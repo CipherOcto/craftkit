@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and nine commands**, one for each thing a person does to a
+//! - **a hundred and ten commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -418,6 +418,7 @@ mod midi;
 mod heal;
 mod keys;
 mod remove;
+mod split;
 mod time;
 
 use std::collections::HashMap;
@@ -445,6 +446,7 @@ pub use mixer::{
     LanePayload, SendKind, SendPayload,
 };
 pub use remove::{RemoveClip, RemoveMarker, RemoveTrack};
+pub use split::SplitMono;
 pub use time::{CutTime, InsertTime};
 
 use craftkit_sdk::serde_json;
@@ -5933,14 +5935,10 @@ fn mix_of(document: &Document, id: &str, raw_track: Option<u64>) -> Result<Mix, 
         let Some(node) = document.node(*source_id) else { continue };
         let Ok(source) = SourcePayload::from_json(&node.data) else { continue };
         let sound = read_sound("sound.render", &source.path)?;
-        if channels == 0 {
-            channels = sound.channels;
-        } else if channels != sound.channels {
-            return Err(EngineError::Failed {
-                id: id.to_string(),
-                message: "the sources do not have the same number of channels".to_string(),
-            });
-        }
+        // The mix is as **wide** as the widest source: a mono source in
+        // a stereo session is heard in both channels, the way the tree's
+        // renderer hears it.
+        channels = channels.max(sound.channels);
         sources.push((*source_id, sound));
     }
     // Each clip's samples are **prepared**: a source at another rate
@@ -6109,7 +6107,7 @@ fn mix_of(document: &Document, id: &str, raw_track: Option<u64>) -> Result<Mix, 
         // The signal is **interleaved**: it holds a frame of every
         // channel, and it is as long as the mix in frames.
         let mut signal = vec![0.0_f32; frames * channels.max(1) as usize];
-        for (index, (_, clip_id, payload)) in clips.iter().enumerate() {
+        for (index, (source_id, clip_id, payload)) in clips.iter().enumerate() {
             let Some(clip) = document.node(*clip_id) else { continue };
             if timeline::track_of(document, clip).map(|owner| owner.id) != Some(track.id) {
                 continue;
@@ -6120,7 +6118,16 @@ fn mix_of(document: &Document, id: &str, raw_track: Option<u64>) -> Result<Mix, 
             // signal is interleaved: the clip's samples go at that
             // many frames, and not at that many samples.
             let at = payload.start.max(0) as usize * channels.max(1) as usize;
-            add_into(&mut signal, &prepared[index], at, 1.0);
+            // A source that is **narrower** than the mix is heard in
+            // every channel of it: the tree's renderer takes the
+            // source's channel `c % n` for the mix's channel `c`, and
+            // a mono source is heard in both channels of a stereo mix.
+            let source_channels = sources
+                .iter()
+                .find(|(id, _)| *id == *source_id)
+                .map(|(_, sound)| sound.channels.max(1) as usize)
+                .unwrap_or(channels.max(1) as usize);
+            add_channels(&mut signal, &prepared[index], at, 1.0, source_channels, channels.max(1) as usize);
         }
         // The **raw** signal of the track: its clips and nothing else.
         // The trim and the inserts belong to the track, and a caller
@@ -6834,6 +6841,38 @@ fn sends_of(document: &Document) -> Vec<Send> {
 }
 
 /// Add a signal into another, at a place, at a gain.
+/// The samples of a clip, **added into** a signal that may be wider
+/// than they are.
+///
+/// A clip's samples are as wide as the source it plays, and the signal
+/// is as wide as the mix: a clip of a mono source in a stereo mix is
+/// heard in both channels, and the tree's renderer does the same — it
+/// takes the source's channel `c % n` for the mix's channel `c`.
+fn add_channels(
+    target: &mut [f32],
+    source: &[f32],
+    at: usize,
+    gain: f32,
+    source_channels: usize,
+    mix_channels: usize,
+) {
+    let source_channels = source_channels.max(1);
+    let mix_channels = mix_channels.max(1);
+    let frames = source.len() / source_channels;
+    for frame in 0..frames {
+        for channel in 0..mix_channels {
+            let target_at = at + frame * mix_channels + channel;
+            if target_at >= target.len() {
+                break;
+            }
+            let source_at = frame * source_channels + (channel % source_channels);
+            if let Some(value) = source.get(source_at) {
+                target[target_at] += *value * gain;
+            }
+        }
+    }
+}
+
 fn add_into(target: &mut [f32], source: &[f32], at: usize, gain: f32) {
     for (index, sample) in source.iter().enumerate() {
         let position = at + index;
@@ -7691,6 +7730,7 @@ craftkit_sdk::plugin_anchor!(
     RemoveClip,
     RemoveMarker,
     RemoveTrack,
+    SplitMono,
     AddMarker,
     AddSource,
     MeasurePeaks,

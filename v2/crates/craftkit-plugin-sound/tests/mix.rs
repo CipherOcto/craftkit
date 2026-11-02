@@ -193,3 +193,66 @@ fn two_stereo_clips_are_heard_together() {
     let sum = first + second;
     assert!((loud - (first + second)).abs() < 0.01, "the two clips are heard together: {loud} and not {sum}");
 }
+
+/// A **mono** source in a stereo session is heard in **both** channels:
+/// the tree's renderer takes the source's channel `c % n` for the
+/// mix's channel `c`, and a mono source is heard in both.
+#[test]
+fn a_mono_source_is_heard_in_both_channels() {
+    let mut session = session();
+    let directory = directory("mono-in-stereo");
+    // A **stereo** sound: a ramp.
+    let stereo = format!("{directory}/stereo.wav");
+    let mut samples = Vec::with_capacity(48_000 * 2);
+    for frame in 0..48_000_u32 {
+        samples.push(frame as f32 / 48_000.0);
+        samples.push(frame as f32 / 48_000.0);
+    }
+    std::fs::write(&stereo, craftkit_wav::write(2, 48_000, &samples)).expect("the file is on the disk");
+    // A **mono** sound: a constant.
+    let mono = format!("{directory}/mono.wav");
+    std::fs::write(&mono, craftkit_wav::write(1, 48_000, &vec![0.5_f32; 48_000]))
+        .expect("the file is on the disk");
+
+    let stereo_source = session
+        .execute("sound.source.add", &json!({ "path": stereo, "channels": 2, "frames": 48_000 }))
+        .expect("the source is added")
+        .data["id"]
+        .as_u64()
+        .expect("the source has an id");
+    let mono_source = session
+        .execute("sound.source.add", &json!({ "path": mono, "channels": 1, "frames": 48_000 }))
+        .expect("the source is added")
+        .data["id"]
+        .as_u64()
+        .expect("the source has an id");
+    session.execute("sound.track.add", &json!({ "name": "wide" })).expect("the track is added");
+    let wide = session.document().node_by_name("wide").expect("the track is there").id;
+    session
+        .execute(
+            "sound.clip.add",
+            &json!({ "track": wide, "start": 0, "length": 48_000, "source": stereo_source }),
+        )
+        .expect("the clip is added");
+    session.execute("sound.track.add", &json!({ "name": "narrow" })).expect("the track is added");
+    let narrow = session.document().node_by_name("narrow").expect("the track is there").id;
+    session
+        .execute(
+            "sound.clip.add",
+            &json!({ "track": narrow, "start": 0, "length": 48_000, "source": mono_source }),
+        )
+        .expect("the clip is added");
+
+    let out = format!("{directory}/out.wav");
+    let outcome = session.execute("sound.render", &json!({ "path": out })).expect("the sound is rendered");
+    assert_eq!(outcome.data["channels"], 2, "the mix is as wide as the widest source");
+    let bytes = std::fs::read(&out).expect("the file is on the disk");
+    let sound = craftkit_wav::read(&bytes, &craftkit_wav::Limits::default()).expect("the file is a sound");
+    assert_eq!(sound.channels, 2);
+    assert_eq!(sound.frames, 48_000);
+    // The mono clip is heard in both channels: the left and the right
+    // of the mix carry the same thing from it.
+    let left = sound.samples[0];
+    let right = sound.samples[1];
+    assert!((left - right).abs() < 0.2, "the mono clip is in both channels: {left} and {right}");
+}
