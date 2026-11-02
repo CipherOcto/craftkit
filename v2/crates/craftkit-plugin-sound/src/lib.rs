@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and five commands**, one for each thing a person does to a
+//! - **a hundred and six commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -5843,7 +5843,7 @@ pub struct RenderSound {
 impl RenderSound {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let path = self.path.0.clone();
-        let mix = mix_of(session.document(), "sound.render")?;
+        let mix = mix_of(session.document(), "sound.render", None)?;
         let channels = mix.channels;
         let bytes = craftkit_wav::write(channels, mix.rate, &mix.master);
         write_file(&path, &bytes)?;
@@ -5869,6 +5869,13 @@ struct Mix {
     master: Vec<f32>,
     /// The tracks that are heard, with their signal.
     tracks: Vec<(u64, Vec<f32>)>,
+    /// The signal of one track **before** its trim and its inserts,
+    /// when a caller asked for it.
+    ///
+    /// This is the sound of the track's own clips and nothing else: the
+    /// track's trim and the track's inserts are not in it, because they
+    /// belong to the track and the track is still there.
+    raw: Option<(u64, Vec<f32>)>,
     /// How many channels the mix has.
     channels: u16,
     /// The rate the mix was made at.
@@ -5881,7 +5888,10 @@ struct Mix {
 ///
 /// The `id` is the command that asked for it, so that a refusal says
 /// which command refused and not which one it was borrowed from.
-fn mix_of(document: &Document, id: &str) -> Result<Mix, EngineError> {
+///
+/// The `raw_track` is the track whose **raw** signal is kept: the sum
+/// of its clips, before its trim and before its inserts.
+fn mix_of(document: &Document, id: &str, raw_track: Option<u64>) -> Result<Mix, EngineError> {
     let settings = session_of(document);
     let rate = settings.sample_rate;
     // The clips: each one plays a source from an offset, for a
@@ -6085,6 +6095,7 @@ fn mix_of(document: &Document, id: &str) -> Result<Mix, EngineError> {
     // signal before the fader, and the copy is the whole point of
     // it.
     let mut pre_fader: Vec<(u64, Vec<f32>)> = Vec::new();
+    let mut raw: Option<(u64, Vec<f32>)> = None;
     let mut tracks: Vec<(u64, Vec<f32>, automate::Automation)> = Vec::new();
     // The **routed tracks**: the tracks that feed a bus, and the
     // signal they feed it with.
@@ -6112,6 +6123,12 @@ fn mix_of(document: &Document, id: &str) -> Result<Mix, EngineError> {
             // many frames, and not at that many samples.
             let at = payload.start.max(0) as usize * channels.max(1) as usize;
             add_into(&mut signal, &prepared[index], at, 1.0);
+        }
+        // The **raw** signal of the track: its clips and nothing else.
+        // The trim and the inserts belong to the track, and a caller
+        // that wants the sound of the clips alone asks for this.
+        if raw_track == Some(track.id) {
+            raw = Some((track.id, signal.clone()));
         }
         // The **trim**: the level of the track's input, and its
         // phase. The tree's mixer applies the trim to the strip
@@ -6341,6 +6358,7 @@ fn mix_of(document: &Document, id: &str) -> Result<Mix, EngineError> {
     Ok(Mix {
         master,
         tracks: tracks.into_iter().map(|(id, signal, _)| (id, signal)).collect(),
+        raw,
         channels,
         rate,
         frames,
@@ -6416,7 +6434,7 @@ impl RenderStems {
                 payload.solo = other == track.id;
                 node.data = payload.to_json();
             }
-            let mix = mix_of(&soloed, "sound.render.stems")?;
+            let mix = mix_of(&soloed, "sound.render.stems", None)?;
             let bytes = craftkit_wav::write(mix.channels, mix.rate, &mix.master);
             let path = a_stem_path(&directory, &track.name);
             write_file(&path, &bytes)?;
@@ -6424,6 +6442,200 @@ impl RenderStems {
         }
         Ok(Outcome::new(format!("bounced {} stems into `{directory}`", files.len()))
             .with_data(serde_json::json!({ "directory": directory, "files": files })))
+    }
+}
+
+/// **Consolidate** a track: the clips of a track become one clip of a
+/// file that holds their sound.
+///
+/// The tree's consolidate renders the sound of a track's clips over a
+/// range, writes it to a file, and puts one clip of that file where the
+/// clips were. The sound is the same and the editing is not: the
+/// clips are gone and there is one clip with a file behind it.
+///
+/// The sound that is rendered is the sound of the track's **clips**:
+/// the track's trim and the track's inserts are not in it, because
+/// they belong to the track and the track is still there. A clip that
+/// crosses the edge of the range keeps the part outside it.
+///
+/// The **MIDI** clips of the track are left alone: they hold no sound
+/// to render, and a MIDI clip is not a file.
+#[derive(Command)]
+#[command(
+    id = "sound.track.consolidate",
+    area = "sound",
+    layer = "sound",
+    icon = "play",
+    menu("Track", "Consolidate"),
+    mutates,
+    undoable
+)]
+pub struct ConsolidateTrack {
+    /// The track to consolidate.
+    pub track: NodeRef,
+    /// Where the range starts, in samples.
+    ///
+    /// Without it, the range starts at the beginning of the session.
+    pub start: Option<Number>,
+    /// Where the range ends, in samples.
+    ///
+    /// Without it, the range ends at the end of the track's clips.
+    pub end: Option<Number>,
+    /// The directory the file is written into.
+    pub directory: Text,
+}
+
+impl ConsolidateTrack {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.track.consolidate".to_string();
+        let track = self.track.0;
+        let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{track}`"),
+        })?;
+        if node.kind != "sound.track" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+            });
+        }
+        if is_master(node) {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "the master holds the fader of the mix and not a sound of its own".to_string(),
+            });
+        }
+        let directory = self.directory.0.clone();
+        if directory.trim().is_empty() {
+            return Err(EngineError::Failed { id, message: "a directory is a path".to_string() });
+        }
+        std::fs::create_dir_all(&directory).map_err(|error| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the directory `{directory}` cannot be made: {error}"),
+        })?;
+        // The **range**: the track's own clips say where it ends, and
+        // a range with no length is refused.
+        let document = session.document().clone();
+        let mut clips: Vec<(u64, ClipPayload)> = Vec::new();
+        let mut last = 0_i64;
+        for clip in document.walk().filter(|node| node.kind == "sound.clip") {
+            if timeline::track_of(&document, clip).map(|owner| owner.id) != Some(track) {
+                continue;
+            }
+            let Ok(payload) = ClipPayload::from_json(&clip.data) else { continue };
+            last = last.max(payload.start.max(0) + payload.length.max(0));
+            clips.push((clip.id, payload));
+        }
+        let start = match &self.start {
+            Some(start) => samples(start.0, "where the range starts")?,
+            None => 0,
+        };
+        let end = match &self.end {
+            Some(end) => samples(end.0, "where the range ends")?,
+            None => last,
+        };
+        if end <= start {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the range ends at {end} and starts at {start}"),
+            });
+        }
+        // The **sound** of the track's clips: the raw signal, before
+        // the track's trim and before the track's inserts.
+        let mix = mix_of(&document, &id, Some(track))?;
+        let channels = mix.channels.max(1) as usize;
+        let from = start.max(0) as usize * channels;
+        let to = end.max(0) as usize * channels;
+        let Some((_, signal)) = mix.raw else {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the track `{track}` has no sound to consolidate"),
+            });
+        };
+        if signal.len() < to {
+            return Err(EngineError::Failed {
+                id,
+                message: format!(
+                    "the sound of the track is {} frames long and the range asks for {end}",
+                    signal.len() / channels
+                ),
+            });
+        }
+        let slice = &signal[from..to];
+        // The **file**: the sound of the range, written beside the
+        // session.
+        let name = format!("{}_consolidated", node.name);
+        let path = a_stem_path(&directory, &name);
+        let bytes = craftkit_wav::write(mix.channels, mix.rate, slice);
+        write_file(&path, &bytes)?;
+        // The **source** of the file, and the **asset** that carries it.
+        let frames = (end - start).max(0);
+        let payload = SourcePayload {
+            path: path.clone(),
+            channels: mix.channels as u32,
+            frames,
+            sample_rate: mix.rate,
+            peaks: Vec::new(),
+        };
+        let source =
+            session.document_mut()?.add_node_with(path.clone(), "sound.source", None, payload.to_json());
+        session.document_mut()?.add_asset(craftkit_sdk::Asset::new(path.clone(), "audio", None));
+        // The **clips** of the range are gone: the ones inside it are
+        // thrown away, and the ones that cross its edge keep the part
+        // outside it.
+        let mut removed = 0_usize;
+        let mut kept = 0_usize;
+        for (clip_id, payload) in clips {
+            let clip_start = payload.start.max(0);
+            let clip_end = clip_start + payload.length.max(0);
+            if clip_end <= start || clip_start >= end {
+                continue;
+            }
+            if clip_start >= start && clip_end <= end {
+                session.document_mut()?.remove_node(clip_id);
+                removed += 1;
+                continue;
+            }
+            // The part **outside** the range is kept.
+            let mut payload = payload;
+            if clip_start < start {
+                payload.length = (start - clip_start).max(0);
+            } else {
+                let cut = end - clip_start;
+                payload.offset += cut;
+                payload.start = end;
+                payload.length = (clip_end - end).max(0);
+            }
+            if let Some(node) = session.document_mut()?.node_mut(clip_id) {
+                node.data = payload.to_json();
+            }
+            kept += 1;
+        }
+        // The **clip** of the new file, where the old ones were.
+        let playlist = playlist_of(session, track, None)?;
+        let mut clip = ClipPayload::new();
+        clip.start = start;
+        clip.length = frames;
+        clip.source = Some(source);
+        let clip_id = session.document_mut()?.add_node_with_under(
+            Some(playlist),
+            name.clone(),
+            "sound.clip",
+            None,
+            clip.to_json(),
+        );
+        Ok(Outcome::changed(format!("consolidated the track `{track}` into `{path}`")).with_data(
+            serde_json::json!({
+                "track": track,
+                "clip": clip_id,
+                "source": source,
+                "path": path,
+                "start": start,
+                "end": end,
+                "removed": removed,
+                "kept": kept,
+            }),
+        ))
     }
 }
 
@@ -7477,6 +7689,7 @@ craftkit_sdk::plugin_anchor!(
     SetKey,
     ReadKeys,
     ImportMidiTracks,
+    ConsolidateTrack,
     AddMarker,
     AddSource,
     MeasurePeaks,
