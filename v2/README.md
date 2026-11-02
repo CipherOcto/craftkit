@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1645 tests.** The MCP server links **all fifteen batteries** in, so the
+**1649 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1645 tests
+cargo test          # 1649 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3670,6 +3670,7 @@ so.
 | the **cut** of a MIDI clip | **built.** The cut divides the notes, and each piece keeps the notes that are its own (§232) | §232 |
 | the **trim** of a MIDI clip | **built.** The trim takes the notes off the head and counts the rest from the clip's new head (§233) | §233 |
 | the **automation** of a whole track | **built.** Every lane of a track is written with the static value of its parameter or thinned at once (§234) | §234 |
+| the **fade** of a clip to a place | **built.** A clip is faded up to a place or down from it, and the shape is the tree's own (§235) | §235 |
 
 ### The list of things that are honestly not there: empty
 
@@ -16120,3 +16121,63 @@ and write one lane, and not the lot.
   know what such a lane's static value is, and writing a number into
   it would be a number that means nothing. A third party that automates
   something of its own may write its own values with its own command.
+
+## 235. The fade of a clip to a place
+
+The tree's editor fades a clip to the **playhead**: "Fade to Start"
+fades the clip from its head up to the playhead, and "Fade to End"
+fades it from the playhead down to its tail. v2 could give a clip a
+fade of a length, and not a fade to a place.
+
+### What was built
+
+- The command `sound.clip.fade.to` fades a clip **up to a place** or
+  **down from it**: the fade in runs from the clip's head to the place,
+  and the fade out runs from the place to the clip's tail.
+- The shape is the tree's own — the **equal-power** curve — and the
+  bend is nothing.
+- A place that is **not inside the clip** is refused: a fade that ends
+  outside the clip is a fade of nothing.
+- A way of fading that this battery does not know is **refused**: a
+  fade goes `in` or `out`.
+
+### What the port found
+
+- **The tree's fade is to the playhead and this tree's is to a place.**
+  The tree's command takes the playhead's position from the editor's
+  state, and the editor's state is a thing this tree does not keep
+  (§200). Here the place is **given**: a place is a fact, and the
+  playhead is a **node** (§ the ruler) — a node that a caller may read
+  and pass on, but not a thing every command may reach into.
+- **The tree's fade is over a selection and this one is over a clip.**
+  The tree's command finds the clip under the playhead on each of the
+  selected tracks and makes a fade on it; here the clip is named, and a
+  caller with several clips says so several times. The same gap as the
+  velocity's (§229) and the length's (§230), and the same answer.
+- **The tree's crossfade is not here.** The tree's `create_fades` does
+  two things: it fades a clip inside a range, and it makes a
+  **crossfade** where two clips meet inside the range — each clip is
+  extended into the other's territory using the **handles** the source
+  has beyond its length. A handle is a thing about a file, and this
+  tree's clips have no handles: a clip reads the material it names and
+  stops. So the fade is made on the clip, and the crossfade is not.
+- **The tree's fade bends nothing and this tree's does not either.**
+  The tree's `create_fades` writes a fade with a curvature of zero and
+  the equal-power shape, and here the same — the bend is the tree's
+  `sound.clip.fade`'s business, and this command is the tree's.
+
+### What it cost
+
+- **Four tests** in the sound battery (`tests/fadeto.rs`): the clip is
+  faded up to a place, it is faded down to a place, a place outside
+  the clip is refused, and an unknown way is refused.
+- **One command** (`sound.clip.fade.to`). The sound battery now
+  carries **99** commands and the MCP server **310**.
+
+### What it does not settle
+
+- **The tree's crossfade is not here**, and the reason is the handles:
+  a clip reads the material it names and stops, so two clips cannot
+  lend each other the sound beyond their own ends.
+- **The tree's fade is over a selection**, and here it is over a clip:
+  the same gap as the velocity's (§229).
