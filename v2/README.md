@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1921 tests.** The MCP server links **all fifteen batteries** in, so the
+**1934 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1921 tests
+cargo test          # 1934 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3710,6 +3710,7 @@ so.
 | the **lifting** of a range | **built.** The clips in a range of a track are taken away and the gap they leave is a gap (§272) | §272 |
 | the **extracting** of a range | **built.** The clips in a range of a track are taken away and the gap closes (§273) | §273 |
 | the **filling of a formula** | **built.** A fill copies a formula and shifts its references, and an anchored reference does not move (§275) | §275 |
+| the **date** of a cell | **built.** A date is a number and a date format, and the tree's calendar has the day in it that never happened (§276) | §276 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18688,9 +18689,8 @@ The spreadsheet battery could set a cell and could not fill a **range**.
 
 ### What it does not settle
 
-- **A formula is not filled.** The tree copies a formula and shifts
-  its relative references for every cell it writes; that is a thing of
-  its own, and it is not here.
+- **A formula is not filled** — and that is no longer true: a formula
+  is filled, and its references are shifted (§275).
 - **The tree's dates and lists are not here**, and neither is the
   tree's **quarter** (`Q1`, `Q2`, `Q3`, `Q4`) and its **ordinal**
   (`1st`, `2nd`).
@@ -18772,10 +18772,11 @@ is **written**.
 
 ### What it does not settle
 
-- **The tree's dates, times, currency, accounting, fractions and
-  scientific formats are not here**, and neither are the tree's
-  **sections** — a format with one code for positive numbers and
-  another for negative ones is not here.
+- **The tree's times, currency, accounting, fractions and scientific
+  formats are not here**, and neither are the tree's **sections** — a
+  format with one code for positive numbers and another for negative
+  ones is not here. The tree's **dates** are here now, and they are a
+  list of nine shapes (§276).
 - **The tree's style is not here**: a style is shared between cells and
   carries a font, a fill, borders, an alignment and a protection, and
   here the format is the cell's own.
@@ -18981,10 +18982,10 @@ tree's now.
 ### What it does not settle
 
 - **The tree's lists are not here** — the days, the months, the
-  quarters — and neither are the tree's **dates**: a text that is a
-  day of the week is copied here, and the tree would step through the
-  week. The tree's `days`, `weekdays`, `months` and `years` modes are
-  therefore not here either.
+  quarters — and a text that is a day of the week is copied here, and
+  the tree would step through the week. The tree's `days`, `weekdays`,
+  `months` and `years` **modes** are therefore not here either: a
+  **date** is here (§276), but a fill of dates is not.
 - **The tree's `formats` and `values` modes are not here**: the first
   copies the style without the value, the second copies the value
   without the style.
@@ -19083,3 +19084,97 @@ formula and **shifts its references**. That is the tree's
   — are refused by the parser here, and so are the tree's **defined
   names**, its **arrays** and its `INDIRECT`: a call this tree does not
   have is kept and its value is an error.
+
+## 276. The date of a cell
+
+§271 said the tree's dates were not here, and named them among the
+things that are missing. They are here now.
+
+### What was built
+
+- A **date format** is a format, and there are **nine** of them:
+  `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`,
+  `ddd`, `dddd` and `yyyy`. A code that is not one of them is refused,
+  and the refusal names them.
+- A **date is a number with a date format on it** — the number of days
+  since the 30th of December 1899 — and the command `grid.cell.date`
+  puts both of them in a cell.
+- A date may be written the **tree's** way: `2026-10-26`,
+  `10/26/2026` or `4-Mar-2026`, and the format the date is written with
+  is the **shape it was written in**.
+- A date that **did not happen** is refused: the 30th of February is
+  not a date.
+
+### What the port found
+
+- **A date in a spreadsheet is not a value: it is a number and a
+  format.** The tree's cell holds a `Value` and a `Style`, and the
+  style carries the number format; a date is the number of days and the
+  format that says so. Here the format is the cell's own field (§271)
+  and the date is the same shape: the number, and the format. That is
+  why a date and a number are not two kinds of thing here — they are
+  one kind of thing with a format on it.
+- **The tree's calendar has a day that never happened.** The 1900
+  system counts from the 30th of December 1899 and — like Lotus 1-2-3
+  and Excel, and for a mistake that is a hundred and twenty-five years
+  old — it treats 1900 as a **leap year**: the serial 60 is the
+  fictitious 29th of February 1900. So the tree's first two months of
+  1900 have sixty serials and fifty-nine days, and the tree's serial 1
+  is the 1st of January and its serial 61 is the 1st of March. Here the
+  same: `1900-02-29` is a date this tree accepts, and it is the
+  serial 60.
+- **The tree's weekdays follow the fictitious calendar, and after the
+  phantom day they are right.** The tree's `datetime_from_serial`
+  computes the weekday from the serial alone, so the serial 1 is a
+  Sunday — a day out from the truth — and the serial 61 is the Monday
+  the 1st of March 1900 really was. Here the same: the weekday comes
+  from the serial and not from the date, and the 26th of October 2026
+  is a Monday.
+- **The tree's date formats are a language, and here they are a
+  list.** The tree's `numfmt` parses a code with `y` and `m` and `d`
+  and `h` and `s` in it, with sections, with colours and with fills;
+  `mmm` is the month in three letters and `dddd` is the day of the week
+  in full, and the tree renders them. Here a date format is one of
+  nine shapes and a code that is not one of them is refused.
+- **The tree turns what you type into a date, and it reads the month
+  first.** The tree's `parse_date` reads `2026-10-26` as the year
+  first, `10/26/2026` as the **month** first — so `26/10/2026` is not
+  a date to it — and `4-Mar-2026` with the month by its name; and it
+  reads a year of two digits as this century below thirty and as the
+  last one above thirty. Here the same, and the shape a date was
+  written in is the format it is written with.
+- **The tree rolls a date over and this tree refuses it.** The tree's
+  `serial_from_ymd` is `DATE()`: the month 13 is the January of the
+  next year and the day 0 is the last day of the month before. A cell
+  that holds a date holds a date that **was**, so here the 30th of
+  February is refused.
+
+### What it cost
+
+- **Thirteen tests** in the grid battery (`tests/dates.rs`): a date is a
+  number with a format on it, the 1st of January 1900 is the serial 1,
+  the tree has a day that never happened, a date that did not happen is
+  refused, a date that is not written as one is refused, a format that
+  is not a date format is refused, a date may be written in any of its
+  shapes, a date may be written the tree's way, the tree reads the
+  month first, a year of two digits is the tree's, a number with a date
+  format is a date, a format this tree does not have is refused, and a
+  number that is not a date is a number.
+- **One new command**: `grid.cell.date`. The grid battery now carries
+  **12** commands and the MCP server **363**.
+- **The format list grew**: seven number formats and nine date
+  formats, and the refusal that names them names sixteen.
+
+### What it does not settle
+
+- **The tree's 1904 date system is not here**: it is the system of the
+  old Macintosh Excel, and a workbook that says which system it uses is
+  a workbook that was made somewhere else.
+- **The tree's times are not here**: there is no `hh:mm`, no seconds,
+  no a.m. and p.m., and a date with a time in it is a number here.
+- **A fill of dates is not here yet**: the tree's `days`, `weekdays`,
+  `months` and `years` modes step through the calendar, and the
+  arithmetic they need is here but the modes are not (§274).
+- **The tree's date and time parsing is not here**: the tree reads a
+  time of day as well as a date, and a date with a time in it, and
+  here a date is a date.
