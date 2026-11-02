@@ -24,6 +24,11 @@
 //! | a cell's value | **derived**: the evaluator computes it |
 //! | the dependency graph | the sheet's **payload**, and the plugin's business |
 //!
+//! And a **range** may be **filled** from a cell: the tree's AutoFill,
+//! in its two shapes — the plain drag copies, and the series counts on
+//! — with the tree's rule that the target holds the source at a corner
+//! (the module `fill`).
+//!
 //! # The three things the port found
 //!
 //! - **A grid is not a tree, and the cells are in the payload.** A cell
@@ -57,12 +62,14 @@
 )]
 #![forbid(unsafe_code)]
 
+mod fill;
 mod formula;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Session, Text};
 
+use fill::FillRange;
 use formula::{Book, CellRef, Cells, Value};
 
 /// The grid layer.
@@ -565,7 +572,14 @@ impl CalcEvaluator {
     id = "panel.grid",
     label = "Grid",
     layer = "grid",
-    commands("grid.workbook.add", "grid.sheet.add", "grid.cell.set", "grid.formula.set", "grid.calc")
+    commands(
+        "grid.workbook.add",
+        "grid.sheet.add",
+        "grid.cell.set",
+        "grid.formula.set",
+        "grid.calc",
+        "grid.range.fill"
+    )
 )]
 pub struct GridPanel;
 
@@ -582,6 +596,7 @@ craftkit_sdk::plugin_anchor!(
     ReadPrecedents,
     ReadDependents,
     CalcSheet,
+    FillRange,
     CalcEvaluator,
     GridPanel
 );
