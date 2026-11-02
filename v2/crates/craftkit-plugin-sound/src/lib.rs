@@ -261,6 +261,13 @@
 //! and the boundary is the distance the cut made in the **ticks** of
 //! the document's tempo, so the division follows the tempo (§232).
 //!
+//! **A trim rebases the notes of a MIDI clip.** The tree's trim of a
+//! MIDI clip takes the notes off the head and counts the notes that
+//! are left from the clip's new head — the model cannot do it, because
+//! the notes are in ticks and the model does not know the tempo map,
+//! so the **engine** does it after. Here the trim does the same
+//! (§233).
+//!
 //! **The tree's strip of silence has three modes and a preview, and so
 //! does this one.** The tree's editor strips the silence, or extracts
 //! the sound and keeps the silence, or separates the clip at the edges
@@ -3296,6 +3303,22 @@ impl TrimClip {
         if let Some(sync) = payload.sync {
             let moved = sync - delta;
             trimmed.sync = (0..=trimmed.length).contains(&moved).then_some(moved);
+        }
+        // The **notes** of a MIDI clip move with the audio they are in:
+        // the notes the trim took off the head are gone, and the notes
+        // that are left are counted from the clip's new head. The
+        // tree's trim does the same — the notes are re-anchored by the
+        // engine, which knows the tempo map.
+        //
+        // The boundary is the distance the trim made, in the **ticks**
+        // of the document's tempo at the clip's own start.
+        if let Some(midi) = payload.midi.as_ref() {
+            let settings = session_of(session.document());
+            let map = tempo_map(session.document());
+            let start_tick = map.samples_to_ticks(payload.start, settings.sample_rate);
+            let cut_tick = map.samples_to_ticks(from as i64, settings.sample_rate);
+            let boundary = cut_tick.saturating_sub(start_tick);
+            trimmed.midi = Some(midi.divided(boundary, true));
         }
         if let Some(node) = session.document_mut()?.node_mut(clip_id) {
             node.data = trimmed.to_json();
