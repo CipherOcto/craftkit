@@ -32,6 +32,17 @@ use std::fmt::Write as _;
 
 use craftkit_sdk::serde_json;
 
+/// The most rows a sheet has.
+///
+/// The tree's bound: a sheet is a million rows tall, and an address
+/// that is not in the sheet is not an address.
+pub const MAX_ROWS: u64 = 1_048_576;
+
+/// The most columns a sheet has.
+///
+/// The tree's bound: a sheet is sixteen thousand columns wide.
+pub const MAX_COLS: u64 = 16_384;
+
 /// A cell's address: a column and a row, both counted from zero.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CellRef {
@@ -45,8 +56,15 @@ impl CellRef {
     /// The address, as `A1`.
     #[allow(clippy::wrong_self_convention)]
     pub fn to_text(self) -> String {
+        let mut name = CellRef::column_text(self.col);
+        let _ = write!(name, "{}", self.row + 1);
+        name
+    }
+
+    /// The letters of a column, as `A` — and `AA` for the twenty-seventh.
+    pub fn column_text(col: u32) -> String {
         let mut name = String::new();
-        let mut col = self.col;
+        let mut col = col;
         loop {
             name.insert(0, (b'A' + (col % 26) as u8) as char);
             if col < 26 {
@@ -54,27 +72,92 @@ impl CellRef {
             }
             col = col / 26 - 1;
         }
-        let _ = write!(name, "{}", self.row + 1);
         name
     }
 
     /// The address, from `A1`.
+    ///
+    /// An **anchored** address — `$A$1` — is not the address of a cell
+    /// but the address of a **reference** in a formula, and it is
+    /// refused here: a command that names a cell names a cell, and a
+    /// `$` in it is not a cell.
     pub fn parse(text: &str) -> Option<CellRef> {
+        let anchor = Anchor::parse(text)?;
+        if anchor.row_abs || anchor.col_abs {
+            return None;
+        }
+        Some(anchor.cell)
+    }
+}
+
+/// An **address**, and whether it is **anchored**.
+///
+/// The `$` of a formula: `$A$1` is anchored in both directions and
+/// does not move when the formula is copied; `A$1` is anchored in its
+/// row; `$A1` is anchored in its column; `A1` is anchored in neither.
+///
+/// The tree keeps the anchoring in the address and it is **the** thing
+/// that decides whether a copied formula moves, so it is kept here too:
+/// an address that has forgotten its `$` is an address that cannot be
+/// copied.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Anchor {
+    /// The cell the address names.
+    pub cell: CellRef,
+    /// Whether the **row** is anchored — the `$` before the number.
+    pub row_abs: bool,
+    /// Whether the **column** is anchored — the `$` before the letters.
+    pub col_abs: bool,
+}
+
+impl Anchor {
+    /// The address, as it is written: `$A$1`.
+    pub fn to_text(self) -> String {
+        let mut text = String::new();
+        if self.col_abs {
+            text.push('$');
+        }
+        text.push_str(&CellRef::column_text(self.cell.col));
+        if self.row_abs {
+            text.push('$');
+        }
+        let _ = write!(text, "{}", self.cell.row + 1);
+        text
+    }
+
+    /// The address, from `$A$1`.
+    pub fn parse(text: &str) -> Option<Anchor> {
+        let characters: Vec<char> = text.chars().collect();
+        let mut at = 0usize;
+        let mut col_abs = false;
+        if characters.get(at) == Some(&'$') {
+            col_abs = true;
+            at += 1;
+        }
         let mut letters = String::new();
-        let mut digits = String::new();
-        let mut seen_digit = false;
-        for character in text.chars() {
-            match character {
-                'A'..='Z' | 'a'..='z' if !seen_digit => letters.push(character),
-                '0'..='9' => {
-                    seen_digit = true;
-                    digits.push(character);
-                }
-                '$' => {}
-                _ => return None,
+        while let Some(character) = characters.get(at) {
+            if character.is_ascii_alphabetic() {
+                letters.push(*character);
+                at += 1;
+            } else {
+                break;
             }
         }
-        if letters.is_empty() || digits.is_empty() {
+        let mut row_abs = false;
+        if characters.get(at) == Some(&'$') {
+            row_abs = true;
+            at += 1;
+        }
+        let mut digits = String::new();
+        while let Some(character) = characters.get(at) {
+            if character.is_ascii_digit() {
+                digits.push(*character);
+                at += 1;
+            } else {
+                break;
+            }
+        }
+        if letters.is_empty() || digits.is_empty() || at != characters.len() {
             return None;
         }
         let mut col = 0u32;
@@ -84,7 +167,25 @@ impl CellRef {
             col = col.checked_mul(26)?.checked_add(value)?;
         }
         let row = digits.parse::<u32>().ok()?.checked_sub(1)?;
-        Some(CellRef { col, row })
+        Some(Anchor { cell: CellRef { col, row }, row_abs, col_abs })
+    }
+
+    /// The address **moved** by `(dr, dc)` rows and columns.
+    ///
+    /// An anchored part does not move, and an address that would leave
+    /// the sheet is **nothing**: the caller refuses, and the tree writes
+    /// `#REF!` in its place.
+    pub fn moved(self, dr: i64, dc: i64) -> Option<Anchor> {
+        let row = if self.row_abs { self.cell.row as i64 } else { self.cell.row as i64 + dr };
+        let col = if self.col_abs { self.cell.col as i64 } else { self.cell.col as i64 + dc };
+        if row < 0 || col < 0 || row as u64 >= MAX_ROWS || col as u64 >= MAX_COLS {
+            return None;
+        }
+        Some(Anchor {
+            cell: CellRef { col: col as u32, row: row as u32 },
+            row_abs: self.row_abs,
+            col_abs: self.col_abs,
+        })
     }
 }
 
@@ -201,15 +302,17 @@ pub enum Expr {
     Cell {
         /// The sheet the cell is in, when the formula names one.
         sheet: Option<String>,
-        /// The cell.
-        cell: CellRef,
+        /// The address, and its anchoring.
+        anchor: Anchor,
     },
     /// A range of cells, in a sheet — or in the sheet the formula is in.
     Range {
         /// The sheet the range is in, when the formula names one.
         sheet: Option<String>,
-        /// The range.
-        area: Area,
+        /// The first corner, and its anchoring.
+        start: Anchor,
+        /// The last corner, and its anchoring.
+        end: Anchor,
     },
     /// A function and its arguments.
     Call(String, Vec<Expr>),
@@ -279,10 +382,12 @@ pub fn precedents(expression: &Expr) -> Vec<Reference> {
 
 fn collect_precedents(expression: &Expr, found: &mut Vec<Reference>) {
     match expression {
-        Expr::Cell { sheet, cell } => {
-            found.push(Reference { sheet: sheet.clone(), area: Area::new(*cell, *cell) })
+        Expr::Cell { sheet, anchor } => {
+            found.push(Reference { sheet: sheet.clone(), area: Area::new(anchor.cell, anchor.cell) })
         }
-        Expr::Range { sheet, area } => found.push(Reference { sheet: sheet.clone(), area: *area }),
+        Expr::Range { sheet, start, end } => {
+            found.push(Reference { sheet: sheet.clone(), area: Area::new(start.cell, end.cell) })
+        }
         Expr::Call(_, arguments) => {
             for argument in arguments {
                 collect_precedents(argument, found);
@@ -624,14 +729,14 @@ impl Parser {
                     });
                 }
             }
-            let first_cell = CellRef::parse(&word)
+            let first = Anchor::parse(&word)
                 .ok_or_else(|| FormulaError { message: format!("`{word}` is not a cell") })?;
-            let second_cell = CellRef::parse(&second)
+            let second = Anchor::parse(&second)
                 .ok_or_else(|| FormulaError { message: format!("`{second}` is not a cell") })?;
-            return Ok(Expr::Range { sheet, area: Area::new(first_cell, second_cell) });
+            return Ok(Expr::Range { sheet, start: first, end: second });
         }
-        match CellRef::parse(&word) {
-            Some(cell) => Ok(Expr::Cell { sheet, cell }),
+        match Anchor::parse(&word) {
+            Some(anchor) => Ok(Expr::Cell { sheet, anchor }),
             None => Err(FormulaError { message: format!("`{word}` is not a cell or a function") }),
         }
     }
@@ -835,15 +940,16 @@ impl Book {
             Expr::Number(number) => Value::Number(*number),
             Expr::Text(text) => Value::Text(text.clone()),
             Expr::Bool(value) => Value::Bool(*value),
-            Expr::Cell { sheet: named, cell } => {
+            Expr::Cell { sheet: named, anchor } => {
                 let name = named.as_deref().unwrap_or(sheet);
-                self.value_of_guarded(name, *cell, being)
+                self.value_of_guarded(name, anchor.cell, being)
             }
-            Expr::Range { sheet: named, area } => {
+            Expr::Range { sheet: named, start, end } => {
                 let name = named.as_deref().unwrap_or(sheet);
                 if !self.sheets.contains_key(name) {
                     return Value::Error(format!("there is no sheet `{name}`"));
                 }
+                let area = Area::new(start.cell, end.cell);
                 let mut values = Vec::new();
                 for row in area.start.row..=area.end.row {
                     for col in area.start.col..=area.end.col {
@@ -872,11 +978,12 @@ impl Book {
         let mut plain: Vec<Value> = Vec::new();
         for argument in arguments {
             match argument {
-                Expr::Range { sheet: named, area } => {
+                Expr::Range { sheet: named, start, end } => {
                     let name = named.as_deref().unwrap_or(sheet);
                     if !self.sheets.contains_key(name) {
                         return Value::Error(format!("there is no sheet `{name}`"));
                     }
+                    let area = Area::new(start.cell, end.cell);
                     for row in area.start.row..=area.end.row {
                         for col in area.start.col..=area.end.col {
                             let value = self.value_of_guarded(name, CellRef { col, row }, being);
@@ -979,4 +1086,156 @@ fn binary(operator: &str, left: &Value, right: &Value) -> Value {
         return Value::Error("#NUM!".to_string());
     }
     Value::Number(result)
+}
+
+// ---------------------------------------------------------------------------
+// The printer: a formula written out again.
+// ---------------------------------------------------------------------------
+
+/// The precedence of a **comparison**.
+const COMPARISON: u8 = 1;
+/// The precedence of a **sum** or a **difference**.
+const ADDITIVE: u8 = 2;
+/// The precedence of a **product** or a **quotient**.
+const MULTIPLICATIVE: u8 = 3;
+/// The precedence of a **power**.
+const POWER: u8 = 4;
+/// The precedence of a **negation**.
+const UNARY: u8 = 5;
+
+impl Expr {
+    /// The formula's **text**: the expression written out.
+    ///
+    /// The tree's printer writes an expression back out, and a copied
+    /// formula is written out again. Here the text of a formula is what
+    /// a cell holds, so the printer is not a nicety: it is the way a
+    /// formula is written down twice.
+    pub fn to_text(&self) -> String {
+        expression_text(self, 0)
+    }
+}
+
+/// The precedence of an expression.
+fn precedence(expression: &Expr) -> u8 {
+    match expression {
+        Expr::Binary(operator, _, _) => match operator.as_str() {
+            "=" | "<>" | "<" | "<=" | ">" | ">=" => COMPARISON,
+            "+" | "-" => ADDITIVE,
+            "*" | "/" => MULTIPLICATIVE,
+            _ => POWER,
+        },
+        Expr::Negate(_) => UNARY,
+        _ => UNARY + 1,
+    }
+}
+
+/// An expression, written out, with brackets where they are needed.
+fn expression_text(expression: &Expr, min_precedence: u8) -> String {
+    let own = precedence(expression);
+    let text = match expression {
+        Expr::Number(number) => number_text(*number),
+        Expr::Text(text) => format!("\"{}\"", text.replace('"', "\"\"")),
+        Expr::Bool(value) => {
+            if *value {
+                "TRUE".to_string()
+            } else {
+                "FALSE".to_string()
+            }
+        }
+        Expr::Cell { sheet, anchor } => format!("{}{}", sheet_prefix(sheet), anchor.to_text()),
+        Expr::Range { sheet, start, end } => {
+            format!("{}{}:{}", sheet_prefix(sheet), start.to_text(), end.to_text())
+        }
+        Expr::Call(name, arguments) => {
+            let arguments: Vec<String> =
+                arguments.iter().map(|argument| expression_text(argument, 0)).collect();
+            format!("{name}({})", arguments.join(", "))
+        }
+        Expr::Negate(inner) => format!("-{}", expression_text(inner, UNARY)),
+        Expr::Binary(operator, left, right) => {
+            // A power binds to the right and everything else to the left.
+            let (left_minimum, right_minimum) =
+                if operator == "^" { (POWER + 1, POWER) } else { (own, own + 1) };
+            format!(
+                "{} {} {}",
+                expression_text(left, left_minimum),
+                operator,
+                expression_text(right, right_minimum)
+            )
+        }
+    };
+    if own < min_precedence { format!("({text})") } else { text }
+}
+
+/// A number, as a formula writes it.
+fn number_text(number: f64) -> String {
+    if number.is_finite() && number.fract() == 0.0 && number.abs() < 1e15 {
+        format!("{}", number as i64)
+    } else {
+        format!("{number}")
+    }
+}
+
+/// The name of a sheet, and its `!` — quoted when the name needs it.
+fn sheet_prefix(sheet: &Option<String>) -> String {
+    let Some(name) = sheet else { return String::new() };
+    let plain = !name.is_empty()
+        && name.chars().all(|character| character.is_ascii_alphanumeric() || character == '_')
+        && !name.chars().next().is_some_and(|character| character.is_ascii_digit());
+    if plain { format!("{name}!") } else { format!("'{}'!", name.replace('\'', "''")) }
+}
+
+// ---------------------------------------------------------------------------
+// The shift: a formula copied, and its references moved.
+// ---------------------------------------------------------------------------
+
+/// What went wrong when a formula was **shifted**.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShiftError {
+    /// What went wrong, in words.
+    pub message: String,
+}
+
+/// Move a formula's **relative** references by `(dr, dc)`.
+///
+/// The tree's `shift_relative`: the relative part of every reference
+/// moves and the anchored part stays where it is, so `$A$1` is the same
+/// cell in every cell a formula is copied to, and `A1` is the cell to
+/// the right of the one it was written in.
+///
+/// A reference that would leave the sheet is **refused**: the tree
+/// writes `#REF!` there and carries on, and here the whole copy is
+/// refused and the reference is named.
+pub fn shift(expression: &Expr, dr: i64, dc: i64) -> Result<Expr, ShiftError> {
+    match expression {
+        Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => Ok(expression.clone()),
+        Expr::Cell { sheet, anchor } => {
+            let moved = anchor.moved(dr, dc).ok_or_else(|| ShiftError {
+                message: format!("the reference {} would leave the sheet", anchor.to_text()),
+            })?;
+            Ok(Expr::Cell { sheet: sheet.clone(), anchor: moved })
+        }
+        Expr::Range { sheet, start, end } => {
+            let start = start.moved(dr, dc).ok_or_else(|| ShiftError {
+                message: format!("the reference {} would leave the sheet", start.to_text()),
+            })?;
+            let end = end.moved(dr, dc).ok_or_else(|| ShiftError {
+                message: format!("the reference {} would leave the sheet", end.to_text()),
+            })?;
+            Ok(Expr::Range { sheet: sheet.clone(), start, end })
+        }
+        Expr::Call(name, arguments) => {
+            let mut moved = Vec::new();
+            for argument in arguments {
+                moved.push(shift(argument, dr, dc)?);
+            }
+            Ok(Expr::Call(name.clone(), moved))
+        }
+        Expr::Negate(inner) => Ok(Expr::Negate(Box::new(shift(inner, dr, dc)?))),
+        Expr::Binary(operator, left, right) => Ok(Expr::Binary(
+            operator.clone(),
+            Box::new(shift(left, dr, dc)?),
+            Box::new(shift(right, dr, dc)?),
+        )),
+    }
 }

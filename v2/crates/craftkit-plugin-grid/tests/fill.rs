@@ -235,22 +235,6 @@ fn a_source_that_is_not_at_a_corner_is_refused() {
     assert!(error.to_string().contains("is not at a corner"), "the error says why: {error}");
 }
 
-/// A source that holds a **formula** is refused: the tree shifts the
-/// references of the formula it copies.
-#[test]
-fn a_source_that_holds_a_formula_is_refused() {
-    let mut session = session();
-    let sheet = a_sheet(&mut session);
-    session.execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B1", "value": 7 })).expect("set");
-    session
-        .execute("grid.formula.set", &json!({ "sheet": sheet, "cell": "A1", "formula": "=B1" }))
-        .expect("the formula is set");
-    let error = session
-        .execute("grid.range.fill", &json!({ "sheet": sheet, "from": "A1", "to": "A1:A3" }))
-        .expect_err("the fill is refused");
-    assert!(error.to_string().contains("holds a formula"), "the error says why: {error}");
-}
-
 /// A source that is **empty** is refused: there is nothing to fill
 /// with.
 #[test]

@@ -36,12 +36,23 @@
 //!   live in a payload and a payload is not a place for a hundred
 //!   thousand cells.
 //!
+//! # The fill of a formula
+//!
+//! A source that holds a **formula** is filled too: the tree copies
+//! the formula and **shifts its relative references** for every cell it
+//! writes, so `=B1` in `A1` becomes `=B2` in `A2` and `=B3` in `A3`.
+//!
+//! The shifting is the tree's `shift_relative`, and it is where the
+//! **`$` earns its keep**: an **anchored** reference — `$A$1`, `A$1`,
+//! `$A1` — does not move, and a reference that would leave the sheet
+//! is `#REF!` in the tree and a **refusal** here.
+//!
+//! A fill that would make a cell **read itself** is refused as well:
+//! the cycle is found here, and not later in the middle of a
+//! recalculation.
+//!
 //! # What it does not do
 //!
-//! - **A formula is not filled.** The tree copies a formula and
-//!   **shifts its relative references** for every cell it writes, and
-//!   that is a thing of its own; here a source that holds a formula is
-//!   refused.
 //! - **The tree's lists are not here** — the days, the months, the
 //!   quarters — and neither are the tree's **dates**: a text that is a
 //!   day of the week is copied here, and the tree would step through
@@ -55,7 +66,7 @@ use craftkit_derive::Command;
 use craftkit_sdk::serde_json::{self, json};
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
 
-use crate::formula::{Area, CellRef, Value};
+use crate::formula::{self, Area, CellRef, Value};
 use crate::{cells_into, cells_of, sheet_cells_mut};
 
 /// The most cells one fill may write.
@@ -266,8 +277,9 @@ fn round15(number: f64) -> f64 {
 /// down or up, or right or left, from there. The mode is the tree's:
 /// `copy`, `series` (the tree's default), `extend` or `alternate`.
 ///
-/// A source that holds a **formula** is refused: the tree copies the
-/// formula and shifts its references, and that is a thing of its own.
+/// A source that holds a **formula** is filled with the formula, and
+/// the references of it are **shifted**: the tree's `shift_relative`,
+/// and the tree's `$` — an anchored reference does not move.
 #[derive(Command)]
 #[command(id = "grid.range.fill", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
 pub struct FillRange {
@@ -393,79 +405,160 @@ impl FillRange {
         }
         // The **source**: what it holds.
         let sheet_cells = cells_of(node);
-        let mut values: Vec<Value> = Vec::new();
-        let mut has_formula = false;
+        let sheet_name = node.name.clone();
+        let mut sources: Vec<Source> = Vec::new();
         for lane in &lanes {
             for cell in &lane.cells {
-                match sheet_cells.get(*cell) {
-                    Some(entry) if entry.formula.is_some() => has_formula = true,
-                    Some(entry) => values.push(entry.value.clone().unwrap_or(Value::Empty)),
-                    None => values.push(Value::Empty),
-                }
+                let from = match sheet_cells.get(*cell) {
+                    Some(entry) => Source {
+                        cell: *cell,
+                        formula: entry.formula.clone(),
+                        value: entry.value.clone().unwrap_or(Value::Empty),
+                    },
+                    None => Source { cell: *cell, formula: None, value: Value::Empty },
+                };
+                sources.push(from);
             }
         }
-        if has_formula {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the source {} holds a formula, and a fill of a formula is not here: the tree shifts the references of the formula it copies",
-                    source.to_text()
-                ),
-            });
-        }
-        if values.iter().all(|value| matches!(value, Value::Empty)) {
+        if sources.iter().all(|from| from.formula.is_none() && matches!(from.value, Value::Empty)) {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!("there is nothing at the source {}", source.to_text()),
             });
         }
-        // The **pattern** of every lane.
+        // What every cell of the fill will hold.
+        let mut writes: Vec<Write> = Vec::new();
+        let mut at = 0;
+        for lane in &lanes {
+            let lane_sources = &sources[at..at + lane.cells.len()];
+            at += lane.cells.len();
+            // The **pattern** of the lane: the tree's pattern is made
+            // from the cells' values, and a cell that holds a formula
+            // has no value here — its value is derived — so the pattern
+            // is made from the cells that hold values.
+            let lane_values: Vec<Value> = lane_sources
+                .iter()
+                .filter(|from| from.formula.is_none())
+                .map(|from| from.value.clone())
+                .collect();
+            let pattern = the_pattern(&lane_values, mode);
+            let per_cell: Vec<Pattern> = lane_sources
+                .iter()
+                .map(|from| {
+                    if from.formula.is_some() {
+                        Pattern::Copy
+                    } else {
+                        Pattern::of(std::slice::from_ref(&from.value))
+                    }
+                })
+                .collect();
+            for (index, cell) in lane.targets.iter().enumerate() {
+                let step = index as i64 + 1;
+                let source_index = if forward {
+                    index % lane.cells.len()
+                } else {
+                    lane.cells.len() - 1 - index % lane.cells.len()
+                };
+                let from = &lane_sources[source_index];
+                let format = sheet_cells.format(from.cell).map(|code| code.to_string());
+                // The tree copies a **formula** and **shifts** the
+                // references of it, so that the copy reads the cells
+                // beside it: `=B1` in `A1` becomes `=B2` in `A2`.
+                if let Some(text) = &from.formula {
+                    let expression = formula::parse(text).map_err(|error| EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "the formula in {} does not parse: {}",
+                            from.cell.to_text(),
+                            error.message
+                        ),
+                    })?;
+                    let rows = cell.row as i64 - from.cell.row as i64;
+                    let columns = cell.col as i64 - from.cell.col as i64;
+                    let moved =
+                        formula::shift(&expression, rows, columns).map_err(|error| EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "the formula in {} cannot be copied: {}",
+                                from.cell.to_text(),
+                                error.message
+                            ),
+                        })?;
+                    let prefix = if text.trim_start().starts_with('=') { "=" } else { "" };
+                    let copied = format!("{prefix}{}", moved.to_text());
+                    writes.push(Write { cell: *cell, formula: Some(copied), value: None, format });
+                    continue;
+                }
+                let value = match &pattern {
+                    Pattern::Copy => {
+                        // The tree's copy: the cell keeps the value
+                        // of the source cell — and when the mode
+                        // continues a series and the source has
+                        // more than one cell, every cell continues
+                        // **its own** series.
+                        if mode.extends() && lane.cells.len() > 1 {
+                            per_cell[source_index].value(step / lane.cells.len() as i64 + 1, forward)
+                        } else {
+                            Some(from.value.clone())
+                        }
+                    }
+                    pattern => pattern.value(step, forward),
+                };
+                let Some(value) = value else {
+                    // A number that would overflow is nothing: the
+                    // cell keeps what it had.
+                    continue;
+                };
+                writes.push(Write { cell: *cell, formula: None, value: Some(value), format });
+            }
+        }
+        // The **cycle**: a copied formula may read itself, and a fill
+        // that makes a cell read itself is refused — the whole fill,
+        // and not a part of it.
+        {
+            let mut book = crate::book_of(session.document());
+            if let Some(sheet_cells) = book.sheet_mut(&sheet_name) {
+                for write in &writes {
+                    match (&write.formula, &write.value) {
+                        (Some(text), _) => sheet_cells.set_formula(write.cell, text.clone()),
+                        (None, Some(value)) => sheet_cells.set_value(write.cell, value.clone()),
+                        (None, None) => {}
+                    }
+                }
+            }
+            for write in &writes {
+                if write.formula.is_some() && book.reads_itself(&sheet_name, write.cell) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "the fill would make {sheet_name}!{} read itself",
+                            write.cell.to_text()
+                        ),
+                    });
+                }
+            }
+        }
+        // The **writes**.
         let mut written: Vec<serde_json::Value> = Vec::new();
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
             let mut sheet_cells = sheet_cells_mut(node);
-            let mut at = 0;
-            for lane in &lanes {
-                let lane_values: Vec<Value> = values[at..at + lane.cells.len()].to_vec();
-                at += lane.cells.len();
-                let pattern = the_pattern(&lane_values, mode);
-                let per_cell: Vec<Pattern> =
-                    lane_values.iter().map(|value| Pattern::of(std::slice::from_ref(value))).collect();
-                for (index, cell) in lane.targets.iter().enumerate() {
-                    let step = index as i64 + 1;
-                    let source_index = if forward {
-                        index % lane.cells.len()
-                    } else {
-                        lane.cells.len() - 1 - index % lane.cells.len()
-                    };
-                    let value = match &pattern {
-                        Pattern::Copy => {
-                            // The tree's copy: the cell keeps the value
-                            // of the source cell — and when the mode
-                            // continues a series and the source has
-                            // more than one cell, every cell continues
-                            // **its own** series.
-                            if mode.extends() && lane.cells.len() > 1 {
-                                per_cell[source_index].value(step / lane.cells.len() as i64 + 1, forward)
-                            } else {
-                                Some(lane_values[source_index].clone())
-                            }
-                        }
-                        pattern => pattern.value(step, forward),
-                    };
-                    let Some(value) = value else {
-                        // A number that would overflow is nothing: the
-                        // cell keeps what it had.
-                        continue;
-                    };
-                    sheet_cells.set_value(*cell, value.clone());
-                    // The tree's fill copies the **style** of the
-                    // source, and the style holds the format.
-                    if let Some(format) =
-                        sheet_cells.format(lane.cells[source_index]).map(|code| code.to_string())
-                    {
-                        sheet_cells.set_format(*cell, Some(format));
+            for write in &writes {
+                match (&write.formula, &write.value) {
+                    (Some(text), _) => sheet_cells.set_formula(write.cell, text.clone()),
+                    (None, Some(value)) => sheet_cells.set_value(write.cell, value.clone()),
+                    (None, None) => {}
+                }
+                // The tree's fill copies the **style** of the source,
+                // and the style holds the format.
+                if let Some(format) = &write.format {
+                    sheet_cells.set_format(write.cell, Some(format.clone()));
+                }
+                match (&write.formula, &write.value) {
+                    (Some(text), _) => written.push(json!({ "cell": write.cell.to_text(), "formula": text })),
+                    (None, Some(value)) => {
+                        written.push(json!({ "cell": write.cell.to_text(), "value": value.to_json() }))
                     }
-                    written.push(json!({ "cell": cell.to_text(), "value": value.to_json() }));
+                    (None, None) => {}
                 }
             }
             node.data["cells"] = cells_into(&sheet_cells);
@@ -475,6 +568,28 @@ impl FillRange {
             json!({ "sheet": sheet, "source": source.to_text(), "mode": mode_name(mode), "cells": written }),
         ))
     }
+}
+
+/// A cell of the **source**: what it holds.
+struct Source {
+    /// The cell.
+    cell: CellRef,
+    /// The formula's text, when the cell holds one.
+    formula: Option<String>,
+    /// The value, when the cell holds one.
+    value: Value,
+}
+
+/// What one cell of a fill will hold.
+struct Write {
+    /// The cell that is written.
+    cell: CellRef,
+    /// The formula's text, when the cell is given one.
+    formula: Option<String>,
+    /// The value, when the cell is given one.
+    value: Option<Value>,
+    /// The format, when the source had one.
+    format: Option<String>,
 }
 
 /// A **lane** of a fill: the cells of the source it comes from, and

@@ -30,6 +30,10 @@
 //! number, with the tree's rule that the target holds the source at a
 //! corner (the module `fill`).
 //!
+//! And a fill of a **formula** copies the formula and **shifts** its
+//! references — the tree's `shift_relative`, and the tree's `$`: an
+//! anchored reference does not move (the module `formula`).
+//!
 //! And a cell may carry a **number format**, and the **text** it shows
 //! is derived from its value and that format: a format is the cell's
 //! own, where the tree's format is a style and a style is shared (the
