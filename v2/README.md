@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1692 tests.** The MCP server links **all fifteen batteries** in, so the
+**1698 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1692 tests
+cargo test          # 1698 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3677,6 +3677,7 @@ so.
 | the **music** of a MIDI file | **built.** The file's tempos, meters and keys come in with it and go out with it, and the notes land where the music lands (§239) | §239 |
 | the **tracks** of a MIDI file | **built.** Every track of the file becomes a track of the session, with a clip of its own (§240) | §240 |
 | the **consolidate** of a track | **built.** The sound of a track's clips over a range is written to a file, and the clips become one clip of it (§242) | §242 |
+| the **taking away** of a node | **built.** A clip, a marker and a track can be taken away, and what goes with them goes with them (§243) | §243 |
 
 ### The list of things that are honestly not there: empty
 
@@ -16751,3 +16752,69 @@ clips were. The sound is the same and the editing is not.
 - **The sound of the range is written to a file and not kept in the
   document.** A document that is copied to another machine carries the
   file beside it, as every source of this tree does.
+
+## 243. The taking away of a node
+
+The tree's editor can delete a clip, a marker and a track. This tree
+could do **none** of it: a thing that could be made but not unmade is a
+thing that is there for ever, and a document that cannot forget is a
+document that grows.
+
+### What was built
+
+- The command `sound.clip.remove` takes a **clip** away. Its edges go
+  with it: a clip that played a source is a clip that plays nothing,
+  and the edge that said so is an edge to nothing.
+- The command `sound.marker.remove` takes a **marker** away. Nothing
+  else goes with it: a marker is a place and nothing points at it.
+- The command `sound.track.remove` takes a **track** away, with its
+  **takes**, its **clips** and its **lanes**, and the **routes** and
+  **sends** that named it.
+- A clip whose **content** is locked is **refused**, and so is a
+  **master**: the master holds the fader of the whole mix.
+
+### What the port found
+
+- **The tree deletes a clip over a selection and this tree names it.**
+  The tree's `edit.clear` takes the selected clips away — or the
+  clips in a range — and the tree's `track.delete` takes the selected
+  tracks away, repairing the routes that pointed at a deleted bus.
+  Here the thing is **named**: a clip, a marker and a track are three
+  different things and each of them has a command of its own. The same
+  gap as the velocity's (§229) and the length's (§230), and the same
+  answer.
+- **The tree's markers are deleted by their number and this tree's by
+  their id.** The tree's marker is a memory location with a number in
+  the ruler; here a marker is a node and the node's id is its name.
+- **The tree's `edit.clear` takes a locked clip away and this tree
+  refuses.** The tree's clear does not ask about the locks: it removes
+  the clips in the range, locked or not. Here a clip whose content is
+  locked is refused, because a lock says the clip's sound is finished
+  (§ the locks) and a finished clip is not thrown away. That is a
+  deliberate difference.
+- **The tree repairs the routes that named a deleted track and this
+  tree lets them go.** The tree's `track.delete` reroutes the tracks
+  that fed a deleted bus to the bus that is left. Here the routes and
+  the sends that named the track go with it: a route to a track that is
+  not there is a route to nothing, and a document that keeps it is a
+  document that says something that is not true.
+
+### What it cost
+
+- **Six tests** in the sound battery (`tests/remove.rs`): a clip is
+  taken away, a locked clip is refused, a marker is taken away, a
+  track is taken away with its clips and its route, a master is
+  refused, and a node that is not a clip is refused.
+- **Three commands** (`sound.clip.remove`, `sound.marker.remove` and
+  `sound.track.remove`). The sound battery now carries **109** commands
+  and the MCP server **320**.
+
+### What it does not settle
+
+- **A take cannot be taken away on its own.** The tree's
+  `track.playlist_delete_unused` throws away the takes of a track that
+  are not used; here a take goes when its track goes, and not before.
+- **The groups of a track keep their name when the track goes.**
+  The tree's `track.delete` takes the deleted tracks out of their
+  groups; here the group node stays and the edge to the track goes
+  with the track, which is the same thing said the other way round.
