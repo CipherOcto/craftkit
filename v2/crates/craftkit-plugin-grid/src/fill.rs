@@ -1,24 +1,28 @@
 //! The **filling** of a range.
 //!
-//! A fill takes the value of one cell and puts it in a range: the tree
-//! calls it the **AutoFill**, and it has two shapes — the plain drag,
-//! which **copies**, and the series, which **counts on**.
+//! A fill takes the value of one cell — or of a **range** of cells —
+//! and puts it in a range. The tree has **four** ways of doing it, and
+//! they differ in what they do with a **lone number**:
 //!
-//! The tree's plain drag copies a lone number, so a drag of `1` gives
-//! `1, 1, 1`; the tree's series mode counts it up, and its `Ctrl`+drag
-//! does the same. Here the fill has a **mode**, and it says which:
-//! `copy` and `series`.
+//! | the source | `copy` | `series` | `extend` | `alternate` |
+//! |---|---|---|---|---|
+//! | one number | copied | **copied** | counts up | counts up |
+//! | two or more numbers | copied | the **trend** | the trend | copied |
+//! | text with a number | copied | counts on | counts on | copied |
+//! | text | copied | copied | copied | copied |
 //!
-//! The patterns of the series are the tree's:
+//! That is the tree's own table, and it is a surprise: the tree's
+//! **plain drag** copies a lone number, and the tree's **series** —
+//! which is the tree's *default* — copies it too; only the tree's
+//! right-drag **Fill Series** (`extend`) and the tree's `Ctrl`+drag
+//! (`alternate`) count a lone number up.
 //!
-//! - a **number** counts on by one;
-//! - **text with a number in it** — `Item 1`, `Q003x` — counts the
-//!   number on and keeps the width of the digits;
-//! - anything else is **copied**.
+//! The tree's **trend** is the tree's: the **least squares** line
+//! through the numbers of the source, so `1, 3` goes on as `5, 7, 9`.
 //!
-//! The tree's **lists** — the days, the months, the quarters — and the
-//! tree's **dates** are not here: a text that is a day of the week is
-//! copied here, and the tree would step through the week.
+//! The tree's source may be a **range**, and then it fills **lane by
+//! lane**: each column of the source continues down its own lane, and
+//! each row of the source continues along its own lane.
 //!
 //! Two of the tree's rules are here because they are the shape of the
 //! operation and not a detail of it:
@@ -38,8 +42,13 @@
 //!   **shifts its relative references** for every cell it writes, and
 //!   that is a thing of its own; here a source that holds a formula is
 //!   refused.
-//! - **The tree's dates and lists are not here**, and neither is the
-//!   tree's **quarter** and its **ordinal** (`1st`, `2nd`).
+//! - **The tree's lists are not here** — the days, the months, the
+//!   quarters — and neither are the tree's **dates**: a text that is a
+//!   day of the week is copied here, and the tree would step through
+//!   the week.
+//! - **The tree's `formats` and `values` modes are not here**: the
+//!   first copies the style without the value, the second copies the
+//!   value without the style.
 
 use craftkit_derive::Command;
 
@@ -56,15 +65,50 @@ use crate::{cells_into, cells_of, sheet_cells_mut};
 /// payload is not a place for a hundred thousand cells.
 const MAX_FILL_CELLS: u64 = 10_000;
 
+/// The ways a fill may write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// The value is **copied**.
+    Copy,
+    /// The tree's **series**: the tree's default, and the tree's series
+    /// copies a lone number.
+    Series,
+    /// The tree's right-drag **Fill Series**: a lone number counts up.
+    Extend,
+    /// The tree's `Ctrl`+drag: a lone number counts up and everything
+    /// else is copied.
+    Alternate,
+}
+
+impl Mode {
+    /// The mode a name says, if it says one this tree knows.
+    fn parse(name: &str) -> Option<Mode> {
+        match name.trim().to_lowercase().as_str() {
+            "copy" => Some(Mode::Copy),
+            "series" => Some(Mode::Series),
+            "extend" => Some(Mode::Extend),
+            "alternate" => Some(Mode::Alternate),
+            _ => None,
+        }
+    }
+
+    /// Whether the mode **continues a series** rather than copying it.
+    fn extends(self) -> bool {
+        matches!(self, Mode::Series | Mode::Extend)
+    }
+}
+
 /// What a fill writes.
 #[derive(Debug, Clone)]
 enum Pattern {
     /// The value is copied.
-    Copy(Value),
-    /// A number that counts on.
+    Copy,
+    /// A series of numbers.
     Linear {
-        /// The number it starts from.
-        base: f64,
+        /// The number the series starts from.
+        first: f64,
+        /// The number it ends on, at the source.
+        last: f64,
         /// How much it counts on by.
         step: f64,
     },
@@ -75,7 +119,9 @@ enum Pattern {
         /// The text after the number.
         suffix: String,
         /// The number it starts from.
-        base: i64,
+        first: i64,
+        /// The number it ends on, at the source.
+        last: i64,
         /// How much the number counts on by.
         step: i64,
         /// How wide the digits are: `Q003x` keeps three.
@@ -91,28 +137,93 @@ impl Pattern {
     fn value(&self, k: i64, forward: bool) -> Option<Value> {
         let sign = if forward { 1 } else { -1 };
         match self {
-            Pattern::Copy(value) => Some(value.clone()),
-            Pattern::Linear { base, step } => Some(Value::Number(round15(base + step * (k * sign) as f64))),
-            Pattern::TextNum { prefix, suffix, base, step, width } => {
-                let number = step.checked_mul(k)?.checked_mul(sign)?.checked_add(*base)?;
+            Pattern::Copy => None,
+            Pattern::Linear { first, last, step } => {
+                let base = if forward { *last } else { *first };
+                Some(Value::Number(round15(base + step * (k * sign) as f64)))
+            }
+            Pattern::TextNum { prefix, suffix, first, last, step, width } => {
+                let base = if forward { *last } else { *first };
+                let number = step.checked_mul(k)?.checked_mul(sign)?.checked_add(base)?;
                 let number = number.checked_abs()?;
                 Some(Value::Text(format!("{prefix}{number:0width$}{suffix}", width = *width)))
             }
         }
     }
 
-    /// The pattern of a **series** of one value.
-    fn of(value: &Value) -> Pattern {
-        match value {
-            Value::Number(number) => Pattern::Linear { base: *number, step: 1.0 },
-            Value::Text(text) => match split_num(text) {
-                Some((prefix, number, suffix, width)) => {
-                    Pattern::TextNum { prefix, suffix, base: number, step: 1, width }
-                }
-                None => Pattern::Copy(value.clone()),
-            },
-            _ => Pattern::Copy(value.clone()),
+    /// The pattern of a **lane**: the values of the source cells.
+    ///
+    /// A lane of **numbers** is a series — the least squares line
+    /// through them — unless there is only one, which the tree copies.
+    /// A lane of **text with a number** in it counts its number on. A
+    /// lane of anything else is copied.
+    fn of(values: &[Value]) -> Pattern {
+        if values.is_empty() {
+            return Pattern::Copy;
         }
+        if values.iter().all(|value| matches!(value, Value::Number(_))) {
+            if values.len() == 1 {
+                return Pattern::Copy;
+            }
+            let numbers: Vec<f64> = values
+                .iter()
+                .filter_map(|value| match value {
+                    Value::Number(number) => Some(*number),
+                    _ => None,
+                })
+                .collect();
+            // The **least squares** line through the numbers, as the
+            // tree's trend is.
+            let count = numbers.len() as f64;
+            let mean_x = (count - 1.0) / 2.0;
+            let mean_y = numbers.iter().sum::<f64>() / count;
+            let mut numerator = 0.0;
+            let mut denominator = 0.0;
+            for (index, number) in numbers.iter().enumerate() {
+                numerator += (index as f64 - mean_x) * (number - mean_y);
+                denominator += (index as f64 - mean_x).powi(2);
+            }
+            let step = if denominator == 0.0 { 0.0 } else { numerator / denominator };
+            let last = mean_y + step * (count - 1.0 - mean_x);
+            let first = mean_y - step * mean_x;
+            return Pattern::Linear { first, last, step };
+        }
+        if values.iter().all(|value| matches!(value, Value::Text(_))) {
+            let texts: Vec<String> = values
+                .iter()
+                .filter_map(|value| match value {
+                    Value::Text(text) => Some(text.clone()),
+                    _ => None,
+                })
+                .collect();
+            let parts: Vec<Option<(String, i64, String, usize)>> =
+                texts.iter().map(|text| split_num(text)).collect();
+            if parts.iter().all(|part| part.is_some()) {
+                let parts: Vec<(String, i64, String, usize)> = parts.into_iter().flatten().collect();
+                if parts.iter().all(|part| part.0 == parts[0].0 && part.2 == parts[0].2) {
+                    let first = parts.first().map(|part| part.1).unwrap_or(0);
+                    let last = parts.last().map(|part| part.1).unwrap_or(0);
+                    let step = if parts.len() >= 2 { parts[1].1 - parts[0].1 } else { 1 };
+                    return Pattern::TextNum {
+                        prefix: parts[0].0.clone(),
+                        suffix: parts[0].2.clone(),
+                        first,
+                        last,
+                        step,
+                        width: parts[0].3,
+                    };
+                }
+            }
+        }
+        Pattern::Copy
+    }
+
+    /// Whether the pattern is a **copy** — and the tree's modes read
+    /// that: the tree's `alternate` copies everything but a lone
+    /// number, and the tree's `extend` continues a lone number that
+    /// would otherwise be copied.
+    fn is_copy(&self) -> bool {
+        matches!(self, Pattern::Copy)
     }
 }
 
@@ -149,12 +260,11 @@ fn round15(number: f64) -> f64 {
     if !scale.is_finite() || scale == 0.0 { number } else { (number * scale).round() / scale }
 }
 
-/// **Fill** a range from a cell.
+/// **Fill** a range from a cell or a range of cells.
 ///
 /// The target must **hold the source at a corner**, and the fill goes
-/// down or up, or right or left, from there. The mode is `copy` — the
-/// value is copied — or `series`, and the series counts on: a number
-/// counts by one, and a text with a number in it counts its number on.
+/// down or up, or right or left, from there. The mode is the tree's:
+/// `copy`, `series` (the tree's default), `extend` or `alternate`.
 ///
 /// A source that holds a **formula** is refused: the tree copies the
 /// formula and shifts its references, and that is a thing of its own.
@@ -163,13 +273,12 @@ fn round15(number: f64) -> f64 {
 pub struct FillRange {
     /// The sheet it goes in.
     pub sheet: NodeRef,
-    /// The cell the fill comes from.
+    /// The cell — or the range of cells — the fill comes from.
     pub from: Text,
     /// The range the fill goes into, `A1:A10`.
     pub to: Text,
-    /// `copy` or `series`. The tree's plain drag is `copy` and the
-    /// tree's series is `series`; the tree's command defaults to the
-    /// series, and so does this one.
+    /// `copy`, `series`, `extend` or `alternate`. The tree's default
+    /// is the series, and so is this one.
     pub mode: Option<Text>,
 }
 
@@ -189,26 +298,20 @@ impl FillRange {
                 message: format!("the node `{sheet}` is not a sheet"),
             });
         }
-        let source = CellRef::parse(self.from.0.trim()).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("`{}` is not a cell", self.from.0.trim()),
-        })?;
+        let source = area_at(&self.from.0, &id)?;
         let target = area_at(&self.to.0, &id)?;
-        // The tree's command has a mode as well, and it **defaults to
-        // the series**: the tree's drag copies and the tree's command
-        // counts on.
         let mode = match &self.mode {
-            Some(mode) => mode.0.trim().to_lowercase(),
-            None => "series".to_string(),
-        };
-        if mode != "copy" && mode != "series" {
-            return Err(EngineError::Failed {
+            Some(mode) => Mode::parse(&mode.0).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
-                message: format!("`{mode}` is not a mode: a fill is `copy` or `series`"),
-            });
-        }
+                message: format!(
+                    "`{}` is not a mode: a fill is `copy`, `series`, `extend` or `alternate`",
+                    mode.0.trim()
+                ),
+            })?,
+            None => Mode::Series,
+        };
         // The target must **hold the source at a corner**.
-        if !target.covers(source) {
+        if !target.covers(source.start) || !target.covers(source.end) {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!(
@@ -218,8 +321,8 @@ impl FillRange {
                 ),
             });
         }
-        let at_corner = (source.row == target.start.row || source.row == target.end.row)
-            && (source.col == target.start.col || source.col == target.end.col);
+        let at_corner = (source.start.row == target.start.row || source.end.row == target.end.row)
+            && (source.start.col == target.start.col || source.end.col == target.end.col);
         if !at_corner {
             return Err(EngineError::Failed {
                 id: id.clone(),
@@ -230,91 +333,199 @@ impl FillRange {
                 ),
             });
         }
-        // The **direction**: down or up when the target has rows, and
-        // right or left when it has one row.
-        let vertical = target.end.row > target.start.row;
-        let forward = if vertical { target.end.row > source.row } else { target.end.col > source.col };
-        let mut cells: Vec<CellRef> = Vec::new();
+        // The **direction**: down or up when the target has rows the
+        // source does not, and right or left when it has columns.
+        let source_rows = source.end.row - source.start.row + 1;
+        let source_columns = source.end.col - source.start.col + 1;
+        let target_rows = target.end.row - target.start.row + 1;
+        let target_columns = target.end.col - target.start.col + 1;
+        let vertical = target_rows != source_rows || target_columns == source_columns;
+        let forward =
+            if vertical { target.end.row > source.end.row } else { target.end.col > source.end.col };
+        // The **lanes**: the columns of the source when the fill goes
+        // down, and its rows when it goes along.
+        let mut lanes: Vec<Lane> = Vec::new();
         if vertical {
-            if forward {
-                for row in source.row + 1..=target.end.row {
-                    cells.push(CellRef { col: source.col, row });
+            for column in source.start.col..=source.end.col {
+                let mut cells = Vec::new();
+                for row in source.start.row..=source.end.row {
+                    cells.push(CellRef { col: column, row });
                 }
-            } else {
-                for row in (target.start.row..source.row).rev() {
-                    cells.push(CellRef { col: source.col, row });
+                let mut targets = Vec::new();
+                if forward {
+                    for row in source.end.row + 1..=target.end.row {
+                        targets.push(CellRef { col: column, row });
+                    }
+                } else {
+                    for row in (target.start.row..source.start.row).rev() {
+                        targets.push(CellRef { col: column, row });
+                    }
                 }
-            }
-        } else if forward {
-            for col in source.col + 1..=target.end.col {
-                cells.push(CellRef { col, row: source.row });
+                lanes.push(Lane { cells, targets });
             }
         } else {
-            for col in (target.start.col..source.col).rev() {
-                cells.push(CellRef { col, row: source.row });
+            for row in source.start.row..=source.end.row {
+                let mut cells = Vec::new();
+                for column in source.start.col..=source.end.col {
+                    cells.push(CellRef { col: column, row });
+                }
+                let mut targets = Vec::new();
+                if forward {
+                    for column in source.end.col + 1..=target.end.col {
+                        targets.push(CellRef { col: column, row });
+                    }
+                } else {
+                    for column in (target.start.col..source.start.col).rev() {
+                        targets.push(CellRef { col: column, row });
+                    }
+                }
+                lanes.push(Lane { cells, targets });
             }
         }
-        if cells.len() as u64 > MAX_FILL_CELLS {
+        let count: u64 = lanes.iter().map(|lane| lane.targets.len() as u64).sum();
+        if count > MAX_FILL_CELLS {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!(
-                    "the fill is too large: it would write {} cells, and a fill writes at most {MAX_FILL_CELLS}",
-                    cells.len()
+                    "the fill is too large: it would write {count} cells, and a fill writes at most {MAX_FILL_CELLS}"
                 ),
             });
         }
         // The **source**: what it holds.
-        let (source_value, source_format) = {
-            let sheet_cells = cells_of(node);
-            let format = sheet_cells.format(source).map(|code| code.to_string());
-            let value = match sheet_cells.get(source) {
-                Some(entry) if entry.formula.is_some() => {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!(
-                            "the source {} holds a formula, and a fill of a formula is not here: the tree shifts the references of the formula it copies",
-                            source.to_text()
-                        ),
-                    });
+        let sheet_cells = cells_of(node);
+        let mut values: Vec<Value> = Vec::new();
+        let mut has_formula = false;
+        for lane in &lanes {
+            for cell in &lane.cells {
+                match sheet_cells.get(*cell) {
+                    Some(entry) if entry.formula.is_some() => has_formula = true,
+                    Some(entry) => values.push(entry.value.clone().unwrap_or(Value::Empty)),
+                    None => values.push(Value::Empty),
                 }
-                Some(entry) => entry.value.clone(),
-                None => None,
-            };
-            (value, format)
-        };
-        let Some(value) = source_value else {
+            }
+        }
+        if has_formula {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the source {} holds a formula, and a fill of a formula is not here: the tree shifts the references of the formula it copies",
+                    source.to_text()
+                ),
+            });
+        }
+        if values.iter().all(|value| matches!(value, Value::Empty)) {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!("there is nothing at the source {}", source.to_text()),
             });
-        };
-        let pattern = match mode.as_str() {
-            "series" => Pattern::of(&value),
-            _ => Pattern::Copy(value),
-        };
-        // The **fill**: every cell of the range past the source.
-        let mut written: Vec<serde_json::Value> = Vec::with_capacity(cells.len());
+        }
+        // The **pattern** of every lane.
+        let mut written: Vec<serde_json::Value> = Vec::new();
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
             let mut sheet_cells = sheet_cells_mut(node);
-            for cell in cells {
-                let Some(value) = pattern.value(written.len() as i64 + 1, forward) else {
-                    // A number that would overflow is nothing: the cell
-                    // keeps what it had.
-                    continue;
-                };
-                sheet_cells.set_value(cell, value.clone());
-                // The tree's fill copies the **style** of the source,
-                // and the style holds the format.
-                if let Some(format) = &source_format {
-                    sheet_cells.set_format(cell, Some(format.clone()));
+            let mut at = 0;
+            for lane in &lanes {
+                let lane_values: Vec<Value> = values[at..at + lane.cells.len()].to_vec();
+                at += lane.cells.len();
+                let pattern = the_pattern(&lane_values, mode);
+                let per_cell: Vec<Pattern> =
+                    lane_values.iter().map(|value| Pattern::of(std::slice::from_ref(value))).collect();
+                for (index, cell) in lane.targets.iter().enumerate() {
+                    let step = index as i64 + 1;
+                    let source_index = if forward {
+                        index % lane.cells.len()
+                    } else {
+                        lane.cells.len() - 1 - index % lane.cells.len()
+                    };
+                    let value = match &pattern {
+                        Pattern::Copy => {
+                            // The tree's copy: the cell keeps the value
+                            // of the source cell — and when the mode
+                            // continues a series and the source has
+                            // more than one cell, every cell continues
+                            // **its own** series.
+                            if mode.extends() && lane.cells.len() > 1 {
+                                per_cell[source_index].value(step / lane.cells.len() as i64 + 1, forward)
+                            } else {
+                                Some(lane_values[source_index].clone())
+                            }
+                        }
+                        pattern => pattern.value(step, forward),
+                    };
+                    let Some(value) = value else {
+                        // A number that would overflow is nothing: the
+                        // cell keeps what it had.
+                        continue;
+                    };
+                    sheet_cells.set_value(*cell, value.clone());
+                    // The tree's fill copies the **style** of the
+                    // source, and the style holds the format.
+                    if let Some(format) =
+                        sheet_cells.format(lane.cells[source_index]).map(|code| code.to_string())
+                    {
+                        sheet_cells.set_format(*cell, Some(format));
+                    }
+                    written.push(json!({ "cell": cell.to_text(), "value": value.to_json() }));
                 }
-                written.push(json!({ "cell": cell.to_text(), "value": value.to_json() }));
             }
             node.data["cells"] = cells_into(&sheet_cells);
         }
         let count = written.len();
-        Ok(Outcome::changed(format!("filled {count} cell(s)"))
-            .with_data(json!({ "sheet": sheet, "source": source.to_text(), "mode": mode, "cells": written })))
+        Ok(Outcome::changed(format!("filled {count} cell(s)")).with_data(
+            json!({ "sheet": sheet, "source": source.to_text(), "mode": mode_name(mode), "cells": written }),
+        ))
+    }
+}
+
+/// A **lane** of a fill: the cells of the source it comes from, and
+/// the cells it writes.
+struct Lane {
+    /// The cells of the source.
+    cells: Vec<CellRef>,
+    /// The cells the lane writes.
+    targets: Vec<CellRef>,
+}
+
+/// The pattern a lane is written with, for a mode.
+///
+/// The tree's table: the `copy` mode copies, the `series` mode — the
+/// tree's default — continues what it finds, the `extend` mode counts
+/// a lone number up, and the `alternate` mode counts a lone number up
+/// and copies everything else.
+fn the_pattern(values: &[Value], mode: Mode) -> Pattern {
+    let pattern = Pattern::of(values);
+    match mode {
+        Mode::Copy => Pattern::Copy,
+        Mode::Series => pattern,
+        Mode::Extend => {
+            if pattern.is_copy()
+                && values.len() == 1
+                && let Some(Value::Number(number)) = values.first()
+            {
+                let number = *number;
+                return Pattern::Linear { first: number, last: number, step: 1.0 };
+            }
+            pattern
+        }
+        Mode::Alternate => {
+            if values.len() == 1
+                && let Some(Value::Number(number)) = values.first()
+            {
+                let number = *number;
+                return Pattern::Linear { first: number, last: number, step: 1.0 };
+            }
+            Pattern::Copy
+        }
+    }
+}
+
+/// The name of a mode.
+fn mode_name(mode: Mode) -> &'static str {
+    match mode {
+        Mode::Copy => "copy",
+        Mode::Series => "series",
+        Mode::Extend => "extend",
+        Mode::Alternate => "alternate",
     }
 }
 

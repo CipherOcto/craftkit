@@ -24,10 +24,11 @@
 //! | a cell's value | **derived**: the evaluator computes it |
 //! | the dependency graph | the sheet's **payload**, and the plugin's business |
 //!
-//! And a **range** may be **filled** from a cell: the tree's AutoFill,
-//! in its two shapes — the plain drag copies, and the series counts on
-//! — with the tree's rule that the target holds the source at a corner
-//! (the module `fill`).
+//! And a **range** may be **filled** from a cell or from a range of
+//! cells: the tree's AutoFill, in its four modes — `copy`, `series`,
+//! `extend` and `alternate` — which differ in what they do with a lone
+//! number, with the tree's rule that the target holds the source at a
+//! corner (the module `fill`).
 //!
 //! And a cell may carry a **number format**, and the **text** it shows
 //! is derived from its value and that format: a format is the cell's
