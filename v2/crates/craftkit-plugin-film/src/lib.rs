@@ -18,6 +18,11 @@
 //! That last part is the **two clocks**: a clip has a place on the
 //! timeline and a place in the media, and they are not the same place.
 //!
+//! And a clip may be **trimmed**: one of its two edges moves, and a
+//! trim that would cross a bound is **refused** and says which bound
+//! stopped it — the tree clamps the same trim and says nothing (the
+//! module `trim`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -62,6 +67,10 @@
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
+
+mod trim;
+
+pub use trim::TrimClip;
 
 /// The film layer.
 ///
@@ -445,7 +454,7 @@ impl TimelineEvaluator {
     id = "panel.film",
     label = "Film",
     layer = "film",
-    commands("film.bin.add", "film.item.add", "film.track.add", "film.clip.add")
+    commands("film.bin.add", "film.item.add", "film.track.add", "film.clip.add", "film.clip.trim")
 )]
 pub struct FilmPanel;
 
@@ -473,6 +482,7 @@ craftkit_sdk::plugin_anchor!(
     AddTrack,
     AddClip,
     ReadTimeline,
+    TrimClip,
     TimelineEvaluator,
     FilmPanel
 );
