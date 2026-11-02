@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1797 tests.** The MCP server links **all fifteen batteries** in, so the
+**1803 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1797 tests
+cargo test          # 1803 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3695,6 +3695,7 @@ so.
 | the **turning** of a path | **built.** A path's open contour is closed and a path is turned the other way round (§258) | §258 |
 | the **anchor** of a segment | **built.** A segment is split in two, and the two halves are the same curve (§259) | §259 |
 | the **key** of an object | **built.** A key of a PDF object's dictionary is set and taken away, and the order is kept (§260) | §260 |
+| the **taking away** of an object | **built.** An object of a PDF file is taken away, and the references that named it go with it (§261) | §261 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17903,11 +17904,11 @@ was wrong the moment it was written.
 
 ### What was built
 
-- The command `pdf.object.set` sets a key of an object's dictionary:
+- The command `pdf.entry.set` sets a key of an object's dictionary:
   the key is **added** when it is not there and **changed** when it is,
   and the order of the dictionary is kept — a key that is there keeps
   its place and a key that is new goes at the end.
-- The command `pdf.object.remove` takes a key away.
+- The command `pdf.entry.remove` takes a key away.
 - A key that is **not there** is refused: a key that was never there is
   not a key that was taken away.
 - A node that is **not an object** is refused, and so is an **empty**
@@ -17937,8 +17938,8 @@ was wrong the moment it was written.
   added, the key is changed, the key is taken away, a key that is not
   there is refused, a node that is not an object is refused, and an
   empty key is refused.
-- **Two commands** (`pdf.object.set` and `pdf.object.remove`). The PDF
-  battery now carries **18** commands and the MCP server **346**.
+- **Two commands** (`pdf.entry.set` and `pdf.entry.remove`). The PDF
+  battery now carries **19** commands and the MCP server **347**.
 
 ### What it does not settle
 
@@ -17949,3 +17950,82 @@ was wrong the moment it was written.
 - **The tree's file is not here**: the cross-reference table, the
   incremental save and the parser are the file (§27), and a key that
   is set here is a key in the object model and not yet in a file.
+
+---
+
+## 261. The taking away of an object
+
+A PDF file is a set of **indirect objects**, and this tree's PDF battery
+could put one in and never take one out: a file whose objects only grow
+is not a file that can be edited.
+
+### What was built
+
+- The command `pdf.object.remove` takes an indirect object away — a
+  dictionary or a stream.
+- The **references** to it go with it. The edges of the kind `ref` die
+  with the node (the SDK does that), and the **values in the
+  dictionaries** are taken away as well, because the file is written
+  from the dictionaries and not from the edges: a key that held one
+  reference loses the key, and a key that held a **list** loses the one
+  element that named the object and keeps the rest.
+- The **root** of the file — the object whose type is `Catalog` — is
+  **refused**: a file without a root is not a file.
+- A node that is **not an object** is refused, and so is a node that is
+  **not there**.
+- The two commands that changed a dictionary's key are **renamed**:
+  `pdf.object.set` is `pdf.entry.set` and `pdf.object.remove` is
+  `pdf.entry.remove`, because `pdf.object.remove` is now the name of
+  the other thing. A dictionary is a list of **entries**, and the code
+  has always called them that.
+
+### What the port found
+
+- **The tree's removal is a rebuild, and this one is a surgery.** The
+  tree's `delete_pages` walks the page tree, keeps the pages that
+  stay, and **rebuilds** the tree around them — flattening the
+  attributes the survivors inherited onto the survivors themselves. Here
+  there is no page tree to rebuild: the objects are a graph, so what
+  has to happen is that the **dictionaries of the other objects** are
+  edited, in place, one key at a time. The tree's act is one rebuild;
+  this one is N small edits, and the difference is the difference
+  between a tree and a graph.
+- **The tree's rule is about the last page, and this one is about the
+  root.** The tree refuses to delete every page
+  (`WouldRemoveAllPages`), because a file with no pages is not a file.
+  Here the file needs a root, and the root is refused for the same
+  reason: the file must have one thing it cannot do without.
+- **The tree drops the destinations that pointed at the page that
+  went** — a bookmark and a link lose their `/Dest` and their `/A`
+  rather than pointing at nothing — and so does this one: the value in
+  the dictionary is taken away, and what pointed at it points at
+  nothing, which is what the tree also does.
+- **The tree frees the number of the object that went, and this one
+  does not.** The tree's `doc.free` puts the number back in the pool;
+  here the number is the caller's to give, and `pdf.object.add` takes
+  any number at all, so a number that is free again may be given to
+  another object. That is a gap, and it is named in the arc that
+  closes it — or in the arc that does not.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/remove.rs`): the object is
+  gone, the references to it go with it, a list loses the one element
+  that named it, the root is refused, a node that is not an object is
+  refused, and a node that is not there is refused.
+- **One command** (`pdf.object.remove`) and **two renames**. The PDF
+  battery now carries **19** commands and the MCP server **347**.
+
+### What it does not settle
+
+- **The bytes of a stream stay.** The bytes live in a file beside the
+  document, and taking the object away does not take the file away: an
+  orphaned file is left behind.
+- **What the object held stays.** An annotation of a page that is taken
+  away is an object of its own, and it stays in the document — an
+  object that nothing refers to any more. The tree drops the widgets
+  of a page that goes; here they are orphans, and nothing gathers
+  them.
+- **The tree's file is not here**: the cross-reference table is
+  written by the writer from the objects that are in the document, and
+  an object that is gone is not in the table.
