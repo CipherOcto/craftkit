@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and seventeen commands**, one for each thing a person does to a
+//! - **a hundred and nineteen commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -50,7 +50,8 @@
 //!   separate a clip at its **transients**, **strip** the silence out
 //!   of a clip in any of its three **modes**, **copy**, **cut** and
 //!   **paste** the material of a range, turn a track's **voice** off
-//!   and on again, **commit** a track to a file, and
+//!   and on again, **commit** a track to a file, **take away** an
+//!   **insert** and **move** it in the chain, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -470,7 +471,7 @@ pub use midi::{
 };
 pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
-    LanePayload, SendKind, SendPayload,
+    LanePayload, MoveInsert, RemoveInsert, SendKind, SendPayload,
 };
 pub use remove::{RemoveClip, RemoveMarker, RemoveTrack};
 pub use repeat::RepeatRange;
@@ -7815,10 +7816,12 @@ craftkit_sdk::plugin_anchor!(
     ConsolidateTrack,
     CommitTrack,
     CopyRange,
+    MoveInsert,
     CutRange,
     PasteRange,
     ReadClipboard,
     RemoveClip,
+    RemoveInsert,
     RemoveMarker,
     RemoveTrack,
     SetTrackInactive,

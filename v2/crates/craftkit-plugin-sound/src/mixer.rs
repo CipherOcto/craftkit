@@ -910,6 +910,139 @@ impl SetInsert {
     }
 }
 
+/// **Take away** an insert: the plugin is not on the thing any more.
+///
+/// The tree's insert lives in a **slot** on the track, and taking it
+/// away empties the slot. Here the insert is a **node** under the
+/// thing it is on, and taking it away takes the node away: there is
+/// no slot left empty, because there was never a slot.
+///
+/// A node that is **not an insert** is refused.
+#[derive(Command)]
+#[command(
+    id = "sound.insert.remove",
+    area = "sound",
+    layer = "sound",
+    icon = "minus",
+    menu("Track", "Inserts"),
+    mutates,
+    undoable
+)]
+pub struct RemoveInsert {
+    /// The insert to take away.
+    pub insert: NodeRef,
+}
+
+impl RemoveInsert {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.insert.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "sound.insert.remove".to_string(),
+                message: format!("there is no node `{id}` in the document"),
+            });
+        };
+        if node.kind != "sound.insert" {
+            return Err(EngineError::Failed {
+                id: "sound.insert.remove".to_string(),
+                message: format!("the node `{id}` is a `{}` and not an insert", node.kind),
+            });
+        }
+        let owner = crate::timeline::parent_of(session.document(), id).map(|owner| owner.id);
+        session.document_mut()?.remove_node(id);
+        Ok(Outcome::changed(format!("took the insert `{id}` away"))
+            .with_data(serde_json::json!({ "id": id, "owner": owner })))
+    }
+}
+
+/// **Move** an insert: it and another one swap their places in the
+/// chain.
+///
+/// The chain is the **order** of the inserts on the thing they are on,
+/// and the order is the order they are run in. The tree's insert lives
+/// in a **slot** and the move swaps two slots; here the insert is a
+/// **node** and the move swaps two nodes.
+///
+/// Two inserts of **different** things are refused: a chain is the
+/// chain of one thing, and there is no chain that holds both.
+#[derive(Command)]
+#[command(
+    id = "sound.insert.move",
+    area = "sound",
+    layer = "sound",
+    icon = "move",
+    menu("Track", "Inserts"),
+    mutates,
+    undoable
+)]
+pub struct MoveInsert {
+    /// The insert to move.
+    pub insert: NodeRef,
+    /// The insert it swaps places with.
+    pub other: NodeRef,
+}
+
+impl MoveInsert {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.insert.move".to_string();
+        let (insert, other) = (self.insert.0, self.other.0);
+        for node_id in [insert, other] {
+            match session.document().node(node_id) {
+                Some(node) if node.kind == "sound.insert" => {}
+                Some(node) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{node_id}` is a `{}` and not an insert", node.kind),
+                    });
+                }
+                None => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no node `{node_id}` in the document"),
+                    });
+                }
+            }
+        }
+        let owner = crate::timeline::parent_of(session.document(), insert).map(|owner| owner.id);
+        let other_owner = crate::timeline::parent_of(session.document(), other).map(|owner| owner.id);
+        if owner != other_owner {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "the two inserts are not on the same thing: a chain is the chain of one thing"
+                    .to_string(),
+            });
+        }
+        let Some(owner_id) = owner else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the insert `{insert}` is on nothing"),
+            });
+        };
+        let Some(node) = session.document_mut()?.node_mut(owner_id) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{owner_id}` in the document"),
+            });
+        };
+        let children = &mut node.children;
+        let Some(from) = children.iter().position(|child| child.id == insert) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the insert `{insert}` is not on `{owner_id}`"),
+            });
+        };
+        let Some(to) = children.iter().position(|child| child.id == other) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the insert `{other}` is not on `{owner_id}`"),
+            });
+        };
+        children.swap(from, to);
+        Ok(Outcome::changed(format!("moved the insert `{insert}` and `{other}`"))
+            .with_data(serde_json::json!({ "insert": insert, "other": other, "owner": owner_id })))
+    }
+}
+
 /// Send a track to a bus at a level.
 ///
 /// The send is a node under the track, and the bus it goes to is a
