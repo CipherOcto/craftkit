@@ -240,6 +240,130 @@ impl AddObject {
     }
 }
 
+/// **Set** a key of an object's dictionary.
+///
+/// The dictionary is the payload, and a payload that cannot be changed
+/// is a payload that was wrong the moment it was written. The key is
+/// **added** when it is not there and **changed** when it is, and the
+/// order of the dictionary is kept: a key that is there keeps its
+/// place, and a key that is new goes at the end.
+///
+/// A node that is **not an object** is refused, and so is an empty
+/// key.
+#[derive(Command)]
+#[command(id = "pdf.object.set", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
+pub struct SetObjectEntry {
+    /// The object.
+    pub object: NodeRef,
+    /// The key.
+    pub key: Text,
+    /// The value.
+    pub value: serde_json::Value,
+}
+
+impl SetObjectEntry {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.object.set".to_string();
+        let object = self.object.0;
+        let Some(node) = session.document().node(object) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{object}`"),
+            });
+        };
+        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{object}` is a `{}` and not an object", node.kind),
+            });
+        }
+        let key = self.key.0.trim();
+        if key.is_empty() {
+            return Err(EngineError::Failed { id: id.clone(), message: "a key is text".to_string() });
+        }
+        let mut entries = entries_of(&node.data);
+        let value = self.value.clone();
+        match entries.iter_mut().find(|(name, _)| name == key) {
+            Some(entry) => entry.1 = value,
+            None => entries.push((key.to_string(), value)),
+        }
+        let data = serde_json::json!({
+            "object": node.data.get("object").cloned().unwrap_or(serde_json::Value::Null),
+            "entries": entries
+                .iter()
+                .map(|(key, value)| serde_json::json!([key, value]))
+                .collect::<Vec<_>>(),
+        });
+        let Some(node) = session.document_mut()?.node_mut(object) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{object}`"),
+            });
+        };
+        node.data = data;
+        Ok(Outcome::changed(format!("the object `{object}` has the key `{key}`"))
+            .with_data(serde_json::json!({ "id": object, "key": key })))
+    }
+}
+
+/// **Take away** a key of an object's dictionary.
+///
+/// A key that is **not there** is refused: a key that was never there
+/// is not a key that was taken away.
+#[derive(Command)]
+#[command(id = "pdf.object.remove", area = "pdf", layer = "pdf", icon = "minus", mutates, undoable)]
+pub struct RemoveObjectEntry {
+    /// The object.
+    pub object: NodeRef,
+    /// The key.
+    pub key: Text,
+}
+
+impl RemoveObjectEntry {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.object.remove".to_string();
+        let object = self.object.0;
+        let Some(node) = session.document().node(object) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{object}`"),
+            });
+        };
+        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{object}` is a `{}` and not an object", node.kind),
+            });
+        }
+        let key = self.key.0.trim();
+        let mut entries = entries_of(&node.data);
+        let before = entries.len();
+        entries.retain(|(name, _)| name != key);
+        if entries.len() == before {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the object `{object}` has no key `{key}`"),
+            });
+        }
+        let data = serde_json::json!({
+            "object": node.data.get("object").cloned().unwrap_or(serde_json::Value::Null),
+            "entries": entries
+                .iter()
+                .map(|(key, value)| serde_json::json!([key, value]))
+                .collect::<Vec<_>>(),
+        });
+        let Some(node) = session.document_mut()?.node_mut(object) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{object}`"),
+            });
+        };
+        node.data = data;
+        Ok(Outcome::changed(format!("the object `{object}` has no key `{key}`"))
+            .with_data(serde_json::json!({ "id": object, "key": key })))
+    }
+}
+
 /// Put an indirect object that has a **stream** in the document.
 ///
 /// The bytes are not in the document: they are in the file beside it, and
@@ -1703,6 +1827,8 @@ craftkit_sdk::plugin_anchor!(
     StreamKind,
     AddObject,
     AddStream,
+    SetObjectEntry,
+    RemoveObjectEntry,
     AddPage,
     PageAttributes,
     DecodeStream,
