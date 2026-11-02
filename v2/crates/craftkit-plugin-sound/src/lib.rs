@@ -6097,7 +6097,9 @@ fn mix_of(document: &Document, id: &str) -> Result<Mix, EngineError> {
         .walk()
         .filter(|node| node.kind == "sound.track" && !is_master(node) && !mixer::reads_bus(document, node.id))
     {
-        let mut signal = vec![0.0_f32; frames];
+        // The signal is **interleaved**: it holds a frame of every
+        // channel, and it is as long as the mix in frames.
+        let mut signal = vec![0.0_f32; frames * channels.max(1) as usize];
         for (index, (_, clip_id, payload)) in clips.iter().enumerate() {
             let Some(clip) = document.node(*clip_id) else { continue };
             if timeline::track_of(document, clip).map(|owner| owner.id) != Some(track.id) {
@@ -6105,7 +6107,11 @@ fn mix_of(document: &Document, id: &str) -> Result<Mix, EngineError> {
             }
             // The clip's own gain is already in its samples: the
             // tree's mixer multiplies it into the clip.
-            add_into(&mut signal, &prepared[index], payload.start.max(0) as usize, 1.0);
+            // The clip's place is a place in **frames**, and the
+            // signal is interleaved: the clip's samples go at that
+            // many frames, and not at that many samples.
+            let at = payload.start.max(0) as usize * channels.max(1) as usize;
+            add_into(&mut signal, &prepared[index], at, 1.0);
         }
         // The **trim**: the level of the track's input, and its
         // phase. The tree's mixer applies the trim to the strip
@@ -6181,7 +6187,7 @@ fn mix_of(document: &Document, id: &str) -> Result<Mix, EngineError> {
     // a send carries a copy of its track's signal at its own level.
     let mut buses: Vec<(u64, Vec<f32>)> = Vec::new();
     for bus in document.walk().filter(|node| node.kind == "sound.bus") {
-        let mut signal = vec![0.0_f32; frames];
+        let mut signal = vec![0.0_f32; frames * channels.max(1) as usize];
         for send in sends_of(document) {
             if send.bus != bus.id {
                 continue;
@@ -6272,7 +6278,7 @@ fn mix_of(document: &Document, id: &str) -> Result<Mix, EngineError> {
         }
     }
     // The **master** is the file: every track and every bus.
-    let mut master = vec![0.0_f32; frames];
+    let mut master = vec![0.0_f32; frames * channels.max(1) as usize];
     for (_, signal, automation) in &tracks {
         // The **balance**: the track's own pan is the track's, and
         // it is applied when the track is routed. A copy that a
@@ -6323,18 +6329,21 @@ fn mix_of(document: &Document, id: &str) -> Result<Mix, EngineError> {
     if settings.metronome {
         click_into(&mut master, channels as usize, rate, &tempo_map(document), &settings);
     }
-    let mix = craftkit_audio::mix(
-        &[craftkit_audio::Track { start: 0, samples: master, gain: 1.0 }],
-        rate,
-        &craftkit_audio::Limits::default(),
-    )
-    .map_err(|error| EngineError::Failed { id: id.to_string(), message: error.to_string() })?;
+    // The **limit**: the mix may not be longer than the audio library
+    // allows, and the limit is in frames.
+    let limits = craftkit_audio::Limits::default();
+    if frames as i64 > limits.max_frames {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the mix is {frames} frames long and the limit is {}", limits.max_frames),
+        });
+    }
     Ok(Mix {
-        master: mix.samples,
+        master,
         tracks: tracks.into_iter().map(|(id, signal, _)| (id, signal)).collect(),
         channels,
         rate,
-        frames: mix.frames.max(0) as usize,
+        frames,
     })
 }
 
