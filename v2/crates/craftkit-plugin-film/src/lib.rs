@@ -32,6 +32,10 @@
 //! clips that are there are pushed along, so that nothing is cut — the
 //! tree's second mode of the move (the module `inserting`).
 //!
+//! And a clip may be **taken away**: the edge that says which item it
+//! played goes with it, and the gap it leaves is a gap — the tree's
+//! delete, and not its ripple delete (the module `removal`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -79,11 +83,13 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 mod inserting;
 mod moving;
+mod removal;
 mod splitting;
 mod trim;
 
 pub use inserting::InsertClip;
 pub use moving::MoveClip;
+pub use removal::RemoveClip;
 pub use splitting::SplitClip;
 pub use trim::TrimClip;
 
@@ -508,6 +514,7 @@ craftkit_sdk::plugin_anchor!(
     MoveClip,
     InsertClip,
     SplitClip,
+    RemoveClip,
     TimelineEvaluator,
     FilmPanel
 );
