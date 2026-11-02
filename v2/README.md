@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1731 tests.** The MCP server links **all fifteen batteries** in, so the
+**1738 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1731 tests
+cargo test          # 1738 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3683,6 +3683,7 @@ so.
 | the **repeating** of a range | **built.** The material of a range is copied and laid after it, as many times as asked (§246) | §246 |
 | the **clipboard** | **built.** The material of a range is copied, cut and pasted, and the clipboard is in the document (§247) | §247 |
 | the **voice** of a track | **built.** A track's voice is turned off and on again, and an inactive track is not heard (§248) | §248 |
+| the **commit** of a track | **built.** The sound of a track is written to a file, a new track of it is made, and the old track goes quiet (§249) | §249 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17212,3 +17213,96 @@ command can make it play again.
   silent and a solo silences the others; an inactive track is **not
   there** — it is not a source for a send either, so a bus fed by an
   inactive track hears nothing.
+
+## 249. The commit of a track
+
+The tree's **commit** writes the sound of a track to a file, makes a
+**new track** of that file, and turns the **voice** of the old track
+off. The editing is over: the old track is still there, with its clips
+and its settings, and it is quiet.
+
+### What was built
+
+- The command `sound.track.commit` writes the sound of a track to a
+  file in a directory and makes a new track of that file.
+- The sound that is written is the sound of the track **before its
+  fader**: the clips, through the track's **trim** and through the
+  track's **inserts**, and not through its **mute**, not through its
+  **fader** and not through its **pan**. The tree's commit renders a
+  track before its fader, and this one does the same.
+- The new track carries the old track's **fader** and its **pan** and
+  its **sends**, and it **feeds the same bus** when the old track fed
+  one. The sound of the document is therefore the sound it was: the
+  level is not counted twice.
+- The old track is **not taken away**: its voice is turned off, and it
+  is in the document with its clips and its settings.
+- The new track takes the **place** of the old one — the document's
+  order is the order the mixer works in, and a committed track stands
+  where the track it was committed from stood.
+- A track with **no sound** is refused, and so is a track whose voice
+  is already off: there is nothing to write down.
+
+### What the port found
+
+- **The tree's commit renders two seconds more than the material.**
+  The tree's `commit_track` renders the track over a range that ends
+  two seconds after its last clip, so that the tail of an insert is in
+  the file. Here the mix is as long as the material — the tree's
+  renderer renders a range and this one's mix is the length of the
+  document — so the tail past the last clip is not in the committed
+  file.
+- **The tree's commit hides the old track as well as making it
+  inactive.** The SDK has a `hidden` flag for a node that is not
+  drawn, and the flag is about drawing: the sound battery draws
+  nothing, so a hidden track would say nothing about the sound. The
+  **inactive** is a fact about the sound, and it is here (§248).
+- **The tree's commit does not copy the pan, and this one does.** The
+  tree's pre-fader render centres the pan and the new track keeps the
+  default, so the sound is the same. Here the pan is applied in the
+  mix and not in the render, so the committed file has no pan in it —
+  and the new track keeps the old track's pan, and the sound is the
+  same for the same reason.
+- **The tree's commit copies the mixer's volume, its output and its
+  sends, and not its inserts.** Here the new track carries the
+  **fader**, the **pan** and the **sends**, and the route to the bus,
+  and it has no inserts: the inserts are in the file, and the old
+  track keeps its own.
+- **The tree's commit says nothing when it does nothing.** The tree's
+  `commit_track` gives back `None` for a track that is not an audio
+  track and for a track with no material, and the command answers
+  with an empty list and no word. Here it is **refused**, and it says
+  why: a command that does nothing and says nothing is a command that
+  cannot be told from a command that was never run.
+
+### What it cost
+
+- **Seven tests** in the sound battery (`tests/commit.rs`): the commit
+  makes a new track of a file, the old track is quiet and it is still
+  there, the sound is the same after the commit, the fader is not
+  counted twice, the committed track takes the place of the old one, a
+  track with no sound is refused, and a node that is not a track is
+  refused.
+- **One command** (`sound.track.commit`). The sound battery now
+  carries **117** commands and the MCP server **328**.
+- The **mix** learned to give back the signal of a track **before its
+  fader** when a caller asks for it: the tree's commit needs that
+  sound, and the mix is the only place it is made.
+
+### What it does not settle
+
+- **The tail of the material is not in the file.** The committed sound
+  is as long as the track's clips, and the two seconds of tail that
+  the tree's commit renders are not here.
+- **The automation of the inserts is not in the file.** The tree's
+  pre-fader render keeps the track's **plugin automation** and runs
+  the inserts under it; here the inserts run with the parameters they
+  have, and the track's own automation of the fader, the mute and the
+  pan is not in the file either — the fader and the pan are on the new
+  track and the mute is not.
+- **The mute of the old track is not in the file and not on the new
+  one.** The tree's commit renders a muted track as if it were not
+  muted, and here the committed sound is the track before its mute as
+  well; the new track is not muted, and the old track keeps its mute.
+- **The file is a WAV** — v2's sources are files on the disk and a
+  sound is a sound — and the new track is named `<name>.cm`, which is
+  the tree's name for a committed track.

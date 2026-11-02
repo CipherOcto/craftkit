@@ -316,6 +316,14 @@
 //! this tree draws no track headers, and a thing that nothing draws is
 //! not a fact.
 //!
+//! **The tree's commit renders two seconds more than the material.**
+//! The tree's commit renders a track over a range that ends two
+//! seconds after its last clip, so that the tail of an insert is in
+//! the file. Here the mix is as long as the material, so the tail past
+//! the last clip is not in the committed file. The tree's commit also
+//! **hides** the old track: the SDK has a hidden flag, and the flag is
+//! about drawing, and this battery draws nothing.
+//!
 //! **The tick of a note is the kit's tick.** The MIDI library counts
 //! in nine hundred and sixty ticks a quarter note, and so does the
 //! sound battery's tempo map (§19) — so a note's place in a clip and
