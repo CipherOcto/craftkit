@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1673 tests.** The MCP server links **all fifteen batteries** in, so the
+**1680 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1673 tests
+cargo test          # 1680 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3674,6 +3674,7 @@ so.
 | the **time** of the session | **built.** Silence is inserted at a place and time is cut out of a range, and everything after moves (§236) | §236 |
 | the **names** of the notes | **built.** A pitch, a drum and a program are named by the tree's own tables, and a clip's notes are read with their names (§237) | §237 |
 | the **key** of the session | **built.** The key is set at a place and read back, kept as the sharps and the mode a file carries (§238) | §238 |
+| the **music** of a MIDI file | **built.** The file's tempos, meters and keys come in with it and go out with it, and the notes land where the music lands (§239) | §239 |
 
 ### The list of things that are honestly not there: empty
 
@@ -16456,4 +16457,102 @@ of a file, so the number was here and the fact was not.
   library reads a file's key signatures and the battery can set one by
   name, but no command yet takes the signatures of an imported file and
   writes them into the session: that is the next thing to close, and
-  it is not closed here.
+  it is not closed here. (There is now: §239 closed it, and this
+  sentence was written before it did.)
+
+## 239. The music of a MIDI file
+
+A MIDI file carries more than notes: it carries a **tempo map** — its
+tempos and its meters — and it carries **key signatures**. The tree
+reads the first two into the session and throws the third away, and
+the export writes the tempo map out and writes no keys at all.
+
+### What was built
+
+- The import grows a parameter, `tempo_map`, and it says whether the
+  file's music comes in with it. It does by default, as it does in the
+  tree.
+- When it does, the file's **tempos** become the document's tempo
+  events, its **meters** become meter events and its **key signatures**
+  become key events — each at the place the file was imported to plus
+  the event's own tick, so that the music of the file lands where the
+  notes of the file land.
+- The **length** of the imported clip is then worked out under the
+  music that came with it: a file at ninety beats a minute makes a
+  longer clip than the same file at a hundred and twenty.
+- The **export** writes the music out with the notes: the document's
+  tempo map, its meters and its keys go into the file, and the notes
+  are placed at the ticks they are at in the document rather than at
+  the ticks they are at inside the clip.
+- The **markers** of the document go into the file as the text markers
+  a file carries, at the ticks they are at.
+- A file with more than ten thousand tempo, meter and key events
+  together is **refused**, as a file with more than ten thousand meter
+  changes is refused in the tree.
+
+### What the port found
+
+- **The tree's import leaves the file's tempos behind.** The tree's
+  `import_midi_bytes` writes the file's tempos and meters into the
+  session's tempo map at the file's **own** ticks — while the notes of
+  the same file are moved to the place the file was imported to. So a
+  file imported at the tenth minute brings a tempo change that lands
+  at the first beat of the session, and the music after the tenth
+  minute is played at the wrong speed. Here the events move with the
+  notes: an event that stayed behind would say something about a piece
+  of music that is not there.
+- **The tree drops the key signatures, and so did this tree until
+  now.** The tree's import reads the file's key signatures and never
+  looks at them; its export writes an empty list of them, so a file
+  that goes out of the tree has lost its keys. Here they come in as
+  key events (§ the key of the session) and they go out again.
+- **The tree's export writes the session's tempo map and this tree
+  wrote none at all.** The tree's `export_midi` gathers the session's
+  tempos and meters into the file it writes, so that the file plays at
+  the speed of the session. Here the export wrote the notes and
+  nothing else, and a file of notes with no tempo plays at the
+  default — which is not the music.
+- **The tree writes the session's markers into the file and this tree
+  wrote none.** The tree's `export_midi` gathers the session's markers
+  as the file's text markers; here the markers were left behind, and a
+  file that goes out of this tree has lost them.
+- **The tree's export places the notes at the session's ticks and this
+  tree's placed them at the clip's.** The tree adds the clip's own
+  tick to every note before it writes the file; here the notes were
+  written as they are in the clip, at the clip's own ticks, so a clip
+  that was not at the start of the session came out at the start. Now
+  the notes are at the ticks they are at in the document.
+- **A tempo of a file is a microsecond count, and it comes back very
+  nearly what it went in as.** The Standard MIDI File writes a tempo as
+  microseconds a quarter note, and ninety beats a minute is six hundred
+  and sixty-six thousand and six hundred and sixty-six and two thirds of
+  a microsecond — so the tempo that comes back is ninety and a
+  fraction. The tree has the same rounding, and it is in the file
+  format and not in either tree.
+
+### What it cost
+
+- **Seven tests** in the sound battery (`tests/importmusic.rs`): the
+  music of the file comes in with it, the file's key comes in as a
+  key, the events land where the notes land, the music may be left
+  behind, the exported file carries the music, the exported notes are
+  at their place in the document, and the exported file carries the
+  markers.
+- **No new command.** The import grows a parameter and the export
+  grows what it writes; the sound battery still carries **104**
+  commands and the MCP server **315**.
+
+### What it does not settle
+
+- **A file still becomes one clip.** The tree makes a **track** for
+  every track of the file, each with its own instrument and its own
+  clip; here the notes of every track of the file become the notes of
+  one clip. The tracks of a file are a separate thing to close.
+- **The tree's import sets an instrument on each track it makes** — a
+  drum kit for a track of drums and a subtractive synth for anything
+  else — and this tree has no instruments to set.
+- **The keys of a file are not a musical truth about the session.**
+  They come in because the file carries them, and a session that has
+  had two files imported into it has the keys of both, and the later
+  one does not replace the earlier one unless they land on the same
+  tick.
