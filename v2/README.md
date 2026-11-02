@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1934 tests.** The MCP server links **all fifteen batteries** in, so the
+**1945 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1934 tests
+cargo test          # 1945 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3711,6 +3711,7 @@ so.
 | the **extracting** of a range | **built.** The clips in a range of a track are taken away and the gap closes (§273) | §273 |
 | the **filling of a formula** | **built.** A fill copies a formula and shifts its references, and an anchored reference does not move (§275) | §275 |
 | the **date** of a cell | **built.** A date is a number and a date format, and the tree's calendar has the day in it that never happened (§276) | §276 |
+| the **fill of dates** | **built.** The tree's four date fills — days, weekdays, months and years — step through the calendar (§277) | §277 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18691,9 +18692,10 @@ The spreadsheet battery could set a cell and could not fill a **range**.
 
 - **A formula is not filled** — and that is no longer true: a formula
   is filled, and its references are shifted (§275).
-- **The tree's dates and lists are not here**, and neither is the
-  tree's **quarter** (`Q1`, `Q2`, `Q3`, `Q4`) and its **ordinal**
-  (`1st`, `2nd`).
+- **The tree's dates and lists are not here** — and the **dates** are
+  here now (§276), and the **lists** are not: the tree's **quarter**
+  (`Q1`, `Q2`, `Q3`, `Q4`) and its **ordinal** (`1st`, `2nd`) are not
+  here either.
 - **The tree's source may be a range.** The tree fills lane by lane
   from a source that is a range of cells; here the source is one cell.
 
@@ -18984,8 +18986,8 @@ tree's now.
 - **The tree's lists are not here** — the days, the months, the
   quarters — and a text that is a day of the week is copied here, and
   the tree would step through the week. The tree's `days`, `weekdays`,
-  `months` and `years` **modes** are therefore not here either: a
-  **date** is here (§276), but a fill of dates is not.
+  `months` and `years` **modes** were not here either, and they are
+  now (§277).
 - **The tree's `formats` and `values` modes are not here**: the first
   copies the style without the value, the second copies the value
   without the style.
@@ -19178,3 +19180,92 @@ things that are missing. They are here now.
 - **The tree's date and time parsing is not here**: the tree reads a
   time of day as well as a date, and a date with a time in it, and
   here a date is a date.
+
+## 277. The fill of dates
+
+§276 gave the grid a **date**, and §274 said the tree's four date fills
+were not here. They are here now.
+
+### What was built
+
+- The fill has **four more modes**, and they are the tree's: `days`,
+  `weekdays`, `months` and `years`.
+- A fill of **days** steps by days, and the step is the difference
+  between the first two dates: two dates a week apart are a fill of
+  every seventh day.
+- A fill of **weekdays** skips the Saturday and the Sunday.
+- A fill of **months** keeps the day of the month and **clamps** it to
+  the month it lands in — the 31st of January, the 28th of February,
+  the 31st of March — and it does not drift.
+- A fill of **years** steps by years, and a year is twelve months.
+- A source that is **not dates** extends like a plain drag, as the
+  tree has it.
+
+### What the port found
+
+- **The tree's date modes are not the plain series with a different
+  step: they are a pattern of their own.** The tree's `Pattern::dates`
+  is asked for the date modes first, and it needs the source to be
+  numbers under a **date format**; when it cannot have that it falls
+  back to the plain detection, and a lone number is copied. So the
+  modes are a fill of dates and nothing else, and a fill of a number
+  in the `days` mode is a plain drag. Here the same: the date modes
+  ask the source whether it holds dates, and a source that does not
+  extends like a plain drag.
+- **The tree's `days` step is the difference between the first two
+  dates, and not one day.** Two dates a week apart are a fill of every
+  seventh day — and two dates on the same day are a fill of one day,
+  because the tree's rule is that a step of zero is one. Here the same.
+- **The tree's `weekdays` step counts the weekdays between the first
+  two dates, and skips the weekend on the way.** The tree's
+  `add_weekdays` moves to the next weekday first — so a fill that
+  starts on a Saturday starts on the Monday — and then counts five
+  weekdays to the week. Here the same.
+- **The tree's months are clamped and they do not drift, and that is
+  the tree's own comment on it.** The tree's `add_months_clamped`
+  keeps the day of the month and clamps it to the length of the month
+  it lands in, and it always measures from the **original** date, so
+  a series is the 31st of January, the 28th of February, the 31st of
+  March and the 30th of April — and not the 28th of February, the 28th
+  of March and the 28th of April, which is what a fill that added a
+  month to the cell before it would give. Here the same.
+- **The tree's plain series knows about dates too, and the port had
+  forgotten.** The tree's `Pattern::detect` looks at the format of the
+  source: a **single date** counts a day on — where a single *number*
+  is copied — and two dates of the **same day of the month** go on by
+  months and not by a line through them. Here the same, and that is a
+  rule the tree had and this tree did not: the port had a fill of
+  numbers and a fill of texts, and a date was a number with a format
+  on it and the fill never looked at the format.
+- **The tree's year is twelve months, and its month step is a count of
+  months and not a count of days.** Two dates two years apart are a
+  fill of every second year, and the tree's rule is that a count of
+  zero is one — so two dates in the same month are a fill of a year.
+  Here the same.
+
+### What it cost
+
+- **Eleven tests** in the grid battery (`tests/date_fill.rs`): a fill
+  of days steps by days, two dates a week apart step by a week, a fill
+  of weekdays skips the weekend, a fill of months clamps the day and
+  does not drift, a fill of years steps by years, two dates years apart
+  step by years, a source that is not dates extends like a plain drag,
+  a single date in a plain series counts a day on, two dates of the
+  same day go on by months, two dates of different days go on by a
+  line, and a mode that is not a mode is refused.
+- **One test changed**: the refusal of a mode that is not a mode now
+  names eight modes and not four.
+- **No new command**: the command is the same one, with four more
+  modes. The grid battery still carries **12** commands and the MCP
+  server **363**.
+
+### What it does not settle
+
+- **The tree's lists are not here**: the days, the months, the
+  quarters and the ordinals, and a text that is a day of the week is
+  copied here and the tree would step through the week.
+- **The tree's flash fill is not here**: it reads the pattern out of
+  the text beside the source.
+- **The tree's `formats` and `values` modes are not here**: the first
+  copies the style without the value, the second copies the value
+  without the style.
