@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and six commands**, one for each thing a person does to a
+//! - **a hundred and nine commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -418,6 +418,7 @@ mod midi;
 // back together.
 mod heal;
 mod keys;
+mod remove;
 mod time;
 
 use std::collections::HashMap;
@@ -444,6 +445,7 @@ pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
     LanePayload, SendKind, SendPayload,
 };
+pub use remove::{RemoveClip, RemoveMarker, RemoveTrack};
 pub use time::{CutTime, InsertTime};
 
 use craftkit_sdk::serde_json;
@@ -7690,6 +7692,9 @@ craftkit_sdk::plugin_anchor!(
     ReadKeys,
     ImportMidiTracks,
     ConsolidateTrack,
+    RemoveClip,
+    RemoveMarker,
+    RemoveTrack,
     AddMarker,
     AddSource,
     MeasurePeaks,
