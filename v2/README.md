@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1902 tests.** The MCP server links **all fifteen batteries** in, so the
+**1906 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1902 tests
+cargo test          # 1906 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3707,6 +3707,7 @@ so.
 | the **filling** of a range | **built.** A range is filled from a cell — copied or counted on — and the target holds the source at a corner (§270) | §270 |
 | the **number format** of a cell | **built.** A cell carries a number format and the text it shows is derived from its value and that format (§271) | §271 |
 | the **lifting** of a range | **built.** The clips in a range of a track are taken away and the gap they leave is a gap (§272) | §272 |
+| the **extracting** of a range | **built.** The clips in a range of a track are taken away and the gap closes (§273) | §273 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18832,7 +18833,62 @@ The lift is here.
 
 ### What it does not settle
 
-- **The extract is not here**, and neither is the tree's
-  **sync-locked** tracks and its **locked** tracks.
+- **The extract was not here — §273 is where it came.** The tree's
+  **sync-locked** tracks and its **locked** tracks are still not here.
 - **The tree's links and transitions are not here**, and neither is the
   tree's **caption tracks**, which the extract also closes the gap on.
+
+---
+
+## 273. The extracting of a range
+
+The tree's other way of taking a range of a track away is the
+**extract**: the same removal, and the gap **closes**.
+
+### What was built
+
+- The command `film.clip.extract` takes the clips that are **in a range**
+  of a track away **and closes the gap**: the clips that were after
+  the range move **up** by the length of the range, so the time the
+  range took is time that is free again.
+- A clip that **spans an edge** of the range is refused, as it is for
+  the lift: the tree splits it, and the split is a command of its own.
+- A range that **ends before it starts** is refused, and so is a node
+  that is not a track.
+
+### What the port found
+
+- **The tree's extract is the tree's lift plus one shift.** The tree's
+  `extract` calls the same `clear_track_range` the lift calls, and
+  then **shifts** the clips that were after the range up by the length
+  of the range: `shift_track_from(tr, range.end(), -range.duration)`.
+  So the two tree commands are one operation and one operation plus a
+  shift — and here they are two commands, because a command that
+  removes a range and closes a gap does two things.
+- **The tree's extract moves the sync-locked tracks as well.** The
+  tree's extract closes the gap on the tracks that are **sync-locked**
+  with the target, and refuses when a locked track would have to move
+  into time that is taken: "this edit would break sync: `A2` is
+  sync-locked and has a clip in the way". Here a track is a track, and
+  there is no lock to be in.
+- **The tree's extract and lift share the removal, and the removal
+  splits.** Both tree commands call `clear_track_range`, which splits
+  the clips at the edges of the range and removes the clips inside
+  it. Here the split is refused rather than done, so the two commands
+  here share the *finding* of the clips and not the splitting.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/extract.rs`): the gap
+  closes, a clip that spans an edge is refused, a range that ends
+  before it starts is refused, and a node that is not a track is
+  refused.
+- **One command** (`film.clip.extract`). The film battery now carries
+  **13** commands and the MCP server **362**.
+
+### What it does not settle
+
+- **The tree's sync-locked tracks are not here**, and neither is its
+  **locked** track, its **links**, its **transitions** nor its
+  **caption tracks** — the tree's extract closes the gap on the
+  caption tracks that are sync-locked as well.
