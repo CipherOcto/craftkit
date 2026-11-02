@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1751 tests.** The MCP server links **all fifteen batteries** in, so the
+**1756 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1751 tests
+cargo test          # 1756 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3687,6 +3687,7 @@ so.
 | the **chain** of inserts | **built.** An insert is taken away and it moves in the chain, and the chain is the order of the nodes (§250) | §250 |
 | the **automation** of a range | **built.** The clipboard carries the breakpoints of the range, the paste writes them and the cut takes them away (§251) | §251 |
 | the **name** of a thing | **built.** A track and a clip are renamed, and a name that is empty or too long is refused (§252) | §252 |
+| the **settings** of a send | **built.** The level, the pan, the silence and the place of a send are changed (§253) | §253 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17486,3 +17487,55 @@ one — the name was fixed when the thing was made.
   track by its name finds the first one with that name.
 - **The tree's rename of a track renames its bus as well**, when the
   track is a folder that feeds one. There are no folders here.
+
+## 253. The settings of a send
+
+The tree's send has a command for its **level** and another for the
+rest of it. This tree's battery could make a send and could take it
+away, and the level could only be set at the moment the send was made:
+a send that wanted to be quieter afterwards had no way to say so.
+
+### What was built
+
+- The command `sound.send.set` changes a send: its **level**, its
+  **pan**, whether it is **silent**, and whether it is taken **before
+  the fader**.
+- A level outside the tree's range — minus one hundred and forty-four
+  decibels to twelve — is **refused** and not pulled to the edge, and
+  a pan outside minus one and one is refused too.
+- A node that is **not a send** is refused.
+
+### What the port found
+
+- **The tree's send has a command for its level and this one had
+  none.** The tree's `mix.send_level` sets the level of a send, and
+  the tree's `mix.send` makes one. Here the level could only be given
+  when the send was made, so a send's level was a fact that could
+  never change — and a fact that can never change is not a fact about
+  a send, it is a fact about the moment the send was made.
+- **The tree clamps the level and this one refuses it.** The tree's
+  `mix.send` pulls a level outside its range to the edge; here it is
+  refused, the same rule the fader follows (§ the fader of a track).
+- **The tree's send is a slot and this one's is a node.** The tree's
+  track carries a list of send slots and a send is at an index; here
+  the send is a node under the track and the bus it goes to is a
+  relation. The tree's level command names the **slot**, and this one
+  names the **node**.
+
+### What it cost
+
+- **Five tests** in the sound battery (`tests/sendlevel.rs`): the level
+  of a send is changed, a level outside the bound is refused, a pan
+  outside the bound is refused, a send may be silent and pre-fader, and
+  a node that is not a send is refused.
+- **One command** (`sound.send.set`). The sound battery now carries
+  **122** commands and the MCP server **333**.
+
+### What it does not settle
+
+- **The tree's send has a preset and a target that may be changed**,
+  and this one's has neither: the bus a send goes to is fixed when the
+  send is made, and a send that should go somewhere else is made
+  again.
+- **The tree's `mix.mute_sends` mutes every send of a track at once**,
+  and this one's does not: a caller mutes the sends one by one.

@@ -318,6 +318,14 @@
 //! this tree draws no track headers, and a thing that nothing draws is
 //! not a fact.
 //!
+//! **The tree's send has a command for its level and this one had
+//! none.** The tree's `mix.send_level` sets the level of a send; here
+//! the level could only be given when the send was made, so a send's
+//! level was a fact that could never change — and a fact that can
+//! never change is not a fact about a send, it is a fact about the
+//! moment the send was made. The tree clamps a level outside its range
+//! to the edge, and here it is refused.
+//!
 //! **The tree's names are unique and this tree's are not.** The tree's
 //! rename refuses a name that another track already has, because the
 //! tree's tracks are named and a caller names them. Here the id is the
