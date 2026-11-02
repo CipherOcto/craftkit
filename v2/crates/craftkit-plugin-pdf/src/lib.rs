@@ -43,6 +43,10 @@
 //! with it, because a file whose objects name things that are not there
 //! is not a file (the module `remove`).
 //!
+//! And an object has a **number**, and one number is one object: two
+//! objects may not share one, and a number that is changed takes every
+//! reference to the object with it (the module `number`).
+//!
 //! And the **outline** is here: the bookmarks of the document, a tree of
 //! items with titles and destinations. The tree is a **list** of
 //! siblings in the file — each item names the next — and the counts are
@@ -102,6 +106,7 @@
 mod content;
 mod filters;
 mod loader;
+mod number;
 mod objects;
 mod outline;
 mod predictors;
@@ -113,6 +118,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+pub use number::SetNumber;
 pub use outline::{AddOutline, ReadOutline};
 pub use remove::RemoveObject;
 
@@ -238,6 +244,12 @@ impl AddObject {
             });
         }
         let entries = check_entries(&self.entries)?;
+        if let Some(other) = number::holder_of(session, number, None) {
+            return Err(EngineError::Failed {
+                id: "pdf.object.add".to_string(),
+                message: format!("the number `{number}` is the number of the object `{other}`"),
+            });
+        }
         let data = serde_json::json!({ "object": number, "entries": entries });
         let name = format!("object {number}");
         let id = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
@@ -402,6 +414,12 @@ impl AddStream {
             });
         }
         let entries = check_entries(&self.entries)?;
+        if let Some(other) = number::holder_of(session, number, None) {
+            return Err(EngineError::Failed {
+                id: "pdf.stream.add".to_string(),
+                message: format!("the number `{number}` is the number of the object `{other}`"),
+            });
+        }
         let path = self.stream.0.clone();
         if path.trim().is_empty() {
             return Err(EngineError::Failed {
@@ -1765,6 +1783,7 @@ impl GraphEvaluator {
     commands(
         "pdf.object.add",
         "pdf.object.remove",
+        "pdf.object.number",
         "pdf.ref.add",
         "pdf.annot.add",
         "pdf.page.annotations",
@@ -1835,6 +1854,7 @@ craftkit_sdk::plugin_anchor!(
     AddObject,
     AddStream,
     RemoveObject,
+    SetNumber,
     SetEntry,
     RemoveEntry,
     AddPage,

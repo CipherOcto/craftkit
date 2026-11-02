@@ -44,7 +44,7 @@ fn a_stream(session: &mut Session, directory: &str, name: &str, bytes: &[u8]) ->
     session
         .execute(
             "pdf.stream.add",
-            &json!({ "object": 1, "entries": [["Type", "XObject"]], "stream": path.clone() }),
+            &json!({ "object": a_free_number(session), "entries": [["Type", "XObject"]], "stream": path.clone() }),
         )
         .expect("the stream is added");
     let id = session
@@ -63,6 +63,13 @@ fn decoded(path: &str) -> Vec<u8> {
 
 /// A **Flate** stream is a zlib stream, and the PNG crate's inflate
 /// reads it.
+/// A **free** object number: one number is one object.
+fn a_free_number(session: &Session) -> u64 {
+    session.document().walk().filter(|node| node.kind == "pdf.stream" || node.kind == "pdf.object").count()
+        as u64
+        + 1
+}
+
 #[test]
 fn a_flate_stream_is_decoded() {
     let directory = directory("flate");
@@ -153,7 +160,7 @@ fn the_dictionary_names_the_filter() {
         .execute(
             "pdf.stream.add",
             &json!({
-                "object": 1,
+                "object": a_free_number(&session),
                 "entries": [["Type", "XObject"], ["Filter", "ASCIIHexDecode"]],
                 "stream": path,
             }),

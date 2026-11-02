@@ -42,8 +42,13 @@ fn directory(name: &str) -> String {
 fn a_stream(session: &mut Session, directory: &str, name: &str, bytes: &[u8]) -> u64 {
     let path = format!("{directory}/{name}");
     std::fs::write(&path, bytes).expect("the bytes are written");
+    // The number is **free**: one number is one object.
+    let number = a_free_number(session);
     session
-        .execute("pdf.stream.add", &json!({ "object": 1, "entries": [["Type", "XObject"]], "stream": path }))
+        .execute(
+            "pdf.stream.add",
+            &json!({ "object": number, "entries": [["Type", "XObject"]], "stream": path }),
+        )
         .expect("the stream is added");
     session
         .document()
@@ -62,6 +67,13 @@ fn operations_of(session: &mut Session, stream: u64) -> Vec<craftkit_sdk::serde_
 
 /// A stream's **operators** are read, with the operands each one was
 /// given.
+/// A **free** object number: one number is one object.
+fn a_free_number(session: &Session) -> u64 {
+    session.document().walk().filter(|node| node.kind == "pdf.stream" || node.kind == "pdf.object").count()
+        as u64
+        + 1
+}
+
 #[test]
 fn the_operators_of_a_stream_are_read() {
     let directory = directory("operators");

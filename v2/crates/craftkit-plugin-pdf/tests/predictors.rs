@@ -54,7 +54,10 @@ fn a_stream(
         list.push(json!([key, value]));
     }
     session
-        .execute("pdf.stream.add", &json!({ "object": 1, "entries": list, "stream": path.clone() }))
+        .execute(
+            "pdf.stream.add",
+            &json!({ "object": a_free_number(session), "entries": list, "stream": path.clone() }),
+        )
         .expect("the stream is added");
     let id = session
         .document()
@@ -79,6 +82,13 @@ fn decoded(path: &str) -> Vec<u8> {
 ///
 /// The row says how it was made: the first is the difference from the
 /// byte to the left and the second from the byte above.
+/// A **free** object number: one number is one object.
+fn a_free_number(session: &Session) -> u64 {
+    session.document().walk().filter(|node| node.kind == "pdf.stream" || node.kind == "pdf.object").count()
+        as u64
+        + 1
+}
+
 #[test]
 fn a_png_predictor_is_undone() {
     let directory = directory("png");

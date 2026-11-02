@@ -53,7 +53,7 @@ fn an_object_stream(
         .execute(
             "pdf.stream.add",
             &json!({
-                "object": 1,
+                "object": a_free_number(session),
                 "entries": [["Type", "ObjStm"], ["N", count], ["First", first]],
                 "stream": path,
             }),
@@ -75,6 +75,13 @@ fn objects_of(session: &mut Session, stream: u64) -> Vec<craftkit_sdk::serde_jso
 }
 
 /// An object stream's **objects** are read, each with its number.
+/// A **free** object number: one number is one object.
+fn a_free_number(session: &Session) -> u64 {
+    session.document().walk().filter(|node| node.kind == "pdf.stream" || node.kind == "pdf.object").count()
+        as u64
+        + 1
+}
+
 #[test]
 fn the_objects_of_an_object_stream_are_read() {
     let directory = directory("objects");
@@ -124,7 +131,10 @@ fn an_object_stream_that_cannot_be_read_is_refused() {
     let path = format!("{directory}/plain.bin");
     std::fs::write(&path, b"5 0 ").expect("the bytes are written");
     session
-        .execute("pdf.stream.add", &json!({ "object": 1, "entries": [["Type", "ObjStm"]], "stream": path }))
+        .execute(
+            "pdf.stream.add",
+            &json!({ "object": a_free_number(&session), "entries": [["Type", "ObjStm"]], "stream": path }),
+        )
         .expect("the stream is added");
     let stream = session
         .document()
