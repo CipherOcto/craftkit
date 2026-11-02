@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1906 tests.** The MCP server links **all fifteen batteries** in, so the
+**1910 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1906 tests
+cargo test          # 1910 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3705,6 +3705,7 @@ so.
 | the **taking away** of a clip | **built.** A clip is taken off its track, the edge that says which item it played goes with it, and the gap is a gap (§268) | §268 |
 | the **rippling** of a clip | **built.** A clip is taken away and the gap closes, and the ripple is refused when the time the clip took is not free (§269) | §269 |
 | the **filling** of a range | **built.** A range is filled from a cell — copied or counted on — and the target holds the source at a corner (§270) | §270 |
+| the **modes** of the fill | **built.** The tree's four fills are here — copy, series, extend and alternate — and the source may be a range (§274) | §274 |
 | the **number format** of a cell | **built.** A cell carries a number format and the text it shows is derived from its value and that format (§271) | §271 |
 | the **lifting** of a range | **built.** The clips in a range of a track are taken away and the gap they leave is a gap (§272) | §272 |
 | the **extracting** of a range | **built.** The clips in a range of a track are taken away and the gap closes (§273) | §273 |
@@ -18635,15 +18636,20 @@ The spreadsheet battery could set a cell and could not fill a **range**.
 
 ### What the port found
 
-- **The tree has two fills and one of them surprises.** The tree's
+- **The tree has four fills and they differ in one cell.** The tree's
   plain drag of a lone number **copies** it — a drag of `1` gives
-  `1, 1, 1` — and only the tree's series mode, or its `Ctrl`+drag,
-  counts it up. So "fill" is two different things in the tree, and a
-  command that picked one of them silently would be wrong half the
-  time. Here the fill **says** which one it is — and the tree's own
-  command says too: `edit.autoFill` takes a mode, and there are nine
-  of them (`copy`, `alternate`, `formats`, `values`, `extend`, `days`,
-  `weekdays`, `months`, `years`), and **the series is the default**.
+  `1, 1, 1` — and so does the tree's **series**, which is the tree's
+  *default*: it is the tree's right-drag **Fill Series** (`extend`) and
+  its `Ctrl`+drag (`alternate`) that count a lone number up. So "fill"
+  is four different things in the tree, and a command that picked one
+  of them silently would be wrong most of the time. Here the fill
+  **says** which one it is — and the tree's own command says too:
+  `edit.autoFill` takes a mode, and there are nine of them (`copy`,
+  `alternate`, `formats`, `values`, `extend`, `days`, `weekdays`,
+  `months`, `years`), and **the series is the default**.
+  **§270 said the tree's series counted a lone number up, and that was
+  wrong: the series copies it, and the `extend` counts it up.** The
+  correction is in §274, where the modes are the tree's.
 - **The tree's corner rule is the shape of the operation.** The tree's
   `holds_source_in_corner` says that a target must contain the source
   and that the source must sit in one of its corners, and the tree
@@ -18892,3 +18898,94 @@ The tree's other way of taking a range of a track away is the
   **locked** track, its **links**, its **transitions** nor its
   **caption tracks** — the tree's extract closes the gap on the
   caption tracks that are sync-locked as well.
+
+---
+
+## 274. The modes of the fill
+
+§270 gave the fill **two** modes, and one of them was the tree's
+`extend` and not the tree's `series`. The tree has **four**, and they
+differ in what they do with a lone number — so the modes here are the
+tree's now.
+
+### What was built
+
+- The modes are the tree's: `copy`, `series` — the tree's **default** —
+  `extend` and `alternate`. And the tree's table is the table:
+
+  | the source | `copy` | `series` | `extend` | `alternate` |
+  |---|---|---|---|---|
+  | one number | copied | **copied** | counts up | counts up |
+  | two or more numbers | copied | the **trend** | the trend | copied |
+  | text with a number | copied | counts on | counts on | copied |
+  | text | copied | copied | copied | copied |
+
+- Two or more numbers are continued by the **trend**: the **least
+  squares** line through them, so `1, 3` goes on as `5, 7`.
+- The source may be a **range**, and the fill goes **lane by lane**:
+  each column of the source continues down its own lane, and each row
+  of the source continues along its own lane.
+- A mode that is **not a mode** is refused, and the refusal names the
+  four that are.
+
+### What the port found
+
+- **§270 was wrong about the tree's series, and the tree's own tests
+  say so.** The tree's test `ctrl_drag_fill_swaps_copy_and_series` says
+  it in a line: "a plain drag copies a lone number" — and the plain
+  drag is the tree's *default* mode, which is the series. The tree's
+  `extend` is the right-drag **Fill Series** ("a lone number counts
+  up, everything else extends as a plain drag"), and the tree's
+  `alternate` is the `Ctrl`+drag, which counts a lone number up and
+  copies what a plain drag would extend. The port found this by
+  reading the tree's `Pattern::detect`, which **copies** a single
+  number, and the tree's `alternate`, which turns that copy into a
+  count.
+- **The tree's trend is a least squares line, not a difference.** The
+  tree's `Pattern::detect` fits the **least squares** line through the
+  numbers of the source — the trend Excel uses — and continues it. So
+  `1, 3` goes on as `5, 7`, and a source of `1, 2, 4` goes on as
+  `5.33`, `6.83`, `8.33`: the line through the numbers, and not even
+  through the last of them — the tree continues the **fitted** line,
+  not the last value. Here the same: the fill continues the line.
+- **The tree's source may be a range, and then the fill is a fill per
+  lane.** The tree's `fill` takes the **lanes** of the source — its
+  columns when the fill goes down, its rows when it goes along — and
+  every lane continues its **own** pattern. Here the same: a source of
+  `A1:B1` fills two lanes, and each lane counts on by itself.
+- **The tree's source with no common pattern continues each cell's own
+  series.** The tree's `per_cell` finds, for a source whose cells have
+  no pattern in common, the pattern of **each cell alone** and
+  continues it: a source of `Product 1` and `On backorder` goes on as
+  `Product 2` and `On backorder`, and then `Product 3` and
+  `On backorder`. Here the same: in the series and the extend modes a
+  copied lane continues each of its cells.
+
+### What it cost
+
+- **Seventeen tests** in the grid battery (`tests/fill.rs`): a copy
+  fill copies the value, the series copies a lone number, the extend
+  counts a lone number up, the alternate counts a number up and copies
+  a text, two numbers are a trend, a series fill counts the number in a
+  text on, a text with no number is copied, a range source fills lane
+  by lane, the fill goes up, the fill goes right, a target that does
+  not hold the source is refused, a source that is not at a corner is
+  refused, a source that holds a formula is refused, an empty source
+  is refused, a mode that is not a mode is refused, a fill that is too
+  large is refused, and a sheet that is not there is refused.
+- **No new command**: the command is the same one, with the tree's
+  modes. The grid battery still carries **11** commands and the MCP
+  server **362**.
+
+### What it does not settle
+
+- **The tree's lists are not here** — the days, the months, the
+  quarters — and neither are the tree's **dates**: a text that is a
+  day of the week is copied here, and the tree would step through the
+  week. The tree's `days`, `weekdays`, `months` and `years` modes are
+  therefore not here either.
+- **The tree's `formats` and `values` modes are not here**: the first
+  copies the style without the value, the second copies the value
+  without the style.
+- **A formula is not filled**, and neither is the tree's **flash
+  fill**, which reads the pattern out of the text beside the source.
