@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1822 tests.** The MCP server links **all fifteen batteries** in, so the
+**1831 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1822 tests
+cargo test          # 1831 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3698,6 +3698,7 @@ so.
 | the **taking away** of an object | **built.** An object of a PDF file is taken away, and the references that named it go with it (§261) | §261 |
 | the **number** of an object | **built.** The number of a PDF object is changed and every reference to it follows, and no two objects share one (§262) | §262 |
 | the **trimming** of a clip | **built.** The head or the tail of a clip is trimmed, and a trim that would cross a bound is refused and says which bound (§263) | §263 |
+| the **moving** of a clip | **built.** A clip moves along its track or to another one, and a move that would land on another clip is refused (§264) | §264 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18178,11 +18179,82 @@ a clip on a track and never move one of them.
 
 - **The ripple is not here.** The tree's ripple trim closes the gap,
   and a ripple is a different command and not a flag.
-- **The moving of a clip is not here.** The tree's `move_items` moves a
-  clip to another track and another place, and it has two modes: the
-  **overwrite**, which cuts what is under the clip, and the **insert**,
-  which pushes it. Neither is here, and the overwrite is a thing a
-  command should not do quietly.
+- **The moving of a clip is not here — §264 is where it came.** The
+  tree's `move_items` has two modes, the **overwrite** and the
+  **insert**; the plain move is in §264, and the overwrite is not,
+  because a command that cuts a clip without saying so is not a
+  command.
 - **The tree's linked clips are not here.** The tree's clips may be
   **linked**: one clip moves and its partners move with it. Here a clip
   is a clip.
+
+---
+
+## 264. The moving of a clip
+
+A clip has a **place** on a track, and the film battery could put a
+clip on a track and never move it.
+
+### What was built
+
+- The command `film.clip.move` moves a clip **along its track** or
+  **to another track**. A clip that changes track is taken out of the
+  tree and put under the other track **with the same id**, so that the
+  edge that says which item it plays still says it.
+- A move that would **land on another clip** is **refused**, and the
+  refusal names the clip that would have been cut: "the clip would run
+  from frame 110 to frame 130, and the clip on the track runs from
+  frame 100 to frame 120". A move that only **touches** the end of the
+  other clip is allowed.
+- A start that is **before the timeline** is refused, and so is a start
+  that is **not a whole number**, and so is a node that is not a clip,
+  and so is a node that is not a track, and so is a node that is not
+  there.
+
+### What the port found
+
+- **The tree's move has two modes and one of them destroys.** The
+  tree's `move_items` takes an `insert_mode`: the **overwrite** cuts
+  whatever is under the clip that moves, and the **insert** pushes the
+  clips along the track. The overwrite is a thing a command does
+  **quietly** — the answer the tree gives back is the answer to "did
+  the move happen", and not to "what did the move destroy". Here the
+  plain move is the only move, and a move that would land on another
+  clip is a **refusal that names the clip**: the caller may then cut it
+  in a command of its own, and the two commands are two things that
+  happened.
+- **The tree's move is a move between tracks, and the tree's track is
+  a list of clips.** The tree's `Track` holds `items` and the move
+  puts the clip in another track's list. Here the track holds the
+  clips as **children**, and a clip that changes track is taken out of
+  the tree and put under the other one — and the **id is kept**,
+  because the id is what the edge from the clip to the item names, and
+  an edge that names a clip that is not there is a dangling edge.
+- **The tree's clips may be linked, and here they are not.** The
+  tree's `TrackItem` has a `link`, and a move moves the linked clips
+  together. Here a clip is a clip, and the link is not here: the
+  relation that says which item a clip plays is the only edge a clip
+  has.
+
+### What it cost
+
+- **Nine tests** in the film battery (`tests/move.rs`): a clip moves
+  along its track, a clip moves to another track, a move that would
+  land on another clip is refused, a move that touches the end of
+  another clip is allowed, a start before the timeline is refused, a
+  start that is not a whole number is refused, a node that is not a
+  clip is refused, a node that is not a track is refused, and a node
+  that is not there is refused.
+- **One command** (`film.clip.move`). The film battery now carries **7**
+  commands and the MCP server **350**.
+
+### What it does not settle
+
+- **The insert is not here.** The tree's insert mode pushes the clips
+  after the moved one along the track, so that nothing is cut. That is
+  a different command and not a flag.
+- **The tree's overwrite is not here**, and nothing here cuts a clip
+  that a move would land on.
+- **The tree's linked clips are not here**, and neither is the tree's
+  **locked** track: a locked track refuses a move in the tree, and
+  here a track has no lock to refuse with.
