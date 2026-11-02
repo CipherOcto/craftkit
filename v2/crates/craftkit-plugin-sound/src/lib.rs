@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and twenty-four commands**, one for each thing a person does to a
+//! - **a hundred and twenty-seven commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -53,7 +53,8 @@
 //!   and on again, **commit** a track to a file, **take away** an
 //!   **insert** and **move** it in the chain, **rename** a track and a
 //!   clip, change the **settings** of a send, **duplicate** a track,
-//!   **render** a clip to a file, and
+//!   **render** a clip to a file, take a **tempo**, a **meter** and a
+//!   **key** away, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -5273,6 +5274,128 @@ impl SetTempo {
     }
 }
 
+/// **Take away** the tempo at a tick.
+///
+/// The tempo map is a list of events, and a map that can only grow is
+/// not a map a person can work with: the tempo at a tick goes away as
+/// well as the one that is put there.
+///
+/// The tempo at the **first tick** is refused: it is the document's
+/// tempo, and a document without one has no beat. A tick with **no
+/// tempo** is refused too: a tempo that was never there is not a tempo
+/// that was taken away.
+#[derive(Command)]
+#[command(
+    id = "sound.tempo.remove",
+    area = "sound",
+    layer = "sound",
+    icon = "minus",
+    menu("Event", "Tempo"),
+    mutates,
+    undoable
+)]
+pub struct RemoveTempo {
+    /// Where the tempo is, in ticks.
+    pub tick: Number,
+}
+
+impl RemoveTempo {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.tempo.remove".to_string();
+        let tick = ticks(self.tick.0)?;
+        if tick == 0 {
+            return Err(EngineError::Failed {
+                id,
+                message: "the tempo at the first tick is the document's tempo and it stays".to_string(),
+            });
+        }
+        let Some(node) = find_event(session, "sound.tempo", tick) else {
+            return Err(EngineError::Failed { id, message: format!("there is no tempo at tick {tick}") });
+        };
+        session.document_mut()?.remove_node(node);
+        Ok(Outcome::changed(format!("the tempo at tick {tick} is gone"))
+            .with_data(serde_json::json!({ "id": node, "tick": tick })))
+    }
+}
+
+/// **Take away** the meter at a tick.
+///
+/// The meter is a list of events, and the same rule the tempo follows
+/// applies to it: the event at the **first tick** is the document's
+/// meter and it stays, and a tick with **no meter** is refused.
+#[derive(Command)]
+#[command(
+    id = "sound.meter.remove",
+    area = "sound",
+    layer = "sound",
+    icon = "minus",
+    menu("Event", "Meter"),
+    mutates,
+    undoable
+)]
+pub struct RemoveMeter {
+    /// Where the meter is, in ticks.
+    pub tick: Number,
+}
+
+impl RemoveMeter {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.meter.remove".to_string();
+        let tick = ticks(self.tick.0)?;
+        if tick == 0 {
+            return Err(EngineError::Failed {
+                id,
+                message: "the meter at the first tick is the document's meter and it stays".to_string(),
+            });
+        }
+        let Some(node) = find_event(session, "sound.meter", tick) else {
+            return Err(EngineError::Failed { id, message: format!("there is no meter at tick {tick}") });
+        };
+        session.document_mut()?.remove_node(node);
+        Ok(Outcome::changed(format!("the meter at tick {tick} is gone"))
+            .with_data(serde_json::json!({ "id": node, "tick": tick })))
+    }
+}
+
+/// **Take away** the key at a tick.
+///
+/// The key is a list of events too, and the same rule the tempo
+/// follows applies to it: the event at the **first tick** is the
+/// document's key and it stays, and a tick with **no key** is refused.
+#[derive(Command)]
+#[command(
+    id = "sound.key.remove",
+    area = "sound",
+    layer = "sound",
+    icon = "minus",
+    menu("Event", "Key"),
+    mutates,
+    undoable
+)]
+pub struct RemoveKey {
+    /// Where the key is, in ticks.
+    pub tick: Number,
+}
+
+impl RemoveKey {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.key.remove".to_string();
+        let tick = ticks(self.tick.0)?;
+        if tick == 0 {
+            return Err(EngineError::Failed {
+                id,
+                message: "the key at the first tick is the document's key and it stays".to_string(),
+            });
+        }
+        let Some(node) = find_event(session, "sound.key", tick) else {
+            return Err(EngineError::Failed { id, message: format!("there is no key at tick {tick}") });
+        };
+        session.document_mut()?.remove_node(node);
+        Ok(Outcome::changed(format!("the key at tick {tick} is gone"))
+            .with_data(serde_json::json!({ "id": node, "tick": tick })))
+    }
+}
+
 /// Set the meter.
 ///
 /// The meter is a list of events too: a bar may be three beats long from
@@ -7900,6 +8023,9 @@ craftkit_sdk::plugin_anchor!(
     ReadClipboard,
     RemoveClip,
     RemoveInsert,
+    RemoveKey,
+    RemoveMeter,
+    RemoveTempo,
     RenderClip,
     RemoveMarker,
     RemoveTrack,
