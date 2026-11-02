@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1810 tests.** The MCP server links **all fifteen batteries** in, so the
+**1822 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1810 tests
+cargo test          # 1822 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3697,6 +3697,7 @@ so.
 | the **key** of an object | **built.** A key of a PDF object's dictionary is set and taken away, and the order is kept (§260) | §260 |
 | the **taking away** of an object | **built.** An object of a PDF file is taken away, and the references that named it go with it (§261) | §261 |
 | the **number** of an object | **built.** The number of a PDF object is changed and every reference to it follows, and no two objects share one (§262) | §262 |
+| the **trimming** of a clip | **built.** The head or the tail of a clip is trimmed, and a trim that would cross a bound is refused and says which bound (§263) | §263 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18102,3 +18103,86 @@ say which one it means.
 - **The tree's file is not here**: the cross-reference table is written
   from the objects that are in the document, and because a number may
   not be taken twice, the table has one entry for every number.
+
+---
+
+## 263. The trimming of a clip
+
+A clip has **two clocks** — where it starts on the timeline and where it
+begins in the media — and two **edges**, and the film battery could put
+a clip on a track and never move one of them.
+
+### What was built
+
+- The command `film.clip.trim` trims one edge of a clip. The **in**
+  edge is the head: the clip gets shorter or longer, the media it
+  begins at moves, and the clip moves on the timeline with it. The
+  **out** edge is the tail: the clip gets shorter or longer and stays
+  where it is.
+- A trim that would cross a bound is **refused**, and the refusal says
+  which bound stopped it. The bounds are four: a clip is **at least one
+  frame** long, a clip may not run **past the end** of the media or
+  begin **before** it, a clip may not **overlap** the clip before it or
+  the clip after it on the same track, and a clip may not start
+  **before the timeline**.
+- A delta that is **not a whole number** is refused, and so is a delta
+  of **zero frames** — a trim of nothing is not a trim — and so is an
+  edge that is not `in` or `out`, and so is a node that is not a clip.
+
+### What the port found
+
+- **The tree clamps, and this tree refuses.** The tree's
+  `clamp_trim` computes the biggest delta the trim may have — bounded
+  by the previous clip, the next clip, the length of the media and the
+  minimum duration — and `trim` uses it and gives back the delta it
+  used. So a drag that goes too far stops at the bound, and **the delta
+  that happened is not the delta that was asked for**: the difference is
+  there, in the number the tree gives back, and it is the caller's to
+  notice. Here the same drag is an **error that names the bound**:
+  "the clip would end at frame 40, and the clip after it starts at
+  frame 40". The tree's clamp answers with a different number, and this
+  tree's refusal answers with the reason.
+- **The tree's trim has two modes and this one has one.** The tree's
+  `TrimMode::Regular` moves the clip's head and its place on the
+  timeline together, and its `TrimMode::Ripple` moves the head and
+  **closes the gap** by shifting every clip after it. Here the trim is
+  the regular one: the clip moves and the gap it leaves is a gap. The
+  ripple is a different thing, and it is a different command.
+- **The tree's trim counts the media in the media's own ticks.** The
+  tree's clips have a speed, and a trim of ten frames of the timeline
+  is ten times the speed of frames of the media, so `src_of` multiplies
+  the delta by the speed before it touches the source. Here a clip has
+  no speed: a frame is a frame in both clocks, and the two clocks are
+  the same number of frames apart.
+- **The tree's neighbours are the clips on the same track, and here
+  they are found the same way** — but the tree knows the track of a
+  clip because a clip *is* in a track, and here a clip is in a track as
+  well: the containment is the same, and the tree of the document is
+  the tree of the editor.
+
+### What it cost
+
+- **Twelve tests** in the film battery (`tests/trim.rs`): the in edge
+  is trimmed, the out edge is trimmed, a clip that would be too short
+  is refused, a clip that would run past the media is refused, a clip
+  that would begin before the media is refused, a clip that would
+  overlap the one before it is refused, a clip that would overlap the
+  one after it is refused, a node that is not a clip is refused, an
+  edge that is not an edge is refused, a delta that is not a whole
+  number is refused, a trim of zero frames is refused, and a node that
+  is not there is refused.
+- **One command** (`film.clip.trim`). The film battery now carries **6**
+  commands and the MCP server **349**.
+
+### What it does not settle
+
+- **The ripple is not here.** The tree's ripple trim closes the gap,
+  and a ripple is a different command and not a flag.
+- **The moving of a clip is not here.** The tree's `move_items` moves a
+  clip to another track and another place, and it has two modes: the
+  **overwrite**, which cuts what is under the clip, and the **insert**,
+  which pushes it. Neither is here, and the overwrite is a thing a
+  command should not do quietly.
+- **The tree's linked clips are not here.** The tree's clips may be
+  **linked**: one clip moves and its partners move with it. Here a clip
+  is a clip.
