@@ -41,8 +41,12 @@
 //! **The tree's MIDI is a crate of a model, a file, an operations
 //! module and a set of names.** The model and the file are here, and
 //! the operations are here too — the quantise, the transpose, the
-//! velocity and the length — and the **names** are not: a name is for
-//! a person to read, and nothing here is read by a person yet.
+//! velocity and the length — and the **names** are here as well: a
+//! note is "C3", a drum is "Bass Drum 1" and a program is "Acoustic
+//! Grand Piano". A name is for a person to read, and nothing here is
+//! read by a person yet — but a name is also a **fact**, and a fact
+//! that is derived from a pitch is a fact that may be derived here
+//! too (§ the names).
 //!
 //! **The tree's transpose clamps and this one refuses.** A pitch of a
 //! MIDI note is from zero to a hundred and twenty-seven, and the tree
@@ -85,6 +89,7 @@
 )]
 #![forbid(unsafe_code)]
 
+pub mod names;
 mod ops;
 mod smf;
 

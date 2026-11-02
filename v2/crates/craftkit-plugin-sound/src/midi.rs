@@ -579,6 +579,87 @@ impl ReadMidi {
     }
 }
 
+/// **Name the notes** of a MIDI clip.
+///
+/// The tree's MIDI crate carries a table of names: a note is "C3", a
+/// drum is "Bass Drum 1" and a program is "Acoustic Grand Piano". The
+/// names are here, and this command gives them back with the notes
+/// they belong to.
+///
+/// A note on the **drum channel** — the tenth — is a drum and is
+/// named as one, and a note on any other channel is named by its
+/// pitch. A pitch outside the drum kit has no drum name, and such a
+/// note is named by its pitch instead.
+#[derive(Command)]
+#[command(id = "sound.clip.midi.names", area = "sound", layer = "sound", icon = "list")]
+pub struct ReadMidiNames {
+    /// The clip whose notes are named.
+    pub clip: NodeRef,
+}
+
+impl ReadMidiNames {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.midi.names".to_string();
+        let clip_id = self.clip.0;
+        let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{clip_id}`"),
+        })?;
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+            });
+        }
+        let payload = ClipPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+        let Some(midi) = payload.midi.clone() else {
+            return Ok(Outcome::new(format!("the clip `{clip_id}` holds no notes"))
+                .with_data(serde_json::json!({ "clip": clip_id, "midi": false, "names": [] })));
+        };
+        // The **names**: the note's own, and the drum's when it is on
+        // the drum channel.
+        let names: Vec<Json> = midi
+            .notes
+            .iter()
+            .map(|note| {
+                let pitch = note.pitch;
+                let channel = note.channel;
+                serde_json::json!({
+                    "pitch": pitch,
+                    "channel": channel,
+                    "start": note.start,
+                    "length": note.length,
+                    "velocity": note.velocity,
+                    "name": craftkit_midi::names::note_or_drum_name(pitch, channel),
+                })
+            })
+            .collect();
+        // The **programs** the clip names, when it has any: a program
+        // change is a program, and a program has a name.
+        let programs: Vec<Json> = midi
+            .ctrls
+            .iter()
+            .filter(|ctrl| ctrl.kind == "program")
+            .map(|ctrl| {
+                let number = ctrl.number.unwrap_or(0);
+                serde_json::json!({
+                    "tick": ctrl.tick,
+                    "channel": ctrl.channel,
+                    "program": number,
+                    "name": craftkit_midi::names::gm_program_name(number),
+                })
+            })
+            .collect();
+        Ok(Outcome::new(format!("the clip holds {} notes", names.len())).with_data(serde_json::json!({
+            "clip": clip_id,
+            "midi": true,
+            "names": names,
+            "programs": programs,
+        })))
+    }
+}
+
 /// **Quantise the notes** of a clip onto the session's **grid**.
 ///
 /// The grid is the session's (§200) and the lines are musical, so they

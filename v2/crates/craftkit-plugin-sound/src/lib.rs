@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and one commands**, one for each thing a person does to a
+//! - **a hundred and two commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -434,7 +434,9 @@ pub use group::{Group, GroupKind, ReadGroup, SetGroupFlags, SetTrackGroup, Ungro
 pub use heal::HealTrack;
 pub use locks::{EditLock, TimeLock};
 pub use marks::SetRating;
-pub use midi::{DurationMidi, ExportMidi, ImportMidi, QuantizeMidi, ReadMidi, TransposeMidi, VelocityMidi};
+pub use midi::{
+    DurationMidi, ExportMidi, ImportMidi, QuantizeMidi, ReadMidi, ReadMidiNames, TransposeMidi, VelocityMidi,
+};
 pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
     LanePayload, SendKind, SendPayload,
