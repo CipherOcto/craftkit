@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and sixteen commands**, one for each thing a person does to a
+//! - **a hundred and seventeen commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -50,7 +50,7 @@
 //!   separate a clip at its **transients**, **strip** the silence out
 //!   of a clip in any of its three **modes**, **copy**, **cut** and
 //!   **paste** the material of a range, turn a track's **voice** off
-//!   and on again, and
+//!   and on again, **commit** a track to a file, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -427,6 +427,7 @@ mod midi;
 // The **healing** of a track: the clips that were separated are put
 // back together.
 mod clipboard;
+mod commit;
 mod heal;
 mod inactive;
 mod keys;
@@ -441,6 +442,7 @@ use std::collections::HashMap;
 pub use autoname::{ReadAutoName, SetAutoName};
 pub use beat::{ReadBeat, RemoveBeat, SetBeat};
 pub use clipboard::{CopyRange, CutRange, PasteRange, ReadClipboard};
+pub use commit::CommitTrack;
 pub use conform::Conform;
 use craftkit_sdk::document::{Path, Rect, Segment, SubPath};
 use craftkit_sdk::{
@@ -5920,6 +5922,15 @@ struct Mix {
     /// track's trim and the track's inserts are not in it, because they
     /// belong to the track and the track is still there.
     raw: Option<(u64, Vec<f32>)>,
+    /// The signal of one track **before** its fader, when a caller
+    /// asked for it.
+    ///
+    /// The sound of the track's clips through its **trim** and its
+    /// **inserts**, and not through its **mute** and not through its
+    /// **fader**. The tree's commit renders a track before its fader,
+    /// so that the new track's fader is the old track's fader and the
+    /// level is not counted twice.
+    pre_fader: Option<(u64, Vec<f32>)>,
     /// How many channels the mix has.
     channels: u16,
     /// The rate the mix was made at.
@@ -5935,7 +5946,7 @@ struct Mix {
 ///
 /// The `raw_track` is the track whose **raw** signal is kept: the sum
 /// of its clips, before its trim and before its inserts.
-fn mix_of(document: &Document, id: &str, raw_track: Option<u64>) -> Result<Mix, EngineError> {
+fn mix_of(document: &Document, id: &str, capture: Option<u64>) -> Result<Mix, EngineError> {
     let settings = session_of(document);
     let rate = settings.sample_rate;
     // The clips: each one plays a source from an offset, for a
@@ -6136,6 +6147,7 @@ fn mix_of(document: &Document, id: &str, raw_track: Option<u64>) -> Result<Mix, 
     // it.
     let mut pre_fader: Vec<(u64, Vec<f32>)> = Vec::new();
     let mut raw: Option<(u64, Vec<f32>)> = None;
+    let mut before_fader: Option<(u64, Vec<f32>)> = None;
     let mut tracks: Vec<(u64, Vec<f32>, automate::Automation)> = Vec::new();
     // The **routed tracks**: the tracks that feed a bus, and the
     // signal they feed it with.
@@ -6178,7 +6190,7 @@ fn mix_of(document: &Document, id: &str, raw_track: Option<u64>) -> Result<Mix, 
         // The **raw** signal of the track: its clips and nothing else.
         // The trim and the inserts belong to the track, and a caller
         // that wants the sound of the clips alone asks for this.
-        if raw_track == Some(track.id) {
+        if capture == Some(track.id) {
             raw = Some((track.id, signal.clone()));
         }
         // The **trim**: the level of the track's input, and its
@@ -6205,6 +6217,14 @@ fn mix_of(document: &Document, id: &str, raw_track: Option<u64>) -> Result<Mix, 
                         message: error.to_string(),
                     })?;
             plugin.process(&mut signal, channels as usize, rate);
+        }
+        // The **pre-fader** signal of the track that was asked for:
+        // the sound of its clips through its trim and its inserts, and
+        // not through its mute and not through its fader. The tree's
+        // commit renders the track before its fader, and this is that
+        // sound.
+        if capture == Some(track.id) {
+            before_fader = Some((track.id, signal.clone()));
         }
         // The **mute** gates the audio and the track's pre-fader
         // tap: a muted track is not heard anywhere.
@@ -6417,6 +6437,7 @@ fn mix_of(document: &Document, id: &str, raw_track: Option<u64>) -> Result<Mix, 
         master,
         tracks: tracks.into_iter().map(|(id, signal, _)| (id, signal)).collect(),
         raw,
+        pre_fader: before_fader,
         channels,
         rate,
         frames,
@@ -7784,6 +7805,7 @@ craftkit_sdk::plugin_anchor!(
     ReadKeys,
     ImportMidiTracks,
     ConsolidateTrack,
+    CommitTrack,
     CopyRange,
     CutRange,
     PasteRange,
