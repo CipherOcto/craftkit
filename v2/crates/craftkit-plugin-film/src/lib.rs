@@ -40,6 +40,10 @@
 //! that were after it move up, and the ripple is refused when the time
 //! the clip took is not free (the module `rippling`).
 //!
+//! And a **range** of a track may be **lifted**: the clips that are in
+//! it go, and the gap they leave is a gap — the tree's lift, and not
+//! its extract (the module `lifting`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -86,6 +90,7 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 mod inserting;
+mod lifting;
 mod moving;
 mod removal;
 mod rippling;
@@ -93,6 +98,7 @@ mod splitting;
 mod trim;
 
 pub use inserting::InsertClip;
+pub use lifting::LiftRange;
 pub use moving::MoveClip;
 pub use removal::RemoveClip;
 pub use rippling::RippleClip;
@@ -522,6 +528,7 @@ craftkit_sdk::plugin_anchor!(
     SplitClip,
     RemoveClip,
     RippleClip,
+    LiftRange,
     TimelineEvaluator,
     FilmPanel
 );
