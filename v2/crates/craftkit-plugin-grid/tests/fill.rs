@@ -258,7 +258,7 @@ fn a_mode_that_is_not_a_mode_is_refused() {
         .expect_err("the fill is refused");
     assert!(
         error.to_string().contains(
-            "a fill is `copy`, `series`, `extend`, `alternate`, `days`, `weekdays`, `months` or `years`"
+            "a fill is `copy`, `series`, `extend`, `alternate`, `days`, `weekdays`, `months`, `years`, `formats` or `values`"
         ),
         "the error says why: {error}"
     );

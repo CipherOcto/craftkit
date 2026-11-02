@@ -24,6 +24,14 @@
 //! it to the month it lands in. A source that is **not** dates extends
 //! like a plain drag.
 //!
+//! And the tree has two ways of filling that are **about the format**:
+//! the **formats** mode gives the cell the format of the source and
+//! keeps its own value, and the **values** mode gives the cell the
+//! value of the source and keeps its own format.
+//!
+//! That is **ten** modes, and they are the tree's ten: every way of
+//! filling the tree has is here.
+//!
 //! The tree's **trend** is the tree's: the **least squares** line
 //! through the numbers of the source, so `1, 3` goes on as `5, 7, 9`.
 //!
@@ -65,9 +73,10 @@
 //!   and the tree would step through the week. The tree's **dates**
 //!   are here: the `days`, `weekdays`, `months` and `years` modes,
 //!   and the calendar they step through (§276).
-//! - **The tree's `formats` and `values` modes are not here**: the
-//!   first copies the style without the value, the second copies the
-//!   value without the style.
+//! - **The tree's style is not here**, and only its format is: the
+//!   tree's style carries the font, the fill, the borders, the
+//!   alignment and the protection as well, and a fill copies the
+//!   whole of it in the tree and only the format here.
 
 use craftkit_derive::Command;
 
@@ -109,6 +118,13 @@ enum Mode {
     Months,
     /// The tree's **Fill Years**: a date steps by years.
     Years,
+    /// The tree's **formats** mode: the cell is given the **format** of
+    /// the source and keeps its own value.
+    Formats,
+    /// The tree's **values** mode — the tree's *Fill Without
+    /// Formatting*: the cell is given the value of the source and keeps
+    /// its own format.
+    Values,
 }
 
 impl Mode {
@@ -123,13 +139,24 @@ impl Mode {
             "weekdays" => Some(Mode::Weekdays),
             "months" => Some(Mode::Months),
             "years" => Some(Mode::Years),
+            "formats" => Some(Mode::Formats),
+            "values" => Some(Mode::Values),
             _ => None,
         }
     }
 
     /// Whether the mode **continues a series** rather than copying it.
     fn extends(self) -> bool {
-        matches!(self, Mode::Series | Mode::Extend | Mode::Days | Mode::Weekdays | Mode::Months | Mode::Years)
+        matches!(
+            self,
+            Mode::Series
+                | Mode::Extend
+                | Mode::Values
+                | Mode::Days
+                | Mode::Weekdays
+                | Mode::Months
+                | Mode::Years
+        )
     }
 
     /// Whether the mode is one of the tree's **date** modes.
@@ -352,9 +379,9 @@ fn round15(number: f64) -> f64 {
 ///
 /// The target must **hold the source at a corner**, and the fill goes
 /// down or up, or right or left, from there. The mode is the tree's:
-/// `copy`, `series` (the tree's default), `extend`, `alternate`, and
-/// the tree's four date modes — `days`, `weekdays`, `months` and
-/// `years`.
+/// `copy`, `series` (the tree's default), `extend`, `alternate`, the
+/// tree's four date modes — `days`, `weekdays`, `months` and `years`
+/// — and the tree's two format modes, `formats` and `values`.
 ///
 /// A source that holds a **formula** is filled with the formula, and
 /// the references of it are **shifted**: the tree's `shift_relative`,
@@ -369,8 +396,8 @@ pub struct FillRange {
     /// The range the fill goes into, `A1:A10`.
     pub to: Text,
     /// `copy`, `series`, `extend`, `alternate`, `days`, `weekdays`,
-    /// `months` or `years`. The tree's default is the series, and so
-    /// is this one.
+    /// `months`, `years`, `formats` or `values`. The tree's default is
+    /// the series, and so is this one.
     pub mode: Option<Text>,
 }
 
@@ -396,7 +423,7 @@ impl FillRange {
             Some(mode) => Mode::parse(&mode.0).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
                 message: format!(
-                    "`{}` is not a mode: a fill is `copy`, `series`, `extend`, `alternate`, `days`, `weekdays`, `months` or `years`",
+                    "`{}` is not a mode: a fill is `copy`, `series`, `extend`, `alternate`, `days`, `weekdays`, `months`, `years`, `formats` or `values`",
                     mode.0.trim()
                 ),
             })?,
@@ -500,7 +527,13 @@ impl FillRange {
                 sources.push(from);
             }
         }
-        if sources.iter().all(|from| from.formula.is_none() && matches!(from.value, Value::Empty)) {
+        // A source that holds **nothing at all** is refused: no value,
+        // no formula and no format.
+        if sources.iter().all(|from| {
+            from.formula.is_none()
+                && matches!(from.value, Value::Empty)
+                && sheet_cells.format(from.cell).is_none()
+        }) {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!("there is nothing at the source {}", source.to_text()),
@@ -554,7 +587,22 @@ impl FillRange {
                     lane.cells.len() - 1 - index % lane.cells.len()
                 };
                 let from = &lane_sources[source_index];
-                let format = sheet_cells.format(from.cell).map(|code| code.to_string());
+                // The tree's fill **replaces** the style of the cell with
+                // the style of the source, and its values mode is the
+                // one that keeps the format of the cell.
+                let format = match mode {
+                    Mode::Values => FormatChange::Keep,
+                    _ => match sheet_cells.format(from.cell) {
+                        Some(code) => FormatChange::Set(code.to_string()),
+                        None => FormatChange::Clear,
+                    },
+                };
+                // The tree's formats mode: the cell is given the
+                // **format** of the source and keeps its own value.
+                if mode == Mode::Formats {
+                    writes.push(Write { cell: *cell, formula: None, value: None, format });
+                    continue;
+                }
                 // The tree copies a **formula** and **shifts** the
                 // references of it, so that the copy reads the cells
                 // beside it: `=B1` in `A1` becomes `=B2` in `A2`.
@@ -644,15 +692,27 @@ impl FillRange {
                 }
                 // The tree's fill copies the **style** of the source,
                 // and the style holds the format.
-                if let Some(format) = &write.format {
-                    sheet_cells.set_format(write.cell, Some(format.clone()));
+                match &write.format {
+                    FormatChange::Keep => {}
+                    FormatChange::Set(code) => {
+                        sheet_cells.set_format(write.cell, Some(code.clone()));
+                    }
+                    FormatChange::Clear => sheet_cells.set_format(write.cell, None),
                 }
                 match (&write.formula, &write.value) {
                     (Some(text), _) => written.push(json!({ "cell": write.cell.to_text(), "formula": text })),
                     (None, Some(value)) => {
                         written.push(json!({ "cell": write.cell.to_text(), "value": value.to_json() }))
                     }
-                    (None, None) => {}
+                    (None, None) => {
+                        // The tree's formats mode: the cell is given its
+                        // format and nothing else.
+                        let format = match &write.format {
+                            FormatChange::Set(code) => json!(code),
+                            _ => serde_json::Value::Null,
+                        };
+                        written.push(json!({ "cell": write.cell.to_text(), "format": format }));
+                    }
                 }
             }
             node.data["cells"] = cells_into(&sheet_cells);
@@ -682,8 +742,25 @@ struct Write {
     formula: Option<String>,
     /// The value, when the cell is given one.
     value: Option<Value>,
-    /// The format, when the source had one.
-    format: Option<String>,
+    /// What happens to the **format** of the cell.
+    format: FormatChange,
+}
+
+/// What happens to the **format** of a cell that is filled.
+///
+/// The tree's fill **replaces** the style of the cell with the style of
+/// the source, and so the format of the cell is replaced with the
+/// format of the source — and a source with no format takes the format
+/// away. The tree's values mode is the one that keeps the format of
+/// the cell.
+#[derive(Debug, Clone)]
+enum FormatChange {
+    /// The format of the cell is left alone — the tree's values mode.
+    Keep,
+    /// The format of the cell is the one of the source.
+    Set(String),
+    /// The format of the cell is **gone** — the source had none.
+    Clear,
 }
 
 /// A **lane** of a fill: the cells of the source it comes from, and
@@ -705,7 +782,8 @@ fn the_pattern(values: &[Value], mode: Mode, format: Option<&Format>) -> Pattern
     let pattern = Pattern::of(values, format);
     match mode {
         Mode::Copy => Pattern::Copy,
-        Mode::Series => pattern,
+        // The tree's values mode extends like a plain drag.
+        Mode::Series | Mode::Values => pattern,
         Mode::Extend => {
             if pattern.is_copy()
                 && values.len() == 1
@@ -727,7 +805,8 @@ fn the_pattern(values: &[Value], mode: Mode, format: Option<&Format>) -> Pattern
         }
         // The tree's date modes never come here: they have a pattern
         // of their own, and a source that is not dates extends like a
-        // plain drag.
+        // plain drag. The tree's formats mode never comes here either:
+        // it writes no value at all.
         _ => pattern,
     }
 }
@@ -743,6 +822,8 @@ fn mode_name(mode: Mode) -> &'static str {
         Mode::Weekdays => "weekdays",
         Mode::Months => "months",
         Mode::Years => "years",
+        Mode::Formats => "formats",
+        Mode::Values => "values",
     }
 }
 
