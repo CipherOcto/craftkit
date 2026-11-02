@@ -319,6 +319,14 @@
 //! this tree draws no track headers, and a thing that nothing draws is
 //! not a fact.
 //!
+//! **The tree's duplicate is a copy of a value and this one's is a
+//! copy of what the track holds.** The tree's track is a value in a
+//! list, and the duplicate clones it and gives the clips new ids; here
+//! a track is a node with children — takes, clips, lanes, inserts,
+//! sends — and the relations that go with them, and the copy is a copy
+//! of the children, with the relation from a clip to its source made
+//! again for the new clip.
+//!
 //! **The tree's send has a command for its level and this one had
 //! none.** The tree's `mix.send_level` sets the level of a send; here
 //! the level could only be given when the send was made, so a send's

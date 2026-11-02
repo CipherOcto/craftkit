@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1756 tests.** The MCP server links **all fifteen batteries** in, so the
+**1762 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1756 tests
+cargo test          # 1762 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3688,6 +3688,7 @@ so.
 | the **automation** of a range | **built.** The clipboard carries the breakpoints of the range, the paste writes them and the cut takes them away (§251) | §251 |
 | the **name** of a thing | **built.** A track and a clip are renamed, and a name that is empty or too long is refused (§252) | §252 |
 | the **settings** of a send | **built.** The level, the pan, the silence and the place of a send are changed (§253) | §253 |
+| the **duplicate** of a track | **built.** A track is copied with its clips, its automation, its inserts and its sends (§254) | §254 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17539,3 +17540,62 @@ a send that wanted to be quieter afterwards had no way to say so.
   again.
 - **The tree's `mix.mute_sends` mutes every send of a track at once**,
   and this one's does not: a caller mutes the sends one by one.
+
+## 254. The duplicate of a track
+
+The tree's editor duplicates a track: the copy has the same clips, the
+same automation, the same inserts and the same sends, and it stands
+where the old one stands. This tree's battery could not.
+
+### What was built
+
+- The command `sound.track.duplicate` copies a track. The copy is a
+  **new track** — a new set of clips with their own ids — and it
+  carries the old one's **clips**, its **automation**, its **inserts**
+  and its **sends**. Each of them may be left out.
+- The **sources** are shared: a sound is a file, and a file may be
+  played twice.
+- The copy **feeds the same bus** when the old track fed one, and it
+  stands **where the old one stands** — the document's order is the
+  order the mixer works in.
+- A **master** is refused: it holds the fader of the mix and not a
+  sound of its own, and two of them would be two faders over one mix.
+- A node that is **not a track** is refused.
+
+### What the port found
+
+- **The tree's copy is a copy of the track's own struct, and this one's
+  is a copy of what the track holds.** The tree's track is a value in
+  a list, and the duplicate clones it and gives the clips new ids. In
+  this tree a track is a **node** with children — takes, clips, lanes,
+  inserts, sends — and the relations that go with them: a copy of the
+  node is a copy of the children, and the relation from a clip to its
+  source is made again for the new clip.
+- **The tree's copy keeps the tree's own name and makes it unique**:
+  `drums` becomes `drums.dup`, and if that is taken it becomes
+  `drums.dup 2`. Here the names are labels and not keys (§252), so
+  the copy is named `drums.dup` and two of them may have that name.
+- **The tree's copy carries the track's output route**, because the
+  route is a field of the tree's mixer. Here the route is a
+  **relation**, and the copy's relation to the bus is made again.
+
+### What it cost
+
+- **Six tests** in the sound battery (`tests/duplicate.rs`): the copy
+  carries the track, the copy is a new track, the copy stands where the
+  old one stands, the copy may leave the playlists out, a master is
+  refused, and a node that is not a track is refused.
+- **One command** (`sound.track.duplicate`). The sound battery now
+  carries **123** commands and the MCP server **334**.
+- The **place** of a node in the document is now a helper of the crate
+  and not a thing each command writes: the commit (§249) and the
+  duplicate stand where the thing they came from stands.
+
+### What it does not settle
+
+- **The copy does not carry the tree's record arm, its input monitor
+  and its frozen flag.** The record arm and the input monitor are the
+  recording's, and there is no recording here; the frozen flag is a
+  thing the tree's window draws, and this tree draws nothing.
+- **The copy's name is not made unique**, and a caller that finds a
+  track by its name finds the first one with that name.
