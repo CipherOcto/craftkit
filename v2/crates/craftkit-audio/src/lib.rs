@@ -22,10 +22,11 @@
 //! # The transients of a sound
 //!
 //! The library also finds the **onsets** of a sound — the places where
-//! it starts again — by its level. The tree's detector watches the
-//! spectrum with a fast Fourier transform, and this kit's crates carry
-//! no dependencies at all, so the detector here is a level detector,
-//! and it says so where it is.
+//! it starts again. There are two detectors here: one watches the
+//! **level** of the sound and one watches its **spectrum**, and the
+//! second is the tree's own: a fast Fourier transform of each frame,
+//! the bands of the spectrum, and how much they rise. The transform is
+//! here too, because this kit's crates carry no dependencies at all.
 //!
 //! # The numbers are hostile
 //!
@@ -45,8 +46,12 @@
 )]
 #![forbid(unsafe_code)]
 
+mod fft;
+mod onsets;
 mod transients;
 
+pub use fft::{is_power_of_two, power};
+pub use onsets::{MAX_ONSETS, onsets};
 pub use transients::{MAX_TRANSIENTS, levels, loud_ranges, transients};
 
 /// The **limits** a mix is made within.

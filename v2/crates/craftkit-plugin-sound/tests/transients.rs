@@ -1,5 +1,8 @@
 //! The **separation of a clip at its transients**: the places where the
 //! sound starts again.
+//!
+//! The detector is the tree's own: it watches the **spectrum** of the
+//! sound and finds the places where the bands of the spectrum rise.
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
@@ -34,21 +37,43 @@ fn directory(name: &str) -> String {
     path.to_string_lossy().to_string()
 }
 
+/// A number that is not quite a number, and not the same one twice.
+fn noise(seed: &mut u32) -> f32 {
+    *seed ^= *seed << 13;
+    *seed ^= *seed >> 17;
+    *seed ^= *seed << 5;
+    *seed as f32 / u32::MAX as f32 * 2.0 - 1.0
+}
+
+/// A **hit**: a burst of noise that dies away, the way a drum does.
+fn hit(level: f32, decay: f32, seed: &mut u32) -> Vec<f32> {
+    let mut previous = 0.0;
+    (0..(48_000_f32 * decay * 6.0) as usize)
+        .map(|index| {
+            let value = noise(seed);
+            let high = value - previous;
+            previous = value;
+            level * high * (-(index as f32) / 48_000.0 / decay).exp()
+        })
+        .collect()
+}
+
 /// A sound of two hits: a quarter of a second of silence, a hit, and
 /// then the same again.
 fn two_hits() -> Vec<f32> {
+    let mut seed = 7;
     let mut samples: Vec<f32> = Vec::new();
     for _ in 0..2 {
         samples.extend(std::iter::repeat_n(0.0_f32, 4_800));
-        samples.extend(std::iter::repeat_n(1.0_f32, 12_000));
+        samples.extend(hit(0.9, 0.04, &mut seed));
     }
     samples
 }
 
 /// A session with a track, a source of that sound and a clip that
 /// plays all of it.
-fn a_clip(session: &mut Session, path: &str) -> (u64, u64) {
-    let bytes = craftkit_wav::write(1, 48_000, &two_hits());
+fn a_clip(session: &mut Session, path: &str, sound: &[f32]) -> (u64, u64) {
+    let bytes = craftkit_wav::write(1, 48_000, sound);
     std::fs::write(path, bytes).expect("the sound is written");
     session.execute("sound.source.add", &json!({ "path": path })).expect("the source is added");
     let source = session
@@ -60,7 +85,10 @@ fn a_clip(session: &mut Session, path: &str) -> (u64, u64) {
     session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
     let track = session.document().node_by_name("drums").expect("the track is there").id;
     session
-        .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 33_600, "source": source }))
+        .execute(
+            "sound.clip.add",
+            &json!({ "track": track, "start": 0, "length": sound.len(), "source": source }),
+        )
         .expect("the clip is added");
     let clip = session
         .document()
@@ -94,7 +122,8 @@ fn a_clip_is_separated_at_its_transients() {
     let mut session = session();
     let directory = directory("separate");
     let path = format!("{directory}/sound.wav");
-    let (_, clip) = a_clip(&mut session, &path);
+    let sound = two_hits();
+    let (_, clip) = a_clip(&mut session, &path, &sound);
     let separated = session
         .execute("sound.clip.separate.transients", &json!({ "clip": clip }))
         .expect("the clip is separated");
@@ -102,10 +131,19 @@ fn a_clip_is_separated_at_its_transients() {
     assert_eq!(separated.data["pieces"], 3, "and the clip is in three");
     let clips = clips_of(&session);
     assert_eq!(clips.len(), 3, "the clip is in three: {clips:?}");
-    assert!(clips[1].0 >= 4_800 && clips[1].0 <= 5_400, "the first cut is at the first hit: {clips:?}");
-    // The second hit starts at 21_600: the silence comes before each
-    // of them.
-    assert!(clips[2].0 >= 21_600 && clips[2].0 <= 22_200, "and the second at the second: {clips:?}");
+    // The detector places an onset within a few milliseconds of the
+    // attack it found, and three milliseconds is the tree's own
+    // tolerance.
+    assert!(
+        clips[1].0 >= 4_800 - 150 && clips[1].0 <= 4_800 + 150,
+        "the first cut is at the first hit: {clips:?}"
+    );
+    // The second hit comes after the first one has died away.
+    let second = (4_800 + sound.len() / 2) as i64;
+    assert!(
+        clips[2].0 >= second - 150 && clips[2].0 <= second + 150,
+        "and the second at the second: {clips:?}"
+    );
 }
 
 /// A clip that plays **no sound** has no transients to be separated
@@ -128,41 +166,37 @@ fn a_clip_without_a_source_is_refused() {
     assert!(refused.is_err(), "there is no sound to find the transients in");
 }
 
-/// The **sensitivity** is how small a rise may be: a sensitive detector
-/// finds the quiet hits that a blunt one does not.
+/// The **sensitivity** is how small a rise may be: a hit that is very
+/// quiet is found by a sensitive detector and not by a blunt one.
+///
+/// The threshold is a **fixed amount** and not one relative to the
+/// loudest hit, so that a quiet hit counts — the tree's own rule, and
+/// the reason a quiet hit is found at all.
 #[test]
 fn the_sensitivity_is_how_small_a_rise_may_be() {
-    let mut session = session();
-    let directory = directory("sensitivity");
-    let path = format!("{directory}/sound.wav");
-    // A loud hit and then a quiet one.
-    let mut samples: Vec<f32> = Vec::new();
-    samples.extend(std::iter::repeat_n(0.0_f32, 4_800));
-    samples.extend(std::iter::repeat_n(1.0_f32, 12_000));
-    samples.extend(std::iter::repeat_n(0.0_f32, 4_800));
-    samples.extend(std::iter::repeat_n(0.05_f32, 12_000));
-    let bytes = craftkit_wav::write(1, 48_000, &samples);
-    std::fs::write(&path, bytes).expect("the sound is written");
-    session.execute("sound.source.add", &json!({ "path": path })).expect("the source is added");
-    let source = session
-        .document()
-        .walk()
-        .find(|node| node.kind == "sound.source")
-        .map(|node| node.id)
-        .expect("the source is there");
-    session.execute("sound.track.add", &json!({ "name": "drums" })).expect("the track is added");
-    let track = session.document().node_by_name("drums").expect("the track is there").id;
-    session
-        .execute("sound.clip.add", &json!({ "track": track, "start": 0, "length": 33_600, "source": source }))
-        .expect("the clip is added");
-    let clip = session
-        .document()
-        .walk()
-        .find(|node| node.kind == "sound.clip")
-        .map(|node| node.id)
-        .expect("the clip is there");
-    let blunt = session
+    let mut seed = 7;
+    // A loud hit and then one that is sixty decibels below it.
+    let mut sound: Vec<f32> = Vec::new();
+    sound.extend(std::iter::repeat_n(0.0_f32, 4_800));
+    sound.extend(hit(0.9, 0.04, &mut seed));
+    sound.extend(std::iter::repeat_n(0.0_f32, 4_800));
+    sound.extend(hit(0.001, 0.03, &mut seed));
+
+    let mut blunt = session();
+    let blunt_directory = directory("blunt");
+    let path = format!("{blunt_directory}/sound.wav");
+    let (_, clip) = a_clip(&mut blunt, &path, &sound);
+    let found = blunt
         .execute("sound.clip.separate.transients", &json!({ "clip": clip, "sensitivity": 0.0 }))
         .expect("the clip is separated");
-    assert_eq!(blunt.data["transients"], 1, "the blunt detector hears the loud hit: {blunt:?}");
+    assert_eq!(found.data["transients"], 1, "the blunt detector hears the loud hit: {found:?}");
+
+    let mut sensitive = session();
+    let sensitive_directory = directory("sensitive");
+    let path = format!("{sensitive_directory}/sound.wav");
+    let (_, clip) = a_clip(&mut sensitive, &path, &sound);
+    let found = sensitive
+        .execute("sound.clip.separate.transients", &json!({ "clip": clip, "sensitivity": 1.0 }))
+        .expect("the clip is separated");
+    assert_eq!(found.data["transients"], 2, "the sensitive one hears the quiet hit too: {found:?}");
 }

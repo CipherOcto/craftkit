@@ -231,12 +231,11 @@
 //! number: the scheme's number is put back before the kept pieces are
 //! named, so that nothing is skipped.
 //!
-//! **A transient is found by the level here and by the spectrum in the
-//! tree.** The tree's detector takes a fast Fourier transform of each
-//! frame and watches the high bands for a jump; a transform is a piece
-//! of work this kit has not done — its crates carry no dependencies at
-//! all — so the detector here watches the **level**, and the
-//! difference is written down where the detector is.
+//! **A transient is found by the spectrum, as it is in the tree.** The
+//! detector takes a fast Fourier transform of each frame and watches
+//! the bands for a jump; the transform is in the audio library now,
+//! written there because this kit's crates carry no dependencies at
+//! all.
 //!
 //! **A separation is joined again by what it is, not by where it is.**
 //! The tree's editor heals a track: it walks the clips in order and
@@ -3757,12 +3756,10 @@ impl SeparateClipOnGrid {
 /// transient, from zero to one: the higher it is, the smaller a rise
 /// counts.
 ///
-/// The tree's detector watches the **spectrum** — it takes a fast
-/// Fourier transform of each frame and looks for a jump in the high
-/// bands. This one watches the **level**: the kit's crates carry no
-/// dependencies at all, and a fast Fourier transform is a piece of work
-/// of its own. So the detector here is a level detector, and the
-/// difference is written down where the detector is.
+/// The detector is the tree's own: it watches the **spectrum** — it
+/// takes a fast Fourier transform of each frame and looks for a jump in
+/// the bands of it — and the transform is in the audio library, written
+/// there because this kit's crates carry no dependencies at all.
 ///
 /// The number of cuts is **bounded**: a clip with more transients than
 /// the bound is **refused** and not cut at the first thousand of them,
@@ -3837,8 +3834,7 @@ impl SeparateClipOnTransients {
         };
         // The **transients** of the material, in the material's own
         // samples.
-        let onsets =
-            craftkit_audio::transients(&sound.samples, sound.channels as usize, sound.rate, sensitivity);
+        let onsets = craftkit_audio::onsets(&sound.samples, sound.channels as usize, sound.rate, sensitivity);
         // The material's samples are the **session's** samples turned
         // into the source's rate, and the clip's offset says where in
         // the material the clip starts.
