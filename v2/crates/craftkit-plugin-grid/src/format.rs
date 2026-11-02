@@ -10,7 +10,13 @@
 //! - `0` and `0.00` — a fixed number of decimals;
 //! - `#,##0` and `#,##0.00` — the thousands separated;
 //! - `0%` and `0.00%` — a percentage, and the value is multiplied by a
-//!   hundred.
+//!   hundred;
+//! - the **dates**: `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`,
+//!   `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`.
+//!
+//! A **date** is a number with one of those on it: the number says
+//! how many days have passed and the format says that the number is a
+//! date and how it is written (the module `dates`).
 //!
 //! A code that is **not one of those** is **refused**: a format that is
 //! quietly ignored is a format the user believes in and the program
@@ -30,10 +36,14 @@
 //!   is a **field of the cell**, and a hundred cells with one format
 //!   carry a hundred formats. The tree's style also carries the font,
 //!   the colour and the alignment, and none of those are here.
-//! - **The tree's dates, times, currency and scientific formats are
-//!   not here**, and neither are its **sections** — a format with a
+//! - **The tree's times, currency and scientific formats are not
+//!   here**, and neither are its **sections** — a format with a
 //!   different code for negative numbers is not here.
+//! - **The tree's date formats are a language, and here they are a
+//!   list**: the nine shapes above are the ones this tree has, and a
+//!   date format that is not one of them is refused.
 
+use crate::dates::{self, Date};
 use crate::formula::Value;
 
 /// The most characters a format code may have.
@@ -60,6 +70,98 @@ pub enum Format {
         /// hundred.
         percent: bool,
     },
+    /// A **date**: a number that is written as a calendar date.
+    Date {
+        /// The shape the date is written in.
+        style: DateStyle,
+    },
+}
+
+/// The **date formats** this tree knows.
+///
+/// The tree's format is a whole language, and a date in it is a code
+/// with a `y` and a `d` and a `m` in it and anything else the tree
+/// likes. Here a date format is one of a **list**, and the list is
+/// this one — nine shapes, and the tree's own way of writing each of
+/// them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DateStyle {
+    /// `yyyy-mm-dd` — the year, the month and the day, and the year
+    /// first.
+    Iso,
+    /// `dd/mm/yyyy` — the day first.
+    DayFirst,
+    /// `m/d/yyyy` — the month first, and the day and the month
+    /// without a zero in front of them.
+    MonthFirst,
+    /// `d-mmm-yyyy` — the day, the month by name, the year.
+    DayMonthName,
+    /// `mmm` — the month by name, in three letters.
+    MonthShort,
+    /// `mmmm` — the month by name, in full.
+    MonthFull,
+    /// `ddd` — the day of the week, in three letters.
+    WeekdayShort,
+    /// `dddd` — the day of the week, in full.
+    WeekdayFull,
+    /// `yyyy` — the year, and nothing else.
+    Year,
+}
+
+impl DateStyle {
+    /// Every date format, and the code that says it.
+    pub const ALL: [(DateStyle, &'static str); 9] = [
+        (DateStyle::Iso, "yyyy-mm-dd"),
+        (DateStyle::DayFirst, "dd/mm/yyyy"),
+        (DateStyle::MonthFirst, "m/d/yyyy"),
+        (DateStyle::DayMonthName, "d-mmm-yyyy"),
+        (DateStyle::MonthShort, "mmm"),
+        (DateStyle::MonthFull, "mmmm"),
+        (DateStyle::WeekdayShort, "ddd"),
+        (DateStyle::WeekdayFull, "dddd"),
+        (DateStyle::Year, "yyyy"),
+    ];
+
+    /// The style a code says, if it says one this tree knows.
+    pub fn parse(code: &str) -> Option<DateStyle> {
+        let code = code.trim();
+        DateStyle::ALL.iter().find(|(_, written)| written.eq_ignore_ascii_case(code)).map(|(style, _)| *style)
+    }
+
+    /// The code the style is written with.
+    pub fn code(self) -> &'static str {
+        DateStyle::ALL.iter().find(|(style, _)| *style == self).map(|(_, code)| *code).unwrap_or("yyyy-mm-dd")
+    }
+
+    /// The **text** a date is written with.
+    pub fn text(self, date: Date) -> String {
+        match self {
+            DateStyle::Iso => format!("{:04}-{:02}-{:02}", date.year, date.month, date.day),
+            DateStyle::DayFirst => format!("{:02}/{:02}/{:04}", date.day, date.month, date.year),
+            DateStyle::MonthFirst => {
+                format!("{}/{}/{:04}", date.month, date.day, date.year)
+            }
+            DateStyle::DayMonthName => {
+                let month: String = dates::MONTHS[month_index(date)].chars().take(3).collect();
+                format!("{}-{}-{:04}", date.day, month, date.year)
+            }
+            DateStyle::MonthShort => dates::MONTHS[month_index(date)].chars().take(3).collect(),
+            DateStyle::MonthFull => dates::MONTHS[month_index(date)].to_string(),
+            DateStyle::WeekdayShort => dates::WEEKDAYS[weekday_index(date)].chars().take(3).collect(),
+            DateStyle::WeekdayFull => dates::WEEKDAYS[weekday_index(date)].to_string(),
+            DateStyle::Year => format!("{:04}", date.year),
+        }
+    }
+}
+
+/// The index of a month in the list of months.
+fn month_index(date: Date) -> usize {
+    (date.month.clamp(1, 12) - 1) as usize
+}
+
+/// The index of a day of the week in the list of days.
+fn weekday_index(date: Date) -> usize {
+    (date.weekday % 7) as usize
 }
 
 impl Format {
@@ -68,6 +170,11 @@ impl Format {
         let code = code.trim();
         if code.is_empty() || code.eq_ignore_ascii_case("general") {
             return Some(Format::General);
+        }
+        // A **date** is a shape of its own, and it is asked for before
+        // the number: `yyyy` is not a number with two decimals.
+        if let Some(style) = DateStyle::parse(code) {
+            return Some(Format::Date { style });
         }
         let (thousands, rest) = match code.contains(',') {
             true => (true, code.replace(',', "")),
@@ -109,6 +216,12 @@ impl Format {
                 Format::Decimals { decimals, thousands, percent } => {
                     fixed(*number, *decimals, *thousands, *percent)
                 }
+                // A date is a **number** with a date format on it, and
+                // a number that is not a date is written as a number.
+                Format::Date { style } => match dates::from_serial(*number) {
+                    Some(date) => style.text(date),
+                    None => general(*number),
+                },
             },
             // A format does not change a text: the tree's text sections
             // are not here.

@@ -39,6 +39,11 @@
 //! own, where the tree's format is a style and a style is shared (the
 //! module `format`).
 //!
+//! And a cell may hold a **date**, which is a **number** and a
+//! **format**: the number says how many days have passed and the
+//! format says that the number is a date. The tree's calendar is here,
+//! and it has the day in it that never happened (the module `dates`).
+//!
 //! # The three things the port found
 //!
 //! - **A grid is not a tree, and the cells are in the payload.** A cell
@@ -72,6 +77,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod dates;
 mod fill;
 mod format;
 mod formula;
@@ -81,7 +87,7 @@ use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Session, Text};
 
 use fill::FillRange;
-use format::{Format, MAX_FORMAT_CHARS};
+use format::{DateStyle, Format, MAX_FORMAT_CHARS};
 use formula::{Book, CellRef, Cells, Value};
 
 /// The grid layer.
@@ -342,7 +348,7 @@ impl SetFormat {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!(
-                    "`{code}` is not a format this tree has: the formats are `general`, `0`, `0.00`, `#,##0`, `#,##0.00`, `0%` and `0.00%`"
+                    "`{code}` is not a format this tree has: the formats are `general`, `0`, `0.00`, `#,##0`, `#,##0.00`, `0%` and `0.00%`, and the dates are `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`"
                 ),
             });
         }
@@ -363,6 +369,85 @@ impl SetFormat {
         node.data["cells"] = cells_into(&cells);
         Ok(Outcome::changed(format!("the cell {} is formatted `{code}`", cell.to_text()))
             .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "format": code })))
+    }
+}
+
+/// Put a **date** in a cell.
+///
+/// A date in a spreadsheet is a **number** and a **format**: the number
+/// is the number of days since the 30th of December 1899, and the
+/// format says that the number is a date and how it is written. This
+/// command puts both of them in the cell.
+///
+/// The date is written as `2026-10-26`, and a date that did not
+/// happen — the 30th of February — is refused.
+#[derive(Command)]
+#[command(id = "grid.cell.date", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
+pub struct SetDate {
+    /// The sheet it goes in.
+    pub sheet: NodeRef,
+    /// The cell's address.
+    pub cell: Text,
+    /// The date, as `2026-10-26`.
+    pub date: Text,
+    /// The format the date is written with. The default is
+    /// `yyyy-mm-dd`, and a format that is not a date format is
+    /// refused.
+    pub format: Option<Text>,
+}
+
+impl SetDate {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.cell.date".to_string();
+        let sheet = self.sheet.0;
+        let cell = cell_at(&self.cell.0, &id)?;
+        let (date, shape) = dates::parse(&self.date.0).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!(
+                "`{}` is not a date: a date is written as 2026-10-26, 10/26/2026 or 4-Mar-2026, and it is a day that happened",
+                self.date.0.trim()
+            ),
+        })?;
+        let serial = dates::to_serial(date.year, date.month, date.day).ok_or_else(|| {
+            EngineError::Failed { id: id.clone(), message: format!("`{}` is not a date", self.date.0.trim()) }
+        })?;
+        let style = match &self.format {
+            Some(code) => DateStyle::parse(&code.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "`{}` is not a date format: the date formats are `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`",
+                    code.0.trim()
+                ),
+            })?,
+            // The **shape** the date was written in is the format it is
+            // written with, as the tree has it: a date written as
+            // `10/26/2026` is written as `10/26/2026`.
+            None => DateStyle::parse(shape).unwrap_or(DateStyle::Iso),
+        };
+        let Some(node) = session.document_mut()?.node_mut(sheet) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{sheet}` is not a sheet"),
+            });
+        }
+        let mut cells = sheet_cells_mut(node);
+        cells.set_value(cell, Value::Number(serial));
+        cells.set_format(cell, Some(style.code().to_string()));
+        node.data["cells"] = cells_into(&cells);
+        Ok(Outcome::changed(format!("set the cell {} to the date {}", cell.to_text(), date.to_text()))
+            .with_data(json!({
+                "sheet": sheet,
+                "cell": cell.to_text(),
+                "date": date.to_text(),
+                "serial": serial,
+                "format": style.code(),
+            })))
     }
 }
 

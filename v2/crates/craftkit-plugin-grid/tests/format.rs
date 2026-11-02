@@ -139,7 +139,7 @@ fn a_format_that_is_not_one_of_ours_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
     let error = session
-        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "yyyy-mm-dd" }))
+        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "dd/mm/yy" }))
         .expect_err("the format is refused");
     assert!(error.to_string().contains("is not a format this tree has"), "the error says why: {error}");
 }
