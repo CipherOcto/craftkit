@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1662 tests.** The MCP server links **all fifteen batteries** in, so the
+**1673 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1662 tests
+cargo test          # 1673 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3673,6 +3673,7 @@ so.
 | the **fade** of a clip to a place | **built.** A clip is faded up to a place or down from it, and the shape is the tree's own (§235) | §235 |
 | the **time** of the session | **built.** Silence is inserted at a place and time is cut out of a range, and everything after moves (§236) | §236 |
 | the **names** of the notes | **built.** A pitch, a drum and a program are named by the tree's own tables, and a clip's notes are read with their names (§237) | §237 |
+| the **key** of the session | **built.** The key is set at a place and read back, kept as the sharps and the mode a file carries (§238) | §238 |
 
 ### The list of things that are honestly not there: empty
 
@@ -16361,3 +16362,98 @@ plainly that the names were not here (§217, §219, §223).
   kept here because it is the tree's: a file written elsewhere may call
   the same pitch "C4", and this tree calls it "C3" because the tree
   does.
+
+## 238. The key of the session
+
+The tree's sound editor has a **key change**: a place in the session
+where the key changes, and the key it changes to. The editor's ruler
+draws it, and nothing else in the tree reads it — it is a fact for a
+person to look at. The tree's MIDI crate reads the key signatures out
+of a file, so the number was here and the fact was not.
+
+### What was built
+
+- A **kind** of its own, `sound.key`, in the ruler's row: a key change
+  is a thing in the document with a place on the timeline, like the
+  tempo and the meter (§ the events of the session).
+- The command `sound.key.set` sets the key at a place: the key is
+  given by its **name** — "G major", "E flat minor" — and a second
+  call at the same place changes the key that is there.
+- The command `sound.key.read` reads the keys of the session, and — when
+  a place is given — the key **in effect** there: the last change at or
+  before it.
+- The MIDI library gains the **names of the keys**: a number of sharps
+  and a mode are named "C major", and a name is read back into the
+  number it stands for.
+
+### What the port found
+
+- **The tree keeps a name and this tree keeps a number.** The tree's
+  session holds `key_signatures: Vec<(Samples, String)>` — a place and
+  a string — and the string is whatever the caller typed. Here the
+  document holds the **sharps and the mode**, because that is what a
+  MIDI file carries and what a key signature *is* (§ the MIDI
+  library), and the name is **derived** from it: a fact that can be
+  worked out is a fact that is worked out, and it cannot go stale
+  against the key it names.
+- **The tree takes any string and this tree refuses a name that is not
+  a key.** The tree's command stores "H major" as happily as "C
+  major", and the ruler draws it. Here a name that is not one of the
+  fifteen keys of the circle of fifths is refused: a name nobody can
+  read is not a key. And a name with **no mode** is refused too — "C"
+  on its own does not say whether the music is in C major or in C
+  minor, and a name that does not say is not a name of a key.
+- **The table of the keys is new work, and it is not the tree's.** The
+  tree has no table of keys at all: its key is a free string, and the
+  ruler shows whatever it says. The fifteen keys here are the ones a
+  MIDI file may carry — seven sharps to seven flats, major and minor —
+  and the names of the accidentals are written both ways: "Eb minor"
+  and "E flat minor" are the same key.
+- **The tree's key is at a sample and this one's is at a tick.** The
+  tree's key change is placed on the session's **samples**, like a
+  marker; here it is in **ticks**, like the tempo and the meter, because
+  a key is a musical fact and the music is counted in ticks (§ the
+  events of the session). The difference shows in what happens when
+  time moves.
+- **Neither tree's key moves when time is inserted, and for different
+  reasons.** The tree's `insert_time` moves the clips, the automation
+  and the markers, and its `shift_from` says nothing about the key
+  changes, so they stay where they are — in samples, in a timeline
+  that has just grown under them. Here they stay too, because the
+  insertion is in samples and the keys are in ticks: inserting silence
+  moves the sound and not the music (§236), and a key is part of the
+  music. The same outcome, and a better reason for it.
+- **The tree's key is display-only and this one's is read.** The tree's
+  ruler draws the key change and no command in the tree reads it back;
+  here the key is a fact with a command on it, because a field with no
+  command is not a fact.
+
+### What it cost
+
+- **Five tests** in the MIDI library (`tests/keys.rs`): a key is named
+  by its sharps and its mode, a signature outside the table has no
+  name, a name says which key it is, a name is read the way a person
+  writes it, and a name that is not a key is refused.
+- **Six tests** in the sound battery (`tests/key.rs`): the key is set
+  and read back, it is kept as its sharps and its mode, a second key at
+  the same place changes the one that is there, a name that is not a
+  key is refused, the key in effect at a place is the last change
+  before it, and a session with no key says so.
+- **Two commands** (`sound.key.set` and `sound.key.read`) and **one
+  kind** (`sound.key`). The sound battery now carries **104** commands
+  and **sixteen** kinds, and the MCP server **315**.
+
+### What it does not settle
+
+- **The key does not change the notes.** A key signature says what the
+  music is in; it does not transpose anything, and it is not a command
+  on a note. The tree's is the same, and the tree's own ruler is the
+  only thing that reads it.
+- **The table holds fifteen keys and no more.** A key spelled some
+  other way — D sharp major written as C sharp major — is a key the
+  table does not have, and it is refused rather than guessed at.
+- **The key of a MIDI file is still not put into the document.** The
+  library reads a file's key signatures and the battery can set one by
+  name, but no command yet takes the signatures of an imported file and
+  writes them into the session: that is the next thing to close, and
+  it is not closed here.
