@@ -169,6 +169,29 @@ pub enum VelocityOp {
     Add(i32),
     /// Every note is struck this many times as hard.
     Scale(f64),
+    /// No note is struck softer than the first bound or harder than
+    /// the second.
+    ///
+    /// The bounds are swapped when they are the wrong way round, so a
+    /// limit of one hundred and ten is a limit of ten and a hundred.
+    Limit {
+        /// The softest a note may be struck.
+        min: u8,
+        /// The hardest a note may be struck.
+        max: u8,
+    },
+    /// The notes are struck harder and harder along their span: the
+    /// earliest note is struck at the first value and the latest at
+    /// the second.
+    ///
+    /// One note is struck at the first value — there is no span to
+    /// ramp along.
+    Ramp {
+        /// The velocity of the earliest note.
+        from: u8,
+        /// The velocity of the latest note.
+        to: u8,
+    },
 }
 
 /// Why a velocity could not be changed.
@@ -193,8 +216,44 @@ pub const MAX_VELOCITY: i32 = 127;
 /// changed: the tree clamps such a velocity into the range, and a note
 /// asked for as a hundred and fifty is not a note the caller knows
 /// about.
+///
+/// The **limit** is the one operation that moves a velocity into the
+/// range on purpose: a limit says *no softer than this and no harder
+/// than that*, so a note outside the limit is moved to its edge. Its
+/// own bounds are still refused when they are outside the range,
+/// because a limit of zero is not a limit of anything.
 pub fn change_velocity(notes: &mut [Note], op: &VelocityOp) -> Result<(), VelocityError> {
     let mut wanted: Vec<i32> = Vec::with_capacity(notes.len());
+    // The **limit** is worked out once: the bounds are swapped when
+    // they are the wrong way round, and a bound outside the range is
+    // refused before a single note is touched.
+    let limit = match op {
+        VelocityOp::Limit { min, max } => {
+            let (low, high) = if min <= max { (*min, *max) } else { (*max, *min) };
+            if !(MIN_VELOCITY..=MAX_VELOCITY).contains(&i32::from(low))
+                || !(MIN_VELOCITY..=MAX_VELOCITY).contains(&i32::from(high))
+            {
+                return Err(VelocityError { velocity: i32::from(low.min(high)) });
+            }
+            Some((i32::from(low), i32::from(high)))
+        }
+        _ => None,
+    };
+    // The **ramp** is worked out once too: the span the notes run
+    // along, and the value at each end of it.
+    let ramp = match op {
+        VelocityOp::Ramp { from, to } => {
+            if !(MIN_VELOCITY..=MAX_VELOCITY).contains(&i32::from(*from))
+                || !(MIN_VELOCITY..=MAX_VELOCITY).contains(&i32::from(*to))
+            {
+                return Err(VelocityError { velocity: i32::from((*from).min(*to)) });
+            }
+            let first = notes.iter().map(|note| note.start).min().unwrap_or(0);
+            let last = notes.iter().map(|note| note.start).max().unwrap_or(0);
+            Some((first, last.saturating_sub(first), f64::from(*from), f64::from(*to)))
+        }
+        _ => None,
+    };
     for note in notes.iter() {
         let value = match op {
             VelocityOp::Set(value) => i32::from(*value),
@@ -205,6 +264,16 @@ pub fn change_velocity(notes: &mut [Note], op: &VelocityOp) -> Result<(), Veloci
                 }
                 let scaled = round(f64::from(note.velocity) * factor);
                 i32::try_from(scaled).unwrap_or(i32::MAX)
+            }
+            VelocityOp::Limit { .. } => {
+                let (low, high) = limit.unwrap_or((MIN_VELOCITY, MAX_VELOCITY));
+                i32::from(note.velocity).clamp(low, high)
+            }
+            VelocityOp::Ramp { .. } => {
+                let (first, span, from, to) = ramp.unwrap_or((0, 0, 0.0, 0.0));
+                let at =
+                    if span > 0 { (note.start.saturating_sub(first) as f64) / (span as f64) } else { 0.0 };
+                round(from + (to - from) * at) as i32
             }
         };
         if !(MIN_VELOCITY..=MAX_VELOCITY).contains(&value) {

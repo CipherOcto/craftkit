@@ -56,6 +56,14 @@
 //! place is a fact, and a fact that changes each time it is asked for
 //! is not a fact.
 //!
+//! **The tree's humanise is random and this one is not.** The tree's
+//! humanise moves every note by a random amount, and the tree's
+//! velocity therefore has a **humanise** of its own — which is not
+//! here, for the same reason the random quantise is not: a note struck
+//! harder by a different amount each time is not a note the caller
+//! knows about. The tree's **limit** and **ramp** are here, because
+//! both of them say the same thing every time they are asked.
+//!
 //! # What this does not do
 //!
 //! - **It does not make a sound.** There is no synthesiser here: the

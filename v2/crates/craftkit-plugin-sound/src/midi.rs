@@ -676,6 +676,16 @@ impl TransposeMidi {
 /// **refused** and the notes are not changed: the tree clamps such a
 /// velocity into the range, and a note asked for as a hundred and fifty
 /// is not a note the caller knows about.
+///
+/// The **limit** is the one way a velocity is moved into the range on
+/// purpose: a limit says *no softer than this and no harder than
+/// that*, so a note outside the limit is moved to its edge. The bounds
+/// of the limit are still refused when they are outside the range,
+/// because a limit of zero is not a limit of anything.
+///
+/// The tree's command has the same four ways: set, add, scale and
+/// limit. They are tried in that order, and the first one that is
+/// given is the one that is done.
 #[derive(Command)]
 #[command(
     id = "sound.clip.midi.velocity",
@@ -693,6 +703,12 @@ pub struct VelocityMidi {
     pub set: Option<Number>,
     /// The change in the velocity of every note.
     pub delta: Option<Number>,
+    /// The factor every note's velocity is multiplied by.
+    pub scale: Option<Number>,
+    /// The softest a note may be struck: with `max`, it is the limit.
+    pub min: Option<Number>,
+    /// The hardest a note may be struck: with `min`, it is the limit.
+    pub max: Option<Number>,
 }
 
 impl VelocityMidi {
@@ -704,15 +720,60 @@ impl VelocityMidi {
             id: id.clone(),
             message: format!("the clip `{clip_id}` holds no notes"),
         })?;
-        let op = match (self.set, self.delta) {
-            (Some(set), _) => craftkit_midi::VelocityOp::Set(number_of(&id, set.0, "the velocity")? as u8),
-            (None, Some(delta)) => {
+        // The ways the velocity is changed, and how many of them were
+        // asked for: the tree's command takes them in the order set,
+        // add, scale, limit, and the first one that is given is the
+        // one that is done — but asking for two of them at once is
+        // refused here, because a caller that meant one of them and
+        // got the other would not know.
+        let ways = usize::from(self.set.is_some())
+            + usize::from(self.delta.is_some())
+            + usize::from(self.scale.is_some())
+            + usize::from(self.min.is_some() || self.max.is_some());
+        if ways > 1 {
+            return Err(EngineError::Failed {
+                id,
+                message: "the velocity is changed one way at a time: set, delta, scale or limit".to_string(),
+            });
+        }
+        let op = match (self.set, self.delta, self.scale, self.min, self.max) {
+            (Some(set), _, _, _, _) => {
+                craftkit_midi::VelocityOp::Set(number_of(&id, set.0, "the velocity")? as u8)
+            }
+            (None, Some(delta), _, _, _) => {
                 craftkit_midi::VelocityOp::Add(number_of(&id, delta.0, "the change in the velocity")?)
             }
-            (None, None) => {
+            (None, None, Some(scale), _, _) => {
+                if !scale.0.is_finite() {
+                    return Err(EngineError::Failed { id, message: "the factor is a number".to_string() });
+                }
+                craftkit_midi::VelocityOp::Scale(scale.0)
+            }
+            (None, None, None, Some(min), Some(max)) => {
+                let min = number_of(&id, min.0, "the softest a note may be struck")?;
+                let max = number_of(&id, max.0, "the hardest a note may be struck")?;
+                if !(0..=255).contains(&min) || !(0..=255).contains(&max) {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!(
+                            "a limit is from {} to {}, and not {min} to {max}",
+                            craftkit_midi::MIN_VELOCITY,
+                            craftkit_midi::MAX_VELOCITY
+                        ),
+                    });
+                }
+                craftkit_midi::VelocityOp::Limit { min: min as u8, max: max as u8 }
+            }
+            (None, None, None, Some(_), None) | (None, None, None, None, Some(_)) => {
                 return Err(EngineError::Failed {
                     id,
-                    message: "the velocity, or the change in it, is needed".to_string(),
+                    message: "a limit has two bounds: the softest and the hardest".to_string(),
+                });
+            }
+            _ => {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the velocity, the change in it, the factor, or the limit is needed".to_string(),
                 });
             }
         };

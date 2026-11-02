@@ -101,6 +101,65 @@ fn a_velocity_outside_the_range_is_refused() {
     assert!(refused.is_err(), "a velocity of zero is not a velocity");
 }
 
+/// The **limit** moves a note onto the edge of the limit: a limit says
+/// no softer than this and no harder than that, so a note outside it
+/// is moved to its edge.
+#[test]
+fn the_velocity_is_limited() {
+    let mut notes = vec![note(60, 0, 100)];
+    notes[0].velocity = 20;
+    change_velocity(&mut notes, &VelocityOp::Limit { min: 40, max: 100 }).expect("the notes are limited");
+    assert_eq!(notes[0].velocity, 40, "the note was softer than the limit");
+    let mut notes = vec![note(60, 0, 100)];
+    notes[0].velocity = 120;
+    change_velocity(&mut notes, &VelocityOp::Limit { min: 40, max: 100 }).expect("the notes are limited");
+    assert_eq!(notes[0].velocity, 100, "the note was harder than the limit");
+}
+
+/// The bounds of a limit are **swapped** when they are the wrong way
+/// round, so a limit of a hundred and ten is a limit of ten and a
+/// hundred.
+#[test]
+fn the_bounds_of_a_limit_are_swapped() {
+    let mut notes = vec![note(60, 0, 100)];
+    notes[0].velocity = 50;
+    change_velocity(&mut notes, &VelocityOp::Limit { min: 100, max: 40 }).expect("the notes are limited");
+    assert_eq!(notes[0].velocity, 50, "the note was inside the limit either way");
+    notes[0].velocity = 20;
+    change_velocity(&mut notes, &VelocityOp::Limit { min: 100, max: 40 }).expect("the notes are limited");
+    assert_eq!(notes[0].velocity, 40, "and the note is on the soft edge");
+}
+
+/// A limit whose own bounds are **outside the range** is refused: a
+/// limit of zero is not a limit of anything.
+#[test]
+fn a_limit_outside_the_range_is_refused() {
+    let mut notes = vec![note(60, 0, 100)];
+    let refused = change_velocity(&mut notes, &VelocityOp::Limit { min: 0, max: 100 });
+    assert!(refused.is_err(), "a limit of zero is not a limit");
+    assert_eq!(notes[0].velocity, 100, "and the note was not changed");
+}
+
+/// The **ramp** strikes the notes harder and harder along their span:
+/// the earliest note at the first value and the latest at the second.
+#[test]
+fn the_velocity_is_ramped() {
+    let mut notes = vec![note(60, 0, 100), note(62, 500, 100), note(64, 1000, 100)];
+    change_velocity(&mut notes, &VelocityOp::Ramp { from: 20, to: 120 }).expect("the notes are ramped");
+    assert_eq!(notes[0].velocity, 20, "the earliest note");
+    assert_eq!(notes[1].velocity, 70, "the note in the middle");
+    assert_eq!(notes[2].velocity, 120, "the latest note");
+}
+
+/// A ramp of **one note** strikes it at the first value: there is no
+/// span to ramp along.
+#[test]
+fn a_ramp_of_one_note_strikes_it_at_the_first_value() {
+    let mut notes = vec![note(60, 0, 100)];
+    change_velocity(&mut notes, &VelocityOp::Ramp { from: 20, to: 120 }).expect("the note is ramped");
+    assert_eq!(notes[0].velocity, 20);
+}
+
 /// The **length** of the notes is set, added to and scaled, and a note
 /// is always at least one tick long.
 #[test]

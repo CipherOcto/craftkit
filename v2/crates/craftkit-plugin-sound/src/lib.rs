@@ -205,6 +205,15 @@
 //! the note is not made — the same rule the transpose follows
 //! (§219).
 //!
+//! **A limit clamps, and everything else refuses.** The tree changes a
+//! note's velocity four ways and clamps all of them into the range.
+//! Here the **set**, the **change** and the **scale** are refused when
+//! the result would leave the range (§219), and only the **limit** moves
+//! a note onto the edge of the limit — because a limit says *no softer
+//! than this and no harder than that*, and moving a note onto its edge
+//! is what was asked for and not a quiet correction. The limit's own
+//! bounds are refused all the same (§229).
+//!
 //! **The room of a MIDI clip does not shrink.** The notes of a clip are
 //! in ticks and the length of the clip is in samples, and the room the
 //! notes need is worked out against the tempo map. A note that reaches
