@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and fifteen commands**, one for each thing a person does to a
+//! - **a hundred and sixteen commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -49,7 +49,8 @@
 //!   end of its material,
 //!   separate a clip at its **transients**, **strip** the silence out
 //!   of a clip in any of its three **modes**, **copy**, **cut** and
-//!   **paste** the material of a range, and
+//!   **paste** the material of a range, turn a track's **voice** off
+//!   and on again, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -419,6 +420,7 @@ mod midi;
 // back together.
 mod clipboard;
 mod heal;
+mod inactive;
 mod keys;
 mod ranges;
 mod remove;
@@ -440,6 +442,7 @@ pub use gain::{BypassGain, SetGain};
 pub use grid::{Quantize, ReadGrid, SetGrid};
 pub use group::{Group, GroupKind, ReadGroup, SetGroupFlags, SetTrackGroup, Ungroup, UngroupTracks};
 pub use heal::HealTrack;
+pub use inactive::SetTrackInactive;
 pub use keys::{KeyKind, ReadKeys, SetKey};
 pub use locks::{EditLock, TimeLock};
 pub use marks::SetRating;
@@ -1229,6 +1232,14 @@ struct TrackPayload {
     /// of them is the one that is played. A track with no name here
     /// plays its first take.
     active_playlist: Option<String>,
+    /// Whether the track's **voice is off**: whether the track is
+    /// inactive and is not heard.
+    ///
+    /// The tree's track header says "dyn" or "off", and "off" is an
+    /// inactive track: it is not in the mix, not on a bus and not a
+    /// stem, and it is still in the document with its clips and its
+    /// settings.
+    inactive: bool,
     /// The **elastic algorithm** of the track: how its clips are
     /// stretched.
     ///
@@ -1257,6 +1268,7 @@ impl TrackPayload {
             "solo_safe": self.solo_safe,
             "phase_invert": self.phase_invert,
             "active_playlist": self.active_playlist,
+            "inactive": self.inactive,
             "elastic": self.elastic,
         })
     }
@@ -1276,6 +1288,7 @@ impl TrackPayload {
                 .get("active_playlist")
                 .and_then(|playlist| playlist.as_str())
                 .map(|playlist| playlist.to_string()),
+            inactive: value.get("inactive").and_then(|inactive| inactive.as_bool()).unwrap_or(false),
             elastic: value
                 .get("elastic")
                 .and_then(|elastic| elastic.as_str())
@@ -1312,6 +1325,14 @@ fn active_playlist(_document: &Document, track: &Node) -> Option<u64> {
 /// master faders over the main mix, and a master holds no clips.
 fn is_master(node: &Node) -> bool {
     TrackPayload::from_json(&node.data).map(|payload| payload.track_kind == "master").unwrap_or(false)
+}
+
+/// Whether a track is **inactive**: whether its voice is off.
+///
+/// An inactive track is not heard — not in the mix, not on a bus and
+/// not as a stem — and it is still in the document.
+fn is_inactive(node: &Node) -> bool {
+    TrackPayload::from_json(&node.data).map(|payload| payload.inactive).unwrap_or(false)
 }
 
 /// Whether a track's clips are **stretched with the pitch kept**.
@@ -1871,6 +1892,7 @@ impl AddTrack {
             solo_safe: false,
             phase_invert: false,
             active_playlist: None,
+            inactive: false,
             elastic: None,
         };
         let document = session.document_mut()?;
@@ -6114,10 +6136,12 @@ fn mix_of(document: &Document, id: &str, raw_track: Option<u64>) -> Result<Mix, 
     // finished after the buses are, because its sound is the bus's
     // sound.
     let readers = mixer::readers_of(document);
-    for track in document
-        .walk()
-        .filter(|node| node.kind == "sound.track" && !is_master(node) && !mixer::reads_bus(document, node.id))
-    {
+    for track in document.walk().filter(|node| {
+        node.kind == "sound.track"
+            && !is_master(node)
+            && !is_inactive(node)
+            && !mixer::reads_bus(document, node.id)
+    }) {
         // The signal is **interleaved**: it holds a frame of every
         // channel, and it is as long as the mix in frames.
         let mut signal = vec![0.0_f32; frames * channels.max(1) as usize];
@@ -6282,6 +6306,11 @@ fn mix_of(document: &Document, id: &str, raw_track: Option<u64>) -> Result<Mix, 
                 // bus is read by an aux and is silent on its own.
                 let Some((_, bus_signal)) = buses.iter().find(|(id, _)| *id == bus) else { continue };
                 let Some(track) = document.node(reader) else { continue };
+                // An **inactive** track is not heard, and a reader is
+                // a track: its voice is off too.
+                if is_inactive(track) {
+                    continue;
+                }
                 let mut signal = bus_signal.clone();
                 for insert in inserts_of(document, track) {
                     if insert.bypass {
@@ -6338,7 +6367,9 @@ fn mix_of(document: &Document, id: &str, raw_track: Option<u64>) -> Result<Mix, 
     // fader for the whole mix and not for a part of it. The tree's
     // mixer runs the master faders over the main mix, in the order
     // of the tree, and the metronome is summed after them.
-    for master_track in document.walk().filter(|node| node.kind == "sound.track" && is_master(node)) {
+    for master_track in
+        document.walk().filter(|node| node.kind == "sound.track" && is_master(node) && !is_inactive(node))
+    {
         for insert in inserts_of(document, master_track) {
             if insert.bypass {
                 continue;
@@ -6426,7 +6457,10 @@ impl RenderStems {
         // fader of the mix and not a sound of its own), and a muted
         // track is not bounced.
         let mut files = Vec::new();
-        for track in document.walk().filter(|node| node.kind == "sound.track" && !is_master(node)) {
+        for track in document
+            .walk()
+            .filter(|node| node.kind == "sound.track" && !is_master(node) && !is_inactive(node))
+        {
             // The **mute** is a field of the track and a lane over it:
             // a muted track is one whose own mute is on, or one whose
             // mute lane says so.
@@ -7584,6 +7618,7 @@ pub(crate) fn add_track(session: &mut Session, name: &str) -> Result<u64, Engine
         solo_safe: false,
         phase_invert: false,
         active_playlist: None,
+        inactive: false,
         elastic: None,
     };
     let document = session.document_mut()?;
@@ -7748,6 +7783,7 @@ craftkit_sdk::plugin_anchor!(
     RemoveClip,
     RemoveMarker,
     RemoveTrack,
+    SetTrackInactive,
     RepeatRange,
     SplitMono,
     AddMarker,
