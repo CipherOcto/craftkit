@@ -318,6 +318,14 @@
 //! this tree draws no track headers, and a thing that nothing draws is
 //! not a fact.
 //!
+//! **The tree's names are unique and this tree's are not.** The tree's
+//! rename refuses a name that another track already has, because the
+//! tree's tracks are named and a caller names them. Here the id is the
+//! identity and the name is a label, and two tracks may carry the same
+//! name. The tree also throws the end of a long name away — sixty-four
+//! characters for a track, in its own command — and here a name that is
+//! longer than the bound is **refused**.
+//!
 //! **The tree's clipboard carries the automation and this one's did
 //! not.** The tree's copy gathers the breakpoints of every lane of the
 //! track that fall inside the range and puts them in the clipboard

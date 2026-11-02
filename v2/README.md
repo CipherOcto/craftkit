@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1745 tests.** The MCP server links **all fifteen batteries** in, so the
+**1751 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1745 tests
+cargo test          # 1751 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3686,6 +3686,7 @@ so.
 | the **commit** of a track | **built.** The sound of a track is written to a file, a new track of it is made, and the old track goes quiet (§249) | §249 |
 | the **chain** of inserts | **built.** An insert is taken away and it moves in the chain, and the chain is the order of the nodes (§250) | §250 |
 | the **automation** of a range | **built.** The clipboard carries the breakpoints of the range, the paste writes them and the cut takes them away (§251) | §251 |
+| the **name** of a thing | **built.** A track and a clip are renamed, and a name that is empty or too long is refused (§252) | §252 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17427,3 +17428,61 @@ length and nothing else, and that was wrong.
 - **The tree's repeat copies the clips and not the automation, and so
   does this one's repeat** (§246): the repeat lays the material again
   and the curve stays where it is.
+
+## 252. The name of a track and of a clip
+
+The tree's editor renames a track and renames a clip. The name is what
+a person calls the thing, and this tree's battery had no way to change
+one — the name was fixed when the thing was made.
+
+### What was built
+
+- The command `sound.track.rename` renames a track, and
+  `sound.clip.rename` renames a clip. The name is trimmed, and the
+  name is put on the node.
+- A name that is **empty** is refused: a name of spaces is no name.
+- A name that is **longer than the tree's bound** — two hundred and
+  fifty-six characters — is refused.
+- A node that is **not a track** is refused, and so is a node that is
+  not a clip.
+- A clip that is in an **auto rename scheme** keeps its place in it: the
+  scheme names the pieces of a cut, and a clip that is renamed by hand
+  is still a clip of the scheme.
+
+### What the port found
+
+- **The tree's names are unique and this tree's are not.** The tree's
+  `track.rename` refuses a name that another track already has, because
+  the tree's tracks are named and a caller names them. Here the **id**
+  is the identity and the name is a label: two tracks may carry the
+  same name, and the tree's rule is not here because a document that
+  says the same thing twice about a name is not a document that says
+  two things about the same thing.
+- **The tree's rename throws the end of a long name away, and this one
+  refuses it.** The tree takes the first two hundred and fifty-six
+  characters of a name — sixty-four for a track, in the tree's own
+  command — and the rest is lost. A name that was cut in half is not
+  the name that was asked for, and here the name is **refused**.
+- **The tree's rename of a clip does not take it out of its auto rename
+  scheme, and this one's does not either.** The tree's rename sets the
+  name and leaves the scheme alone; the scheme names the pieces of a
+  later cut, and the clip that was renamed by hand is still a clip of
+  the scheme.
+
+### What it cost
+
+- **Six tests** in the sound battery (`tests/rename.rs`): the track is
+  renamed, the clip is renamed, an empty name is refused, a long name
+  is refused, two tracks may have the same name, and a node that is
+  not a track is refused.
+- **Two commands** (`sound.track.rename` and `sound.clip.rename`). The
+  sound battery now carries **121** commands and the MCP server
+  **332**.
+
+### What it does not settle
+
+- **The names are not unique.** The tree refuses a name that is taken;
+  here two tracks may have the same name, and a caller that finds a
+  track by its name finds the first one with that name.
+- **The tree's rename of a track renames its bus as well**, when the
+  track is a folder that feeds one. There are no folders here.
