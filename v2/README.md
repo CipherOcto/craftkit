@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1779 tests.** The MCP server links **all fifteen batteries** in, so the
+**1783 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1779 tests
+cargo test          # 1783 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3692,6 +3692,7 @@ so.
 | the **render** of a clip | **built.** The sound of a clip is written to a file, and a MIDI clip is refused (§255) | §255 |
 | the **taking away** of an event | **built.** A tempo, a meter and a key go away, and the document's own stays (§256) | §256 |
 | the **shapes** of the tree | **built.** A star, a line and a spiral are made out of numbers, with the tree's own geometry (§257) | §257 |
+| the **turning** of a path | **built.** A path's open contour is closed and a path is turned the other way round (§258) | §258 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17780,3 +17781,53 @@ here now.
 - **The tree's star has a straight-armed variant**, where the inner
   radius is worked out from the outer one so that the shoulders line
   up; here the inner radius is what the caller says.
+
+## 258. The closing and the turning of a path
+
+The tree's editor closes a path's open contour and turns a path the
+other way round. This tree's vector battery could do neither.
+
+### What was built
+
+- The command `vector.path.close` closes a path's **last open
+  contour**: a contour that is open has a loose end, and a loose end is
+  a place where the paint stops in the middle of nowhere.
+- A path with **no open contour** is refused: there is nothing to
+  close.
+- The command `vector.path.reverse` turns a path the other way round:
+  the contour starts where it ended, and every curve keeps its shape
+  and turns the other way — the two control points change places.
+
+### What the port found
+
+- **The tree's reverse is about the way a path *winds*.** The tree's
+  `path.reverse` looks at the **signed area** of each contour and
+  turns the ones that wind the wrong way, so that a path with a hole
+  in it comes out right whichever way it was drawn. Here the command
+  turns the path the other way round, always: a path that is turned
+  twice is the path it was.
+- **The tree's close may set the first anchor's incoming handle**, and
+  this one's does not: the handle is a fact about the anchor, and a
+  command that closes a contour does not change the curve at its end.
+- **The tree's close says which contour it closed**, and this one's
+  says that the path is closed and nothing more: the contour is the
+  path's, and a path may have several.
+
+### What it cost
+
+- **Four tests** in the vector battery (`tests/turn.rs`): the open
+  contour is closed, a path with no open contour is refused, the path
+  is turned the other way round, and turning a path twice gives it
+  back.
+- **Two commands** (`vector.path.close` and `vector.path.reverse`). The
+  vector battery now carries **30** commands and the MCP server
+  **343**.
+
+### What it does not settle
+
+- **The tree's reverse turns the contours that wind the wrong way**,
+  and this one's turns them all: a caller that wants the path wound
+  one way says so twice.
+- **The tree's path.average and the tree's path.reshape are not
+  here**: the average of a set of points and the reshaping of a path
+  are two more pieces of the tree's geometry.
