@@ -1482,6 +1482,175 @@ impl ThinLane {
     }
 }
 
+/// The lanes of a **track**, by their parameter.
+///
+/// The lanes are the ones under the track: a lane automates one thing
+/// and a track's lanes are under the track.
+pub(crate) fn lanes_of(document: &Document, track: u64) -> Vec<(u64, LanePayload)> {
+    let mut lanes: Vec<(u64, LanePayload)> = document
+        .walk()
+        .filter(|node| node.kind == "sound.lane")
+        .filter(|node| crate::timeline::parent_of(document, node.id).map(|parent| parent.id) == Some(track))
+        .filter_map(|node| LanePayload::from_json(&node.data).ok().map(|payload| (node.id, payload)))
+        .collect();
+    lanes.sort_by_key(|(_, payload)| payload.param.clone());
+    lanes
+}
+
+/// **Thin** every lane of a track: take away the breakpoints the curves
+/// do not need.
+///
+/// The tree's editor has a "Thin All": it thins every lane of every
+/// track at once. Here it is **one track's** lanes, because a track is
+/// a node and a node is something a command can be given.
+#[derive(Command)]
+#[command(
+    id = "sound.lane.thin.all",
+    area = "sound",
+    layer = "sound",
+    icon = "minus",
+    menu("Track", "Automation"),
+    mutates,
+    undoable
+)]
+pub struct ThinAllLanes {
+    /// The track whose lanes are thinned.
+    pub track: NodeRef,
+    /// How much the curve may change, in the value of the parameter.
+    pub tolerance: Option<Number>,
+}
+
+impl ThinAllLanes {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.lane.thin.all".to_string();
+        let track = self.track.0;
+        let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{track}`"),
+        })?;
+        if node.kind != "sound.track" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+            });
+        }
+        let tolerance = match self.tolerance {
+            Some(tolerance) if tolerance.0.is_finite() => tolerance.0.clamp(0.0, 100.0),
+            Some(_) => {
+                return Err(EngineError::Failed { id, message: "the tolerance is a number".to_string() });
+            }
+            None => 0.1,
+        };
+        let lanes = lanes_of(session.document(), track);
+        let mut removed = 0;
+        for (lane, mut payload) in lanes {
+            removed += thin_points(&mut payload.points, tolerance);
+            write_lane(session, lane, &payload)?;
+        }
+        Ok(Outcome::changed(format!("took {removed} breakpoints off the lanes of the track `{track}`"))
+            .with_data(serde_json::json!({ "track": track, "removed": removed })))
+    }
+}
+
+/// **Write** the static value of every lane of a track over a range.
+///
+/// The tree's editor has a "Write to Current": it takes the **static**
+/// value of each parameter — the fader, the pan, the mute — and writes
+/// it over a range, so that the curve is flat over it and the value
+/// before and after it is kept.
+///
+/// Here the static values are the **defaults of their lanes** (§ the
+/// fader), and the tree's own mixer keeps a mute of its own beside the
+/// mute lane: here the lane is the mute's default, and a lane without
+/// breakpoints is the mute.
+#[derive(Command)]
+#[command(
+    id = "sound.lane.write.all",
+    area = "sound",
+    layer = "sound",
+    icon = "pencil",
+    menu("Track", "Automation"),
+    mutates,
+    undoable
+)]
+pub struct WriteAllLanes {
+    /// The track whose lanes are written.
+    pub track: NodeRef,
+    /// Where the range starts, in the owner's samples.
+    pub start: Number,
+    /// Where the range ends, in the owner's samples.
+    pub end: Number,
+}
+
+impl WriteAllLanes {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.lane.write.all".to_string();
+        let track = self.track.0;
+        let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{track}`"),
+        })?;
+        if node.kind != "sound.track" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+            });
+        }
+        let start = crate::samples(self.start.0, "where the range starts")?;
+        let end = crate::samples(self.end.0, "where the range ends")?;
+        if end <= start {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the range from {start} to {end} is empty"),
+            });
+        }
+        // The **static values**: the fader, the pan and the mute are
+        // the defaults of their lanes, and those are the values the
+        // tree writes.
+        let payload = crate::TrackPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+        let statics: Vec<(&str, f64)> = vec![
+            ("volume", payload.fader_db),
+            ("pan", payload.pan),
+            ("mute", if payload.mute { 1.0 } else { 0.0 }),
+        ];
+        let lanes = lanes_of(session.document(), track);
+        let mut written = 0;
+        for (lane, mut lane_payload) in lanes {
+            // The value this lane's parameter holds when it is not
+            // automated: the track's own.
+            let Some((_, value)) = statics.iter().find(|(param, _)| *param == lane_payload.param) else {
+                continue;
+            };
+            let value = check_value(&id, &lane_payload.param, *value)?;
+            // The curve before and after the range, so that the anchors
+            // keep it.
+            let before = crate::automate::value_at(&lane_payload.points, start.saturating_sub(1));
+            let after = crate::automate::value_at(&lane_payload.points, end);
+            lane_payload.points.retain(|(when, _)| *when < start || *when > end);
+            fn set(points: &mut Vec<(i64, f64)>, at: i64, value: f64) {
+                match points.iter_mut().find(|(when, _)| *when == at) {
+                    Some(point) => point.1 = value,
+                    None => points.push((at, value)),
+                }
+            }
+            if start > 0 {
+                set(&mut lane_payload.points, start - 1, before);
+            }
+            set(&mut lane_payload.points, start, value);
+            set(&mut lane_payload.points, end, value);
+            if !lane_payload.points.iter().any(|(when, _)| *when == end + 1) {
+                set(&mut lane_payload.points, end + 1, after);
+            }
+            lane_payload.points.sort_by_key(|(at, _)| *at);
+            write_lane(session, lane, &lane_payload)?;
+            written += 1;
+        }
+        Ok(Outcome::changed(format!("wrote the lanes of the track `{track}` over a range"))
+            .with_data(serde_json::json!({ "track": track, "lanes": written, "start": start, "end": end })))
+    }
+}
+
 /// Take away the breakpoints of a curve that the curve does not need.
 ///
 /// A breakpoint is taken away when the **slope** from the last

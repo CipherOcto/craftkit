@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **ninety-six commands**, one for each thing a person does to a
+//! - **ninety-eight commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -267,6 +267,13 @@
 //! the notes are in ticks and the model does not know the tempo map,
 //! so the **engine** does it after. Here the trim does the same
 //! (§233).
+//!
+//! **The tree's automation is done over every track and this tree's
+//! over one.** The tree's "Thin All" thins every lane of every track
+//! and its "Write to Current" writes the static value of every
+//! parameter over a range. Here both are **one track's** lanes,
+//! because a track is a node and a node is something a command can be
+//! given (§234).
 //!
 //! **The tree's strip of silence has three modes and a preview, and so
 //! does this one.** The tree's editor strips the silence, or extracts
