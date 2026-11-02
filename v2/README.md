@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1684 tests.** The MCP server links **all fifteen batteries** in, so the
+**1692 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1684 tests
+cargo test          # 1692 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3676,6 +3676,7 @@ so.
 | the **key** of the session | **built.** The key is set at a place and read back, kept as the sharps and the mode a file carries (§238) | §238 |
 | the **music** of a MIDI file | **built.** The file's tempos, meters and keys come in with it and go out with it, and the notes land where the music lands (§239) | §239 |
 | the **tracks** of a MIDI file | **built.** Every track of the file becomes a track of the session, with a clip of its own (§240) | §240 |
+| the **consolidate** of a track | **built.** The sound of a track's clips over a range is written to a file, and the clips become one clip of it (§242) | §242 |
 
 ### The list of things that are honestly not there: empty
 
@@ -16629,3 +16630,124 @@ its own; this tree's import made one clip with all the notes in it.
   the other makes a single clip with all of them. The tree has only
   the first, and this tree has both because the clip import was here
   first (§ the MIDI of a clip).
+
+## 241. The mix was not interleaved
+
+A **frame** is a sample of every channel: a stereo sound is two samples
+to the frame, and the samples are interleaved. The mix held one sample
+of every frame — its buffers were as long as the mix in frames and
+were used as interleaved samples — and so a stereo session was **half
+as long as it should be**, and every clip was at **half its place**.
+
+This is not an addition; it is a **defect**, and it was found while
+building the consolidate (§242).
+
+### What was built
+
+- The buffers of the mix — the track's signal, the buses' signals and
+  the master — are as long as the mix in **frames times the channels**.
+- A clip's samples go at its place in **frames**: a clip put half a
+  second into a stereo session is half a second into the file and not
+  a quarter of a second in.
+- The **limit** on the length of a mix is checked in frames and not in
+  samples, and the mix no longer goes through the audio library's
+  mono mixer to be counted.
+
+### What the port found
+
+- **The tree's mix is interleaved, and this one was not.** The tree's
+  renderer works in frames and writes the channels out as they come;
+  here the buffers were counted in frames and used as samples. A
+  **mono** session was right by accident — one channel and one sample
+  to the frame are the same number — and a stereo session was wrong:
+  half as long, and every clip at half its place.
+- **No test of the tree could have caught it, and none of this tree's
+  could either.** The tests of this tree that read a rendered file
+  read a **mono** one, where the two mistakes are the same mistake.
+  The three tests of this arc read a stereo file and count its frames.
+- **The fix is in the mix and not in the writer.** The WAV writer
+  takes the channels and the samples and works out the frames itself,
+  and it was right: it wrote a file of half the frames because half
+  the samples were given to it.
+
+### What it cost
+
+- **Three tests** in the sound battery (`tests/mix.rs`): a stereo clip
+  is where it was put, a mono clip is where it was put, and two stereo
+  clips are heard together.
+
+### What it does not settle
+
+- **The mix is still one mix.** The tree's mixer can route a channel
+  to another channel — a **matrix** — and this one cannot; the tree's
+  session format and its source-to-track-to-session routing are a
+  redesign rather than an addition, and it is not done here.
+
+## 242. The consolidate of a track
+
+The tree's consolidate renders the sound of a track's clips over a
+range, writes it to a file, and puts one clip of that file where the
+clips were. The sound is the same and the editing is not.
+
+### What was built
+
+- The command `sound.track.consolidate` renders the sound of a
+  track's clips over a range, writes it to a file in a directory, adds
+  the file to the document as a **source**, and puts **one clip** of
+  that source where the clips were.
+- The sound that is rendered is the sound of the track's **clips**:
+  the track's trim and the track's inserts are not in it, because they
+  belong to the track and the track is still there.
+- A clip that **crosses the edge** of the range keeps the part outside
+  it: the head of the first clip and the tail of the last stay where
+  they were.
+- The **MIDI** clips of the track are left alone: they hold no sound
+  to render, and a MIDI clip is not a file.
+- A range with no length is refused, and so is a node that is not a
+  track.
+
+### What the port found
+
+- **The tree's consolidate renders the clips and this one does too.**
+  The tree's `consolidate` renders the track's clips over the range
+  with `render_clips` — the clips' own gains and fades, and not the
+  track's strip — and puts the result in a new clip on the same
+  track. Here the mix is asked for the track's **raw** signal: the sum
+  of its clips, before the trim and before the inserts. The strip
+  still applies to the file that comes out, exactly once.
+- **The tree's consolidate separates the clips that cross the range
+  and this one trims them.** The tree's `clear_range` cuts a clip that
+  crosses into two pieces and keeps the outside one; here the clip
+  keeps its head or its tail and stays one clip (§ the cut of a MIDI
+  clip, and § the time of the session: the tree separates and this
+  tree trims).
+- **The tree's consolidate is over a selection and this one is over a
+  range.** The same gap as the velocity's (§229), the length's (§230)
+  and the fade's (§235), and the same answer: a range is a fact and a
+  selection is the editor's state.
+- **The tree's sources are in a pool and this tree's are files.** The
+  tree's consolidated sound is an `AudioBuffer` in the session's
+  source pool; here it is a file on the disk, a `sound.source` node
+  and an asset beside the document — because that is how every source
+  of this tree is a file (§ the source of a clip).
+
+### What it cost
+
+- **Five tests** in the sound battery (`tests/consolidate.rs`): the
+  clips of the track become one clip, the file holds the sound of the
+  range, a clip that crosses the range keeps the part outside it, an
+  empty range is refused, and a node that is not a track is refused.
+- **One command** (`sound.track.consolidate`) and one thing in the
+  mix: the **raw** signal of a track, the sum of its clips before the
+  strip. The sound battery now carries **106** commands and the MCP
+  server **317**.
+
+### What it does not settle
+
+- **The tree's commit is not here.** The tree's `track.commit` renders
+  a track through its inserts into a **new track** and marks the old
+  one inactive and hidden; this tree has no inactive track and no
+  hidden track, and the consolidate keeps the track it was given.
+- **The sound of the range is written to a file and not kept in the
+  document.** A document that is copied to another machine carries the
+  file beside it, as every source of this tree does.
