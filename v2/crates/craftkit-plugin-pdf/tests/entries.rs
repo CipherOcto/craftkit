@@ -58,7 +58,7 @@ fn a_key_is_added() {
     let mut session = session();
     let object = an_object(&mut session, json!([["Type", "Page"]]));
     session
-        .execute("pdf.object.set", &json!({ "object": object, "key": "MediaBox", "value": [0, 0, 595, 842] }))
+        .execute("pdf.entry.set", &json!({ "object": object, "key": "MediaBox", "value": [0, 0, 595, 842] }))
         .expect("the key is set");
     let entries = entries_of(&session, object);
     assert_eq!(entries.len(), 2, "the dictionary has two keys: {entries:?}");
@@ -72,7 +72,7 @@ fn a_key_is_changed() {
     let mut session = session();
     let object = an_object(&mut session, json!([["Type", "Page"], ["Rotate", 0]]));
     session
-        .execute("pdf.object.set", &json!({ "object": object, "key": "Rotate", "value": 90 }))
+        .execute("pdf.entry.set", &json!({ "object": object, "key": "Rotate", "value": 90 }))
         .expect("the key is set");
     let entries = entries_of(&session, object);
     assert_eq!(entries.len(), 2, "the dictionary still has two keys: {entries:?}");
@@ -86,7 +86,7 @@ fn a_key_is_taken_away() {
     let mut session = session();
     let object = an_object(&mut session, json!([["Type", "Page"], ["Rotate", 90]]));
     session
-        .execute("pdf.object.remove", &json!({ "object": object, "key": "Rotate" }))
+        .execute("pdf.entry.remove", &json!({ "object": object, "key": "Rotate" }))
         .expect("the key is taken away");
     let entries = entries_of(&session, object);
     assert_eq!(entries.len(), 1, "the dictionary has one key: {entries:?}");
@@ -100,7 +100,7 @@ fn a_key_that_is_not_there_is_refused() {
     let mut session = session();
     let object = an_object(&mut session, json!([["Type", "Page"]]));
     let error = session
-        .execute("pdf.object.remove", &json!({ "object": object, "key": "Rotate" }))
+        .execute("pdf.entry.remove", &json!({ "object": object, "key": "Rotate" }))
         .expect_err("the removal is refused");
     assert!(error.to_string().contains("no key `Rotate`"), "the error says why: {error}");
     assert_eq!(entries_of(&session, object).len(), 1, "and the dictionary is as it was");
@@ -112,7 +112,7 @@ fn a_node_that_is_not_an_object_is_refused() {
     let mut session = session();
     let object = an_object(&mut session, json!([]));
     let error = session
-        .execute("pdf.object.set", &json!({ "object": object + 1_000_000, "key": "Rotate", "value": 90 }))
+        .execute("pdf.entry.set", &json!({ "object": object + 1_000_000, "key": "Rotate", "value": 90 }))
         .expect_err("the setting is refused");
     assert!(error.to_string().contains("there is no node"), "the error says why: {error}");
 }
@@ -123,7 +123,7 @@ fn an_empty_key_is_refused() {
     let mut session = session();
     let object = an_object(&mut session, json!([]));
     let error = session
-        .execute("pdf.object.set", &json!({ "object": object, "key": "  ", "value": 90 }))
+        .execute("pdf.entry.set", &json!({ "object": object, "key": "  ", "value": 90 }))
         .expect_err("the key is refused");
     assert!(error.to_string().contains("a key is text"), "the error says why: {error}");
 }

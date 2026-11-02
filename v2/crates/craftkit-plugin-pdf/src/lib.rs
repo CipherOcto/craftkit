@@ -39,6 +39,10 @@
 //! it in its `/Annots`, which is an edge, the same edge the page tree
 //! is made of.
 //!
+//! And an object may be **taken away**: the references that named it go
+//! with it, because a file whose objects name things that are not there
+//! is not a file (the module `remove`).
+//!
 //! And the **outline** is here: the bookmarks of the document, a tree of
 //! items with titles and destinations. The tree is a **list** of
 //! siblings in the file — each item names the next — and the counts are
@@ -101,6 +105,7 @@ mod loader;
 mod objects;
 mod outline;
 mod predictors;
+mod remove;
 mod writer;
 mod xref;
 
@@ -109,6 +114,7 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 pub use outline::{AddOutline, ReadOutline};
+pub use remove::RemoveObject;
 
 /// The PDF layer.
 ///
@@ -251,8 +257,8 @@ impl AddObject {
 /// A node that is **not an object** is refused, and so is an empty
 /// key.
 #[derive(Command)]
-#[command(id = "pdf.object.set", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct SetObjectEntry {
+#[command(id = "pdf.entry.set", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
+pub struct SetEntry {
     /// The object.
     pub object: NodeRef,
     /// The key.
@@ -261,9 +267,9 @@ pub struct SetObjectEntry {
     pub value: serde_json::Value,
 }
 
-impl SetObjectEntry {
+impl SetEntry {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.object.set".to_string();
+        let id = "pdf.entry.set".to_string();
         let object = self.object.0;
         let Some(node) = session.document().node(object) else {
             return Err(EngineError::Failed {
@@ -311,17 +317,17 @@ impl SetObjectEntry {
 /// A key that is **not there** is refused: a key that was never there
 /// is not a key that was taken away.
 #[derive(Command)]
-#[command(id = "pdf.object.remove", area = "pdf", layer = "pdf", icon = "minus", mutates, undoable)]
-pub struct RemoveObjectEntry {
+#[command(id = "pdf.entry.remove", area = "pdf", layer = "pdf", icon = "minus", mutates, undoable)]
+pub struct RemoveEntry {
     /// The object.
     pub object: NodeRef,
     /// The key.
     pub key: Text,
 }
 
-impl RemoveObjectEntry {
+impl RemoveEntry {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.object.remove".to_string();
+        let id = "pdf.entry.remove".to_string();
         let object = self.object.0;
         let Some(node) = session.document().node(object) else {
             return Err(EngineError::Failed {
@@ -1758,6 +1764,7 @@ impl GraphEvaluator {
     layer = "pdf",
     commands(
         "pdf.object.add",
+        "pdf.object.remove",
         "pdf.ref.add",
         "pdf.annot.add",
         "pdf.page.annotations",
@@ -1827,8 +1834,9 @@ craftkit_sdk::plugin_anchor!(
     StreamKind,
     AddObject,
     AddStream,
-    SetObjectEntry,
-    RemoveObjectEntry,
+    RemoveObject,
+    SetEntry,
+    RemoveEntry,
     AddPage,
     PageAttributes,
     DecodeStream,
