@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1649 tests.** The MCP server links **all fifteen batteries** in, so the
+**1655 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1649 tests
+cargo test          # 1655 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3671,6 +3671,7 @@ so.
 | the **trim** of a MIDI clip | **built.** The trim takes the notes off the head and counts the rest from the clip's new head (§233) | §233 |
 | the **automation** of a whole track | **built.** Every lane of a track is written with the static value of its parameter or thinned at once (§234) | §234 |
 | the **fade** of a clip to a place | **built.** A clip is faded up to a place or down from it, and the shape is the tree's own (§235) | §235 |
+| the **time** of the session | **built.** Silence is inserted at a place and time is cut out of a range, and everything after moves (§236) | §236 |
 
 ### The list of things that are honestly not there: empty
 
@@ -15712,7 +15713,9 @@ and v2 could only put things there.
 - **The tree's insert and cut of time are not here.** The tree can
   insert time at a place or cut it out, and the events and the clips
   after it move: that is a change to the whole of the session's
-  timeline, and it is not a command here.
+  timeline, and it is not a command here. (This was written before
+  §236, which builds both commands; the sentence is left as it was
+  and the arc that made it true is beside it.)
 - **The tree's renumbering of the bars is not here.** The tree's
   session counts its bars; here the grid counts from the bar line
   (§200) and there are no bar numbers to renumber.
@@ -16181,3 +16184,90 @@ fade of a length, and not a fade to a place.
   lend each other the sound beyond their own ends.
 - **The tree's fade is over a selection**, and here it is over a clip:
   the same gap as the velocity's (§229).
+
+## 236. The time of the session
+
+The tree's editor can **insert time** at a place and **cut time** out
+of a range. Both are changes to the whole of the session's timeline:
+every track moves, every lane moves and every marker moves. Section
+228 said this was not here, and named it as the thing that was
+missing.
+
+### What was built
+
+- The command `sound.time.insert` puts **silence** into the session at
+  a place: the clips at or after it move later by the length of the
+  silence, the lanes' breakpoints at or after it move later, and the
+  markers at or after it move later — and a marker keeps its span.
+- The command `sound.time.cut` cuts a range out of the session: the
+  clips inside the range are thrown away, the lanes' breakpoints
+  inside it are thrown away, the markers inside it are thrown away,
+  and everything after the range moves earlier by the length of it.
+- A **locked** clip does not move: a lock says the clip stays where it
+  is.
+- A range that is **empty** is refused, and so is a silence of no
+  length: there is no time to cut and no silence in nothing.
+
+### What the port found
+
+- **The tree's commands are over a selection and this tree's are over
+  a place.** The tree's `event.insert_time` and `event.cut_time` take
+  a range of the **selection**, and they do it to **every track** of
+  the session — the tree's session is a list of tracks and a range of
+  it is a fact about the editor. Here the place or the range is
+  **given**, and the whole of the document is the thing that moves.
+  This is the same gap as the velocity's (§229), the length's (§230)
+  and the fade's (§235), and it has the same answer: a place is a
+  fact and a selection is the editor's state, which this tree does
+  not keep (§200).
+- **The tree's clips are in a list and this tree's are nodes.** The
+  tree's track holds a playlist of clips and the shift is a field of
+  the clip; here a clip is a node under a take and the shift is its
+  payload. The **lane** is the same: the tree's lane is a field of
+  the track and here it is a node with breakpoints of its own, and the
+  tree's `shift_from` moves the breakpoints of a lane where here the
+  breakpoints are moved one at a time.
+- **The tree's cut removes the clips inside the range and here it does
+  too — but the tree's cut does not trim the clips that cross it.**
+  The tree's `clear_range` separates the clips at the two edges of
+  the range and throws away the ones inside it; the pieces outside
+  stay where they were, and the tree's `shift_from` moves the ones
+  after the range. Here a clip that crosses the range is **trimmed**
+  to the part outside it — the sound of the clip is not lost, and the
+  clip that is left says what it plays. That is a difference: the
+  tree's piece outside the range is a new clip with a new name, and
+  here the clip is trimmed in place.
+- **A locked clip does not move here, and the tree's shift says
+  otherwise.** The tree's `shift_from` moves "every clip that starts
+  at or after `from` by `by`, **locked or not**" — the tree's own
+  words. Here a locked clip stays: a lock says the clip stays where
+  it is (§ the locks), and a clip that is locked against editing is
+  finished. That is a deliberate difference, and the tree's comment is
+  the proof that the tree thinks about it.
+
+### What it cost
+
+- **Six tests** in the sound battery (`tests/sessiontime.rs`): the
+  silence goes in and everything after it moves, a clip after the place
+  moves later, the time is cut out and everything after it moves, a
+  clip inside the range is thrown away, a locked clip does not move,
+  and an empty range is refused.
+- **Two commands** (`sound.time.insert` and `sound.time.cut`). The
+  sound battery now carries **101** commands and the MCP server
+  **312**.
+
+### What it does not settle
+
+- **The tree's commands are over a selection**, and here they are over
+  a place or a range: the same gap as the velocity's (§229).
+- **The tree's cut separates the clips that cross the range and here
+  it trims them.** A trimmed clip keeps its name and its place; the
+  tree's pieces are new clips with new names, and the tree's auto
+  rename scheme counts them (§216). Here the cut does not make new
+  clips, and so the scheme does not count.
+- **The tree's tempo map is not moved by either.** Inserting time
+  changes the **samples** the clips are at and not the **ticks** the
+  music is at, and the tempo map is in ticks — so the music does not
+  change its place in the bar. That is the tree's behaviour and it is
+  this one's, and it is worth knowing: inserting silence moves the
+  sound and not the music.
