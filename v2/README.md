@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1632 tests.** The MCP server links **all fifteen batteries** in, so the
+**1636 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1632 tests
+cargo test          # 1636 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3666,6 +3666,7 @@ so.
 | the **MIDI** of a document | **built.** A clip may hold notes: the content is a field in the payload, the notes are read from and written to a Standard MIDI File, and they may be quantised, transposed, given a velocity, and added, changed, taken away and moved (§217, §218, §219, §223) | §223 |
 | the **velocity** of a note | **built.** The notes are struck at a velocity, changed by one, scaled, limited and ramped, and a velocity outside the range is refused (§229) | §229 |
 | the **length** of a note | **built.** The notes are given a length, changed by one, scaled and made legato, and a note is never shorter than a tick (§230) | §230 |
+| the **modes** of the strip of silence | **built.** The silence is stripped, the sound extracted or the clip separated, and the loud parts can be read without changing anything (§231) | §231 |
 
 ### The list of things that are honestly not there: empty
 
@@ -15845,3 +15846,76 @@ another length.
   a fact).
 - **The tree's length change is over a selection**, and here it is
   over a clip: the same gap as the velocity's (§229).
+
+## 231. The modes of the strip of silence
+
+The tree's editor strips silence in three ways: it **strips** the
+silence and keeps the loud parts, it **extracts** the sound and keeps
+the silence, and it **separates** the clip at the edges of the loud
+parts and keeps everything. It also has a **preview** that finds the
+silence and says where the parts are without changing anything. v2 had
+the strip alone.
+
+### What was built
+
+- The command `sound.clip.strip.silence` takes a **mode**: `strip`
+  keeps the loud parts and throws the quiet ones away, `extract` keeps
+  the quiet parts and throws the loud ones away, and `separate` cuts
+  the clip at the edges of the loud parts and keeps everything.
+- A mode this battery does not know is **refused**, and the clip is
+  not changed.
+- The command `sound.clip.strip.silence.read` is the **preview**: it
+  says where the loud parts are and it changes nothing.
+- The loud parts are worked out by **one** helper, which the strip and
+  the preview both call — so the preview cannot say something the
+  strip would not do.
+
+### What the port found
+
+- **The tree's mode is a string and this one is a string too.** The
+  tree's `StripMode` is a variant of three, matched in the engine; here
+  the mode is a **name** in a parameter, and a name this battery does
+  not know is **refused** — the same rule the **processes** on a clip
+  follow (§209), and the same reason: a mode that does nothing is
+  worse than no mode at all.
+- **The tree's preview is a scan that runs on a thread, and this one
+  is a read.** The tree's `edit.strip_silence_preview` builds a scan
+  and runs it, on a worker thread in the desktop build and on the frame
+  thread in the web build, because the scan renders the audio and that
+  is work a frame cannot wait for. Here a command runs on the caller's
+  thread, and a read that renders a file is work the caller asked for
+  (§212, the same rule the peaks follow). The **shape** is the same:
+  the preview finds the silence and says where the parts are, and it
+  changes nothing.
+- **The tree's strip works on a selection and this one on a clip.** The
+  tree's `edit.strip_silence` takes a **range** and a list of tracks,
+  and it finds the silence in the whole of it; here the unit is a
+  **clip**, and the parts are found in the **material** the clip plays
+  (§222). The tree's separate mode cuts the clip at the edges of the
+  loud parts too — and so does this one, at the edges of the parts of
+  the clip.
+
+### What it cost
+
+- **Four tests** in the sound battery (`tests/stripmode.rs`): the
+  loud parts are extracted, the clip is separated at the edges of the
+  loud parts, an unknown mode is refused, and the preview says where
+  the parts are without changing anything.
+- **One command** (`sound.clip.strip.silence.read`) and **one command
+  changed** (`sound.clip.strip.silence`, which takes a mode). The sound
+  battery now carries **96** commands and the MCP server **307**.
+
+### What it does not settle
+
+- **The tree's strip of silence is over a selection and a list of
+  tracks.** Here it is over a clip: the same gap as the velocity's
+  (§229) and the length's (§230). A clip that is one piece of a
+  selection is stripped as a clip, and the parts of the selection that
+  are in other clips are not looked at.
+- **The tree's naming of the clips left in the selection is not here.**
+  The tree's strip can name the audio clips that were left inside the
+  selection with a scheme of its own — a name, a number, a count of
+  zeros and a suffix — beside the auto rename scheme. Here the
+  **auto rename** scheme names the pieces (§216), and the strip's own
+  naming is not a command: a scheme is a node here (§216), and a
+  second way of making one would be a second path.
