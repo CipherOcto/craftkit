@@ -402,6 +402,47 @@ pub fn from_bezpath(bez: &BezPath) -> Path {
     Path { subpaths, rule: FillRule::default() }
 }
 
+/// A contour with **one more anchor** in it: a segment split in two.
+///
+/// The split is at `t` along the segment — zero at its beginning and
+/// one at its end — and the two halves are the **same curve**: the
+/// point at `t` is the point the original curve had at `t`, and the
+/// shape of the curve does not change.
+///
+/// The segment that was split is the one at `index`, and the new
+/// anchor is the point where the two halves meet.
+pub fn split_segment(subpath: &SubPath, index: usize, t: f64) -> Result<SubPath, GeomError> {
+    let Some(segment) = subpath.segments.get(index) else {
+        return Err(GeomError::Operation(format!("the contour has no segment {index}")));
+    };
+    if !t.is_finite() {
+        return Err(GeomError::NotFinite);
+    }
+    let t = t.clamp(0.0, 1.0);
+    let from = if index == 0 { subpath.start } else { subpath.segments[index - 1].end() };
+    let (left, right) = match segment {
+        Segment::Line { to } => {
+            let mid = Point::new(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t);
+            (Segment::Line { to: mid }, Segment::Line { to: *to })
+        }
+        Segment::Cubic { c1, c2, to } => {
+            // **De Casteljau**: the curve is cut by halving it over
+            // and over, and the halves are the same curve.
+            let lerp = |a: Point, b: Point| Point::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+            let q0 = lerp(from, *c1);
+            let q1 = lerp(*c1, *c2);
+            let q2 = lerp(*c2, *to);
+            let r0 = lerp(q0, q1);
+            let r1 = lerp(q1, q2);
+            let mid = lerp(r0, r1);
+            (Segment::Cubic { c1: q0, c2: r0, to: mid }, Segment::Cubic { c1: r1, c2: q2, to: *to })
+        }
+    };
+    let mut segments = subpath.segments.clone();
+    segments.splice(index..=index, [left, right]);
+    Ok(SubPath { start: subpath.start, segments, closed: subpath.closed })
+}
+
 /// The boolean operation of two paths.
 ///
 /// The result may have more than one contour: subtracting a shape from the

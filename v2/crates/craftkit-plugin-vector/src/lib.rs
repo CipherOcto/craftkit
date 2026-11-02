@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **thirty commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **thirty-one commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.unite`,
@@ -615,6 +615,74 @@ impl ReversePath {
         vector.path.subpaths = subpaths;
         write_back(session, self.node.0, &vector)?;
         Ok(Outcome::changed("the path is turned round").with_data(serde_json::json!({ "id": self.node.0 })))
+    }
+}
+
+/// **Add an anchor** to a path: a segment of a contour is split in two.
+///
+/// The anchor goes in at a place along the segment — `t`, from zero at
+/// its beginning to one at its end — and the two halves are the same
+/// curve: the shape of the path does not change, and the path has one
+/// more point to move.
+#[derive(Command)]
+#[command(
+    id = "vector.path.anchor.add",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path"),
+    mutates,
+    undoable
+)]
+pub struct AddAnchor {
+    /// The path.
+    pub node: NodeRef,
+    /// Which contour of the path.
+    pub subpath: Option<Number>,
+    /// Which segment of the contour.
+    pub segment: Number,
+    /// Where along the segment the anchor goes: from zero to one.
+    pub t: Option<Number>,
+}
+
+impl AddAnchor {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "vector.path.anchor.add".to_string();
+        let index = self.segment.0;
+        if !index.is_finite() || index < 0.0 {
+            return Err(EngineError::Failed {
+                id,
+                message: "a segment is a number and not a negative one".to_string(),
+            });
+        }
+        let t = self.t.map(|t| t.0).unwrap_or(0.5);
+        if !t.is_finite() {
+            return Err(EngineError::Failed {
+                id,
+                message: "a place along a segment is a number between zero and one".to_string(),
+            });
+        }
+        let mut vector = vector_of(session, self.node.0)?;
+        let which = match &self.subpath {
+            Some(subpath) => subpath.0,
+            None => 0.0,
+        };
+        if !which.is_finite() || which < 0.0 {
+            return Err(EngineError::Failed {
+                id,
+                message: "a contour is a number and not a negative one".to_string(),
+            });
+        }
+        let which = which as usize;
+        let Some(subpath) = vector.path.subpaths.get(which).cloned() else {
+            return Err(EngineError::Failed { id, message: format!("the path has no contour {which}") });
+        };
+        let split = geom::split_segment(&subpath, index as usize, t)
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+        vector.path.subpaths[which] = split;
+        write_back(session, self.node.0, &vector)?;
+        Ok(Outcome::changed("the path has one more anchor")
+            .with_data(serde_json::json!({ "id": self.node.0, "subpath": which, "segment": index })))
     }
 }
 
@@ -2141,6 +2209,7 @@ craftkit_sdk::plugin_anchor!(
     TransformPath,
     ClosePath,
     ReversePath,
+    AddAnchor,
     VectorPanel,
     TotalAreaEvaluator
 );
