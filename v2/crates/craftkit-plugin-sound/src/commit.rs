@@ -230,7 +230,7 @@ impl CommitTrack {
         node.data = old.to_json();
         // The **place** of the new track: where the old one was, so
         // that the mix is in the same order as it was.
-        place_after(session, new_track, track);
+        crate::place_after(session, new_track, track);
         Ok(Outcome::changed(format!("committed the track `{track}` into `{path}`")).with_data(json!({
             "track": track,
             "committed": new_track,
@@ -242,21 +242,4 @@ impl CommitTrack {
             "bus": route,
         })))
     }
-}
-
-/// Put a node **after** another one, at the top level.
-///
-/// The document's own order is the order the mixer works in, and a
-/// committed track takes the place of the track it was committed from.
-fn place_after(session: &mut Session, node: u64, after: u64) {
-    let Ok(document) = session.document_mut() else { return };
-    let Some(index) = document.nodes.iter().position(|entry| entry.id == node) else { return };
-    let Some(mut place) = document.nodes.iter().position(|entry| entry.id == after) else { return };
-    let entry = document.nodes.remove(index);
-    // The node that was after the one we moved is one place earlier
-    // now.
-    if place > index {
-        place -= 1;
-    }
-    document.nodes.insert(place + 1, entry);
 }

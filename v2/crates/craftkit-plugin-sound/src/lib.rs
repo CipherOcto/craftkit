@@ -52,7 +52,8 @@
 //!   **paste** the material of a range, turn a track's **voice** off
 //!   and on again, **commit** a track to a file, **take away** an
 //!   **insert** and **move** it in the chain, **rename** a track and a
-//!   clip, change the **settings** of a send, and
+//!   clip, change the **settings** of a send, **duplicate** a track,
+//!   and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -471,6 +472,7 @@ mod midi;
 // back together.
 mod clipboard;
 mod commit;
+mod duplicate;
 mod heal;
 mod inactive;
 mod keys;
@@ -492,6 +494,7 @@ use craftkit_sdk::document::{Path, Rect, Segment, SubPath};
 use craftkit_sdk::{
     Bool, Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
 };
+pub use duplicate::DuplicateTrack;
 pub use gain::{BypassGain, SetGain};
 pub use grid::{Quantize, ReadGrid, SetGrid};
 pub use group::{Group, GroupKind, ReadGroup, SetGroupFlags, SetTrackGroup, Ungroup, UngroupTracks};
@@ -6768,6 +6771,24 @@ impl ConsolidateTrack {
     }
 }
 
+/// Put a node **after** another one, at the top level.
+///
+/// The document's own order is the order the mixer works in, and a
+/// thing that stands in another's place — a **committed** track, a
+/// **copy** of a track — stands there in the order as well.
+pub(crate) fn place_after(session: &mut Session, node: u64, after: u64) {
+    let Ok(document) = session.document_mut() else { return };
+    let Some(index) = document.nodes.iter().position(|entry| entry.id == node) else { return };
+    let Some(mut place) = document.nodes.iter().position(|entry| entry.id == after) else { return };
+    let entry = document.nodes.remove(index);
+    // The node that was after the one we moved is one place earlier
+    // now.
+    if place > index {
+        place -= 1;
+    }
+    document.nodes.insert(place + 1, entry);
+}
+
 /// The **path** of a stem: the track's name in the directory, and a
 /// name that is taken gets a number after it.
 ///
@@ -7854,6 +7875,7 @@ craftkit_sdk::plugin_anchor!(
     ConsolidateTrack,
     CommitTrack,
     CopyRange,
+    DuplicateTrack,
     MoveInsert,
     CutRange,
     PasteRange,
