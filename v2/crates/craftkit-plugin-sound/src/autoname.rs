@@ -46,9 +46,10 @@
 //!
 //! The tree's scheme has an **id** of its own, "to tell this scheme
 //! from another one under the same key after an undo or in another
-//! session, for pastes from the clipboard". The clipboard is not in
-//! this battery — there is no copy and no paste — and so the id has
-//! nothing to tell apart, and there is no id here.
+//! session, for pastes from the clipboard". The clipboard is in this
+//! battery now (§247), and the schemes are told apart by
+//! their **nodes** — a node is the thing, and the tree's id is a key
+//! under a key — so there is no id here.
 
 use craftkit_derive::{Command, NodeKind};
 

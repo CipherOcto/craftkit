@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1719 tests.** The MCP server links **all fifteen batteries** in, so the
+**1725 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1719 tests
+cargo test          # 1725 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3681,6 +3681,7 @@ so.
 | the **onsets** in the spectrum | **built.** The tree's own detector, with the transform written here because the kit has no dependencies (§244) | §244 |
 | the **split** into mono | **built.** A stereo track becomes a track for each channel, panned to the sides, and a mono source is heard in every channel of the mix (§245) | §245 |
 | the **repeating** of a range | **built.** The material of a range is copied and laid after it, as many times as asked (§246) | §246 |
+| the **clipboard** | **built.** The material of a range is copied, cut and pasted, and the clipboard is in the document (§247) | §247 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14860,9 +14861,10 @@ next clip separated from any of them is "Kick4".
   the scheme too, so a cut of a piece counts on in the same sequence.
 - **The tree's scheme has an id and this tree's has none.** The tree's
   id is "to tell this scheme from another one under the same key after
-  an undo or in another session, for pastes from the clipboard". This
-  battery has no clipboard — there is no copy and no paste — and so
-  there is nothing for such an id to tell apart.
+  an undo or in another session, for pastes from the clipboard". The
+  clipboard is here now (§247), and the schemes it holds are told
+  apart by their **nodes**: a node is the thing, and the tree's id is a
+  key under a key.
 - **The tree's zeros are zeros and not padding.** The tree writes the
   name, then that many zero characters, then the number, then the
   suffix — "SFX", one zero, twenty-four and ".Reel1" is "SFX024.Reel1",
@@ -14890,8 +14892,9 @@ next clip separated from any of them is "Kick4".
   is the only thing that makes a piece.
 - **The tree's scheme survives a paste.** A copy carries its scheme
   with it, and the copy pasted into another session brings the scheme
-  along and counts on from it. This battery has no clipboard, and so
-  there is nothing to carry.
+  along and counts on from it. The clipboard is here now (§247), but it
+  carries the **clips** and not the schemes, so a pasted clip is not in
+  a scheme and its name is the name of the clip it was made from.
 
 ## 217. The MIDI library
 
@@ -17047,3 +17050,101 @@ for.
 - **The tree's repeat copies the material of every selected track and
   this one repeats one track.** A caller that wants two tracks
   repeated says so twice.
+
+## 247. The clipboard
+
+The tree's editor has a clipboard: it copies the material of a range,
+and pastes it somewhere else. This tree's battery had **no clipboard at
+all** — there was no copy and no paste — and the copy and the paste are
+here now.
+
+### What was built
+
+- The command `sound.track.copy` copies the material of a range of a
+  track into the clipboard, `sound.track.cut` copies it and then takes
+  it away, `sound.track.paste` lays the clipboard onto a track, and
+  `sound.track.clipboard.read` says what the clipboard holds.
+- The clipboard lives in the **document's payload**, under a key of its
+  own: `sound.clipboard`. The document is the only place this tree
+  keeps a thing, and a key of its own means that two batteries cannot
+  collide by accident.
+- It is **not a node**: a clipboard is not a thing in the session, it
+  is a thing that was **copied out of** it. What it holds is the
+  **payloads** of the clips of the range — their own words and the
+  source they play — and the **length** of the range.
+- A copy is **trimmed to the range**, and a copy trimmed at its head
+  loses its **fade in** — the fade was of the material before it — and
+  a copy trimmed at its tail loses its **fade out**. The **beat**
+  follows the audio, as it does everywhere else.
+- The paste makes **new** clips, with the source they play, and lays
+  them **over** what is there.
+- A range with **no length** is refused: there is nothing in it. An
+  **empty** clipboard is refused: there is nothing to paste. A range
+  with no material in it copies nothing and says so.
+- The **cut** takes the material away: the clips inside the range are
+  thrown away, and the clips that cross its edge keep the part outside
+  it.
+
+### What the port found
+
+- **The tree's clipboard is the engine's state and this one is the
+  document's.** The tree's `edit.copy` is a *noundo* command: it does
+  not change the document, and so it cannot be undone. Here the
+  clipboard is in the document, which means the copy **changes** the
+  document and is undoable like any other change — and it also means
+  that a document that is **saved** carries what was copied in it. The
+  tree's clipboard dies with the session; this one travels with the
+  file. Neither is obviously right, and the difference is the price of
+  putting the clipboard where this tree keeps everything else.
+- **The tree's clipboard holds much more.** It carries the
+  **automation** of the range, the **markers** in it, the **clip gain**,
+  the **clip effects**, the **grid offset** and the **auto rename
+  schemes** of the copied clips. Here it carries the clips and the
+  length, and the section says why: this tree keeps a track's
+  automation in **lanes** (§ the editing of a lane) and its markers as
+  **nodes** in the document, so a clipboard that carried them would
+  carry a second truth about the same timeline. The grid offset is the
+  editor's state, and the same gap as the repeat's (§246): a range is
+  a fact and a selection is not.
+- **The tree's copy is over several tracks and this one is over one.**
+  The tree's clipboard holds a *list of tracks*, and its paste lays
+  them on several tracks, cycling the clipboard's tracks. Here a
+  clipboard is one track's range, and a paste is onto one track.
+- **The tree's paste, in shuffle mode with a selection, clears the
+  selection first.** The paste replaces what it covers. Here a paste
+  lays the material **over** what is there, the same difference the
+  repeat has (§246): a document that throws away material nobody
+  asked it to throw away is a document that surprises.
+- **The tree's scheme carries an id** "to tell this scheme from
+  another one under the same key after an undo or in another session,
+  for pastes from the clipboard". The clipboard is here now, and the
+  schemes it holds are told apart by their **nodes**: a node is the
+  thing, and the tree's id is a key under a key.
+
+### What it cost
+
+- **Six tests** in the sound battery (`tests/clipboard.rs`): the range
+  is copied, the copy changes nothing, the clipboard is pasted onto a
+  track, the cut copies and removes, an empty clipboard is refused and
+  an empty range is refused.
+- **One module** (`ranges.rs`) that the **repeat** now shares with the
+  **copy** and the **cut**: a range means one thing and not three, and
+  the trimming of a copy is written once.
+- **Four commands** (`sound.track.copy`, `sound.track.cut`,
+  `sound.track.paste`, `sound.track.clipboard.read`). The sound
+  battery now carries **115** commands and the MCP server **326**.
+
+### What it does not settle
+
+- **The automation and the markers of the copied range do not travel.**
+  A paste brings the clips and nothing else: no lane, no marker, no
+  clip gain, no clip effects.
+- **The auto rename schemes of the copied clips do not travel.** The
+  pasted clips are new clips and they are **not** in the scheme (§ the
+  auto rename of a clip); their names are the names of the clips they
+  were made from, and the tree's scheme id — the thing that would
+  have told two schemes apart under the same key — is not here, because
+  a node is the thing.
+- **The paste does not clear what it covers**, and the tree's does.
+- **One track at a time.** A caller that wants two tracks copied cuts
+  and pastes twice, and the two pastes are two commands.

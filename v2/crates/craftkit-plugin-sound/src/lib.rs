@@ -350,9 +350,10 @@
 //!   truth about the same timeline.
 //! - **A scheme has no id of its own.** The tree's scheme carries an id
 //!   "to tell this scheme from another one under the same key after an
-//!   undo or in another session, for pastes from the clipboard". This
-//!   battery has no clipboard — there is no copy and no paste — and so
-//!   there is nothing for such an id to tell apart.
+//!   undo or in another session, for pastes from the clipboard". The
+//!   clipboard is here now (§247), and the schemes it holds
+//!   are told apart by their **nodes** and not by an id of their own:
+//!   a node is the thing, and the tree's id is a key under a key.
 //! - **A big shift loses the top of the sound.** The pitch shift is
 //!   made by resampling the sound as if it were played faster, and a
 //!   resample takes away what was above the new half of the rate: an
