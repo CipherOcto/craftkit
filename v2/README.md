@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1639 tests.** The MCP server links **all fifteen batteries** in, so the
+**1641 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1639 tests
+cargo test          # 1641 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3668,6 +3668,7 @@ so.
 | the **length** of a note | **built.** The notes are given a length, changed by one, scaled and made legato, and a note is never shorter than a tick (§230) | §230 |
 | the **modes** of the strip of silence | **built.** The silence is stripped, the sound extracted or the clip separated, and the loud parts can be read without changing anything (§231) | §231 |
 | the **cut** of a MIDI clip | **built.** The cut divides the notes, and each piece keeps the notes that are its own (§232) | §232 |
+| the **trim** of a MIDI clip | **built.** The trim takes the notes off the head and counts the rest from the clip's new head (§233) | §233 |
 
 ### The list of things that are honestly not there: empty
 
@@ -15987,3 +15988,63 @@ did not say so.
   division is by the note's **start** and not by the note's end. A
   note that begins before the cut and ends after it is in the first
   piece and is heard past the cut's end.
+
+## 233. The trim of a MIDI clip
+
+The **trim** of a MIDI clip left its **notes** where they were. The
+clip's head moved, its content moved and its beat moved — and the notes
+stayed, so a clip trimmed a quarter note in still played the note that
+was at its head. The tree's trim **rebases** the notes: the notes the
+trim took off are gone and the notes that are left are counted from the
+clip's new head.
+
+### What was built
+
+- The trim of a MIDI clip takes the **notes off the head**: the notes
+  before the trim are dropped, and the notes after it are counted from
+  the clip's new head.
+- The **controllers** are rebased the same way as the notes.
+- The boundary is the distance the trim made, in the **ticks** of the
+  document's tempo at the clip's own start — so the rebase follows the
+  tempo, and a clip trimmed on a beat rebases on that beat.
+- The trim of the **tail** leaves the notes alone, which is what the
+  tree does: a shorter clip has the notes it had.
+
+### What the port found
+
+- **The tree rebases the notes and this tree did not.** The tree's
+  `trim_start_to` moves the clip's content and its beat, and the
+  **engine** re-anchors the MIDI notes after it — the model's own trim
+  cannot, because the notes are in ticks and the model does not know
+  the tempo map. Here the same: the trim moves the content and the
+  beat, and the notes are rebased against the tempo map.
+- **A trim is one operation and every field that moves in it has to be
+  in it.** This is the same lesson as the cut (§232), found the second
+  time: the trim was written before a MIDI clip existed (§218), and
+  the notes were not in it. The offset moved, the beat moved and the
+  notes did not — because a clip of sound has no notes. A clip of
+  notes is a different clip, and the fields that hold its content are
+  not the fields that hold a sound's.
+- **The tree's tail trim does not rebase and neither does this one.**
+  The tree's `trim_end_to` shortens the clip and leaves the notes
+  alone: a note that starts before the trim and sounds past it is
+  **not** shortened, because a trim of the tail does not touch the
+  notes. Here the same.
+
+### What it cost
+
+- **Two tests** in the sound battery (`tests/miditrim.rs`): the trim
+  takes the notes off the head, and the trim of the tail leaves them
+  alone.
+- **No command**: the trim was already there, and it was wrong. The
+  sound battery still carries **96** commands and the MCP server
+  **307**.
+
+### What it does not settle
+
+- **The tree's trim is over a selection and this one is over a clip**
+  (§212): the same gap as the velocity's (§229) and the length's
+  (§230).
+- **A note that sounds past the trim is not shortened.** The tree
+  leaves it whole, and so does this: a note is a note, and cutting it
+  in half is a thing the tree does not do on a trim.
