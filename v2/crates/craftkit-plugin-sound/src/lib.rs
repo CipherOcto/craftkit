@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and eleven commands**, one for each thing a person does to a
+//! - **a hundred and fifteen commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -48,7 +48,8 @@
 //!   the breakpoints of a lane, **move** a clip and **trim** it to the
 //!   end of its material,
 //!   separate a clip at its **transients**, **strip** the silence out
-//!   of a clip in any of its three **modes**, and
+//!   of a clip in any of its three **modes**, **copy**, **cut** and
+//!   **paste** the material of a range, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -415,8 +416,10 @@ mod midi;
 
 // The **healing** of a track: the clips that were separated are put
 // back together.
+mod clipboard;
 mod heal;
 mod keys;
+mod ranges;
 mod remove;
 mod repeat;
 mod split;
@@ -426,6 +429,7 @@ use std::collections::HashMap;
 
 pub use autoname::{ReadAutoName, SetAutoName};
 pub use beat::{ReadBeat, RemoveBeat, SetBeat};
+pub use clipboard::{CopyRange, CutRange, PasteRange, ReadClipboard};
 pub use conform::Conform;
 use craftkit_sdk::document::{Path, Rect, Segment, SubPath};
 use craftkit_sdk::{
@@ -597,6 +601,13 @@ pub(crate) fn clip_ids_of(value: &serde_json::Value, id: &str) -> Result<Vec<u64
     }
     Ok(ids)
 }
+
+/// Take the material of a range away.
+pub(crate) use ranges::clear_range_of;
+/// The **copies** of the material of a range, trimmed to it.
+pub(crate) use ranges::copies_of_range;
+/// The **range** of a track: where it starts and where it ends.
+pub(crate) use ranges::range_of;
 
 /// Put the session's settings back into the document.
 pub(crate) fn set_session(document: &mut Document, session: &SoundSession) {
@@ -7729,6 +7740,10 @@ craftkit_sdk::plugin_anchor!(
     ReadKeys,
     ImportMidiTracks,
     ConsolidateTrack,
+    CopyRange,
+    CutRange,
+    PasteRange,
+    ReadClipboard,
     RemoveClip,
     RemoveMarker,
     RemoveTrack,

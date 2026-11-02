@@ -9,8 +9,6 @@ use craftkit_derive::Command;
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
 
-use crate::ClipPayload;
-
 /// The most times a range may be repeated.
 ///
 /// The tree's repeat is a number from one to nine hundred and
@@ -84,71 +82,11 @@ impl RepeatRange {
             }
             None => 1,
         };
-        let document = session.document().clone();
-        // The **clips** of the track: the ones that overlap the range
-        // are the ones that are copied.
-        let mut clips: Vec<(u64, ClipPayload)> = Vec::new();
-        let mut last = 0_i64;
-        for clip in document.walk().filter(|node| node.kind == "sound.clip") {
-            if crate::timeline::track_of(&document, clip).map(|owner| owner.id) != Some(track) {
-                continue;
-            }
-            let Ok(payload) = ClipPayload::from_json(&clip.data) else { continue };
-            last = last.max(payload.start.max(0) + payload.length.max(0));
-            clips.push((clip.id, payload));
-        }
-        let start = match &self.start {
-            Some(start) => crate::samples(start.0, "where the range starts")?,
-            None => 0,
-        };
-        let end = match &self.end {
-            Some(end) => crate::samples(end.0, "where the range ends")?,
-            None => last,
-        };
-        if end <= start {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the range ends at {end} and starts at {start}"),
-            });
-        }
+        let (start, end) = crate::range_of(session, track, &id, self.start, self.end)?;
         let length = end - start;
         // The **copies**: each clip of the range, trimmed to the range
         // and moved to the range's head.
-        let mut copies: Vec<(String, ClipPayload)> = Vec::new();
-        for (clip_id, payload) in &clips {
-            let clip_start = payload.start.max(0);
-            let clip_end = clip_start + payload.length.max(0);
-            if clip_end <= start || clip_start >= end {
-                continue;
-            }
-            let mut copy = payload.clone();
-            // The **head** of the copy: where the range cuts it.
-            if clip_start < start {
-                let cut = start - clip_start;
-                copy.length = (copy.length - cut).max(0);
-                copy.offset += cut;
-                // The **fade in** was of the material before it.
-                copy.fade_in = crate::FadePayload::none();
-                // The **beat** follows the audio: a beat is a place in
-                // the clip, and the clip's head has moved.
-                copy.sync = copy.sync.map(|beat| beat - cut);
-            }
-            // The **tail** of the copy: where the range cuts it.
-            if clip_end > end {
-                let cut = clip_end - end;
-                copy.length = (copy.length - cut).max(0);
-                // The **fade out** was of the material after it.
-                copy.fade_out = crate::FadePayload::none();
-            }
-            // The copy is measured from the **range's** head.
-            copy.start = clip_start.max(start) - start;
-            let name = session
-                .document()
-                .node(*clip_id)
-                .map(|node| node.name.clone())
-                .unwrap_or_else(|| format!("clip {clip_id}"));
-            copies.push((name, copy));
-        }
+        let copies = crate::copies_of_range(session, track, start, end);
         if copies.is_empty() {
             return Ok(Outcome::new("there is no material in the range to repeat")
                 .with_data(serde_json::json!({ "repeats": 0, "clips": Vec::<u64>::new() })));
