@@ -208,6 +208,48 @@ pub(crate) struct MidiPayload {
 }
 
 impl MidiPayload {
+    /// The half of the sequence on one side of a **cut**.
+    ///
+    /// The cut is at a **tick** from the start of the clip, and the
+    /// half is named by which side of it is wanted: the first piece
+    /// keeps what is **before** the cut, and the second keeps what is
+    /// **at or after** it.
+    ///
+    /// The second piece's notes are **moved back** by the cut, because
+    /// they are counted from the second piece's own head: a note that
+    /// was a quarter note into the clip is at the head of the piece
+    /// that starts a quarter note into it.
+    ///
+    /// The tree's cut divides the notes the same way — a note is not in
+    /// both pieces.
+    pub(crate) fn divided(&self, boundary: i64, second: bool) -> MidiPayload {
+        let mut notes: Vec<NotePayload> = Vec::new();
+        let mut ctrls: Vec<CtrlPayload> = Vec::new();
+        for note in &self.notes {
+            let after = note.start >= boundary;
+            if after != second {
+                continue;
+            }
+            let mut note = note.clone();
+            if second {
+                note.start = note.start.saturating_sub(boundary);
+            }
+            notes.push(note);
+        }
+        for ctrl in &self.ctrls {
+            let after = ctrl.tick >= boundary;
+            if after != second {
+                continue;
+            }
+            let mut ctrl = ctrl.clone();
+            if second {
+                ctrl.tick = ctrl.tick.saturating_sub(boundary);
+            }
+            ctrls.push(ctrl);
+        }
+        MidiPayload { notes, ctrls }
+    }
+
     /// The sequence as the MIDI library has it.
     fn to_sequence(&self) -> craftkit_midi::Sequence {
         let notes = self

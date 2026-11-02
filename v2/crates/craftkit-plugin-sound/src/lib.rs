@@ -254,6 +254,13 @@
 //! document is a fact, and a fact that changes each time it is asked
 //! for is not a fact.
 //!
+//! **A cut divides the notes of a MIDI clip.** The tree's cut keeps
+//! the notes before the cut in the first piece and the notes at or
+//! after it in the second, and moves the second's notes back by the
+//! cut — a note is not in both pieces. Here the cut does the same,
+//! and the boundary is the distance the cut made in the **ticks** of
+//! the document's tempo, so the division follows the tempo (§232).
+//!
 //! **The tree's strip of silence has three modes and a preview, and so
 //! does this one.** The tree's editor strips the silence, or extracts
 //! the sound and keeps the silence, or separates the clip at the edges
@@ -3403,6 +3410,11 @@ impl SeparateClip {
 /// The **fade** at the cut is dropped: the tree drops it too, because
 /// a fade that ended at the cut would be a fade of nothing.
 ///
+/// The **notes** of a MIDI clip are divided at the cut: the notes
+/// before it stay in the first piece and the notes at or after it move
+/// to the second, counted from the second piece's own head. The tree
+/// divides them the same way — a note is not in both pieces.
+///
 /// The **second** piece's id is the answer: it is the piece that runs
 /// from the cut to the end, and it is the piece a further cut goes
 /// into.
@@ -3439,6 +3451,22 @@ fn separate_at(
     // and a beat that the cut left in the other piece is not a beat
     // of this one.
     second.sync = payload.sync.map(|sync| sync - delta).filter(|sync| *sync >= 0 && *sync <= second.length);
+    // The **notes** of a MIDI clip are divided at the cut: the notes
+    // before it stay in the first piece and the notes at or after it
+    // move to the second, counted from the second piece's own head.
+    //
+    // The notes are in **ticks** and the cut is in **samples**, so the
+    // boundary is the distance the cut made, in the ticks of the
+    // document's tempo map at the clip's own start.
+    if let Some(midi) = payload.midi.as_ref() {
+        let settings = session_of(session.document());
+        let map = tempo_map(session.document());
+        let start_tick = map.samples_to_ticks(payload.start, settings.sample_rate);
+        let cut_tick = map.samples_to_ticks(at, settings.sample_rate);
+        let boundary = cut_tick.saturating_sub(start_tick);
+        first.midi = Some(midi.divided(boundary, false));
+        second.midi = Some(midi.divided(boundary, true));
+    }
     let playlist = timeline::parent_of(session.document(), clip_id).map(|parent| parent.id);
     let source = payload.source;
     let first_data = first.to_json();
