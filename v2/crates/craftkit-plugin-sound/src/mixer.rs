@@ -1179,6 +1179,102 @@ impl RemoveInput {
     }
 }
 
+/// **Change** a send: its level, its pan, whether it is silent, and
+/// whether it is taken before the track's fader.
+///
+/// The tree's send has a command for its **level** and another for the
+/// rest, and this one has a command for the send's own settings: the
+/// send is a thing, and the things about it are the send's.
+///
+/// A level outside the tree's range is **refused** and not pulled to
+/// the edge, and a pan outside minus one and one is refused too.
+#[derive(Command)]
+#[command(
+    id = "sound.send.set",
+    area = "sound",
+    layer = "sound",
+    icon = "sliders",
+    menu("Track", "Send"),
+    mutates,
+    undoable
+)]
+pub struct SetSend {
+    /// The send to change.
+    pub send: NodeRef,
+    /// Its level, in decibels: from minus one hundred and forty-four to
+    /// twelve.
+    pub level_db: Option<Number>,
+    /// Its pan, from minus one to one.
+    pub pan: Option<Number>,
+    /// Whether the send is silent.
+    pub mute: Option<craftkit_sdk::Bool>,
+    /// Whether the send is taken before the track's fader.
+    pub pre_fader: Option<craftkit_sdk::Bool>,
+}
+
+impl SetSend {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.send.set".to_string();
+        let send = self.send.0;
+        let Some(node) = session.document().node(send) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{send}` in the document"),
+            });
+        };
+        if node.kind != "sound.send" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{send}` is a `{}` and not a send", node.kind),
+            });
+        }
+        let mut payload = SendPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+        if let Some(level) = &self.level_db {
+            let decibels = level.0;
+            if !decibels.is_finite() || !(-144.0..=12.0).contains(&decibels) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message:
+                        "a level is a number of decibels from minus one hundred and forty-four to twelve"
+                            .to_string(),
+                });
+            }
+            payload.level_db = decibels;
+        }
+        if let Some(pan) = &self.pan {
+            let value = pan.0;
+            if !value.is_finite() || !(-1.0..=1.0).contains(&value) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a pan is a number between minus one and one".to_string(),
+                });
+            }
+            payload.pan = value;
+        }
+        if let Some(mute) = &self.mute {
+            payload.mute = mute.0;
+        }
+        if let Some(pre_fader) = &self.pre_fader {
+            payload.pre_fader = pre_fader.0;
+        }
+        let Some(node) = session.document_mut()?.node_mut(send) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{send}` in the document"),
+            });
+        };
+        node.data = payload.to_json();
+        Ok(Outcome::changed(format!("changed the send `{send}`")).with_data(serde_json::json!({
+            "id": send,
+            "level_db": payload.level_db,
+            "pan": payload.pan,
+            "mute": payload.mute,
+            "pre_fader": payload.pre_fader,
+        })))
+    }
+}
+
 /// **Take away** a send.
 ///
 /// The send is a **node** under the track, and it goes with its link

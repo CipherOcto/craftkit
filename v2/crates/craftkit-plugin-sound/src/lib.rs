@@ -52,7 +52,7 @@
 //!   **paste** the material of a range, turn a track's **voice** off
 //!   and on again, **commit** a track to a file, **take away** an
 //!   **insert** and **move** it in the chain, **rename** a track and a
-//!   clip, and
+//!   clip, change the **settings** of a send, and
 //!   the rest that came with the mixer — the bus, the send, the insert,
 //!   the lane, the route, the input, the peaks and the render;
 //! - a **tool**, `tool.sound.clip`;
@@ -498,7 +498,7 @@ pub use midi::{
 };
 pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
-    LanePayload, MoveInsert, RemoveInsert, SendKind, SendPayload,
+    LanePayload, MoveInsert, RemoveInsert, SendKind, SendPayload, SetSend,
 };
 pub use remove::{RemoveClip, RemoveMarker, RemoveTrack};
 pub use rename::{RenameClip, RenameTrack};
@@ -7856,6 +7856,7 @@ craftkit_sdk::plugin_anchor!(
     RemoveTrack,
     RenameClip,
     RenameTrack,
+    SetSend,
     SetTrackInactive,
     RepeatRange,
     SplitMono,
