@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1865 tests.** The MCP server links **all fifteen batteries** in, so the
+**1870 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1865 tests
+cargo test          # 1870 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3703,6 +3703,7 @@ so.
 | the **inserting** of a clip | **built.** A gap opens at the place and the clips that are there are pushed along, so that nothing is cut (§266) | §266 |
 | the **splitting** of a clip | **built.** A clip is divided at a place, the second piece is a new clip, and the media moves with the cut (§267) | §267 |
 | the **taking away** of a clip | **built.** A clip is taken off its track, the edge that says which item it played goes with it, and the gap is a gap (§268) | §268 |
+| the **rippling** of a clip | **built.** A clip is taken away and the gap closes, and the ripple is refused when the time the clip took is not free (§269) | §269 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18532,8 +18533,68 @@ away.
 
 ### What it does not settle
 
-- **The ripple delete is not here**, and neither is the tree's
-  **lift** and its **extract**, which take a **range** away rather than
-  a clip.
+- **The ripple delete was not here — §269 is where it came.** The
+  tree's **lift** and its **extract**, which take a **range** away
+  rather than a clip, are still not here.
 - **The tree's linked clips are not here**: a link is a tree's way of
   saying that two clips move together, and here a clip is a clip.
+
+---
+
+## 269. The rippling of a clip
+
+The tree's delete leaves a gap and the tree's **ripple delete** closes
+it. The delete is §268, and this is the ripple.
+
+### What was built
+
+- The command `film.clip.ripple` takes a clip away and **closes the
+  gap**: the clips that were after it move **up** by the length of the
+  clip that went, and the time the clip took is free again. The clip
+  before it does not move.
+- A ripple whose gap **cannot close** is **refused**, in the tree's own
+  words: "no gap can close: the clip on the track runs from frame 10 to
+  frame 20, and it covers the time the clip took".
+- A node that is **not a clip** is refused, and so is a node that is
+  **not there**.
+
+### What the port found
+
+- **The tree's ripple computes the stretches that can close, and closes
+  each of them.** The tree's `ripple_delete_spans` merges the time the
+  deleted clips covered with the time that stays, and the stretches
+  between them are the gaps that may close; the tree then closes them
+  one at a time, right to left. Here the stretch is the whole range of
+  the clip or nothing: the clip's range is free or it is not.
+- **The tree's refusal is a fact about the material, and here it is
+  too.** The tree refuses when the deleted time is covered by what
+  stays on the tracks that lose a clip: "no gap can close: the other
+  clips on these tracks cover the deleted time". Here the clip that
+  covers the time is named, and the ripple is refused.
+- **The tree's ripple moves the sync-locked tracks too.** The tree
+  shifts the tracks that are **sync-locked** with the track that lost
+  the clip, so that a group of tracks stays together — and it refuses
+  when a locked track would have to move into time that is taken. Here
+  a track is a track, and there is no lock to be in.
+- **The tree's ripple closes the gaps right to left, and here the
+  clips are moved once.** The tree closes one stretch at a time, from
+  the last to the first, because a stretch may depend on the ones
+  before it. Here the clip's range is one stretch, and the clips that
+  are after it move once.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/ripple.rs`): the gap
+  closes, the clip before does not move, a gap that cannot close is
+  refused, a node that is not a clip is refused, and a node that is
+  not there is refused.
+- **One command** (`film.clip.ripple`). The film battery now carries
+  **11** commands and the MCP server **357**.
+
+### What it does not settle
+
+- **The sync-locked tracks are not here**, and neither is the tree's
+  **locked** track.
+- **The tree's lift and extract are not here**: they take a **range**
+  away — the tree's lift leaves the gap and the tree's extract closes
+  it — and a range is a range of a track, not a clip.
