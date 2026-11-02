@@ -28,6 +28,10 @@
 //! clip that would have been cut — the tree cuts it and says nothing
 //! about the cut (the module `moving`).
 //!
+//! And a clip may be **inserted**: a gap opens at the place and the
+//! clips that are there are pushed along, so that nothing is cut — the
+//! tree's second mode of the move (the module `inserting`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -73,9 +77,11 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+mod inserting;
 mod moving;
 mod trim;
 
+pub use inserting::InsertClip;
 pub use moving::MoveClip;
 pub use trim::TrimClip;
 
@@ -498,6 +504,7 @@ craftkit_sdk::plugin_anchor!(
     ReadTimeline,
     TrimClip,
     MoveClip,
+    InsertClip,
     TimelineEvaluator,
     FilmPanel
 );
