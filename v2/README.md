@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1762 tests.** The MCP server links **all fifteen batteries** in, so the
+**1766 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1762 tests
+cargo test          # 1766 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3689,6 +3689,7 @@ so.
 | the **name** of a thing | **built.** A track and a clip are renamed, and a name that is empty or too long is refused (§252) | §252 |
 | the **settings** of a send | **built.** The level, the pan, the silence and the place of a send are changed (§253) | §253 |
 | the **duplicate** of a track | **built.** A track is copied with its clips, its automation, its inserts and its sends (§254) | §254 |
+| the **render** of a clip | **built.** The sound of a clip is written to a file, and a MIDI clip is refused (§255) | §255 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17599,3 +17600,56 @@ where the old one stands. This tree's battery could not.
   thing the tree's window draws, and this tree draws nothing.
 - **The copy's name is not made unique**, and a caller that finds a
   track by its name finds the first one with that name.
+
+## 255. The render of a clip
+
+The tree's editor exports the clips as files: it renders the track
+over the clip's range and writes what it hears to a WAV file named
+after the clip. This tree's battery could render the **mix** and the
+**stems**, and not one clip of them.
+
+### What was built
+
+- The command `sound.clip.render` writes the sound of a clip to a file
+  in a directory. The file is named after the clip.
+- The sound is the sound of the **track** over the clip's range: the
+  clips of the track, with their gains and their fades, and not the
+  track's trim, not the track's inserts and not the track's fader.
+- A **MIDI clip** is refused: it holds notes and not a sound, and a
+  file of notes is not a sound.
+- A node that is **not a clip** is refused.
+
+### What the port found
+
+- **The tree's export renders the track and this one's renders the
+  track too.** The tree's `export_clips` renders the track over the
+  clip's range — the clips of the track, with their gains and their
+  fades, and without the track's strip — and writes that. It is the
+  same sound as the consolidate (§242) and the same sound as the
+  commit's file (§249): the sound of the clips and not the sound of
+  the track.
+- **The tree's export names the file after the clip and makes the name
+  unique** — `kick.wav`, and then `kick-2.wav`. Here the names are
+  labels and not keys (§252), and the file is named `kick.wav` and a
+  second one is `kick-2.wav` because the file is on the disk and two
+  files cannot have one name.
+- **The tree's export refuses a clip that is too long to render**,
+  before it writes anything. Here the render is refused when the
+  track's sound is shorter than the clip asks for, which is the same
+  kind of refusal and not the same bound.
+
+### What it cost
+
+- **Four tests** in the sound battery (`tests/cliprender.rs`): the
+  clip is rendered to a file, the file is named after the clip, a MIDI
+  clip is refused, and a node that is not a clip is refused.
+- **One command** (`sound.clip.render`). The sound battery now carries
+  **124** commands and the MCP server **335**.
+
+### What it does not settle
+
+- **The tree's export may write several clips at once**, and this one's
+  writes one: a caller renders the clips one by one.
+- **The tree's export writes the clip's own effects** — the tree's
+  clip effects are an equaliser and a compressor on one clip — and
+  this one's writes the clip's own **processes** and nothing else.

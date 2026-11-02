@@ -319,6 +319,14 @@
 //! this tree draws no track headers, and a thing that nothing draws is
 //! not a fact.
 //!
+//! **The tree's export renders the track and this one's renders the
+//! track too.** The tree's `export_clips` renders the track over the
+//! clip's range — the clips of the track, with their gains and their
+//! fades, and without the track's strip — and writes that. It is the
+//! same sound as the consolidate (§242) and the same sound as the
+//! commit's file (§249): the sound of the clips and not the sound of
+//! the track.
+//!
 //! **The tree's duplicate is a copy of a value and this one's is a
 //! copy of what the track holds.** The tree's track is a value in a
 //! list, and the duplicate clones it and gives the clips new ids; here

@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **twenty-four commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **twenty-five commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
@@ -34,7 +34,8 @@
 //!   corners and ends are finished; `vector.path.smooth` makes a point
 //!   of a path smooth; `vector.path.transform` says where
 //!   the path is put; `vector.path.outline` makes the shape a line
-//!   covers into a path of its own; and `vector.path.rule` says which
+//!   covers into a path of its own; `vector.path.order` says which
+//!   path is in front of the others; and `vector.path.rule` says which
 //!   parts of it are inside;
 //! - a **tool**, `tool.vector`;
 //! - a **panel**, `panel.vector`;
