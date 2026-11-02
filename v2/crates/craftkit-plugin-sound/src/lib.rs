@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and ten commands**, one for each thing a person does to a
+//! - **a hundred and eleven commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -418,6 +418,7 @@ mod midi;
 mod heal;
 mod keys;
 mod remove;
+mod repeat;
 mod split;
 mod time;
 
@@ -446,6 +447,7 @@ pub use mixer::{
     LanePayload, SendKind, SendPayload,
 };
 pub use remove::{RemoveClip, RemoveMarker, RemoveTrack};
+pub use repeat::RepeatRange;
 pub use split::SplitMono;
 pub use time::{CutTime, InsertTime};
 
@@ -7730,6 +7732,7 @@ craftkit_sdk::plugin_anchor!(
     RemoveClip,
     RemoveMarker,
     RemoveTrack,
+    RepeatRange,
     SplitMono,
     AddMarker,
     AddSource,
