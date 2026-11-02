@@ -15112,6 +15112,8 @@ could not be touched.
   that is **limited** to a range, one that **ramps** over the notes
   and one that **humanises** them. The last three are not here, and
   the humanise is a random one — and a random fact is not a fact.
+  (The **limit** and the **ramp** are here now: §229 built them, and
+  this sentence was written before it did.)
 - **The quantise has no strength of its own here.** The library's
   quantise has one — how far a note moves towards the line — and the
   battery's command moves every note all the way. A person who wants
@@ -15318,9 +15320,13 @@ its transients (§221), and the quiet parts of it were still in it.
 - **The tree's three modes are not here.** The tree's command strips
   the silence, **extracts** it, or separates at every edge and keeps
   everything; here the silence is stripped, and the other two are not.
+  (All three are here now: §231 built the other two, and this
+  sentence was written before it did.)
 - **The tree's preview is not here.** The tree scans a track without
   changing it, so that a person can see the ranges before they strip
-  them; here the command strips, and there is no scan to see.
+  them; here the command strips, and there is no scan to see. (The
+  scan is here now: §231 built it as a read, and this sentence was
+  written before it did.)
 
 ## 223. The editing of the notes of a MIDI clip
 
@@ -15390,7 +15396,8 @@ command to touch them.
 - **The tree's duplicates are not taken out.** The tree has a command
   that takes the duplicate notes out of a clip, and the library here
   can do it (§ the MIDI library's `remove_duplicates`) — but there is
-  no command that asks for it.
+  no command that asks for it. (There is now: §239 built it, and this
+  sentence was written before it did.)
 - **The tree's note names are not here.** A note is a pitch, a place
   and a length, and it has no name: the tree names a note "C3", and a
   name is for a person to read.
@@ -15522,10 +15529,13 @@ a mistake in it could not be undone.
   the pan, the mute — and here the value is given by the caller. The
   value of a track's fader is the fader's own field (§ the level), and
   a command that reads it and writes it over a range is a command that
-  has to know which value the caller meant.
+  has to know which value the caller meant. (It is here now: §234
+  built it, and this sentence was written before it did.)
 - **The tree's thin touches every lane of a track at once.** Here a
   lane is thinned on its own: the command names the lane, and a person
-  who wants every lane thinned asks for them one after another.
+  who wants every lane thinned asks for them one after another. (All
+  the lanes at once are here now: §234 built it, and this sentence was
+  written before it did.)
 
 ## 226. The moving of a clip
 
@@ -15585,7 +15595,12 @@ heard — and there was no command for the second thing.
 - **The tree's shift is not here.** The tree shifts every clip of a
   track from a place onwards, and here the clips are moved one
   command at a time: the command takes the clips it moves, and a
-  person who wants a whole track shifted asks for its clips.
+  person who wants a whole track shifted asks for its clips. (Every
+  clip from a place onwards is shifted now: §236 built it as the
+  insertion of silence, and this sentence was written before it did.
+  What is still not here is a shift by an **arbitrary** amount — the
+  tree's shift moves the clips by any distance it is given, and
+  v2's shifts them by the length of the silence inserted.)
 - **The tree's trim to fill the selection is not here.** It trims the
   clips to the edges of a selection, and here the trim is to a range
   the caller gives or to the material the clip plays.
