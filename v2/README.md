@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1772 tests.** The MCP server links **all fifteen batteries** in, so the
+**1779 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1772 tests
+cargo test          # 1779 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3691,6 +3691,7 @@ so.
 | the **duplicate** of a track | **built.** A track is copied with its clips, its automation, its inserts and its sends (§254) | §254 |
 | the **render** of a clip | **built.** The sound of a clip is written to a file, and a MIDI clip is refused (§255) | §255 |
 | the **taking away** of an event | **built.** A tempo, a meter and a key go away, and the document's own stays (§256) | §256 |
+| the **shapes** of the tree | **built.** A star, a line and a spiral are made out of numbers, with the tree's own geometry (§257) | §257 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17709,3 +17710,73 @@ away: a map that can only grow is not a map a person can work with.
 - **The tree's removal of a tempo may leave the map with no tempo at
   the first tick** — it refuses that — and this one's refuses it with
   a word about the document's tempo.
+
+## 257. The shapes the tree makes that this tree did not
+
+The tree's editor makes a **star**, a **line** and a **spiral** out of
+nothing but a few numbers, and it makes an **arc** and a **flare** as
+well. This tree's vector battery had three shapes — the rectangle, the
+ellipse and the polygon — and the star, the line and the spiral are
+here now.
+
+### What was built
+
+- The command `vector.star` makes a star: its points alternate
+  between an **outer** radius and an **inner** one, it starts at the
+  **top**, and the **rotation** turns it. The inner radius is half the
+  outer one when it is not given.
+- The command `vector.line` makes a line: a contour of **two points**,
+  open and not closed.
+- The command `vector.spiral` makes a spiral: a run of **quarter
+  arcs** that get smaller and smaller, wound **inward** — the path
+  starts at the centre and ends at the outside, the way a person draws
+  one.
+- The geometry is the **tree's own**: the same points, the same
+  **kappa**, the same reversal of the contour.
+- A star with too few or too many **points** is refused, and a spiral
+  whose **decay** is outside its bound is refused.
+
+### What the port found
+
+- **The tree's star takes the absolute value of its radii, and this
+  one refuses a negative one.** The tree's `shape.star` takes
+  `radius1.abs()` and `radius2.abs()`, so a star asked for with a
+  negative radius is a star of the radius it means. Here a negative
+  radius is **refused**: the same rule the fader follows (§ the fader
+  of a track).
+- **The tree's star clamps its point count and this one refuses it.**
+  The tree's star has between two and a thousand points, and the count
+  outside that is pulled to the edge. Here the count outside the bound
+  is refused.
+- **The tree's spiral clamps its decay and this one refuses it.** The
+  tree's decay is between five and ninety-nine point nine nine
+  percent, and the value outside is pulled to the edge. Here it is
+  refused, and the same goes for the number of turns.
+- **The tree's line is stroked with the current paint and this one's
+  is stroked with a colour the caller gives.** The tree's line takes
+  the paint that is current, and a line that is not filled is a line
+  that is stroked; here a path without a stroke is not drawn at all,
+  so the line carries the colour it is stroked with.
+
+### What it cost
+
+- **Seven tests** in the vector battery (`tests/shapes.rs`): the star
+  alternates between two radii, the star starts at the top, the inner
+  radius is half the outer one, a star outside the bound is refused,
+  the line is two points, the spiral winds inward, and a spiral outside
+  the bound is refused.
+- **Three commands** (`vector.star`, `vector.line` and
+  `vector.spiral`). The vector battery now carries **28** commands and
+  the MCP server **341**.
+
+### What it does not settle
+
+- **The tree's arc and the tree's flare are not here.** The arc is
+  drawn from an anchor, a reference point and two lengths, and the
+  flare is a lens flare made of radial gradients in Screen mode. The
+  star, the line and the spiral are the shapes whose geometry is a
+  handful of numbers; the arc is a drawing tool's worth of geometry
+  and the flare is a paint's worth.
+- **The tree's star has a straight-armed variant**, where the inner
+  radius is worked out from the outer one so that the shoulders line
+  up; here the inner radius is what the caller says.
