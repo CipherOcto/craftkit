@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1636 tests.** The MCP server links **all fifteen batteries** in, so the
+**1639 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1636 tests
+cargo test          # 1639 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3667,6 +3667,7 @@ so.
 | the **velocity** of a note | **built.** The notes are struck at a velocity, changed by one, scaled, limited and ramped, and a velocity outside the range is refused (§229) | §229 |
 | the **length** of a note | **built.** The notes are given a length, changed by one, scaled and made legato, and a note is never shorter than a tick (§230) | §230 |
 | the **modes** of the strip of silence | **built.** The silence is stripped, the sound extracted or the clip separated, and the loud parts can be read without changing anything (§231) | §231 |
+| the **cut** of a MIDI clip | **built.** The cut divides the notes, and each piece keeps the notes that are its own (§232) | §232 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14569,6 +14570,9 @@ to cut a clip in two: a clip was one thing from its start to its end.
   the clip and the second keeps the tail, and the second starts later
   in the source by the distance the cut made — **divided by the
   stretch**, because a stretched clip's source is read more slowly.
+  (A **MIDI** clip's notes are divided at the cut too, and this was
+  not true when this section was written: §232 says what was wrong
+  and what fixed it.)
 - The **beat** moves with the audio it is in: a beat that the cut left
   in the other piece is not a beat of this one.
 - The **fade** at the cut is dropped: the tree drops it too, because a
@@ -15919,3 +15923,67 @@ the strip alone.
   **auto rename** scheme names the pieces (§216), and the strip's own
   naming is not a command: a scheme is a node here (§216), and a
   second way of making one would be a second path.
+
+## 232. The cut of a MIDI clip
+
+Separating a **MIDI clip** kept **all** of its notes in **both**
+pieces. The tree divides the notes at the cut: the notes before it
+stay in the first piece and the notes at or after it move to the
+second. This tree did not — and §212, which describes the separation,
+did not say so.
+
+### What was built
+
+- The cut **divides the notes**: the notes before the cut stay in the
+  first piece, and the notes at or after it move to the second.
+- The second piece's notes are **counted from its own head**: a note
+  that was a quarter note into the clip and a quarter note after the
+  cut is at the head of the second piece.
+- The **controllers** are divided the same way as the notes, for the
+  same reason.
+- The fix is in the **one** place the cut is made, so the separation
+  on the **grid** and at the **transients** divide the notes too.
+
+### What the port found
+
+- **The tree's cut divides the notes and this tree's did not.** The
+  tree's `split_clip` keeps the notes before the cut in the left
+  piece and the notes at or after it in the right one, and moves the
+  right one's notes back by the cut. Here the payload was **cloned**,
+  so both pieces had every note: a clip of two notes became two clips
+  of two notes, and the notes were heard **twice**.
+- **The tree's cut is a cut and this tree's was a copy.** The tree's
+  `split_clip` is one function that trims the clip and trims a copy;
+  here the second piece was built by cloning the payload and moving
+  the fields that a cut moves — the length, the fade, the beat, the
+  offset. The **notes** were not in that list, because a clip of sound
+  has no notes and the cut was written before a MIDI clip existed
+  (§218). The lesson is the one the kit already teaches: a cut is one
+  operation, and every field that moves in a cut has to be in it.
+- **The notes are in ticks and the cut is in samples.** The tree's
+  `split_clip` asks the **tempo map** for the boundary in ticks. Here
+  the same: the boundary is the distance the cut made, in the ticks of
+  the document's tempo at the clip's own start — so the division
+  follows the tempo, and a clip that is cut on a beat divides on that
+  beat.
+
+### What it cost
+
+- **Three tests** in the sound battery (`tests/midiseparate.rs`): the
+  cut divides the notes, the second piece counts its notes from its
+  own head, and a note is not in both pieces.
+- **No command**: the separation was already there, and it was wrong.
+  The sound battery still carries **96** commands and the MCP server
+  **307**.
+
+### What it does not settle
+
+- **The tree's separate is over a track and this one is over a
+  clip** (§212), and that is unchanged: the fix is in the cut, not in
+  what the cut is given.
+- **A note that straddles the cut is not split.** The tree's cut puts
+  a note that is sounding across the cut in the piece that holds its
+  **start**, and the note is not shortened; here the same, because the
+  division is by the note's **start** and not by the note's end. A
+  note that begins before the cut and ends after it is in the first
+  piece and is heard past the cut's end.
