@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **ninety-nine commands**, one for each thing a person does to a
+//! - **a hundred and one commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -280,6 +280,12 @@
 //! under the playhead up to it or down from it. Here the place is
 //! **given** — a place is a fact and the playhead is a node (§235).
 //!
+//! **The tree's time is a selection and this tree's is a place.** The
+//! tree can insert time at a place in the selection or cut time out of
+//! it, and every track of the session moves. Here the place or the
+//! range is **given** and the whole of the document is the thing that
+//! moves (§236).
+//!
 //! **The tree's strip of silence has three modes and a preview, and so
 //! does this one.** The tree's editor strips the silence, or extracts
 //! the sound and keeps the silence, or separates the clip at the edges
@@ -411,6 +417,7 @@ mod midi;
 // The **healing** of a track: the clips that were separated are put
 // back together.
 mod heal;
+mod time;
 
 use std::collections::HashMap;
 
@@ -432,6 +439,7 @@ pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
     LanePayload, SendKind, SendPayload,
 };
+pub use time::{CutTime, InsertTime};
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::Value as Json;
