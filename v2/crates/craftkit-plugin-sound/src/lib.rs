@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
 //!   `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **ninety-eight commands**, one for each thing a person does to a
+//! - **ninety-nine commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -274,6 +274,11 @@
 //! parameter over a range. Here both are **one track's** lanes,
 //! because a track is a node and a node is something a command can be
 //! given (§234).
+//!
+//! **The tree's fade is to the playhead and this tree's is to a
+//! place.** The tree's "Fade to Start" and "Fade to End" fade the clip
+//! under the playhead up to it or down from it. Here the place is
+//! **given** — a place is a fact and the playhead is a node (§235).
 //!
 //! **The tree's strip of silence has three modes and a preview, and so
 //! does this one.** The tree's editor strips the silence, or extracts
@@ -3071,6 +3076,120 @@ impl SetClipPitch {
         }
         Ok(Outcome::changed(format!("the clip `{}` is at {semitones} semitones", self.clip.0))
             .with_data(serde_json::json!({ "id": self.clip.0, "semitones": semitones })))
+    }
+}
+
+/// **Fade** a clip **to a place**: up to it, or down to it.
+///
+/// The tree's editor fades a clip to the **playhead**: "Fade to
+/// Start" fades the clip from its head up to the playhead, and "Fade
+/// to End" fades it from the playhead down to its tail. The shape of
+/// the fade is the tree's own — the equal-power curve — and the
+/// curvature is not bent.
+///
+/// Here the place is **given**, because the playhead is a node of the
+/// document and a node is not a place every command may read: the
+/// place is where the caller says it is.
+///
+/// A place that is **not inside the clip** is refused: a fade that
+/// ends outside the clip is a fade of nothing.
+#[derive(Command)]
+#[command(
+    id = "sound.clip.fade.to",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Clip", "Fade"),
+    mutates,
+    undoable
+)]
+pub struct FadeClipTo {
+    /// The clip to fade.
+    pub clip: NodeRef,
+    /// Where the fade ends, in the clip's own samples.
+    pub at: Number,
+    /// Which way the fade goes: `in` fades the clip from its head up
+    /// to the place, and `out` fades it from the place down to its
+    /// tail.
+    pub to: Option<Text>,
+}
+
+impl FadeClipTo {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.clip.fade.to".to_string();
+        let clip_id = self.clip.0;
+        let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no node `{clip_id}`"),
+        })?;
+        if node.kind != "sound.clip" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+            });
+        }
+        let mut payload = ClipPayload::from_json(&node.data)
+            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+        if locks::edit_is_locked(&payload) {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the clip `{clip_id}` is locked: its sound is finished"),
+            });
+        }
+        // The **way** the fade goes: `in` or `out`, and a name this
+        // battery does not know is refused.
+        let to = match &self.to {
+            Some(to) => match to.0.trim() {
+                "in" => "in",
+                "out" => "out",
+                other => {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!("a fade goes `in` or `out`, and not `{other}`"),
+                    });
+                }
+            },
+            None => "in",
+        };
+        // The **place** is in the clip's own time: how far into the
+        // clip it is.
+        let at = samples(self.at.0, "where the fade ends")?;
+        let into = at - payload.start;
+        if into <= 0 || into >= payload.length {
+            return Err(EngineError::Failed {
+                id,
+                message: format!(
+                    "the clip `{clip_id}` runs from {} to {} and cannot fade at {at}",
+                    payload.start,
+                    payload.start + payload.length
+                ),
+            });
+        }
+        // The tree's own shape: the equal-power curve, and a bend of
+        // nothing.
+        //
+        // The **length** of the fade is how far it runs: a fade in
+        // runs from the clip's head to the place, and a fade out runs
+        // from the place to the clip's tail.
+        let len = if to == "in" { into } else { payload.length - into };
+        let fade = FadePayload { len, shape: craftkit_audio::FadeShape::EqualPower, curvature: 0.0 };
+        if to == "in" {
+            payload.fade_in = fade;
+        } else {
+            payload.fade_out = fade;
+        }
+        if let Some(node) = session.document_mut()?.node_mut(clip_id) {
+            node.data = payload.to_json();
+        }
+        Ok(Outcome::changed(format!("faded the clip `{clip_id}` {to} to {at}")).with_data(
+            serde_json::json!({
+                "id": clip_id,
+                "at": at,
+                "to": to,
+                "fade_in": payload.fade_in.to_json(),
+                "fade_out": payload.fade_out.to_json(),
+            }),
+        ))
     }
 }
 
