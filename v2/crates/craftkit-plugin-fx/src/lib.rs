@@ -40,6 +40,12 @@
 //!   when a keyframe moves. So the **evaluator** says it, and nobody
 //!   writes it down.
 //!
+//! And the **keyframes** are here: a keyframe is a frame and a value,
+//! the keyframes of a property are sorted by frame, and the value at a
+//! time is the line between the two keyframes around it — or the
+//! earlier value, when the value does not interpolate (the module
+//! `keys`).
+//!
 //! And one that is not a finding but a fact: the **expressions** are the
 //! plugin's own language, and they live in the payload beside the
 //! keyframes they sit on.
@@ -57,6 +63,10 @@
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
+
+mod keys;
+
+pub use keys::{RemoveKeyframe, SetKeyframe, ValueAt};
 
 /// The compositing layer.
 ///
@@ -472,6 +482,9 @@ craftkit_sdk::plugin_anchor!(
     SetProp,
     GetProp,
     PropsEvaluator,
+    SetKeyframe,
+    RemoveKeyframe,
+    ValueAt,
     FxPanel
 );
 
