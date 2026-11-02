@@ -58,7 +58,7 @@ pub(crate) struct KeyPayload {
 }
 
 impl KeyPayload {
-    fn to_json(&self) -> Json {
+    pub(crate) fn to_json(&self) -> Json {
         serde_json::json!({
             "tick": self.tick,
             "sharps": self.sharps,
