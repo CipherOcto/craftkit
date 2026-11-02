@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1655 tests.** The MCP server links **all fifteen batteries** in, so the
+**1662 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1655 tests
+cargo test          # 1662 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3672,6 +3672,7 @@ so.
 | the **automation** of a whole track | **built.** Every lane of a track is written with the static value of its parameter or thinned at once (§234) | §234 |
 | the **fade** of a clip to a place | **built.** A clip is faded up to a place or down from it, and the shape is the tree's own (§235) | §235 |
 | the **time** of the session | **built.** Silence is inserted at a place and time is cut out of a range, and everything after moves (§236) | §236 |
+| the **names** of the notes | **built.** A pitch, a drum and a program are named by the tree's own tables, and a clip's notes are read with their names (§237) | §237 |
 
 ### The list of things that are honestly not there: empty
 
@@ -14962,7 +14963,8 @@ was no note in the whole of v2, and no MIDI file.
   the tree's, and they are not in this crate yet.
 - **The names are not here.** The tree names a note ("C3"), a drum and
   a program; a name is for a person to read, and nothing here is read
-  by a person yet.
+  by a person yet. (There is now: §237 built the names, and this
+  sentence was written before it did.)
 
 ## 218. The MIDI of a clip
 
@@ -15086,7 +15088,8 @@ could not be touched.
   are put on it.
 - **The tree's note names are not here.** The tree names a note
   ("C3"), a drum and a program; a name is for a person to read, and
-  nothing in v2 is read by a person yet.
+  nothing in v2 is read by a person yet. (There is now: §237 built the
+  names, and this sentence was written before it did.)
 
 ### What it cost
 
@@ -15400,7 +15403,8 @@ command to touch them.
   sentence was written before it did.)
 - **The tree's note names are not here.** A note is a pitch, a place
   and a length, and it has no name: the tree names a note "C3", and a
-  name is for a person to read.
+  name is for a person to read. (There is now: §237 built the names,
+  and this sentence was written before it did.)
 
 ## 224. The taking away of a link
 
@@ -16286,3 +16290,74 @@ missing.
   change its place in the bar. That is the tree's behaviour and it is
   this one's, and it is worth knowing: inserting silence moves the
   sound and not the music.
+
+## 237. The names of the notes
+
+A MIDI note is a number, and a number is not something a person reads.
+The tree's MIDI crate carries a table of names — the note names, the
+drum names and the program names — and three earlier sections said
+plainly that the names were not here (§217, §219, §223).
+
+### What was built
+
+- The MIDI library gains a module of **names**: `note_name` for a
+  pitch, `gm_drum_name` for a drum, `gm_program_name` for a program,
+  and `note_or_drum_name` for a note that may be a drum.
+- The tables are the **tree's own**, copied and not typed: forty-seven
+  drums, from "Acoustic Bass Drum" to "Open Triangle", and a hundred
+  and twenty-eight programs, from "Acoustic Grand Piano" to "Gunshot".
+  A drum outside the kit has **no** name and a program above the set
+  is **"Unknown"** — neither is made up.
+- The command `sound.clip.midi.names` reads a clip's notes with the
+  names they have, and the programs the clip names, through the
+  program-change controllers it holds.
+- A clip that holds no notes says so, and it is not a failure: the
+  read says `midi: false`.
+
+### What the port found
+
+- **The tree names a note the way a piano names it.** The middle C —
+  the pitch of sixty — is **"C3"**, so the octave of a note is the
+  octave a piano gives it and not the octave the specification counts.
+  The pitch of zero is **"C-2"**, and the tree says so in its own
+  words: the Pro Tools convention.
+- **The tree's drums are "channel 10" and this tree's drum channel is
+  nine.** The tree's `names.rs` says the drum names are for "a pitch
+  on channel 10", and its engine counts the channels from zero and
+  calls the drum channel nine. Here the channels are counted from zero
+  as well (§ the MIDI of a clip), so the drum channel is **nine** in
+  both — the tree's comment and the tree's code disagree by one, and
+  the code is right.
+- **The tree has a library of names and no command that reads them.**
+  Its names are called by the panels that show them: the note list of
+  the MIDI editor and the sampler window. Here the name is **derived
+  where it is read**, so a name cannot go stale against the note it
+  names, and a caller that wants the names has a command to ask.
+- **The tree's drum name is an option and its program name is a
+  string.** A pitch outside the kit has no drum — `None` — and a
+  program above the hundred and twenty-eight is the string
+  "Unknown". Here the same: a drum outside the kit falls back to the
+  note's own name rather than to nothing, because a note on the drum
+  channel that is not a drum is still a note.
+
+### What it cost
+
+- **Four tests** in the MIDI library (`tests/names.rs`): the middle C
+  is "C3", the pitch of zero is "C-2", the drum of the kit is named and
+  the program of the set is named.
+- **Three tests** in the sound battery (`tests/midinames.rs`): the
+  notes of a clip are named by their pitch, a note on the drum channel
+  is named as a drum, and a clip that holds no notes says so.
+- **One command** (`sound.clip.midi.names`). The sound battery now
+  carries **102** commands and the MCP server **313**.
+
+### What it does not settle
+
+- **The tree's names are shown in panels and here they are read.** A
+  panel that lists the notes of a clip would draw the names it reads;
+  this tree has no panels for MIDI yet, and the read is what a panel
+  would draw from.
+- **The tree's octave naming is a convention, not a rule**, and it is
+  kept here because it is the tree's: a file written elsewhere may call
+  the same pitch "C4", and this tree calls it "C3" because the tree
+  does.
