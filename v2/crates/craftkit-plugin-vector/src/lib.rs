@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **twenty-eight commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **thirty commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.unite`,
@@ -546,6 +546,97 @@ impl SimplifyPath {
         write_back(session, self.node.0, &vector)?;
         Ok(Outcome::changed("the path is simpler").with_data(serde_json::json!({ "id": self.node.0 })))
     }
+}
+
+/// **Close** a path: its last open contour is closed.
+///
+/// A contour that is open has a loose end, and a loose end is a place
+/// where the paint of the path stops in the middle of nowhere. Closing
+/// it joins the end back to the beginning.
+///
+/// A path with **no open contour** is refused: there is nothing to
+/// close.
+#[derive(Command)]
+#[command(
+    id = "vector.path.close",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path"),
+    mutates,
+    undoable
+)]
+pub struct ClosePath {
+    /// The path.
+    pub node: NodeRef,
+}
+
+impl ClosePath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.node.0)?;
+        let Some(subpath) = vector.path.subpaths.iter_mut().rev().find(|subpath| !subpath.closed) else {
+            return Err(EngineError::Failed {
+                id: "vector.path.close".to_string(),
+                message: "the path has no open contour: there is nothing to close".to_string(),
+            });
+        };
+        subpath.closed = true;
+        write_back(session, self.node.0, &vector)?;
+        Ok(Outcome::changed("the path is closed").with_data(serde_json::json!({ "id": self.node.0 })))
+    }
+}
+
+/// **Turn** a path the other way round.
+///
+/// The contour runs backwards: it starts where it ended, and every
+/// curve keeps its shape and turns the other way. The path is the same
+/// shape and it winds the other way, which matters when the shape has
+/// a **hole** in it or when the path is filled by a rule that says
+/// which way it winds.
+#[derive(Command)]
+#[command(
+    id = "vector.path.reverse",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path"),
+    mutates,
+    undoable
+)]
+pub struct ReversePath {
+    /// The path.
+    pub node: NodeRef,
+}
+
+impl ReversePath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.node.0)?;
+        let subpaths: Vec<SubPath> = vector.path.subpaths.iter().map(reverse_subpath).collect();
+        vector.path.subpaths = subpaths;
+        write_back(session, self.node.0, &vector)?;
+        Ok(Outcome::changed("the path is turned round").with_data(serde_json::json!({ "id": self.node.0 })))
+    }
+}
+
+/// A contour the other way round.
+///
+/// The contour starts where it ended, and every curve keeps its shape:
+/// the two control points change places.
+fn reverse_subpath(subpath: &SubPath) -> SubPath {
+    let mut points = Vec::with_capacity(subpath.segments.len() + 1);
+    points.push(subpath.start);
+    for segment in &subpath.segments {
+        points.push(segment.end());
+    }
+    let mut segments = Vec::with_capacity(subpath.segments.len());
+    for index in (0..subpath.segments.len()).rev() {
+        let from = points[index];
+        segments.push(match &subpath.segments[index] {
+            Segment::Line { .. } => Segment::Line { to: from },
+            Segment::Cubic { c1, c2, .. } => Segment::Cubic { c1: *c2, c2: *c1, to: from },
+        });
+    }
+    SubPath { start: subpath.end(), segments, closed: subpath.closed }
 }
 
 /// Push a path out, or in.
@@ -2048,6 +2139,8 @@ craftkit_sdk::plugin_anchor!(
     SmoothPoint,
     OutlinePath,
     TransformPath,
+    ClosePath,
+    ReversePath,
     VectorPanel,
     TotalAreaEvaluator
 );
