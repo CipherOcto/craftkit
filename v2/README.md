@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1910 tests.** The MCP server links **all fifteen batteries** in, so the
+**1921 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1910 tests
+cargo test          # 1921 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3709,6 +3709,7 @@ so.
 | the **number format** of a cell | **built.** A cell carries a number format and the text it shows is derived from its value and that format (§271) | §271 |
 | the **lifting** of a range | **built.** The clips in a range of a track are taken away and the gap they leave is a gap (§272) | §272 |
 | the **extracting** of a range | **built.** The clips in a range of a track are taken away and the gap closes (§273) | §273 |
+| the **filling of a formula** | **built.** A fill copies a formula and shifts its references, and an anchored reference does not move (§275) | §275 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18987,5 +18988,98 @@ tree's now.
 - **The tree's `formats` and `values` modes are not here**: the first
   copies the style without the value, the second copies the value
   without the style.
-- **A formula is not filled**, and neither is the tree's **flash
-  fill**, which reads the pattern out of the text beside the source.
+- **A formula is not filled** — and that is no longer true: a formula
+  is filled, and its references are shifted (§275). The tree's **flash
+  fill**, which reads the pattern out of the text beside the source, is
+  still not here.
+
+## 275. The fill of a formula
+
+§274 left the fill of a formula out and said so: the tree copies a
+formula and **shifts its references**. That is the tree's
+`shift_relative`, and it is here now.
+
+### What was built
+
+- A source that holds a **formula** is filled with the formula, and
+  the references of it are shifted for every cell that is written:
+  `=B1` in `A1` becomes `=B2` in `A2` and `=B3` in `A3`.
+- The **anchoring** of an address is in the model: `$A$1` does not
+  move, `A$1` keeps its row, `$A1` keeps its column, and `A1` moves in
+  both.
+- A reference that would **leave the sheet** is refused, and the
+  reference is named.
+- A fill that would make a cell **read itself** is refused, and the
+  whole fill with it — not a part of it.
+- The formula language grew a **printer**: a formula is written out
+  again, and the copy a fill writes is the printer's text.
+
+### What the port found
+
+- **The `$` is a part of the address, and the port had thrown it
+  away.** v2's `CellRef::parse` skipped the `$` and read `$A$1` as
+  `A1` — so here a formula that named an anchored cell and one that
+  named a plain cell were the same thing, and the difference the tree's
+  `$` makes could not be made at all. Now an address is an address
+  **and** its anchoring, and the anchoring is what says whether a
+  reference moves. And a command that names a cell names a cell:
+  `grid.cell.set` with `A$1` is refused, because `$A$1` is the address
+  of a *reference* and not the address of a cell.
+- **The tree's shift moves the relative parts and keeps the anchored
+  ones — and it moves the references of another sheet too.** The tree's
+  `shift_relative` shifts every reference of the expression, whether it
+  names this sheet or another: `Sheet2!A1` is a relative reference to
+  another sheet and it moves with the copy. Here the same: a fill of
+  `=Sheet2!A1` writes `=Sheet2!A2`.
+- **The tree's `#REF!` is a value, and a value that says "this
+  reference is broken".** The tree's `shift_anchor` refuses an address
+  that leaves the sheet, the formula becomes `#REF!`, and the cell
+  still holds a formula — a broken one. Here the whole **fill** is
+  refused and the reference is named: a refusal that never truncates,
+  and a tree that would rather break a formula than stop.
+- **A fill can make a cell read itself, and the tree does not look.**
+  The tree's fill copies a formula and moves its references, and
+  nothing in the fill asks whether the copy reads the cell it is
+  written in: `=B1` in `A1`, filled into `A2`, reads `B2` — and if
+  `B2` reads `A2` the two cells read each other. Here the copy is
+  checked against the **workbook** before it is written and the fill is
+  refused, with the cell named — the same rule the formula command has,
+  where the cycle is found at the point the formula is set and not
+  later in the middle of a recalculation.
+- **A formula cell has no value to offer a pattern.** The tree's fill
+  detects its pattern from the cells' **values**, and a formula cell's
+  value in the tree is the tree's **cached** one. Here a formula cell's
+  value is derived and never written down, so a lane's pattern is made
+  from the cells that hold values, and a cell that holds a formula is
+  given its formula instead.
+
+### What it cost
+
+- **Twelve tests** in the grid battery (`tests/formula_fill.rs`): a
+  fill of a formula shifts its references, a copy of a formula holds a
+  formula and not a value, an anchored reference does not move, a range
+  in a formula shifts as a whole, a reference to another sheet keeps
+  its sheet, the mode does not matter for a formula, a fill that makes
+  a cell read itself is refused, a reference that would leave the sheet
+  is refused, the value of a copied formula is derived, a fill of a
+  range of formulas shifts every one of them, a fill of a formula
+  copies the format, and a text is not a formula.
+- **One test taken away**: `tests/fill.rs` had a test that said a
+  source that holds a formula is refused, and it is not true any more.
+- **The formula model changed**: `Expr::Cell` and `Expr::Range` carry
+  an **anchor** now, the language has a printer, and the printer's text
+  is what a fill writes.
+- **No new command**: the grid battery still carries **11** commands and
+  the MCP server **362**.
+
+### What it does not settle
+
+- **The tree's flash fill** is not here: it reads the pattern out of
+  the text beside the source, and that is a thing of its own.
+- **The tree's `formats` and `values` modes** are still not here, and
+  neither are its **lists** — the days, the months, the quarters — nor
+  its **dates**.
+- **The tree's whole-column and whole-row references** — `A:A`, `1:1`
+  — are refused by the parser here, and so are the tree's **defined
+  names**, its **arrays** and its `INDIRECT`: a call this tree does not
+  have is kept and its value is an error.
