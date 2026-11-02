@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1791 tests.** The MCP server links **all fifteen batteries** in, so the
+**1797 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1791 tests
+cargo test          # 1797 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3694,6 +3694,7 @@ so.
 | the **shapes** of the tree | **built.** A star, a line and a spiral are made out of numbers, with the tree's own geometry (§257) | §257 |
 | the **turning** of a path | **built.** A path's open contour is closed and a path is turned the other way round (§258) | §258 |
 | the **anchor** of a segment | **built.** A segment is split in two, and the two halves are the same curve (§259) | §259 |
+| the **key** of an object | **built.** A key of a PDF object's dictionary is set and taken away, and the order is kept (§260) | §260 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17892,3 +17893,59 @@ vector battery had no way to put a point on a curve.
   split makes it.** The tree's new anchor is a smooth one, with its
   handles on the curve; here the two halves carry the handles the
   split worked out, which is the same curve and not the same handle.
+
+## 260. The key of an object
+
+A PDF object's **dictionary** is the payload of the node, and this
+tree's PDF battery could put an object into the document and could
+never change one: a payload that cannot be changed is a payload that
+was wrong the moment it was written.
+
+### What was built
+
+- The command `pdf.object.set` sets a key of an object's dictionary:
+  the key is **added** when it is not there and **changed** when it is,
+  and the order of the dictionary is kept — a key that is there keeps
+  its place and a key that is new goes at the end.
+- The command `pdf.object.remove` takes a key away.
+- A key that is **not there** is refused: a key that was never there is
+  not a key that was taken away.
+- A node that is **not an object** is refused, and so is an **empty**
+  key.
+
+### What the port found
+
+- **The tree's page commands are the tree's commands, and here the
+  dictionary is the door.** The tree's editor sets a page's boxes, its
+  rotation and its metadata with a command each; here the object is
+  the model and the dictionary is its payload, so one command sets any
+  key of any object. The tree's `page.boxes` is this command with the
+  key `MediaBox` and the tree's `page.rotate` is this command with
+  the key `Rotate` — and the tree's own file is not here, so what a
+  page means is the object's own business.
+- **The tree's dictionary keeps its order and so does this one.** The
+  port found that a JSON object does not keep the order of its keys
+  (§27), and the dictionary is a **list of pairs** — so a key that is
+  changed keeps its place and a rewritten file is byte-stable.
+- **The tree removes a key by removing the thing that holds it** — a
+  page's rotation goes when the page goes — and here a key is taken
+  away on its own: the object model has no page to lose.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/entries.rs`): the key is
+  added, the key is changed, the key is taken away, a key that is not
+  there is refused, a node that is not an object is refused, and an
+  empty key is refused.
+- **Two commands** (`pdf.object.set` and `pdf.object.remove`). The PDF
+  battery now carries **18** commands and the MCP server **346**.
+
+### What it does not settle
+
+- **The tree's page is a page and here a page is an object.** The tree
+  knows that an object with the type `Page` is a page and gives it
+  boxes, a rotation and a tree of children; here the type is a key in
+  the dictionary and the rest is the caller's business.
+- **The tree's file is not here**: the cross-reference table, the
+  incremental save and the parser are the file (§27), and a key that
+  is set here is a key in the object model and not yet in a file.
