@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1714 tests.** The MCP server links **all fifteen batteries** in, so the
+**1719 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1714 tests
+cargo test          # 1719 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3680,6 +3680,7 @@ so.
 | the **taking away** of a node | **built.** A clip, a marker and a track can be taken away, and what goes with them goes with them (§243) | §243 |
 | the **onsets** in the spectrum | **built.** The tree's own detector, with the transform written here because the kit has no dependencies (§244) | §244 |
 | the **split** into mono | **built.** A stereo track becomes a track for each channel, panned to the sides, and a mono source is heard in every channel of the mix (§245) | §245 |
+| the **repeating** of a range | **built.** The material of a range is copied and laid after it, as many times as asked (§246) | §246 |
 
 ### The list of things that are honestly not there: empty
 
@@ -16980,3 +16981,69 @@ a stereo track into a track for each of its channels.
   the original's auto-rename scheme; this one's copies do not.** The
   scheme is a node and the copies are not in it (§ the auto rename of
   a clip), and nothing has been said about them yet.
+
+## 246. The repeating of a range
+
+The tree's editor repeats a selection: it copies the material of the
+range and lays the copies after it, as many times as the caller asks
+for.
+
+### What was built
+
+- The command `sound.track.repeat` copies the clips of a track that
+  overlap a range and lays the copies **after** the range, as many
+  times as the caller asks for.
+- A copy is **trimmed to the range**: it is as long as the range and it
+  plays the material from where the range began.
+- A copy that is trimmed at its head loses its **fade in** — the fade
+  was of the material before it — and a copy that is trimmed at its
+  tail loses its **fade out**. A copy keeps everything else: its gain,
+  its stretch, its pitch, its processes and its **beat**, which follows
+  the audio as it does everywhere else (§ the beat of a clip).
+- The copies keep the **source** of the clip they were made from: a
+  copy that plays nothing is a copy of nothing.
+- The **count** is clamped into its bounds — one to nine hundred and
+  ninety-nine, as the tree's is — because it is a knob and not a fact
+  about the material.
+
+### What the port found
+
+- **The tree's repeat is over a selection and this one is over a
+  range.** The same gap as the velocity's (§229), the taking away's
+  (§243) and the split's (§245), and the same answer: a range is a
+  fact and a selection is the editor's state.
+- **The tree's paste clears what it covers and this one's copies do
+  not.** The tree's `paste` places a clip with `place_clip`, and
+  `place_clip` clears the range the clip covers first: a repeat that
+  lands on material throws that material away. Here the copies are laid
+  **over** what is there, as the loop's copies are (§ the loop of a
+  clip): a document that throws away material nobody asked it to throw
+  away is a document that surprises.
+- **The tree's copy of a range drops the fades at the edges and so
+  does this one.** The tree's `copy_range` trims the clips to the
+  range and clears the fade at each end it cuts: a fade in is of the
+  material before the clip and a fade out is of the material after it,
+  and a copy that has neither is not missing anything.
+- **The tree's repeat counts in the tree's own shuffle mode.** The
+  tree's repeat moves the material to make room when the editor is in
+  shuffle mode; this tree has no shuffle mode, and the copies are laid
+  where they are.
+
+### What it cost
+
+- **Five tests** in the sound battery (`tests/repeat.rs`): the
+  material of a range is laid again, the range is repeated as many
+  times as asked, a copy is trimmed to the range, a copy plays the
+  source of the clip it was made from, and an empty range is refused.
+- **One command** (`sound.track.repeat`). The sound battery now
+  carries **111** commands and the MCP server **322**.
+
+### What it does not settle
+
+- **The copies are not in the auto rename scheme.** A copy is a new
+  clip and the scheme is a node with edges to its clips (§ the auto
+  rename of a clip); the copies of a repeat are not in it, and their
+  names are the names of the clips they were made from.
+- **The tree's repeat copies the material of every selected track and
+  this one repeats one track.** A caller that wants two tracks
+  repeated says so twice.
