@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1854 tests.** The MCP server links **all fifteen batteries** in, so the
+**1860 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1854 tests
+cargo test          # 1860 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3701,6 +3701,7 @@ so.
 | the **moving** of a clip | **built.** A clip moves along its track or to another one, and a move that would land on another clip is refused (§264) | §264 |
 | the **keyframes** of a property | **built.** A keyframe is set and taken away, and the value of a property at a frame is the line between the keyframes (§265) | §265 |
 | the **inserting** of a clip | **built.** A gap opens at the place and the clips that are there are pushed along, so that nothing is cut (§266) | §266 |
+| the **splitting** of a clip | **built.** A clip is divided at a place, the second piece is a new clip, and the media moves with the cut (§267) | §267 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18412,6 +18413,68 @@ clips along. The overwrite is §264, and this is the insert.
 - **The sync-locked tracks are not here**, and neither is the tree's
   **locked** track: a locked track refuses an edit in the tree, and
   here a track has no lock to refuse with.
-- **The split is not here.** The tree's razor divides a clip at a
-  place, and that is a command of its own — the same command that
-  would make the insert possible on a clip that spans the place.
+- **The split was not here — §267 is where it came.** The tree's razor
+  divides a clip at a place, and that is a command of its own — the
+  same command that would make the insert possible on a clip that
+  spans the place.
+
+---
+
+## 267. The splitting of a clip
+
+The tree's razor divides a clip at a place, and the tree's insert
+splits a clip that spans the place as a side effect. Here the split is
+a **command of its own**, and the insert refuses to split anything.
+
+### What was built
+
+- The command `film.clip.split` divides a clip at a place: the piece
+  **before** the place keeps the clip's id and is shortened, and the
+  piece **after** it is a **new clip** that begins that much later in
+  the media.
+- The new clip **plays the same item** and is **on the same track**.
+- A place that is **not inside** the clip is refused: a cut at the edge
+  would cut nothing, and a place outside the clip is not in it. A
+  place that is **not a whole number** is refused, and so is a node
+  that is not a clip, and so is a node that is not there.
+
+### What the port found
+
+- **Cutting a clip cuts both of its clocks.** The tree's
+  `split_track_at` shortens the left piece and gives the right piece a
+  **new id**, and it moves the right piece's `source_in` by the length
+  of the cut: the piece after the cut shows the media that comes after
+  the cut, not the media the cut was at. Here the same: the second
+  piece's `source_in` is the first piece's plus the cut. A clip has
+  two clocks and a cut is in both of them.
+- **The tree's split is a helper, and the tree's razor is the
+  command.** The tree's `split_track_at` is called by the insert, by
+  the overwrite and by the delete, and the razor calls it to divide a
+  clip on purpose. Here the split is a command, and the insert is
+  **refused** when a clip spans the place — a command that splits a
+  clip while it moves another one is a command that does two things and
+  says one.
+- **The tree's split keeps the links together and drops the
+  transitions.** The tree's split gives the new piece a **new link**,
+  so that the two pieces are still linked to each other and not to the
+  old partner, and it removes the transitions that spanned the cut and
+  re-points the ones after it. Here the links and the transitions are
+  not here: a clip is a clip, and a new clip plays the item the old
+  one played.
+
+### What it cost
+
+- **Six tests** in the film battery (`tests/split.rs`): a clip is
+  split, the new clip plays the same item, a place that is not inside
+  the clip is refused, a place that is not a whole number is refused, a
+  node that is not a clip is refused, and a node that is not there is
+  refused.
+- **One command** (`film.clip.split`). The film battery now carries
+  **9** commands and the MCP server **355**.
+
+### What it does not settle
+
+- **The tree's razor is not here**: the tree divides a clip on several
+  tracks at once, and here a split is one clip.
+- **The tree's links and transitions are not here**, and neither is the
+  tree's **reversed** clip, whose cut moves the media the other way.
