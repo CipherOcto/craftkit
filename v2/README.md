@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1766 tests.** The MCP server links **all fifteen batteries** in, so the
+**1772 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1766 tests
+cargo test          # 1772 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3690,6 +3690,7 @@ so.
 | the **settings** of a send | **built.** The level, the pan, the silence and the place of a send are changed (§253) | §253 |
 | the **duplicate** of a track | **built.** A track is copied with its clips, its automation, its inserts and its sends (§254) | §254 |
 | the **render** of a clip | **built.** The sound of a clip is written to a file, and a MIDI clip is refused (§255) | §255 |
+| the **taking away** of an event | **built.** A tempo, a meter and a key go away, and the document's own stays (§256) | §256 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17653,3 +17654,58 @@ after the clip. This tree's battery could render the **mix** and the
 - **The tree's export writes the clip's own effects** — the tree's
   clip effects are an equaliser and a compressor on one clip — and
   this one's writes the clip's own **processes** and nothing else.
+
+## 256. The taking away of an event of the map
+
+The tree's editor removes a tempo change: the tempo map is a list of
+events, and an event may go away as well as come. This tree's battery
+could set a tempo, a meter and a key, and could take **none** of them
+away: a map that can only grow is not a map a person can work with.
+
+### What was built
+
+- The command `sound.tempo.remove` takes the tempo at a tick away, and
+  `sound.meter.remove` takes the meter at a tick away, and
+  `sound.key.remove` takes the key at a tick away.
+- The event at the **first tick** is **refused**: it is the document's
+  tempo, its meter and its key, and a document without one has no beat.
+- A tick with **no event** is refused: a tempo that was never there is
+  not a tempo that was taken away.
+
+### What the port found
+
+- **The tree has a command for the tempo and not for the meter and not
+  for the key.** The tree's `event.tempo_remove` takes a tempo change
+  away; the tree's meter and the tree's key are put and never taken
+  away. The rule is the same for all three — the event at the first
+  tick is the document's own and it stays — and a map that can only
+  grow is not a map, so all three are here.
+- **The tree's removal says how many it removed**, and answers with
+  zero when there was nothing there. Here a tick with no event is
+  **refused** and it says why: a command that does nothing and says
+  nothing is a command that cannot be told from a command that was
+  never run.
+- **The tree's removal takes a place and this one's takes a tick.**
+  The tree's command takes the place in samples and works out the tick
+  itself; the tempo map here is in ticks (§ the music of a MIDI file),
+  and a command that takes the map's own unit is a command that does
+  not make the caller work out the map.
+
+### What it cost
+
+- **Six tests** in the sound battery (`tests/temporemove.rs`): the
+  tempo is taken away, the first tempo stays, a tick with no tempo is
+  refused, the meter is taken away, the first meter stays, and the key
+  is taken away.
+- **Three commands** (`sound.tempo.remove`, `sound.meter.remove` and
+  `sound.key.remove`). The sound battery now carries **127** commands
+  and the MCP server **338**.
+
+### What it does not settle
+
+- **The tree's `event.tempo_remove` removes a tempo and leaves the
+  bars where they are**, and this one's does too: the bars are counted
+  from the meter, and a tempo that goes away does not renumber them.
+- **The tree's removal of a tempo may leave the map with no tempo at
+  the first tick** — it refuses that — and this one's refuses it with
+  a word about the document's tempo.

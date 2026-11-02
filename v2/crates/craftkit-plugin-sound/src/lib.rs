@@ -320,6 +320,13 @@
 //! this tree draws no track headers, and a thing that nothing draws is
 //! not a fact.
 //!
+//! **The tree has a command for the tempo and not for the meter and
+//! not for the key.** The rule is the same for all three — the event
+//! at the first tick is the document's own and it stays — and a map
+//! that can only grow is not a map, so all three are here. The tree's
+//! removal says how many it removed and answers with zero when there
+//! was nothing there; here a tick with no event is refused.
+//!
 //! **The tree's export renders the track and this one's renders the
 //! track too.** The tree's `export_clips` renders the track over the
 //! clip's range — the clips of the track, with their gains and their
