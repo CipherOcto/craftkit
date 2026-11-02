@@ -41,8 +41,9 @@
 //! the clip took is not free (the module `rippling`).
 //!
 //! And a **range** of a track may be **lifted**: the clips that are in
-//! it go, and the gap they leave is a gap — the tree's lift, and not
-//! its extract (the module `lifting`).
+//! it go, and the gap they leave is a gap — the tree's lift (the module
+//! `lifting`). And the same range may be **extracted**: the same
+//! removal, and the gap closes.
 //!
 //! # The mapping
 //!
