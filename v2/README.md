@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1698 tests.** The MCP server links **all fifteen batteries** in, so the
+**1708 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1698 tests
+cargo test          # 1708 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3655,7 +3655,7 @@ so.
 | the **solo-safe** track | **built.** A track that a solo does not silence, and a command that says so (§214) | §214 |
 | the **separation** on the grid | **built.** A clip cut at every line of the session's grid it crosses, refused past the bound (§215) | §215 |
 | the **healing** of a track | **built.** The clips that were separated are joined again when they are the same sound continued (§220) | §220 |
-| the **separation** at the transients | **built.** A clip cut where its sound starts again, found by the level (§221) | §221 |
+| the **separation** at the transients | **built.** A clip cut where its sound starts again, found in the spectrum as it is in the tree (§221, §244) | §221, §244 |
 | the **stripping** of silence | **built.** The quiet parts of a clip are thrown away and the loud parts are kept and named (§222) | §222 |
 | the **auto rename** of a clip | **built.** A scheme is a node and the clips point at it, and the piece after a cut takes the scheme's next name (§216) | §216 |
 | the **events** of the session | **built.** A marker is moved and renamed, the tempos are scaled and a range of the map is made constant (§228) | §228 |
@@ -3678,6 +3678,7 @@ so.
 | the **tracks** of a MIDI file | **built.** Every track of the file becomes a track of the session, with a clip of its own (§240) | §240 |
 | the **consolidate** of a track | **built.** The sound of a track's clips over a range is written to a file, and the clips become one clip of it (§242) | §242 |
 | the **taking away** of a node | **built.** A clip, a marker and a track can be taken away, and what goes with them goes with them (§243) | §243 |
+| the **onsets** in the spectrum | **built.** The tree's own detector, with the transform written here because the kit has no dependencies (§244) | §244 |
 
 ### The list of things that are honestly not there: empty
 
@@ -15226,13 +15227,16 @@ grid (§215), and the sound itself was never listened to.
   dependencies at all, and a fast Fourier transform is a piece of work
   of its own. So the detector here reads the **level** of each short
   frame and calls a transient a rise that stays up, and the difference
-  is written down where the detector is.
+  is written down where the detector is. (There is now: §244 built the
+  transform and the tree's detector, and this sentence was written
+  before it did.)
 - **The tree's sensitivity and this one's are not the same number.**
   The tree's sensitivity is how much of the frame's own spectrum must
   change; here it is how much of the **whole sound's** level a frame
   must reach to count — a hundredth of it at the most sensitive, and
   all of it at the least. A number outside zero to one is clamped into
-  it: the sensitivity is a knob and not a fact about the sound.
+  it: the sensitivity is a knob and not a fact about the sound. (The
+  detector is the tree's now, and so is the sensitivity: §244.)
 - **The tree's transients are of the clip and this one's are of the
   material.** The tree reads the clip's rendered sound, so a clip that
   is stretched or pitched is heard as it will be played; here the
@@ -15259,7 +15263,9 @@ grid (§215), and the sound itself was never listened to.
   detector hears a drum inside a chord, and a level detector hears the
   chord. A fast Fourier transform is a piece of work of its own, and
   it is not done: the kit's crates carry no dependencies at all, and
-  that is a rule worth more than a better detector.
+  that is a rule worth more than a better detector. (There is now:
+  §244 built the transform — in the kit's own crates, with no
+  dependency at all — and the detector is the tree's.)
 - **The tree reads the clip and this one reads the source.** A clip
   whose sound is changed on the way out — a process, a pitch — is
   heard by the tree as it will be played, and here the material is
@@ -16818,3 +16824,85 @@ document that grows.
   The tree's `track.delete` takes the deleted tracks out of their
   groups; here the group node stays and the edge to the track goes
   with the track, which is the same thing said the other way round.
+
+## 244. The onsets in the spectrum
+
+Section 221 said that a transient is found by the **level** here and by
+the **spectrum** in the tree, and it said why: the tree's detector
+needs a fast Fourier transform, and this kit's crates carry no
+dependencies at all.
+
+The transform is a piece of work, and it is now done — **in the kit's
+own crates, with no dependency at all**.
+
+### What was built
+
+- The audio crate gains a **transform**: a fast Fourier transform of a
+  frame, written here — the samples are put in a bit-reversed order
+  and folded together in stages, and the work is `n log n`. A length
+  that is not a **power of two** is refused, because there is no answer
+  and not a wrong one.
+- The audio crate gains the tree's **onset detector**: the sound is
+  read in frames of about twelve milliseconds, each frame is
+  transformed, the power at each frequency is gathered into **bands** of
+  twenty-four to the octave, each band's level is a logarithm, and the
+  **flux** of a frame is how much the bands rose against the loudest
+  of their neighbours.
+- A frame is an onset when its flux stands out from the flux around it
+  by a **fixed amount** — and not by an amount relative to the loudest
+  hit, so that a quiet hit still counts — and the onset is then placed
+  at the **attack**: the place where the energy first rises.
+- The sound battery's separation at the transients uses it now.
+
+### What the port found
+
+- **The tree's detector is now this tree's detector, and the tree's
+  own tests are this tree's own tests.** Six of the tree's tests came
+  over: notes that start over a ringing note are placed on their
+  attacks, the quieter hits between loud ones count, a held chord with
+  vibrato and chorus has no transients, the transients do not depend on
+  where the analysed audio starts, a fast release is not a transient,
+  and channels that cancel when mixed still show their transients. They
+  all pass against the transform written here.
+- **The tree's threshold is fixed and this tree's was relative.** The
+  tree's detector asks a peak to stand out from the flux around it by
+  a **fixed** amount, so a quiet hit counts even beside a loud one.
+  This tree's level detector asked a frame to reach a fraction of the
+  **whole sound's** level, and a hit that was quiet beside a loud one
+  was not heard at all. That is the difference the tree's rule is
+  about, and it is now the tree's rule.
+- **The tree's sensitivity is the same knob and it means the same
+  thing.** It is the size of the fixed amount: ten at the bluntest,
+  two and a half in the middle, and five sixteenths at the most
+  sensitive. A hit sixty decibels below another is not heard by the
+  blunt detector and is heard by the sensitive one — and that is
+  measured, not assumed.
+- **An abrupt stop is an onset too.** A square wave that stops dead
+  has an edge at the stop, and the edge is broadband: the bands rise
+  at it, and the detector calls it an onset. The tree's detector does
+  the same, and the tree's own guard is against a **fast release** —
+  a gradual one, whose attack edge is weak and whose energy does not
+  grow — and not against a stop that is a click.
+
+### What it cost
+
+- **Four tests** in the audio crate (`tests/fft.rs`): a frame of sound
+  has power, a frame of silence has none, a sine has its power at its
+  own frequency, and a length that is not a power of two is refused.
+- **Six tests** in the audio crate (`tests/onsets.rs`): the tree's
+  own six, brought over.
+- **Three tests** in the sound battery (`tests/transients.rs`): the
+  clip is separated at its transients, a clip that plays no sound is
+  refused, and the sensitivity is how small a rise may be.
+- The sound battery carries **109** commands and the MCP server **320**.
+
+### What it does not settle
+
+- **The level detector is still in the library.** It is the detector
+  the sound battery used, and it is a **read** of a sound's shape: it
+  is what says which parts of a sound are loud (§ the stripping of
+  silence). It is not the detector of the transients any more.
+- **The clip's own sound is still not what is analysed.** The
+  material is read and not the clip's rendered sound, so a clip that
+  is pitched or processed is cut at the attacks of the **material**
+  (§221).
