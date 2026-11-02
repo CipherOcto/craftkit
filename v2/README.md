@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1742 tests.** The MCP server links **all fifteen batteries** in, so the
+**1745 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1742 tests
+cargo test          # 1745 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3685,6 +3685,7 @@ so.
 | the **voice** of a track | **built.** A track's voice is turned off and on again, and an inactive track is not heard (§248) | §248 |
 | the **commit** of a track | **built.** The sound of a track is written to a file, a new track of it is made, and the old track goes quiet (§249) | §249 |
 | the **chain** of inserts | **built.** An insert is taken away and it moves in the chain, and the chain is the order of the nodes (§250) | §250 |
+| the **automation** of a range | **built.** The clipboard carries the breakpoints of the range, the paste writes them and the cut takes them away (§251) | §251 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17074,7 +17075,8 @@ here now.
 - It is **not a node**: a clipboard is not a thing in the session, it
   is a thing that was **copied out of** it. What it holds is the
   **payloads** of the clips of the range — their own words and the
-  source they play — and the **length** of the range.
+  source they play — the **automation** of the range and the **length**
+  of the range.
 - A copy is **trimmed to the range**, and a copy trimmed at its head
   loses its **fade in** — the fade was of the material before it — and
   a copy trimmed at its tail loses its **fade out**. The **beat**
@@ -17102,11 +17104,13 @@ here now.
 - **The tree's clipboard holds much more.** It carries the
   **automation** of the range, the **markers** in it, the **clip gain**,
   the **clip effects**, the **grid offset** and the **auto rename
-  schemes** of the copied clips. Here it carries the clips and the
-  length, and the section says why: this tree keeps a track's
-  automation in **lanes** (§ the editing of a lane) and its markers as
-  **nodes** in the document, so a clipboard that carried them would
-  carry a second truth about the same timeline. The grid offset is the
+  schemes** of the copied clips. Here it carries the clips, the
+  **automation** and the length, and the section says why: this tree
+  keeps a track's automation in **lanes** (§ the editing of a lane) and
+  its markers as **nodes** in the document, so a clipboard that
+  carried the markers would carry a second truth about the same
+  timeline — but the lanes' breakpoints are the automation itself, and
+  a copy of them is a copy of the curve (§251). The grid offset is the
   editor's state, and the same gap as the repeat's (§246): a range is
   a fact and a selection is not.
 - **The tree's copy is over several tracks and this one is over one.**
@@ -17139,9 +17143,9 @@ here now.
 
 ### What it does not settle
 
-- **The automation and the markers of the copied range do not travel.**
-  A paste brings the clips and nothing else: no lane, no marker, no
-  clip gain, no clip effects.
+- **The markers of the copied range do not travel.** A paste brings
+  the clips and the automation and nothing else: no marker, no clip
+  gain, no clip effects.
 - **The auto rename schemes of the copied clips do not travel.** The
   pasted clips are new clips and they are **not** in the scheme (§ the
   auto rename of a clip); their names are the names of the clips they
@@ -17363,3 +17367,63 @@ on, and the **chain** is the order of those nodes.
 - **The tree's insert has a preset and this one's has not.** The
   tree's `mix.insert_param` and its preset command put a named preset
   on an insert; here an insert is a plugin and a table of numbers.
+
+## 251. The automation of a range
+
+The tree's clipboard carries the **automation** of the range it copied:
+the breakpoints of the track's lanes that were inside the range, and a
+paste puts them on the track it pastes onto. The tree's cut takes them
+away with the material. Here the clipboard carried the clips and the
+length and nothing else, and that was wrong.
+
+### What was built
+
+- The **copy** of a range carries the **breakpoints** of the track's
+  lanes that were inside it, moved to the range's own head.
+- The **paste** writes them on the track: the breakpoints are put
+  where the material was put, and the breakpoints that were **there**
+  are taken away — the tree's paste clears the range it covers before
+  it writes, so that a paste is a paste and not the sum of two curves.
+- The **cut** takes the automation of the range away with the
+  material.
+- A range with a **curve** in it and no clip in it has something to
+  copy: the material of a range is its clips **and** its automation.
+- The **read** of the clipboard says how many lanes it holds and what
+  is in them.
+
+### What the port found
+
+- **The tree's copy carries the automation and this one's did not.**
+  The tree's `edit.copy` gathers the breakpoints of every lane of the
+  track that fall inside the range and puts them in the clipboard with
+  the clips. The port of the clipboard (§247) left them out, and the
+  reason it gave — "a clipboard that carried them would carry a second
+  truth about the same timeline" — was **wrong**: the lanes *are* the
+  automation, and a copy of a lane's breakpoints is a copy of the
+  curve and not a second curve. The truth is that the tree's clipboard
+  carries the **markers** as well, and those are nodes in the
+  document, and a copy of those would be a second truth.
+- **The tree's cut takes the automation away when the session says
+  that the automation follows the edit.** The tree's session carries a
+  flag for it, and the flag is the editor's state. This tree has no
+  such flag, and a cut takes the curve of the range away: the material
+  and the automation are one thing, and one of them without the other
+  is a document that says two things about the same time.
+
+### What it cost
+
+- **Three tests** in the sound battery (`tests/clipboard.rs`): the
+  automation of a range is copied, the paste writes the automation, and
+  a cut takes the automation away.
+- **No new command**: the copy, the cut and the paste are the same
+  three commands, and they carry one thing more. The sound battery
+  carries **119** commands and the MCP server **330**.
+
+### What it does not settle
+
+- **The tree's copy carries the markers, the clip gain and the clip
+  effects**, and this one's does not: a paste brings the clips and the
+  curve and nothing else.
+- **The tree's repeat copies the clips and not the automation, and so
+  does this one's repeat** (§246): the repeat lays the material again
+  and the curve stays where it is.

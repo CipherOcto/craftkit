@@ -317,6 +317,17 @@
 //! this tree draws no track headers, and a thing that nothing draws is
 //! not a fact.
 //!
+//! **The tree's clipboard carries the automation and this one's did
+//! not.** The tree's copy gathers the breakpoints of every lane of the
+//! track that fall inside the range and puts them in the clipboard
+//! with the clips; the port of the clipboard left them out, and the
+//! reason it gave — that a clipboard carrying them would carry a
+//! second truth about the same timeline — was wrong. The lanes *are*
+//! the automation, and a copy of a lane's breakpoints is a copy of the
+//! curve and not a second curve. The truth is that the tree's
+//! clipboard carries the **markers** as well, and those are nodes in
+//! the document, and a copy of those would be a second truth.
+//!
 //! **The tree's insert lives in a slot and this tree's is a node.**
 //! The tree's track carries a fixed ladder of slots and an insert is
 //! at an index, and taking an insert away empties its slot; here an
