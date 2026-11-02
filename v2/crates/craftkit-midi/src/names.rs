@@ -6,6 +6,10 @@
 //! called "C3" and a drum can be called "Bass Drum 1" and a program
 //! can be called "Acoustic Grand Piano".
 //!
+//! The **keys** are here too: a key signature is a number of sharps
+//! and a mode, and both of them have a name — "G major" — and a name
+//! may be read back into the number it stands for.
+//!
 //! The **note names** follow the tree's own convention: the middle C —
 //! the note of pitch sixty — is **C3**, so that the octave of a note
 //! is the one a piano names it by. A note of pitch zero is **C-2**,
@@ -235,10 +239,98 @@ pub fn gm_program_name(program: u8) -> &'static str {
 /// The drums of the General MIDI kit are on the channel ten, and a
 /// note on that channel is a drum: the note name is the drum's name.
 pub fn note_or_drum_name(pitch: u8, channel: u8) -> String {
-    if channel == 9 {
-        if let Some(name) = gm_drum_name(pitch) {
-            return name.to_string();
-        }
+    if channel == 9
+        && let Some(name) = gm_drum_name(pitch)
+    {
+        return name.to_string();
     }
     note_name(pitch)
+}
+
+/// The **major** keys, by the number of sharps (or flats) they carry.
+///
+/// The keys are written in the order of the **circle of fifths**, so
+/// the table goes up through the sharp keys and back down through the
+/// flat ones. A key of seven sharps is C sharp major, and a key of
+/// seven flats is C flat major.
+const MAJOR_KEYS: [(&str, i8); 15] = [
+    ("C", 0),
+    ("G", 1),
+    ("D", 2),
+    ("A", 3),
+    ("E", 4),
+    ("B", 5),
+    ("F#", 6),
+    ("C#", 7),
+    ("F", -1),
+    ("Bb", -2),
+    ("Eb", -3),
+    ("Ab", -4),
+    ("Db", -5),
+    ("Gb", -6),
+    ("Cb", -7),
+];
+
+/// The **minor** keys, by the number of sharps (or flats) they carry.
+///
+/// A minor key is the relative minor of the major key that lies five
+/// steps above it on the circle, so A minor has no sharps and E minor
+/// has one.
+const MINOR_KEYS: [(&str, i8); 15] = [
+    ("A", 0),
+    ("E", 1),
+    ("B", 2),
+    ("F#", 3),
+    ("C#", 4),
+    ("G#", 5),
+    ("D#", 6),
+    ("A#", 7),
+    ("D", -1),
+    ("G", -2),
+    ("C", -3),
+    ("F", -4),
+    ("Bb", -5),
+    ("Eb", -6),
+    ("Ab", -7),
+];
+
+/// The name of a **key**, for a number of sharps and a mode.
+///
+/// The number of sharps is how a key signature is written in a MIDI
+/// file: seven means seven sharps, and less than zero means that many
+/// flats. A number outside the fifteen that a signature may carry has
+/// no name, and none is made up for it.
+pub fn key_name(sharps: i8, minor: bool) -> Option<String> {
+    let table = if minor { &MINOR_KEYS } else { &MAJOR_KEYS };
+    let (tonic, _) = table.iter().find(|(_, count)| *count == sharps)?;
+    Some(if minor { format!("{tonic} minor") } else { format!("{tonic} major") })
+}
+
+/// The **key** a name says: the number of sharps and the mode.
+///
+/// The name is a name of a person — "G major", "E flat minor" — and it
+/// is read the way a person writes it: the mode may be spelled out
+/// ("major", "minor") or shortened ("maj", "min"), and the case does
+/// not matter. A name that is not a key of the table has **no** key:
+/// the caller is told so rather than given a key that is nearly right.
+pub fn key_from_name(name: &str) -> Option<(i8, bool)> {
+    let text = name.trim().to_lowercase();
+    let (tonic, minor) = if let Some(tonic) = text.strip_suffix(" major") {
+        (tonic.trim(), false)
+    } else if let Some(tonic) = text.strip_suffix(" maj") {
+        (tonic.trim(), false)
+    } else if let Some(tonic) = text.strip_suffix(" minor") {
+        (tonic.trim(), true)
+    } else {
+        // A name with no mode is **refused**: "C" on its own does not
+        // say whether the music is in C major or in C minor, and a name
+        // that does not say is not a name of a key.
+        let tonic = text.strip_suffix(" min")?;
+        (tonic.trim(), true)
+    };
+    // The accidentals are written as a person writes them: "E flat
+    // minor" is the same key as "Eb minor".
+    let tonic = tonic.replace("flat", "b").replace("sharp", "#").replace(' ', "");
+    let table = if minor { &MINOR_KEYS } else { &MAJOR_KEYS };
+    table.iter().find(|(name, _)| name.eq_ignore_ascii_case(&tonic)).map(|(_, count)| (*count, minor))
 }

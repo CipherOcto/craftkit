@@ -11,12 +11,12 @@
 //! It contributes:
 //!
 //! - a **layer**, `sound`, which the rest of it is in;
-//! - **fifteen kinds**: `sound.track`, `sound.playlist`, `sound.clip`,
+//! - **sixteen kinds**: `sound.track`, `sound.playlist`, `sound.clip`,
 //!   `sound.bus`, `sound.send`, `sound.insert`, `sound.lane`,
-//!   `sound.tempo`, `sound.meter`, `sound.marker`, `sound.ruler`,
-//!   `sound.playhead`, `sound.source`, `sound.group` and
+//!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
+//!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and two commands**, one for each thing a person does to a
+//! - **a hundred and four commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -417,6 +417,7 @@ mod midi;
 // The **healing** of a track: the clips that were separated are put
 // back together.
 mod heal;
+mod keys;
 mod time;
 
 use std::collections::HashMap;
@@ -432,6 +433,7 @@ pub use gain::{BypassGain, SetGain};
 pub use grid::{Quantize, ReadGrid, SetGrid};
 pub use group::{Group, GroupKind, ReadGroup, SetGroupFlags, SetTrackGroup, Ungroup, UngroupTracks};
 pub use heal::HealTrack;
+pub use keys::{KeyKind, ReadKeys, SetKey};
 pub use locks::{EditLock, TimeLock};
 pub use marks::SetRating;
 pub use midi::{
@@ -7283,6 +7285,7 @@ fn find_event(session: &Session, kind: &str, tick: i64) -> Option<u64> {
             let at = match kind {
                 "sound.tempo" => TempoPayload::from_json(&node.data).map(|payload| payload.tick),
                 "sound.meter" => MeterPayload::from_json(&node.data).map(|payload| payload.tick),
+                "sound.key" => crate::keys::KeyPayload::from_json(&node.data).map(|payload| payload.tick),
                 _ => Ok(-1),
             };
             matches!(at, Ok(at) if at == tick)
@@ -7425,6 +7428,7 @@ craftkit_sdk::plugin_anchor!(
     ClipKind,
     TempoKind,
     MeterKind,
+    KeyKind,
     MarkerKind,
     SourceKind,
     AddTrack,
@@ -7434,6 +7438,8 @@ craftkit_sdk::plugin_anchor!(
     SetClipFade,
     SetTempo,
     SetMeter,
+    SetKey,
+    ReadKeys,
     AddMarker,
     AddSource,
     MeasurePeaks,
