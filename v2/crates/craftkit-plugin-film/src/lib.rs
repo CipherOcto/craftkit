@@ -79,10 +79,12 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 mod inserting;
 mod moving;
+mod splitting;
 mod trim;
 
 pub use inserting::InsertClip;
 pub use moving::MoveClip;
+pub use splitting::SplitClip;
 pub use trim::TrimClip;
 
 /// The film layer.
@@ -505,6 +507,7 @@ craftkit_sdk::plugin_anchor!(
     TrimClip,
     MoveClip,
     InsertClip,
+    SplitClip,
     TimelineEvaluator,
     FilmPanel
 );
