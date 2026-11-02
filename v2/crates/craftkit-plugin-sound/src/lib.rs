@@ -308,6 +308,14 @@
 //! (§200) and it is musical, so the lines move with the tempo and
 //! follow the meter.
 //!
+//! **The tree's track has a voice and this tree's has one too.** The
+//! tree's track header says "dyn" or "off", and "off" is an
+//! **inactive** track: it is not heard, and it is still in the
+//! document. Here the voice is a **field of the track** and a command
+//! turns it off and on again, and the tree's **hidden** is not here:
+//! this tree draws no track headers, and a thing that nothing draws is
+//! not a fact.
+//!
 //! **The tick of a note is the kit's tick.** The MIDI library counts
 //! in nine hundred and sixty ticks a quarter note, and so does the
 //! sound battery's tempo map (§19) — so a note's place in a clip and

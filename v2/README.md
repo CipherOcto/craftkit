@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1725 tests.** The MCP server links **all fifteen batteries** in, so the
+**1731 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1725 tests
+cargo test          # 1731 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3682,6 +3682,7 @@ so.
 | the **split** into mono | **built.** A stereo track becomes a track for each channel, panned to the sides, and a mono source is heard in every channel of the mix (§245) | §245 |
 | the **repeating** of a range | **built.** The material of a range is copied and laid after it, as many times as asked (§246) | §246 |
 | the **clipboard** | **built.** The material of a range is copied, cut and pasted, and the clipboard is in the document (§247) | §247 |
+| the **voice** of a track | **built.** A track's voice is turned off and on again, and an inactive track is not heard (§248) | §248 |
 
 ### The list of things that are honestly not there: empty
 
@@ -17148,3 +17149,66 @@ here now.
 - **The paste does not clear what it covers**, and the tree's does.
 - **One track at a time.** A caller that wants two tracks copied cuts
   and pastes twice, and the two pastes are two commands.
+
+## 248. The voice of a track
+
+The tree's track header says **"dyn"** or **"off"**, and "off" makes
+the track **inactive**. An inactive track is not heard, and it is not
+gone: it is in the document with its clips and its settings, and a
+command can make it play again.
+
+### What was built
+
+- The command `sound.track.inactive` turns a track's **voice** off and
+  on again. The voice is a **field of the track** — the tree's track
+  carries it as a field too — and it is read back from the track's own
+  data.
+- An inactive track is **not heard**: it is not in the mix, not on a
+  bus, not a **pre-fader** send's source and not a **stem**. A reader
+  that reads a bus is a track, and its voice is off too.
+- The track itself is **not touched**: its clips, its fader, its pan
+  and its automation are where they were, and turning the voice on
+  again brings the track back exactly as it was.
+- A node that is **not a track** is refused.
+
+### What the port found
+
+- **The tree's commit makes the old track inactive *and* hidden.** The
+  tree's `commit_track` writes the track's sound to a file, makes a
+  new track of it, and sets the old track's `inactive` and `hidden`.
+  The **hidden** is not here: this tree draws no track headers, and a
+  thing that nothing draws and nothing reads is not a fact. The
+  **inactive** is a fact — it is what makes the old track stop being
+  heard — and so it is here.
+- **The tree's inactive track is skipped in the mix, and so is this
+  one.** The tree's mixer filters `!t.inactive` over the tracks, over
+  the aux tracks and over the masters, and the solo counts only the
+  tracks that are active. Here the filter is in the same places: the
+  audio tracks, the readers and the masters.
+- **The tree's commit hides the old track because it is *looking* at
+  the new one.** A commit is a thing a person does in front of a
+  window, and the window shows the new track under the old one. Here
+  the commit is a command and not a window, and a command that leaves
+  two tracks in the document is the honest thing: the old track is
+  there, and it is quiet.
+
+### What it cost
+
+- **Six tests** in the sound battery (`tests/inactive.rs`): the track
+  carries its voice, the voice is turned off and on again, an inactive
+  track is not heard, an inactive track is not gone, an inactive track
+  is not bounced, and a node that is not a track is refused.
+- **One field** on the track's payload (`inactive`) and **one
+  command** (`sound.track.inactive`). The sound battery now carries
+  **116** commands and the MCP server **327**.
+
+### What it does not settle
+
+- **A track that is inactive is not in the mix, but it is still in the
+  document** — and a document that is rendered, bounced or saved says
+  nothing about it. The tree's commit hides it, and hiding is not
+  here (§ the commit of a track).
+- **The voice is not a mute and it is not a solo.** A muted track is
+  silent and a solo silences the others; an inactive track is **not
+  there** — it is not a source for a send either, so a bus fed by an
+  inactive track hears nothing.
