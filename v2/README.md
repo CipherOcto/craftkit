@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1954 tests.** The MCP server links **all fifteen batteries** in, so the
+**1959 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1954 tests
+cargo test          # 1959 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3713,6 +3713,7 @@ so.
 | the **date** of a cell | **built.** A date is a number and a date format, and the tree's calendar has the day in it that never happened (§276) | §276 |
 | the **fill of dates** | **built.** The tree's four date fills — days, weekdays, months and years — step through the calendar (§277) | §277 |
 | the **`TEXT`** of a formula | **built.** A formula writes a value with a format code, and the code may be in a cell (§278) | §278 |
+| the **formats** and **values** of a fill | **built.** The tree's last two fills: one gives the cell the format of the source and one gives it the value (§279) | §279 |
 
 ### The list of things that are honestly not there: empty
 
@@ -19002,9 +19003,9 @@ tree's now.
   the tree would step through the week. The tree's `days`, `weekdays`,
   `months` and `years` **modes** were not here either, and they are
   now (§277).
-- **The tree's `formats` and `values` modes are not here**: the first
-  copies the style without the value, the second copies the value
-  without the style.
+- **The tree's `formats` and `values` modes are not here** — and they
+  are now (§279): the first copies the style without the value, the
+  second copies the value without the style.
 - **A formula is not filled** — and that is no longer true: a formula
   is filled, and its references are shifted (§275). The tree's **flash
   fill**, which reads the pattern out of the text beside the source, is
@@ -19095,7 +19096,8 @@ formula and **shifts its references**. That is the tree's
   the text beside the source, and that is a thing of its own.
 - **The tree's `formats` and `values` modes** are still not here, and
   neither are its **lists** — the days, the months, the quarters — nor
-  its **dates**.
+  its **dates**: the `formats` and `values` modes are now (§279), the
+  dates are now (§276), and the lists are not.
 - **The tree's whole-column and whole-row references** — `A:A`, `1:1`
   — are refused by the parser here, and so are the tree's **defined
   names**, its **arrays** and its `INDIRECT`: a call this tree does not
@@ -19280,9 +19282,9 @@ were not here. They are here now.
   copied here and the tree would step through the week.
 - **The tree's flash fill is not here**: it reads the pattern out of
   the text beside the source.
-- **The tree's `formats` and `values` modes are not here**: the first
-  copies the style without the value, the second copies the value
-  without the style.
+- **The tree's `formats` and `values` modes are not here** — and they
+  are now (§279): the first copies the style without the value, the
+  second copies the value without the style.
 
 ## 278. The `TEXT` of a formula
 
@@ -19358,3 +19360,72 @@ formats, so the reason is gone — and the reason was wrong in any case.
 - **The tree's other functions are not here**: its `IF`, its `INDEX`,
   its `XLOOKUP`, its `LET` and its `LAMBDA`, and the tree's
   **volatile** functions.
+
+## 279. The formats and the values of a fill
+
+The tree has **ten** ways of filling a range. Eight of them are here
+(§274 and §277), and the last two are the ones that are about the
+**format**.
+
+### What was built
+
+- The fill has the tree's **`formats`** mode: the cell is given the
+  **format** of the source and keeps its own value.
+- The fill has the tree's **`values`** mode — the tree's *Fill Without
+  Formatting*: the cell is given the **value** of the source and keeps
+  its own format, and it extends like a plain drag.
+- The fill **replaces** the format of the cell with the format of the
+  source, as the tree replaces the style — and a source with no format
+  takes the format away.
+
+### What the port found
+
+- **The tree's fill replaces the style of the cell, and the port had
+  copied the format only when the source had one.** The tree's fill
+  builds the new cell as a **copy of the source cell** — with the
+  value put in it — and so the style of the target is the style of the
+  source and not the style the target had. A source with the default
+  style gives the target the default style, and a target with a
+  hundred decimals loses them. Here the same: the format of the cell
+  is replaced by the format of the source, and a source with no format
+  takes the format away.
+- **The tree's style is more than a format, and the port's bargain
+  shows here.** The tree's style carries the font, the fill, the
+  borders, the alignment and the protection, and the tree's fill
+  copies **all of it**. Here the format is the cell's own field
+  (§271) and the fill copies the format and nothing else — so a fill
+  here is a fill of a spreadsheet with one property, and the tree's
+  is a fill of a spreadsheet with six.
+- **The tree's values mode is the plain drag without the style.** The
+  tree's `ValuesOnly` is in the tree's `extends_series`, so it
+  continues a series like the plain drag does, and a lone number is
+  copied; and the tree keeps the target's style. Here the same: the
+  values mode is the series mode with the format left alone.
+- **The tree's formats mode writes no value at all, and it says so in
+  the outcome.** The tree's `Formats` takes the target's cell, puts
+  the source's style in it and writes it back — so the value of the
+  target is the target's own. Here the same: the cell is given its
+  format and nothing else, and the outcome says which format.
+
+### What it cost
+
+- **Five tests** in the grid battery (`tests/formats_and_values.rs`):
+  the formats mode gives the format and keeps the value, the values
+  mode gives the value and keeps the format, the values mode extends
+  like a plain drag, a source with no format takes the format away,
+  and the formats mode with no format takes the format away.
+- **One test changed**: the refusal of a mode that is not a mode now
+  names ten modes and not eight.
+- **No new command**: the command is the same one, with two more
+  modes. The grid battery still carries **12** commands and the MCP
+  server **363**.
+
+### What it does not settle
+
+- **The tree's style is not here**, and only its format is: the
+  font, the fill, the borders, the alignment and the protection are
+  not here, and a fill copies the format and not the style.
+- **The tree's lists are not here**: the days, the months, the
+  quarters and the ordinals.
+- **The tree's flash fill is not here**: it reads the pattern out of
+  the text beside the source.
