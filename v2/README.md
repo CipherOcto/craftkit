@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1860 tests.** The MCP server links **all fifteen batteries** in, so the
+**1865 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1860 tests
+cargo test          # 1865 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3702,6 +3702,7 @@ so.
 | the **keyframes** of a property | **built.** A keyframe is set and taken away, and the value of a property at a frame is the line between the keyframes (§265) | §265 |
 | the **inserting** of a clip | **built.** A gap opens at the place and the clips that are there are pushed along, so that nothing is cut (§266) | §266 |
 | the **splitting** of a clip | **built.** A clip is divided at a place, the second piece is a new clip, and the media moves with the cut (§267) | §267 |
+| the **taking away** of a clip | **built.** A clip is taken off its track, the edge that says which item it played goes with it, and the gap is a gap (§268) | §268 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18478,3 +18479,61 @@ a **command of its own**, and the insert refuses to split anything.
   tracks at once, and here a split is one clip.
 - **The tree's links and transitions are not here**, and neither is the
   tree's **reversed** clip, whose cut moves the media the other way.
+
+---
+
+## 268. The taking away of a clip
+
+The film battery could put a clip on a track and could never take one
+away.
+
+### What was built
+
+- The command `film.clip.remove` takes a clip off its track.
+- What goes with it goes with it: the edge that says which item the
+  clip played **dies with the node**.
+- The gap the clip leaves is a **gap**: the clips that were after it
+  stay where they are, and the track is shorter by the length of the
+  clip that went.
+- A node that is **not a clip** is refused, and so is a node that is
+  **not there**.
+
+### What the port found
+
+- **The tree has two ways of taking a clip away, and they are not the
+  same.** The tree's `delete_items` removes the clips and leaves the
+  gap; the tree's `ripple_delete_items` removes them and **closes** the
+  gap, and it **refuses** when it cannot: "no gap can close: the other
+  clips on these tracks cover the deleted time". Here the delete is
+  here, and the ripple is a command of its own: a command that removes
+  a clip and closes a gap does two things, and the gap that closes is
+  the tree's business.
+- **What goes with a clip goes with it, and the core says so.** The
+  SDK's `remove_node` removes the relations that name the node and the
+  relations the node names, so the edge from the clip to the item dies
+  with the clip — and there is nothing left that points at nothing.
+  The tree has the same rule in its own words: the tree's
+  `delete_items` removes the clips that are named and drops the
+  **transitions** that are left without a clip on one side
+  (`remove_orphan_transitions`).
+- **The gap is a fact about the timeline and not about the tree.** The
+  track's end is the end of its last clip (§ the film battery's own
+  finding), so a clip that is taken away makes the track shorter
+  without anybody writing that down.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/remove.rs`): a clip is
+  taken away, the edge goes with the clip, the gap is left, a node
+  that is not a clip is refused, and a node that is not there is
+  refused.
+- **One command** (`film.clip.remove`). The film battery now carries
+  **10** commands and the MCP server **356**.
+
+### What it does not settle
+
+- **The ripple delete is not here**, and neither is the tree's
+  **lift** and its **extract**, which take a **range** away rather than
+  a clip.
+- **The tree's linked clips are not here**: a link is a tree's way of
+  saying that two clips move together, and here a clip is a clip.
