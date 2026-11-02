@@ -19,10 +19,10 @@
 //!
 //! # What the clipboard holds
 //!
-//! The **clips** of the range and the **length** of the range. The
-//! tree's clipboard holds more: the automation of the range, the
-//! markers in it, the clip gain and the clip effects. The automation
-//! and the markers are not here, and the section says why.
+//! The **clips** of the range, the **automation** of the range and the
+//! **length** of the range. The tree's clipboard holds more: the
+//! markers in it, the clip gain and the clip effects. The markers are
+//! not here, and the section says why.
 
 use craftkit_derive::Command;
 
@@ -43,6 +43,18 @@ pub(crate) struct Clipboard {
     /// The clips of the range: each one is a payload and the source
     /// it plays.
     pub(crate) clips: Vec<ClipboardClip>,
+    /// The **automation** of the range: the breakpoints of the track's
+    /// lanes that were inside it, moved to the range's own head.
+    pub(crate) automation: Vec<ClipboardLane>,
+}
+
+/// A **lane** in the clipboard.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ClipboardLane {
+    /// Which parameter it moves.
+    pub(crate) param: String,
+    /// Its breakpoints, relative to the range's head.
+    pub(crate) points: Vec<(i64, f64)>,
 }
 
 /// A **clip** in the clipboard.
@@ -64,7 +76,22 @@ pub(crate) fn clipboard_of(document: &craftkit_sdk::Document) -> Option<Clipboar
         let payload = ClipPayload::from_json(clip.get("payload")?).ok()?;
         clips.push(ClipboardClip { name, payload });
     }
-    Some(Clipboard { length, clips })
+    let mut automation = Vec::new();
+    for lane in value.get("automation").and_then(|lanes| lanes.as_array())? {
+        let param = lane.get("param").and_then(|param| param.as_str()).unwrap_or("").to_string();
+        let mut points = Vec::new();
+        if let Some(list) = lane.get("points").and_then(|points| points.as_array()) {
+            for point in list {
+                let at = point.get("at").and_then(|at| at.as_i64());
+                let value = point.get("value").and_then(|value| value.as_f64());
+                if let (Some(at), Some(value)) = (at, value) {
+                    points.push((at, value));
+                }
+            }
+        }
+        automation.push(ClipboardLane { param, points });
+    }
+    Some(Clipboard { length, clips, automation })
 }
 
 /// Put the **clipboard** into the document.
@@ -83,8 +110,102 @@ pub(crate) fn set_clipboard(document: &mut craftkit_sdk::Document, clipboard: &C
         Some(object) => object.clone(),
         None => serde_json::Map::new(),
     };
-    data.insert(CLIPBOARD_KEY.to_string(), serde_json::json!({ "length": clipboard.length, "clips": clips }));
+    let lanes: Vec<Json> = clipboard
+        .automation
+        .iter()
+        .map(|lane| {
+            let points: Vec<Json> = lane
+                .points
+                .iter()
+                .map(|(at, value)| serde_json::json!({ "at": at, "value": value }))
+                .collect();
+            serde_json::json!({ "param": lane.param, "points": points })
+        })
+        .collect();
+    data.insert(
+        CLIPBOARD_KEY.to_string(),
+        serde_json::json!({ "length": clipboard.length, "clips": clips, "automation": lanes }),
+    );
     document.data = Json::Object(data);
+}
+
+/// The **lanes** of a range: the automation that was inside it.
+fn lanes_of(session: &Session, track: u64, start: i64, end: i64) -> Vec<ClipboardLane> {
+    crate::automation_of_range(session, track, start, end)
+        .into_iter()
+        .map(|(param, points)| ClipboardLane { param, points })
+        .collect()
+}
+
+/// Take the **automation** of a range away: the breakpoints that fall
+/// inside it are thrown away.
+fn clear_automation(session: &mut Session, track: u64, start: i64, end: i64) -> Result<(), EngineError> {
+    let lanes = crate::automation_of_range(session, track, start, end);
+    for (param, _) in lanes {
+        let Some(node) = lane_node(session, track, &param) else { continue };
+        let Some(node) = session.document_mut()?.node_mut(node) else { continue };
+        let Ok(mut payload) = crate::mixer::LanePayload::from_json(&node.data) else { continue };
+        payload.points.retain(|(at, _)| *at < start || *at >= end);
+        node.data = payload.to_json();
+    }
+    Ok(())
+}
+
+/// The **lane** of a track for a parameter, if it has one.
+fn lane_node(session: &Session, track: u64, param: &str) -> Option<u64> {
+    let document = session.document();
+    for lane in document.walk().filter(|node| node.kind == "sound.lane") {
+        if crate::timeline::parent_of(document, lane.id).map(|parent| parent.id) != Some(track) {
+            continue;
+        }
+        let Ok(payload) = crate::mixer::LanePayload::from_json(&lane.data) else { continue };
+        if payload.param == param {
+            return Some(lane.id);
+        }
+    }
+    None
+}
+
+/// Write the **automation** of a range on a track.
+///
+/// The breakpoints of the range are put at the place the material was
+/// put, and the breakpoints that were **there** are taken away: the
+/// tree's paste clears the range it covers before it writes, so that
+/// a paste is a paste and not a sum of two curves.
+fn paste_automation(
+    session: &mut Session,
+    track: u64,
+    at: i64,
+    clipboard: &Clipboard,
+) -> Result<usize, EngineError> {
+    let mut written = 0_usize;
+    for lane in &clipboard.automation {
+        if lane.points.is_empty() {
+            continue;
+        }
+        let node = match lane_node(session, track, &lane.param) {
+            Some(node) => node,
+            None => {
+                let payload = crate::mixer::LanePayload { param: lane.param.clone(), points: Vec::new() };
+                session.document_mut()?.add_node_with_under(
+                    Some(track),
+                    lane.param.clone(),
+                    "sound.lane",
+                    None,
+                    payload.to_json(),
+                )
+            }
+        };
+        let Some(node) = session.document_mut()?.node_mut(node) else { continue };
+        let Ok(mut payload) = crate::mixer::LanePayload::from_json(&node.data) else { continue };
+        let end = at + clipboard.length;
+        payload.points.retain(|(point, _)| *point < at || *point >= end);
+        payload.points.extend(lane.points.iter().map(|(point, value)| (at + point, *value)));
+        payload.points.sort_by_key(|(at, _)| *at);
+        node.data = payload.to_json();
+        written += 1;
+    }
+    Ok(written)
 }
 
 /// **Copy** the material of a range of a track.
@@ -118,13 +239,18 @@ impl CopyRange {
         let id = "sound.track.copy".to_string();
         let (start, end) = crate::range_of(session, self.track.0, &id, self.start, self.end)?;
         let copies = crate::copies_of_range(session, self.track.0, start, end);
-        if copies.is_empty() {
+        let automation = lanes_of(session, self.track.0, start, end);
+        // The **material** of a range is its clips **and** its
+        // automation: a range with a curve in it and no clip in it has
+        // something to copy.
+        if copies.is_empty() && automation.is_empty() {
             return Ok(Outcome::new("there is no material in the range to copy")
                 .with_data(serde_json::json!({ "copied": 0, "length": end - start })));
         }
         let clipboard = Clipboard {
             length: end - start,
             clips: copies.into_iter().map(|(name, payload)| ClipboardClip { name, payload }).collect(),
+            automation,
         };
         let count = clipboard.clips.len();
         set_clipboard(session.document_mut()?, &clipboard);
@@ -162,13 +288,15 @@ impl CutRange {
         let id = "sound.track.cut".to_string();
         let (start, end) = crate::range_of(session, self.track.0, &id, self.start, self.end)?;
         let copies = crate::copies_of_range(session, self.track.0, start, end);
-        if copies.is_empty() {
+        let automation = lanes_of(session, self.track.0, start, end);
+        if copies.is_empty() && automation.is_empty() {
             return Ok(Outcome::new("there is no material in the range to cut")
                 .with_data(serde_json::json!({ "cut": 0, "length": end - start })));
         }
         let clipboard = Clipboard {
             length: end - start,
             clips: copies.into_iter().map(|(name, payload)| ClipboardClip { name, payload }).collect(),
+            automation,
         };
         let count = clipboard.clips.len();
         set_clipboard(session.document_mut()?, &clipboard);
@@ -176,6 +304,9 @@ impl CutRange {
         // away, and the ones that cross its edge keep the part outside
         // it.
         let removed = crate::clear_range_of(session, self.track.0, start, end);
+        // The **automation** of the range goes with the material: a
+        // cut takes the curve away as well.
+        clear_automation(session, self.track.0, start, end)?;
         Ok(Outcome::changed(format!("cut {count} clip(s) into the clipboard"))
             .with_data(serde_json::json!({ "cut": count, "removed": removed, "length": clipboard.length })))
     }
@@ -225,7 +356,7 @@ impl PasteRange {
                 message: "the clipboard is empty: there is nothing to paste".to_string(),
             });
         };
-        if clipboard.clips.is_empty() {
+        if clipboard.clips.is_empty() && clipboard.automation.is_empty() {
             return Err(EngineError::Failed {
                 id,
                 message: "the clipboard is empty: there is nothing to paste".to_string(),
@@ -256,8 +387,12 @@ impl PasteRange {
             }
             made.push(placed);
         }
-        Ok(Outcome::changed(format!("pasted {} clip(s) onto the track `{track}`", made.len()))
-            .with_data(serde_json::json!({ "clips": made, "at": at, "length": clipboard.length })))
+        // The **automation** of the range is written on the track: the
+        // lanes of the clipboard, at the place the material was put.
+        let lanes = paste_automation(session, track, at, &clipboard)?;
+        Ok(Outcome::changed(format!("pasted {} clip(s) onto the track `{track}`", made.len())).with_data(
+            serde_json::json!({ "clips": made, "at": at, "length": clipboard.length, "lanes": lanes }),
+        ))
     }
 }
 
@@ -284,7 +419,24 @@ impl ReadClipboard {
                 })
             })
             .collect();
-        Ok(Outcome::new(format!("the clipboard holds {} clip(s)", clips.len()))
-            .with_data(serde_json::json!({ "empty": false, "length": clipboard.length, "clips": clips })))
+        // The **automation** of the range: the lanes that came with it.
+        let automation: Vec<Json> = clipboard
+            .automation
+            .iter()
+            .map(|lane| {
+                let points: Vec<Json> =
+                    lane.points.iter().map(|(at, value)| serde_json::json!([at, value])).collect();
+                serde_json::json!({ "param": lane.param, "points": points })
+            })
+            .collect();
+        Ok(Outcome::new(format!("the clipboard holds {} clip(s)", clips.len())).with_data(
+            serde_json::json!({
+                "empty": false,
+                "length": clipboard.length,
+                "clips": clips,
+                "lanes": automation.len(),
+                "automation": automation,
+            }),
+        ))
     }
 }

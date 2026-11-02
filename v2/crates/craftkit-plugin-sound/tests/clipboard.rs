@@ -169,3 +169,88 @@ fn an_empty_range_is_refused() {
         .expect_err("the range is refused");
     assert!(error.to_string().contains("starts at"), "the error says why: {error}");
 }
+
+/// The **automation** of a range is copied with it: the breakpoints
+/// that were inside the range are in the clipboard.
+#[test]
+fn the_automation_of_a_range_is_copied() {
+    let mut session = session();
+    let (track, _) = a_track(&mut session, "automation");
+    session
+        .execute(
+            "sound.lane.add",
+            &json!({ "track": track, "param": "volume", "points": [[0, 0.0], [12_000, 1.0]] }),
+        )
+        .expect("the lane is added");
+    session
+        .execute("sound.track.copy", &json!({ "track": track, "start": 0, "end": 24_000 }))
+        .expect("the range is copied");
+    let read = session.execute("sound.track.clipboard.read", &json!({})).expect("the clipboard is read");
+    assert_eq!(read.data["lanes"], 1, "the lane is in the clipboard");
+    assert_eq!(read.data["automation"][0]["param"], "volume");
+    assert_eq!(read.data["automation"][0]["points"].as_array().expect("the points are there").len(), 2);
+}
+
+/// The **paste** writes the automation on the track: the breakpoints
+/// are put where the material was put.
+#[test]
+fn the_paste_writes_the_automation() {
+    let mut session = session();
+    let (track, _) = a_track(&mut session, "written");
+    session
+        .execute(
+            "sound.lane.add",
+            &json!({ "track": track, "param": "volume", "points": [[0, 0.0], [12_000, 1.0]] }),
+        )
+        .expect("the lane is added");
+    session
+        .execute("sound.track.copy", &json!({ "track": track, "start": 0, "end": 24_000 }))
+        .expect("the range is copied");
+    session
+        .execute("sound.track.paste", &json!({ "track": track, "at": 96_000 }))
+        .expect("the clipboard is pasted");
+    let points = lane_points(&session, track, "volume");
+    assert!(points.contains(&(96_000, 0.0)), "the breakpoint is where the material was put: {points:?}");
+    assert!(points.contains(&(108_000, 1.0)), "and the other one with it: {points:?}");
+}
+
+/// A **cut** takes the automation of the range away with it.
+#[test]
+fn a_cut_takes_the_automation_away() {
+    let mut session = session();
+    let (track, _) = a_track(&mut session, "cut-automation");
+    session
+        .execute(
+            "sound.lane.add",
+            &json!({ "track": track, "param": "volume", "points": [[0, 0.0], [12_000, 1.0], [48_000, 0.0]] }),
+        )
+        .expect("the lane is added");
+    session
+        .execute("sound.track.cut", &json!({ "track": track, "start": 0, "end": 24_000 }))
+        .expect("the range is cut");
+    let points = lane_points(&session, track, "volume");
+    assert!(!points.contains(&(0, 0.0)), "the breakpoint in the range is gone: {points:?}");
+    assert!(!points.contains(&(12_000, 1.0)), "and the other one: {points:?}");
+    assert!(points.contains(&(48_000, 0.0)), "and the one outside it is still there: {points:?}");
+}
+
+/// The **breakpoints** of a lane, read back.
+///
+/// A breakpoint is a pair: where, and what value.
+fn lane_points(session: &Session, _track: u64, param: &str) -> Vec<(i64, f64)> {
+    let document = session.document();
+    for lane in document.walk().filter(|node| node.kind == "sound.lane") {
+        if lane.data.get("param").and_then(|param| param.as_str()) != Some(param) {
+            continue;
+        }
+        let Some(points) = lane.data.get("points").and_then(|points| points.as_array()) else { continue };
+        let mut found = Vec::new();
+        for point in points {
+            let at = point.get(0).and_then(|at| at.as_i64()).unwrap_or(0);
+            let value = point.get(1).and_then(|value| value.as_f64()).unwrap_or(0.0);
+            found.push((at, value));
+        }
+        return found;
+    }
+    Vec::new()
+}

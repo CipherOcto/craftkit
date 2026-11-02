@@ -104,6 +104,40 @@ pub(crate) fn copies_of_range(
     copies
 }
 
+/// The **automation** of a range: the breakpoints of the track's lanes
+/// that fall inside it, moved to the range's own head.
+///
+/// A lane automates one thing and the tree's copy of a range carries
+/// the lanes with it, so that a paste brings the curve as well as the
+/// clips. A breakpoint outside the range is not carried: it belongs to
+/// the material around it.
+pub(crate) fn automation_of_range(
+    session: &Session,
+    track: u64,
+    start: i64,
+    end: i64,
+) -> Vec<(String, Vec<(i64, f64)>)> {
+    let document = session.document();
+    let mut lanes = Vec::new();
+    for lane in document.walk().filter(|node| node.kind == "sound.lane") {
+        if crate::timeline::parent_of(document, lane.id).map(|parent| parent.id) != Some(track) {
+            continue;
+        }
+        let Ok(payload) = crate::mixer::LanePayload::from_json(&lane.data) else { continue };
+        let points: Vec<(i64, f64)> = payload
+            .points
+            .iter()
+            .filter(|(at, _)| *at >= start && *at < end)
+            .map(|(at, value)| (at - start, *value))
+            .collect();
+        if points.is_empty() {
+            continue;
+        }
+        lanes.push((payload.param, points));
+    }
+    lanes
+}
+
 /// Take the material of a range **away**: the clips inside it are
 /// thrown away, and the clips that cross its edge keep the part
 /// outside it.

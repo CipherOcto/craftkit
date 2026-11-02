@@ -631,6 +631,8 @@ pub(crate) fn clip_ids_of(value: &serde_json::Value, id: &str) -> Result<Vec<u64
     Ok(ids)
 }
 
+/// The **automation** of a range: the breakpoints that fall inside it.
+pub(crate) use ranges::automation_of_range;
 /// Take the material of a range away.
 pub(crate) use ranges::clear_range_of;
 /// The **copies** of the material of a range, trimmed to it.
