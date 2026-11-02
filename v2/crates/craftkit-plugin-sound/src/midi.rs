@@ -461,10 +461,7 @@ impl ImportMidi {
         // length of the clip is the length its notes need **under the
         // music that came with them**.
         let map = tempo_map(session.document());
-        let end_tick = start_tick.saturating_add(payload.end_tick());
-        let length = map
-            .ticks_to_samples(end_tick, settings.sample_rate)
-            .saturating_sub(map.ticks_to_samples(start_tick, settings.sample_rate));
+        let length = length_of(&map, settings.sample_rate, start_tick, payload.end_tick());
         if length <= 0 {
             return Err(EngineError::Failed {
                 id,
@@ -498,6 +495,141 @@ impl ImportMidi {
             }),
         ))
     }
+}
+
+/// **Import a MIDI file as tracks**: a track for every track of the
+/// file.
+///
+/// The tree's import makes a **track** of the session for every track
+/// of the file, each with a clip of its own and an instrument on it. A
+/// file's tracks are its parts — a flute and a drum kit — and a clip
+/// that holds them all together has lost them.
+///
+/// The file's **music** may come in with it, as it does with
+/// `sound.clip.midi.import`: the tempos, the meters and the keys
+/// become the document's events at the place the file lands.
+///
+/// A file that holds no notes at all is **refused**: there is nothing
+/// to import.
+#[derive(Command)]
+#[command(
+    id = "sound.track.midi.import",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("File", "Import MIDI as Tracks"),
+    mutates,
+    undoable
+)]
+pub struct ImportMidiTracks {
+    /// The MIDI file to read.
+    pub path: Text,
+    /// Where the tracks are put, in samples.
+    pub start: Number,
+    /// Whether the file's **tempo map** comes in with it.
+    ///
+    /// The file's tempos, meters and key signatures become the
+    /// document's events. Without it, the file is read at the
+    /// document's own tempo.
+    pub tempo_map: Option<Bool>,
+}
+
+impl ImportMidiTracks {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.track.midi.import".to_string();
+        let start = samples(self.start.0, "where the tracks are put")?;
+        let path = self.path.0.clone();
+        let file = read_midi_file(&id, &path)?;
+        // The tracks of the file that hold something: a file may carry
+        // a track of nothing, and a track of nothing is not a track.
+        let parts: Vec<&craftkit_midi::SmfTrack> = file
+            .tracks
+            .iter()
+            .filter(|track| !track.sequence.notes.is_empty() || !track.sequence.ctrls.is_empty())
+            .collect();
+        if parts.is_empty() {
+            return Err(EngineError::Failed { id, message: format!("the file `{path}` holds no notes") });
+        }
+        let notes: usize = parts.iter().map(|track| track.sequence.notes.len()).sum();
+        if notes > MAX_NOTES {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the file `{path}` holds more than {MAX_NOTES} notes"),
+            });
+        }
+        let settings = session_of(session.document());
+        let map = tempo_map(session.document());
+        let start_tick = map.samples_to_ticks(start, settings.sample_rate);
+        // The **music the file carries** may come in with it.
+        let tempo_map_in = self.tempo_map.map(|flag| flag.0).unwrap_or(true);
+        let mut imported = Imported::default();
+        if tempo_map_in {
+            imported = import_music(session, &file, start_tick)?;
+        }
+        let map = tempo_map(session.document());
+        // A **track** for every part of the file, each with a clip of
+        // its own.
+        let mut made = Vec::with_capacity(parts.len());
+        for (index, part) in parts.iter().enumerate() {
+            let mut sequence = part.sequence.clone();
+            sequence.sort();
+            let payload = MidiPayload::from_sequence(&sequence);
+            let length = length_of(&map, settings.sample_rate, start_tick, payload.end_tick());
+            if length <= 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the notes of the track `{}` of `{path}` are no longer than a moment",
+                        part.name
+                    ),
+                });
+            }
+            let name = name_of(part, index);
+            let track = crate::add_track(session, &name)?;
+            let playlist = crate::playlist_of(session, track, None)?;
+            let mut clip = ClipPayload::new();
+            clip.start = start;
+            clip.length = length;
+            clip.content = Some(CONTENT_MIDI.to_string());
+            clip.midi = Some(payload);
+            let clip_id = session.document_mut()?.add_node_with_under(
+                Some(playlist),
+                name.clone(),
+                "sound.clip",
+                None,
+                clip.to_json(),
+            );
+            made.push(serde_json::json!({ "track": track, "clip": clip_id, "name": name }));
+        }
+        Ok(Outcome::changed(format!("imported the tracks of `{path}`")).with_data(serde_json::json!({
+            "tracks": made,
+            "count": made.len(),
+            "tempos": imported.tempos,
+            "meters": imported.meters,
+            "keys": imported.keys,
+        })))
+    }
+}
+
+/// The **name** of a track of a file: the name the file gives it, or
+/// the number of the track when it has none.
+///
+/// The name is **bounded**: a file may name a track with a very long
+/// string, and a name that long is not a name.
+fn name_of(track: &craftkit_midi::SmfTrack, index: usize) -> String {
+    let name = track.name.trim();
+    let name = if name.is_empty() { format!("MIDI {}", index + 1) } else { name.to_string() };
+    name.chars().take(MAX_NAME_CHARS).collect()
+}
+
+/// The most characters a **name** may have.
+const MAX_NAME_CHARS: usize = 256;
+
+/// How long a **clip** is: the room the notes need, at the tempo the
+/// document says where the clip is.
+fn length_of(map: &craftkit_sound_time::TempoMap, rate: u32, start_tick: i64, end_tick: i64) -> i64 {
+    let end = start_tick.saturating_add(end_tick);
+    map.ticks_to_samples(end, rate).saturating_sub(map.ticks_to_samples(start_tick, rate))
 }
 
 /// What a file brought in with it.

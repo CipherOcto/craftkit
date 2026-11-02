@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and four commands**, one for each thing a person does to a
+//! - **a hundred and five commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -437,7 +437,8 @@ pub use keys::{KeyKind, ReadKeys, SetKey};
 pub use locks::{EditLock, TimeLock};
 pub use marks::SetRating;
 pub use midi::{
-    DurationMidi, ExportMidi, ImportMidi, QuantizeMidi, ReadMidi, ReadMidiNames, TransposeMidi, VelocityMidi,
+    DurationMidi, ExportMidi, ImportMidi, ImportMidiTracks, QuantizeMidi, ReadMidi, ReadMidiNames,
+    TransposeMidi, VelocityMidi,
 };
 pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
@@ -7293,6 +7294,32 @@ fn find_event(session: &Session, kind: &str, tick: i64) -> Option<u64> {
         .map(|node| node.id)
 }
 
+/// Put a **track** into the document, with its take under it.
+///
+/// A track is a node and its take is a node under it: the track is
+/// the row of the timeline and the take is where the clips go. The
+/// track made here is an **instrument** track, because a track of
+/// notes is a track that is played.
+pub(crate) fn add_track(session: &mut Session, name: &str) -> Result<u64, EngineError> {
+    let payload = TrackPayload {
+        track_kind: "instrument".to_string(),
+        channels: 2,
+        solo: false,
+        trim_db: 0.0,
+        fader_db: 0.0,
+        pan: 0.0,
+        mute: false,
+        solo_safe: false,
+        phase_invert: false,
+        active_playlist: None,
+        elastic: None,
+    };
+    let document = session.document_mut()?;
+    let track = document.add_node_with(name.to_string(), "sound.track", None, payload.to_json());
+    document.add_node_with_under(Some(track), "A".to_string(), "sound.playlist", None, Json::Null);
+    Ok(track)
+}
+
 /// The playlist a clip goes in.
 ///
 /// The playlist is named, or it is the first one the track has.
@@ -7440,6 +7467,7 @@ craftkit_sdk::plugin_anchor!(
     SetMeter,
     SetKey,
     ReadKeys,
+    ImportMidiTracks,
     AddMarker,
     AddSource,
     MeasurePeaks,
