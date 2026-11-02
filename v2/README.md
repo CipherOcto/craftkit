@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1945 tests.** The MCP server links **all fifteen batteries** in, so the
+**1954 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1945 tests
+cargo test          # 1954 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3712,6 +3712,7 @@ so.
 | the **filling of a formula** | **built.** A fill copies a formula and shifts its references, and an anchored reference does not move (§275) | §275 |
 | the **date** of a cell | **built.** A date is a number and a date format, and the tree's calendar has the day in it that never happened (§276) | §276 |
 | the **fill of dates** | **built.** The tree's four date fills — days, weekdays, months and years — step through the calendar (§277) | §277 |
+| the **`TEXT`** of a formula | **built.** A formula writes a value with a format code, and the code may be in a cell (§278) | §278 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18709,10 +18710,11 @@ is **written**.
 ### What was built
 
 - The command `grid.cell.format` puts a **number format** on a cell.
-  The formats this tree has are `general`, `0`, `0.00`, `#,##0`,
-  `#,##0.00`, `0%` and `0.00%`. A format that is **not one of them**
-  is refused, and so is a format that is **too long** — the tree's own
-  bound of 255 characters.
+  The number formats this tree has are `general`, `0`, `0.00`, `#,##0`,
+  `#,##0.00`, `0%` and `0.00%` — and they are a **grammar**, so
+  `0.0000` and `#0` are codes too. A format that is **not a number
+  format of that shape** is refused, and so is a format that is **too
+  long** — the tree's own bound of 255 characters.
 - The command `grid.cell.text` reads the **text the cell shows**: the
   value of the cell written with its format. The value of a **formula**
   cell is computed, so this is the calculation.
@@ -18741,10 +18743,22 @@ is **written**.
   currency, accounting, fractions, scientific notation and text
   sections; and it **never fails** — an unknown part of a code becomes
   literal text, and a code that is too long becomes General, with the
-  code kept as it is. Here a code that is not one of the seven is
-  **refused**: the tree degrades quietly, and a format that is quietly
-  ignored is a format the user believes in and the program does not
-  have.
+  code kept as it is. Here a code that is neither a number format of
+  this shape nor one of the nine dates is **refused**: the tree
+  degrades quietly, and a format that is quietly ignored is a format
+  the user believes in and the program does not have.
+- **The number formats of this tree are a grammar, and the date
+  formats are a list — and §271 said that both were lists.** It said
+  "a code that is not one of them is refused", and named seven. The
+  seven are the ones the tree's own tests use; the **code** takes any
+  number of decimals and any arrangement of `0` and `#`, so `0.0000`
+  and `#0` are formats this tree has had since §271. The truth is that
+  the number formats are a small **grammar** — the thousands, a whole
+  part of placeholders with at least one `0` in it, up to fifteen
+  decimals and a percent sign — and that the date formats are a **list**
+  of nine, because the tree's date formats are a language and this one
+  has nine shapes of it (§276). The claim is corrected here, and the
+  crate's own words with it.
 - **The tree's General format is about a screen.** The tree's General
   format fits the number to the **width of the column** — fewer
   decimals, then scientific notation, then `####` — because a cell is
@@ -18782,9 +18796,9 @@ is **written**.
 - **The tree's style is not here**: a style is shared between cells and
   carries a font, a fill, borders, an alignment and a protection, and
   here the format is the cell's own.
-- **The tree's `TEXT` function is not here**: the tree's `TEXT` writes
-  a value with a format code inside a formula, and a formula in this
-  tree has no format code in it.
+- **The tree's `TEXT` function is not here** — and it is now (§278):
+  the tree's `TEXT` writes a value with a format code inside a
+  formula, and a formula in this tree has the codes of the format.
 
 ---
 
@@ -19269,3 +19283,78 @@ were not here. They are here now.
 - **The tree's `formats` and `values` modes are not here**: the first
   copies the style without the value, the second copies the value
   without the style.
+
+## 278. The `TEXT` of a formula
+
+§271 said the tree's `TEXT` was not here, and said why: "a formula in
+this tree has no format code in it". §276 gave the tree its date
+formats, so the reason is gone — and the reason was wrong in any case.
+
+### What was built
+
+- The formula language has the tree's **`TEXT`**: `TEXT(value, code)`
+  writes a value with a **format code** and the answer is a text.
+- The code is **evaluated**, so it may be a cell that holds a code.
+- A code that this tree does not have is an **error**, and the error
+  names the code.
+
+### What the port found
+
+- **The reason §271 gave was wrong, and the port had carried it for
+  eleven arcs.** §271 said a formula in this tree has no format code
+  in it — and the truth is that a formula may name **any** code, and
+  what it does with it is the question. The codes are here (§271 for
+  the numbers and §276 for the dates), so `TEXT` is a function of the
+  format module and not a new thing.
+- **The tree's `TEXT` takes the second argument as a value, not as a
+  code.** The tree's `TEXT` evaluates both of its arguments and then
+  asks the second one for its text: so `TEXT(A1, B1)` writes `A1` with
+  whatever code is **in** `B1`. Here the same: the code is a value, and
+  a value may be in a cell.
+- **The tree's `TEXT` is an error when the value is an error, and it
+  does not go on to write anything.** Here the same: the error of the
+  value is the error of the `TEXT`, and a `TEXT` with one argument or
+  with three is `#VALUE!`.
+- **The number formats of this tree are a grammar, and §271 said they
+  were a list.** §271 named seven number formats and said "a code
+  that is not one of them is refused" — and the seven are the ones the
+  tree's own tests use, while the **code** takes any number of
+  decimals and any arrangement of `0` and `#`. So `0.0000` and `#0`
+  have been formats this tree has had since §271, and the claim in
+  the README and in the crate's own words was false. It is corrected
+  here: the number formats are a small **grammar** — the thousands, a
+  whole part of placeholders with at least one `0` in it, up to
+  fifteen decimals and a percent sign — and the date formats are a
+  **list** of nine, because the tree's date formats are a language
+  and this one has nine shapes of it.
+- **A format that is refused by `grid.cell.format` is not refused by
+  `TEXT`, and that is a difference worth naming.** The command refuses
+  a code it does not have, because a command that sets a format is a
+  user writing a format; a formula that writes a value with a code it
+  does not have is an **error in a cell**, and the tree's own way of
+  saying that is the cell's error.
+
+### What it cost
+
+- **Nine tests** in the grid battery (`tests/text_function.rs`): a
+  `TEXT` writes a number with a format code, a `TEXT` of a percentage
+  multiplies it, a `TEXT` of a date writes the date, the code may be
+  in a cell, a code this tree does not have is an error, a `TEXT` with
+  the wrong arguments is an error, a `TEXT` of a text is the text, a
+  `TEXT` of a general format is the value, and a code with four
+  decimals is a code this tree has.
+- **Two claims corrected**: §271's list of seven number formats and
+  the reason it gave for the tree's `TEXT` not being here.
+- **No new command**: a function is not a command, and the formula
+  command is the same one. The grid battery still carries **12**
+  commands and the MCP server **363**.
+
+### What it does not settle
+
+- **The tree's `TEXT` takes the tree's whole format language** and
+  this one takes the grammar and the nine dates of this tree: a code
+  with a section, a colour or a fill is an error here and a text in
+  the tree.
+- **The tree's other functions are not here**: its `IF`, its `INDEX`,
+  its `XLOOKUP`, its `LET` and its `LAMBDA`, and the tree's
+  **volatile** functions.
