@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1844 tests.** The MCP server links **all fifteen batteries** in, so the
+**1854 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1844 tests
+cargo test          # 1854 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3700,6 +3700,7 @@ so.
 | the **trimming** of a clip | **built.** The head or the tail of a clip is trimmed, and a trim that would cross a bound is refused and says which bound (§263) | §263 |
 | the **moving** of a clip | **built.** A clip moves along its track or to another one, and a move that would land on another clip is refused (§264) | §264 |
 | the **keyframes** of a property | **built.** A keyframe is set and taken away, and the value of a property at a frame is the line between the keyframes (§265) | §265 |
+| the **inserting** of a clip | **built.** A gap opens at the place and the clips that are there are pushed along, so that nothing is cut (§266) | §266 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18251,9 +18252,9 @@ clip on a track and never move it.
 
 ### What it does not settle
 
-- **The insert is not here.** The tree's insert mode pushes the clips
-  after the moved one along the track, so that nothing is cut. That is
-  a different command and not a flag.
+- **The insert was not here — §266 is where it came.** The tree's
+  insert mode pushes the clips after the moved one along the track, so
+  that nothing is cut; it is a different command and not a flag.
 - **The tree's overwrite is not here**, and nothing here cuts a clip
   that a move would land on.
 - **The tree's linked clips are not here**, and neither is the tree's
@@ -18340,3 +18341,77 @@ the value at a time is derived, so there was no way to make one.
   property, and an expression is a language and not a value.
 - **The tree's linked properties are not here**: the tree may key two
   properties together, and here a property is a property.
+
+---
+
+## 266. The inserting of a clip
+
+The tree moves a clip in two modes: the **overwrite**, which cuts what
+is under the clip, and the **insert**, which opens a gap and pushes the
+clips along. The overwrite is §264, and this is the insert.
+
+### What was built
+
+- The command `film.clip.insert` puts a clip at a place on a track and
+  opens a **gap of the clip's length** there: every clip on the track
+  that starts at or after that place is **pushed along** by that
+  length, so that nothing is cut. The clip may go to **another track**,
+  and the gap opens there.
+- A clip that **spans** the place is **refused**, and the refusal names
+  it: "the clip on the track runs from frame 20 to frame 50, and it
+  spans the place the gap opens at". The tree splits such a clip so
+  that the gap has two edges; here splitting is a command of its own.
+- A start that is **before the timeline** is refused, and so is a start
+  that is **not a whole number**, and so is a node that is not a clip,
+  and so is a node that is not a track, and so is a node that is not
+  there.
+
+### What the port found
+
+- **The tree's insert opens the gap and then places the clip, and the
+  order matters.** The tree's `insert` computes the place and the
+  length of the gap from the placements, opens the gap on every
+  affected track, and only then puts the clips down. Here the gap is
+  the clip's own length and the place is the one the caller gave, so
+  the order is the same: the gap opens, the clips move, and the clip
+  goes down.
+- **The tree's gap splits a clip that spans the place, and that split
+  is a command in its own right.** The tree's `split_track_at` cuts a
+  clip in two: the left piece keeps its id, the right piece gets a new
+  one, and the media moves with the cut — and the tree's razor does
+  the same thing on purpose. Here a split is not a side effect: the
+  insert is **refused** and the clip that spans the place is named,
+  because a command that splits a clip while it moves another one is a
+  command that does two things and says one.
+- **The tree shifts the clips that start at or after the place, and
+  not the ones that span it.** The tree's `shift_track_from` moves
+  every item whose start is at or after the place; a clip that spans
+  the place is handled by the split that comes before it. Here the
+  clips that start at or after the place are pushed, and a clip that
+  spans it is refused, so the two cases do not overlap.
+- **The tree's insert opens the gap on the sync-locked tracks too.**
+  The tree's `insert` walks the tracks and opens the gap on the ones
+  that are **sync-locked** with the target, so that a group of
+  tracks stays together. Here a track is a track, and there is no
+  lock to be in.
+
+### What it cost
+
+- **Ten tests** in the film battery (`tests/insert.rs`): an insert
+  pushes the clips along, the gap opens at the place, a clip that
+  spans the place is refused, a clip is inserted on another track, the
+  end of the track grows, a start before the timeline is refused, a
+  start that is not a whole number is refused, a node that is not a
+  clip is refused, a node that is not a track is refused, and a node
+  that is not there is refused.
+- **One command** (`film.clip.insert`). The film battery now carries
+  **8** commands and the MCP server **354**.
+
+### What it does not settle
+
+- **The sync-locked tracks are not here**, and neither is the tree's
+  **locked** track: a locked track refuses an edit in the tree, and
+  here a track has no lock to refuse with.
+- **The split is not here.** The tree's razor divides a clip at a
+  place, and that is a command of its own — the same command that
+  would make the insert possible on a clip that spans the place.
