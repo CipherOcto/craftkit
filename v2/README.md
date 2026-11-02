@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1680 tests.** The MCP server links **all fifteen batteries** in, so the
+**1684 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1680 tests
+cargo test          # 1684 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3675,6 +3675,7 @@ so.
 | the **names** of the notes | **built.** A pitch, a drum and a program are named by the tree's own tables, and a clip's notes are read with their names (§237) | §237 |
 | the **key** of the session | **built.** The key is set at a place and read back, kept as the sharps and the mode a file carries (§238) | §238 |
 | the **music** of a MIDI file | **built.** The file's tempos, meters and keys come in with it and go out with it, and the notes land where the music lands (§239) | §239 |
+| the **tracks** of a MIDI file | **built.** Every track of the file becomes a track of the session, with a clip of its own (§240) | §240 |
 
 ### The list of things that are honestly not there: empty
 
@@ -16547,7 +16548,9 @@ the export writes the tempo map out and writes no keys at all.
 - **A file still becomes one clip.** The tree makes a **track** for
   every track of the file, each with its own instrument and its own
   clip; here the notes of every track of the file become the notes of
-  one clip. The tracks of a file are a separate thing to close.
+  one clip. The tracks of a file are a separate thing to close. (There
+  is now: §240 closed it with a command of its own, and this sentence
+  was written before it did.)
 - **The tree's import sets an instrument on each track it makes** — a
   drum kit for a track of drums and a subtractive synth for anything
   else — and this tree has no instruments to set.
@@ -16556,3 +16559,73 @@ the export writes the tempo map out and writes no keys at all.
   had two files imported into it has the keys of both, and the later
   one does not replace the earlier one unless they land on the same
   tick.
+
+## 240. The tracks of a MIDI file
+
+A MIDI file holds **tracks**, and they are its parts: a flute and a
+drum kit are two tracks of the same piece. The tree's import makes a
+track of the session for every track of the file, each with a clip of
+its own; this tree's import made one clip with all the notes in it.
+
+### What was built
+
+- A command of its own, `sound.track.midi.import`, which reads a file
+  and makes a **track of the session** for every track of the file
+  that holds something: a track, a take under it, and a clip in that
+  take with the notes of that part of the file.
+- The track is named after the track of the file, and a track of the
+  file that has no name is named by its number: "MIDI 1".
+- A track of the file that holds **nothing** — no notes and no
+  controllers — is not a track, and no track is made for it.
+- The file's **music** may come in with it, as it does with
+  `sound.clip.midi.import`: the tempos, the meters and the keys become
+  the document's events at the place the file lands.
+- A file that holds **no notes at all** is refused, as it is by the
+  clip import: there is nothing to import.
+
+### What the port found
+
+- **The tree's import makes a track for every track of the file and
+  this tree's made one clip.** The tree's `import_midi_bytes` walks
+  the tracks of the file and, for each of them, adds a track of the
+  session with a clip of its own. The notes of a flute and the notes
+  of a drum kit are in one clip here, and a clip is one sequence: the
+  two parts are one thing, and the tree keeps them apart.
+- **The tree names the tracks it makes and sets an instrument on
+  them.** The tree's track is named after the track of the file, or
+  "MIDI 1" when the file gives it no name, and it carries an
+  instrument: a drum kit for a track whose notes are all on the drum
+  channel, and a subtractive synth for anything else. Here the name is
+  the same and the instrument is not: this tree's processes are named
+  by the battery (§ the processes on a clip), and a battery that names
+  an instrument it does not have would be a battery that names a
+  process it will not do.
+- **The tree's import skips a track of the file that holds nothing,
+  and so does this one.** The tree's import makes no track for a file
+  track that holds neither notes nor controllers, and neither does
+  this tree's: a track of nothing is not a track, and a session with
+  one in it has a row that can never be heard.
+- **The tree's name is bounded at two hundred and fifty-six
+  characters.** The tree truncates the name of a track it makes to the
+  length the model allows, because a file may name a track with a very
+  long string. Here the name is bounded the same way.
+
+### What it cost
+
+- **Four tests** in the sound battery (`tests/importtracks.rs`): every
+  track of the file becomes a track, each track holds its own notes,
+  the music of the file comes in with it, and a file with no notes is
+  refused.
+- **One command** (`sound.track.midi.import`). The sound battery now
+  carries **105** commands and the MCP server **316**.
+
+### What it does not settle
+
+- **The tracks made here carry no instrument.** The tree's do, and a
+  track of notes with no instrument on it makes no sound until one is
+  put there.
+- **The clip import still makes one clip out of the whole file.** The
+  two commands are two ways to read a file: one makes the parts, and
+  the other makes a single clip with all of them. The tree has only
+  the first, and this tree has both because the clip import was here
+  first (§ the MIDI of a clip).
