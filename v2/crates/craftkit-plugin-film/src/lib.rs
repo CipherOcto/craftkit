@@ -23,6 +23,11 @@
 //! stopped it — the tree clamps the same trim and says nothing (the
 //! module `trim`).
 //!
+//! And a clip may be **moved**: along its track or to another one, and
+//! a move that would land on another clip is **refused** and names the
+//! clip that would have been cut — the tree cuts it and says nothing
+//! about the cut (the module `moving`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -68,8 +73,10 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+mod moving;
 mod trim;
 
+pub use moving::MoveClip;
 pub use trim::TrimClip;
 
 /// The film layer.
@@ -454,7 +461,14 @@ impl TimelineEvaluator {
     id = "panel.film",
     label = "Film",
     layer = "film",
-    commands("film.bin.add", "film.item.add", "film.track.add", "film.clip.add", "film.clip.trim")
+    commands(
+        "film.bin.add",
+        "film.item.add",
+        "film.track.add",
+        "film.clip.add",
+        "film.clip.trim",
+        "film.clip.move"
+    )
 )]
 pub struct FilmPanel;
 
@@ -483,6 +497,7 @@ craftkit_sdk::plugin_anchor!(
     AddClip,
     ReadTimeline,
     TrimClip,
+    MoveClip,
     TimelineEvaluator,
     FilmPanel
 );
