@@ -17,8 +17,10 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **twenty-five commands**: `vector.rectangle`, `vector.ellipse` and
-//!   `vector.polygon` make shapes; `vector.path.unite`,
+//! - **twenty-eight commands**: `vector.rectangle`, `vector.ellipse` and
+//!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
+//!   `vector.spiral` make the shapes the tree makes that are not
+//!   polygons; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
 //!   `vector.path.offset` work on whole paths; `vector.path.move` and
@@ -62,6 +64,10 @@
     clippy::unreachable
 )]
 #![forbid(unsafe_code)]
+
+mod shapes;
+
+pub use shapes::{AddLine, AddSpiral, AddStar};
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
 use craftkit_sdk::{
@@ -2029,6 +2035,9 @@ craftkit_sdk::plugin_anchor!(
     AddRectangle,
     AddEllipse,
     AddPolygon,
+    AddStar,
+    AddLine,
+    AddSpiral,
     UnitePaths,
     SubtractPaths,
     IntersectPaths,
