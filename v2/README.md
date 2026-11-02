@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1708 tests.** The MCP server links **all fifteen batteries** in, so the
+**1714 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1708 tests
+cargo test          # 1714 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3679,6 +3679,7 @@ so.
 | the **consolidate** of a track | **built.** The sound of a track's clips over a range is written to a file, and the clips become one clip of it (§242) | §242 |
 | the **taking away** of a node | **built.** A clip, a marker and a track can be taken away, and what goes with them goes with them (§243) | §243 |
 | the **onsets** in the spectrum | **built.** The tree's own detector, with the transform written here because the kit has no dependencies (§244) | §244 |
+| the **split** into mono | **built.** A stereo track becomes a track for each channel, panned to the sides, and a mono source is heard in every channel of the mix (§245) | §245 |
 
 ### The list of things that are honestly not there: empty
 
@@ -16906,3 +16907,76 @@ own crates, with no dependency at all**.
   material is read and not the clip's rendered sound, so a clip that
   is pitched or processed is cut at the attacks of the **material**
   (§221).
+
+## 245. The split into mono
+
+A stereo track is two channels that travel together, and a track of one
+channel is two things that can be heard apart. The tree's editor splits
+a stereo track into a track for each of its channels.
+
+### What was built
+
+- The command `sound.track.split.mono` makes a **track** for each
+  channel of a track: each of them is **mono**, each of them is panned
+  to its side — the left one hard left and the right one hard right —
+  and each of them plays the channel of the material that is its own.
+- The channel is written to a **file** of its own, beside the session:
+  this tree's sources are files and not a pool of sounds, so the
+  channel of a source is a file.
+- The **original** track is left where it is: it is the caller's to
+  mute, and the tree leaves it too.
+- A track that is **not** stereo is **refused**: there is nothing to
+  split, and a command that quietly does nothing is a command that
+  answers a question nobody asked.
+- The **mix** learned the tree's rule for a narrow source: the mix is
+  as wide as the **widest** source, and a source that is narrower is
+  heard in every channel of the mix — the tree's renderer takes the
+  source's channel `c % n` for the mix's channel `c`.
+
+### What the port found
+
+- **The tree's split writes a file for each channel and so does this
+  one — but the tree's files live in a pool.** The tree's split copies
+  the channel of the source into a new source of the session's pool,
+  and the copies are shared between the clips that need them. Here a
+  source is a **file** on the disk (§ the source of a clip), so the
+  channel is a file: "<source>.L.wav" beside the session, with the
+  asset that carries it.
+- **The tree's split keeps the whole channel.** Its own words: the
+  cloned clips keep their offsets, their stretch, their gain and their
+  fades, and every reader sees genuine mono media. Here the same: the
+  mono file holds the whole channel, and the clips that play it keep
+  everything they had.
+- **The tree's mix lets a narrow source be narrow and this one
+  refused it.** The tree's renderer takes the source's channel `c % n`
+  for the track's channel `c`, so a mono source in a stereo track is
+  heard in both channels. Here the mix **refused** a document whose
+  sources did not all have the same number of channels — a mono source
+  in a stereo session was not a document that could be played at all.
+  The mix is now as wide as the widest source, and a narrower source
+  is heard in every channel of it.
+- **The tree's split is over a selection and this one names a track.**
+  The same gap as the velocity's (§229) and the taking away's (§243),
+  and the same answer.
+
+### What it cost
+
+- **Five tests** in the sound battery (`tests/split.rs`): a stereo
+  track is split into two, the two are panned to the sides, each track
+  plays one channel of the material, the original track is left where
+  it is, and a mono track is refused.
+- **One test** in the sound battery (`tests/mix.rs`): a mono source is
+  heard in both channels of a stereo mix.
+- **One command** (`sound.track.split.mono`). The sound battery now
+  carries **110** commands and the MCP server **321**.
+
+### What it does not settle
+
+- **The new tracks carry none of the old one's settings.** The tree's
+  new track is a fresh one with a pan and nothing else, and this one
+  is the same: the fader, the mute and the sends are the caller's to
+  set again.
+- **The tree's split copies the clips into the new tracks and keeps
+  the original's auto-rename scheme; this one's copies do not.** The
+  scheme is a node and the copies are not in it (§ the auto rename of
+  a clip), and nothing has been said about them yet.
