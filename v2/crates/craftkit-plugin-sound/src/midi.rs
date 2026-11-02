@@ -39,7 +39,7 @@ use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::Value as Json;
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Session, Text};
 
 use crate::{ClipPayload, samples, session_of, tempo_map};
 
@@ -52,6 +52,14 @@ pub(crate) const CONTENT_MIDI: &str = "midi";
 /// and a clip with more of them is a clip the kit cannot draw, cannot
 /// save and cannot undo.
 const MAX_NOTES: usize = 65_536;
+
+/// The most **music** a file may bring in with it: the tempo, meter
+/// and key events that go into the document.
+///
+/// The tree caps the meters of a file at ten thousand, and a score has
+/// a handful; the cap is here so that a file cannot fill the document
+/// with events.
+const MAX_MUSIC_EVENTS: usize = 10_000;
 
 /// The most a MIDI file may weigh, in bytes.
 ///
@@ -371,12 +379,16 @@ impl MidiPayload {
 /// tracks become the notes of the clip: a clip holds one sequence, and
 /// a file may hold many.
 ///
-/// The **tempo** of the file is not the tempo of the document, and the
-/// document's is the one that is used: the notes are in ticks, and the
-/// ticks are read at the tempo the document says. A file that carries
-/// a tempo of its own is imported at the document's tempo, and the
-/// file's tempo is not read into the document — because a second tempo
-/// map would be a second truth about the same timeline.
+/// The **tempo map** of the file may come in with it: the `tempo_map`
+/// parameter says whether it does, and it does by default. The file's
+/// **tempos**, **meters** and **key signatures** then become the
+/// document's own events, at the place the file is imported to plus
+/// the file's own tick — so the music of the file lands where the file
+/// lands.
+///
+/// Without it, the file is imported at the document's tempo: the notes
+/// are in ticks, and the ticks are read at the tempo the document says.
+/// A second tempo map would be a second truth about the same timeline.
 ///
 /// The **length** of the clip is **derived**: it is as long as the
 /// notes need, at the tempo the document says where the clip starts. A
@@ -399,6 +411,12 @@ pub struct ImportMidi {
     pub start: Number,
     /// The MIDI file to read.
     pub path: Text,
+    /// Whether the file's **tempo map** comes in with it.
+    ///
+    /// The file's tempos, meters and key signatures become the
+    /// document's events. Without it, the file is read at the
+    /// document's own tempo.
+    pub tempo_map: Option<Bool>,
 }
 
 impl ImportMidi {
@@ -430,6 +448,19 @@ impl ImportMidi {
         let settings = session_of(session.document());
         let map = tempo_map(session.document());
         let start_tick = map.samples_to_ticks(start, settings.sample_rate);
+        // The **music the file carries** may come in with it: its
+        // tempos, its meters and its key signatures become the
+        // document's events, at the place the file lands plus the
+        // file's own tick.
+        let tempo_map_in = self.tempo_map.map(|flag| flag.0).unwrap_or(true);
+        let mut imported = Imported::default();
+        if tempo_map_in {
+            imported = import_music(session, &file, start_tick)?;
+        }
+        // The tempo map may have changed, so it is read again: the
+        // length of the clip is the length its notes need **under the
+        // music that came with them**.
+        let map = tempo_map(session.document());
         let end_tick = start_tick.saturating_add(payload.end_tick());
         let length = map
             .ticks_to_samples(end_tick, settings.sample_rate)
@@ -461,9 +492,151 @@ impl ImportMidi {
                 "ctrls": sequence.ctrls.len(),
                 "start": start,
                 "length": length,
+                "tempos": imported.tempos,
+                "meters": imported.meters,
+                "keys": imported.keys,
             }),
         ))
     }
+}
+
+/// What a file brought in with it.
+#[derive(Debug, Default, Clone, Copy)]
+struct Imported {
+    /// How many tempos came in.
+    tempos: usize,
+    /// How many meters came in.
+    meters: usize,
+    /// How many key signatures came in.
+    keys: usize,
+}
+
+/// The **music** of a MIDI file, brought into the document.
+///
+/// The file's **tempos** become tempo events, its **meters** become
+/// meter events and its **key signatures** become key events, each at
+/// the place the file was imported to plus the event's own tick.
+///
+/// The tree puts the file's tempos at the file's **own** ticks and
+/// nowhere near the place the file was imported to — while its notes
+/// are moved to that place. Here the events are moved with the notes,
+/// because an event that stayed behind would say something about a
+/// piece of music that is not there.
+///
+/// The tree's import **drops** the key signatures; here they come in,
+/// because the file carries them and a key is a fact (§ the key of the
+/// session).
+fn import_music(
+    session: &mut Session,
+    file: &craftkit_midi::Smf,
+    base_tick: i64,
+) -> Result<Imported, EngineError> {
+    let id = "sound.clip.midi.import".to_string();
+    let events = file.tempos.len() + file.meters.len() + file.key_sigs.len();
+    if events > MAX_MUSIC_EVENTS {
+        return Err(EngineError::Failed {
+            id,
+            message: format!(
+                "a file may bring at most {MAX_MUSIC_EVENTS} tempo, meter and key events, and this one brings {events}"
+            ),
+        });
+    }
+    let mut imported = Imported::default();
+    for (tick, bpm) in &file.tempos {
+        if !bpm.is_finite() || !(5.0..=1000.0).contains(bpm) {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the file's tempo at tick {tick} is {bpm}, and it is not a tempo between 5 and 1000"
+                ),
+            });
+        }
+        set_tempo(session, base_tick.saturating_add(*tick), *bpm)?;
+        imported.tempos += 1;
+    }
+    for (tick, numerator, denominator) in &file.meters {
+        set_meter(session, base_tick.saturating_add(*tick), *numerator, *denominator)?;
+        imported.meters += 1;
+    }
+    for (tick, sharps, minor) in &file.key_sigs {
+        set_key(session, base_tick.saturating_add(*tick), *sharps, *minor)?;
+        imported.keys += 1;
+    }
+    Ok(imported)
+}
+
+/// Put a **tempo** into the document, at a tick.
+fn set_tempo(session: &mut Session, tick: i64, bpm: f64) -> Result<(), EngineError> {
+    let payload = crate::TempoPayload { tick, bpm };
+    match crate::find_event(session, "sound.tempo", tick) {
+        Some(existing) => {
+            if let Some(node) = session.document_mut()?.node_mut(existing) {
+                node.data = payload.to_json();
+                node.name = format!("tempo {bpm}");
+            }
+        }
+        None => {
+            session.document_mut()?.add_node_with(
+                format!("tempo {bpm}"),
+                "sound.tempo",
+                None,
+                payload.to_json(),
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Put a **meter** into the document, at a tick.
+fn set_meter(session: &mut Session, tick: i64, numerator: u8, denominator: u8) -> Result<(), EngineError> {
+    let id = "sound.clip.midi.import".to_string();
+    if !(1..=64).contains(&numerator) || ![1, 2, 4, 8, 16, 32, 64].contains(&denominator) {
+        return Err(EngineError::Failed {
+            id,
+            message: format!("the file's meter {numerator}/{denominator} is not a meter"),
+        });
+    }
+    let payload = crate::MeterPayload { tick, numerator: numerator as u32, denominator: denominator as u32 };
+    match crate::find_event(session, "sound.meter", tick) {
+        Some(existing) => {
+            if let Some(node) = session.document_mut()?.node_mut(existing) {
+                node.data = payload.to_json();
+                node.name = format!("meter {numerator}/{denominator}");
+            }
+        }
+        None => {
+            session.document_mut()?.add_node_with(
+                format!("meter {numerator}/{denominator}"),
+                "sound.meter",
+                None,
+                payload.to_json(),
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Put a **key** into the document, at a tick.
+fn set_key(session: &mut Session, tick: i64, sharps: i8, minor: bool) -> Result<(), EngineError> {
+    let payload = crate::keys::KeyPayload { tick, sharps, minor };
+    let name = craftkit_midi::names::key_name(sharps, minor).unwrap_or_default();
+    match crate::find_event(session, "sound.key", tick) {
+        Some(existing) => {
+            if let Some(node) = session.document_mut()?.node_mut(existing) {
+                node.data = payload.to_json();
+                node.name = format!("key {name}");
+            }
+        }
+        None => {
+            session.document_mut()?.add_node_with(
+                format!("key {name}"),
+                "sound.key",
+                None,
+                payload.to_json(),
+            );
+        }
+    }
+    Ok(())
 }
 
 /// **Export the MIDI** of a clip to a file.
@@ -511,10 +684,65 @@ impl ExportMidi {
         let Some(midi) = payload.midi.clone() else {
             return Err(EngineError::Failed { id, message: format!("the clip `{clip_id}` holds no notes") });
         };
+        // The **music** goes out with the notes: the document's tempo
+        // map, its meters and its keys are written into the file, and
+        // the notes are placed at the ticks they are at in the
+        // document. A file of notes with no tempo plays at the
+        // default, and the default is not the music.
+        let settings = session_of(session.document());
+        let map = tempo_map(session.document());
+        let base = map.samples_to_ticks(payload.start, settings.sample_rate);
+        let mut sequence = midi.to_sequence();
+        for note in &mut sequence.notes {
+            note.start = note.start.saturating_add(base);
+        }
+        for ctrl in &mut sequence.ctrls {
+            ctrl.tick = ctrl.tick.saturating_add(base);
+        }
+        sequence.sort();
+        let mut tempos = Vec::new();
+        let mut meters = Vec::new();
+        let mut key_sigs = Vec::new();
+        let mut markers = Vec::new();
+        for node in session.document().walk() {
+            match node.kind.as_str() {
+                "sound.tempo" => {
+                    if let Ok(payload) = crate::TempoPayload::from_json(&node.data) {
+                        tempos.push((payload.tick, payload.bpm));
+                    }
+                }
+                "sound.meter" => {
+                    if let Ok(payload) = crate::MeterPayload::from_json(&node.data) {
+                        meters.push((payload.tick, payload.numerator as u8, payload.denominator as u8));
+                    }
+                }
+                "sound.key" => {
+                    if let Ok(payload) = crate::keys::KeyPayload::from_json(&node.data) {
+                        key_sigs.push((payload.tick, payload.sharps, payload.minor));
+                    }
+                }
+                "sound.marker" => {
+                    // A marker's **name** is the node's name, and the
+                    // file's marker is a tick and a text.
+                    if let Ok(payload) = crate::MarkerPayload::from_json(&node.data) {
+                        let tick = map.samples_to_ticks(payload.start, settings.sample_rate);
+                        markers.push((tick, node.name.clone()));
+                    }
+                }
+                _ => {}
+            }
+        }
+        tempos.sort_by_key(|(tick, _)| *tick);
+        meters.sort_by_key(|(tick, _, _)| *tick);
+        key_sigs.sort_by_key(|(tick, _, _)| *tick);
+        markers.sort_by_key(|(tick, _)| *tick);
         let file = craftkit_midi::Smf {
             format: 1,
-            tracks: vec![craftkit_midi::SmfTrack { name: node.name.clone(), sequence: midi.to_sequence() }],
-            ..craftkit_midi::Smf::default()
+            tracks: vec![craftkit_midi::SmfTrack { name: node.name.clone(), sequence }],
+            tempos,
+            meters,
+            key_sigs,
+            markers,
         };
         let bytes = craftkit_midi::write_smf(&file).map_err(|error| EngineError::Failed {
             id: id.clone(),
@@ -531,6 +759,10 @@ impl ExportMidi {
                 "notes": midi.notes.len(),
                 "ctrls": midi.ctrls.len(),
                 "bytes": bytes.len(),
+                "tempos": file.tempos.len(),
+                "meters": file.meters.len(),
+                "keys": file.key_sigs.len(),
+                "markers": file.markers.len(),
             }),
         ))
     }
