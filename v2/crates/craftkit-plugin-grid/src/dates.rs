@@ -233,6 +233,82 @@ fn the_date(year: i64, month: i64, day: i64) -> Option<Date> {
     from_serial(serial)
 }
 
+/// Whether a serial falls on **Monday to Friday**.
+///
+/// The Saturday is the sixth day and the Sunday is the zeroth, as the
+/// tree has them.
+pub fn is_weekday(serial: f64) -> Option<bool> {
+    from_serial(serial).map(|date| date.weekday != 0 && date.weekday != 6)
+}
+
+/// A serial moved by `n` **weekdays**.
+///
+/// The Saturday and the Sunday are skipped, and a start that is on one
+/// of them moves to the next weekday for the first step. From a
+/// weekday every seven days hold five weekdays.
+pub fn add_weekdays(serial: f64, n: i64) -> Option<f64> {
+    if n == 0 {
+        return Some(serial);
+    }
+    let step = if n > 0 { 1.0 } else { -1.0 };
+    let mut day = serial;
+    let next_weekday = |day: &mut f64| -> Option<()> {
+        loop {
+            *day += step;
+            match is_weekday(*day) {
+                Some(true) => return Some(()),
+                Some(false) => {}
+                None => return None,
+            }
+        }
+    };
+    next_weekday(&mut day)?;
+    let rest = n.unsigned_abs() - 1;
+    day += step * ((rest / 5) * 7) as f64;
+    for _ in 0..rest % 5 {
+        next_weekday(&mut day)?;
+    }
+    from_serial(day)?;
+    Some(day)
+}
+
+/// How many weekdays lie after `a` up to and including `b`.
+///
+/// The count is negative when `b` comes first.
+pub fn weekdays_between(a: f64, b: f64) -> Option<i64> {
+    let (low, high, sign) = if b >= a { (a.floor(), b.floor(), 1) } else { (b.floor(), a.floor(), -1) };
+    let days = (high - low) as i64;
+    let mut count = days / 7 * 5;
+    let mut day = low + (days / 7 * 7) as f64;
+    for _ in 0..days % 7 {
+        day += 1.0;
+        if is_weekday(day)? {
+            count += 1;
+        }
+    }
+    Some(count * sign)
+}
+
+/// A serial moved by `months` **calendar months**.
+///
+/// The day of the month is kept and **clamped** to the length of the
+/// month it lands in — the 31st of January plus a month is the 28th of
+/// February — and the months are always counted from the **original**
+/// date, so a series does not drift: the 31st of January, the 28th of
+/// February, the 31st of March, the 30th of April.
+pub fn add_months(serial: f64, months: i64) -> Option<f64> {
+    let date = from_serial(serial)?;
+    let total =
+        i64::from(date.year).checked_mul(12)?.checked_add(i64::from(date.month) - 1)?.checked_add(months)?;
+    let year = total.div_euclid(12);
+    let month = total.rem_euclid(12) + 1;
+    let year = i32::try_from(year).ok()?;
+    let last = days_in_month(year, month as u32);
+    let day = i64::from(date.day).min(i64::from(last));
+    let base = to_serial(year, month as u32, day as u32)?;
+    Some(base + serial - serial.floor())
+}
+
 /// The days from the 1st of January 1970 to a date.
 ///
 /// The Gregorian calendar, for every year: the calendar repeats every

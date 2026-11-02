@@ -257,7 +257,9 @@ fn a_mode_that_is_not_a_mode_is_refused() {
         .execute("grid.range.fill", &json!({ "sheet": sheet, "from": "A1", "to": "A1:A3", "mode": "guess" }))
         .expect_err("the fill is refused");
     assert!(
-        error.to_string().contains("a fill is `copy`, `series`, `extend` or `alternate`"),
+        error.to_string().contains(
+            "a fill is `copy`, `series`, `extend`, `alternate`, `days`, `weekdays`, `months` or `years`"
+        ),
         "the error says why: {error}"
     );
 }

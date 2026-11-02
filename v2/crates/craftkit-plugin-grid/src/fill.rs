@@ -17,6 +17,13 @@
 //! right-drag **Fill Series** (`extend`) and the tree's `Ctrl`+drag
 //! (`alternate`) count a lone number up.
 //!
+//! And the tree has **four** ways of filling a range of **dates** —
+//! `days`, `weekdays`, `months` and `years` — and they step through
+//! the calendar: a fill of weekdays skips the Saturday and the
+//! Sunday, and a fill of months keeps the day of the month and clamps
+//! it to the month it lands in. A source that is **not** dates extends
+//! like a plain drag.
+//!
 //! The tree's **trend** is the tree's: the **least squares** line
 //! through the numbers of the source, so `1, 3` goes on as `5, 7, 9`.
 //!
@@ -54,9 +61,10 @@
 //! # What it does not do
 //!
 //! - **The tree's lists are not here** — the days, the months, the
-//!   quarters — and neither are the tree's **dates**: a text that is a
-//!   day of the week is copied here, and the tree would step through
-//!   the week.
+//!   quarters — and a text that is a day of the week is copied here,
+//!   and the tree would step through the week. The tree's **dates**
+//!   are here: the `days`, `weekdays`, `months` and `years` modes,
+//!   and the calendar they step through (§276).
 //! - **The tree's `formats` and `values` modes are not here**: the
 //!   first copies the style without the value, the second copies the
 //!   value without the style.
@@ -66,6 +74,8 @@ use craftkit_derive::Command;
 use craftkit_sdk::serde_json::{self, json};
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
 
+use crate::dates;
+use crate::format::Format;
 use crate::formula::{self, Area, CellRef, Value};
 use crate::{cells_into, cells_of, sheet_cells_mut};
 
@@ -89,6 +99,16 @@ enum Mode {
     /// The tree's `Ctrl`+drag: a lone number counts up and everything
     /// else is copied.
     Alternate,
+    /// The tree's **Fill Days**: a date steps by days.
+    Days,
+    /// The tree's **Fill Weekdays**: a date steps by weekdays, and the
+    /// Saturday and the Sunday are skipped.
+    Weekdays,
+    /// The tree's **Fill Months**: a date steps by months, and the day
+    /// of the month is clamped to the month it lands in.
+    Months,
+    /// The tree's **Fill Years**: a date steps by years.
+    Years,
 }
 
 impl Mode {
@@ -99,13 +119,22 @@ impl Mode {
             "series" => Some(Mode::Series),
             "extend" => Some(Mode::Extend),
             "alternate" => Some(Mode::Alternate),
+            "days" => Some(Mode::Days),
+            "weekdays" => Some(Mode::Weekdays),
+            "months" => Some(Mode::Months),
+            "years" => Some(Mode::Years),
             _ => None,
         }
     }
 
     /// Whether the mode **continues a series** rather than copying it.
     fn extends(self) -> bool {
-        matches!(self, Mode::Series | Mode::Extend)
+        matches!(self, Mode::Series | Mode::Extend | Mode::Days | Mode::Weekdays | Mode::Months | Mode::Years)
+    }
+
+    /// Whether the mode is one of the tree's **date** modes.
+    fn is_date(self) -> bool {
+        matches!(self, Mode::Days | Mode::Weekdays | Mode::Months | Mode::Years)
     }
 }
 
@@ -122,6 +151,26 @@ enum Pattern {
         last: f64,
         /// How much it counts on by.
         step: f64,
+    },
+    /// A series of **weekdays**: the Saturday and the Sunday are
+    /// skipped.
+    Weekdays {
+        /// The number the series starts from.
+        first: f64,
+        /// The number it ends on, at the source.
+        last: f64,
+        /// How many weekdays it steps by.
+        step: i64,
+    },
+    /// A series of **months**, and the day of the month is clamped to
+    /// the month it lands in.
+    Months {
+        /// The number the series starts from.
+        first: f64,
+        /// The number it ends on, at the source.
+        last: f64,
+        /// How many months it steps by.
+        months: i64,
     },
     /// Text with a number in it: `Item 1`.
     TextNum {
@@ -159,6 +208,16 @@ impl Pattern {
                 let number = number.checked_abs()?;
                 Some(Value::Text(format!("{prefix}{number:0width$}{suffix}", width = *width)))
             }
+            Pattern::Weekdays { first, last, step } => {
+                let base = if forward { *last } else { *first };
+                let count = step.checked_mul(k)?.checked_mul(sign)?;
+                dates::add_weekdays(base, count).map(Value::Number)
+            }
+            Pattern::Months { first, last, months } => {
+                let base = if forward { *last } else { *first };
+                let count = months.checked_mul(k)?.checked_mul(sign)?;
+                dates::add_months(base, count).map(Value::Number)
+            }
         }
     }
 
@@ -168,14 +227,11 @@ impl Pattern {
     /// through them — unless there is only one, which the tree copies.
     /// A lane of **text with a number** in it counts its number on. A
     /// lane of anything else is copied.
-    fn of(values: &[Value]) -> Pattern {
+    fn of(values: &[Value], format: Option<&Format>) -> Pattern {
         if values.is_empty() {
             return Pattern::Copy;
         }
         if values.iter().all(|value| matches!(value, Value::Number(_))) {
-            if values.len() == 1 {
-                return Pattern::Copy;
-            }
             let numbers: Vec<f64> = values
                 .iter()
                 .filter_map(|value| match value {
@@ -183,6 +239,27 @@ impl Pattern {
                     _ => None,
                 })
                 .collect();
+            if values.len() == 1 {
+                // The tree's rule: a single **date** counts a day on,
+                // and a single number is copied.
+                if is_a_date(format) {
+                    let number = numbers[0];
+                    return Pattern::Linear { first: number, last: number, step: 1.0 };
+                }
+                return Pattern::Copy;
+            }
+            // The tree's rule: dates that differ by whole months go on
+            // by months, and not by a line through them.
+            if is_a_date(format)
+                && let (Some(a), Some(b)) = (dates::from_serial(numbers[0]), dates::from_serial(numbers[1]))
+                && a.day == b.day
+                && (a.month != b.month || a.year != b.year)
+            {
+                let months =
+                    (i64::from(b.year) - i64::from(a.year)) * 12 + i64::from(b.month) - i64::from(a.month);
+                let last = numbers[numbers.len() - 1];
+                return Pattern::Months { first: numbers[0], last, months };
+            }
             // The **least squares** line through the numbers, as the
             // tree's trend is.
             let count = numbers.len() as f64;
@@ -275,7 +352,9 @@ fn round15(number: f64) -> f64 {
 ///
 /// The target must **hold the source at a corner**, and the fill goes
 /// down or up, or right or left, from there. The mode is the tree's:
-/// `copy`, `series` (the tree's default), `extend` or `alternate`.
+/// `copy`, `series` (the tree's default), `extend`, `alternate`, and
+/// the tree's four date modes — `days`, `weekdays`, `months` and
+/// `years`.
 ///
 /// A source that holds a **formula** is filled with the formula, and
 /// the references of it are **shifted**: the tree's `shift_relative`,
@@ -289,8 +368,9 @@ pub struct FillRange {
     pub from: Text,
     /// The range the fill goes into, `A1:A10`.
     pub to: Text,
-    /// `copy`, `series`, `extend` or `alternate`. The tree's default
-    /// is the series, and so is this one.
+    /// `copy`, `series`, `extend`, `alternate`, `days`, `weekdays`,
+    /// `months` or `years`. The tree's default is the series, and so
+    /// is this one.
     pub mode: Option<Text>,
 }
 
@@ -316,7 +396,7 @@ impl FillRange {
             Some(mode) => Mode::parse(&mode.0).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
                 message: format!(
-                    "`{}` is not a mode: a fill is `copy`, `series`, `extend` or `alternate`",
+                    "`{}` is not a mode: a fill is `copy`, `series`, `extend`, `alternate`, `days`, `weekdays`, `months` or `years`",
                     mode.0.trim()
                 ),
             })?,
@@ -441,14 +521,28 @@ impl FillRange {
                 .filter(|from| from.formula.is_none())
                 .map(|from| from.value.clone())
                 .collect();
-            let pattern = the_pattern(&lane_values, mode);
+            // The **format** of the lane's first cell: it is the
+            // format of the source, and a date is a number under a
+            // date format.
+            let format_code = sheet_cells.format(lane.cells[0]).map(|code| code.to_string());
+            let format = format_code.as_deref().and_then(Format::parse);
+            let pattern = if mode.is_date() {
+                // The tree's date modes: a source of **dates** steps by
+                // its unit, and a source that is not dates extends like
+                // a plain drag.
+                the_dates(lane_sources, mode, format.as_ref())
+                    .unwrap_or_else(|| the_pattern(&lane_values, Mode::Series, format.as_ref()))
+            } else {
+                the_pattern(&lane_values, mode, format.as_ref())
+            };
             let per_cell: Vec<Pattern> = lane_sources
                 .iter()
                 .map(|from| {
                     if from.formula.is_some() {
                         Pattern::Copy
                     } else {
-                        Pattern::of(std::slice::from_ref(&from.value))
+                        let cell_format = sheet_cells.format(from.cell).and_then(Format::parse);
+                        Pattern::of(std::slice::from_ref(&from.value), cell_format.as_ref())
                     }
                 })
                 .collect();
@@ -607,8 +701,8 @@ struct Lane {
 /// tree's default — continues what it finds, the `extend` mode counts
 /// a lone number up, and the `alternate` mode counts a lone number up
 /// and copies everything else.
-fn the_pattern(values: &[Value], mode: Mode) -> Pattern {
-    let pattern = Pattern::of(values);
+fn the_pattern(values: &[Value], mode: Mode, format: Option<&Format>) -> Pattern {
+    let pattern = Pattern::of(values, format);
     match mode {
         Mode::Copy => Pattern::Copy,
         Mode::Series => pattern,
@@ -631,6 +725,10 @@ fn the_pattern(values: &[Value], mode: Mode) -> Pattern {
             }
             Pattern::Copy
         }
+        // The tree's date modes never come here: they have a pattern
+        // of their own, and a source that is not dates extends like a
+        // plain drag.
+        _ => pattern,
     }
 }
 
@@ -641,7 +739,84 @@ fn mode_name(mode: Mode) -> &'static str {
         Mode::Series => "series",
         Mode::Extend => "extend",
         Mode::Alternate => "alternate",
+        Mode::Days => "days",
+        Mode::Weekdays => "weekdays",
+        Mode::Months => "months",
+        Mode::Years => "years",
     }
+}
+
+/// Whether a format is a **date** format.
+fn is_a_date(format: Option<&Format>) -> bool {
+    matches!(format, Some(Format::Date { .. }))
+}
+
+/// The pattern of a lane of **dates**, for one of the tree's date
+/// modes.
+///
+/// The tree's `Pattern::dates`: the source must be numbers under a
+/// date format, and a source that is **not** dates extends like a
+/// plain drag.
+fn the_dates(sources: &[Source], mode: Mode, format: Option<&Format>) -> Option<Pattern> {
+    if !is_a_date(format) {
+        return None;
+    }
+    if sources.iter().any(|source| source.formula.is_some()) {
+        return None;
+    }
+    let mut numbers: Vec<f64> = Vec::new();
+    for source in sources {
+        let Value::Number(number) = &source.value else { return None };
+        numbers.push(*number);
+    }
+    let first = *numbers.first()?;
+    let last = *numbers.last()?;
+    let second = numbers.get(1).copied();
+    match mode {
+        Mode::Days => {
+            // The tree's rule: the step is the difference between the
+            // first two dates in days, and one day when they are the
+            // same day.
+            let days = second.map_or(1.0, |other| other.floor() - first.floor());
+            Some(Pattern::Linear { first, last, step: if days == 0.0 { 1.0 } else { days } })
+        }
+        Mode::Weekdays => {
+            // The tree's rule: the step is the number of weekdays
+            // between the first two dates, and one when there is only
+            // one date.
+            let step = match second {
+                Some(other) => at_least_one(dates::weekdays_between(first, other)?),
+                None => 1,
+            };
+            Some(Pattern::Weekdays { first, last, step })
+        }
+        Mode::Months | Mode::Years => {
+            // The tree's rule: the step is the number of months
+            // between the first two dates — and a year is twelve of
+            // them — and a lone date steps by a month, or by a year.
+            let months = match second {
+                Some(other) => {
+                    let a = dates::from_serial(first)?;
+                    let b = dates::from_serial(other)?;
+                    let years = i64::from(b.year) - i64::from(a.year);
+                    if mode == Mode::Years {
+                        at_least_one(years) * 12
+                    } else {
+                        at_least_one(years * 12 + i64::from(b.month) - i64::from(a.month))
+                    }
+                }
+                None if mode == Mode::Years => 12,
+                None => 1,
+            };
+            Some(Pattern::Months { first, last, months })
+        }
+        _ => None,
+    }
+}
+
+/// The tree's rule: a count of zero is one.
+fn at_least_one(count: i64) -> i64 {
+    if count == 0 { 1 } else { count }
 }
 
 /// The area an address names, `A1:B4` or `A1`.
