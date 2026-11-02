@@ -36,6 +36,10 @@
 //! played goes with it, and the gap it leaves is a gap — the tree's
 //! delete, and not its ripple delete (the module `removal`).
 //!
+//! And a clip may be **rippled** away: the gap closes and the clips
+//! that were after it move up, and the ripple is refused when the time
+//! the clip took is not free (the module `rippling`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -84,12 +88,14 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 mod inserting;
 mod moving;
 mod removal;
+mod rippling;
 mod splitting;
 mod trim;
 
 pub use inserting::InsertClip;
 pub use moving::MoveClip;
 pub use removal::RemoveClip;
+pub use rippling::RippleClip;
 pub use splitting::SplitClip;
 pub use trim::TrimClip;
 
@@ -515,6 +521,7 @@ craftkit_sdk::plugin_anchor!(
     InsertClip,
     SplitClip,
     RemoveClip,
+    RippleClip,
     TimelineEvaluator,
     FilmPanel
 );
