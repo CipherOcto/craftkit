@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1995 tests.** The MCP server links **all fifteen batteries** in, so the
+**2004 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1995 tests
+cargo test          # 2004 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3718,6 +3718,7 @@ so.
 | the **reversal** of a clip | **built.** A clip may play its media backwards, and the direction changes what its edges consume (§281) | §281 |
 | the **lists** of a fill | **built.** A text that is a day, a month or a quarter steps through the list (§282) | §282 |
 | the **locked** track | **built.** A locked track cannot be edited, and every command that would edit it is refused (§283) | §283 |
+| the **fades** of a range | **built.** A range of a track fades in the clips that start in it and fades out the clips that end in it (§284) | §284 |
 
 ### The list of things that are honestly not there: empty
 
@@ -19725,3 +19726,79 @@ edited. That is here now.
   and sync-locked as well.
 - **The tree's track solo and the tree's track freeze are not here**,
   and they are locks of another kind.
+
+## 284. The fades of a range of a track
+
+The tree's `sound.clip.fade` was here (§ the clip's own fade), and the
+tree's **range** of fades was not: the tree's `create_fades` walks a
+**selection** and fades what the selection touches. That is here now.
+
+### What was built
+
+- The command `sound.track.fade` fades a **range** of a track: a clip
+  that **starts** inside the range fades in over the rest of the
+  range, and a clip that **ends** inside it fades out over the
+  beginning of the range.
+- The command `sound.track.fade.delete` takes those fades away.
+- A range that covers **neither** a start nor an end is **refused**,
+  and the refusal says what the range must cover.
+- The **shape** of the curve is the tree's: `linear`, `equal_power`,
+  `s_curve`, `exponential` or `logarithmic`, and the default is the
+  tree's default, the equal power.
+
+### What the port found
+
+- **The tree's fade is a property of the clip and not of the track.**
+  The tree's `create_fades` walks the track's playlist and writes the
+  fade onto the *clip* — `c.fade_in = Fade { len, shape, curvature }` —
+  and the tree's clip holds its fade and takes it with it when it
+  moves. So a "fade of a range" is a thing a range *causes* and not a
+  thing a range *is*: the range is looked at once and the clips are
+  written. Here the same.
+- **The tree's fade is a length, a shape and a bend, and the port had
+  all three.** The tree's `Fade` is three numbers, and v2's clip has
+  carried all three since the clip's own fade was ported — what was
+  missing was not the fade but the **range**: the tree's fades are made
+  over a *selection*, and the selection is what says which clips are
+  faded and how long. That is what this arc adds, and the fade itself
+  was already here.
+- **The tree's range decides by the clip's start and by the clip's
+  end, and it is an `else if`.** The tree's rule is that a clip that
+  starts inside the range fades in, and a clip that ends inside it
+  fades out — and a clip that does both gets only the fade in, because
+  the tree's second test is an `else if`. Here the same.
+- **The tree refuses a range that covers nothing, and says what a
+  range must cover.** The tree's `fades_create` counts the fades it
+  made and **fails when the count is zero**: "the selection must cover
+  a clip start, end or the boundary between two clips". Here the
+  refusal names the two of the three that are here, and the third —
+  the boundary — is the crossfade and is not here yet.
+- **The tree's delete clears the fades of every clip that *touches*
+  the range, and it counts the clips that had one.** A clip that
+  touches the range and has no fade is still touched, and the tree
+  does not count it. Here the same.
+
+### What it cost
+
+- **Nine tests** in the sound battery (`tests/rangefades.rs`): a range
+  that covers a start fades the clip in, a range that covers an end
+  fades the clip out, the shape may be the tree's other shapes, a shape
+  that is not a shape is refused, a range that covers nothing is
+  refused, an empty range is refused, the fades of a range may be taken
+  away, a fade in and a fade out may both be made, and a track that is
+  not there is refused.
+- **Two new commands**: `sound.track.fade` and `sound.track.fade.delete`.
+  The sound battery now carries **129** commands and the MCP server
+  **368**.
+
+### What it does not settle
+
+- **The tree's crossfade is not here**: a range that covers the
+  **boundary** between two clips makes the two clips **overlap**, and
+  each is extended into the other's territory using its handle — the
+  material before it and the material after it. That is the third case
+  of the tree's rule and it is a thing of its own.
+- **The tree's delete trims the overlapping neighbours back to the
+  midpoint** — the undo of the crossfade — and that is not here.
+- **The tree's fade to is not here**: a fade that runs to the start of
+  the next clip.
