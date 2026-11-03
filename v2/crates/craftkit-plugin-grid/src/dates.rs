@@ -46,6 +46,126 @@ pub const MAX_SERIAL: f64 = 2_958_465.0;
 /// Unix day count one number apart.
 const UNIX_1899_12_30: i64 = -25_569;
 
+/// A **time of day**.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Time {
+    /// The hour, from zero to twenty-three.
+    pub hour: u32,
+    /// The minute.
+    pub minute: u32,
+    /// The second.
+    pub second: u32,
+}
+
+impl Time {
+    /// The time, as `13:45:00`.
+    pub fn to_text(self) -> String {
+        format!("{:02}:{:02}:{:02}", self.hour, self.minute, self.second)
+    }
+}
+
+/// The **fraction of a day** a time is.
+///
+/// The tree's own rule: a time is a part of a day and not a thing of
+/// its own, so a cell that holds a time holds a number.
+pub fn time_fraction(hour: u32, minute: u32, second: u32) -> f64 {
+    (f64::from(hour) * 3600.0 + f64::from(minute) * 60.0 + f64::from(second)) / 86_400.0
+}
+
+/// The **day and the milliseconds** of a serial.
+///
+/// The tree's own split: the day is the whole part and the milliseconds
+/// are the rest, rounded to the nearest **second** — and a second that
+/// rounds to the next one carries into the day.
+pub fn day_and_ms(serial: f64) -> Option<(i64, i64)> {
+    if !serial.is_finite() {
+        return None;
+    }
+    let mut day = serial.floor() as i64;
+    let mut ms = ((serial - serial.floor()) * 86_400.000).round() as i64 * 1000;
+    if ms >= 86_400_000 {
+        ms -= 86_400_000;
+        day += 1;
+    }
+    Some((day, ms))
+}
+
+/// A time, from the way a time is **written**.
+///
+/// The tree's own shapes, and the tree's own order of trying them:
+///
+/// - `13:45` — the hour and the minute;
+/// - `13:45:30` — and the second;
+/// - `1:45 pm` — on a clock of twelve, and the afternoon is the half
+///   of the day after the noon.
+///
+/// The answer is the time and the **format code** the tree gives it,
+/// because a time in a spreadsheet is a number and a format, and the
+/// two go together.
+pub fn parse_time(text: &str) -> Option<(Time, &'static str)> {
+    let text = text.trim();
+    let lower = text.to_ascii_lowercase();
+    let (body, afternoon) = if let Some(body) = lower.strip_suffix("am").or_else(|| lower.strip_suffix('a')) {
+        (body.trim().to_string(), Some(false))
+    } else if let Some(body) = lower.strip_suffix("pm").or_else(|| lower.strip_suffix('p')) {
+        (body.trim().to_string(), Some(true))
+    } else {
+        (lower.clone(), None)
+    };
+    let parts: Vec<&str> = body.split(':').map(|part| part.trim()).collect();
+    // A lone number is not a time, unless it says which half of the
+    // day it is in.
+    if parts.len() == 1 && afternoon.is_none() {
+        return None;
+    }
+    if parts.len() > 3
+        || parts.iter().any(|part| part.is_empty() || !part.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        return None;
+    }
+    let number = |text: &str| -> Option<u32> { text.parse::<u32>().ok() };
+    let mut hour = number(parts.first()?)?;
+    let minute = match parts.get(1) {
+        Some(part) => number(part)?,
+        None => 0,
+    };
+    let second = match parts.get(2) {
+        Some(part) => number(part)?,
+        None => 0,
+    };
+    if minute > 59 || second > 59 {
+        return None;
+    }
+    match afternoon {
+        Some(false) | Some(true) => {
+            // On a clock of twelve the noon is the twelve, and the
+            // midnight is the zero.
+            if !(1..=12).contains(&hour) {
+                return None;
+            }
+            if hour == 12 {
+                hour = 0;
+            }
+            if afternoon == Some(true) {
+                hour += 12;
+            }
+        }
+        None => {
+            if hour > 23 {
+                return None;
+            }
+        }
+    }
+    let time = Time { hour, minute, second };
+    let code = match (parts.len() == 3, afternoon.is_some()) {
+        (true, true) => "h:mm:ss AM/PM",
+        (true, false) => "h:mm:ss",
+        (false, true) => "h:mm AM/PM",
+        (false, false) => "h:mm",
+    };
+    Some((time, code))
+}
+
 /// A **calendar date**, and the day of the week it falls on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Date {

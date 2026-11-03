@@ -49,6 +49,12 @@
 //! literals, tokens of the source and the first letter of a token —
 //! that is then run on the rows that are empty (the module `flash`).
 //!
+//! And a cell may hold a **time**, which is a **fraction of a day**
+//! and a **format**: the number says how much of the day has gone and
+//! the format says that the number is a time and how it is written.
+//! The tree's clock shapes and its elapsed shapes are both here (the
+//! modules `dates` and `format`).
+//!
 //! # The three things the port found
 //!
 //! - **A grid is not a tree, and the cells are in the payload.** A cell
@@ -94,7 +100,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem
 
 use fill::FillRange;
 use flash::FlashFill;
-use format::{DateStyle, Format, MAX_FORMAT_CHARS};
+use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
 
 /// The grid layer.
@@ -355,7 +361,7 @@ impl SetFormat {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!(
-                    "`{code}` is not a format this tree has: a number format is `general`, a whole part of `0` and `#`, up to fifteen decimals and a `%`; and a date format is `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` or `yyyy`"
+                    "`{code}` is not a format this tree has: a number format is `general`, a whole part of `0` and `#`, up to fifteen decimals and a `%`; and a date format is `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` or `yyyy`; and a time format is `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`, `h AM/PM`, `h:mm AM/PM`, `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`, `[h]:mm`, `[h]:mm:ss` or `[mm]:ss`"
                 ),
             });
         }
@@ -452,6 +458,82 @@ impl SetDate {
                 "sheet": sheet,
                 "cell": cell.to_text(),
                 "date": date.to_text(),
+                "serial": serial,
+                "format": style.code(),
+            })))
+    }
+}
+
+/// Put a **time** in a cell.
+///
+/// A time in a spreadsheet is a **number** and a **format**: the number
+/// is the fraction of the day the time is, and the format says that the
+/// number is a time and how it is written.
+///
+/// The time is written as `13:45`, `13:45:30` or `1:45 pm`, and a time
+/// that did not happen — the 13th of the 60th minute — is refused.
+#[derive(Command)]
+#[command(id = "grid.cell.time", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
+pub struct SetTime {
+    /// The sheet it goes in.
+    pub sheet: NodeRef,
+    /// The cell's address.
+    pub cell: Text,
+    /// The time, as `13:45` or `1:45 pm`.
+    pub time: Text,
+    /// The format the time is written with. The default is the format
+    /// the time was written in, and a format that is not a time format
+    /// is refused.
+    pub format: Option<Text>,
+}
+
+impl SetTime {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.cell.time".to_string();
+        let sheet = self.sheet.0;
+        let cell = cell_at(&self.cell.0, &id)?;
+        let (time, shape) = dates::parse_time(&self.time.0).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!(
+                "`{}` is not a time: a time is written as 13:45, 13:45:30 or 1:45 pm, and it is a time that happened",
+                self.time.0.trim()
+            ),
+        })?;
+        let style = match &self.format {
+            Some(code) => TimeStyle::parse(&code.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "`{}` is not a time format: the time formats are `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`, `h AM/PM`, `h:mm AM/PM`, `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`, `[h]:mm`, `[h]:mm:ss` and `[mm]:ss`",
+                    code.0.trim()
+                ),
+            })?,
+            // The **shape** the time was written in is the format it is
+            // written with, as the tree has it: a time written as
+            // `1:45 pm` is written as `1:45 pm`.
+            None => TimeStyle::parse(shape).unwrap_or(TimeStyle::HourMinute),
+        };
+        let serial = dates::time_fraction(time.hour, time.minute, time.second);
+        let Some(node) = session.document_mut()?.node_mut(sheet) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{sheet}` is not a sheet"),
+            });
+        }
+        let mut cells = sheet_cells_mut(node);
+        cells.set_value(cell, Value::Number(serial));
+        cells.set_format(cell, Some(style.code().to_string()));
+        node.data["cells"] = cells_into(&cells);
+        Ok(Outcome::changed(format!("set the cell {} to the time {}", cell.to_text(), time.to_text()))
+            .with_data(json!({
+                "sheet": sheet,
+                "cell": cell.to_text(),
+                "time": time.to_text(),
                 "serial": serial,
                 "format": style.code(),
             })))
@@ -831,6 +913,7 @@ craftkit_sdk::plugin_anchor!(
     FillRange,
     FlashFill,
     SetFormat,
+    SetTime,
     CellText,
     CalcEvaluator,
     GridPanel

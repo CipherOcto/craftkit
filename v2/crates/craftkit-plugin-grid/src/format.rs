@@ -13,6 +13,9 @@
 //!   hundred;
 //! - the **dates**: `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`,
 //!   `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`.
+//! - the **times**: `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`,
+//!   `h AM/PM`, `h:mm AM/PM`, `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`,
+//!   `[h]:mm`, `[h]:mm:ss` and `[mm]:ss`.
 //!
 //! The **number** formats are a **grammar** and not a list: the
 //! thousands separated by a comma, a whole part of `0` and `#`
@@ -49,9 +52,11 @@
 //!   is a **field of the cell**, and a hundred cells with one format
 //!   carry a hundred formats. The tree's style also carries the font,
 //!   the colour and the alignment, and none of those are here.
-//! - **The tree's times, currency and scientific formats are not
-//!   here**, and neither are its **sections** — a format with a
-//!   different code for negative numbers is not here.
+//! - **The tree's currency and scientific formats are not here**, and
+//!   neither are its **sections** — a format with a different code for
+//!   negative numbers is not here. The tree's **times** are here: a
+//!   time is a fraction of a day and a format, and the tree's clock
+//!   shapes and its elapsed shapes are both here.
 //! - **The tree's date formats are a language, and here they are a
 //!   list**: the nine shapes above are the ones this tree has, and a
 //!   date format that is not one of them is refused.
@@ -88,6 +93,123 @@ pub enum Format {
         /// The shape the date is written in.
         style: DateStyle,
     },
+    /// A **time**: a number that is written as a time of day.
+    Time {
+        /// The shape the time is written in.
+        style: TimeStyle,
+    },
+}
+
+/// The **time formats** this tree knows.
+///
+/// The tree's format is a whole language, and a time in it is a code
+/// with an `h` and a `m` and a `s` in it and anything else the tree
+/// likes. Here a time format is one of a **list**, and the list is
+/// this one — the clock's shapes and the tree's own way of writing
+/// each of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimeStyle {
+    /// `h` — the hour, on a clock of twenty-four.
+    Hour,
+    /// `hh` — the hour, with two digits.
+    Hour2,
+    /// `h:mm` — the hour and the minute.
+    HourMinute,
+    /// `hh:mm` — and the hour with two digits.
+    Hour2Minute,
+    /// `h:mm:ss` — and the second.
+    HourMinuteSecond,
+    /// `hh:mm:ss` — and the hour with two digits.
+    Hour2MinuteSecond,
+    /// `h AM/PM` — the hour on a clock of twelve.
+    Hour12,
+    /// `h:mm AM/PM` — and the minute.
+    Hour12Minute,
+    /// `h:mm:ss AM/PM` — and the second.
+    Hour12MinuteSecond,
+    /// `hh:mm:ss AM/PM` — and the hour with two digits.
+    Hour2MinuteSecond12,
+    /// `[h]:mm` — the **elapsed** hours and minutes.
+    ElapsedHourMinute,
+    /// `[h]:mm:ss` — and the seconds.
+    ElapsedHourMinuteSecond,
+    /// `[mm]:ss` — the elapsed minutes and seconds.
+    ElapsedMinuteSecond,
+}
+
+impl TimeStyle {
+    /// Every time format, and the code that says it.
+    pub const ALL: [(TimeStyle, &'static str); 13] = [
+        (TimeStyle::Hour, "h"),
+        (TimeStyle::Hour2, "hh"),
+        (TimeStyle::HourMinute, "h:mm"),
+        (TimeStyle::Hour2Minute, "hh:mm"),
+        (TimeStyle::HourMinuteSecond, "h:mm:ss"),
+        (TimeStyle::Hour2MinuteSecond, "hh:mm:ss"),
+        (TimeStyle::Hour12, "h AM/PM"),
+        (TimeStyle::Hour12Minute, "h:mm AM/PM"),
+        (TimeStyle::Hour12MinuteSecond, "h:mm:ss AM/PM"),
+        (TimeStyle::Hour2MinuteSecond12, "hh:mm:ss AM/PM"),
+        (TimeStyle::ElapsedHourMinute, "[h]:mm"),
+        (TimeStyle::ElapsedHourMinuteSecond, "[h]:mm:ss"),
+        (TimeStyle::ElapsedMinuteSecond, "[mm]:ss"),
+    ];
+
+    /// The style a code says, if it says one this tree knows.
+    pub fn parse(code: &str) -> Option<TimeStyle> {
+        let code = code.trim();
+        TimeStyle::ALL.iter().find(|(_, written)| written.eq_ignore_ascii_case(code)).map(|(style, _)| *style)
+    }
+
+    /// The code the style is written with.
+    pub fn code(self) -> &'static str {
+        TimeStyle::ALL.iter().find(|(style, _)| *style == self).map(|(_, code)| *code).unwrap_or("h:mm")
+    }
+
+    /// The **text** a number is written with, as a time.
+    ///
+    /// The number is a serial: its whole part is the day and its rest
+    /// is the time of day. The **clock** shapes look at the time of day
+    /// and the **elapsed** shapes look at the whole number — an elapsed
+    /// hour is an hour of the whole number, and it does not stop at
+    /// twenty-four.
+    pub fn text(self, serial: f64) -> String {
+        let Some((day, ms)) = dates::day_and_ms(serial) else {
+            return String::new();
+        };
+        let hour = ms / 3_600_000;
+        let minute = ms / 60_000 % 60;
+        let second = ms / 1000 % 60;
+        let twelve = |hour: i64| {
+            let hour = hour % 12;
+            if hour == 0 { 12 } else { hour }
+        };
+        let half = |hour: i64| if hour >= 12 { "PM" } else { "AM" };
+        let total = day.saturating_mul(86_400_000).saturating_add(ms);
+        match self {
+            TimeStyle::Hour => format!("{hour}"),
+            TimeStyle::Hour2 => format!("{hour:02}"),
+            TimeStyle::HourMinute => format!("{hour}:{minute:02}"),
+            TimeStyle::Hour2Minute => format!("{hour:02}:{minute:02}"),
+            TimeStyle::HourMinuteSecond => format!("{hour}:{minute:02}:{second:02}"),
+            TimeStyle::Hour2MinuteSecond => format!("{hour:02}:{minute:02}:{second:02}"),
+            TimeStyle::Hour12 => format!("{} {}", twelve(hour), half(hour)),
+            TimeStyle::Hour12Minute => format!("{}:{:02} {}", twelve(hour), minute, half(hour)),
+            TimeStyle::Hour12MinuteSecond => {
+                format!("{}:{:02}:{:02} {}", twelve(hour), minute, second, half(hour))
+            }
+            TimeStyle::Hour2MinuteSecond12 => {
+                format!("{:02}:{:02}:{:02} {}", twelve(hour), minute, second, half(hour))
+            }
+            TimeStyle::ElapsedHourMinute => {
+                format!("{}:{:02}", total / 3_600_000, total / 60_000 % 60)
+            }
+            TimeStyle::ElapsedHourMinuteSecond => {
+                format!("{}:{:02}:{:02}", total / 3_600_000, total / 60_000 % 60, total / 1000 % 60)
+            }
+            TimeStyle::ElapsedMinuteSecond => format!("{}:{:02}", total / 60_000, total / 1000 % 60),
+        }
+    }
 }
 
 /// The **date formats** this tree knows.
@@ -185,9 +307,13 @@ impl Format {
             return Some(Format::General);
         }
         // A **date** is a shape of its own, and it is asked for before
-        // the number: `yyyy` is not a number with two decimals.
+        // the number: `yyyy` is not a number with two decimals. A
+        // **time** is a shape of its own too.
         if let Some(style) = DateStyle::parse(code) {
             return Some(Format::Date { style });
+        }
+        if let Some(style) = TimeStyle::parse(code) {
+            return Some(Format::Time { style });
         }
         let (thousands, rest) = match code.contains(',') {
             true => (true, code.replace(',', "")),
@@ -235,6 +361,9 @@ impl Format {
                     Some(date) => style.text(date),
                     None => general(*number),
                 },
+                // A time is a **number** with a time format on it, and
+                // the number that is not a date is a time of the day.
+                Format::Time { style } => style.text(*number),
             },
             // A format does not change a text: the tree's text sections
             // are not here.
