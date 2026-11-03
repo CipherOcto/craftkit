@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and thirty-three commands**, one for each thing a person does to a
+//! - **a hundred and thirty-four commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -32,7 +32,8 @@
 //!   **elastic** so that its clips are stretched and the pitch stays,
 //!   set a track's **fader** and its **pan**, put a track's sound
 //!   **in the room** with a **surround pan** and take it away, **arm**
-//!   a track for **recording** and let it hear its input, move a
+//!   a track for **recording** and let it hear its input, **freeze**
+//!   a track, move a
 //!   clip's **pitch**,
 //!   do a **process** to a clip's sound and take it off, render the
 //!   **stems**, **separate** a clip into two or on the **grid**,
@@ -492,6 +493,9 @@ mod group;
 // The **grid**: the lines a clip is put on.
 mod grid;
 
+// The **frozen** track: the flag that says the track is frozen.
+mod freeze;
+
 // The **gain** of a clip: how loud it is.
 mod gain;
 
@@ -538,6 +542,7 @@ use craftkit_sdk::{
 };
 pub use duplicate::DuplicateTrack;
 pub use fades::{DeleteRangeFades, FadeRange};
+pub use freeze::FreezeTrack;
 pub use gain::{BypassGain, SetGain};
 pub use grid::{Quantize, ReadGrid, SetGrid};
 pub use group::{Group, GroupKind, ReadGroup, SetGroupFlags, SetTrackGroup, Ungroup, UngroupTracks};
@@ -1385,6 +1390,12 @@ struct TrackPayload {
     /// stem, and it is still in the document with its clips and its
     /// settings.
     inactive: bool,
+    /// Whether the track is **frozen**.
+    ///
+    /// The tree's freeze is a flag and not a behaviour: the tree's
+    /// engine reads it nowhere else, and the only thing that shows it
+    /// is the track's header.
+    frozen: bool,
     /// Whether the track is **armed** for recording.
     ///
     /// The arm is the track's own: the tree's mixer shares the mute
@@ -1438,6 +1449,7 @@ impl TrackPayload {
             "surround": self.surround.map(|surround| surround.to_json()),
             "record_arm": self.record_arm,
             "input_monitor": self.input_monitor,
+            "frozen": self.frozen,
         })
     }
 
@@ -1462,6 +1474,7 @@ impl TrackPayload {
                 .and_then(|elastic| elastic.as_str())
                 .map(|elastic| elastic.to_string()),
             surround: value.get("surround").and_then(surround::SurroundPan::from_json),
+            frozen: value.get("frozen").and_then(|frozen| frozen.as_bool()).unwrap_or(false),
             record_arm: value.get("record_arm").and_then(|armed| armed.as_bool()).unwrap_or(false),
             input_monitor: value.get("input_monitor").and_then(|monitor| monitor.as_bool()).unwrap_or(false),
         })
@@ -2068,6 +2081,7 @@ impl AddTrack {
             surround: None,
             record_arm: false,
             input_monitor: false,
+            frozen: false,
         };
         let document = session.document_mut()?;
         let track = document.add_node_with(name.clone(), "sound.track", None, payload.to_json());
@@ -7990,6 +8004,7 @@ pub(crate) fn add_track(session: &mut Session, name: &str) -> Result<u64, Engine
         surround: None,
         record_arm: false,
         input_monitor: false,
+        frozen: false,
     };
     let document = session.document_mut()?;
     let track = document.add_node_with(name.to_string(), "sound.track", None, payload.to_json());
