@@ -80,6 +80,11 @@
 //! freezes the row above it and the column to its left, and freezing
 //! at `A1` freezes nothing (the module `view`).
 //!
+//! And a sheet may be **hidden**, and its tab may be **coloured**: a
+//! workbook must keep one visible sheet — the tree's rule, and a
+//! workbook with no sheet to look at is not a workbook — and the
+//! colour is a hex colour and not a name (the module `tabs`).
+//!
 //! # The three things the port found
 //!
 //! - **A grid is not a tree, and the cells are in the payload.** A cell
@@ -121,6 +126,7 @@ mod formula;
 mod fractions;
 mod sections;
 mod styles;
+mod tabs;
 mod view;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
@@ -132,6 +138,7 @@ use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
+pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
 pub use view::{FreezePanes, SetView, SetZoom, UnfreezePanes};
 
 /// The grid layer.
