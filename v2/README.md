@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2641 tests.** The MCP server links **all fifteen batteries** in, so the
+**2652 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2641 tests
+cargo test          # 2652 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3784,6 +3784,7 @@ so.
 | the **filter** of a sheet | **built.** A column and a criterion, and the rows the filter hides are derived (§347) | §347 |
 | the **switch** of one effect | **built.** An effect may be switched off and keep its values (§348) | §348 |
 | the **line spacing** of a paragraph | **built.** The lines may be spaced by a multiple, a minimum or an exact number (§349) | §349 |
+| the **conditional formats** of a sheet | **built.** A range, a criterion and a format, and the cells that match are written with it (§350) | §350 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23938,3 +23939,75 @@ points, or an **exact** number of points.
 - **The tree's reading view has its own spacing** — the spacing the
   reader sees, which is not the spacing of the document — and that is
   the state of the view and not a fact of the document.
+
+## 350. The conditional formats of a sheet
+
+A **conditional format** is a **range** of cells, a **criterion** and a
+**format**: the cells of the range whose value matches the criterion are
+written with that format. It is the tree's conditional formatting
+without the colours.
+
+### What was built
+
+- The command `grid.conditional.set` puts a conditional format on a
+  range, and the command `grid.conditional.clear` takes one away.
+- The command `grid.conditional.check` says which cells a range's
+  conditional format holds for, and the cells are **derived**: they are
+  worked out from the cells each time they are asked for.
+- The criterion is the **same** one the filter of a sheet uses (§347) —
+  an operation and a value, with the tree's `*` as a wildcard — and an
+  operation that is not one of the tree's own is refused.
+- The format is one of the tree's own **number formats**, and a format
+  that is not a format is refused.
+- A range may have **one** conditional format: a second one for the
+  same range replaces the first.
+- The conditional format is **on top** of the cell's own format: the
+  cell is written with the conditional format when it matches, and with
+  its own otherwise.
+
+### What the port found
+
+- **The tree's rule is a style and this one's is a format.** The
+  tree's conditional format carries a style — a fill, a font colour, an
+  icon set — and a style is shared between cells. Here it carries a
+  **number format**, which is a cell's own thing in this tree.
+- **The tree's criteria are many and this one's is one.** The tree's
+  rule may be a comparison, a colour scale, a data bar, an icon set or
+  an expression. Here a rule is a **comparison** — the same criterion
+  the filter uses — and the other kinds are commands of their own when
+  they come.
+- **The tree's rules are ordered and the first that matches wins.**
+  The tree's rules are in a list and it walks them in order. Here they
+  are in a list too, and the **first** one that matches the cell is the
+  one that writes it.
+- **The tree's conditional format wins over the cell's own format, and
+  so does this one.** In the tree the conditional format's style is
+  drawn on top of the cell's own; here the number format that writes
+  the cell is the conditional one when it matches.
+
+### What it cost
+
+- **Eleven tests** in the grid battery (`tests/conditional.rs`): a
+  conditional format writing the cells that match, the cells being
+  derived, the conditional format being on top, a cell outside the
+  range not being written, a second format for a range replacing the
+  first, a conditional format being taken away, a range with no
+  conditional format being refused, a range that is not a range being
+  refused, an operation that is not one being refused, a format that is
+  not a format being refused, and the conditional format being saved.
+- **The criterion is now a thing of its own.** The filter's criterion
+  and the conditional format's criterion are the same type, and the
+  filter says so.
+- **Three new commands**: `grid.conditional.set`,
+  `grid.conditional.clear` and `grid.conditional.check`. The grid
+  battery now carries **48** commands and the MCP server **463**.
+
+### What it does not settle
+
+- **The tree's colours are not here.** A conditional format in the
+  tree is a fill and a font colour and an icon set, and this tree's
+  grid has number formats and no colours — so a rule that says "this
+  cell is red" has no place to say it.
+- **The tree's colour scales, data bars and icon sets are not here**,
+  and neither is its **expression** rule: a rule that is a formula
+  judged for every cell of the range.
