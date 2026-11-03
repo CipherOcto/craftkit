@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2202 tests.** The MCP server links **all fifteen batteries** in, so the
+**2209 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3743,6 +3743,7 @@ so.
 | the **transitions** of a trim | **built.** A transition that no longer fits inside the two clips it joins is brought back inside them (§306) | §306 |
 | the **widgets** of a page that is gone | **built.** The fields of a page that is taken away leave the form (§307) | §307 |
 | the **corner** of a point | **built.** The handles at a point may be pulled back to it, and the point becomes a corner (§308) | §308 |
+| the **currency** of a cell | **built.** A cell may write a number with a symbol on it, as the tree writes its currencies (§309) | §309 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21374,3 +21375,60 @@ lines. The tree's smooth point was here; the corner was not.
 - **The tree's anchor kind is not here**: the tree remembers whether
   an anchor is a corner or a smooth one, and this tree's points do not
   carry that — the handles say it.
+
+## 309. The currency of a cell
+
+The tree's format is a whole language, and a **currency** is one of
+the things in it. This tree's number formats were a grammar without a
+symbol in it.
+
+### What was built
+
+- A cell may have a **currency**: a number with a **symbol** on it.
+  The symbol is a literal in **quotes**, as the tree writes it:
+  `"$"#,##0.00`, or `#,##0.00" kr"` with the symbol behind the
+  number.
+- The **sign** is in front of the symbol, and the thousands are
+  separated when the format says so.
+
+### What the port found
+
+- **The tree's currency is not a renderer.** The tree asks what a
+  format *is* before it renders it, and the answer is a currency when
+  the number section has a currency flag and some digits. The
+  rendering is then the ordinary number rendering with the literal in
+  it. So the tree's currency is a number format **plus a literal**, and
+  not a shape of its own.
+- **The tree's symbol is a quoted literal.** The tree's own test says
+  `"$"#,##0.00` is a currency. The quotes are what make it a literal
+  and not a placeholder — and the tree's literal may be anywhere in
+  the code.
+- **The tree's sign is in front of the literal.** A single-section
+  format writes the minus sign before the code's own tokens, so a
+  negative currency is `-` and then the symbol and then the number.
+- **The tree's sections are not here.** A format with a second section
+  for the negative numbers — `"$"#,##0.00;("$"#,##0.00)` — is not
+  here, so the negative currency has a sign and not brackets. The tree
+  says as much: a multi-section format never adds the minus sign
+  itself.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/currency.rs`): the
+  symbol and the number, the symbol behind the number, a currency with
+  no decimals, a negative currency, the separated thousands, and two
+  refusals.
+- **No new command**: this is what `grid.cell.format` does. The grid
+  battery still carries **17** commands and the MCP server **387**.
+- **One rule of the number format was pulled out of the parser**: the
+  shape of a number format — the decimals and the separated thousands
+  — is now one function, and the currency uses it as well.
+
+### What it does not settle
+
+- **The tree's sections are not here**: a currency with a second
+  section for the negative numbers is not a currency this tree has.
+- **The tree's literal may be anywhere in the code**: here the symbol
+  is in front of the number or behind it.
+- **The tree's accounting format is not here**: it is a currency in
+  another shape, and the tree tells the two apart.
