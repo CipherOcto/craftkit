@@ -36,9 +36,16 @@
 //!
 //! The tree's keyframe has an interpolation on **each** side — in and
 //! out — and the segment between two keyframes is shaped by the out
-//! side of the first and the in side of the second. Here a keyframe
-//! has the interpolation of the side it leaves on, and the side it is
-//! entered on is linear.
+//! side of the first and the in side of the second. So a keyframe here
+//! has an interpolation on each side as well, and the two are set by
+//! the same command with the **side** it names: `out` for the side the
+//! keyframe leaves on and `in` for the side it is entered on.
+//!
+//! The tree's rule for the pair: the side the keyframe **leaves** on
+//! decides the shape of the segment — a hold out side holds the value
+//! — and the side it is **entered** on shapes the handle that comes in.
+//! An in side that is not a bezier is a linear side, so a hold in side
+//! shapes the segment it ends like a line.
 //!
 //! # What it does not do
 //!
@@ -55,6 +62,16 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
 
 use crate::{get_at, parse_path, set_at};
+
+/// The **side** of a keyframe: the side it leaves on, or the side it
+/// is entered on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Side {
+    /// The side the keyframe leaves on.
+    Out,
+    /// The side the keyframe is entered on.
+    In,
+}
 
 /// The **interpolation** of a keyframe on the side it leaves on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,6 +139,10 @@ struct Key {
     interp: Interp,
     /// The ease of a bezier.
     ease: Ease,
+    /// The interpolation of the side the keyframe is **entered** on.
+    in_interp: Interp,
+    /// The ease of the side the keyframe is entered on.
+    in_ease: Ease,
 }
 
 impl Key {
@@ -143,7 +164,21 @@ impl Key {
             },
             None => Ease::default(),
         };
-        Some(Key { frame, value, interp, ease })
+        let in_interp = match key.get("in_interp").and_then(|interp| interp.as_str()) {
+            Some(name) => Interp::parse(name)?,
+            None => Interp::Linear,
+        };
+        let in_ease = match key.get("in_ease") {
+            Some(ease) => Ease {
+                speed: ease.get("speed").and_then(|speed| speed.as_f64()).unwrap_or(0.0),
+                influence: ease
+                    .get("influence")
+                    .and_then(|influence| influence.as_f64())
+                    .unwrap_or(Ease::default().influence),
+            },
+            None => Ease::default(),
+        };
+        Some(Key { frame, value, interp, ease, in_interp, in_ease })
     }
 
     /// The keyframe, as the payload holds it.
@@ -153,6 +188,8 @@ impl Key {
             "value": self.value,
             "interp": self.interp.name(),
             "ease": { "speed": self.ease.speed, "influence": self.ease.influence },
+            "in_interp": self.in_interp.name(),
+            "in_ease": { "speed": self.in_ease.speed, "influence": self.in_ease.influence },
         })
     }
 }
@@ -252,7 +289,14 @@ impl SetKeyframe {
         match keys.iter_mut().find(|key| key.frame == frame) {
             Some(key) => key.value = value,
             None => {
-                keys.push(Key { frame, value, interp: Interp::Linear, ease: Ease::default() });
+                keys.push(Key {
+                    frame,
+                    value,
+                    interp: Interp::Linear,
+                    ease: Ease::default(),
+                    in_interp: Interp::Linear,
+                    in_ease: Ease::default(),
+                });
                 keys.sort_by_key(|key| key.frame);
             }
         }
@@ -371,6 +415,10 @@ pub struct SetInterpolation {
     /// The influence of a bezier: the fraction of the segment its
     /// handle takes.
     pub influence: Option<Number>,
+    /// Which **side** of the keyframe: `out` for the side it leaves
+    /// on and `in` for the side it is entered on. The default is
+    /// `out`.
+    pub side: Option<Text>,
 }
 
 impl SetInterpolation {
@@ -450,8 +498,34 @@ impl SetInterpolation {
                 message: format!("`{path}` has no keyframe at frame {frame}"),
             });
         };
-        key.interp = interp;
-        key.ease = ease;
+        // The **side**: the side the keyframe leaves on, or the side
+        // it is entered on.
+        let side = match &self.side {
+            Some(side) => {
+                let name = side.0.trim();
+                match name.to_ascii_lowercase().as_str() {
+                    "out" => Side::Out,
+                    "in" => Side::In,
+                    _ => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("`{name}` is not a side of a keyframe: a side is `out` or `in`"),
+                        });
+                    }
+                }
+            }
+            None => Side::Out,
+        };
+        match side {
+            Side::Out => {
+                key.interp = interp;
+                key.ease = ease;
+            }
+            Side::In => {
+                key.in_interp = interp;
+                key.in_ease = ease;
+            }
+        }
         let new = with_keys(&current, &keys);
         if let Some(node) = session.document_mut()?.node_mut(layer) {
             let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
@@ -459,11 +533,16 @@ impl SetInterpolation {
                 .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
             node.data["props"] = props;
         }
-        Ok(Outcome::changed(format!("`{path}` leaves frame {frame} on a {}", interp.name())).with_data(
+        let (verb, side_name) = match side {
+            Side::Out => ("leaves", "out"),
+            Side::In => ("is entered", "in"),
+        };
+        Ok(Outcome::changed(format!("`{path}` {verb} frame {frame} on a {}", interp.name())).with_data(
             serde_json::json!({
                 "layer": layer,
                 "path": path,
                 "frame": frame,
+                "side": side_name,
                 "interp": interp.name(),
                 "ease": { "speed": ease.speed, "influence": ease.influence },
             }),
@@ -560,12 +639,26 @@ fn value_at(keys: &[Key], frame: f64) -> Option<serde_json::Value> {
         return Some(start.value.clone());
     }
     let x = (frame - start.frame as f64) / span;
+    // The tree's rule: the side the keyframe **leaves** on decides the
+    // shape of the segment, and the side it is **entered** on shapes
+    // the handle that comes in. An in side that is not a bezier is a
+    // linear side — a hold in side shapes the segment it ends like a
+    // linear one.
+    let lin_out = start.interp == Interp::Linear;
+    let lin_in = end.in_interp != Interp::Bezier;
     Some(match start.interp {
         // The tree's hold: the value does not move until the next
         // keyframe.
         Interp::Hold => start.value.clone(),
-        Interp::Linear => interpolate(&start.value, &end.value, x),
-        Interp::Bezier => eased(&start.value, &end.value, x, span, start.ease),
+        Interp::Linear | Interp::Bezier => {
+            if lin_out && lin_in {
+                interpolate(&start.value, &end.value, x)
+            } else {
+                let out_ease = if lin_out { None } else { Some(start.ease) };
+                let in_ease = if lin_in { None } else { Some(end.in_ease) };
+                eased(&start.value, &end.value, x, span, out_ease, in_ease)
+            }
+        }
     })
 }
 
@@ -600,15 +693,23 @@ fn interpolate(a: &serde_json::Value, b: &serde_json::Value, x: f64) -> serde_js
 /// keyframes — the **speed** says how fast the value is moving and the
 /// **influence** says how much of the segment the handle takes.
 ///
-/// The side that is **entered** is linear here, as the tree's linear
-/// side is: a third of the segment.
-fn eased(a: &serde_json::Value, b: &serde_json::Value, x: f64, span: f64, ease: Ease) -> serde_json::Value {
-    let out = ease.influence.clamp(0.0, 1.0);
-    let into = 1.0 / 3.0;
+/// A side that is **not** a bezier is a linear side, and a linear side
+/// is a third of the segment: the handle is a third of the way to the
+/// other value, and the curve is the straight line.
+fn eased(
+    a: &serde_json::Value,
+    b: &serde_json::Value,
+    x: f64,
+    span: f64,
+    out_ease: Option<Ease>,
+    in_ease: Option<Ease>,
+) -> serde_json::Value {
     if let (Some(a), Some(b)) = (a.as_f64(), b.as_f64()) {
         let difference = b - a;
+        let (out, out_offset) = handle(out_ease, difference, span);
+        let (into, in_offset) = handle(in_ease, difference, span);
         let u = solve_u(0.0, out, 1.0 - into, 1.0, x);
-        let value = bez(a, a + ease.speed * out * span, b - difference * into, b, u);
+        let value = bez(a, a + out_offset, b - in_offset, b, u);
         return serde_json::json!(value);
     }
     let (Some(list_a), Some(list_b)) = (a.as_array(), b.as_array()) else {
@@ -623,11 +724,28 @@ fn eased(a: &serde_json::Value, b: &serde_json::Value, x: f64, span: f64, ease: 
             return a.clone();
         };
         let difference = to - from;
+        let (out, out_offset) = handle(out_ease, difference, span);
+        let (into, in_offset) = handle(in_ease, difference, span);
         let u = solve_u(0.0, out, 1.0 - into, 1.0, x);
-        let value = bez(from, from + ease.speed * out * span, to - difference * into, to, u);
+        let value = bez(from, from + out_offset, to - in_offset, to, u);
         out_values.push(serde_json::json!(value));
     }
     serde_json::Value::Array(out_values)
+}
+
+/// A **handle**: the influence of the side and how far the handle is
+/// from the value it is on.
+///
+/// A side with no ease is a **linear** side: it takes a third of the
+/// segment, as the tree's linear side does.
+fn handle(ease: Option<Ease>, difference: f64, span: f64) -> (f64, f64) {
+    match ease {
+        Some(ease) => {
+            let influence = ease.influence.clamp(0.0, 1.0);
+            (influence, ease.speed * influence * span)
+        }
+        None => (1.0 / 3.0, difference / 3.0),
+    }
 }
 
 /// A cubic Bezier in one dimension.
