@@ -34,6 +34,13 @@
 //! page names its parent, the parent names its children, and the count
 //! of the children is worked out from the edges and not kept.
 //!
+//! And the **rotation** of a page is here: `/Rotate` says by how many
+//! degrees, and a positive number turns the page clockwise. The
+//! degrees are a multiple of ninety — the tree's command truncates
+//! what it is given, and here it is refused — and the number is taken
+//! back into the circle, so a page turned four times is a page not
+//! turned at all (the module `rotation`).
+//!
 //! And the **boxes** of a page are here: the media box, the crop box,
 //! the bleed box, the trim box and the art box — a chain, where each
 //! falls back to the one before it and each is cut back to the media
@@ -129,6 +136,7 @@ mod outline;
 mod pages;
 mod predictors;
 mod remove;
+mod rotation;
 mod writer;
 mod xref;
 
@@ -141,6 +149,7 @@ pub use number::SetNumber;
 pub use outline::{AddOutline, ReadOutline};
 pub use pages::RemovePage;
 pub use remove::RemoveObject;
+pub use rotation::{ReadRotation, RotatePage};
 
 /// The PDF layer.
 ///
