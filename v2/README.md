@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2409 tests.** The MCP server links **all fifteen batteries** in, so the
+**2418 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2409 tests
+cargo test          # 2418 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3764,6 +3764,7 @@ so.
 | the **view** of a sheet | **built.** A sheet says what is drawn of it and how far it is zoomed, and its panes may be frozen (§327) | §327 |
 | the **tabs** of a workbook | **built.** A sheet may be hidden, and its tab may be coloured (§328) | §328 |
 | the **validation** of a range of cells | **built.** A rule says what may be typed into a range, written for the first cell of it (§329) | §329 |
+| the **boxes** of a page | **built.** A page has five boxes, a chain where each falls back to the one before it (§330) | §330 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22664,6 +22665,59 @@ text — with an operator and the formulas that go with it.
 - **The tree's "circle invalid data" is not here**: the tree's command
   walks a sheet and lists the cells that fail their rules, and this
   tree's rules are checked one value at a time.
+
+## 330. The boxes of a page
+
+A page has five **boxes**, and they are the geometry of the page: the
+**media** box is the paper, the **crop** box is what is shown, and the
+**bleed**, **trim** and **art** boxes are where the ink goes, where
+the page is cut and where the artwork is.
+
+### What was built
+
+- The command `pdf.page.boxes` says the boxes of a page, and where
+  each of them came from.
+- The command `pdf.page.box` sets one of them.
+
+### What the port found
+
+- **The boxes are a chain.** The crop box falls back to the media box,
+  and the bleed, trim and art boxes fall back to the crop box; and
+  every one of them is **clipped** to the media box, so a box that
+  reaches outside the paper is cut back to the paper. The media box
+  itself falls back to the letter size, for a page that says nothing
+  at all.
+- **The media box and the crop box may be inherited.** They are among
+  the keys a page may leave out and take from its ancestor, so a page
+  in a tree that says the size once says it once — and the command
+  says where each box came from: its own dictionary, an ancestor, or
+  the default.
+- **The tree's page may not be smaller than a point.** A box that
+  would make it smaller is refused: the tree's rule, and a page that
+  cannot be seen is not a page.
+
+### What it cost
+
+- **Nine tests** in the pdf battery (`tests/boxes.rs`): a page with no
+  boxes having the letter size, the media box being set, the boxes
+  falling back to one another, a box being cut back to the media box, a
+  rectangle that is not four numbers refused, a page smaller than a
+  point refused, a box that is not a box refused, the corners of a
+  rectangle being put in order, and the boxes being saved with the
+  page.
+- **Two new commands**: `pdf.page.boxes` and `pdf.page.box`. The pdf
+  battery now carries **24** commands and the MCP server **422**.
+
+### What it does not settle
+
+- **The tree's margins are not here**: the tree's dialog takes
+  margins inward from the media box as well as a rectangle, and the
+  margins are the same rectangle written another way.
+- **The tree's pin of the default is not here**: the tree writes the
+  media box out again when a crop box is removed, so that an inherited
+  crop box does not come back.
+- **Nothing is drawn**: the boxes are the geometry of a page, and this
+  tree's pdf battery renders nothing.
 
 ## 321. The frozen track
 
