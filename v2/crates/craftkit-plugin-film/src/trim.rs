@@ -32,6 +32,10 @@
 //!   through it.** The tree's trim counts the media a trim takes in the
 //!   media's own ticks, which are the timeline's ticks multiplied by
 //!   the speed (the module `speed`).
+//! - **The link is here, and the trim honours it.** The tree's linked
+//!   clips are trimmed as **one edit**: every member of the group takes
+//!   the same delta, and a member that cannot take it refuses the trim
+//!   (the module `linking`).
 
 use craftkit_derive::Command;
 
@@ -101,14 +105,8 @@ impl TrimClip {
         }
         // A clip that is **linked** is trimmed with its partners: the
         // tree trims the group as one edit, with the delta that every
-        // member can take. That is not here yet, and a trim that
-        // trimmed one member would break the link.
-        if crate::linking::link_of(&node.data).is_some() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "not supported yet: a clip that is linked is trimmed with its partners".to_string(),
-            });
-        }
+        // member can take.
+        let members = crate::linking::group(session, clip);
         let Some(clock) = Clock::of(&node.data) else {
             return Err(EngineError::Failed {
                 id: id.clone(),
@@ -121,9 +119,6 @@ impl TrimClip {
         {
             return Err(crate::locked_error(&id, track));
         }
-        // A clip that plays **backwards** consumes the media at the
-        // other end of its range.
-        let reversed = crate::is_reversed(&node.data);
         let edge = self.edge.0.trim().to_lowercase();
         if edge != "in" && edge != "out" {
             return Err(EngineError::Failed {
@@ -145,125 +140,135 @@ impl TrimClip {
                 message: "a trim of zero frames is not a trim".to_string(),
             });
         }
-        // The **speed**: the media a frame of the clip plays is the
-        // speed's worth of the media, so a trim of the in edge moves
-        // the media by that much and not by one frame.
-        let speed = crate::speed::speed_of(&node.data);
-        // The **neighbours**: the clips on the same track, before and
-        // after this one.
-        let Neighbours { before, after } = neighbours(session, clip, clock.start);
-        // The **media**: how long the item the clip plays is.
-        let media = media_of(session, clip);
-
-        // A clip that plays **backwards** consumes the media at the
-        // other end of its range: its in edge takes the media *after*
-        // its out point and its out edge takes the media *before* its
-        // in point.
-        // The **media** a trim of that many frames takes.
-        let media_delta = (delta as f64 * speed).round() as i64;
-        let (start, duration, source_in) = if edge == "in" {
-            let duration = clock.duration as i64 - delta;
-            let source_in =
-                if reversed { clock.source_in as i64 } else { clock.source_in as i64 + media_delta };
-            let start = clock.start as i64 + delta;
-            if duration < 1 {
-                return Err(EngineError::Failed {
+        // Every member of the group is trimmed by the same delta, and
+        // a member that cannot take it refuses the whole trim.
+        let mut planned: Vec<(u64, i64, i64, i64)> = Vec::new();
+        for member in &members {
+            let (start, duration, source_in) =
+                trimmed(session, *member, &edge, delta).map_err(|message| EngineError::Failed {
                     id: id.clone(),
-                    message: format!(
-                        "the clip would be {duration} frames long, and a clip is at least one frame"
-                    ),
-                });
-            }
-            if source_in < 0 {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the clip would begin at {} frames before the media begins", -source_in),
-                });
-            }
-            if start < 0 {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "the clip would start at frame {}, and the timeline begins at frame 0",
-                        -start
-                    ),
-                });
-            }
-            (start, duration, source_in)
-        } else {
-            let duration = clock.duration as i64 + delta;
-            if duration < 1 {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "the clip would be {duration} frames long, and a clip is at least one frame"
-                    ),
-                });
-            }
-            // A clip that plays backwards takes the media *before* its
-            // in point when its out edge grows.
-            let source_in =
-                if reversed { clock.source_in as i64 - media_delta } else { clock.source_in as i64 };
-            if source_in < 0 {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the clip would begin at {} frames before the media begins", -source_in),
-                });
-            }
-            (clock.start as i64, duration, source_in)
-        };
-
-        // The **media** the clip plays: its length multiplied by its
-        // speed, as the tree counts it.
-        let played = crate::speed::media_frames(duration as u64, speed) as i64;
-        if let Some(media) = media
-            && source_in + played > media as i64
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the clip would run to frame {} of the media, and the media is {media} frames long",
-                    source_in + played
-                ),
-            });
+                    message: format!("the clip `{member}`: {message}"),
+                })?;
+            planned.push((*member, start, duration, source_in));
         }
-        if let Some((_, end)) = before
-            && start < end as i64
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the clip would start at frame {start}, and the clip before it ends at frame {end}"
-                ),
-            });
-        }
-        if let Some((next_start, _)) = after
-            && start + duration > next_start as i64
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the clip would end at frame {}, and the clip after it starts at frame {next_start}",
-                    start + duration
-                ),
-            });
-        }
-
-        let source_in = serde_json::json!(source_in as u64);
-        let data = crate::clocks_of(&node.data, start as u64, duration as u64, &source_in);
-        if let Some(node) = session.document_mut()?.node_mut(clip) {
-            node.data = data;
+        for (member, start, duration, source_in) in &planned {
+            let Some(node) = session.document_mut()?.node_mut(*member) else {
+                continue;
+            };
+            let source_in = serde_json::json!(*source_in as u64);
+            node.data = crate::clocks_of(&node.data, *start as u64, *duration as u64, &source_in);
             node.name = format!("clip at {start}");
         }
+        let (start, duration, source_in) = planned
+            .first()
+            .map(|(_, start, duration, source_in)| (*start, *duration, *source_in))
+            .unwrap_or((clock.start as i64, clock.duration as i64, clock.source_in as i64));
+        let partners: Vec<u64> = members.iter().copied().filter(|member| *member != clip).collect();
         Ok(Outcome::changed(format!("the clip `{clip}` is trimmed by {delta} frames")).with_data(
             serde_json::json!({
                 "id": clip,
                 "start": start,
                 "duration": duration,
                 "source_in": source_in,
+                "group": members,
+                "partners": partners,
             }),
         ))
     }
+}
+
+/// The **new clock** of a clip trimmed by a delta: where it starts, how
+/// long it is and where in the media it begins.
+///
+/// The answer is the clock, or the **reason** the trim cannot be made.
+fn trimmed(session: &Session, clip: u64, edge: &str, delta: i64) -> Result<(i64, i64, i64), String> {
+    let Some(node) = session.document().node(clip) else {
+        return Err(format!("there is no clip `{clip}`"));
+    };
+    let Some(clock) = Clock::of(&node.data) else {
+        return Err(format!("the clip `{clip}` does not say where it is"));
+    };
+    // A clip that plays **backwards** consumes the media at the
+    // other end of its range.
+    let reversed = crate::is_reversed(&node.data);
+    // The **speed**: the media a frame of the clip plays is the
+    // speed's worth of the media, so a trim of the in edge moves
+    // the media by that much and not by one frame.
+    let speed = crate::speed::speed_of(&node.data);
+    // The **neighbours**: the clips on the same track, before and
+    // after this one.
+    let Neighbours { before, after } = neighbours(session, clip, clock.start);
+    // The **media**: how long the item the clip plays is.
+    let media = media_of(session, clip);
+
+    // A clip that plays **backwards** consumes the media at the
+    // other end of its range: its in edge takes the media *after*
+    // its out point and its out edge takes the media *before* its
+    // in point.
+    // The **media** a trim of that many frames takes.
+    let media_delta = (delta as f64 * speed).round() as i64;
+    let (start, duration, source_in) = if edge == "in" {
+        let duration = clock.duration as i64 - delta;
+        let source_in = if reversed { clock.source_in as i64 } else { clock.source_in as i64 + media_delta };
+        let start = clock.start as i64 + delta;
+        if duration < 1 {
+            return Err(format!(
+                "the clip would be {duration} frames long, and a clip is at least one frame"
+            ));
+        }
+        if source_in < 0 {
+            return Err(format!("the clip would begin at {} frames before the media begins", -source_in));
+        }
+        if start < 0 {
+            return Err(format!(
+                "the clip would start at frame {}, and the timeline begins at frame 0",
+                -start
+            ));
+        }
+        (start, duration, source_in)
+    } else {
+        let duration = clock.duration as i64 + delta;
+        if duration < 1 {
+            return Err(format!(
+                "the clip would be {duration} frames long, and a clip is at least one frame"
+            ));
+        }
+        // A clip that plays backwards takes the media *before* its
+        // in point when its out edge grows.
+        let source_in = if reversed { clock.source_in as i64 - media_delta } else { clock.source_in as i64 };
+        if source_in < 0 {
+            return Err(format!("the clip would begin at {} frames before the media begins", -source_in));
+        }
+        (clock.start as i64, duration, source_in)
+    };
+
+    // The **media** the clip plays: its length multiplied by its
+    // speed, as the tree counts it.
+    let played = crate::speed::media_frames(duration as u64, speed) as i64;
+    if let Some(media) = media
+        && source_in + played > media as i64
+    {
+        return Err(format!(
+            "the clip would run to frame {} of the media, and the media is {media} frames long",
+            source_in + played
+        ));
+    }
+    if let Some((_, end)) = before
+        && start < end as i64
+    {
+        return Err(format!(
+            "the clip would start at frame {start}, and the clip before it ends at frame {end}"
+        ));
+    }
+    if let Some((next_start, _)) = after
+        && start + duration > next_start as i64
+    {
+        return Err(format!(
+            "the clip would end at frame {}, and the clip after it starts at frame {next_start}",
+            start + duration
+        ));
+    }
+    Ok((start, duration, source_in))
 }
 
 /// The clips **around** a clip on its own track.

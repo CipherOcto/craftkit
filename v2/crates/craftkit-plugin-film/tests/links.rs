@@ -205,10 +205,10 @@ fn two_clips_in_different_sequences_are_refused() {
     assert!(outcome.is_err(), "the clips of two sequences are refused");
 }
 
-/// The **trim** of a linked clip is refused: the tree trims the group
-/// as one edit, and that is not here yet.
+/// The **trim** of a linked clip trims the **group**: the tree trims
+/// the group as one edit.
 #[test]
-fn the_trim_of_a_linked_clip_is_refused() {
+fn the_trim_of_a_linked_clip_trims_the_group() {
     let mut session = session();
     let (item, picture, sound) = two_tracks(&mut session);
     let first = a_clip(&mut session, picture, item, 0, 50);
@@ -216,8 +216,15 @@ fn the_trim_of_a_linked_clip_is_refused() {
     session
         .execute("film.clip.link", &json!({ "clip": first, "with": second }))
         .expect("the clips are linked");
-    let outcome = session.execute("film.clip.trim", &json!({ "clip": first, "edge": "out", "delta": 5 }));
-    assert!(outcome.is_err(), "the trim of a linked clip is refused");
+    session
+        .execute("film.clip.trim", &json!({ "clip": first, "edge": "out", "delta": 5 }))
+        .expect("the group is trimmed");
+    let duration_of = |session: &Session, clip: u64| {
+        let node = session.document().node(clip).expect("the clip is there");
+        node.data["duration"].as_u64().expect("the clip has a duration")
+    };
+    assert_eq!(duration_of(&session, first), 55, "the clip is trimmed");
+    assert_eq!(duration_of(&session, second), 55, "and its partner with it");
 }
 
 /// The **split** of a linked clip is refused: the tree splits the
