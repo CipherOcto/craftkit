@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2256 tests.** The MCP server links **all fifteen batteries** in, so the
+**2270 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2256 tests
+cargo test          # 2270 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3749,6 +3749,7 @@ so.
 | the **path** of a spatial property | **built.** A property whose value is a point follows a path, and the time maps to the length along it (§312) | §312 |
 | the **free numbers** of a file | **built.** A number whose object is taken away is free and is not used again, and the file says so (§313) | §313 |
 | the **ripple** of a speed change | **built.** A speed change may ripple: the clips that were after it move up by the change, and the transitions follow the cuts (§314) | §314 |
+| the **fraction** of a cell | **built.** A number may be written as the nearest fraction, and the limit is what the code says (§315) | §315 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21814,3 +21815,74 @@ change in its length, and the time the clip took is time that is free.
   a list of clips and a group of them changes speed as one edit, and
   the ripple is one shift for all of them. Here one clip changes at a
   time.
+
+## 315. The fraction of a cell
+
+A number may be written as a **fraction**: not the decimals of the
+number but a fraction that stands for it — a half, a third, an eighth.
+
+### What was built
+
+- A cell may carry a **fraction** format: `# ?/?`, `# ??/??`, `?/?` and
+  `# ?/4` — a whole part, a numerator, a bar and a denominator.
+- The fraction is the **nearest** one: the best rational number whose
+  denominator is no bigger than the **limit**, found with continued
+  fractions.
+- The **limit** is what the code says: one digit of denominator is
+  nine, and two are ninety-nine.
+- A code may **name** the denominator: `# ?/4` is a quarter, and the
+  fraction is written with that denominator.
+- The **whole** part is written beside the fraction when there is one,
+  and a whole number is written as a whole number.
+
+### What the port found
+
+- **The nearest fraction is not the closest one.** The tree takes the
+  **semiconvergent**: the best of the two ends of the last step of the
+  continued fraction, because the best fraction with a denominator no
+  bigger than the limit is often one step short of the next
+  convergent. So `0.3` with a limit of nine is **2/7** and not `1/3`:
+  the error of the second is bigger.
+- **The limit is the number of the denominator's placeholders.**
+  `10^digits - 1`: one digit is nine, two are ninety-nine, and the
+  tree takes the last seven digits of a denominator that has more.
+- **The numerator may be bigger than the denominator, and is then
+  carried into the whole part.** `0.99` with a limit of nine is the
+  whole number **1** — the fraction is below one, so the whole part
+  takes the rest.
+- **A named denominator is not reduced.** `0.5` with `?/8` is
+  **`4/8`** and not `1/2`: the code names the denominator and the
+  fraction is written with it.
+- **The tree's sign is dropped when the number is written as zeros**,
+  which is the same rule the fixed formats have: the sign of a number
+  that is not there is not written.
+- **The tree pads the fraction to its placeholders.** The `?`
+  placeholders leave blanks where a part is hidden and the `0`
+  placeholders pad with zeros, so the tree writes `" 1/4"` and
+  `"3 14/99"`. Here the parts are written as they are.
+
+### What it cost
+
+- **Fourteen tests** in the grid battery (`tests/fractions.rs`): the
+  nearest fraction, the whole part beside it, a whole number, zero,
+  the numerator carrying the whole value, the limit the placeholders
+  say, the nearest fraction being the best one, a named denominator
+  used as it is, a named denominator with a whole part, the sign of a
+  negative fraction, a negative that rounds to zero having no sign, a
+  code that is not a fraction being refused, a fraction in a style, and
+  the `TEXT` function writing one.
+- **No new command**: a fraction is a **format**, and the grid battery
+  still carries **21** commands and the MCP server **393**.
+- **One new module** (`src/fractions.rs`): the shape of the code, the
+  nearest fraction, and the continued fractions that find it.
+
+### What it does not settle
+
+- **The tree's padding is not here**: the parts of the fraction are
+  written as they are, and not padded to the placeholders.
+- **The tree clamps and here it is refused**: a denominator with more
+  than seven digits, and a named denominator above a billion, are not
+  formats this tree has.
+- **The tree's sections are not here**: a format with a different code
+  for negative numbers, for zero, or for text is not here yet, and a
+  fraction is one code for every number.
