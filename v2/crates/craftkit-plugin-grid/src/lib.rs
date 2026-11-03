@@ -71,6 +71,15 @@
 //! The tree's clock shapes and its elapsed shapes are both here (the
 //! modules `dates` and `format`).
 //!
+//! And a sheet has a **view** of its own: whether the gridlines and
+//! the headings are drawn, whether the zeros are shown, whether the
+//! sheet runs right to left, and how far it is zoomed — and it may
+//! have **frozen panes**, the rows above a cell and the columns to its
+//! left. The tree keeps these with the sheet and saves them with the
+//! file, and the tree's freeze is the cell's own: freezing at `B2`
+//! freezes the row above it and the column to its left, and freezing
+//! at `A1` freezes nothing (the module `view`).
+//!
 //! # The three things the port found
 //!
 //! - **A grid is not a tree, and the cells are in the payload.** A cell
@@ -112,6 +121,7 @@ mod formula;
 mod fractions;
 mod sections;
 mod styles;
+mod view;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
@@ -122,6 +132,7 @@ use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
+pub use view::{FreezePanes, SetView, SetZoom, UnfreezePanes};
 
 /// The grid layer.
 ///
@@ -617,7 +628,11 @@ impl AddSheet {
             name.clone(),
             "grid.sheet",
             None,
-            json!({ "cells": {} }),
+            json!({
+                "cells": {},
+                "view": crate::view::SheetView::default().to_json(),
+                "zoom": 100,
+            }),
         );
         Ok(Outcome::changed(format!("added the sheet `{name}`")).with_data(json!({ "id": id, "name": name })))
     }
