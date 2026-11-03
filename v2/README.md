@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2209 tests.** The MCP server links **all fifteen batteries** in, so the
+**2215 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3744,6 +3744,7 @@ so.
 | the **widgets** of a page that is gone | **built.** The fields of a page that is taken away leave the form (§307) | §307 |
 | the **corner** of a point | **built.** The handles at a point may be pulled back to it, and the point becomes a corner (§308) | §308 |
 | the **currency** of a cell | **built.** A cell may write a number with a symbol on it, as the tree writes its currencies (§309) | §309 |
+| the **sign** of a number that rounds away | **built.** A negative number that rounds to zero is written without its sign (§310) | §310 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21432,3 +21433,54 @@ symbol in it.
   is in front of the number or behind it.
 - **The tree's accounting format is not here**: it is a currency in
   another shape, and the tree tells the two apart.
+
+## 310. The sign of a number that rounds away
+
+A negative number that rounds to zero is written **without its sign**.
+The sign of a number that is not there is not written — and this tree
+was writing it.
+
+### What was built
+
+- A negative number that **rounds to zero** is written without its
+  sign: `-0.0033` with two decimals is `0.00` and not `-0.00`.
+- A negative number that **rounds away from zero** keeps its sign:
+  `-0.005` with two decimals is `-0.01`.
+- The rule holds for the **currency** as well: a currency that rounds
+  to zero has no sign.
+
+### What the port found
+
+- **The tree's rule is about the number that is written and not about
+  the number that was given.** The tree's test says it in one line: *a
+  negative number that rounds to zero shows no minus sign*. The sign
+  belongs to the written number, and the written number is zero.
+- **The tree's rounding is away from zero**, so the boundary is
+  exact: `-0.005` with two decimals is `-0.01` — the sign is there,
+  because the number that is written is not zero — and `-0.4` with no
+  decimals is `0`, and `-0.5` is `-1`.
+- **The tree's sign is a sign and not a section.** A format with a
+  second section for the negative numbers writes the section's own
+  text, and the tree says that a multi-section format never adds the
+  minus sign itself. Here the sign is the sign, and it goes when the
+  number is not there.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/negative.rs`): a negative
+  number that rounds to zero, one that rounds away, a whole number
+  that rounds to zero, one that rounds away, one that is not near
+  zero, and a currency that rounds to zero.
+- **No new command**: this is what the number format does. The grid
+  battery still carries **17** commands and the MCP server **387**.
+- **One rule changed** in the number format and in the currency: the
+  sign is written when the number that is written is not zero.
+
+### What it does not settle
+
+- **The tree's sections are not here**: a format with a second section
+  for the negative numbers is not a format this tree has, so the
+  negative number is written with a sign and not with the section's own
+  text.
+- **The tree's scientific formats are not here**, and their sign is
+  the tree's as well.
