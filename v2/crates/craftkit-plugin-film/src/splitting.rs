@@ -11,15 +11,20 @@
 //! effect of the insert (§266): a command that splits a clip while it
 //! moves another one is a command that does two things and says one.
 //!
+//! And the **transitions** follow the cut: a transition that begins at
+//! or after the cut now joins the piece after the cut, and a transition
+//! that spans the cut keeps the piece before it. The tree's rule, and
+//! the rule is about the transition's **start** and not about the cut
+//! the transition sits on.
+//!
 //! # What it does not do
 //!
 //! - **The link is here, and the split honours it.** The tree's split
 //!   gives the new piece a **new link**, so that the two pieces are
 //!   still linked together and not to the left-hand ones, and the
 //!   members of a group are cut in one edit (the module `linking`).
-//! - **The tree's transitions are not here**, and neither are the
-//!   tree's **reversed** clips: a reversed clip's cut moves the media
-//!   the other way.
+//! - **The tree's reversed clips are not here**: a reversed clip's cut
+//!   moves the media the other way.
 
 use craftkit_derive::Command;
 
@@ -101,6 +106,9 @@ impl SplitClip {
         // split: the tree splits the members of a group that are under
         // the place, and the others are left alone.
         let mut split: Vec<(u64, u64)> = Vec::new();
+        // The **transitions** that follow the cut: they now join the
+        // piece after it.
+        let mut moved: Vec<u64> = Vec::new();
         for member in &members {
             let Some(node) = session.document().node(*member) else {
                 continue;
@@ -113,8 +121,9 @@ impl SplitClip {
             if at <= member_start || at >= member_start + member_duration {
                 continue;
             }
-            let new = split_one(session, *member, at)?;
+            let (new, followed) = split_one(session, *member, at)?;
             split.push((*member, new));
+            moved.extend(followed);
         }
         if split.is_empty() {
             return Err(EngineError::Failed {
@@ -146,14 +155,21 @@ impl SplitClip {
                 "group": split.iter().map(|(member, _)| *member).collect::<Vec<u64>>(),
                 "new_group": split.iter().map(|(_, new)| *new).collect::<Vec<u64>>(),
                 "link": name,
+                "transitions": moved,
             }),
         ))
     }
 }
 
 /// **Split** one clip at a place, and give back the **new clip** — the
-/// piece after the place.
-fn split_one(session: &mut Session, clip: u64, at: u64) -> Result<u64, EngineError> {
+/// piece after the place — and the **transitions** that now join it.
+///
+/// The tree's rule: a transition that **begins at or after the cut**
+/// and joins the clip now joins the piece after the cut. The rule is
+/// about the transition's **start** and not about the cut the
+/// transition sits on, so a transition that spans the cut keeps the
+/// piece before it.
+fn split_one(session: &mut Session, clip: u64, at: u64) -> Result<(u64, Vec<u64>), EngineError> {
     let id = "film.clip.split".to_string();
     let Some(node) = session.document().node(clip) else {
         return Err(EngineError::Failed { id: id.clone(), message: format!("there is no node `{clip}`") });
@@ -216,5 +232,21 @@ fn split_one(session: &mut Session, clip: u64, at: u64) -> Result<u64, EngineErr
     let new = session.document_mut()?.add_node_with_under(Some(track), name.clone(), "film.clip", None, data);
     let relation = craftkit_sdk::Relation::with_payload(new, item, "clip", serde_json::json!({}));
     session.document_mut()?.add_relation(relation);
-    Ok(new)
+    // The **transitions** that follow the cut now join the piece after
+    // it: the tree's rule, and the rule is about the transition's
+    // **start**.
+    let followed: Vec<u64> = session
+        .document()
+        .walk()
+        .filter(|node| node.kind == "film.transition")
+        .filter(|node| node.data.get("from").and_then(|from| from.as_u64()) == Some(clip))
+        .filter(|node| node.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0) >= at)
+        .map(|node| node.id)
+        .collect();
+    for transition in &followed {
+        if let Some(node) = session.document_mut()?.node_mut(*transition) {
+            node.data["from"] = serde_json::json!(new);
+        }
+    }
+    Ok((new, followed))
 }

@@ -19,6 +19,10 @@
 //!
 //! So a transition here is a **node** in the track, with a payload:
 //! the two clips, the span, the duration, the alignment and the kind.
+//!
+//! And a **split** answers for them: a transition that follows the cut
+//! joins the piece after it, and one that spans the cut keeps the piece
+//! before it (the module `splitting`).
 
 use craftkit_derive::Command;
 
