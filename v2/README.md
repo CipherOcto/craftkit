@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2361 tests.** The MCP server links **all fifteen batteries** in, so the
+**2369 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2361 tests
+cargo test          # 2369 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3759,6 +3759,7 @@ so.
 | the **VCA** of a track | **built.** A track may be put under a VCA master, whose fader offsets its level and whose mute mutes it (§322) | §322 |
 | the **switches** of a layer | **built.** A layer has switches beside its properties, and what they do is derived (§323) | §323 |
 | the **blending mode** of a layer | **built.** A layer says how it is laid over what is under it, in the tree's own thirty-eight modes (§324) | §324 |
+| the **parent** of a layer | **built.** A layer may be under another layer, and the chain may not be a circle (§325) | §325 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22422,6 +22423,49 @@ backdrop's by a rule.
   group is known, and no menu draws a line after it.
 - **The tree's HDR modes are not here**: the modes whose formulas are
   defined for over-range values are the tree's business.
+
+## 325. The parent of a layer
+
+A layer may be **under** another layer: the parent's transform carries
+the child with it.
+
+### What was built
+
+- The command `fx.layer.parent` puts a layer under another layer.
+- The command `fx.layer.parent.delete` takes it out again.
+- A **circle** is refused: a layer under a layer under itself.
+
+### What the port found
+
+- **The chain of parents may not be a circle.** The tree's command
+  walks the chain above the parent before it changes anything, and it
+  refuses a parent that would close a circle — the refusal comes
+  **before** the edit, so a refused parenting changes nothing at all.
+- **The tree's parenting keeps the layer where it is.** The tree
+  re-expresses the child's transform in the new parent's space, so
+  the picture does not move when the parent changes; that
+  re-expression is a transform and not a fact, and it is not here.
+
+### What it cost
+
+- **Eight tests** in the fx battery (`tests/parent.rs`): a layer being
+  put under another, the parent being taken away, a layer that may
+  not be its own parent, a parent that would close a circle refused, a
+  deeper circle refused, a parent that is not a layer refused, a
+  parent that is not there refused, and the parent being saved with
+  the layer.
+- **Two new commands**: `fx.layer.parent` and `fx.layer.parent.delete`.
+  The fx battery now carries **18** commands and the MCP server
+  **408**.
+
+### What it does not settle
+
+- **Parenting does not keep the layer where it is here.** The tree's
+  re-expression of the child's transform is not here, so a picture
+  would move when its parent changes.
+- **The tree's safety limits are not here**: the tree's command walks
+  the chain with a limit on the visits and on the work, and this
+  tree's chain is bounded by the document itself.
 
 ## 321. The frozen track
 
