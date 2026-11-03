@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2293 tests.** The MCP server links **all fifteen batteries** in, so the
+**2304 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2293 tests
+cargo test          # 2304 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3752,6 +3752,7 @@ so.
 | the **fraction** of a cell | **built.** A number may be written as the nearest fraction, and the limit is what the code says (§315) | §315 |
 | the **sections** of a format | **built.** A format may have a different code for the positive numbers, the negative ones and the zero (§316) | §316 |
 | the **reshape** of a path | **built.** The path is grabbed at a point and dragged, and the anchors around follow with a falloff measured along the path (§317) | §317 |
+| the **surround pan** of a track | **built.** The sound is placed in the room, and the gains on the speakers are derived from the position (§318) | §318 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22033,3 +22034,78 @@ by how far they are **along the path**.
 - **The tree's distance is measured with the curve's own arc length**
   and this tree measures it with the curve sampled; the two agree to
   within the sampling.
+
+## 318. The surround pan of a track
+
+The **surround pan** says where a sound **is**: how far to the left or
+the right, how far back or forward, and how high. It is a position and
+not a balance — the balance says how much of the sound is on the left,
+and this says where the sound is.
+
+### What was built
+
+- A track may carry a **surround pan**: the command
+  `sound.track.surround` puts it, and `sound.track.surround.delete`
+  takes it away.
+- The **gains** — the power of the sound on each speaker — are
+  **derived** from the pan and the session's **layout**, and the
+  command reports them.
+- The **layout** is a setting of the session: `stereo`, `5.0`, `5.1`,
+  `7.1` and `7.1.4`.
+- Every field is **refused** when it is outside its range, and not
+  pulled to the edge.
+
+### What the port found
+
+- **The tree's position is a puck in a square room, and the angle is
+  warped.** The square's front corners land on the front speakers, its
+  side midpoints at ninety degrees and its rear corners on the
+  layout's rear-most surrounds — so a puck in a corner is **exactly on
+  one speaker** and not between two. The warp is what makes that
+  true, and it is the tree's own finding.
+- **The gains are the power of the sound, and the power adds up to
+  one.** The tree works in **power** and not in gain, so the squared
+  gains of the speakers that are not the LFE always add up to one: the
+  sound is not quieter when it is spread over two speakers than when
+  it is on one.
+- **The tree's divergence is a spread of point sources.** The sound is
+  sampled across the spread and the powers are averaged, and the spread
+  is wider when the puck is near the middle of the room and narrower
+  when it is at the edge — so a puck at the edge is a point source and
+  a puck in the middle is the whole room.
+- **The tree's centre is a share, and the rest of it is a phantom
+  centre.** The share that leaves the centre speaker goes half to the
+  left and half to the right, so the sound is in the middle without
+  being on the speaker.
+- **The LFE is never panned to.** It gets nothing, and the caller
+  sends to it separately.
+- **The tree clamps the position and here it is refused.** The tree's
+  values are pulled into their range, and a clamp is a quiet lie about
+  where the sound is: the sound is somewhere the caller did not ask
+  for.
+
+### What it cost
+
+- **Eleven tests** in the sound battery (`tests/surround.rs`): the pan
+  being a fact of the track, the fields that are left out keeping what
+  they were, the gains being derived, the gains adding up to one, the
+  LFE never being panned to, a puck in a corner being on one speaker,
+  the layout being a setting of the session, a layout that is not one
+  of them refused, a position outside the room refused, the pan being
+  taken away, and a track that is not there refused.
+- **Two new commands**: `sound.track.surround` and
+  `sound.track.surround.delete`. The sound battery now carries **131**
+  commands and the MCP server **396**.
+- **One new module** (`src/surround.rs`): the speakers, the layouts,
+  the puck's warped angle, the pair that takes the power, and the gains.
+
+### What it does not settle
+
+- **The mix does not use the gains yet.** The tree's surround pan
+  places the sound in the mix, and here the pan is a fact of the track
+  and the gains are derived and reported; the mix still balances the
+  track between the two sides.
+- **The tree's thirty-four layouts are five here**, and the
+  **Ambisonics** are not here at all.
+- **The tree's send panner is not here**: a send may have a surround
+  pan of its own, and here it has the pan of a send.
