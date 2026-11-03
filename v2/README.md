@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2674 tests.** The MCP server links **all fifteen batteries** in, so the
+**2684 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2674 tests
+cargo test          # 2684 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3787,6 +3787,7 @@ so.
 | the **conditional formats** of a sheet | **built.** A range, a criterion and a format, and the cells that match are written with it (§350) | §350 |
 | the other **commands on an effect** | **built.** An effect's parameters may be reset, it may be copied and it may be moved (§351) | §351 |
 | the **marks** of a media | **built.** A media may carry a mark in and a mark out, and the material a clip plays is between them (§352) | §352 |
+| the **name** of a sheet | **built.** A name has rules, and a rename carries the formulas and the names that use it with it (§353) | §353 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24130,3 +24131,71 @@ a clip of a marked media may not play outside them.
   still says where it begins, and the marks only say what it may begin
   at — so a clip that already plays outside the marks is left as it is
   and is refused when it is edited.
+
+## 353. The name of a sheet
+
+A sheet's **name** is not a label: it is the way a formula reaches the
+sheet, and a name that is taken is a name that means nothing. So a
+name has rules, and a rename is more than a rename.
+
+### What was built
+
+- The command `grid.sheet.rename` renames a sheet. The name it takes
+  is checked against the tree's rules: not **blank**, at most **31
+  characters**, holding none of `:`, `\`, `/`, `?`, `*`, `[` or `]`, not
+  **beginning or ending** with an apostrophe, and not **taken** by
+  another sheet of the workbook — the tree's comparison ignores case,
+  so `ledger` does not save a name that `Ledger` has.
+- The **formulas follow**: every formula of every sheet that names the
+  sheet is rewritten, and the answer says how many followed. A formula
+  that does not name the sheet is left exactly as it was written.
+- The **names follow**: a name of the workbook that stands for a range
+  in the sheet now stands for a range in the new sheet.
+- The same rules are the rules of the **name**, so `grid.sheet.add`
+  refuses a bad name and a taken one too — the tree's `check_sheet_name`
+  is one rule with two doors, and here it is one rule as well.
+
+### What the port found
+
+- **The tree renames by rewriting the expression, and here the formula
+  is text.** The tree keeps a formula parsed and prints it again, so a
+  rename is a change of the expression. Here a cell holds the formula's
+  **text** — the text the caller wrote — so a rename parses the text,
+  names the sheet again and prints it. The cost is honest and worth
+  saying: a formula that follows is the **printer's** spelling of it
+  (`A1 + A2`, where the caller wrote `A1+A2`), and a formula that does
+  not follow keeps its own text untouched.
+- **The tree's sheet-qualified names are not here.** The tree's
+  `Old!MyName` is one string and the printer adds the quotes. Here a
+  name stands for a **range**, and the range names its sheet, so a
+  rename moves the sheet in the range and the name stays as it is.
+- **The tree's uniqueness is per workbook and so is this one.** Two
+  workbooks may hold sheets of one name, because each workbook is its
+  own book of sheets.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/sheetnames.rs`): a sheet
+  being renamed, a blank name refused, a name that is too long refused,
+  a name holding a forbidden character refused, a name with an
+  apostrophe at either end refused, a name that is taken refused (and
+  the case not saving it), the formulas that name the sheet following
+  it and the one that does not staying as it was, a name that stands
+  for a range following, a node that is not a sheet refused, and a
+  sheet that is added with a bad name refused.
+- **One new command**: `grid.sheet.rename`. The grid battery now
+  carries **49** commands and the MCP server **468**.
+
+### What it does not settle
+
+- **The tree's protection is not here.** The tree refuses to rename a
+  sheet in a workbook whose structure is protected, and this tree has
+  no protection of a workbook yet.
+- **The tree's charts and pivot tables follow a rename and this tree
+  has neither.** A chart's series and a pivot table's link name a
+  sheet, and the tree rewrites them with the sheet; here there is
+  nothing of that kind to rewrite.
+- **A renamed sheet's own formulas follow it too, and the tree's do as
+  well** — but the tree's sheets are held in a list and this tree's are
+  nodes, so a formula that names the sheet it is in is rewritten the
+  same way as any other.
