@@ -1062,7 +1062,7 @@ fn at_least_one(count: i64) -> i64 {
 }
 
 /// The area an address names, `A1:B4` or `A1`.
-fn area_at(text: &str, id: &str) -> Result<Area, EngineError> {
+pub(crate) fn area_at(text: &str, id: &str) -> Result<Area, EngineError> {
     let text = text.trim();
     let mut parts = text.split(':');
     let first = parts.next().unwrap_or_default();

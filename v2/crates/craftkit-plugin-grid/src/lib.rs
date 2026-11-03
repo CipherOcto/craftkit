@@ -85,6 +85,13 @@
 //! workbook with no sheet to look at is not a workbook — and the
 //! colour is a hex colour and not a name (the module `tabs`).
 //!
+//! And a range of cells may carry a **validation rule**: what may be
+//! typed into it — a whole number, a decimal, a word from a list, a
+//! date, a time, a length of text — with an operator and the
+//! formulas that go with it. A rule is **written for the first cell**
+//! of its range, and the relative references in it move with the cell
+//! (the module `validation`).
+//!
 //! # The three things the port found
 //!
 //! - **A grid is not a tree, and the cells are in the payload.** A cell
@@ -127,6 +134,7 @@ mod fractions;
 mod sections;
 mod styles;
 mod tabs;
+mod validation;
 mod view;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
@@ -139,6 +147,7 @@ use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
 pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
+pub use validation::{CheckValidation, ClearValidation, SetValidation};
 pub use view::{FreezePanes, SetView, SetZoom, UnfreezePanes};
 
 /// The grid layer.
