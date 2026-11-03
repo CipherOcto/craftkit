@@ -28,6 +28,10 @@
 //!
 //! And a row and a column may be **hidden** (the module `hiding`).
 //!
+//! And a sheet may carry a **filter**: a column and a criterion, and
+//! the rows the filter hides are derived from it (the module
+//! `filters`).
+//!
 //! # The mapping
 //!
 //! | the application | v2 |
@@ -142,6 +146,7 @@
 
 mod dates;
 mod fill;
+mod filters;
 mod flash;
 mod format;
 mod formula;
@@ -161,6 +166,7 @@ use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 use fill::FillRange;
+pub use filters::{ClearFilter, FilteredRows, SetFilter};
 use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
@@ -254,6 +260,17 @@ fn book_of(document: &Document) -> Book {
             .map(|rows| rows.iter().filter_map(|row| row.as_u64()).collect())
             .unwrap_or_default();
         book.hide_rows(&node.name, hidden);
+        // The **filter** of the sheet: the rows it hides are derived
+        // from it.
+        if let Some(filter) = node.data.get("filter") {
+            let column =
+                filter.get("column").and_then(|column| column.as_str()).and_then(CellRef::column_index);
+            let op = filter.get("op").and_then(|op| op.as_str()).unwrap_or("=").to_string();
+            let value = filter.get("value").and_then(|value| value.as_str()).unwrap_or("").to_string();
+            if let Some(column) = column {
+                book.set_filter(&node.name, formula::Filter { column, op, value });
+            }
+        }
     }
     // The **names** of the workbook: what a name stands for.
     if let Some(workbook) = document.walk().find(|node| node.kind == "grid.workbook")
@@ -1336,6 +1353,9 @@ craftkit_sdk::plugin_anchor!(
     ShowRow,
     HideColumn,
     ShowColumn,
+    SetFilter,
+    ClearFilter,
+    FilteredRows,
     ClearCell,
     ReadPrecedents,
     ReadDependents,

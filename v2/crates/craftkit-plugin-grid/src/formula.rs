@@ -78,6 +78,19 @@ impl CellRef {
         name
     }
 
+    /// The **column** a name says, counted from zero: `A` is 0 and `AA`
+    /// is 26.
+    pub fn column_index(text: &str) -> Option<u32> {
+        let mut column: u32 = 0;
+        for character in text.chars() {
+            if !character.is_ascii_alphabetic() {
+                return None;
+            }
+            column = column * 26 + (character.to_ascii_uppercase() as u32 - 'A' as u32 + 1);
+        }
+        if text.is_empty() { None } else { Some(column - 1) }
+    }
+
     /// The address, from `A1`.
     ///
     /// An **anchored** address — `$A$1` — is not the address of a cell
@@ -361,6 +374,119 @@ pub struct Name {
     pub sheet: String,
     /// The area of cells.
     pub area: Area,
+}
+
+/// A **filter**: a column of a sheet and a criterion.
+///
+/// The criterion is an **operation** and a **value**, and the value may
+/// hold the tree's `*` wildcard — `*abc*` is "contains abc" and `abc*`
+/// is "begins with abc".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Filter {
+    /// The column it filters, counted from zero.
+    pub column: u32,
+    /// The operation: `=`, `!=`, `<`, `<=`, `>` or `>=`.
+    pub op: String,
+    /// The value it compares with.
+    pub value: String,
+}
+
+/// The **operations** a filter may have.
+pub const FILTER_OPS: [&str; 6] = ["=", "!=", "<", "<=", ">", ">="];
+
+impl Filter {
+    /// Whether the operation is one of the tree's own.
+    pub fn op_is_known(op: &str) -> bool {
+        FILTER_OPS.contains(&op)
+    }
+
+    /// Whether a cell's **value** matches the criterion.
+    ///
+    /// The comparison operations compare **numbers**: an empty cell is
+    /// zero, as it is in the tree, and a cell that holds text is not a
+    /// number and does not match. The equality operations compare the
+    /// **text** of the cell, and the tree's `*` is a wildcard.
+    pub fn matches(&self, value: &Value) -> bool {
+        match self.op.as_str() {
+            "=" => wildcard(&self.value, &display_text(value)),
+            "!=" => !wildcard(&self.value, &display_text(value)),
+            "<" | "<=" | ">" | ">=" => {
+                let Some(criterion) = self.value.trim().parse::<f64>().ok() else {
+                    return false;
+                };
+                let cell = match value {
+                    Value::Empty => 0.0,
+                    other => match other.as_number() {
+                        Some(number) => number,
+                        None => return false,
+                    },
+                };
+                match self.op.as_str() {
+                    "<" => cell < criterion,
+                    "<=" => cell <= criterion,
+                    ">" => cell > criterion,
+                    _ => cell >= criterion,
+                }
+            }
+            _ => false,
+        }
+    }
+}
+
+/// The **text** of a value, as a cell shows it.
+fn display_text(value: &Value) -> String {
+    match value {
+        Value::Empty => String::new(),
+        Value::Number(number) => {
+            if number.fract() == 0.0 {
+                format!("{}", *number as i64)
+            } else {
+                format!("{number}")
+            }
+        }
+        Value::Text(text) => text.clone(),
+        Value::Bool(flag) => {
+            if *flag {
+                "TRUE".to_string()
+            } else {
+                "FALSE".to_string()
+            }
+        }
+        Value::Error(message) => message.clone(),
+    }
+}
+
+/// Whether a **text** matches a pattern with the tree's `*` wildcard.
+///
+/// The comparison is without case, as the tree's is.
+fn wildcard(pattern: &str, text: &str) -> bool {
+    let pattern = pattern.to_lowercase();
+    let text = text.to_lowercase();
+    let parts: Vec<&str> = pattern.split('*').collect();
+    let mut at = 0usize;
+    for (index, part) in parts.iter().enumerate() {
+        if part.is_empty() {
+            continue;
+        }
+        if index == 0 {
+            if !text[at..].starts_with(part) {
+                return false;
+            }
+            at += part.len();
+            continue;
+        }
+        match text[at..].find(part) {
+            Some(found) => at += found + part.len(),
+            None => return false,
+        }
+    }
+    if let Some(last) = parts.last()
+        && !last.is_empty()
+        && !text.ends_with(last)
+    {
+        return false;
+    }
+    true
 }
 
 /// A formula that did not parse.
@@ -902,6 +1028,8 @@ pub struct Book {
     sheets: BTreeMap<String, Cells>,
     /// The **hidden rows** of each sheet, by sheet name.
     hidden: BTreeMap<String, Vec<u64>>,
+    /// The **filter** of each sheet, by sheet name.
+    filters: BTreeMap<String, Filter>,
     /// The **names**, by name.
     names: BTreeMap<String, Name>,
     /// The **date system** of the workbook the sheets are in.
@@ -911,7 +1039,13 @@ pub struct Book {
 impl Book {
     /// A workbook in a **date system**.
     pub fn in_system(system: crate::dates::System) -> Book {
-        Book { sheets: BTreeMap::new(), hidden: BTreeMap::new(), names: BTreeMap::new(), system }
+        Book {
+            sheets: BTreeMap::new(),
+            hidden: BTreeMap::new(),
+            filters: BTreeMap::new(),
+            names: BTreeMap::new(),
+            system,
+        }
     }
 
     /// Say which of a sheet's **rows** are hidden.
@@ -922,6 +1056,41 @@ impl Book {
     /// Whether a **row** of a sheet is hidden.
     pub fn row_is_hidden(&self, sheet: &str, row: u64) -> bool {
         self.hidden.get(sheet).is_some_and(|rows| rows.contains(&row))
+    }
+
+    /// Set the **filter** of a sheet.
+    pub fn set_filter(&mut self, sheet: &str, filter: Filter) {
+        self.filters.insert(sheet.to_string(), filter);
+    }
+
+    /// The **rows** a sheet's filter hides, counted from one.
+    ///
+    /// The rows are **derived**: they are the rows whose cell in the
+    /// filtered column does not match, and they are worked out from the
+    /// cells each time they are asked for.
+    pub fn filtered_rows(&self, sheet: &str) -> Vec<u64> {
+        let Some(filter) = self.filters.get(sheet) else {
+            return Vec::new();
+        };
+        let Some(cells) = self.sheets.get(sheet) else {
+            return Vec::new();
+        };
+        let mut rows: Vec<u64> = Vec::new();
+        for (cell, _) in cells.iter() {
+            let row = cell.row as u64 + 1;
+            if rows.contains(&row) {
+                continue;
+            }
+            let value = cells
+                .get(CellRef { col: filter.column, row: cell.row })
+                .and_then(|cell| cell.value.clone())
+                .unwrap_or(Value::Empty);
+            if !filter.matches(&value) {
+                rows.push(row);
+            }
+        }
+        rows.sort_unstable();
+        rows
     }
 
     /// Put a **name** in the workbook.
@@ -1209,8 +1378,9 @@ impl Book {
                 ));
             }
         };
-        // The **cells** of the ranges: a hidden row and a nested
-        // subtotal are left out.
+        // The **cells** of the ranges: a row a filter hides, a hidden
+        // row and a nested subtotal are left out.
+        let mut filtered: BTreeMap<String, Vec<u64>> = BTreeMap::new();
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();
         for argument in &arguments[1..] {
@@ -1224,7 +1394,9 @@ impl Book {
                     for row in area.start.row..=area.end.row {
                         for col in area.start.col..=area.end.col {
                             let cell = CellRef { col, row };
-                            if self.left_out(name, cell, skip_hidden) {
+                            let rows =
+                                filtered.entry(name.to_string()).or_insert_with(|| self.filtered_rows(name));
+                            if self.left_out(name, cell, skip_hidden, rows) {
                                 continue;
                             }
                             let value = self.value_of_guarded(name, cell, being);
@@ -1244,7 +1416,10 @@ impl Book {
                     for row in area.start.row..=area.end.row {
                         for col in area.start.col..=area.end.col {
                             let cell = CellRef { col, row };
-                            if self.left_out(&name.sheet, cell, skip_hidden) {
+                            let rows = filtered
+                                .entry(name.sheet.clone())
+                                .or_insert_with(|| self.filtered_rows(&name.sheet));
+                            if self.left_out(&name.sheet, cell, skip_hidden, rows) {
                                 continue;
                             }
                             let value = self.value_of_guarded(&name.sheet, cell, being);
@@ -1298,13 +1473,19 @@ impl Book {
         }
     }
 
-    /// Whether a cell is **left out** of a subtotal: it is in a hidden
-    /// row and the subtotal is the hundred-and-more form, or it holds a
-    /// nested subtotal.
-    fn left_out(&self, sheet: &str, cell: CellRef, skip_hidden: bool) -> bool {
+    /// Whether a cell is **left out** of a subtotal: a row a **filter**
+    /// hides, a row hidden **by hand** and the subtotal is the
+    /// hundred-and-more form, or a cell that holds a nested subtotal.
+    fn left_out(&self, sheet: &str, cell: CellRef, skip_hidden: bool, filtered: &[u64]) -> bool {
         // The rows of a sheet are counted from one and a cell's row is
         // counted from nothing.
-        if skip_hidden && self.row_is_hidden(sheet, cell.row as u64 + 1) {
+        let row = cell.row as u64 + 1;
+        // The rows a filter hides are left out whatever the function
+        // number: that is the tree's rule.
+        if filtered.contains(&row) {
+            return true;
+        }
+        if skip_hidden && self.row_is_hidden(sheet, row) {
             return true;
         }
         let Some(cells) = self.sheets.get(sheet) else { return false };
