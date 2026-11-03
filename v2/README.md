@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2579 tests.** The MCP server links **all fifteen batteries** in, so the
+**2589 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2579 tests
+cargo test          # 2589 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3778,6 +3778,7 @@ so.
 | the **names** of a workbook | **built.** A word may stand for a range of cells, and a formula may use the word (§341) | §341 |
 | the **merges** of a sheet | **built.** A range of cells may be one cell, and a covered cell may not be written to (§342) | §342 |
 | the **sizes** of a sheet | **built.** A row has a height and a column has a width, and a size of nothing is refused (§343) | §343 |
+| the **properties** of a paragraph | **built.** A paragraph may stand, be indented and have space around it (§344) | §344 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23561,3 +23562,66 @@ stored with the sheet and are the same in every view.
   means two things.
 - **The tree's autofit is not here**, for the reason above: it is a
   measurement of a font.
+
+## 344. The properties of a paragraph
+
+A paragraph is not only words: it **stands** somewhere, it is
+**indented**, and there is **space** around it. The tree's word
+processor has all three, and this tree's paragraphs had only a text and
+some runs.
+
+### What was built
+
+- The command `prose.block.paragraph.align` says how a paragraph
+  stands, and the alignment is one of the tree's own: `left`,
+  `center`, `right`, `justify` or `distribute`. The tree's `start` and
+  `end` are the logical edges and it writes them down as `left` and
+  `right` — and so does this one.
+- The command `prose.block.paragraph.indent` says how far a paragraph
+  is indented, in **points**: the left edge, the right edge and the
+  first line, which may be negative — a **hanging** indent.
+- The command `prose.block.paragraph.spacing` says how much space is
+  around a paragraph, in points: above it and below it.
+- Only what is named is changed.
+
+### What the port found
+
+- **The tree clamps the numbers and this tree refuses them.** The
+  tree's indents are clamped to between minus fifteen hundred and
+  eighty-four points and its spacing to between zero and the same, and
+  a number outside the range is quietly brought into it. Here a number
+  outside the range is **refused**, and the refusal says the range.
+- **The tree's indents cancel the character indents and this tree's
+  do not.** The tree's `cancel_char_indents` reaches into the
+  characters of the paragraph and undoes the letter-by-letter
+  indents. Here a paragraph's runs carry a length, a bold and an
+  italic, and there is no character indent to cancel — so there is
+  nothing to cancel.
+- **The tree's alignment has a word for each edge and this tree's has
+  the tree's words.** The tree refuses an alignment it does not know,
+  and so does this one, and the refusal says what they are.
+
+### What it cost
+
+- **Ten tests** in the prose battery (`tests/paragraphs.rs`): a
+  paragraph being told how it stands, the logical edges being the
+  tree's own, an alignment that is not one being refused, a paragraph
+  being indented, an indent out of range being refused, a paragraph
+  having space around it, a space out of range being refused, a table
+  not being a paragraph, a node that is not there being refused, and
+  the properties being saved.
+- **Three new commands**: `prose.block.paragraph.align`,
+  `prose.block.paragraph.indent` and `prose.block.paragraph.spacing`.
+  The prose battery now carries **13** commands and the MCP server
+  **451**.
+
+### What it does not settle
+
+- **The tree's line spacing is not here.** The tree's spacing of the
+  lines inside a paragraph is a multiple, or a minimum, or an exact
+  number of points, and it is a thing of its own. Here the space
+  around a paragraph is here and the space between its lines is not.
+- **The tree's character indents are not here.** The tree may indent
+  the characters of a run — a letter at a time — and its paragraph
+  indents cancel them. Here a run carries a length, a bold and an
+  italic, and the indents of a paragraph are the paragraph's own.
