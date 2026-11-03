@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2071 tests.** The MCP server links **all fifteen batteries** in, so the
+**2085 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3727,6 +3727,7 @@ so.
 | the **quarters** in a text | **built.** A text that says a quarter wraps after four, as the list of the quarters does (§290) | §290 |
 | the **in side** of a keyframe | **built.** A keyframe has an interpolation on each side, and the segment between two keyframes is shaped by both (§291) | §291 |
 | the **auto bezier** of a keyframe | **built.** An auto keyframe's ease is not written down but comes from its neighbours (§292) | §292 |
+| the **transitions** of a track | **built.** A transition sits over the cut between two clips, with a duration and an alignment on the cut (§293) | §293 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20321,3 +20322,84 @@ writing it down.
 - **The tree's written ease per dimension is not here**: an ease is
   one speed and one influence for the whole value, and every number of
   a list is curved by it.
+
+## 293. The transitions of a track
+
+The tree's timeline has one thing this battery did not have: a thing
+that sits **over the cut** between two clips.
+
+### What was built
+
+- A track may carry a **transition**: a node in the track, with a
+  payload — the two clips it joins, its span, its duration, its
+  alignment and its kind.
+- A transition sits on the **cut** by its alignment: `center` (half of
+  it before the cut), `start` (all of it after) or `end` (all of it
+  before).
+- A transition may be **changed** — its duration and its alignment — and
+  it may be **taken away**, and the clips it joins are not touched.
+- Three things are **refused**: two clips that are not next to each
+  other, a transition that would leave the clips it joins, and a locked
+  track.
+
+### What the port found
+
+- **A transition joins two clips that are next to each other.** The
+  tree looks for the cut: the clip before must *end* exactly where the
+  clip after *begins*. A gap is not a cut, and a transition over a gap
+  is not a thing.
+- **The tree's alignment is a placement and not a shape.** The
+  transition's start follows from the alignment and the cut: a centred
+  one starts half its duration before the cut, one that starts at the
+  cut starts at it, and one that ends at the cut is its whole duration
+  before it. So changing the duration of a centred transition moves
+  **both** of its ends, and changing the duration of one that ends at
+  the cut moves only its beginning.
+- **The tree's transition may not leave the clips it joins, and the
+  tree says why.** The tree's bounds are the outgoing clip's start and
+  the incoming clip's end, and the tree's own comment is that it does
+  not check the material the clips have beyond the cut — the *handles*
+  — so a transition may cover at most the clips it joins.
+- **A transition is a thing of the track and not of either clip.** The
+  tree keeps the transitions in the track, and the tree removes a
+  transition whose clip is gone (`remove_orphan_transitions`).
+- **The tree's transition over the same cut is replaced, and not
+  stacked.** The tree's `add_transition` removes the transitions that
+  overlap the new one and join one of the same clips, so that there is
+  one transition over a cut and not two.
+- **The tree's transition kind is a name in a registry, and the
+  registry is not here.** The tree has a table of transitions and a
+  cross dissolve is the default for a video track. A registry is a
+  thing of its own, so this tree has the one the tree's default names
+  and refuses the rest.
+
+### What it cost
+
+- **Fourteen tests** in the film battery (`tests/transitions.rs`): a
+  transition is centred on the cut, it may start at the cut, it may end
+  at the cut, it is a thing of the track, two clips that are not next
+  to each other are refused, a transition that does not fit is refused,
+  a locked track refuses it, a transition that is already there is
+  replaced, a transition can be taken away, the duration may be
+  changed, the alignment may be changed, an alignment that is not an
+  alignment is refused, a transition this tree does not have is
+  refused, and a transition of no frames is refused.
+- **Three new commands**: `film.transition.add`, `film.transition.set`
+  and `film.transition.remove`, and a **kind**: `film.transition`. The
+  film battery now carries **18** commands and the MCP server **374**.
+
+### What it does not settle
+
+- **The tree's one-sided transitions are not here**: a fade from
+  nothing or to nothing is a transition with one clip and not two, and
+  the tree has a rule for where it sits — at the cut, or its whole
+  duration before it.
+- **The tree's custom start is not here**: a transition dragged off
+  the centre of its cut is a fourth alignment, and the tree's rule for
+  it is that the ends move equally around where it is now.
+- **The tree's transition parameters are not here**: the tree's
+  transition is an *effect* with parameters of its own, and the
+  parameters are the effect's business.
+- **The tree's linked clips are not here**, and so a transition over
+  the cut of a linked pair is not here either: a linked clip is a
+  thing of its own.
