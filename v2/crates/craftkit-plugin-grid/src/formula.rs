@@ -900,6 +900,8 @@ impl Cells {
 pub struct Book {
     /// The sheets, by name.
     sheets: BTreeMap<String, Cells>,
+    /// The **hidden rows** of each sheet, by sheet name.
+    hidden: BTreeMap<String, Vec<u64>>,
     /// The **names**, by name.
     names: BTreeMap<String, Name>,
     /// The **date system** of the workbook the sheets are in.
@@ -909,7 +911,17 @@ pub struct Book {
 impl Book {
     /// A workbook in a **date system**.
     pub fn in_system(system: crate::dates::System) -> Book {
-        Book { sheets: BTreeMap::new(), names: BTreeMap::new(), system }
+        Book { sheets: BTreeMap::new(), hidden: BTreeMap::new(), names: BTreeMap::new(), system }
+    }
+
+    /// Say which of a sheet's **rows** are hidden.
+    pub fn hide_rows(&mut self, sheet: &str, rows: Vec<u64>) {
+        self.hidden.insert(sheet.to_string(), rows);
+    }
+
+    /// Whether a **row** of a sheet is hidden.
+    pub fn row_is_hidden(&self, sheet: &str, row: u64) -> bool {
+        self.hidden.get(sheet).is_some_and(|rows| rows.contains(&row))
     }
 
     /// Put a **name** in the workbook.
@@ -1062,6 +1074,9 @@ impl Book {
         if name == "TEXT" {
             return self.text_call(sheet, arguments, being);
         }
+        if name == "SUBTOTAL" {
+            return self.subtotal(sheet, arguments, being);
+        }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();
@@ -1144,6 +1159,160 @@ impl Book {
     /// may be a cell that holds a code. A code that this tree does not
     /// have is an error: the tree's `TEXT` takes the tree's whole
     /// format language, and this one takes the sixteen codes it has.
+    /// The **subtotal** of a range: the tree's `SUBTOTAL`.
+    ///
+    /// The tree's rule, in the tree's own words:
+    ///
+    /// - the **function number** is one of the tree's eleven, and the
+    ///   hundred-and-more form (`101` to `111`) is the same function
+    ///   with the **hidden rows left out** as well;
+    /// - a cell that holds a **nested subtotal** is left out, always —
+    ///   in the hundred-and-more form too;
+    /// - a row a **filter** hides is left out, whatever the function
+    ///   number. This tree has no filter, so there is no such row.
+    ///
+    /// And the functions the tree names that this tree does not have
+    /// are refused: `PRODUCT`, `STDEV`, `STDEVP`, `VAR` and `VARP` are
+    /// not here, and a subtotal that names one is an error that says
+    /// so.
+    fn subtotal(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() < 2 {
+            return Value::Error("a subtotal is a function number and a range".to_string());
+        }
+        let code = match &arguments[0] {
+            Expr::Number(number) => *number,
+            other => match self.evaluate(sheet, other, being).as_number() {
+                Some(number) => number,
+                None => return Value::Error("a subtotal's function number is a number".to_string()),
+            },
+        };
+        if !code.is_finite() || code.fract() != 0.0 {
+            return Value::Error(format!("a subtotal's function number is a whole number: {code}"));
+        }
+        let code = code as i64;
+        if !(1..=11).contains(&code) && !(101..=111).contains(&code) {
+            return Value::Error(format!(
+                "a subtotal's function number is 1 to 11 or 101 to 111, and {code} is not"
+            ));
+        }
+        let skip_hidden = code > 100;
+        let function = match code % 100 {
+            1 => "AVERAGE",
+            2 => "COUNT",
+            3 => "COUNTA",
+            4 => "MAX",
+            5 => "MIN",
+            9 => "SUM",
+            other => {
+                return Value::Error(format!(
+                    "the function number {other} is not one this tree has: the numbers are 1 (AVERAGE), 2 (COUNT), 3 (COUNTA), 4 (MAX), 5 (MIN) and 9 (SUM)"
+                ));
+            }
+        };
+        // The **cells** of the ranges: a hidden row and a nested
+        // subtotal are left out.
+        let mut numbers: Vec<f64> = Vec::new();
+        let mut plain: Vec<Value> = Vec::new();
+        for argument in &arguments[1..] {
+            match argument {
+                Expr::Range { sheet: named, start, end } => {
+                    let name = named.as_deref().unwrap_or(sheet);
+                    if !self.sheets.contains_key(name) {
+                        return Value::Error(format!("there is no sheet `{name}`"));
+                    }
+                    let area = Area::new(start.cell, end.cell);
+                    for row in area.start.row..=area.end.row {
+                        for col in area.start.col..=area.end.col {
+                            let cell = CellRef { col, row };
+                            if self.left_out(name, cell, skip_hidden) {
+                                continue;
+                            }
+                            let value = self.value_of_guarded(name, cell, being);
+                            if let Some(number) = value.as_number() {
+                                numbers.push(number);
+                            } else if !matches!(value, Value::Empty) {
+                                plain.push(value);
+                            }
+                        }
+                    }
+                }
+                Expr::Name(name) => {
+                    let Some(name) = self.names.get(name) else {
+                        return Value::Error(format!("there is no name `{name}`"));
+                    };
+                    let area = name.area;
+                    for row in area.start.row..=area.end.row {
+                        for col in area.start.col..=area.end.col {
+                            let cell = CellRef { col, row };
+                            if self.left_out(&name.sheet, cell, skip_hidden) {
+                                continue;
+                            }
+                            let value = self.value_of_guarded(&name.sheet, cell, being);
+                            if let Some(number) = value.as_number() {
+                                numbers.push(number);
+                            } else if !matches!(value, Value::Empty) {
+                                plain.push(value);
+                            }
+                        }
+                    }
+                }
+                other => {
+                    let value = self.evaluate(sheet, other, being);
+                    if let Some(number) = value.as_number() {
+                        numbers.push(number);
+                    } else if !matches!(value, Value::Empty) {
+                        plain.push(value);
+                    }
+                }
+            }
+        }
+        // The **aggregate**.
+        match function {
+            "SUM" => Value::Number(numbers.iter().sum()),
+            "AVERAGE" => {
+                if numbers.is_empty() {
+                    Value::Error("#DIV/0!".to_string())
+                } else {
+                    Value::Number(numbers.iter().sum::<f64>() / numbers.len() as f64)
+                }
+            }
+            "MIN" => numbers
+                .iter()
+                .copied()
+                .fold(None, |smallest: Option<f64>, number| {
+                    Some(smallest.map_or(number, |smallest| smallest.min(number)))
+                })
+                .map(Value::Number)
+                .unwrap_or(Value::Empty),
+            "MAX" => numbers
+                .iter()
+                .copied()
+                .fold(None, |largest: Option<f64>, number| {
+                    Some(largest.map_or(number, |largest| largest.max(number)))
+                })
+                .map(Value::Number)
+                .unwrap_or(Value::Empty),
+            "COUNT" => Value::Number(numbers.len() as f64),
+            "COUNTA" => Value::Number((numbers.len() + plain.len()) as f64),
+            _ => Value::Error(format!("there is no function `{function}`")),
+        }
+    }
+
+    /// Whether a cell is **left out** of a subtotal: it is in a hidden
+    /// row and the subtotal is the hundred-and-more form, or it holds a
+    /// nested subtotal.
+    fn left_out(&self, sheet: &str, cell: CellRef, skip_hidden: bool) -> bool {
+        // The rows of a sheet are counted from one and a cell's row is
+        // counted from nothing.
+        if skip_hidden && self.row_is_hidden(sheet, cell.row as u64 + 1) {
+            return true;
+        }
+        let Some(cells) = self.sheets.get(sheet) else { return false };
+        let Some(entry) = cells.get(cell) else { return false };
+        let Some(formula) = entry.formula.as_deref() else { return false };
+        formula.to_ascii_uppercase().contains("SUBTOTAL(")
+    }
+
     fn text_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
         if arguments.len() != 2 {
             return Value::Error("#VALUE!".to_string());

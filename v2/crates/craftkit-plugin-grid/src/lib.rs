@@ -12,6 +12,8 @@
 //!   cells: `SUM(A1:B4)` reads sixteen cells and one range;
 //! - the **value** of a formula cell, which the application computes and
 //!   **stores** beside the formula.
+//! - the **functions** a formula may call: `SUM`, `AVERAGE`, `MIN`,
+//!   `MAX`, `COUNT`, `COUNTA`, `TEXT` and `SUBTOTAL`.
 //!
 //! And a workbook may carry **names**: a word that stands for a range of
 //! cells, and a formula may use the word where it would use the range
@@ -243,6 +245,15 @@ fn book_of(document: &Document) -> Book {
     let mut book = Book::in_system(system);
     for node in document.walk().filter(|node| node.kind == "grid.sheet") {
         book.add(&node.name, cells_of(node));
+        // The **hidden rows** of the sheet: a subtotal that is the
+        // hundred-and-more form leaves them out.
+        let hidden: Vec<u64> = node
+            .data
+            .get("hidden_rows")
+            .and_then(|rows| rows.as_array())
+            .map(|rows| rows.iter().filter_map(|row| row.as_u64()).collect())
+            .unwrap_or_default();
+        book.hide_rows(&node.name, hidden);
     }
     // The **names** of the workbook: what a name stands for.
     if let Some(workbook) = document.walk().find(|node| node.kind == "grid.workbook")
