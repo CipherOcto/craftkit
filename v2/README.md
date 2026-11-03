@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2104 tests.** The MCP server links **all fifteen batteries** in, so the
+**2114 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3730,6 +3730,7 @@ so.
 | the **transitions** of a track | **built.** A transition sits over the cut between two clips, with a duration and an alignment on the cut (§293) | §293 |
 | the **speed** of a clip | **built.** A clip may play its media faster or slower, and the media it plays is its length multiplied by its speed (§294) | §294 |
 | the **link** of a clip | **built.** Two clips may be the same thing on two tracks, and a move of one moves the other (§295) | §295 |
+| the **date system** of a workbook | **built.** A workbook says which calendar its serials are counted in, and every date in it is read in that calendar (§296) | §296 |
 
 ### The list of things that are honestly not there: empty
 
@@ -19203,9 +19204,10 @@ things that are missing. They are here now.
 
 ### What it does not settle
 
-- **The tree's 1904 date system is not here**: it is the system of the
-  old Macintosh Excel, and a workbook that says which system it uses is
-  a workbook that was made somewhere else.
+- **The tree's 1904 date system is not here** — and it is now (§296):
+  it is the system of the old Macintosh Excel, and the system is a fact
+  of the workbook, so a workbook that says which system it uses is a
+  workbook that was made somewhere else.
 - **The tree's times are not here** — and they are now (§287): there is
   `hh:mm`, there are seconds, there is a.m. and p.m., and a date with
   a time in it is still a number here.
@@ -20543,3 +20545,70 @@ that are **the same thing on two tracks** — a picture and its sound.
 - **The tree's selection is not here**: the tree links what is
   selected and pairs a video clip with the audio clip of the same item
   that overlaps it; here two clips are named.
+
+## 296. The date system of a workbook
+
+§276 gave the grid a **date**, and the date was a number in one
+calendar. The tree has **two** calendars and a workbook says which one.
+
+### What was built
+
+- A workbook says which **calendar** its serials are counted in: the
+  `1900` system or the `1904` system, and a new command,
+  `grid.workbook.date.system`, that says it.
+- The system is a fact of the **workbook**, as it is in the tree: every
+  date in every sheet of a workbook is read in that workbook's
+  calendar.
+- A date before the **calendar's own first day** is refused: the 1904
+  system begins at the 1st of January 1904 and the 1900 system at the
+  1st of January 1900.
+
+### What the port found
+
+- **The tree's date system is a field of the workbook.** The tree's
+  `Workbook` has a `date_system: DateSystem` and every date in the book
+  is read in it — the tree's `serial_in_system` shifts a serial by
+  **1462 days**, and the shift is the whole difference between the two
+  systems.
+- **The tree's 1904 system has no day in it that never happened.** The
+  1900 system has the fictitious 29th of February of 1900 — the serial
+  60 — and the 1904 system counts from the 1st of January 1904, so its
+  serial 0 is that day and its serial 60 is the 1st of March 1904.
+- **The tree's weekdays are the tree's own in the 1900 system and the
+  real ones in the 1904 system.** The tree's 1900 calendar has the
+  day that never happened in it, so every date before the 1st of March
+  of 1900 is a day later than the day it really is: the 1st of
+  January 1900 was a Monday and the tree's calendar says the Sunday.
+  After March the tree's dates and its weekdays are the real ones, and
+  the two systems agree on the weekday of every date they share.
+- **The tree's maximum serial is the system's.** The tree's
+  `max_serial` is 2 958 465 in the 1900 system and 1462 less in the
+  1904 system, so the two books end on the same day.
+- **The tree's workbook is where the system lives and not the sheet.**
+  That is why the system's change moves *every* date in the book: the
+  serial of a date is the same number in both systems only when the
+  system is the same.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/systems.rs`): a workbook is
+  in the 1900 system, the system may be changed, a system that is not
+  a system is refused, the two systems are 1462 days apart, the
+  weekday is the one of the system, a date before the calendar is
+  refused, the 1904 system has no day that never happened, the system
+  belongs to the workbook, a fill of dates is in the system, and the
+  same serial is a different date.
+- **One new command**: `grid.workbook.date.system`. The grid battery
+  now carries **15** commands and the MCP server **378**.
+
+### What it does not settle
+
+- **The tree's system is set when the file is read and not by a
+  command.** The tree's workbook carries the system in the file, so a
+  file that was made somewhere else keeps its calendar. Here the
+  system is set by a command, and a file that says nothing is in the
+  1900 system.
+- **The tree's `DATE()` is not here**, and it takes the system's
+  calendar and rolls a month over into the next year.
+- **The tree's time zone is not here**: the tree's serial is a time
+  without a zone, and here it is too.
