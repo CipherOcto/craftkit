@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2123 tests.** The MCP server links **all fifteen batteries** in, so the
+**2133 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3732,6 +3732,7 @@ so.
 | the **link** of a clip | **built.** Two clips may be the same thing on two tracks, and a move of one moves the other (§295) | §295 |
 | the **date system** of a workbook | **built.** A workbook says which calendar its serials are counted in, and every date in it is read in that calendar (§296) | §296 |
 | the **continuous** keyframe | **built.** A keyframe's two sides may be locked to each other, so the curve is smooth at it (§297) | §297 |
+| the **custom lists** of a workbook | **built.** A workbook may carry lists of your own, and a fill steps through one (§298) | §298 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20681,3 +20682,68 @@ decided.
   for each dimension of the value, so a continuous keyframe of a list
   curves each number its own way; here one ease is written and every
   dimension is curved by it.
+
+## 298. The custom lists of a workbook
+
+§282 gave the grid the tree's **five lists** — the days of the week,
+the months and the quarters. The tree has a sixth place for lists, and
+it is empty.
+
+### What was built
+
+- A workbook may carry **lists of your own**: the words a fill steps
+  through. Two new commands, `grid.workbook.list.add` and
+  `grid.workbook.list.remove`, and a `custom_lists` in the workbook's
+  payload.
+- The tree's own lists are tried **after** the workbook's, so a list of
+  your own may **shadow** one of the tree's.
+- The words are given **one per line**; a list of **one** word is not a
+  list, and a word that is in the list **twice** is refused — the fill
+  finds a list by membership and would find the first of the two and
+  never the second.
+
+### What the port found
+
+- **The tree's custom lists are a field with no writer.** The tree's
+  `Workbook` has a `custom_lists: Vec<Vec<String>>` and the tree's
+  fill reads it — the tree's `fill` does `cx.wb.custom_lists.clone()`
+  and the tree's `Pattern::detect` tries them — but **nothing in the
+  tree ever writes one**: no command, no file reader, no user interface.
+  So the tree's custom lists are always empty, and the code that reads
+  them is the tree's own dead branch.
+- **The tree tries the lists of the workbook first.** The tree's
+  `Pattern::detect` does `custom.iter().cloned().chain(lists())`, so a
+  list of your own is tried **before** the days of the week — and a
+  list of your own that says `Mon`, `Tue`, `Wed` shadows the tree's
+  list of the days.
+- **The tree's list is found by membership and not by a name.** The
+  tree's test is that every text of the source is in the list, and the
+  index of each text in the list is where the fill starts — so a list
+  of two words may be stepped through in either direction, and the
+  case of the source is the case of the list (§282).
+- **The tree's list has no duplicate rule.** The tree's `position`
+  finds the **first** match, so a list with the same word twice is a
+  list with one of them unreachable — and the tree says nothing. Here
+  the list with the word twice is refused.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/custom_lists.rs`): a custom
+  list may be added, a fill steps through a custom list, a custom list
+  wraps, a custom list is found by membership, a custom list shadows a
+  tree list, a list of one word is refused, a word twice is refused, a
+  custom list may be taken away, a list that is not there is refused,
+  and the lists belong to the workbook.
+- **Two new commands**: `grid.workbook.list.add` and
+  `grid.workbook.list.remove`. The grid battery now carries **17**
+  commands and the MCP server **381**.
+
+### What it does not settle
+
+- **The tree's list has no writer and this one has two.** A list in a
+  workbook is a fact here and a dead field there, and the difference
+  is the finding: the tree's fill honours a thing nothing ever puts
+  there.
+- **The tree's list is written in a user interface and not by a
+  command**: the tree's field is the *Options › Custom Lists* of a
+  spreadsheet, and here the words are given one per line.
