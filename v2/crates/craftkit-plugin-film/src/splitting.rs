@@ -13,9 +13,10 @@
 //!
 //! # What it does not do
 //!
-//! - **The tree's links are not here.** The tree's split gives the new
-//!   piece a **new link**, so that the two pieces are still linked
-//!   together. Here a clip is a clip.
+//! - **The link is here, and the split honours it.** The tree's split
+//!   gives the new piece a **new link**, so that the two pieces are
+//!   still linked together and not to the left-hand ones, and the
+//!   members of a group are cut in one edit (the module `linking`).
 //! - **The tree's transitions are not here**, and neither are the
 //!   tree's **reversed** clips: a reversed clip's cut moves the media
 //!   the other way.
@@ -59,13 +60,7 @@ impl SplitClip {
         // A clip that is **linked** is split with its partners: the
         // tree splits the group as one edit and the right-hand pieces
         // keep a link to each other and not to the left-hand ones.
-        // That is not here yet.
-        if crate::linking::link_of(&node.data).is_some() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "not supported yet: a clip that is linked is split with its partners".to_string(),
-            });
-        }
+        let members = crate::linking::group(session, clip);
         let Some(start) = node.data.get("start").and_then(|start| start.as_u64()) else {
             return Err(EngineError::Failed {
                 id: id.clone(),
@@ -78,7 +73,6 @@ impl SplitClip {
                 message: format!("the clip `{clip}` does not say how long it is"),
             });
         };
-        let source_in = node.data.get("source_in").and_then(|source_in| source_in.as_u64()).unwrap_or(0);
         let at = self.at.0;
         if !at.is_finite() || at.fract() != 0.0 {
             return Err(EngineError::Failed {
@@ -96,30 +90,6 @@ impl SplitClip {
                 ),
             });
         }
-        // The **item** the clip plays, and the **track** it is on.
-        let Some(item) = session
-            .document()
-            .relations
-            .iter()
-            .find(|relation| relation.kind == "clip" && relation.from == clip)
-            .map(|relation| relation.to)
-        else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip}` does not say which item it plays"),
-            });
-        };
-        let Some(track) = session
-            .document()
-            .walk()
-            .find(|node| node.kind == "film.track" && node.children.iter().any(|child| child.id == clip))
-            .map(|node| node.id)
-        else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip}` is not on a track"),
-            });
-        };
         // A **locked** track cannot be edited.
         if let Some(track) = crate::track_of(session, clip)
             && crate::is_locked(session, track)
@@ -127,45 +97,124 @@ impl SplitClip {
             return Err(crate::locked_error(&id, track));
         }
 
-        let cut = at - start;
-        // A clip that plays **backwards** shows the *later* media at
-        // its head: the piece before the place takes the media the
-        // piece after it had, and the content stays continuous.
-        let reversed = crate::is_reversed(&node.data);
-        // The **speed**: the media a frame of the clip plays is the
-        // speed's worth of the media, so the cut is a cut in the media
-        // too.
-        let speed = crate::speed::speed_of(&node.data);
-        let original = node.data.clone();
-        let media_of = |frames: u64| crate::speed::media_frames(frames, speed);
-        let (left_source_in, right_source_in) = if reversed {
-            (source_in + media_of(duration - cut), source_in)
-        } else {
-            (source_in, source_in + media_of(cut))
-        };
-        // The piece before the place: the same clip, shorter.
-        let left_source_in = serde_json::json!(left_source_in);
-        let data = crate::clocks_of(&original, start, cut, &left_source_in);
-        if let Some(node) = session.document_mut()?.node_mut(clip) {
-            node.data = data;
-            node.name = format!("clip at {start}");
+        // Every member of the group that **covers** the place is
+        // split: the tree splits the members of a group that are under
+        // the place, and the others are left alone.
+        let mut split: Vec<(u64, u64)> = Vec::new();
+        for member in &members {
+            let Some(node) = session.document().node(*member) else {
+                continue;
+            };
+            let member_start = node.data.get("start").and_then(|start| start.as_u64());
+            let member_duration = node.data.get("duration").and_then(|duration| duration.as_u64());
+            let (Some(member_start), Some(member_duration)) = (member_start, member_duration) else {
+                continue;
+            };
+            if at <= member_start || at >= member_start + member_duration {
+                continue;
+            }
+            let new = split_one(session, *member, at)?;
+            split.push((*member, new));
         }
-        // The piece after it: a **new clip**, and the media moves with
-        // the cut.
-        let right_source_in = serde_json::json!(right_source_in);
-        let data = crate::clocks_of(&original, at, duration - cut, &right_source_in);
-        let name = format!("clip at {at}");
-        let new =
-            session.document_mut()?.add_node_with_under(Some(track), name.clone(), "film.clip", None, data);
-        let relation = craftkit_sdk::Relation::with_payload(new, item, "clip", serde_json::json!({}));
-        session.document_mut()?.add_relation(relation);
+        if split.is_empty() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the frame {at} is not inside the clip, which runs from frame {start} to frame {}",
+                    start + duration
+                ),
+            });
+        }
+        // The **new group**: the right-hand pieces are linked to each
+        // other and not to the left-hand ones, as the tree's split
+        // does. The group's name is the smallest id in it.
+        let name = split.iter().map(|(_, new)| *new).min();
+        if let Some(name) = name {
+            for (_, new) in &split {
+                if let Some(node) = session.document_mut()?.node_mut(*new) {
+                    node.data["link"] = serde_json::json!(name);
+                }
+            }
+        }
+        let new = split.iter().find(|(member, _)| *member == clip).map(|(_, new)| *new);
         Ok(Outcome::changed(format!("the clip `{clip}` is split at frame {at}")).with_data(
             serde_json::json!({
                 "id": clip,
                 "new": new,
                 "at": at,
-                "duration": cut,
+                "duration": at - start,
+                "group": split.iter().map(|(member, _)| *member).collect::<Vec<u64>>(),
+                "new_group": split.iter().map(|(_, new)| *new).collect::<Vec<u64>>(),
+                "link": name,
             }),
         ))
     }
+}
+
+/// **Split** one clip at a place, and give back the **new clip** — the
+/// piece after the place.
+fn split_one(session: &mut Session, clip: u64, at: u64) -> Result<u64, EngineError> {
+    let id = "film.clip.split".to_string();
+    let Some(node) = session.document().node(clip) else {
+        return Err(EngineError::Failed { id: id.clone(), message: format!("there is no node `{clip}`") });
+    };
+    let start = node.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
+    let duration = node.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
+    let source_in = node.data.get("source_in").and_then(|source_in| source_in.as_u64()).unwrap_or(0);
+    // The **item** the clip plays, and the **track** it is on.
+    let Some(item) = session
+        .document()
+        .relations
+        .iter()
+        .find(|relation| relation.kind == "clip" && relation.from == clip)
+        .map(|relation| relation.to)
+    else {
+        return Err(EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip}` does not say which item it plays"),
+        });
+    };
+    let Some(track) = session
+        .document()
+        .walk()
+        .find(|node| node.kind == "film.track" && node.children.iter().any(|child| child.id == clip))
+        .map(|node| node.id)
+    else {
+        return Err(EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip}` is not on a track"),
+        });
+    };
+    let cut = at - start;
+    // A clip that plays **backwards** shows the *later* media at
+    // its head: the piece before the place takes the media the
+    // piece after it had, and the content stays continuous.
+    let reversed = crate::is_reversed(&node.data);
+    // The **speed**: the media a frame of the clip plays is the
+    // speed's worth of the media, so the cut is a cut in the media
+    // too.
+    let speed = crate::speed::speed_of(&node.data);
+    let original = node.data.clone();
+    let media_of = |frames: u64| crate::speed::media_frames(frames, speed);
+    let (left_source_in, right_source_in) = if reversed {
+        (source_in + media_of(duration - cut), source_in)
+    } else {
+        (source_in, source_in + media_of(cut))
+    };
+    // The piece before the place: the same clip, shorter.
+    let left_source_in = serde_json::json!(left_source_in);
+    let data = crate::clocks_of(&original, start, cut, &left_source_in);
+    if let Some(node) = session.document_mut()?.node_mut(clip) {
+        node.data = data;
+        node.name = format!("clip at {start}");
+    }
+    // The piece after it: a **new clip**, and the media moves with
+    // the cut.
+    let right_source_in = serde_json::json!(right_source_in);
+    let data = crate::clocks_of(&original, at, duration - cut, &right_source_in);
+    let name = format!("clip at {at}");
+    let new = session.document_mut()?.add_node_with_under(Some(track), name.clone(), "film.clip", None, data);
+    let relation = craftkit_sdk::Relation::with_payload(new, item, "clip", serde_json::json!({}));
+    session.document_mut()?.add_relation(relation);
+    Ok(new)
 }

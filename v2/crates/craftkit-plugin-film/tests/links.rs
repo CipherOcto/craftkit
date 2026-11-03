@@ -227,10 +227,10 @@ fn the_trim_of_a_linked_clip_trims_the_group() {
     assert_eq!(duration_of(&session, second), 55, "and its partner with it");
 }
 
-/// The **split** of a linked clip is refused: the tree splits the
-/// group as one edit, and that is not here yet.
+/// The **split** of a linked clip splits the **group**: the tree
+/// splits the group as one edit.
 #[test]
-fn the_split_of_a_linked_clip_is_refused() {
+fn the_split_of_a_linked_clip_splits_the_group() {
     let mut session = session();
     let (item, picture, sound) = two_tracks(&mut session);
     let first = a_clip(&mut session, picture, item, 0, 50);
@@ -238,6 +238,11 @@ fn the_split_of_a_linked_clip_is_refused() {
     session
         .execute("film.clip.link", &json!({ "clip": first, "with": second }))
         .expect("the clips are linked");
-    let outcome = session.execute("film.clip.split", &json!({ "clip": first, "at": 10 }));
-    assert!(outcome.is_err(), "the split of a linked clip is refused");
+    session.execute("film.clip.split", &json!({ "clip": first, "at": 10 })).expect("the group is split");
+    let duration_of = |session: &Session, clip: u64| {
+        let node = session.document().node(clip).expect("the clip is there");
+        node.data["duration"].as_u64().expect("the clip has a duration")
+    };
+    assert_eq!(duration_of(&session, first), 10, "the clip is split");
+    assert_eq!(duration_of(&session, second), 10, "and its partner with it");
 }
