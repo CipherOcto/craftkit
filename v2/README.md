@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2238 tests.** The MCP server links **all fifteen batteries** in, so the
+**2248 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2238 tests
+cargo test          # 2248 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3747,6 +3747,7 @@ so.
 | the **sign** of a number that rounds away | **built.** A negative number that rounds to zero is written without its sign (§310) | §310 |
 | the **styles** of a workbook | **built.** A style is a named format that cells share, and changing it changes every cell that names it (§311) | §311 |
 | the **path** of a spatial property | **built.** A property whose value is a point follows a path, and the time maps to the length along it (§312) | §312 |
+| the **free numbers** of a file | **built.** A number whose object is taken away is free and is not used again, and the file says so (§313) | §313 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21652,3 +21653,91 @@ of the path and not at the speed of the chord.
 - **The path is in the value's own plane.** A pair or a triple is a
   point and a point has a path; a value of four numbers is not a
   point here and is refused.
+
+## 313. The free numbers of a file
+
+A PDF file numbers its objects, and a number that is not in use is
+**free**. The file says which numbers are free, and the tree's rule is
+the finding: a number that is taken away is **not given back**.
+
+### What was built
+
+- A number whose object is taken away is **free**: the commands
+  `pdf.object.remove` and `pdf.page.remove` free it, and the file
+  says so.
+- A free number is **not used again**: the command `pdf.object.add`
+  refuses a number that is free.
+- The command `pdf.file.free` says which numbers are free, and what
+  the **next** number is — the next number is past them all, because a
+  free number is a number something had.
+- The **table** that is written has a row for each free number, and a
+  row for the number zero, which is always free.
+- The **size** of the file that is written is the next number, and not
+  the count of its objects.
+- A file that is **loaded** keeps the free numbers it says.
+
+### What the port found
+
+- **The tree's free number is a slot, and a slot has a generation.**
+  The tree frees a number by writing a slot that says *freed* with
+  the generation **one more** than the number had, and the number is
+  never used again: the tree's `next_num` only ever grows, and a
+  freed number is a number something had.
+- **The tree's free row is an offset of zero and a kind of `f`.** The
+  classic table says the number is free with `0000000000 00001 f` —
+  and the generation in the row is the generation the number gets if
+  it is used again.
+- **The tree writes the number zero as free, with the generation
+  65535**, and the first row of the table is its own. Here the table
+  had no row for the number zero at all, and a table whose first row
+  is not the number zero is not the table the file's own rules ask
+  for.
+- **The tree's size is the next number.** The tree's trailer says
+  `/Size` is `next_num` — the highest number in the file plus one —
+  and not the count of the objects, because a file with a free number
+  in it has more numbers than it has objects. Here the size was the
+  count of the objects, which was wrong for every file whose numbers
+  were not one after another.
+- **The tree's free numbers are the incremental save's business.** The
+  tree's full save renumbers the objects from one and writes only the
+  ones that are reachable, so a full save has no free numbers at all;
+  the free numbers are what an incremental save carries. Here the file
+  is always written whole and keeps its own numbers, so the free
+  numbers are written as they are.
+- **The tree's free number may be used again.** The tree's `set` puts
+  an object on a number that was free, and the number comes back with
+  the generation the free row gave it. Here a free number is refused:
+  a number that is free is not used again, and the file says so.
+
+### What it cost
+
+- **Ten tests** in the pdf battery (`tests/free_numbers.rs`): a file
+  that is loaded keeps its free numbers, an object that is taken away
+  frees its number, a page that is taken away frees its number, a
+  free number is not used again, the next number is past the free
+  ones, the table has a row for the free number, the number zero is
+  free, the size of the file is the next number, the free number
+  survives the round trip, and a number that is not free is not free.
+- **One new command**: `pdf.file.free`. The pdf battery now carries
+  **22** commands and the MCP server **393**.
+- **The writer changed**: the table has a row for the number zero and
+  a row for each free number, and the trailer's size is the next
+  number.
+- **Two claims of the battery were wrong, and are corrected here**:
+  the module of the page said that the widgets of a page that is gone
+  do not leave the form — they do, since the widgets came in — and the
+  module of the filters said that the predictors are not here — they
+  are, in the module of their own.
+
+### What it does not settle
+
+- **The tree's incremental save is not here.** The file is written
+  whole, with the numbers it has; a file that was saved again has one
+  table and not two.
+- **The tree's full save renumbers the objects** from one and writes
+  only the ones that are reachable, so an object that nothing refers
+  to any more is not in the file at all. Here every object is written,
+  reachable or not.
+- **The generation of a live object is not here.** Every object of
+  this tree is written with the generation zero, so a number that is
+  freed gets the generation one — the one after the generation it had.
