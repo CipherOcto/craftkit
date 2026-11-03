@@ -266,7 +266,15 @@ impl Pattern {
             Pattern::TextNum { prefix, suffix, first, last, step, width } => {
                 let base = if forward { *last } else { *first };
                 let number = step.checked_mul(k)?.checked_mul(sign)?.checked_add(base)?;
-                let number = number.checked_abs()?;
+                // The tree's rule: a **quarter** in a text wraps after
+                // four, like the list of the quarters does — and the
+                // text before it says which one it is: `Q`, `Qtr` or
+                // `Quarter`.
+                let quarter = suffix.is_empty()
+                    && (1..=4).contains(&base)
+                    && ["q", "qtr", "quarter"].contains(&prefix.trim_end().to_ascii_lowercase().as_str());
+                let number =
+                    if quarter { number.checked_sub(1)?.rem_euclid(4) + 1 } else { number.checked_abs()? };
                 Some(Value::Text(format!(
                     "{prefix}{number:0width$}{}",
                     ordinal_suffix(number, suffix),
