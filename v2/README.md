@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2555 tests.** The MCP server links **all fifteen batteries** in, so the
+**2568 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2555 tests
+cargo test          # 2568 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3776,6 +3776,7 @@ so.
 | the **effects** of a layer | **built.** The kit has a catalogue of effects, and an instance is a group with the parameters at their defaults (§339) | §339 |
 | the **editing** of a document | **built.** A paragraph's text may be changed, a block may be taken away, and a block may be moved (§340) | §340 |
 | the **names** of a workbook | **built.** A word may stand for a range of cells, and a formula may use the word (§341) | §341 |
+| the **merges** of a sheet | **built.** A range of cells may be one cell, and a covered cell may not be written to (§342) | §342 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23442,3 +23443,67 @@ this tree had none.
   tree's grid is a payload in a document and not a file with a format
   of its own, so the names live in the payload and the writing out of
   a file is a separate thing.
+
+## 342. The merges of a sheet
+
+A **merge** says that a range of cells is **one cell**: the value
+lives in the cell at the **top left** and the other cells of the range
+are **covered**. The tree's merged region is one cell that is drawn as
+many, and the tree's rule is that the value of the region is the value
+of its top left cell.
+
+### What was built
+
+- The command `grid.merge.set` merges a range of cells, and the
+  command `grid.merge.clear` unmerges one.
+- A merge may not **overlap** another merge, because a cell that is in
+  two regions is in none of them.
+- A merge may not be made over cells that hold a **value**: the value
+  of a merged region is the value of its top left cell, and the values
+  of the others would be lost — so the merge is **refused** and the
+  refusal says which cell holds a value.
+- A **covered** cell may not be **written** to: not by a value, not by
+  a formula, not by a fill and not by a flash fill. A value put in one
+  would be a second value in a region that has one.
+
+### What the port found
+
+- **The tree's merge is a command on a range and so is this one.**
+  The tree merges the range that is chosen and unmerges it again.
+  Here the range is given to `grid.merge.set` and `grid.merge.clear`
+  by its own text, and the range of a merge is exactly the range that
+  was merged — `A1:B2` and not `A1:B3`.
+- **The tree keeps the value of the region in the top left cell and
+  loses the others.** The tree's merge asks and moves the value that is
+  in the other cells into the top left, or asks the user whether it
+  may. Here the merge is **refused** when the other cells hold a
+  value: the caller empties them first, and nothing is lost quietly.
+
+### What it cost
+
+- **Thirteen tests** in the grid battery (`tests/merges.rs`): a range
+  being merged, a covered cell not being written to, a covered cell
+  not holding a formula, a merge over a value refused, a merge that
+  overlaps another refused, two merges that do not touch, a merge of
+  one cell refused, a range that is not a range refused, a merged
+  region being unmerged, a region that is not merged not being
+  unmerged, a node that is not a sheet refused, a fill not writing
+  into a covered cell, and the merge being saved.
+- **Every command that writes a value now knows about the merges**:
+  the cell, the date, the time, the formula, the fill and the flash
+  fill. A cell that a merge covers is refused, and the refusal says
+  which merge covers it.
+- **Two new commands**: `grid.merge.set` and `grid.merge.clear`. The
+  grid battery now carries **36** commands and the MCP server **446**.
+
+### What it does not settle
+
+- **The tree's merged region is drawn as one cell and this tree's is
+  not drawn at all.** The tree's grid has a canvas and the region is
+  one cell with many addresses; here the merge is a fact of the sheet
+  and nothing draws it.
+- **The tree's merge keeps the format of the region.** The tree's
+  merge takes the format of the top left cell and puts it on the
+  region. Here a **format** may still be put on a covered cell — a
+  format is not a value, and a covered cell has no value to lose — and
+  what a region looks like is not a thing this tree has.
