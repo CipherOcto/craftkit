@@ -79,6 +79,11 @@
 //! refusal comes before the edit, so a refused parenting changes
 //! nothing (the module `parent`).
 //!
+//! And the **markers** of a composition are here: a moment and what is
+//! said about it, and the markers of a composition stand in the order
+//! of their time — the tree's command sorts them as it adds one, and
+//! the order is derived (the module `markers`).
+//!
 //! And the **spatial** property is here too: a property whose value is
 //! a **point** does not move along the straight line from one keyframe
 //! to the next, it follows a **path** in the plane, and the time maps
@@ -103,6 +108,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 mod blend;
 mod expressions;
 mod keys;
+mod markers;
 mod parent;
 mod spatial;
 mod switches;
@@ -111,6 +117,7 @@ pub use blend::SetBlend;
 pub use expressions::{DeleteExpression, SetExpression};
 use keys::keys_of;
 pub use keys::{RemoveKeyframe, SetAuto, SetContinuous, SetInterpolation, SetKeyframe, ValueAt};
+pub use markers::{AddMarker, MarkerKind, MarkersEvaluator, SetMarker};
 pub use parent::{DeleteParent, SetParent};
 pub use switches::{SetCompSwitch, SetSwitch, SwitchesEvaluator};
 
