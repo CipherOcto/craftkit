@@ -300,7 +300,12 @@ impl Pattern {
     /// through them — unless there is only one, which the tree copies.
     /// A lane of **text with a number** in it counts its number on. A
     /// lane of anything else is copied.
-    fn of(values: &[Value], format: Option<&Format>, system: dates::System) -> Pattern {
+    fn of(
+        values: &[Value],
+        format: Option<&Format>,
+        system: dates::System,
+        custom: &[Vec<String>],
+    ) -> Pattern {
         if values.is_empty() {
             return Pattern::Copy;
         }
@@ -364,9 +369,12 @@ impl Pattern {
                 })
                 .collect();
             // The tree's **lists**: the days of the week, the months
-            // and the quarters. A text that is in a list steps through
-            // the list.
-            for list in lists() {
+            // and the quarters, and the workbook's **own** lists — and
+            // the tree tries the own ones **first**, so a list of your
+            // own may shadow one of the tree's.
+            let mut all: Vec<Vec<String>> = custom.to_vec();
+            all.extend(lists());
+            for list in all {
                 let indexes: Option<Vec<usize>> = texts
                     .iter()
                     .map(|text| list.iter().position(|item| item.eq_ignore_ascii_case(text)))
@@ -420,6 +428,8 @@ impl Pattern {
 ///
 /// The tree's lists: the days of the week in three letters and in
 /// full, the months in three letters and in full, and the quarters.
+/// And the workbook's **own** lists, which the tree tries **first** —
+/// so a list of your own may shadow one of the tree's.
 fn lists() -> Vec<Vec<String>> {
     let short_days: Vec<String> = dates::WEEKDAYS.iter().map(|day| day.chars().take(3).collect()).collect();
     let short_months: Vec<String> =
@@ -541,8 +551,11 @@ impl FillRange {
             });
         }
         // The **date system** of the workbook the sheet is in: the
-        // dates of a fill are counted in that calendar.
+        // dates of a fill are counted in that calendar. And the
+        // workbook's **custom lists**: the words a fill may step
+        // through.
         let system = crate::system_of(session, sheet);
+        let custom = crate::custom_lists_of(session, sheet);
         let source = area_at(&self.from.0, &id)?;
         let target = area_at(&self.to.0, &id)?;
         let mode = match &self.mode {
@@ -689,10 +702,11 @@ impl FillRange {
                 // The tree's date modes: a source of **dates** steps by
                 // its unit, and a source that is not dates extends like
                 // a plain drag.
-                the_dates(lane_sources, mode, format.as_ref(), system)
-                    .unwrap_or_else(|| the_pattern(&lane_values, Mode::Series, format.as_ref(), system))
+                the_dates(lane_sources, mode, format.as_ref(), system).unwrap_or_else(|| {
+                    the_pattern(&lane_values, Mode::Series, format.as_ref(), system, &custom)
+                })
             } else {
-                the_pattern(&lane_values, mode, format.as_ref(), system)
+                the_pattern(&lane_values, mode, format.as_ref(), system, &custom)
             };
             let per_cell: Vec<Pattern> = lane_sources
                 .iter()
@@ -701,7 +715,7 @@ impl FillRange {
                         Pattern::Copy
                     } else {
                         let cell_format = sheet_cells.format(from.cell).and_then(Format::parse);
-                        Pattern::of(std::slice::from_ref(&from.value), cell_format.as_ref(), system)
+                        Pattern::of(std::slice::from_ref(&from.value), cell_format.as_ref(), system, &custom)
                     }
                 })
                 .collect();
@@ -904,8 +918,14 @@ struct Lane {
 /// tree's default — continues what it finds, the `extend` mode counts
 /// a lone number up, and the `alternate` mode counts a lone number up
 /// and copies everything else.
-fn the_pattern(values: &[Value], mode: Mode, format: Option<&Format>, system: dates::System) -> Pattern {
-    let pattern = Pattern::of(values, format, system);
+fn the_pattern(
+    values: &[Value],
+    mode: Mode,
+    format: Option<&Format>,
+    system: dates::System,
+    custom: &[Vec<String>],
+) -> Pattern {
+    let pattern = Pattern::of(values, format, system, custom);
     match mode {
         Mode::Copy => Pattern::Copy,
         // The tree's values mode extends like a plain drag.

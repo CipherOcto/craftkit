@@ -49,6 +49,10 @@
 //! literals, tokens of the source and the first letter of a token —
 //! that is then run on the rows that are empty (the module `flash`).
 //!
+//! And a workbook may carry **lists of your own** — the words a fill
+//! steps through — and the tree's own lists are the days of the week,
+//! the months and the quarters (the module `fill`).
+//!
 //! And a workbook says which **calendar** its serials are counted in:
 //! the 1900 system, with the day in it that never happened, or the
 //! 1904 system, without one. The system is a fact of the **workbook**,
@@ -102,7 +106,7 @@ mod formula;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Session, Text};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 use fill::FillRange;
 use flash::FlashFill;
@@ -238,6 +242,35 @@ fn sheet_cells_mut(node: &mut Node) -> Cells {
     cells_of(node)
 }
 
+/// The **custom lists** of the workbook a sheet is in.
+///
+/// A custom list is a list of words a fill may step through, and the
+/// lists belong to the **workbook** — as they do in the tree.
+pub fn custom_lists_of(session: &Session, sheet: u64) -> Vec<Vec<String>> {
+    let Some(book) =
+        session.document().walk().find(|node| node.children.iter().any(|child| child.id == sheet))
+    else {
+        return Vec::new();
+    };
+    book.data
+        .get("custom_lists")
+        .and_then(|lists| lists.as_array())
+        .map(|lists| {
+            lists
+                .iter()
+                .filter_map(|list| {
+                    let words: Vec<String> = list
+                        .as_array()?
+                        .iter()
+                        .filter_map(|word| word.as_str().map(|word| word.to_string()))
+                        .collect();
+                    Some(words)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The **date system** of the workbook a sheet is in.
 ///
 /// The system is a fact of the **workbook**, as it is in the tree: the
@@ -280,10 +313,139 @@ impl AddWorkbook {
             name.clone(),
             "grid.workbook",
             None,
-            json!({ "date_system": dates::System::default().name() }),
+            json!({
+                "date_system": dates::System::default().name(),
+                "custom_lists": Vec::<String>::new(),
+            }),
         );
         Ok(Outcome::changed(format!("added the workbook `{name}`"))
             .with_data(json!({ "id": id, "name": name })))
+    }
+}
+
+/// **Add** a **custom list** to a workbook.
+///
+/// A custom list is a list of words a fill may step through: the
+/// tree's own lists are the days of the week, the months and the
+/// quarters, and a custom list is one of your own.
+///
+/// The words are given **one per line**, because a word is a line and
+/// a line may not be two words. A list of **one** word is not a list,
+/// and two words that are the same are one word twice — so both are
+/// refused.
+#[derive(Command)]
+#[command(id = "grid.workbook.list.add", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
+pub struct AddCustomList {
+    /// The workbook the list belongs to.
+    pub workbook: NodeRef,
+    /// The words of the list, one per line.
+    pub words: Text,
+}
+
+impl AddCustomList {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.workbook.list.add".to_string();
+        let workbook = self.workbook.0;
+        let Some(node) = session.document().node(workbook) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no workbook `{workbook}`"),
+            });
+        };
+        if node.kind != "grid.workbook" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+            });
+        }
+        let words: Vec<String> = self
+            .words
+            .0
+            .lines()
+            .map(|line| line.trim().to_string())
+            .filter(|line| !line.is_empty())
+            .collect();
+        if words.len() < 2 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a list of one word is not a list".to_string(),
+            });
+        }
+        // The tree's list is found by **membership**, so two words
+        // that are the same are one word twice: the fill would find
+        // the first and never the second.
+        for (index, word) in words.iter().enumerate() {
+            if words[..index].iter().any(|other| other.eq_ignore_ascii_case(word)) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "`{word}` is in the list twice, and a fill would find the first of them"
+                    ),
+                });
+            }
+        }
+        let mut lists =
+            node.data.get("custom_lists").and_then(|lists| lists.as_array()).cloned().unwrap_or_default();
+        lists.push(json!(words));
+        if let Some(node) = session.document_mut()?.node_mut(workbook) {
+            node.data["custom_lists"] = json!(lists);
+        }
+        Ok(Outcome::changed(format!("the workbook `{workbook}` has a list of {} words", words.len()))
+            .with_data(json!({ "workbook": workbook, "words": words })))
+    }
+}
+
+/// **Take away** a **custom list** of a workbook.
+///
+/// The list is named by its **place**: the first list, the second
+/// list, and so on.
+#[derive(Command)]
+#[command(id = "grid.workbook.list.remove", area = "grid", layer = "grid", icon = "minus", mutates, undoable)]
+pub struct RemoveCustomList {
+    /// The workbook the list belongs to.
+    pub workbook: NodeRef,
+    /// Which list: the first is 1, the second is 2, and so on.
+    pub list: Number,
+}
+
+impl RemoveCustomList {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.workbook.list.remove".to_string();
+        let workbook = self.workbook.0;
+        let Some(node) = session.document().node(workbook) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no workbook `{workbook}`"),
+            });
+        };
+        if node.kind != "grid.workbook" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+            });
+        }
+        let which = self.list.0;
+        if !which.is_finite() || which.fract() != 0.0 || which < 1.0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a list is named by its place, and the first list is the first".to_string(),
+            });
+        }
+        let which = which as usize - 1;
+        let mut lists =
+            node.data.get("custom_lists").and_then(|lists| lists.as_array()).cloned().unwrap_or_default();
+        if which >= lists.len() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the workbook `{workbook}` has {} lists", lists.len()),
+            });
+        }
+        let removed = lists.remove(which);
+        if let Some(node) = session.document_mut()?.node_mut(workbook) {
+            node.data["custom_lists"] = json!(lists);
+        }
+        Ok(Outcome::changed(format!("the workbook `{workbook}` has one list less"))
+            .with_data(json!({ "workbook": workbook, "list": which + 1, "removed": removed })))
     }
 }
 
