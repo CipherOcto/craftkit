@@ -34,6 +34,11 @@
 //! page names its parent, the parent names its children, and the count
 //! of the children is worked out from the edges and not kept.
 //!
+//! And the **boxes** of a page are here: the media box, the crop box,
+//! the bleed box, the trim box and the art box — a chain, where each
+//! falls back to the one before it and each is cut back to the media
+//! box (the module `boxes`).
+//!
 //! And the **annotation** is here: an annotation is an object of its
 //! own — a kind, a rectangle, and somewhere to go — and the page names
 //! it in its `/Annots`, which is an edge, the same edge the page tree
@@ -113,6 +118,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod boxes;
 mod content;
 mod filters;
 mod free;
@@ -130,6 +136,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+pub use boxes::{PageBoxes, SetPageBox};
 pub use number::SetNumber;
 pub use outline::{AddOutline, ReadOutline};
 pub use pages::RemovePage;
