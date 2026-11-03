@@ -267,7 +267,11 @@ impl Pattern {
                 let base = if forward { *last } else { *first };
                 let number = step.checked_mul(k)?.checked_mul(sign)?.checked_add(base)?;
                 let number = number.checked_abs()?;
-                Some(Value::Text(format!("{prefix}{number:0width$}{suffix}", width = *width)))
+                Some(Value::Text(format!(
+                    "{prefix}{number:0width$}{}",
+                    ordinal_suffix(number, suffix),
+                    width = *width
+                )))
             }
             Pattern::Weekdays { first, last, step } => {
                 let base = if forward { *last } else { *first };
@@ -433,6 +437,38 @@ fn split_num(text: &str) -> Option<(String, i64, String, usize)> {
     let suffix: String = characters.get(end + 1..)?.iter().collect();
     let width = if digits.starts_with('0') && digits.len() > 1 { digits.len() } else { 1 };
     Some((prefix, number, suffix, width))
+}
+
+/// The **ordinal ending** of a text, rewritten to suit the number.
+///
+/// The tree's rule: `1st Period` is filled as `2nd Period`. The ending
+/// is the first two letters of the text after the number, and they are
+/// rewritten when they are one of the four English endings — and when
+/// what follows them starts a word, because `1st2` is not an ordinal.
+fn ordinal_suffix(number: i64, suffix: &str) -> String {
+    let (Some(end), Some(rest)) = (suffix.get(..2), suffix.get(2..)) else {
+        return suffix.to_string();
+    };
+    if !["st", "nd", "rd", "th"].contains(&end.to_ascii_lowercase().as_str())
+        || rest.starts_with(char::is_alphanumeric)
+    {
+        return suffix.to_string();
+    }
+    let new = match (number % 10, number % 100) {
+        (_, 11..=13) => "th",
+        (1, _) => "st",
+        (2, _) => "nd",
+        (3, _) => "rd",
+        _ => "th",
+    };
+    // The ending keeps the case it was written in: `1ST` is filled as
+    // `2ND`.
+    let new = if end.chars().all(|character| character.is_ascii_uppercase()) {
+        new.to_ascii_uppercase()
+    } else {
+        new.to_string()
+    };
+    format!("{new}{rest}")
 }
 
 /// A number to **fifteen** digits.
