@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2433 tests.** The MCP server links **all fifteen batteries** in, so the
+**2440 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2433 tests
+cargo test          # 2440 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3767,6 +3767,7 @@ so.
 | the **boxes** of a page | **built.** A page has five boxes, a chain where each falls back to the one before it (§330) | §330 |
 | the **rotation** of a page | **built.** A page may be turned, by a multiple of ninety degrees (§331) | §331 |
 | the **label** of a clip | **built.** A clip carries one of the tree's own sixteen colours, and the clips with the same one are a group (§332) | §332 |
+| the **opacity** of a path | **built.** A path says how solid it is, and the opacity multiplies into the fill and the line (§333) | §333 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22809,6 +22810,51 @@ names, in the tree's own order.
 - **The tree's label groups are selected, not listed**: the tree's
   command changes the selection, and this tree's command says which
   clips are in the group.
+
+## 333. The opacity of a path
+
+The **opacity** is how **solid** a path is: it is a percentage, and it
+multiplies into everything the path is painted with — the fill, the
+line on its outline, and the stops of a gradient.
+
+### What was built
+
+- The command `vector.path.opacity` sets the opacity of a path.
+- The opacity is put into the paint: the fill and the line are drawn
+  with it.
+
+### What the port found
+
+- **The tree clamps the opacity and this tree refuses it.** The tree's
+  command takes any number and puts it between zero and a hundred, and
+  a percentage of a thousand is a percentage of a hundred; here an
+  opacity outside that range is **refused**, because an opacity that is
+  not a percentage is not an opacity.
+- **The opacity is not the fill's own transparency.** A fill may be
+  half solid and the path may be half opaque, and the two are
+  multiplied — the tree's opacity is the object's own and the fill's
+  alpha is the paint's.
+
+### What it cost
+
+- **Seven tests** in the vector battery (`tests/opacity.rs`): a new
+  path being fully solid, the opacity being set, an opacity outside
+  the range refused, a path being nothing at all, the opacity
+  multiplying into the fill, the opacity multiplying into the line, and
+  the opacity being saved with the path.
+- **One new command**: `vector.path.opacity`. The vector battery now
+  carries **36** commands and the MCP server **428**.
+
+### What it does not settle
+
+- **The tree's opacity is per appearance item, and this one is per
+  path**: the tree's object has a stack of fills and strokes, and each
+  of them has its own opacity, and here the path has one.
+- **The tree's opacity mask is not here**: a mask that fades a path
+  along its own shape is the tree's own and a whole thing of its own.
+- **The tree's isolate and knockout are not here**: they are about how
+  a path mixes with what is under it, and the blend mode is here and
+  they are not.
 
 ## 321. The frozen track
 
