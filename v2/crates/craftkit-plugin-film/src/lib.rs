@@ -77,6 +77,12 @@
 //! the media and then holds that frame to the end of the clip, so its
 //! material is **shorter** than the clip (the module `hold`).
 //!
+//! And a clip may be **slipped**: it stays where it is on the timeline
+//! and how long it is, and it shows a **different part of its media** —
+//! and a slip that would run past the end of the media is **refused**
+//! and says how long the media is, where the tree clamps it and says
+//! nothing (the module `slipping`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -132,6 +138,7 @@ mod moving;
 mod removal;
 mod reversing;
 mod rippling;
+mod slipping;
 pub mod speed;
 mod splitting;
 mod transitions;
@@ -147,6 +154,7 @@ pub use moving::MoveClip;
 pub use removal::RemoveClip;
 pub use reversing::ReverseClip;
 pub use rippling::RippleClip;
+pub use slipping::SlipClip;
 pub use speed::SetSpeed;
 pub use splitting::SplitClip;
 pub use transitions::{AddTransition, RemoveTransition, SetTransition, TransitionKind};
@@ -670,6 +678,7 @@ craftkit_sdk::plugin_anchor!(
     RemoveTransition,
     ReverseClip,
     LockTrack,
+    SlipClip,
     TimelineEvaluator,
     FilmPanel
 );
