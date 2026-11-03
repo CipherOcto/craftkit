@@ -89,6 +89,11 @@
 //! **refused** and says which bound stopped it, where the tree clamps
 //! it and says nothing (the module `rolling`).
 //!
+//! And a clip may be **slid** between its neighbours: it moves and the
+//! clips around it give way, so that the span they share stays
+//! without a gap — and a slide that would cross a bound is **refused**
+//! and says which bound stopped it (the module `sliding`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -145,6 +150,7 @@ mod removal;
 mod reversing;
 mod rippling;
 mod rolling;
+mod sliding;
 mod slipping;
 pub mod speed;
 mod splitting;
@@ -162,6 +168,7 @@ pub use removal::RemoveClip;
 pub use reversing::ReverseClip;
 pub use rippling::RippleClip;
 pub use rolling::RollCut;
+pub use sliding::SlideClip;
 pub use slipping::SlipClip;
 pub use speed::SetSpeed;
 pub use splitting::SplitClip;
@@ -687,6 +694,7 @@ craftkit_sdk::plugin_anchor!(
     ReverseClip,
     LockTrack,
     SlipClip,
+    SlideClip,
     RollCut,
     TimelineEvaluator,
     FilmPanel

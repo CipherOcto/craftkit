@@ -176,7 +176,7 @@ impl RollCut {
         // cut, and they stay inside the two clips they join (the
         // module `transitions`).
         for planned in &planned {
-            move_transition(session, planned.before, planned.after, delta)?;
+            crate::transitions::follow_cut(session, planned.before, planned.after, delta)?;
             crate::transitions::keep_within_clips(session, planned.before)?;
             crate::transitions::keep_within_clips(session, planned.after)?;
         }
@@ -294,32 +294,4 @@ fn pairs_to_roll(session: &Session, left: u64, right: u64, cut: u64) -> Vec<(u64
         }
     }
     pairs
-}
-
-/// Move the **transition** that sits over a cut that moved.
-///
-/// The transition sits on the cut by its alignment, and the cut moved,
-/// so the transition moves with it.
-fn move_transition(session: &mut Session, before: u64, after: u64, delta: i64) -> Result<(), EngineError> {
-    let transitions: Vec<u64> = session
-        .document()
-        .walk()
-        .filter(|node| node.kind == "film.transition")
-        .filter(|node| {
-            let from = node.data.get("from").and_then(|from| from.as_u64());
-            let to = node.data.get("to").and_then(|to| to.as_u64());
-            (from == Some(before) && to == Some(after)) || (from == Some(after) && to == Some(before))
-        })
-        .map(|node| node.id)
-        .collect();
-    for transition in transitions {
-        let Some(node) = session.document().node(transition) else { continue };
-        let start = node.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
-        let moved = start as i64 + delta;
-        let moved = if moved < 0 { 0 } else { moved as u64 };
-        if let Some(node) = session.document_mut()?.node_mut(transition) {
-            node.data["start"] = serde_json::json!(moved);
-        }
-    }
-    Ok(())
 }
