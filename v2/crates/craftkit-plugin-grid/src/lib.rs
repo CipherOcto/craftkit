@@ -621,7 +621,7 @@ impl SetFormat {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!(
-                    "`{code}` is not a format this tree has: a number format is `general`, a whole part of `0` and `#`, up to fifteen decimals and a `%`; and a date format is `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` or `yyyy`; and a time format is `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`, `h AM/PM`, `h:mm AM/PM`, `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`, `[h]:mm`, `[h]:mm:ss` or `[mm]:ss`"
+                    "`{code}` is not a format this tree has: a number format is `general`, a whole part of `0` and `#`, up to fifteen decimals and a `%`, or a number with a symbol in quotes; and a date format is `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` or `yyyy`; and a time format is `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`, `h AM/PM`, `h:mm AM/PM`, `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`, `[h]:mm`, `[h]:mm:ss` or `[mm]:ss`"
                 ),
             });
         }

@@ -11,6 +11,8 @@
 //! - `#,##0` and `#,##0.00` — the thousands separated;
 //! - `0%` and `0.00%` — a percentage, and the value is multiplied by a
 //!   hundred;
+//! - the **currencies**: a number with a symbol in quotes, such as
+//!   `"$"#,##0.00` or `#,##0.00" kr"`;
 //! - the **dates**: `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`,
 //!   `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`.
 //! - the **times**: `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`,
@@ -52,11 +54,13 @@
 //!   is a **field of the cell**, and a hundred cells with one format
 //!   carry a hundred formats. The tree's style also carries the font,
 //!   the colour and the alignment, and none of those are here.
-//! - **The tree's currency and scientific formats are not here**, and
-//!   neither are its **sections** — a format with a different code for
-//!   negative numbers is not here. The tree's **times** are here: a
-//!   time is a fraction of a day and a format, and the tree's clock
-//!   shapes and its elapsed shapes are both here.
+//! - **The tree's scientific formats are not here**, and neither are
+//!   its **sections** — a format with a different code for negative
+//!   numbers is not here. The tree's **currency** is here: a number
+//!   with a symbol on it, and the symbol is a literal in quotes. The
+//!   tree's **times** are here: a time is a fraction of a day and a
+//!   format, and the tree's clock shapes and its elapsed shapes are
+//!   both here.
 //! - **The tree's date formats are a language, and here they are a
 //!   list**: the nine shapes above are the ones this tree has, and a
 //!   date format that is not one of them is refused.
@@ -97,6 +101,18 @@ pub enum Format {
     Time {
         /// The shape the time is written in.
         style: TimeStyle,
+    },
+    /// A **currency**: a number with a **symbol** on it.
+    Currency {
+        /// The symbol: the tree writes it in quotes.
+        symbol: String,
+        /// Whether the symbol is in **front** of the number or behind
+        /// it.
+        before: bool,
+        /// How many decimals are written.
+        decimals: usize,
+        /// Whether the thousands are separated by a comma.
+        thousands: bool,
     },
 }
 
@@ -315,34 +331,18 @@ impl Format {
         if let Some(style) = TimeStyle::parse(code) {
             return Some(Format::Time { style });
         }
-        let (thousands, rest) = match code.contains(',') {
-            true => (true, code.replace(',', "")),
-            false => (false, code.to_string()),
-        };
-        let (percent, rest) = match rest.strip_suffix('%') {
-            Some(rest) => (true, rest.to_string()),
-            None => (false, rest),
-        };
-        let (whole, decimals) = match rest.split_once('.') {
-            Some((whole, decimals)) => {
-                if decimals.is_empty() || !decimals.chars().all(|digit| digit.is_ascii_digit()) {
-                    return None;
-                }
-                (whole.to_string(), decimals.len())
+        // A **currency** is a number with a **symbol**: the symbol is a
+        // literal in quotes, and the tree writes it that way.
+        for (symbol, before, rest) in symbols(code) {
+            if let Some((decimals, thousands)) = number_shape(&rest) {
+                return Some(Format::Currency { symbol, before, decimals, thousands });
             }
-            None => (rest.clone(), 0),
+        }
+        let (percent, rest) = match code.strip_suffix('%') {
+            Some(rest) => (true, rest.to_string()),
+            None => (false, code.to_string()),
         };
-        if decimals > MAX_DECIMALS {
-            return None;
-        }
-        // The whole part is a placeholder: `0` always shows a digit and
-        // `#` leaves it out when it is zero.
-        if whole.is_empty()
-            || !whole.chars().all(|digit| digit == '#' || digit == '0')
-            || !whole.contains('0')
-        {
-            return None;
-        }
+        let (decimals, thousands) = number_shape(&rest)?;
         Some(Format::Decimals { decimals, thousands, percent })
     }
 
@@ -364,6 +364,10 @@ impl Format {
                 // A time is a **number** with a time format on it, and
                 // the number that is not a date is a time of the day.
                 Format::Time { style } => style.text(*number),
+                // A currency is a **number** with a symbol on it.
+                Format::Currency { symbol, before, decimals, thousands } => {
+                    currency(*number, symbol, *before, *decimals, *thousands)
+                }
             },
             // A format does not change a text: the tree's text sections
             // are not here.
@@ -378,6 +382,68 @@ impl Format {
             Value::Error(message) => message.clone(),
         }
     }
+}
+
+/// The **symbols** of a currency, and the number format that is left.
+///
+/// The tree writes the symbol in **quotes**, because a symbol is a
+/// literal and not a placeholder: `"$"#,##0.00`. The symbol may be in
+/// front of the number or behind it, and a code that has both readings
+/// is read the way that leaves a number behind.
+fn symbols(code: &str) -> Vec<(String, bool, String)> {
+    let code = code.trim();
+    let mut out: Vec<(String, bool, String)> = Vec::new();
+    if let Some(rest) = code.strip_prefix('"')
+        && let Some((symbol, rest)) = rest.split_once('"')
+    {
+        out.push((symbol.to_string(), true, rest.trim().to_string()));
+    }
+    if let Some(rest) = code.strip_suffix('"')
+        && let Some((rest, symbol)) = rest.rsplit_once('"')
+    {
+        out.push((symbol.to_string(), false, rest.trim().to_string()));
+    }
+    out
+}
+
+/// The **shape** of a number format: how many decimals it writes and
+/// whether the thousands are separated.
+///
+/// The whole part is a placeholder: `0` always shows a digit and `#`
+/// leaves it out when it is zero.
+fn number_shape(code: &str) -> Option<(usize, bool)> {
+    let (thousands, rest) = match code.contains(',') {
+        true => (true, code.replace(',', "")),
+        false => (false, code.to_string()),
+    };
+    let (whole, decimals) = match rest.split_once('.') {
+        Some((whole, decimals)) => {
+            if decimals.is_empty() || !decimals.chars().all(|digit| digit.is_ascii_digit()) {
+                return None;
+            }
+            (whole.to_string(), decimals.len())
+        }
+        None => (rest.clone(), 0),
+    };
+    if decimals > MAX_DECIMALS {
+        return None;
+    }
+    if whole.is_empty() || !whole.chars().all(|digit| digit == '#' || digit == '0') || !whole.contains('0') {
+        return None;
+    }
+    Some((decimals, thousands))
+}
+
+/// A number with a **symbol** in front of it.
+///
+/// The sign is in front of the symbol, as the tree writes it.
+fn currency(number: f64, symbol: &str, before: bool, decimals: usize, thousands: bool) -> String {
+    if !number.is_finite() {
+        return general(number);
+    }
+    let sign = if number < 0.0 { "-" } else { "" };
+    let written = fixed(number.abs(), decimals, thousands, false);
+    if before { format!("{sign}{symbol}{written}") } else { format!("{sign}{written}{symbol}") }
 }
 
 /// A number, as it is.
