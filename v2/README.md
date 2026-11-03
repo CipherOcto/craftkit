@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2632 tests.** The MCP server links **all fifteen batteries** in, so the
+**2641 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2632 tests
+cargo test          # 2641 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3783,6 +3783,7 @@ so.
 | the **subtotal** of a range | **built.** The tree's own function, with the hundred-and-more form that leaves the hidden rows out (§346) | §346 |
 | the **filter** of a sheet | **built.** A column and a criterion, and the rows the filter hides are derived (§347) | §347 |
 | the **switch** of one effect | **built.** An effect may be switched off and keep its values (§348) | §348 |
+| the **line spacing** of a paragraph | **built.** The lines may be spaced by a multiple, a minimum or an exact number (§349) | §349 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23882,3 +23883,58 @@ where they are: the tree's `effect.toggle`.
 - **The tree's duplicate and reset of an instance are not here**
   either: they are commands on an instance and they come with the
   reorder.
+
+## 349. The line spacing of a paragraph
+
+The space **around** a paragraph is here (§344) and the space
+**between** its lines was not: the tree's spacing is one of three
+things — a **multiple** of single spacing, a **minimum** number of
+points, or an **exact** number of points.
+
+### What was built
+
+- The command `prose.block.paragraph.linespacing` says how the lines of
+  a paragraph are spaced.
+- Only **one** of the three may be said: a spacing of nothing is
+  refused and a spacing of more than one is refused.
+- A number outside the tree's own range is **refused**: a multiple is
+  between 0.06 and 132, a minimum of points is between 0 and 1584, and
+  an exact number of points is between 0.7 and 1584.
+
+### What the port found
+
+- **The tree clamps the numbers and this tree refuses them.** The
+  tree's `line_spacing` clamps each of the three into its own range
+  and says nothing about it. Here a number outside the range is
+  **refused**, and the refusal says the range.
+- **The tree takes the three in an order and this tree takes one.**
+  The tree's command reads `atLeast`, then `exactly`, and takes a
+  multiple when neither is there — so a call with two of them keeps
+  the first. Here a call with two of them is **refused**, because a
+  spacing that is two things is not a spacing.
+- **The tree's spacing is one enum and this tree's is one field with
+  a kind.** The tree's `LineSpacing` is a multiple, a minimum or an
+  exact number, and it is written down as such. Here the paragraph
+  carries the kind and the number, and the kind is one of the tree's
+  three names.
+
+### What it cost
+
+- **Nine tests** in the prose battery (`tests/linespacing.rs`): the
+  lines being spaced by a multiple, by a minimum and by an exact
+  number, a spacing of nothing refused, a spacing of more than one
+  refused, a multiple out of range refused, a minimum and an exact out
+  of range refused, a table not being a paragraph, and the spacing
+  being saved.
+- **One new command**: `prose.block.paragraph.linespacing`. The prose
+  battery now carries **14** commands and the MCP server **460**.
+
+### What it does not settle
+
+- **The tree's character spacing is not here.** The tree may space
+  the characters of a run — a letter at a time — and the tree's
+  paragraph indents cancel it. Here a run carries a length, a bold and
+  an italic, and there is no character spacing to cancel.
+- **The tree's reading view has its own spacing** — the spacing the
+  reader sees, which is not the spacing of the document — and that is
+  the state of the view and not a fact of the document.
