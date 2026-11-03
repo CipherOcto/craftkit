@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2158 tests.** The MCP server links **all fifteen batteries** in, so the
+**2168 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3737,6 +3737,7 @@ so.
 | the **split** of a linked group | **built.** A linked group is split as one edit, and the right-hand pieces are a new group (§300) | §300 |
 | the **frame hold** of a clip | **built.** A clip may hold a frame of its media to the end of the clip, and its material is then shorter than the clip (§301) | §301 |
 | the **transitions** of a split | **built.** A transition that follows a cut joins the piece after it, and one that spans the cut keeps the piece before it (§302) | §302 |
+| the **average** of the points of a path | **built.** The points of a path may be put on one line, in one column, or all in one place (§303) | §303 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20989,3 +20990,62 @@ through a clip has to answer for the transitions that sit over it.
 - **The tree's transitions carry a kind of their own** — a registry of
   them — and this tree has the one the tree's default names.
 
+## 303. The average of the points of a path
+
+The tree's average puts the **selected** points of a path on one line,
+in one column, or all in one place. It is a small thing, and it is
+here because it says something about what this tree does with a
+selection.
+
+### What was built
+
+- The **average** of the points of a path: the command
+  `vector.path.average` puts the points that are given on one line
+  (`horizontal`), in one column (`vertical`), or all in one place
+  (`both`, which is the default).
+- The points are given **one per line**, as `contour:point`, because
+  this tree has no selection: a range is a fact and a selection is
+  not.
+- The **handles** move with the point they belong to, as they do in the
+  tree.
+
+### What the port found
+
+- **The tree's average is a command about the selection, and this
+  tree's is a command about the points.** The tree's `path.average`
+  works on the anchors that are directly selected, across **several**
+  paths at once: it gathers their positions, works out the mean, and
+  moves each anchor to it. Here the points are a **parameter**, one
+  path per command, because a command works on one node.
+- **The tree's unknown axis is `both`, and says nothing about it.** The
+  tree's handler matches `horizontal` and `vertical` and falls through
+  to the centre for everything else — so a typo is a different edit
+  and no warning. Here an axis that is not an axis is **refused**.
+- **The tree's average of nothing is nothing.** The tree gathers the
+  points, and if there are none it returns without editing anything —
+  a command that did nothing and said nothing. Here there is nothing
+  to average and that is **refused**.
+- **The tree's average does not move the handles of a point it did
+  not average**, and neither does this one: a point carries its two
+  handles, and the handles of an averaged point move with it.
+
+### What it cost
+
+- **Ten tests** in the vector battery (`tests/average.rs`): the three
+  axes, the axis that is left out, the handles that move with the
+  point, an axis that is not an axis, a line that is not a point, a
+  point that is not there, no points at all, and the same point twice.
+- **One new command**: `vector.path.average`. The vector battery now
+  carries **32** commands and the MCP server **384**.
+- **One rule of the SDK's**: the parameter kinds are number, text,
+  bool, node, document and either — and there is no list. So the points
+  are one **text**, one point to a line.
+
+### What it does not settle
+
+- **The tree's average of several paths at once is not here**: a
+  command works on one path, so averaging points of two paths is two
+  commands and not one.
+- **The tree's other point commands are not here**: the tree's
+  `path.convertAnchors` turns the direct-selected points into corner
+  or smooth points, and its `path.deleteAnchors` takes them away.
