@@ -111,19 +111,24 @@ impl SplitClip {
             });
         };
         let cut = at - start;
+        // A clip that plays **backwards** shows the *later* media at
+        // its head: the piece before the place takes the media the
+        // piece after it had, and the content stays continuous.
+        let reversed = crate::is_reversed(&node.data);
+        let original = node.data.clone();
+        let (left_source_in, right_source_in) =
+            if reversed { (source_in + (duration - cut), source_in) } else { (source_in, source_in + cut) };
         // The piece before the place: the same clip, shorter.
-        let data = serde_json::json!({ "start": start, "duration": cut, "source_in": source_in });
+        let left_source_in = serde_json::json!(left_source_in);
+        let data = crate::clocks_of(&original, start, cut, &left_source_in);
         if let Some(node) = session.document_mut()?.node_mut(clip) {
             node.data = data;
             node.name = format!("clip at {start}");
         }
         // The piece after it: a **new clip**, and the media moves with
         // the cut.
-        let data = serde_json::json!({
-            "start": at,
-            "duration": duration - cut,
-            "source_in": source_in + cut,
-        });
+        let right_source_in = serde_json::json!(right_source_in);
+        let data = crate::clocks_of(&original, at, duration - cut, &right_source_in);
         let name = format!("clip at {at}");
         let new =
             session.document_mut()?.add_node_with_under(Some(track), name.clone(), "film.clip", None, data);

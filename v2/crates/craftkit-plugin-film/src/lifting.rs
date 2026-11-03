@@ -150,10 +150,8 @@ impl ExtractRange {
                 .node(clip)
                 .and_then(|node| node.data.get("source_in").cloned())
                 .unwrap_or(serde_json::Value::Null);
-            let data =
-                serde_json::json!({ "start": new_start, "duration": duration, "source_in": source_in });
             if let Some(node) = session.document_mut()?.node_mut(clip) {
-                node.data = data;
+                node.data = crate::clocks_of(&node.data, new_start, duration, &source_in);
                 node.name = format!("clip at {new_start}");
             }
             moved.push(serde_json::json!({ "id": clip, "start": new_start }));

@@ -105,6 +105,9 @@ impl TrimClip {
                 message: format!("the clip `{clip}` does not say where it is"),
             });
         };
+        // A clip that plays **backwards** consumes the media at the
+        // other end of its range.
+        let reversed = crate::is_reversed(&node.data);
         let edge = self.edge.0.trim().to_lowercase();
         if edge != "in" && edge != "out" {
             return Err(EngineError::Failed {
@@ -132,9 +135,13 @@ impl TrimClip {
         // The **media**: how long the item the clip plays is.
         let media = media_of(session, clip);
 
+        // A clip that plays **backwards** consumes the media at the
+        // other end of its range: its in edge takes the media *after*
+        // its out point and its out edge takes the media *before* its
+        // in point.
         let (start, duration, source_in) = if edge == "in" {
             let duration = clock.duration as i64 - delta;
-            let source_in = clock.source_in as i64 + delta;
+            let source_in = if reversed { clock.source_in as i64 } else { clock.source_in as i64 + delta };
             let start = clock.start as i64 + delta;
             if duration < 1 {
                 return Err(EngineError::Failed {
@@ -170,7 +177,16 @@ impl TrimClip {
                     ),
                 });
             }
-            (clock.start as i64, duration, clock.source_in as i64)
+            // A clip that plays backwards takes the media *before* its
+            // in point when its out edge grows.
+            let source_in = if reversed { clock.source_in as i64 - delta } else { clock.source_in as i64 };
+            if source_in < 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip would begin at {} frames before the media begins", -source_in),
+                });
+            }
+            (clock.start as i64, duration, source_in)
         };
 
         if let Some(media) = media
@@ -206,11 +222,8 @@ impl TrimClip {
             });
         }
 
-        let data = serde_json::json!({
-            "start": start,
-            "duration": duration,
-            "source_in": source_in,
-        });
+        let source_in = serde_json::json!(source_in as u64);
+        let data = crate::clocks_of(&node.data, start as u64, duration as u64, &source_in);
         if let Some(node) = session.document_mut()?.node_mut(clip) {
             node.data = data;
             node.name = format!("clip at {start}");

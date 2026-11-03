@@ -132,19 +132,15 @@ impl InsertClip {
         let mut moved: Vec<serde_json::Value> = Vec::new();
         for (other, other_start) in pushed {
             let new_start = other_start + duration;
-            let data = serde_json::json!({
-                "start": new_start,
-                "duration": duration_of(session, other),
-                "source_in": source_in_of(session, other),
-            });
+            let source_in = source_in_of(session, other);
+            let duration = duration_of(session, other);
             if let Some(node) = session.document_mut()?.node_mut(other) {
-                node.data = data;
+                node.data = crate::clocks_of(&node.data, new_start, duration, &source_in);
                 node.name = format!("clip at {new_start}");
             }
             moved.push(serde_json::json!({ "id": other, "start": new_start }));
         }
         // The clip itself: its place, and the track it is on.
-        let data = serde_json::json!({ "start": start, "duration": duration, "source_in": source_in });
         let name = format!("clip at {start}");
         let from = session
             .document()
@@ -153,7 +149,7 @@ impl InsertClip {
             .map(|node| node.id);
         if from == Some(track) {
             if let Some(node) = session.document_mut()?.node_mut(clip) {
-                node.data = data;
+                node.data = crate::clocks_of(&node.data, start, duration, &source_in);
                 node.name = name;
             }
         } else {
@@ -163,7 +159,7 @@ impl InsertClip {
                     message: format!("there is no node `{clip}`"),
                 });
             };
-            node.data = data;
+            node.data = crate::clocks_of(&node.data, start, duration, &source_in);
             node.name = name;
             let Some(track_node) = session.document_mut()?.node_mut(track) else {
                 return Err(EngineError::Failed {

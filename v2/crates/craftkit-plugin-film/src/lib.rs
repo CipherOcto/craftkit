@@ -45,6 +45,11 @@
 //! `lifting`). And the same range may be **extracted**: the same
 //! removal, and the gap closes.
 //!
+//! And a clip may play its media **backwards**: the direction is a
+//! property of the clip and not of the media, and it changes what the
+//! clip's edges consume — a reversed clip's head is the *end* of its
+//! media — and what a split of it does (the module `reversing`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -94,6 +99,7 @@ mod inserting;
 mod lifting;
 mod moving;
 mod removal;
+mod reversing;
 mod rippling;
 mod splitting;
 mod trim;
@@ -102,6 +108,7 @@ pub use inserting::InsertClip;
 pub use lifting::LiftRange;
 pub use moving::MoveClip;
 pub use removal::RemoveClip;
+pub use reversing::ReverseClip;
 pub use rippling::RippleClip;
 pub use splitting::SplitClip;
 pub use trim::TrimClip;
@@ -499,6 +506,33 @@ impl TimelineEvaluator {
 )]
 pub struct FilmPanel;
 
+/// The payload of a clip with its **clocks** set.
+///
+/// The rest of the payload is kept: a clip may carry more than its
+/// three clocks — whether it plays backwards is one of those things —
+/// and taking it away would be taking away something the caller did
+/// not ask about.
+pub fn clocks_of(
+    data: &serde_json::Value,
+    start: u64,
+    duration: u64,
+    source_in: &serde_json::Value,
+) -> serde_json::Value {
+    let mut new = data.clone();
+    if !new.is_object() {
+        new = serde_json::json!({});
+    }
+    new["start"] = serde_json::json!(start);
+    new["duration"] = serde_json::json!(duration);
+    new["source_in"] = source_in.clone();
+    new
+}
+
+/// Whether a clip plays its media **backwards**.
+pub fn is_reversed(data: &serde_json::Value) -> bool {
+    data.get("reverse").and_then(|reverse| reverse.as_bool()).unwrap_or(false)
+}
+
 /// A number of frames.
 fn frames(value: Number, id: &str) -> Result<u64, EngineError> {
     if !value.0.is_finite() || value.0 < 0.0 || value.0.fract() != 0.0 {
@@ -530,6 +564,7 @@ craftkit_sdk::plugin_anchor!(
     RemoveClip,
     RippleClip,
     LiftRange,
+    ReverseClip,
     TimelineEvaluator,
     FilmPanel
 );

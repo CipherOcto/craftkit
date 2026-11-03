@@ -127,15 +127,10 @@ impl MoveClip {
             .walk()
             .find(|node| node.kind == "film.track" && node.children.iter().any(|child| child.id == clip))
             .map(|node| node.id);
-        let data = serde_json::json!({
-            "start": start,
-            "duration": duration,
-            "source_in": source_in,
-        });
         let name = format!("clip at {start}");
         if from == Some(track) {
             if let Some(node) = session.document_mut()?.node_mut(clip) {
-                node.data = data;
+                node.data = crate::clocks_of(&node.data, start, duration, &source_in);
                 node.name = name;
             }
         } else {
@@ -148,7 +143,7 @@ impl MoveClip {
                     message: format!("there is no node `{clip}`"),
                 });
             };
-            node.data = data;
+            node.data = crate::clocks_of(&node.data, start, duration, &source_in);
             node.name = name;
             let Some(track_node) = session.document_mut()?.node_mut(track) else {
                 return Err(EngineError::Failed {
