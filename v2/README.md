@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2176 tests.** The MCP server links **all fifteen batteries** in, so the
+**2186 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3739,6 +3739,7 @@ so.
 | the **transitions** of a split | **built.** A transition that follows a cut joins the piece after it, and one that spans the cut keeps the piece before it (§302) | §302 |
 | the **average** of the points of a path | **built.** The points of a path may be put on one line, in one column, or all in one place (§303) | §303 |
 | the **removal** of a page | **built.** A page may be taken away, the tree of pages is right afterwards, and the destinations that went to it go with it (§304) | §304 |
+| the **removal** of an anchor | **built.** An anchor may be taken away, and the contour becomes the stretches that are left (§305) | §305 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21128,3 +21129,68 @@ of pages, and everything that pointed at it has to stop pointing at it.
   and no generation, so a number that is free may be taken by a new
   object.
 - **Several pages at once are not here**: one command, one page.
+
+## 305. The removal of an anchor
+
+The vector battery could add an anchor to a segment. It could not take
+one away, and taking one away is not the same thing as not adding it:
+the contour has to answer for the gap.
+
+### What was built
+
+- The command `vector.path.anchor.remove` takes an **anchor** away.
+- The segments that touch it go with it, and the contour becomes the
+  **stretches** that are left: a closed contour is a cycle and stays
+  one stretch, an open contour is a line of points and becomes the two
+  stretches on either side of the gap.
+- A stretch with fewer than two points is not a stretch, and it is
+  gone.
+
+### What the port found
+
+- **The tree's rule is about the stretches and not about the points.**
+  The tree removes the selected anchors *and* the segments that touch
+  them, and then keeps the surviving stretches **separate** rather
+  than joining across the gap: the path does not heal over the hole.
+  A stretch that is left with fewer than two anchors is dropped, so a
+  contour may go entirely.
+- **A closed contour is a cycle, and it stays one stretch.** The tree's
+  closed contour has an explicit closing segment, and taking an anchor
+  out of the cycle leaves one path — not two. This tree's closed
+  contour has no closing segment: the closing is **implicit**, and it
+  is a straight line. So the cut makes that edge explicit, and it is a
+  straight line here as well.
+- **The tree's handles at the ends of a stretch are cleared.** The tree
+  clears the dangling handles of the first and the last anchor of a
+  stretch, because a handle that leads nowhere is not a handle. Here
+  the handles belong to the segments and not to the points, so the
+  segments that went took their handles with them and there is nothing
+  left to clear.
+- **The tree's anchor is a selection.** The tree's `path.deleteAnchors`
+  works on the anchors that are directly selected, and it also handles
+  a whole path that was caught by a marquee. Here the anchor is a
+  **parameter**, because this tree has no selection: a range is a fact
+  and a selection is not.
+
+### What it cost
+
+- **Ten tests** in the vector battery (`tests/anchor_remove.rs`): an
+  anchor may be taken away, a closed contour stays one stretch, an
+  open contour splits into two, the points that survive keep their
+  places, a closed contour is open afterwards, a contour with one
+  point is gone, the segments that survive keep their shape, and three
+  refusals.
+- **One new command**: `vector.path.anchor.remove`. The vector battery
+  now carries **33** commands and the MCP server **386**.
+
+### What it does not settle
+
+- **The tree's other anchor commands are not here**: its
+  `path.convertAnchors` turns the selected points into corner points
+  or into smooth ones, and its `path.removeAnchor` takes one point
+  away by its own name — the two are the same edit here, because this
+  tree has one command for one thing.
+- **The tree's segment pick is not here**: a segment that is picked may
+  be cut on its own, keeping every curve around it.
+- **The tree's marquee is not here**, and with it the removal of a
+  whole path that a marquee caught.
