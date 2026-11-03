@@ -122,9 +122,17 @@ impl SplitClip {
         // its head: the piece before the place takes the media the
         // piece after it had, and the content stays continuous.
         let reversed = crate::is_reversed(&node.data);
+        // The **speed**: the media a frame of the clip plays is the
+        // speed's worth of the media, so the cut is a cut in the media
+        // too.
+        let speed = crate::speed::speed_of(&node.data);
         let original = node.data.clone();
-        let (left_source_in, right_source_in) =
-            if reversed { (source_in + (duration - cut), source_in) } else { (source_in, source_in + cut) };
+        let media_of = |frames: u64| crate::speed::media_frames(frames, speed);
+        let (left_source_in, right_source_in) = if reversed {
+            (source_in + media_of(duration - cut), source_in)
+        } else {
+            (source_in, source_in + media_of(cut))
+        };
         // The piece before the place: the same clip, shorter.
         let left_source_in = serde_json::json!(left_source_in);
         let data = crate::clocks_of(&original, start, cut, &left_source_in);

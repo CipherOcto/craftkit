@@ -59,6 +59,11 @@
 //! and an alignment on the cut, and it may not leave the clips it
 //! joins — the tree's transitions (the module `transitions`).
 //!
+//! And a clip may play its media **faster or slower** than it is: the
+//! speed is the third thing that joins the two clocks, and the media a
+//! clip plays is its length multiplied by its speed (the module
+//! `speed`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -111,6 +116,7 @@ mod moving;
 mod removal;
 mod reversing;
 mod rippling;
+pub mod speed;
 mod splitting;
 mod transitions;
 mod trim;
@@ -122,6 +128,7 @@ pub use moving::MoveClip;
 pub use removal::RemoveClip;
 pub use reversing::ReverseClip;
 pub use rippling::RippleClip;
+pub use speed::SetSpeed;
 pub use splitting::SplitClip;
 pub use transitions::{AddTransition, RemoveTransition, SetTransition, TransitionKind};
 pub use trim::TrimClip;
@@ -415,6 +422,7 @@ impl AddClip {
             "start": start,
             "duration": duration,
             "source_in": source_in,
+            "speed": 1.0,
         });
         let name = format!("clip at {start}");
         let id =
@@ -546,6 +554,22 @@ pub fn clocks_of(
     new
 }
 
+/// How long the **media** a clip plays is.
+///
+/// The item the clip plays is a relation, and the item's own length is
+/// in its payload.
+pub fn media_length_of(session: &Session, clip: u64) -> Option<u64> {
+    let item = session
+        .document()
+        .relations
+        .iter()
+        .find(|relation| relation.kind == "clip" && relation.from == clip)
+        .map(|relation| relation.to)?;
+    let node = session.document().node(item)?;
+    let duration = node.data.get("duration")?.as_u64()?;
+    if duration == 0 { None } else { Some(duration) }
+}
+
 /// The **track** a clip is on.
 pub fn track_of(session: &Session, clip: u64) -> Option<u64> {
     session
@@ -606,6 +630,7 @@ craftkit_sdk::plugin_anchor!(
     RippleClip,
     LiftRange,
     TransitionKind,
+    SetSpeed,
     AddTransition,
     SetTransition,
     RemoveTransition,

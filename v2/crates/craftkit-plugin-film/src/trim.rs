@@ -28,10 +28,10 @@
 //!   clips after the trimmed one, so that the gap closes. Here the
 //!   trim moves the clip and nothing else, and the gap it leaves is a
 //!   gap.
-//! - **The clip's speed is not here.** The tree's trim counts the
-//!   media a trim takes in the media's own ticks, which are the
-//!   timeline's ticks multiplied by the speed. Here a frame is a frame
-//!   in both clocks.
+//! - **The clip's speed is here, and the trim counts the media
+//!   through it.** The tree's trim counts the media a trim takes in the
+//!   media's own ticks, which are the timeline's ticks multiplied by
+//!   the speed (the module `speed`).
 
 use craftkit_derive::Command;
 
@@ -135,6 +135,10 @@ impl TrimClip {
                 message: "a trim of zero frames is not a trim".to_string(),
             });
         }
+        // The **speed**: the media a frame of the clip plays is the
+        // speed's worth of the media, so a trim of the in edge moves
+        // the media by that much and not by one frame.
+        let speed = crate::speed::speed_of(&node.data);
         // The **neighbours**: the clips on the same track, before and
         // after this one.
         let Neighbours { before, after } = neighbours(session, clip, clock.start);
@@ -145,9 +149,12 @@ impl TrimClip {
         // other end of its range: its in edge takes the media *after*
         // its out point and its out edge takes the media *before* its
         // in point.
+        // The **media** a trim of that many frames takes.
+        let media_delta = (delta as f64 * speed).round() as i64;
         let (start, duration, source_in) = if edge == "in" {
             let duration = clock.duration as i64 - delta;
-            let source_in = if reversed { clock.source_in as i64 } else { clock.source_in as i64 + delta };
+            let source_in =
+                if reversed { clock.source_in as i64 } else { clock.source_in as i64 + media_delta };
             let start = clock.start as i64 + delta;
             if duration < 1 {
                 return Err(EngineError::Failed {
@@ -185,7 +192,8 @@ impl TrimClip {
             }
             // A clip that plays backwards takes the media *before* its
             // in point when its out edge grows.
-            let source_in = if reversed { clock.source_in as i64 - delta } else { clock.source_in as i64 };
+            let source_in =
+                if reversed { clock.source_in as i64 - media_delta } else { clock.source_in as i64 };
             if source_in < 0 {
                 return Err(EngineError::Failed {
                     id: id.clone(),
@@ -195,14 +203,17 @@ impl TrimClip {
             (clock.start as i64, duration, source_in)
         };
 
+        // The **media** the clip plays: its length multiplied by its
+        // speed, as the tree counts it.
+        let played = crate::speed::media_frames(duration as u64, speed) as i64;
         if let Some(media) = media
-            && source_in + duration > media as i64
+            && source_in + played > media as i64
         {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!(
                     "the clip would run to frame {} of the media, and the media is {media} frames long",
-                    source_in + duration
+                    source_in + played
                 ),
             });
         }
@@ -288,13 +299,5 @@ fn neighbours(session: &Session, clip: u64, start: u64) -> Neighbours {
 /// The item's own duration is the media's length; an item that has none
 /// does not bound the clip.
 fn media_of(session: &Session, clip: u64) -> Option<u64> {
-    let item = session
-        .document()
-        .relations
-        .iter()
-        .find(|relation| relation.kind == "clip" && relation.from == clip)
-        .map(|relation| relation.to)?;
-    let node = session.document().node(item)?;
-    let duration = node.data.get("duration")?.as_u64()?;
-    if duration == 0 { None } else { Some(duration) }
+    crate::media_length_of(session, clip)
 }
