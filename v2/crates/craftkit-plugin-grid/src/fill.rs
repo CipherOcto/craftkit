@@ -696,8 +696,10 @@ impl FillRange {
             // The **format** of the lane's first cell: it is the
             // format of the source, and a date is a number under a
             // date format.
-            let format_code = sheet_cells.format(lane.cells[0]).map(|code| code.to_string());
-            let format = format_code.as_deref().and_then(Format::parse);
+            // The **format** of the lane's first cell: it is the
+            // format the source is written with, and the style the
+            // source names is part of that.
+            let format = Some(crate::format_of(session, sheet, &sheet_cells, lane.cells[0]));
             let pattern = if mode.is_date() {
                 // The tree's date modes: a source of **dates** steps by
                 // its unit, and a source that is not dates extends like
@@ -714,7 +716,7 @@ impl FillRange {
                     if from.formula.is_some() {
                         Pattern::Copy
                     } else {
-                        let cell_format = sheet_cells.format(from.cell).and_then(Format::parse);
+                        let cell_format = Some(crate::format_of(session, sheet, &sheet_cells, from.cell));
                         Pattern::of(std::slice::from_ref(&from.value), cell_format.as_ref(), system, &custom)
                     }
                 })
@@ -732,8 +734,8 @@ impl FillRange {
                 // one that keeps the format of the cell.
                 let format = match mode {
                     Mode::Values => FormatChange::Keep,
-                    _ => match sheet_cells.format(from.cell) {
-                        Some(code) => FormatChange::Set(code.to_string()),
+                    _ => match crate::format_code_of(session, sheet, &sheet_cells, from.cell) {
+                        Some(code) => FormatChange::Set(code),
                         None => FormatChange::Clear,
                     },
                 };

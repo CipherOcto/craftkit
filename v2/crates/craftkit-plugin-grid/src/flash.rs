@@ -14,7 +14,6 @@ use craftkit_derive::Command;
 use craftkit_sdk::serde_json::{self, json};
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
 
-use crate::format::Format;
 use crate::formula::{CellRef, Cells, Value};
 
 /// **Flash fill** a column: learn from the rows that are filled and
@@ -81,12 +80,12 @@ impl FlashFill {
         let mut examples: Vec<(String, String)> = Vec::new();
         let mut todo: Vec<(CellRef, String)> = Vec::new();
         for row in top..=bottom {
-            let from = shown_text(&cells, CellRef { col: source.col, row }, system);
+            let from = shown_text(session, sheet, &cells, CellRef { col: source.col, row }, system);
             let to = CellRef { col: at.col, row };
             if is_empty(&cells, to) {
                 todo.push((to, from));
             } else {
-                examples.push((from, shown_text(&cells, to, system)));
+                examples.push((from, shown_text(session, sheet, &cells, to, system)));
             }
         }
         if examples.is_empty() {
@@ -151,12 +150,18 @@ fn is_empty(cells: &Cells, cell: CellRef) -> bool {
 }
 
 /// The **shown text** of a cell: its value with its format.
-fn shown_text(cells: &Cells, cell: CellRef, system: crate::dates::System) -> String {
+///
+/// The format is the one the cell is **written** with, so a cell that
+/// names a style is written with the style's format.
+fn shown_text(
+    session: &Session,
+    sheet: u64,
+    cells: &Cells,
+    cell: CellRef,
+    system: crate::dates::System,
+) -> String {
     let value = cells.get(cell).and_then(|entry| entry.value.clone()).unwrap_or(Value::Empty);
-    let format = match cells.format(cell) {
-        Some(code) => Format::parse(code).unwrap_or(Format::General),
-        None => Format::General,
-    };
+    let format = crate::format_of(session, sheet, cells, cell);
     format.text(&value, system)
 }
 

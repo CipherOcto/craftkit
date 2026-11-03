@@ -50,12 +50,12 @@
 //!
 //! # What it does not do
 //!
-//! - **The tree's format is a style, and a style is shared.** In the
-//!   tree a cell has a style and the style has the format, so a
-//!   hundred cells with one format carry one format. Here the format
-//!   is a **field of the cell**, and a hundred cells with one format
-//!   carry a hundred formats. The tree's style also carries the font,
-//!   the colour and the alignment, and none of those are here.
+//! - **The tree's style carries more than a format.** In the tree a
+//!   style carries the font, the colour, the alignment and the number
+//!   format, and a cell has a style. Here a style carries a **format**
+//!   and nothing else, because a format is the only thing this tree
+//!   writes on a cell — and the format of a cell is still the cell's
+//!   own (the module `styles`).
 //! - **The tree's scientific formats are not here**, and neither are
 //!   its **sections** — a format with a different code for negative
 //!   numbers is not here. The tree's **currency** is here: a number

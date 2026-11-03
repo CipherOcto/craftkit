@@ -763,8 +763,13 @@ pub struct Cell {
     ///
     /// The tree's format is a style and a style is shared between
     /// cells; here the format is the cell's own, so a hundred cells
-    /// with one format carry a hundred formats.
+    /// with one format carry a hundred formats — unless the cell names
+    /// a **style**, and then the style's format is the one it is
+    /// written with.
     pub format: Option<String>,
+    /// The **style** the cell names: the name of a style of the
+    /// workbook, when it names one.
+    pub style: Option<String>,
 }
 
 impl Cells {
@@ -784,7 +789,8 @@ impl Cells {
     /// how the value is written.
     pub fn set_value(&mut self, cell: CellRef, value: Value) {
         let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
-        self.cells.insert(cell, Cell { value: Some(value), formula: None, format });
+        let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
+        self.cells.insert(cell, Cell { value: Some(value), formula: None, format, style });
     }
 
     /// Put a formula in a cell.
@@ -793,7 +799,8 @@ impl Cells {
     /// it.
     pub fn set_formula(&mut self, cell: CellRef, formula: String) {
         let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
-        self.cells.insert(cell, Cell { value: None, formula: Some(formula), format });
+        let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
+        self.cells.insert(cell, Cell { value: None, formula: Some(formula), format, style });
     }
 
     /// The **number format** of a cell, if it has one.
@@ -809,7 +816,27 @@ impl Cells {
         match self.cells.get_mut(&cell) {
             Some(entry) => entry.format = format,
             None => {
-                self.cells.insert(cell, Cell { value: None, formula: None, format });
+                let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
+                self.cells.insert(cell, Cell { value: None, formula: None, format, style });
+            }
+        }
+    }
+
+    /// The **style** a cell names, if it names one.
+    pub fn style(&self, cell: CellRef) -> Option<&str> {
+        self.cells.get(&cell)?.style.as_deref()
+    }
+
+    /// Put a **style** on a cell, keeping what the cell holds.
+    ///
+    /// A cell that is not there is made: a cell may be styled before it
+    /// has a value.
+    pub fn set_style(&mut self, cell: CellRef, style: Option<String>) {
+        match self.cells.get_mut(&cell) {
+            Some(entry) => entry.style = style,
+            None => {
+                let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
+                self.cells.insert(cell, Cell { value: None, formula: None, format, style });
             }
         }
     }

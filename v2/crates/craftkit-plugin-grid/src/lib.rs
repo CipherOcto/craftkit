@@ -39,6 +39,12 @@
 //! own, where the tree's format is a style and a style is shared (the
 //! module `format`).
 //!
+//! And a **style** is a named format of the workbook, and it is
+//! **shared**: a cell may name a style, and a hundred cells that name
+//! one style carry one format — and changing the style changes every
+//! cell that names it, because the format of a cell is **derived**
+//! (the module `styles`).
+//!
 //! And a cell may hold a **date**, which is a **number** and a
 //! **format**: the number says how many days have passed and the
 //! format says that the number is a date. The tree's calendar is here,
@@ -103,6 +109,7 @@ mod fill;
 mod flash;
 mod format;
 mod formula;
+mod styles;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
@@ -112,6 +119,7 @@ use fill::FillRange;
 use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
+pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
 
 /// The grid layer.
 ///
@@ -200,6 +208,7 @@ fn cells_of(node: &Node) -> Cells {
         let formula = entry.get("formula").and_then(|formula| formula.as_str()).map(|text| text.to_string());
         let value = entry.get("value").map(Value::from_json);
         let format = entry.get("format").and_then(|format| format.as_str()).map(|text| text.to_string());
+        let style = entry.get("style").and_then(|style| style.as_str()).map(|text| text.to_string());
         match (value, formula) {
             (_, Some(formula)) => cells.set_formula(cell, formula),
             (Some(value), None) => cells.set_value(cell, value),
@@ -208,12 +217,15 @@ fn cells_of(node: &Node) -> Cells {
         if let Some(format) = format {
             cells.set_format(cell, Some(format));
         }
+        if let Some(style) = style {
+            cells.set_style(cell, Some(style));
+        }
     }
     cells
 }
 
 /// The cells of a sheet, into its payload.
-fn cells_into(cells: &Cells) -> Json {
+pub(crate) fn cells_into(cells: &Cells) -> Json {
     let mut map = serde_json::Map::new();
     for (cell, entry) in cells.iter() {
         let mut one = serde_json::Map::new();
@@ -226,19 +238,22 @@ fn cells_into(cells: &Cells) -> Json {
         if let Some(format) = &entry.format {
             one.insert("format".to_string(), Json::String(format.clone()));
         }
+        if let Some(style) = &entry.style {
+            one.insert("style".to_string(), Json::String(style.clone()));
+        }
         map.insert(cell.to_text(), Json::Object(one));
     }
     Json::Object(map)
 }
 
 /// The cell at an address, or the error that says there is no such cell.
-fn cell_at(text: &str, id: &str) -> Result<CellRef, EngineError> {
+pub(crate) fn cell_at(text: &str, id: &str) -> Result<CellRef, EngineError> {
     CellRef::parse(text.trim())
         .ok_or_else(|| EngineError::Failed { id: id.to_string(), message: format!("`{text}` is not a cell") })
 }
 
 /// The cells of a sheet, from a node, to change them.
-fn sheet_cells_mut(node: &mut Node) -> Cells {
+pub(crate) fn sheet_cells_mut(node: &mut Node) -> Cells {
     cells_of(node)
 }
 
@@ -289,6 +304,66 @@ pub fn system_of(session: &Session, sheet: u64) -> dates::System {
         .unwrap_or_default()
 }
 
+/// The **styles** of the workbook a sheet is in: their names and the
+/// formats they carry.
+///
+/// A style is a **named format** of the workbook, and it is shared: a
+/// hundred cells that name one style carry one format.
+pub fn styles_of(session: &Session, sheet: u64) -> Vec<(String, String)> {
+    let Some(book) =
+        session.document().walk().find(|node| node.children.iter().any(|child| child.id == sheet))
+    else {
+        return Vec::new();
+    };
+    book.data
+        .get("styles")
+        .and_then(|styles| styles.as_array())
+        .map(|styles| {
+            styles
+                .iter()
+                .filter_map(|style| {
+                    let name = style.get("name")?.as_str()?.to_string();
+                    let format = style.get("format")?.as_str()?.to_string();
+                    Some((name, format))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The **format** a cell is written with.
+///
+/// A cell may name a **style** of the workbook, and the style carries a
+/// format: the cell is then written with the style's format.
+///
+/// The tree's rule: a style whose format is *General* does not change
+/// the cell's format — the cell keeps its own. And a cell that names a
+/// style that is not there keeps its own format as well.
+pub fn format_of(session: &Session, sheet: u64, cells: &Cells, cell: CellRef) -> Format {
+    match format_code_of(session, sheet, cells, cell) {
+        Some(code) => Format::parse(&code).unwrap_or(Format::General),
+        None => Format::General,
+    }
+}
+
+/// The **format code** a cell is written with.
+///
+/// The same rule as the format itself: the code of the style the cell
+/// names, if it names one that has a format, and the cell's own code
+/// otherwise.
+pub fn format_code_of(session: &Session, sheet: u64, cells: &Cells, cell: CellRef) -> Option<String> {
+    if let Some(name) = cells.style(cell) {
+        let styles = styles_of(session, sheet);
+        if let Some((_, code)) = styles.iter().find(|(style, _)| style == name) {
+            let format = Format::parse(code).unwrap_or(Format::General);
+            if format != Format::General {
+                return Some(code.clone());
+            }
+        }
+    }
+    cells.format(cell).map(|code| code.to_string())
+}
+
 /// Put a **workbook** in the document.
 #[derive(Command)]
 #[command(id = "grid.workbook.add", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
@@ -316,6 +391,7 @@ impl AddWorkbook {
             json!({
                 "date_system": dates::System::default().name(),
                 "custom_lists": Vec::<String>::new(),
+                "styles": Vec::<String>::new(),
             }),
         );
         Ok(Outcome::changed(format!("added the workbook `{name}`"))
@@ -838,10 +914,9 @@ impl CellText {
         }
         let name = node.name.clone();
         let cells = cells_of(node);
-        let format = match cells.format(cell) {
-            Some(code) => Format::parse(code).unwrap_or(Format::General),
-            None => Format::General,
-        };
+        // The **format** the cell is written with: the format of the
+        // style it names, if it names one, and its own otherwise.
+        let format = format_of(session, sheet, &cells, cell);
         // The **value**: the one the cell holds, or the one its formula
         // computes.
         let value = match cells.get(cell) {
