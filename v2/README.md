@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2038 tests.** The MCP server links **all fifteen batteries** in, so the
+**2045 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3722,6 +3722,7 @@ so.
 | the **crossfade** | **built.** A range that covers the boundary between two clips makes them overlap, and the fades meet in the overlap (§285) | §285 |
 | the **flash fill** | **built.** A column learns a **program** from the rows that are filled and runs it on the rows that are empty (§286) | §286 |
 | the **time** of a cell | **built.** A time is a fraction of a day and a format, and the tree's clock shapes and its elapsed shapes are both here (§287) | §287 |
+| the **ordinals** of a fill | **built.** A text with an English ordinal ending is filled with the ending rewritten to suit the number (§288) | §288 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20033,3 +20034,58 @@ more thing of that shape, and it is here now.
 - **The tree's date with a time in it is not here**: `2026-10-26
   13:45` is a date and a time in the tree, and here it is neither a
   date nor a time — a date is a date and a time is a time.
+
+## 288. The ordinals of a fill
+
+§270 gave the grid a fill that counts a **text with a number** in it on.
+The tree counts more than the number.
+
+### What was built
+
+- A text with an English **ordinal ending** is filled with the ending
+  rewritten to suit the new number: `1st Period` is filled as
+  `2nd Period`, `3rd Period` and `4th Period`.
+- The eleventh, the twelfth and the thirteenth end in **th**, as they
+  do in English.
+- The ending keeps the **case** it was written in: `1ST` is filled as
+  `2ND`.
+- A text after the ending that starts a **word** is not an ordinal, and
+  the ending is kept as it is.
+
+### What the port found
+
+- **The tree's ordinal is a rule about the text after the number.** The
+  fill splits a text into the text before the number, the number and
+  the text after it, and the *first two letters* of that last part are
+  the ending. `1st Period` is the empty text, the number `1` and
+  `st Period`, and the ending is `st`.
+- **The tree refuses an ending that is followed by a word.** `1stx` is
+  filled as `2stx`: the ending is not rewritten when what follows it
+  starts an alphanumeric, because `1stx` is not an ordinal and the
+  tree does not make it one.
+- **The tree's case rule is about the ending and not about the text.**
+  The ending is in capitals when the two letters it was written in are
+  both capitals, and the rest of the text keeps its own case.
+- **The tree's number in a text is the *last* run of digits.** `1st2` is
+  the text `1st` and the number `2`, and it is filled as `1st3` — the
+  ending is not the ending of the text at all, because the text's
+  number is the one at the end.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/ordinals.rs`): the
+  ending is rewritten, the eleventh and the twelfth and the thirteenth
+  end in th, the ending keeps its case, a text that starts a word is
+  not an ordinal, a text with no ordinal is filled as it is, the number
+  is still a number, and the number is the last run of digits.
+- **No new command**: this is what `grid.range.fill` does with a text
+  that has an ordinal in it. The grid battery still carries **14**
+  commands and the MCP server **370**.
+
+### What it does not settle
+
+- **The tree's `n-th` in every language is not here**: the four
+  English endings are the four the tree has, and `1er` and `2ème` are
+  not.
+- **The tree's quarters in a text are not here**: `Qtr3` and
+  `Quarter 4` wrap after four in the tree, and here they count on.
