@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2215 tests.** The MCP server links **all fifteen batteries** in, so the
+**2226 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3745,6 +3745,7 @@ so.
 | the **corner** of a point | **built.** The handles at a point may be pulled back to it, and the point becomes a corner (§308) | §308 |
 | the **currency** of a cell | **built.** A cell may write a number with a symbol on it, as the tree writes its currencies (§309) | §309 |
 | the **sign** of a number that rounds away | **built.** A negative number that rounds to zero is written without its sign (§310) | §310 |
+| the **styles** of a workbook | **built.** A style is a named format that cells share, and changing it changes every cell that names it (§311) | §311 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21484,3 +21485,72 @@ was writing it.
   text.
 - **The tree's scientific formats are not here**, and their sign is
   the tree's as well.
+
+## 311. The styles of a workbook
+
+The tree's format is a **style**, and a style is **shared**: a hundred
+cells with one format carry one format. This tree's format was a field
+of the cell, and a hundred cells with one format carried a hundred
+formats. Now a cell may name a **style**.
+
+### What was built
+
+- A **style** is a named format of the **workbook**, and a cell may
+  name one: the commands `grid.style.add`, `grid.style.set`,
+  `grid.style.remove` and `grid.cell.style`.
+- The format of a cell is **derived**: a cell that names a style is
+  written with the style's format, and changing the style changes
+  every cell that names it.
+- The tree's rule that is here: a style whose format is *General* does
+  not change the cell's format — the cell keeps its own.
+
+### What the port found
+
+- **The tree's style is a whole thing.** The tree's style carries the
+  font, the fill, the border, the alignment and the number format, and
+  the tree's cell holds a style. Here a style carries a **format** and
+  nothing else, because a format is the only thing this tree writes on
+  a cell.
+- **The tree's named styles are built in.** The tree's `home.cellStyle`
+  finds a style in a list of the tree's own — *Normal*, *Title*,
+  *Explanatory Text*, *Comma*, *Currency*, *Percent* and the rest — or
+  in the ones the file carries. Here a style is a style of the
+  workbook, and it is **written**: added, changed and taken away.
+- **The tree's style is found by its name and without regard to
+  case.** The tree's `cell_style` compares the names with
+  `eq_ignore_ascii_case`, so two styles whose names differ only in
+  case are one style. Here a name that is taken is refused — and a
+  name that is not there is refused as well, and never quietly
+  ignored.
+- **The tree's rule about the number format is the one that is here.**
+  The tree's number-format styles — *Comma*, *Currency*, *Percent* —
+  change the number format and nothing else; and a style whose number
+  format is *General* leaves the cell's own number format alone. Here
+  a style carries a format and nothing else, so the second half of the
+  rule is the whole of it.
+
+### What it cost
+
+- **Eleven tests** in the grid battery (`tests/styles.rs`): a style may
+  be added, a cell that names one is written with it, changing it
+  changes every cell that names it, a style with a general format
+  leaves the cell alone, a style that is taken away leaves the cell
+  with its own format, an empty name means the cell has no style, and
+  four refusals.
+- **Four new commands**: `grid.style.add`, `grid.style.set`,
+  `grid.style.remove` and `grid.cell.style`. The grid battery now
+  carries **21** commands and the MCP server **391**.
+- **One rule of the cell changed**: the format of a cell is now
+  **derived** — the style's format when the cell names a style, and
+  its own otherwise — and the cell text, the fill and the flash fill
+  all read the derived one.
+
+### What it does not settle
+
+- **The tree's style carries more than a format**: the font, the
+  colour and the alignment are not here.
+- **The tree's built-in styles are not here**: there is no *Normal* and
+  no *Title*; a style is one the workbook has.
+- **The tree's style is not written here by the tree**: the tree's
+  styles come from the file and are applied by a command, and here a
+  style is a fact of the workbook that three commands write.
