@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and twenty-nine commands**, one for each thing a person does to a
+//! - **a hundred and thirty-one commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -30,7 +30,9 @@
 //!   **gain** and bypass it, **conform** a clip to the tempo, group
 //!   **tracks** so that they are mixed together, make a track
 //!   **elastic** so that its clips are stretched and the pitch stays,
-//!   set a track's **fader** and its **pan**, move a clip's **pitch**,
+//!   set a track's **fader** and its **pan**, put a track's sound
+//!   **in the room** with a **surround pan** and take it away, move a
+//!   clip's **pitch**,
 //!   do a **process** to a clip's sound and take it off, render the
 //!   **stems**, **separate** a clip into two or on the **grid**,
 //!   **move** and **rename** a marker, **scale** the tempos and make a
@@ -513,6 +515,10 @@ mod rename;
 mod render;
 mod repeat;
 mod split;
+
+// The **surround pan** of a track: where its sound is in the room.
+mod surround;
+
 mod time;
 
 use std::collections::HashMap;
@@ -549,6 +555,7 @@ pub use rename::{RenameClip, RenameTrack};
 pub use render::RenderClip;
 pub use repeat::RepeatRange;
 pub use split::SplitMono;
+pub use surround::{DeleteSurround, SetSurround};
 pub use time::{CutTime, InsertTime};
 
 use craftkit_sdk::serde_json;
@@ -598,6 +605,12 @@ pub struct SoundSession {
     /// The grid is a setting of the session and not of the editor: it
     /// is in the document, so a file says what grid it was made on.
     pub grid: Grid,
+    /// The **layout** of the room: the speakers the sound is heard on.
+    ///
+    /// The tree's main output format is the layout of the room, and it
+    /// is a setting of the session: the file says how wide it is. Here
+    /// it is one of the five layouts this tree has.
+    pub layout: String,
 }
 
 impl Default for SoundSession {
@@ -610,6 +623,7 @@ impl Default for SoundSession {
             click_note: 72.0,
             click_accent_note: 84.0,
             grid: Grid::default(),
+            layout: "stereo".to_string(),
         }
     }
 }
@@ -664,6 +678,14 @@ pub(crate) fn session_of(document: &Document) -> SoundSession {
         },
         None => SoundSession::default().grid,
     };
+    // The **layout** of the room: the speakers the sound is heard on.
+    // A layout that is not one this tree has is not a layout: the
+    // sound is heard in two speakers, as it is by default.
+    let layout = match settings.and_then(|settings| settings.get("layout")).and_then(|layout| layout.as_str())
+    {
+        Some(layout) if surround::layout(layout).is_some() => layout.to_string(),
+        _ => SoundSession::default().layout,
+    };
     SoundSession {
         sample_rate,
         timecode_start,
@@ -672,6 +694,7 @@ pub(crate) fn session_of(document: &Document) -> SoundSession {
         click_note,
         click_accent_note,
         grid,
+        layout,
     }
 }
 
@@ -727,6 +750,7 @@ pub(crate) fn set_session(document: &mut Document, session: &SoundSession) {
                 "dotted": session.grid.dotted,
                 "triplet": session.grid.triplet,
             }),
+            "layout": session.layout,
         }),
     );
     document.data = Json::Object(data);
@@ -1334,6 +1358,14 @@ struct TrackPayload {
     /// stem, and it is still in the document with its clips and its
     /// settings.
     inactive: bool,
+    /// The **surround pan** of the track: where its sound is in the
+    /// room.
+    ///
+    /// The tree's mixer keeps a surround pan beside the balance, and
+    /// it is a **position** and not a balance: the balance says how
+    /// much of the sound is on the left, and the surround pan says
+    /// where the sound is. A track with no surround pan is balanced.
+    surround: Option<surround::SurroundPan>,
     /// The **elastic algorithm** of the track: how its clips are
     /// stretched.
     ///
@@ -1364,6 +1396,7 @@ impl TrackPayload {
             "active_playlist": self.active_playlist,
             "inactive": self.inactive,
             "elastic": self.elastic,
+            "surround": self.surround.map(|surround| surround.to_json()),
         })
     }
 
@@ -1387,6 +1420,7 @@ impl TrackPayload {
                 .get("elastic")
                 .and_then(|elastic| elastic.as_str())
                 .map(|elastic| elastic.to_string()),
+            surround: value.get("surround").and_then(surround::SurroundPan::from_json),
         })
     }
 }
@@ -1988,6 +2022,7 @@ impl AddTrack {
             active_playlist: None,
             inactive: false,
             elastic: None,
+            surround: None,
         };
         let document = session.document_mut()?;
         let track = document.add_node_with(name.clone(), "sound.track", None, payload.to_json());
@@ -7606,6 +7641,11 @@ pub struct SetSession {
     pub click_note: Option<Number>,
     /// The **accent's** pitch: the click on the first beat of a bar.
     pub click_accent_note: Option<Number>,
+    /// The **layout** of the room: the speakers the sound is heard on.
+    ///
+    /// One of `stereo`, `5.0`, `5.1`, `7.1` and `7.1.4`, and a layout
+    /// that is not one of them is **refused**.
+    pub layout: Option<Text>,
 }
 
 impl SetSession {
@@ -7653,6 +7693,19 @@ impl SetSession {
             }
             settings.click_accent_note = note.0;
         }
+        if let Some(layout) = &self.layout {
+            if surround::layout(&layout.0).is_none() {
+                return Err(EngineError::Failed {
+                    id: "sound.session.set".to_string(),
+                    message: format!(
+                        "`{}` is not a layout this tree has: the layouts are {}",
+                        layout.0,
+                        surround::layout_names().join(", ")
+                    ),
+                });
+            }
+            settings.layout = layout.0.trim().to_string();
+        }
         set_session(session.document_mut()?, &settings);
         Ok(Outcome::changed(format!("the session runs at {} samples a second", settings.sample_rate))
             .with_data(serde_json::json!({
@@ -7662,6 +7715,7 @@ impl SetSession {
                 "click_volume_db": settings.click_volume_db,
                 "click_note": settings.click_note,
                 "click_accent_note": settings.click_accent_note,
+                "layout": settings.layout,
             })))
     }
 }
@@ -7873,6 +7927,7 @@ pub(crate) fn add_track(session: &mut Session, name: &str) -> Result<u64, Engine
         active_playlist: None,
         inactive: false,
         elastic: None,
+        surround: None,
     };
     let document = session.document_mut()?;
     let track = document.add_node_with(name.to_string(), "sound.track", None, payload.to_json());

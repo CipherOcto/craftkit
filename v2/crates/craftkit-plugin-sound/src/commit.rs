@@ -165,6 +165,7 @@ impl CommitTrack {
             active_playlist: None,
             inactive: false,
             elastic: None,
+            surround: None,
         };
         let new_track =
             session.document_mut()?.add_node_with(name.clone(), "sound.track", None, new_payload.to_json());
