@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2304 tests.** The MCP server links **all fifteen batteries** in, so the
+**2318 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2304 tests
+cargo test          # 2318 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3753,6 +3753,7 @@ so.
 | the **sections** of a format | **built.** A format may have a different code for the positive numbers, the negative ones and the zero (§316) | §316 |
 | the **reshape** of a path | **built.** The path is grabbed at a point and dragged, and the anchors around follow with a falloff measured along the path (§317) | §317 |
 | the **surround pan** of a track | **built.** The sound is placed in the room, and the gains on the speakers are derived from the position (§318) | §318 |
+| the **expression** of a property | **built.** An expression says what the value is at every frame, in a small language of this tree's own (§319) | §319 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22109,3 +22110,87 @@ and this says where the sound is.
   **Ambisonics** are not here at all.
 - **The tree's send panner is not here**: a send may have a surround
   pan of its own, and here it has the pan of a send.
+
+## 319. The expression of a property
+
+An **expression** says what the value of a property is at every frame.
+The tree's expressions are **JavaScript** on a JavaScript engine, and
+they are After Effects' expressions; this tree is Rust and has no
+engine in it, so an expression here is a small **arithmetic language**
+of this tree's own.
+
+### What was built
+
+- A property may carry an **expression**: the command
+  `fx.prop.expression` puts one down and `fx.prop.expression.delete`
+  takes it away.
+- The expression is **parsed** when it is put down, and one that does
+  not parse is **refused** — a property with a broken expression is a
+  property that cannot be read.
+- The language has the **numbers**, the operators `+ - * / % ^`, the
+  **brackets**, the names `time` (the frame) and `value` (the
+  property's own value), and the tree's **functions**: `linear`,
+  `ease`, `easeIn`, `easeOut`, `clamp`, `min`, `max`, `abs`, `round`,
+  `floor`, `ceil`, `sqrt`, `sin`, `cos` and `tan`.
+- The expression **replaces** the value, and `value` inside it is the
+  value the keyframes give.
+
+### What the port found
+
+- **The tree's expressions are a language of their own, and not a
+  formula.** The tree's is JavaScript on a JavaScript engine, with
+  `wiggle`, `valueAtTime`, `thisComp` and `posterizeTime` in it, and
+  the tree rewrites the array maths into helper calls before it runs.
+  That is a whole language, and a language is not a thing that can be
+  ported into a tree that has no engine: so this one is a small
+  language of its own, and it says so.
+- **The tree's eases are the tree's eases here.** The `ease` is the
+  smoothstep `u²(3 − 2u)`, `easeIn` is `u²(2 − u)` and `easeOut` is
+  `1 − (1 − u)²(2 − (1 − u))`, and the interpolation clamps the time
+  into the two times it runs between. The four eases take three
+  arguments — the time and the two values — or five: the time, the
+  two times it runs between, and the two values.
+- **The tree's expressions are evaluated per frame and are
+  deterministic.** The tree's `wiggle` and `random` are seeded by the
+  layer and the property, so a frame renders the same on every
+  machine. Here there is no random at all: a value that changes every
+  time it is read is not derived, and an expression here is derived.
+- **The tree's expression is the property's own.** The tree's
+  property carries the expression beside its keyframes, and the
+  expression's `value` is the value the keyframes give. Here it is the
+  same: the expression is a fact of the property, and the keyframes
+  are still there under it.
+- **The tree's time is in seconds and this tree's is the frame.** The
+  tree's composition has a frame rate and its expressions count in
+  seconds; this tree's composition has no frame rate, so the time is
+  the frame, and an expression that wants seconds divides.
+
+### What it cost
+
+- **Fourteen tests** in the fx battery (`tests/expressions.rs`): the
+  expression saying what the value is, `value` being the property's
+  own value, `time` being the frame, the order of the operators, the
+  power being to the right, `linear` being the tree's, `ease` being
+  the tree's smoothstep, the eases in and out being the tree's, the
+  functions being the tree's, an expression that does not parse being
+  refused, a function this tree does not have being refused, a
+  function with the wrong arguments being refused, an expression on a
+  property that is not animated being refused, and the expression
+  being taken away.
+- **Two new commands**: `fx.prop.expression` and
+  `fx.prop.expression.delete`. The fx battery now carries **13**
+  commands and the MCP server **398**.
+- **One new module** (`src/expressions.rs`): the parser, the
+  evaluator, and the tree's functions and eases.
+
+### What it does not settle
+
+- **The tree's JavaScript is not here**: there is no `wiggle`, no
+  `valueAtTime`, no `thisComp`, no `posterizeTime` and no array
+  maths, and an expression that uses one of them is **refused**.
+- **The random numbers are not here**: the tree's are seeded so that a
+  frame renders the same everywhere, and here there is no random at
+  all.
+- **The tree's expression may be an expression over the property's
+  neighbours** — `valueAtTime` and the rest — and here an expression
+  sees only its own property and the time.
