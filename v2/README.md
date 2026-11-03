@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2601 tests.** The MCP server links **all fifteen batteries** in, so the
+**2611 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2601 tests
+cargo test          # 2611 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3780,6 +3780,7 @@ so.
 | the **sizes** of a sheet | **built.** A row has a height and a column has a width, and a size of nothing is refused (§343) | §343 |
 | the **properties** of a paragraph | **built.** A paragraph may stand, be indented and have space around it (§344) | §344 |
 | the **hiding** of a row and a column | **built.** A row and a column may be hidden, and a hidden row is still a row (§345) | §345 |
+| the **subtotal** of a range | **built.** The tree's own function, with the hundred-and-more form that leaves the hidden rows out (§346) | §346 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23687,3 +23688,70 @@ is gone; it is a row that is not shown.
   filter hides the rows that do not match. Here a row is hidden by
   itself, and a filter that hides rows is a thing this tree has not
   got.
+
+## 346. The subtotal of a range
+
+`SUBTOTAL` is the tree's own function: it sums a range the way a total
+row does, and it leaves out what a total row leaves out. The tree
+names it with a **function number**, and this tree does too — and the
+hiding of a row (§345) is what makes it mean something.
+
+### What was built
+
+- The function `SUBTOTAL(code, range...)` in the grid's formula
+  engine.
+- The **hundred-and-more form** (`101` to `111`) leaves the hidden rows
+  out as well; the plain form does not. That is the tree's own rule and
+  not Excel's, and the tree's comment says so.
+- A **nested subtotal** — a cell whose own formula holds a
+  `SUBTOTAL(` — is left out, in both forms.
+- The function numbers that this tree has are `1` (AVERAGE), `2`
+  (COUNT), `3` (COUNTA), `4` (MAX), `5` (MIN) and `9` (SUM). A number
+  that names a function this tree does not have is **refused**, and the
+  refusal says what the numbers are.
+- A subtotal may read **two ranges** and it may read a **name**.
+
+### What the port found
+
+- **The tree's rule is not Excel's rule.** The tree's `SUBTOTAL`
+  leaves out the rows a **filter** hides whatever the function number,
+  and the hundred-and-more form leaves out the rows hidden **by hand**
+  as well. Excel does the opposite for the rows hidden by hand. This
+  tree ports the tree: the hundred-and-more form leaves the hidden rows
+  out and the plain form does not.
+- **The tree's eleven function numbers are not all here.** The tree's
+  `SUBTOTAL` can be a `PRODUCT`, a `STDEV`, a `STDEVP`, a `VAR` or a
+  `VARP` — and this tree has none of those functions, so a subtotal
+  that names one is refused and says so. The functions of this tree
+  are the six the numbers stand for.
+- **The tree's nested rule is a rule about the formula's text.** The
+  tree leaves out a cell whose formula **contains** `SUBTOTAL(` or
+  `AGGREGATE(` — anywhere in it, even inside a word — and so does
+  this one. It is a rule about the text and not about what the formula
+  means.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/subtotal.rs`): a subtotal
+  summing a range, the hundred-and-more form leaving the hidden rows
+  out, a nested subtotal being left out, the other functions working, a
+  function number that is not one being refused, a function number out
+  of range being refused, a subtotal with no range being refused, a
+  subtotal reading two ranges, a subtotal reading a name, and the
+  subtotal being saved.
+- **The formula engine learned the hidden rows.** The book carries the
+  hidden rows of each sheet, and the subtotal reads them.
+- **No new command**: `SUBTOTAL` is a function and not a command, so
+  the grid battery still carries **42** commands and the MCP server
+  **455**.
+
+### What it does not settle
+
+- **The tree's `AGGREGATE` is not here.** It is the tree's other
+  function over a range, with its own options — whether it skips
+  errors, whether it skips hidden rows, whether it leaves out nested
+  totals — and it is a function of its own.
+- **The tree's filter is not here**, and so the rows a filter hides are
+  not a thing this tree knows: a hidden row here is a row hidden by
+  hand, and the subtotal leaves it out only in the hundred-and-more
+  form.
