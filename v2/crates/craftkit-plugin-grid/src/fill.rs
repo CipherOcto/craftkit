@@ -306,10 +306,15 @@ impl Pattern {
                 .collect();
             if values.len() == 1 {
                 // The tree's rule: a single **date** counts a day on,
-                // and a single number is copied.
+                // a single **time** counts an hour on, and a single
+                // number is copied.
                 if is_a_date(format) {
                     let number = numbers[0];
                     return Pattern::Linear { first: number, last: number, step: 1.0 };
+                }
+                if is_a_time(format) {
+                    let number = numbers[0];
+                    return Pattern::Linear { first: number, last: number, step: 1.0 / 24.0 };
                 }
                 return Pattern::Copy;
             }
@@ -939,6 +944,14 @@ fn mode_name(mode: Mode) -> &'static str {
 /// Whether a format is a **date** format.
 fn is_a_date(format: Option<&Format>) -> bool {
     matches!(format, Some(Format::Date { .. }))
+}
+
+/// Whether a format is a **time** format.
+///
+/// The tree's rule: a format with an `h` in it is a time and not a
+/// date, and a single number under one counts an hour on.
+fn is_a_time(format: Option<&Format>) -> bool {
+    matches!(format, Some(Format::Time { .. }))
 }
 
 /// The pattern of a lane of **dates**, for one of the tree's date
