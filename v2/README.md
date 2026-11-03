@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2377 tests.** The MCP server links **all fifteen batteries** in, so the
+**2387 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2377 tests
+cargo test          # 2387 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3761,6 +3761,7 @@ so.
 | the **blending mode** of a layer | **built.** A layer says how it is laid over what is under it, in the tree's own thirty-eight modes (§324) | §324 |
 | the **parent** of a layer | **built.** A layer may be under another layer, and the chain may not be a circle (§325) | §325 |
 | the **markers** of a composition | **built.** A marker is a moment with something said about it, and they stand in time order (§326) | §326 |
+| the **view** of a sheet | **built.** A sheet says what is drawn of it and how far it is zoomed, and its panes may be frozen (§327) | §327 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22512,6 +22513,58 @@ A marker is a **moment** in a composition with something said about it.
   markers of their own, and only the composition's are here.
 - **No marker is drawn**: the tree's marker is a line on the timeline,
   and this tree's fx battery draws nothing at all.
+
+## 327. The view of a sheet
+
+A sheet is not only its cells: it says whether the gridlines are
+drawn, whether the headings are, whether the zeros are shown, whether
+it runs right to left, and how far it is zoomed — and it may have
+**frozen panes**.
+
+### What was built
+
+- The command `grid.sheet.view` sets the view of a sheet.
+- The command `grid.sheet.freeze` freezes the panes at a cell, and
+  `grid.sheet.freeze.delete` lets them go.
+- The command `grid.sheet.zoom` sets the zoom of a sheet.
+
+### What the port found
+
+- **The tree's view is the sheet's own, and it is saved with the
+  file.** The tree keeps the gridlines, the headings, the zeros, the
+  right-to-left flag and the zoom beside the cells, and a file says
+  what the sheet looked like as well as what it held.
+- **The tree's freeze is the cell's own.** Freezing at `B2` freezes
+  the row above it and the column to its left, and freezing at `A1`
+  freezes nothing — the tree's command puts no freeze where the cell
+  is the first one, and a freeze of no rows and no columns is no
+  freeze.
+- **The tree clamps its zoom and this tree refuses it.** The tree's
+  command clamps a zoom into ten to four hundred per cent; a zoom
+  asked for as a thousand per cent is not a zoom, so it is refused.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/view.rs`): the tree's own
+  view, the gridlines being taken away, a flag that is not named
+  keeping its value, a sheet running right to left, the panes being
+  frozen at a cell, freezing at the first cell freezing nothing, the
+  panes being unfrozen, a cell that is not a cell refused, a zoom
+  outside the range refused, and the view being saved with the sheet.
+- **Four new commands**: `grid.sheet.view`, `grid.sheet.freeze`,
+  `grid.sheet.freeze.delete` and `grid.sheet.zoom`. The grid battery
+  now carries **25** commands and the MCP server **414**.
+
+### What it does not settle
+
+- **Nothing here is drawn**: the gridlines, the headings and the
+  panes are facts of a sheet, and this tree's grid battery draws no
+  cells at all.
+- **The tree's scroll position and last selection are not here**: the
+  tree saves them with the sheet, and they are about where a person
+  was, and not about the sheet.
+- **The tree's outline symbols and its print settings are not here**:
+  they are the tree's own, and they are about a printed sheet.
 
 ## 321. The frozen track
 
