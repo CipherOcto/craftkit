@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2525 tests.** The MCP server links **all fifteen batteries** in, so the
+**2540 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2525 tests
+cargo test          # 2540 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3774,6 +3774,7 @@ so.
 | the **stretch** of a clip | **built.** A clip may be stretched, and it plays the same material at another speed (§337) | §337 |
 | the **markers** of a sequence | **built.** A sequence carries named places, with a colour and a kind (§338) | §338 |
 | the **effects** of a layer | **built.** The kit has a catalogue of effects, and an instance is a group with the parameters at their defaults (§339) | §339 |
+| the **editing** of a document | **built.** A paragraph's text may be changed, a block may be taken away, and a block may be moved (§340) | §340 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23297,3 +23298,70 @@ other property. And here there was a hole: the paths said
   commands on an instance, and they come when the instance is worth
   having — and the reorder has to say what it does to the paths, which
   address an instance by its number.
+
+## 340. The editing of a document
+
+A document is a **flat list of blocks**, and a list that can only grow
+is a list that cannot be a document: the tree's word processor writes
+a paragraph, and it takes it away, and it moves it, and it changes what
+it says — and this tree could only do the first of those.
+
+### What was built
+
+- The command `prose.block.paragraph.text` changes **what a paragraph
+  says**.
+- The command `prose.block.remove` takes a block out of a document, and
+  the block's edges go with it.
+- The command `prose.block.move` puts a block somewhere else in the
+  document, and the place is counted from one among the blocks.
+- The **runs** are not touched by any of them: a run is an **interval**
+  over the text, and the characters it covers are derived — so when the
+  text changes, the runs still say how many characters they cover.
+
+### What the port found
+
+- **The tree's order is the tree's order, and so is this one's.** The
+  tree's paragraphs are a list in the document, and moving one is
+  moving it in the list. Here the blocks are the document's children
+  and the order of the children is the order of the blocks, so a move
+  is a move of the children — and the styles and the media that live
+  beside the blocks do not change their places.
+- **The tree's move is up or down, and this one's is a place.** The
+  tree has `para.moveUp` and `para.moveDown`, and each of them
+  refuses at the end of the list. Here the block is given the place it
+  goes to, and a place that is not there is refused — which is one
+  command and not two.
+- **The tree's typing has a cap and this tree's has the core's.** The
+  tree refuses a typed paragraph beyond ten thousand lines. Here the
+  text of a paragraph is a **text parameter**, and the core owns that
+  bound: a text longer than sixty-five thousand characters is refused
+  before the command runs.
+
+### What it cost
+
+- **Fifteen tests** in the prose battery (`tests/editing.rs`): what a
+  paragraph says being changed, a paragraph being emptied, the runs
+  staying when the text changes, a table not being a paragraph, a node
+  that is not there refused, a block being taken away, the style of a
+  block going with it, a document not being a block, a block being
+  moved, a block being moved down, a block that is already there
+  refused, a place that is not there refused, a place that is not a
+  whole number refused, a style not being a block, and the edit being
+  saved.
+- **Three new commands**: `prose.block.paragraph.text`,
+  `prose.block.remove` and `prose.block.move`. The prose battery now
+  carries **10** commands and the MCP server **442**.
+
+### What it does not settle
+
+- **The tree's paragraph properties are not here.** The tree sets a
+  paragraph's alignment, its indents, its spacing and its tabs, and it
+  clamps every one of them silently. Here a paragraph has a text and
+  runs and nothing else, and the numbers of a paragraph — its
+  indents, its spacing — are a separate arc and not this one.
+- **The tree's character formatting over a range is not here.** The
+  tree's runs carry a size, a colour and an underline, and the tree
+  splits a run's boundaries so that the formatting lands on exactly
+  the characters that were chosen. Here a run carries a length, a bold
+  and an italic, and the interval algebra of a formatted range is a
+  separate arc.
