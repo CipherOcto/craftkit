@@ -68,6 +68,10 @@
 //! picture and its sound — and a move of one moves the other (the
 //! module `linking`).
 //!
+//! And a clip may **hold** a frame: it plays its media up to a point in
+//! the media and then holds that frame to the end of the clip, so its
+//! material is **shorter** than the clip (the module `hold`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -113,6 +117,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+mod hold;
 mod inserting;
 mod lifting;
 mod linking;
@@ -126,6 +131,7 @@ mod splitting;
 mod transitions;
 mod trim;
 
+pub use hold::{DeleteHold, SetHold};
 pub use inserting::InsertClip;
 pub use lifting::LiftRange;
 pub use linking::{LinkClips, UnlinkClip};
@@ -650,6 +656,8 @@ craftkit_sdk::plugin_anchor!(
     SetSpeed,
     LinkClips,
     UnlinkClip,
+    SetHold,
+    DeleteHold,
     AddTransition,
     SetTransition,
     RemoveTransition,

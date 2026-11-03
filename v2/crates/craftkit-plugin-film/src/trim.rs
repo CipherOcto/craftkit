@@ -32,6 +32,11 @@
 //!   through it.** The tree's trim counts the media a trim takes in the
 //!   media's own ticks, which are the timeline's ticks multiplied by
 //!   the speed (the module `speed`).
+//! - **The frame hold is here, and the trim honours it.** A held clip
+//!   has no out edge in the media and no head handle, so a trim of its
+//!   in edge moves the clip and leaves the media where it is, and the
+//!   media does not bound it — the tree's `media_len` is nothing when a
+//!   clip holds a frame (the module `hold`).
 //! - **The link is here, and the trim honours it.** The tree's linked
 //!   clips are trimmed as **one edit**: every member of the group takes
 //!   the same delta, and a member that cannot take it refuses the trim
@@ -195,6 +200,10 @@ fn trimmed(session: &Session, clip: u64, edge: &str, delta: i64) -> Result<(i64,
     // speed's worth of the media, so a trim of the in edge moves
     // the media by that much and not by one frame.
     let speed = crate::speed::speed_of(&node.data);
+    // The **frame hold**: the frame of the media the clip holds to the
+    // end of it. A held clip has no out edge in the media and no head
+    // handle, so the trim moves the clip and not the media.
+    let hold = crate::hold::hold_of(&node.data);
     // The **neighbours**: the clips on the same track, before and
     // after this one.
     let Neighbours { before, after } = neighbours(session, clip, clock.start);
@@ -209,7 +218,14 @@ fn trimmed(session: &Session, clip: u64, edge: &str, delta: i64) -> Result<(i64,
     let media_delta = (delta as f64 * speed).round() as i64;
     let (start, duration, source_in) = if edge == "in" {
         let duration = clock.duration as i64 - delta;
-        let source_in = if reversed { clock.source_in as i64 } else { clock.source_in as i64 + media_delta };
+        // A **held** clip has no head handle: the media before its in
+        // point is not there to be taken, so the in edge moves the clip
+        // and leaves the media where it is.
+        let source_in = if hold.is_some() || reversed {
+            clock.source_in as i64
+        } else {
+            clock.source_in as i64 + media_delta
+        };
         let start = clock.start as i64 + delta;
         if duration < 1 {
             return Err(format!(
@@ -244,14 +260,21 @@ fn trimmed(session: &Session, clip: u64, edge: &str, delta: i64) -> Result<(i64,
 
     // The **media** the clip plays: its length multiplied by its
     // speed, as the tree counts it.
-    let played = crate::speed::media_frames(duration as u64, speed) as i64;
+    // A **held** clip plays its material up to the hold and holds that
+    // frame to the end, so the material it plays is **shorter** than the
+    // clip. The tree does not bound a held clip by the media at all —
+    // its `media_len` is nothing when a clip holds a frame — so the
+    // bound is the hold and the media does not stop it.
     if let Some(media) = media
-        && source_in + played > media as i64
+        && hold.is_none()
     {
-        return Err(format!(
-            "the clip would run to frame {} of the media, and the media is {media} frames long",
-            source_in + played
-        ));
+        let played = crate::speed::media_frames(duration as u64, speed) as i64;
+        if source_in + played > media as i64 {
+            return Err(format!(
+                "the clip would run to frame {} of the media, and the media is {media} frames long",
+                source_in + played
+            ));
+        }
     }
     if let Some((_, end)) = before
         && start < end as i64
