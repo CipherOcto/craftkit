@@ -55,6 +55,12 @@ impl RippleClip {
         let start = node.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
         let duration = node.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
         let end = start + duration;
+        // A **locked** track cannot be edited.
+        if let Some(track) = crate::track_of(session, clip)
+            && crate::is_locked(session, track)
+        {
+            return Err(crate::locked_error(&id, track));
+        }
         // The **clips** on the track: the gap may only close when the
         // time the clip took is free.
         let mut others: Vec<(u64, u64, u64)> = Vec::new();

@@ -50,6 +50,10 @@
 //! clip's edges consume — a reversed clip's head is the *end* of its
 //! media — and what a split of it does (the module `reversing`).
 //!
+//! And a track may be **locked**: a locked track cannot be edited, and
+//! every command that would edit it is refused — the tree's locked
+//! track, and the tree's `unlocked_track` (the module `locking`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -97,6 +101,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 mod inserting;
 mod lifting;
+mod locking;
 mod moving;
 mod removal;
 mod reversing;
@@ -106,6 +111,7 @@ mod trim;
 
 pub use inserting::InsertClip;
 pub use lifting::LiftRange;
+pub use locking::LockTrack;
 pub use moving::MoveClip;
 pub use removal::RemoveClip;
 pub use reversing::ReverseClip;
@@ -381,6 +387,11 @@ impl AddClip {
                 });
             }
         }
+        // A **locked** track cannot be edited, and a clip on it is an
+        // edit.
+        if is_locked(session, track) {
+            return Err(locked_error("film.clip.add", track));
+        }
         let start = frames(self.start, "film.clip.add")?;
         let duration = frames(self.duration, "film.clip.add")?;
         if duration == 0 {
@@ -528,6 +539,29 @@ pub fn clocks_of(
     new
 }
 
+/// The **track** a clip is on.
+pub fn track_of(session: &Session, clip: u64) -> Option<u64> {
+    session
+        .document()
+        .walk()
+        .find(|node| node.kind == "film.track" && node.children.iter().any(|child| child.id == clip))
+        .map(|node| node.id)
+}
+
+/// Whether a track is **locked**: a locked track cannot be edited.
+pub fn is_locked(session: &Session, track: u64) -> bool {
+    session
+        .document()
+        .node(track)
+        .and_then(|node| node.data.get("locked").and_then(|locked| locked.as_bool()))
+        .unwrap_or(false)
+}
+
+/// The refusal a **locked** track gives.
+pub fn locked_error(id: &str, track: u64) -> EngineError {
+    EngineError::Failed { id: id.to_string(), message: format!("the track `{track}` is locked") }
+}
+
 /// Whether a clip plays its media **backwards**.
 pub fn is_reversed(data: &serde_json::Value) -> bool {
     data.get("reverse").and_then(|reverse| reverse.as_bool()).unwrap_or(false)
@@ -565,6 +599,7 @@ craftkit_sdk::plugin_anchor!(
     RippleClip,
     LiftRange,
     ReverseClip,
+    LockTrack,
     TimelineEvaluator,
     FilmPanel
 );

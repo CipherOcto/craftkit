@@ -127,6 +127,16 @@ impl MoveClip {
             .walk()
             .find(|node| node.kind == "film.track" && node.children.iter().any(|child| child.id == clip))
             .map(|node| node.id);
+        // A **locked** track cannot be edited: not the one the clip is
+        // on, and not the one it goes on.
+        if let Some(track) = from
+            && crate::is_locked(session, track)
+        {
+            return Err(crate::locked_error(&id, track));
+        }
+        if crate::is_locked(session, track) {
+            return Err(crate::locked_error(&id, track));
+        }
         let name = format!("clip at {start}");
         if from == Some(track) {
             if let Some(node) = session.document_mut()?.node_mut(clip) {

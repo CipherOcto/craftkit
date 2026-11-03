@@ -65,6 +65,10 @@ impl LiftRange {
                 message: format!("the node `{track}` is a `{}` and not a track", node.kind),
             });
         }
+        // A **locked** track cannot be edited.
+        if crate::is_locked(session, track) {
+            return Err(crate::locked_error(&id, track));
+        }
         let from = frames(self.from, &id)?;
         let to = frames(self.to, &id)?;
         if to < from {
@@ -130,6 +134,10 @@ impl ExtractRange {
                 id: id.clone(),
                 message: format!("the node `{track}` is a `{}` and not a track", node.kind),
             });
+        }
+        // A **locked** track cannot be edited.
+        if crate::is_locked(session, track) {
+            return Err(crate::locked_error(&id, track));
         }
         let from = frames(self.from, &id)?;
         let to = frames(self.to, &id)?;

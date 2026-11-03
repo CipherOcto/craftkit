@@ -105,6 +105,12 @@ impl TrimClip {
                 message: format!("the clip `{clip}` does not say where it is"),
             });
         };
+        // A **locked** track cannot be edited.
+        if let Some(track) = crate::track_of(session, clip)
+            && crate::is_locked(session, track)
+        {
+            return Err(crate::locked_error(&id, track));
+        }
         // A clip that plays **backwards** consumes the media at the
         // other end of its range.
         let reversed = crate::is_reversed(&node.data);

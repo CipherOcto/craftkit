@@ -110,6 +110,13 @@ impl SplitClip {
                 message: format!("the clip `{clip}` is not on a track"),
             });
         };
+        // A **locked** track cannot be edited.
+        if let Some(track) = crate::track_of(session, clip)
+            && crate::is_locked(session, track)
+        {
+            return Err(crate::locked_error(&id, track));
+        }
+
         let cut = at - start;
         // A clip that plays **backwards** shows the *later* media at
         // its head: the piece before the place takes the media the

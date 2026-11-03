@@ -51,6 +51,12 @@ impl RemoveClip {
                 message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
             });
         }
+        // A **locked** track cannot be edited.
+        if let Some(track) = crate::track_of(session, clip)
+            && crate::is_locked(session, track)
+        {
+            return Err(crate::locked_error(&id, track));
+        }
         let duration = node.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
         let start = node.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
         if !session.document_mut()?.remove_node(clip) {

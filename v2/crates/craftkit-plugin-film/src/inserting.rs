@@ -83,6 +83,10 @@ impl InsertClip {
                 message: format!("the node `{track}` is a `{}` and not a track", node.kind),
             });
         }
+        // A **locked** track cannot be edited.
+        if crate::is_locked(session, track) {
+            return Err(crate::locked_error(&id, track));
+        }
         let start = self.start.0;
         if !start.is_finite() || start.fract() != 0.0 {
             return Err(EngineError::Failed {
