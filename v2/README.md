@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2623 tests.** The MCP server links **all fifteen batteries** in, so the
+**2632 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2623 tests
+cargo test          # 2632 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3782,6 +3782,7 @@ so.
 | the **hiding** of a row and a column | **built.** A row and a column may be hidden, and a hidden row is still a row (§345) | §345 |
 | the **subtotal** of a range | **built.** The tree's own function, with the hundred-and-more form that leaves the hidden rows out (§346) | §346 |
 | the **filter** of a sheet | **built.** A column and a criterion, and the rows the filter hides are derived (§347) | §347 |
+| the **switch** of one effect | **built.** An effect may be switched off and keep its values (§348) | §348 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23829,3 +23830,55 @@ more than ten are the rows the filter **hides**.
 - **The tree's sort is not here.** The tree may sort the rows of a
   filtered table, and the order of the rows is then a fact of the
   sheet. Here the rows are where they were put.
+
+## 348. The switch of one effect
+
+An effect on a layer may be switched **off** and leave its values
+where they are: the tree's `effect.toggle`.
+
+### What was built
+
+- The command `fx.effect.toggle` switches one effect of a layer off or
+  on, and the values of the effect stay where they are.
+- With no value given the switch is **toggled** — the tree's own rule.
+- An effect is **on** when it is put on a layer.
+- The **effects that run** are derived: the ones that are enabled and
+  the layer's own effects switch is on. The evaluator says how many
+  there are.
+
+### What the port found
+
+- **The tree's instance has a group with an `enabled` flag and this
+  tree's has a field.** The tree's effect instance is a property
+  group with a uid, a label and an `enabled` flag, and the flag is
+  what the tree's `effect.toggle` writes. Here the instance is a group
+  in the property tree and the flag is a field of it — and the
+  instance is addressed by its **number**, as the paths address it.
+- **The tree's toggle takes the value or flips the flag, and this
+  tree's does the same.** The tree's `effect.toggle` reads an optional
+  `value` and flips the flag when there is none, and returns what the
+  flag is now.
+
+### What it cost
+
+- **Nine tests** in the fx battery (`tests/toggle.rs`): an effect
+  being on when it is put on, an effect being switched off with its
+  values left in place, an effect with no value being toggled, the
+  effects that run being derived, the layer's own switch saying
+  whether they run, an effect that is not there being refused, an
+  effect being counted from one, a node that is not a layer being
+  refused, and the switch being saved.
+- **One new command**: `fx.effect.toggle`. The fx battery now carries
+  **24** commands and the MCP server **459**.
+- The **switches evaluator** says how many of a layer's effects run.
+
+### What it does not settle
+
+- **The tree's reorder of the stack is not here.** The tree may move
+  an effect up or down the stack, and the tree's instance has a uid so
+  that moving it does not move what addresses it. Here the instance is
+  addressed by its number, and a reorder has to say what it does to
+  the paths — which is why it is not here yet.
+- **The tree's duplicate and reset of an instance are not here**
+  either: they are commands on an instance and they come with the
+  reorder.
