@@ -54,6 +54,11 @@
 //! every command that would edit it is refused — the tree's locked
 //! track, and the tree's `unlocked_track` (the module `locking`).
 //!
+//! And a track may carry a **transition**: a thing that sits over the
+//! cut between two clips that are next to each other, with a duration
+//! and an alignment on the cut, and it may not leave the clips it
+//! joins — the tree's transitions (the module `transitions`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -107,6 +112,7 @@ mod removal;
 mod reversing;
 mod rippling;
 mod splitting;
+mod transitions;
 mod trim;
 
 pub use inserting::InsertClip;
@@ -117,6 +123,7 @@ pub use removal::RemoveClip;
 pub use reversing::ReverseClip;
 pub use rippling::RippleClip;
 pub use splitting::SplitClip;
+pub use transitions::{AddTransition, RemoveTransition, SetTransition, TransitionKind};
 pub use trim::TrimClip;
 
 /// The film layer.
@@ -598,6 +605,10 @@ craftkit_sdk::plugin_anchor!(
     RemoveClip,
     RippleClip,
     LiftRange,
+    TransitionKind,
+    AddTransition,
+    SetTransition,
+    RemoveTransition,
     ReverseClip,
     LockTrack,
     TimelineEvaluator,
