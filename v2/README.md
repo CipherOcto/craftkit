@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2440 tests.** The MCP server links **all fifteen batteries** in, so the
+**2452 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2440 tests
+cargo test          # 2452 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3768,6 +3768,7 @@ so.
 | the **rotation** of a page | **built.** A page may be turned, by a multiple of ninety degrees (§331) | §331 |
 | the **label** of a clip | **built.** A clip carries one of the tree's own sixteen colours, and the clips with the same one are a group (§332) | §332 |
 | the **opacity** of a path | **built.** A path says how solid it is, and the opacity multiplies into the fill and the line (§333) | §333 |
+| the **slip** of a clip | **built.** A clip stays where it is and shows a different part of its media, and a slip past the end of the media is refused (§334) | §334 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22895,3 +22896,59 @@ nowhere else.
   header, and the flag is not a picture.
 - **What a frozen track may be done to is not here**: the tree does not
   say, and neither does this.
+
+## 334. The slip of a clip
+
+A clip has two clocks — where it starts on the timeline and where it
+begins in the media — and a **slip** moves the second one and leaves
+the first one alone. The clip stays where it is and how long it is, and
+it shows a **different part of its media**.
+
+### What was built
+
+- The command `film.clip.slip` shows a different part of a clip's media.
+- The slip is **refused** when it would run past the end of the media
+  or begin before it, and the refusal says how long the media is.
+- The **link** is honoured: the linked clips slip together, so that the
+  picture and the sound stay in step.
+
+### What the port found
+
+- **The tree's slip moves the media whatever the speed is.** The
+  tree's `slip` adds the delta to the clip's place in the media and
+  does not count the speed through it, while its own **trim** does. So
+  a clip that plays twice as fast slips twice as far in the media as a
+  clip that plays as it is, and the picture it shows moves half as
+  far. Here the slip counts the media through the speed, like the trim
+  does: a slip of ten frames shows ten frames of picture later,
+  whatever the speed is.
+- **The tree's linked slip is scaled and this one is refused.** The
+  tree's `slip_together` divides the delta of the group by the
+  fraction the most constrained member could take, so the whole group
+  slips a little and nothing says so. Here every member of the group
+  takes the same delta, and a member that cannot take it refuses the
+  slip — the rule the trim of a linked group already had (§299).
+
+### What it cost
+
+- **Twelve tests** in the film battery (`tests/slip.rs`): a slip
+  moving the media and not the timeline, a slip going backwards, a
+  slip past the end of the media refused, a slip before the media
+  refused, a slip of nothing refused, the slip counting the speed,
+  the linked clips slipping together, a linked clip that cannot take
+  the slip refusing it, a slip on a locked track refused, a node that
+  is not a clip refused, a held clip being slipped, and the place in
+  the media being saved.
+- **One new command**: `film.clip.slip`. The film battery now carries
+  **27** commands and the MCP server **429**.
+
+### What it does not settle
+
+- **The roll and the slide are not here.** The tree's **roll** moves
+  the cut between two clips and the tree's **slide** moves a clip
+  between its neighbours, and both are edits of the **place** of a
+  clip and not of its content. They are commands of their own.
+- **The tree's subclip restriction is not here.** The tree's slip may
+  not leave the range of a subclip, and the tree's own media may start
+  at a mark that is not the first frame. Here the media begins at
+  frame zero and there are no marks.
