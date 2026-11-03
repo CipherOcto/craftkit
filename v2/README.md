@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2663 tests.** The MCP server links **all fifteen batteries** in, so the
+**2674 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2663 tests
+cargo test          # 2674 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3786,6 +3786,7 @@ so.
 | the **line spacing** of a paragraph | **built.** The lines may be spaced by a multiple, a minimum or an exact number (§349) | §349 |
 | the **conditional formats** of a sheet | **built.** A range, a criterion and a format, and the cells that match are written with it (§350) | §350 |
 | the other **commands on an effect** | **built.** An effect's parameters may be reset, it may be copied and it may be moved (§351) | §351 |
+| the **marks** of a media | **built.** A media may carry a mark in and a mark out, and the material a clip plays is between them (§352) | §352 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24070,3 +24071,62 @@ and it may be **moved** in the stack.
   order is a fact and not a picture.
 - **The tree's own colours are not here** (§350), and neither are its
   other kinds of rule.
+
+## 352. The marks of a media
+
+A **media** may carry a **mark in** and a **mark out**, and the
+material a clip plays is between them: the tree's media has marks, and
+a clip of a marked media may not play outside them.
+
+### What was built
+
+- The command `film.item.mark` puts the marks on a media. Only what is
+  **named** is changed: a mark in alone leaves the mark out as it was,
+  and a mark out alone leaves the mark in.
+- A mark that is **outside the media** is refused and says how long the
+  media is; a mark in that is **after** the mark out is refused and says
+  why; a frame that is **not a whole number** is refused.
+- A media with **no marks** is all of itself: the clip may begin at its
+  first frame and run to its last, and the refusals say the media's
+  length as they always did.
+- A marked media **bounds** the clip: the trim, the slip and the speed
+  all stop at the marks and not at the end of the media, and the
+  refusal says where the media begins or what its marks are.
+
+### What the port found
+
+- **The tree's marks are the media's own and so are these.** The tree's
+  item carries a `mark_in` and a `mark_out` in media time, and the
+  tree's clip's `source_in` is in media time as well. Here the clip's
+  `source_in` is in media time too — it has always been — and the marks
+  say which part of that media may be played.
+- **The tree's marks are optional and so are these.** A media without a
+  mark in or a mark out is all of itself, and a mark in of nothing is
+  the media's own beginning and a mark out of nothing is its end.
+- **The tree clamps a trim against the media and this tree refuses it.**
+  The tree's trim works out the biggest delta it may have and uses that;
+  here the trim that would cross the mark is refused and says which
+  bound stopped it — the same rule as every other bound in this tree.
+
+### What it cost
+
+- **Eleven tests** in the film battery (`tests/mediamarks.rs`): the
+  marks being put on a media, only what is named being changed, a mark
+  outside the media refused, a mark in after the mark out refused, a
+  frame that is not a frame refused, a node that is not a media
+  refused, a clip not running past the mark out, a clip not beginning
+  before the mark in, a slip staying between the marks, a media with no
+  marks being all of itself, and the marks being saved.
+- **One new command**: `film.item.mark`. The film battery now carries
+  **35** commands and the MCP server **467**.
+
+### What it does not settle
+
+- **The tree's marks may be set on the media and on the sequence.** The
+  tree's sequence carries its own `mark_in` and `mark_out` for the media
+  it plays, and they are the marks of the *sequence* and not of a media.
+  Here the marks are the media's and a sequence's marks are not here.
+- **A mark does not change what a clip plays.** The clip's `source_in`
+  still says where it begins, and the marks only say what it may begin
+  at — so a clip that already plays outside the marks is left as it is
+  and is refused when it is edited.
