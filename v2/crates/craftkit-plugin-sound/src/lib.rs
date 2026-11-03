@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and thirty-one commands**, one for each thing a person does to a
+//! - **a hundred and thirty-three commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -31,7 +31,8 @@
 //!   **tracks** so that they are mixed together, make a track
 //!   **elastic** so that its clips are stretched and the pitch stays,
 //!   set a track's **fader** and its **pan**, put a track's sound
-//!   **in the room** with a **surround pan** and take it away, move a
+//!   **in the room** with a **surround pan** and take it away, **arm**
+//!   a track for **recording** and let it hear its input, move a
 //!   clip's **pitch**,
 //!   do a **process** to a clip's sound and take it off, render the
 //!   **stems**, **separate** a clip into two or on the **grid**,
@@ -516,6 +517,9 @@ mod render;
 mod repeat;
 mod split;
 
+// The **recording** of a track: the arm and the monitor.
+mod recording;
+
 // The **surround pan** of a track: where its sound is in the room.
 mod surround;
 
@@ -550,6 +554,7 @@ pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
     LanePayload, MoveInsert, RemoveInsert, SendKind, SendPayload, SetSend,
 };
+pub use recording::{MonitorTrack, RecordTrack};
 pub use remove::{RemoveClip, RemoveMarker, RemoveTrack};
 pub use rename::{RenameClip, RenameTrack};
 pub use render::RenderClip;
@@ -611,6 +616,13 @@ pub struct SoundSession {
     /// is a setting of the session: the file says how wide it is. Here
     /// it is one of the five layouts this tree has.
     pub layout: String,
+    /// Whether the recording is **destructive**: the sound that is
+    /// recorded over is gone.
+    pub destructive_record: bool,
+    /// Whether the recording is **track punch**: the recording is
+    /// written over the part of the track that is armed and nowhere
+    /// else.
+    pub track_punch: bool,
 }
 
 impl Default for SoundSession {
@@ -624,6 +636,8 @@ impl Default for SoundSession {
             click_accent_note: 84.0,
             grid: Grid::default(),
             layout: "stereo".to_string(),
+            destructive_record: false,
+            track_punch: false,
         }
     }
 }
@@ -686,6 +700,15 @@ pub(crate) fn session_of(document: &Document) -> SoundSession {
         Some(layout) if surround::layout(layout).is_some() => layout.to_string(),
         _ => SoundSession::default().layout,
     };
+    // The **recording modes**: destructive, and the track punch.
+    let destructive_record = settings
+        .and_then(|settings| settings.get("destructive_record"))
+        .and_then(|destructive| destructive.as_bool())
+        .unwrap_or(SoundSession::default().destructive_record);
+    let track_punch = settings
+        .and_then(|settings| settings.get("track_punch"))
+        .and_then(|punch| punch.as_bool())
+        .unwrap_or(SoundSession::default().track_punch);
     SoundSession {
         sample_rate,
         timecode_start,
@@ -695,6 +718,8 @@ pub(crate) fn session_of(document: &Document) -> SoundSession {
         click_accent_note,
         grid,
         layout,
+        destructive_record,
+        track_punch,
     }
 }
 
@@ -751,6 +776,8 @@ pub(crate) fn set_session(document: &mut Document, session: &SoundSession) {
                 "triplet": session.grid.triplet,
             }),
             "layout": session.layout,
+            "destructive_record": session.destructive_record,
+            "track_punch": session.track_punch,
         }),
     );
     document.data = Json::Object(data);
@@ -1358,6 +1385,18 @@ struct TrackPayload {
     /// stem, and it is still in the document with its clips and its
     /// settings.
     inactive: bool,
+    /// Whether the track is **armed** for recording.
+    ///
+    /// The arm is the track's own: the tree's mixer shares the mute
+    /// and the solo with the group that mixes together, and the arm is
+    /// not one of them.
+    record_arm: bool,
+    /// Whether the track **hears its input**.
+    ///
+    /// The tree's monitor puts the live input in the mix in place of
+    /// the track's own sound; here there is no live input, and the
+    /// monitor says that the track is listening.
+    input_monitor: bool,
     /// The **surround pan** of the track: where its sound is in the
     /// room.
     ///
@@ -1397,6 +1436,8 @@ impl TrackPayload {
             "inactive": self.inactive,
             "elastic": self.elastic,
             "surround": self.surround.map(|surround| surround.to_json()),
+            "record_arm": self.record_arm,
+            "input_monitor": self.input_monitor,
         })
     }
 
@@ -1421,6 +1462,8 @@ impl TrackPayload {
                 .and_then(|elastic| elastic.as_str())
                 .map(|elastic| elastic.to_string()),
             surround: value.get("surround").and_then(surround::SurroundPan::from_json),
+            record_arm: value.get("record_arm").and_then(|armed| armed.as_bool()).unwrap_or(false),
+            input_monitor: value.get("input_monitor").and_then(|monitor| monitor.as_bool()).unwrap_or(false),
         })
     }
 }
@@ -2023,6 +2066,8 @@ impl AddTrack {
             inactive: false,
             elastic: None,
             surround: None,
+            record_arm: false,
+            input_monitor: false,
         };
         let document = session.document_mut()?;
         let track = document.add_node_with(name.clone(), "sound.track", None, payload.to_json());
@@ -7646,6 +7691,13 @@ pub struct SetSession {
     /// One of `stereo`, `5.0`, `5.1`, `7.1` and `7.1.4`, and a layout
     /// that is not one of them is **refused**.
     pub layout: Option<Text>,
+    /// Whether the recording is **destructive**: the sound that is
+    /// recorded over is gone.
+    pub destructive_record: Option<Bool>,
+    /// Whether the recording is a **track punch**: the recording is
+    /// written over the part of the track that is armed and nowhere
+    /// else.
+    pub track_punch: Option<Bool>,
 }
 
 impl SetSession {
@@ -7706,6 +7758,12 @@ impl SetSession {
             }
             settings.layout = layout.0.trim().to_string();
         }
+        if let Some(destructive) = &self.destructive_record {
+            settings.destructive_record = destructive.0;
+        }
+        if let Some(punch) = &self.track_punch {
+            settings.track_punch = punch.0;
+        }
         set_session(session.document_mut()?, &settings);
         Ok(Outcome::changed(format!("the session runs at {} samples a second", settings.sample_rate))
             .with_data(serde_json::json!({
@@ -7716,6 +7774,8 @@ impl SetSession {
                 "click_note": settings.click_note,
                 "click_accent_note": settings.click_accent_note,
                 "layout": settings.layout,
+                "destructive_record": settings.destructive_record,
+                "track_punch": settings.track_punch,
             })))
     }
 }
@@ -7928,6 +7988,8 @@ pub(crate) fn add_track(session: &mut Session, name: &str) -> Result<u64, Engine
         inactive: false,
         elastic: None,
         surround: None,
+        record_arm: false,
+        input_monitor: false,
     };
     let document = session.document_mut()?;
     let track = document.add_node_with(name.to_string(), "sound.track", None, payload.to_json());
