@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2325 tests.** The MCP server links **all fifteen batteries** in, so the
+**2331 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2325 tests
+cargo test          # 2331 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3755,6 +3755,7 @@ so.
 | the **surround pan** of a track | **built.** The sound is placed in the room, and the gains on the speakers are derived from the position (§318) | §318 |
 | the **expression** of a property | **built.** An expression says what the value is at every frame, in a small language of this tree's own (§319) | §319 |
 | the **recording** of a track | **built.** A track may be armed for recording and may hear its input, and the recording modes are settings of the session (§320) | §320 |
+| the **frozen** track | **built.** A track may be frozen, and the flag is a fact of the track (§321) | §321 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22251,3 +22252,43 @@ is there is not.
   track is listening, and there is nothing to listen to.
 - **The tree's bulk "set record tracks to input only" is not here**,
   and there is no list of the armed tracks.
+
+## 321. The frozen track
+
+A track may be **frozen**: the tree's header then draws the track with
+the face of a bypassed one, and the tree's engine reads the flag
+nowhere else.
+
+### What was built
+
+- The command `sound.track.freeze` freezes a track, or lets it be.
+- The **flag** is a fact of the track, and it is saved with it.
+
+### What the port found
+
+- **The tree's freeze freezes nothing.** The tree's engine reads the
+  frozen flag in exactly one place — the header, which draws a frozen
+  track with the face of a bypassed one — and the mixer, the renderer
+  and the timeline know nothing about it. So the tree's freeze is a
+  **fact about a track and not a behaviour**: the honest port is the
+  flag, and what a frozen track may be done to is the tree's business
+  and not here.
+- **The freeze is the track's own.** The tree's freeze is on a single
+  track, and a group of tracks that mixes together is frozen one at a
+  time — unlike the mute and the solo, which the tree's group shares.
+
+### What it cost
+
+- **Six tests** in the sound battery (`tests/freeze.rs`): a track being
+  frozen, the freeze being taken away, a track that was never frozen,
+  the freeze being the track's own inside a group that mixes, the
+  freeze being saved, and a node that is not a track refused.
+- **One new command**: `sound.track.freeze`. The sound battery now
+  carries **134** commands and the MCP server **401**.
+
+### What it does not settle
+
+- **The tree's frozen face is not here**: this tree has no track
+  header, and the flag is not a picture.
+- **What a frozen track may be done to is not here**: the tree does not
+  say, and neither does this.
