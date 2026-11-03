@@ -13,6 +13,8 @@
 //!   hundred;
 //! - the **currencies**: a number with a symbol in quotes, such as
 //!   `"$"#,##0.00` or `#,##0.00" kr"`;
+//! - the **fractions**: `# ?/?`, `# ??/??`, `?/?` and `# ?/4` — a
+//!   number written as the nearest fraction (the module `fractions`);
 //! - the **dates**: `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`,
 //!   `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`.
 //! - the **times**: `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`,
@@ -69,6 +71,7 @@
 
 use crate::dates::{self, Date};
 use crate::formula::Value;
+use crate::fractions;
 
 /// The most characters a format code may have.
 ///
@@ -116,6 +119,8 @@ pub enum Format {
         /// Whether the thousands are separated by a comma.
         thousands: bool,
     },
+    /// A **fraction**: a number written as a fraction.
+    Fraction(fractions::Fraction),
 }
 
 /// The **time formats** this tree knows.
@@ -333,6 +338,11 @@ impl Format {
         if let Some(style) = TimeStyle::parse(code) {
             return Some(Format::Time { style });
         }
+        // A **fraction** is a shape of its own: a whole part, a
+        // numerator, a bar and a denominator.
+        if let Some(fraction) = fractions::parse(code) {
+            return Some(Format::Fraction(fraction));
+        }
         // A **currency** is a number with a **symbol**: the symbol is a
         // literal in quotes, and the tree writes it that way.
         for (symbol, before, rest) in symbols(code) {
@@ -370,6 +380,8 @@ impl Format {
                 Format::Currency { symbol, before, decimals, thousands } => {
                     currency(*number, symbol, *before, *decimals, *thousands)
                 }
+                // A fraction is a **number** written as a fraction.
+                Format::Fraction(fraction) => fractions::text(*number, fraction),
             },
             // A format does not change a text: the tree's text sections
             // are not here.
@@ -454,7 +466,7 @@ fn currency(number: f64, symbol: &str, before: bool, decimals: usize, thousands:
 ///
 /// A whole number is written without its decimals, and the rest is
 /// written as the number is.
-fn general(number: f64) -> String {
+pub(crate) fn general(number: f64) -> String {
     if !number.is_finite() {
         return format!("{number}");
     }
