@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2283 tests.** The MCP server links **all fifteen batteries** in, so the
+**2293 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2283 tests
+cargo test          # 2293 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3751,6 +3751,7 @@ so.
 | the **ripple** of a speed change | **built.** A speed change may ripple: the clips that were after it move up by the change, and the transitions follow the cuts (§314) | §314 |
 | the **fraction** of a cell | **built.** A number may be written as the nearest fraction, and the limit is what the code says (§315) | §315 |
 | the **sections** of a format | **built.** A format may have a different code for the positive numbers, the negative ones and the zero (§316) | §316 |
+| the **reshape** of a path | **built.** The path is grabbed at a point and dragged, and the anchors around follow with a falloff measured along the path (§317) | §317 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21957,3 +21958,78 @@ A format may have a different code for the **positive** numbers, the
 - **The tree's text section is not here**: a text is written as it is.
 - **The tree's literals are not here**: every section is a format this
   tree has, so a section that is plain text is refused.
+
+## 317. The reshape of a path
+
+The **reshape tool** grabs the path at a point and drags it, and the
+anchors around the grab follow. The tree's finding is that the
+followers are not chosen by how far they are in a straight line but
+by how far they are **along the path**.
+
+### What was built
+
+- The command `vector.path.reshape` grabs a path at a point and drags
+  it by a **delta**.
+- The anchors around the grab follow with a **smooth falloff** over a
+  **radius**, and the radius is measured **along the path** — not in a
+  straight line from the grab, but along the curve the path is.
+- The grab may be on a point that is **not an anchor**: the path is
+  grabbed where it is nearest to the point, and an anchor is added
+  there — unless an anchor is already within the tolerance.
+- The **handles** move with their anchor, and the shape of the curve
+  around it does not change.
+
+### What the port found
+
+- **The falloff is measured along the path, and that is the whole
+  finding.** The tree measures each anchor's distance from the grabbed
+  one *along the path* — the arc length — and not in a straight line
+  from the grab. On a curve the two are not the same thing, and the
+  tree changed from one to the other: the tree's own comment says the
+  lengths are now measured along the path, where they used to be
+  measured across.
+- **The weight is `(1 - q²)²`.** The grabbed anchor has the weight
+  one and moves the whole way; an anchor at the radius has the weight
+  zero and does not move at all; and the weight falls smoothly in
+  between, so the shape of the path does not break at the edge of the
+  falloff.
+- **The reach is half the size of the contour** — the diagonal of its
+  box, halved — and never less than one. So on a small shape only the
+  grabbed anchor moves, and on a big one the neighbours come with it.
+- **The grab adds an anchor when there is not one near it.** The tree
+  takes the nearest anchor, and when it is further away than the
+  tolerance the path is **split** at the point that was grabbed — and
+  the split does not change the shape of the curve, because the two
+  halves are the same curve.
+- **On a closed path the distance is the shorter way round.** The tree
+  measures the distance between two anchors along the path and takes
+  the shorter of the two ways, so an anchor just behind the grab is
+  near it even though the path between them is long.
+- **The tree's reach is a clamp and here it is a refusal**: a radius
+  or a tolerance that is negative is not a distance.
+
+### What it cost
+
+- **Ten tests** in the vector battery (`tests/reshape.rs`): the
+  grabbed anchor moving the whole way, the anchors beyond the radius
+  staying, an anchor within the radius following by its weight, the
+  falloff being measured along the path, a grab that is not on an
+  anchor adding one, a grab near an anchor grabbing that one, the
+  handles moving with their anchor, a negative distance refused, a
+  radius of zero moving only the grabbed anchor, and an empty path
+  refused.
+- **One new command**: `vector.path.reshape`. The vector battery now
+  carries **35** commands and the MCP server **394**.
+- **One new module** (`src/reshape.rs`): the nearest point of a path,
+  the positions of the anchors along it, the size of a contour and the
+  weight of an anchor.
+
+### What it does not settle
+
+- **The tree's selection is not here.** The tree's reshape works on
+  the selected path and its selected anchors, and the shape that is
+  grabbed is the one under the cursor. Here the path is named and the
+  contour is the one the grab is nearest to.
+- **The tree's distance is measured with the curve's own arc length**
+  and this tree measures it with the curve sampled; the two agree to
+  within the sampling.
