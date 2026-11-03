@@ -20,6 +20,10 @@
 //!   travel beside the document in the bundle;
 //! - the **blocks** — derived, in order, by the evaluator.
 //!
+//! And a document can be **edited**: what a paragraph says may be
+//! changed, a block may be taken away, and a block may be moved to
+//! another place in the document (the module `editing`).
+//!
 //! # The five things the port found
 //!
 //! - **A word processor's document is a flat list, and the kit's tree
@@ -69,6 +73,10 @@
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Relation, Session, Text};
+
+mod editing;
+
+pub use editing::{MoveBlock, RemoveBlock, SetParagraphText};
 
 /// The prose layer.
 ///
@@ -712,6 +720,9 @@ craftkit_sdk::plugin_anchor!(
     AddTable,
     PutOnStyle,
     SetRuns,
+    SetParagraphText,
+    RemoveBlock,
+    MoveBlock,
     BlocksEvaluator,
     ProsePanel
 );
