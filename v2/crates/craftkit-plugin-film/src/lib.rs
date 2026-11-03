@@ -102,6 +102,9 @@
 //! And a sequence may carry **markers**: named places on its timeline,
 //! with a comment, a colour and a kind (the module `markers`).
 //!
+//! And a **media** may carry **marks**: a mark in and a mark out, and
+//! the material a clip plays is between them (the module `mediamarks`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -154,6 +157,7 @@ mod lifting;
 mod linking;
 mod locking;
 mod markers;
+mod mediamarks;
 mod moving;
 mod removal;
 mod reversing;
@@ -174,6 +178,7 @@ pub use lifting::LiftRange;
 pub use linking::{LinkClips, UnlinkClip};
 pub use locking::LockTrack;
 pub use markers::{AddMarker, ClearMarkers, MarkerKind, RemoveMarker, SetMarker};
+pub use mediamarks::SetMarks;
 pub use moving::MoveClip;
 pub use removal::RemoveClip;
 pub use reversing::ReverseClip;
@@ -679,6 +684,60 @@ pub fn media_length_of(session: &Session, clip: u64) -> Option<u64> {
     if duration == 0 { None } else { Some(duration) }
 }
 
+/// The **media** a clip may play: the range of the media's frames that
+/// a clip may play, and the media's own length.
+///
+/// The tree's media carries a **mark in** and a **mark out**, and the
+/// material a clip plays is between them. Here the marks are the
+/// item's own facts, and a media without them is all of itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MediaRange {
+    /// The first frame of the media a clip may play.
+    pub start: u64,
+    /// The frame after the last one a clip may play.
+    pub end: u64,
+    /// How long the whole media is.
+    pub length: u64,
+    /// Whether the media has marks of its own.
+    pub marked: bool,
+}
+
+impl MediaRange {
+    /// What the media allows, in words.
+    pub fn bound(&self) -> String {
+        if self.marked {
+            format!(
+                "the media is {} frames long and its marks are {} and {}",
+                self.length, self.start, self.end
+            )
+        } else {
+            format!("the media is {} frames long", self.length)
+        }
+    }
+}
+
+/// The **media** a clip may play: the range of its frames, if it is
+/// known.
+pub fn media_range_of(session: &Session, clip: u64) -> Option<MediaRange> {
+    let item = session
+        .document()
+        .relations
+        .iter()
+        .find(|relation| relation.kind == "clip" && relation.from == clip)
+        .map(|relation| relation.to)?;
+    let node = session.document().node(item)?;
+    let length = node.data.get("duration")?.as_u64()?;
+    if length == 0 {
+        return None;
+    }
+    let mark_in = node.data.get("mark_in").and_then(|mark| mark.as_u64());
+    let mark_out = node.data.get("mark_out").and_then(|mark| mark.as_u64());
+    let marked = mark_in.is_some() || mark_out.is_some();
+    let start = mark_in.unwrap_or(0);
+    let end = mark_out.unwrap_or(length).min(length);
+    Some(MediaRange { start, end, length, marked })
+}
+
 /// The **sequence** a clip is in: the item the track is in.
 pub fn sequence_of(session: &Session, clip: u64) -> Option<u64> {
     let track = track_of(session, clip)?;
@@ -766,6 +825,7 @@ craftkit_sdk::plugin_anchor!(
     LockTrack,
     SlipClip,
     SlideClip,
+    SetMarks,
     StretchClip,
     RollCut,
     TimelineEvaluator,

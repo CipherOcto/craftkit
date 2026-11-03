@@ -158,14 +158,15 @@ impl SetSpeed {
         }
         // The media may not run past the **end** of the item the clip
         // plays.
-        if let Some(media_length) = crate::media_length_of(session, clip)
-            && source_in as i64 + media_frames(duration as u64, speed) as i64 > media_length as i64
+        if let Some(media) = crate::media_range_of(session, clip)
+            && source_in as i64 + media_frames(duration as u64, speed) as i64 > media.end as i64
         {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!(
-                    "the clip would run to frame {} of the media, and the media is {media_length} frames long",
-                    source_in as i64 + media_frames(duration as u64, speed) as i64
+                    "the clip would run to frame {} of the media, and {}",
+                    source_in as i64 + media_frames(duration as u64, speed) as i64,
+                    media.bound()
                 ),
             });
         }

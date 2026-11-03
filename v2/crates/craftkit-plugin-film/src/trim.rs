@@ -252,8 +252,12 @@ pub fn clock_after(session: &Session, clip: u64, edge: &str, delta: i64) -> Resu
     // end of it. A held clip has no out edge in the media and no head
     // handle, so the trim moves the clip and not the media.
     let hold = crate::hold::hold_of(&node.data);
-    // The **media**: how long the item the clip plays is.
+    // The **media**: the range of the item's frames a clip may play.
     let media = media_of(session, clip);
+    let (media_start, media_marked) = match media {
+        Some(media) => (media.start as i64, media.marked),
+        None => (0, false),
+    };
 
     // A clip that plays **backwards** consumes the media at the
     // other end of its range: its in edge takes the media *after*
@@ -277,8 +281,15 @@ pub fn clock_after(session: &Session, clip: u64, edge: &str, delta: i64) -> Resu
                 "the clip would be {duration} frames long, and a clip is at least one frame"
             ));
         }
-        if source_in < 0 {
-            return Err(format!("the clip would begin at {} frames before the media begins", -source_in));
+        if source_in < media_start {
+            return Err(if media_marked {
+                format!(
+                    "the clip would begin at frame {}, and the media begins at frame {media_start}",
+                    source_in
+                )
+            } else {
+                format!("the clip would begin at {} frames before the media begins", -source_in)
+            });
         }
         if start < 0 {
             return Err(format!(
@@ -297,8 +308,15 @@ pub fn clock_after(session: &Session, clip: u64, edge: &str, delta: i64) -> Resu
         // A clip that plays backwards takes the media *before* its
         // in point when its out edge grows.
         let source_in = if reversed { clock.source_in as i64 - media_delta } else { clock.source_in as i64 };
-        if source_in < 0 {
-            return Err(format!("the clip would begin at {} frames before the media begins", -source_in));
+        if source_in < media_start {
+            return Err(if media_marked {
+                format!(
+                    "the clip would begin at frame {}, and the media begins at frame {media_start}",
+                    source_in
+                )
+            } else {
+                format!("the clip would begin at {} frames before the media begins", -source_in)
+            });
         }
         (clock.start as i64, duration, source_in)
     };
@@ -314,10 +332,11 @@ pub fn clock_after(session: &Session, clip: u64, edge: &str, delta: i64) -> Resu
         && hold.is_none()
     {
         let played = crate::speed::media_frames(duration as u64, speed) as i64;
-        if source_in + played > media as i64 {
+        if source_in + played > media.end as i64 {
             return Err(format!(
-                "the clip would run to frame {} of the media, and the media is {media} frames long",
-                source_in + played
+                "the clip would run to frame {} of the media, and {}",
+                source_in + played,
+                media.bound()
             ));
         }
     }
@@ -362,10 +381,10 @@ fn neighbours(session: &Session, clip: u64, start: u64) -> Neighbours {
     Neighbours { before, after }
 }
 
-/// How long the **media** the clip plays is, if it is known.
+/// The **media** the clip plays: the range of its frames, if it is
+/// known.
 ///
-/// The item's own duration is the media's length; an item that has none
-/// does not bound the clip.
-fn media_of(session: &Session, clip: u64) -> Option<u64> {
-    crate::media_length_of(session, clip)
+/// An item that has no duration does not bound the clip.
+fn media_of(session: &Session, clip: u64) -> Option<crate::MediaRange> {
+    crate::media_range_of(session, clip)
 }

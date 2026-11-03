@@ -51,9 +51,9 @@
 //!   clip between its neighbours, and both are edits of the **place**
 //!   of a clip and not of its content. They are commands of their own.
 //! - **The tree's subclip restriction is not here.** The tree's slip
-//!   may not leave the range of a subclip, and the tree's own media
-//!   may start at a mark that is not the first frame. Here the media
-//!   begins at frame zero and there are no marks.
+//!   may not leave the range of a subclip. Here the media may carry
+//!   **marks** and the slip stays between them (the module
+//!   `mediamarks`), but a subclip is not here.
 
 use craftkit_derive::Command;
 
@@ -176,12 +176,19 @@ fn slipped(session: &Session, clip: u64, delta: i64) -> Result<u64, String> {
     let hold = crate::hold::hold_of(&node.data);
     let shift = (delta as f64 * speed).round() as i64;
     let moved = source_in as i64 + shift;
-    if moved < 0 {
-        return Err(format!("the clip would begin at frame {} before the media begins", -moved));
+    // The **media** the clip plays: the range of its frames a clip may
+    // play, which is between its marks when it has them.
+    let media = crate::media_range_of(session, clip);
+    let media_start = media.map(|media| media.start as i64).unwrap_or(0);
+    let media_marked = media.map(|media| media.marked).unwrap_or(false);
+    if moved < media_start {
+        return Err(if media_marked {
+            format!("the clip would begin at frame {moved}, and the media begins at frame {media_start}")
+        } else {
+            format!("the clip would begin at frame {} before the media begins", -moved)
+        });
     }
     let moved = moved as u64;
-    // The **media** the clip plays: how long the item is.
-    let media = crate::media_length_of(session, clip);
     match hold {
         // A **held** clip plays its material up to the frame it holds
         // and holds that frame to the end of the clip, so the material
@@ -207,11 +214,12 @@ fn slipped(session: &Session, clip: u64, delta: i64) -> Result<u64, String> {
         None => {
             let played = crate::speed::media_frames(duration, speed);
             if let Some(media) = media
-                && moved + played > media
+                && moved + played > media.end
             {
                 return Err(format!(
-                    "the clip would run to frame {} of the media, and the media is {media} frames long",
-                    moved + played
+                    "the clip would run to frame {} of the media, and {}",
+                    moved + played,
+                    media.bound()
                 ));
             }
         }
