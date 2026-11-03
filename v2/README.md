@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2318 tests.** The MCP server links **all fifteen batteries** in, so the
+**2325 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2318 tests
+cargo test          # 2325 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3754,6 +3754,7 @@ so.
 | the **reshape** of a path | **built.** The path is grabbed at a point and dragged, and the anchors around follow with a falloff measured along the path (§317) | §317 |
 | the **surround pan** of a track | **built.** The sound is placed in the room, and the gains on the speakers are derived from the position (§318) | §318 |
 | the **expression** of a property | **built.** An expression says what the value is at every frame, in a small language of this tree's own (§319) | §319 |
+| the **recording** of a track | **built.** A track may be armed for recording and may hear its input, and the recording modes are settings of the session (§320) | §320 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22194,3 +22195,59 @@ of this tree's own.
 - **The tree's expression may be an expression over the property's
   neighbours** — `valueAtTime` and the rest — and here an expression
   sees only its own property and the time.
+
+## 320. The recording of a track
+
+A track may be **armed** for recording, and it may **monitor** its
+input: the sound that comes in is heard in the mix, and the sound that
+is there is not.
+
+### What was built
+
+- The command `sound.track.record` arms a track, or lets it be.
+- The command `sound.track.monitor` lets a track hear its input, or
+  not.
+- The **recording modes** — the destructive one and the track punch —
+  are settings of the session, and the command `sound.session.set`
+  sets them.
+
+### What the port found
+
+- **The tree's recording is the host's.** The tree's transport asks
+  the host to record, and the sound that comes in is the host's live
+  input; the tree's monitor puts that input in the mix in place of the
+  track's own sound. There is no host here, so what is here is the
+  **arming** and the **monitoring** — the facts of a track that is
+  ready to record — and the input itself is not here.
+- **The tree's arm is the track's own, and the tree's mute is not.**
+  The tree's mixer shares the mute and the solo with the group that
+  mixes together — a change to the mute of one member is a change to
+  the mute of all of them — and the record arm is **not** one of the
+  shared things: a group of tracks is armed one at a time.
+- **The tree's recording modes are the session's.** The destructive
+  recording and the track punch are options of the session and not of
+  a track, so a file says which of them it was made with.
+- **The tree's "set record tracks to input only" is a bulk action**:
+  it puts every armed track into monitor in one go. Here the monitor
+  is one track at a time, because there is no list of the armed tracks
+  to act on.
+
+### What it cost
+
+- **Seven tests** in the sound battery (`tests/recording.rs`): a
+  track being armed, the arm being taken away, a track hearing its
+  input, a track that is not armed, the arm being the track's own
+  inside a group that mixes, the recording modes being settings of
+  the session, and a track that is not there refused.
+- **Two new commands**: `sound.track.record` and
+  `sound.track.monitor`. The sound battery now carries **133**
+  commands and the MCP server **400**.
+
+### What it does not settle
+
+- **The tree's transport record is not here**: the recording is the
+  host's, and this tree has no host.
+- **The tree's live input is not here**: the monitor says that the
+  track is listening, and there is nothing to listen to.
+- **The tree's bulk "set record tracks to input only" is not here**,
+  and there is no list of the armed tracks.
