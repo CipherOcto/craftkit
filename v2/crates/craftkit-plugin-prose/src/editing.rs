@@ -232,6 +232,247 @@ impl MoveBlock {
     }
 }
 
+/// The **alignments** a paragraph may have, in the tree's own names.
+///
+/// The tree's `start` and `end` are the logical edges, and the tree
+/// writes them down as `left` and `right` — and so does this one.
+pub const ALIGNMENTS: [&str; 5] = ["left", "center", "right", "justify", "distribute"];
+
+/// The **alignment** a name says, if it is one.
+fn alignment_of(name: &str) -> Option<&'static str> {
+    let wanted = name.trim();
+    match wanted.to_lowercase().as_str() {
+        "left" | "start" => Some("left"),
+        "center" => Some("center"),
+        "right" | "end" => Some("right"),
+        "justify" | "both" => Some("justify"),
+        "distribute" => Some("distribute"),
+        _ => None,
+    }
+}
+
+/// The **largest** an indent may be, in points.
+const MAX_INDENT: f64 = 1584.0;
+
+/// The **largest** a spacing may be, in points.
+const MAX_SPACING: f64 = 1584.0;
+
+/// Say how a paragraph **stands**.
+///
+/// The alignment is one of the tree's own: `left`, `center`, `right`,
+/// `justify` or `distribute`. The tree's `start` and `end` are the
+/// logical edges and it writes them down as `left` and `right`.
+#[derive(Command)]
+#[command(
+    id = "prose.block.paragraph.align",
+    area = "prose",
+    layer = "prose",
+    icon = "align",
+    mutates,
+    undoable
+)]
+pub struct SetAlignment {
+    /// The paragraph.
+    pub block: NodeRef,
+    /// How it stands: `left`, `center`, `right`, `justify` or
+    /// `distribute`.
+    pub align: Text,
+}
+
+impl SetAlignment {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "prose.block.paragraph.align".to_string();
+        let block = self.block.0;
+        let Some(node) = session.document().node(block) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{block}`"),
+            });
+        };
+        if node.kind != "prose.block.paragraph" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
+            });
+        }
+        let Some(align) = alignment_of(&self.align.0) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "there is no alignment `{}`: the alignments are {}",
+                    self.align.0.trim(),
+                    ALIGNMENTS.join(", ")
+                ),
+            });
+        };
+        if let Some(node) = session.document_mut()?.node_mut(block) {
+            node.data["align"] = Json::String(align.to_string());
+        }
+        Ok(Outcome::changed(format!("the paragraph {block} stands {align}"))
+            .with_data(json!({ "block": block, "align": align })))
+    }
+}
+
+/// Say how far a paragraph is **indented**, in points.
+///
+/// Only what is named is changed. An indent outside the tree's own
+/// range is **refused**: the tree clamps it and says nothing.
+#[derive(Command)]
+#[command(
+    id = "prose.block.paragraph.indent",
+    area = "prose",
+    layer = "prose",
+    icon = "indent",
+    mutates,
+    undoable
+)]
+pub struct SetIndent {
+    /// The paragraph.
+    pub block: NodeRef,
+    /// How far from the left edge, in points.
+    pub left: Option<Number>,
+    /// How far from the right edge, in points.
+    pub right: Option<Number>,
+    /// How far the first line is in from the left, in points. A
+    /// negative number is a **hanging** indent.
+    pub first_line: Option<Number>,
+}
+
+impl SetIndent {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "prose.block.paragraph.indent".to_string();
+        let block = self.block.0;
+        let Some(node) = session.document().node(block) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{block}`"),
+            });
+        };
+        if node.kind != "prose.block.paragraph" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
+            });
+        }
+        let left = indent_of(self.left, &id)?;
+        let right = indent_of(self.right, &id)?;
+        let first_line = indent_of(self.first_line, &id)?;
+        let Some(node) = session.document_mut()?.node_mut(block) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{block}`"),
+            });
+        };
+        if let Some(left) = left {
+            node.data["indent_left"] = Json::from(left);
+        }
+        if let Some(right) = right {
+            node.data["indent_right"] = Json::from(right);
+        }
+        if let Some(first_line) = first_line {
+            node.data["indent_first"] = Json::from(first_line);
+        }
+        Ok(Outcome::changed(format!("the paragraph {block} is indented")).with_data(json!({
+            "block": block,
+            "left": left,
+            "right": right,
+            "first_line": first_line,
+        })))
+    }
+}
+
+/// An indent, if it is one.
+fn indent_of(value: Option<Number>, id: &str) -> Result<Option<f64>, EngineError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let points = value.0;
+    if !points.is_finite() || points < -MAX_INDENT || points > MAX_INDENT {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!(
+                "an indent is between -{MAX_INDENT} and {MAX_INDENT} points, and {points} is not"
+            ),
+        });
+    }
+    Ok(Some(points))
+}
+
+/// Say how much **space** is around a paragraph, in points.
+///
+/// Only what is named is changed. A space outside the tree's own range
+/// is **refused**: the tree clamps it and says nothing.
+#[derive(Command)]
+#[command(
+    id = "prose.block.paragraph.spacing",
+    area = "prose",
+    layer = "prose",
+    icon = "space",
+    mutates,
+    undoable
+)]
+pub struct SetSpacing {
+    /// The paragraph.
+    pub block: NodeRef,
+    /// How much space is above it, in points.
+    pub before: Option<Number>,
+    /// How much space is below it, in points.
+    pub after: Option<Number>,
+}
+
+impl SetSpacing {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "prose.block.paragraph.spacing".to_string();
+        let block = self.block.0;
+        let Some(node) = session.document().node(block) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{block}`"),
+            });
+        };
+        if node.kind != "prose.block.paragraph" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
+            });
+        }
+        let before = spacing_of(self.before, &id)?;
+        let after = spacing_of(self.after, &id)?;
+        let Some(node) = session.document_mut()?.node_mut(block) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{block}`"),
+            });
+        };
+        if let Some(before) = before {
+            node.data["space_before"] = Json::from(before);
+        }
+        if let Some(after) = after {
+            node.data["space_after"] = Json::from(after);
+        }
+        Ok(Outcome::changed(format!("the paragraph {block} has its space")).with_data(json!({
+            "block": block,
+            "before": before,
+            "after": after,
+        })))
+    }
+}
+
+/// A space, if it is one.
+fn spacing_of(value: Option<Number>, id: &str) -> Result<Option<f64>, EngineError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let points = value.0;
+    if !points.is_finite() || points < 0.0 || points > MAX_SPACING {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("a space is between 0 and {MAX_SPACING} points, and {points} is not"),
+        });
+    }
+    Ok(Some(points))
+}
+
 /// Whether a node is a **block**: a paragraph or a table.
 fn is_block(node: &Node) -> bool {
     node.kind.starts_with("prose.block.")
