@@ -199,6 +199,42 @@ impl TrimClip {
 ///
 /// The answer is the clock, or the **reason** the trim cannot be made.
 fn trimmed(session: &Session, clip: u64, edge: &str, delta: i64) -> Result<(i64, i64, i64), String> {
+    let (start, duration, source_in) = clock_after(session, clip, edge, delta)?;
+    // The **neighbours**: the clips on the same track, before and
+    // after this one, taken from where the clip **is** and not from
+    // where it would be.
+    let old_start = session
+        .document()
+        .node(clip)
+        .and_then(|node| node.data.get("start").and_then(|start| start.as_u64()))
+        .unwrap_or(0);
+    let Neighbours { before, after } = neighbours(session, clip, old_start);
+    if let Some((_, end)) = before
+        && start < end as i64
+    {
+        return Err(format!(
+            "the clip would start at frame {start}, and the clip before it ends at frame {end}"
+        ));
+    }
+    if let Some((next_start, _)) = after
+        && start + duration > next_start as i64
+    {
+        return Err(format!(
+            "the clip would end at frame {}, and the clip after it starts at frame {next_start}",
+            start + duration
+        ));
+    }
+    Ok((start, duration, source_in))
+}
+
+/// The **new clock** of a clip whose edge is trimmed by a delta, with
+/// every bound but the **neighbours'**.
+///
+/// The neighbours are the clips on the same track, and whether the
+/// trimmed clip runs into one of them is the caller's business: a
+/// **trim** refuses it and a **roll** moves the neighbour with it (the
+/// module `rolling`).
+pub fn clock_after(session: &Session, clip: u64, edge: &str, delta: i64) -> Result<(i64, i64, i64), String> {
     let Some(node) = session.document().node(clip) else {
         return Err(format!("there is no clip `{clip}`"));
     };
@@ -216,9 +252,6 @@ fn trimmed(session: &Session, clip: u64, edge: &str, delta: i64) -> Result<(i64,
     // end of it. A held clip has no out edge in the media and no head
     // handle, so the trim moves the clip and not the media.
     let hold = crate::hold::hold_of(&node.data);
-    // The **neighbours**: the clips on the same track, before and
-    // after this one.
-    let Neighbours { before, after } = neighbours(session, clip, clock.start);
     // The **media**: how long the item the clip plays is.
     let media = media_of(session, clip);
 
@@ -287,21 +320,6 @@ fn trimmed(session: &Session, clip: u64, edge: &str, delta: i64) -> Result<(i64,
                 source_in + played
             ));
         }
-    }
-    if let Some((_, end)) = before
-        && start < end as i64
-    {
-        return Err(format!(
-            "the clip would start at frame {start}, and the clip before it ends at frame {end}"
-        ));
-    }
-    if let Some((next_start, _)) = after
-        && start + duration > next_start as i64
-    {
-        return Err(format!(
-            "the clip would end at frame {}, and the clip after it starts at frame {next_start}",
-            start + duration
-        ));
     }
     Ok((start, duration, source_in))
 }

@@ -83,6 +83,12 @@
 //! and says how long the media is, where the tree clamps it and says
 //! nothing (the module `slipping`).
 //!
+//! And a **cut** may be **rolled**: the place where two clips meet
+//! moves, the left clip's tail grows and the right clip's head shrinks,
+//! and the media follows — and a roll that would cross a bound is
+//! **refused** and says which bound stopped it, where the tree clamps
+//! it and says nothing (the module `rolling`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -138,6 +144,7 @@ mod moving;
 mod removal;
 mod reversing;
 mod rippling;
+mod rolling;
 mod slipping;
 pub mod speed;
 mod splitting;
@@ -154,6 +161,7 @@ pub use moving::MoveClip;
 pub use removal::RemoveClip;
 pub use reversing::ReverseClip;
 pub use rippling::RippleClip;
+pub use rolling::RollCut;
 pub use slipping::SlipClip;
 pub use speed::SetSpeed;
 pub use splitting::SplitClip;
@@ -679,6 +687,7 @@ craftkit_sdk::plugin_anchor!(
     ReverseClip,
     LockTrack,
     SlipClip,
+    RollCut,
     TimelineEvaluator,
     FilmPanel
 );
