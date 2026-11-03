@@ -21,6 +21,9 @@
 //! whose value is the value of the cell at the top left (the module
 //! `merges`).
 //!
+//! And a sheet's rows have a **height** and its columns have a
+//! **width** (the module `sizes`).
+//!
 //! # The mapping
 //!
 //! | the application | v2 |
@@ -142,6 +145,7 @@ mod fractions;
 mod merges;
 mod names;
 mod sections;
+mod sizes;
 mod styles;
 mod tabs;
 mod validation;
@@ -157,6 +161,7 @@ use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
 pub use merges::{ClearMerge, SetMerge};
 pub use names::{DeleteName, SetName};
+pub use sizes::{SetColumnWidth, SetRowHeight};
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
 pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
 pub use validation::{CheckValidation, ClearValidation, SetValidation};
@@ -1310,6 +1315,8 @@ craftkit_sdk::plugin_anchor!(
     DeleteName,
     SetMerge,
     ClearMerge,
+    SetRowHeight,
+    SetColumnWidth,
     ClearCell,
     ReadPrecedents,
     ReadDependents,
