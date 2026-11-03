@@ -84,6 +84,12 @@
 //! of their time — the tree's command sorts them as it adds one, and
 //! the order is derived (the module `markers`).
 //!
+//! And the **effects** of a layer are here: an effect is a named set of
+//! parameters, and the kit has a small catalogue of them, and an
+//! instance of one on a layer is a group in the property tree that
+//! holds the parameters at their defaults. A group under `effects`
+//! that no command made is not an effect (the module `effects`).
+//!
 //! And the **spatial** property is here too: a property whose value is
 //! a **point** does not move along the straight line from one keyframe
 //! to the next, it follows a **path** in the plane, and the time maps
@@ -106,6 +112,7 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 mod blend;
+mod effects;
 mod expressions;
 mod keys;
 mod markers;
@@ -114,6 +121,7 @@ mod spatial;
 mod switches;
 
 pub use blend::SetBlend;
+pub use effects::{AddEffect, ListEffects, RemoveEffect};
 pub use expressions::{DeleteExpression, SetExpression};
 use keys::keys_of;
 pub use keys::{RemoveKeyframe, SetAuto, SetContinuous, SetInterpolation, SetKeyframe, ValueAt};
@@ -275,6 +283,12 @@ impl SetProp {
             });
         };
         let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+        // A path under `effects` names a **parameter** of an effect
+        // that is there. The stack itself is made by `fx.effect.add`
+        // and taken away by `fx.effect.remove`, and a property is not
+        // a way to make an effect (the module `effects`).
+        check_effect_path(&props, &segments, &path)
+            .map_err(|message| EngineError::Failed { id: "fx.prop.set".to_string(), message })?;
         set_at(&mut props, &segments, self.value.clone())
             .map_err(|message| EngineError::Failed { id: "fx.prop.set".to_string(), message })?;
         node.data["props"] = props;
@@ -571,6 +585,39 @@ fn put(value: &mut serde_json::Value, rest: &[Seg], new: serde_json::Value) -> R
     set_at(value, rest, new)
 }
 
+/// Check a path that is about the **effects** of a layer.
+///
+/// The stack of effects is made by `fx.effect.add` and taken away by
+/// `fx.effect.remove`, and a path may only write a **parameter** of an
+/// effect that is there. A path that names the stack, or an effect
+/// that is not there, or the effect itself rather than one of its
+/// parameters, is refused.
+fn check_effect_path(props: &serde_json::Value, segments: &[Seg], path: &str) -> Result<(), String> {
+    let Some((first, rest)) = segments.split_first() else {
+        return Ok(());
+    };
+    if !matches!(first, Seg::Match(name, 1) if name == "effects") {
+        return Ok(());
+    }
+    if rest.is_empty() {
+        return Err(format!(
+            "the effects of a layer are made by `fx.effect.add` and taken away by `fx.effect.remove`, and `{path}` is the stack"
+        ));
+    }
+    let Seg::Index(index) = rest[0] else {
+        return Err(format!("an effect is named by its number: `{path}` is not one"));
+    };
+    if rest.len() < 2 {
+        return Err(format!("the effect itself is not a property: `{path}` is the effect"));
+    }
+    let effects = props.get("effects").and_then(|effects| effects.as_array());
+    let there = effects.and_then(|effects| effects.get(index.checked_sub(1)?)).is_some();
+    if !there {
+        return Err(format!("there is no effect number {index} on this layer"));
+    }
+    Ok(())
+}
+
 /// The group a path needs: an object, or a list of one when the next step
 /// is a number.
 fn empty_group(rest: &[Seg]) -> serde_json::Value {
@@ -650,6 +697,9 @@ craftkit_sdk::plugin_anchor!(
     AddLayer,
     SetProp,
     GetProp,
+    ListEffects,
+    AddEffect,
+    RemoveEffect,
     PropsEvaluator,
     SetKeyframe,
     RemoveKeyframe,

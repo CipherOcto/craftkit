@@ -60,15 +60,25 @@ fn a_property_is_set_and_read_by_its_path() {
 }
 
 /// A path with a **number** in it picks the nth child.
+///
+/// The effects of a layer are made by `fx.effect.add` and not by a
+/// property: an effect is a thing with a name and its parameters, and
+/// a property is a value.
 #[cfg(feature = "fx")]
 #[test]
 fn a_path_with_a_number_in_it_picks_the_nth_child() {
     let (mut session, layer) = a_comp();
     session
-        .execute("fx.prop.set", &json!({ "layer": layer, "path": "effects", "value": [ { "blurriness": 5 }, { "blurriness": 9 } ] }))
-        .expect("the group is set");
+        .execute("fx.effect.add", &json!({ "layer": layer, "effect": "blur" }))
+        .expect("the first effect is added");
+    session
+        .execute("fx.effect.add", &json!({ "layer": layer, "effect": "glow" }))
+        .expect("the second effect is added");
+    session
+        .execute("fx.prop.set", &json!({ "layer": layer, "path": "effects/#2/intensity", "value": 9 }))
+        .expect("the property is set");
     let outcome = session
-        .execute("fx.prop.get", &json!({ "layer": layer, "path": "effects/#2/blurriness" }))
+        .execute("fx.prop.get", &json!({ "layer": layer, "path": "effects/#2/intensity" }))
         .expect("the property is read");
     assert_eq!(outcome.data["value"], json!(9), "the second effect");
 }
@@ -77,19 +87,18 @@ fn a_path_with_a_number_in_it_picks_the_nth_child() {
 /// which.
 ///
 /// The setter makes the groups it needs — setting a property on a layer
-/// that has no `transform` makes one — but it does not invent a *list*.
+/// that has no `transform` makes one — but it does not invent a *list*,
+/// and the list of effects is made by `fx.effect.add` and not by a
+/// property.
 #[cfg(feature = "fx")]
 #[test]
 fn a_path_that_names_nothing_is_refused() {
     let (mut session, layer) = a_comp();
     session
-        .execute(
-            "fx.prop.set",
-            &json!({ "layer": layer, "path": "effects", "value": [ { "blurriness": 5 } ] }),
-        )
-        .expect("the group is set");
+        .execute("fx.effect.add", &json!({ "layer": layer, "effect": "blur" }))
+        .expect("the effect is added");
     let error = session
-        .execute("fx.prop.set", &json!({ "layer": layer, "path": "effects/#5/blurriness", "value": 1 }))
+        .execute("fx.prop.set", &json!({ "layer": layer, "path": "effects/#5/radius", "value": 1 }))
         .expect_err("there is no fifth effect");
     assert!(error.to_string().contains("number 5"), "{error}");
 }
