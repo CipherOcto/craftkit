@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2568 tests.** The MCP server links **all fifteen batteries** in, so the
+**2579 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2568 tests
+cargo test          # 2579 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3777,6 +3777,7 @@ so.
 | the **editing** of a document | **built.** A paragraph's text may be changed, a block may be taken away, and a block may be moved (§340) | §340 |
 | the **names** of a workbook | **built.** A word may stand for a range of cells, and a formula may use the word (§341) | §341 |
 | the **merges** of a sheet | **built.** A range of cells may be one cell, and a covered cell may not be written to (§342) | §342 |
+| the **sizes** of a sheet | **built.** A row has a height and a column has a width, and a size of nothing is refused (§343) | §343 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23507,3 +23508,56 @@ of its top left cell.
   region. Here a **format** may still be put on a covered cell — a
   format is not a value, and a covered cell has no value to lose — and
   what a region looks like is not a thing this tree has.
+
+## 343. The sizes of a sheet
+
+A sheet's rows have a **height** and its columns have a **width**, and
+they are facts of the sheet: the tree's row height and column width are
+stored with the sheet and are the same in every view.
+
+### What was built
+
+- The command `grid.row.height` gives a row a height, in **points**,
+  and the command `grid.column.width` gives a column a width, in
+  **characters** — the units the tree's own dialogues use.
+- A size of **nothing** is refused: a row of no height is a **hidden**
+  row in the tree, and the hiding of a row is a thing of its own that
+  this tree has not got yet.
+- A row that is **not there** is refused, and so is a column that is
+  not a column.
+
+### What the port found
+
+- **The tree's row height may be given in pixels or in points and its
+  column width in pixels or in characters.** The tree's commands take
+  either and work out which one was meant. Here a size is in the unit
+  the tree's dialogue uses, and the unit is in the command's name.
+- **The tree's size applies to a range of rows or columns at once** —
+  `2:5`, `2:2,4:5` — and its dialogue asks for all of them. Here a
+  size is for **one** row or **one** column, and a size for many is
+  many sizes: one command and one row each.
+- **The tree's autofit is not here.** The tree may measure the text of
+  a cell and make the row or the column the size of the text, and that
+  is a **measurement** of a font this tree does not have.
+
+### What it cost
+
+- **Eleven tests** in the grid battery (`tests/sizes.rs`): a row being
+  given a height, a column being given a width, a row being given a
+  height again, a row that is not there refused, a height of nothing
+  refused, a height that is not there refused, a column that is not a
+  column refused, a column named in any case, a width of nothing
+  refused, a node that is not a sheet refused, and the size being
+  saved.
+- **Two new commands**: `grid.row.height` and `grid.column.width`. The
+  grid battery now carries **38** commands and the MCP server **448**.
+
+### What it does not settle
+
+- **The hiding of a row and a column is not here.** The tree's
+  `home.hideRows` and `home.hideColumns` hide a row and a column, and
+  the tree's `SUBTOTAL` leaves the hidden rows out of its sum. Here a
+  size of nothing is refused rather than stored, so that a size never
+  means two things.
+- **The tree's autofit is not here**, for the reason above: it is a
+  measurement of a font.
