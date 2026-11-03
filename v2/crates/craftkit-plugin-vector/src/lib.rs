@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **thirty-five commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **thirty-six commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.unite`,
@@ -36,6 +36,7 @@
 //!   it; and `vector.path.grid`, `vector.path.mirror` and
 //!   `vector.path.radial` make the copies of a path — in a grid, over a
 //!   mirror and round a centre;
+//!   `vector.path.opacity` says how solid the path is;
 //!   `vector.path.join` and `vector.path.cap` say how the line's
 //!   corners and ends are finished; `vector.path.reshape` grabs the
 //!   path at a point and drags it, and the anchors around follow; `vector.path.smooth` makes a point
@@ -70,9 +71,11 @@
 )]
 #![forbid(unsafe_code)]
 
+mod opacity;
 mod reshape;
 mod shapes;
 
+pub use opacity::{SetOpacity, fill_at, stroke_at};
 pub use shapes::{AddLine, AddSpiral, AddStar};
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
@@ -120,6 +123,11 @@ pub struct VectorNode {
     pub blend: BlendMode,
     /// The transform the path is placed with.
     pub transform: geom::Matrix,
+    /// How **solid** the path is: from zero to one.
+    ///
+    /// The path's own transparency, and not the fill's: the opacity
+    /// multiplies into everything the path is painted with.
+    pub opacity: f64,
 }
 
 impl VectorNode {
@@ -144,6 +152,7 @@ impl FormatValue for VectorNode {
             "stroke": self.stroke.as_ref().map(|stroke| stroke.to_json()),
             "blend": self.blend.label(),
             "transform": self.transform.to_json(),
+            "opacity": self.opacity,
         })
     }
 
@@ -172,7 +181,16 @@ impl FormatValue for VectorNode {
             Some(transform) if !transform.is_null() => geom::Matrix::from_json(transform)?,
             _ => geom::Matrix::identity(),
         };
-        Ok(VectorNode { path: Path::from_json(path)?, fill, stroke, blend, transform })
+        // A path written before the **opacity** was in the payload has
+        // none, and a path that says nothing is fully solid.
+        let opacity = match value.get("opacity").and_then(|opacity| opacity.as_f64()) {
+            Some(opacity) if opacity.is_finite() && (0.0..=1.0).contains(&opacity) => opacity,
+            Some(_) => {
+                return Err("a path's opacity is between zero and one".to_string());
+            }
+            None => 1.0,
+        };
+        Ok(VectorNode { path: Path::from_json(path)?, fill, stroke, blend, transform, opacity })
     }
 }
 
@@ -197,6 +215,10 @@ impl VectorPathKind {
             None => (vector.fill.clone(), vector.stroke, vector.blend),
         };
         let fill = if node.muted { Fill::Solid(Colour::NONE) } else { fill };
+        // The path's **opacity** multiplies into what is painted: the
+        // fill and the line on the outline.
+        let fill = crate::opacity::fill_at(vector.opacity, &fill);
+        let stroke = stroke.map(|stroke| crate::opacity::stroke_at(vector.opacity, &stroke));
         // The **transform** is where the path is put, and the canvas
         // draws the path it is given.
         canvas.path(&vector.placed(), fill, blend, stroke);
@@ -941,6 +963,7 @@ impl OutlinePath {
             stroke: None,
             blend: BlendMode::Normal,
             transform: geom::Matrix::identity(),
+            opacity: 1.0,
         };
         let rect = bounds(&outline);
         let id =
@@ -2630,6 +2653,7 @@ fn add_path(
         stroke: None,
         blend: BlendMode::Normal,
         transform: geom::Matrix::identity(),
+        opacity: 1.0,
     };
     let rect = bounds(&path);
     let id = session.document_mut()?.add_node_with(name, "vector.path", Some(rect), vector.to_json());
