@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2270 tests.** The MCP server links **all fifteen batteries** in, so the
+**2283 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2270 tests
+cargo test          # 2283 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3750,6 +3750,7 @@ so.
 | the **free numbers** of a file | **built.** A number whose object is taken away is free and is not used again, and the file says so (§313) | §313 |
 | the **ripple** of a speed change | **built.** A speed change may ripple: the clips that were after it move up by the change, and the transitions follow the cuts (§314) | §314 |
 | the **fraction** of a cell | **built.** A number may be written as the nearest fraction, and the limit is what the code says (§315) | §315 |
+| the **sections** of a format | **built.** A format may have a different code for the positive numbers, the negative ones and the zero (§316) | §316 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21886,3 +21887,73 @@ number but a fraction that stands for it — a half, a third, an eighth.
 - **The tree's sections are not here**: a format with a different code
   for negative numbers, for zero, or for text is not here yet, and a
   fraction is one code for every number.
+
+## 316. The sections of a format
+
+A format may have a different code for the **positive** numbers, the
+**negative** ones and the **zero**, and the codes are separated by a
+**semicolon**.
+
+### What was built
+
+- A format may have **sections**: one for the positive numbers, one for
+  the negative ones and one for the zero.
+- The **negative** section shows the **absolute value**, and the sign
+  is not written: the section is the one that says how a negative
+  number looks.
+- With **two** sections the first one writes the zero as well, and with
+  **three** the third one writes it.
+- A semicolon inside a **literal** in quotes is not a separator.
+- A format with **four** sections — the text's own — and a format with
+  an **empty** section are refused.
+
+### What the port found
+
+- **The tree's negative section shows the absolute value and the sign
+  is not written.** That is the tree's rule, and it is the rule of the
+  file: the section is the one that says how a negative number looks,
+  so the sign is its business and not the format's. A format with one
+  section has no second section, so the sign is written — and a format
+  with two sections of `0.00` shows `-1.50` as **`1.50`**.
+- **The tree's sections are picked by the sign and by zero**, and the
+  tree has **conditional** sections as well: a section may carry a
+  condition — `[>100]` — and the tree picks the section by the value
+  and not by the sign. Here the sections are picked by the sign and by
+  zero, and a condition is a code this tree does not have.
+- **The tree's fourth section is the text's own**, and the tree's text
+  section writes the text with the section's code — `@` is the text as
+  it is. Here a text is written as it is, and a fourth section is
+  refused.
+- **The tree's empty section shows nothing** for the numbers it covers.
+  Here an empty section is refused: a format with one is not a format
+  this tree has, and a section that is nothing is not a shape.
+- **The tree ignores the sections past the fourth** and carries on. Here
+  a code with more than three sections is refused.
+- **The tree's sections may be plain text** — `"none"` — because the
+  tree's format is a language of literals and placeholders. Here every
+  section is a format this tree has, so a literal section is refused.
+
+### What it cost
+
+- **Thirteen tests** in the grid battery (`tests/sections.rs`): one
+  section writing the sign, the negative section showing the absolute
+  value, the first section writing the positive numbers, two sections
+  writing the zero with the first, three sections writing the zero
+  with the third, a currency as a section, a fraction as a section, the
+  sections being of different shapes, a semicolon in a literal, four
+  sections refused, an empty section refused, a section that is not a
+  format refused, and sections in a style.
+- **No new command**: a section is a **format**, and the grid battery
+  still carries **21** commands and the MCP server **393**.
+- **One new module** (`src/sections.rs`): the split of a code into its
+  sections, and the rule that a semicolon in a literal is not a
+  separator.
+
+### What it does not settle
+
+- **The tree's conditions are not here**: a section is picked by the
+  number's sign and by whether it is zero, and not by a condition the
+  code carries.
+- **The tree's text section is not here**: a text is written as it is.
+- **The tree's literals are not here**: every section is a format this
+  tree has, so a section that is plain text is refused.
