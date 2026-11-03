@@ -43,6 +43,10 @@
 //! with it, because a file whose objects name things that are not there
 //! is not a file (the module `remove`).
 //!
+//! And a **page** may be taken away: the tree of pages is right
+//! afterwards, the count of the children is derived, and the
+//! destinations that went to the page go with it (the module `pages`).
+//!
 //! And an object has a **number**, and one number is one object: two
 //! objects may not share one, and a number that is changed takes every
 //! reference to the object with it (the module `number`).
@@ -109,6 +113,7 @@ mod loader;
 mod number;
 mod objects;
 mod outline;
+mod pages;
 mod predictors;
 mod remove;
 mod writer;
@@ -120,6 +125,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 pub use number::SetNumber;
 pub use outline::{AddOutline, ReadOutline};
+pub use pages::RemovePage;
 pub use remove::RemoveObject;
 
 /// The PDF layer.
@@ -1858,6 +1864,7 @@ craftkit_sdk::plugin_anchor!(
     SetEntry,
     RemoveEntry,
     AddPage,
+    RemovePage,
     PageAttributes,
     DecodeStream,
     ContentOperators,
