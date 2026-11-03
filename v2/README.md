@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2684 tests.** The MCP server links **all fifteen batteries** in, so the
+**2690 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2684 tests
+cargo test          # 2690 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3788,6 +3788,7 @@ so.
 | the other **commands on an effect** | **built.** An effect's parameters may be reset, it may be copied and it may be moved (§351) | §351 |
 | the **marks** of a media | **built.** A media may carry a mark in and a mark out, and the material a clip plays is between them (§352) | §352 |
 | the **name** of a sheet | **built.** A name has rules, and a rename carries the formulas and the names that use it with it (§353) | §353 |
+| the **taking away** of a sheet | **built.** A workbook keeps one visible sheet, and a formula that named the sheet reads the error that says which sheet is missing (§354) | §354 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24199,3 +24200,62 @@ name has rules, and a rename is more than a rename.
   well** — but the tree's sheets are held in a list and this tree's are
   nodes, so a formula that names the sheet it is in is rewritten the
   same way as any other.
+
+## 354. The taking away of a sheet
+
+A sheet may be **taken away** from its workbook, and the workbook must
+keep **one visible sheet**: the tree's rule, and the rule the hiding of
+a sheet obeys too.
+
+### What was built
+
+- The command `grid.sheet.remove` takes a sheet away from its workbook.
+- The **last visible sheet** may not be taken away, and the refusal says
+  why: a workbook with no sheet to look at is not a workbook. The tree
+  counts the sheets that are visible and refuses the taking away when
+  there is one of them, so a **hidden** sheet may not be taken away
+  either while it is the last one that can be looked at.
+- A **formula that named** the sheet is left as it was written, and the
+  cell's value is the error "there is no sheet `Ledger`" — which says
+  which sheet is missing.
+- A node that is **not a sheet** is refused, and so is a node that is
+  not there at all.
+
+### What the port found
+
+- **The tree writes `#REF!` and this tree says what is missing.** The
+  tree's `adjust::delete_sheet` turns a reference to a sheet that is
+  gone into `#REF!` — a mark, and not a word. Here the reference is
+  left alone and the **evaluation** produces an error value with the
+  sheet's name in it. The error is **derived**, so it cannot be wrong:
+  it is computed every time the cell is read, and a sheet that comes
+  back makes the formula work again with nothing written down. The
+  tree's `#REF!` is written into the file and stays there.
+- **The tree's names of a deleted sheet become `#REF!` too, and here
+  they are not touched.** A name of the workbook stands for a range, and
+  a range in a sheet that is gone reads the same error.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/removal.rs`): a sheet being
+  taken away, the last visible sheet not being takeable, a hidden sheet
+  not being takeable while it is the last visible one, a hidden sheet
+  being takeable when another can be looked at, a formula that named
+  the sheet reading the error that says which sheet is missing, and a
+  node that is not a sheet refused.
+- **One new command**: `grid.sheet.remove`. The grid battery now
+  carries **49** commands and the MCP server **469**.
+
+### What it does not settle
+
+- **The tree's protection is not here.** The tree refuses to take a
+  sheet away in a workbook whose structure is protected, and this tree
+  has no protection of a workbook yet.
+- **The tree's active sheet and selection are not here.** The tree
+  moves the active sheet when the sheet it was on is taken away, and
+  clears the selection; this tree has no active sheet and no selection,
+  so there is nothing to move and nothing to clear.
+- **The tree's sheet order is a list and this tree's is the tree.** The
+  tree's sheets are held in a list and their indices are moved when one
+  is taken away; here a sheet is a node and taking it away takes it
+  out of the tree, and the order of the rest is their own.
