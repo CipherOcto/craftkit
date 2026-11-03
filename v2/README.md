@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2045 tests.** The MCP server links **all fifteen batteries** in, so the
+**2050 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3723,6 +3723,7 @@ so.
 | the **flash fill** | **built.** A column learns a **program** from the rows that are filled and runs it on the rows that are empty (§286) | §286 |
 | the **time** of a cell | **built.** A time is a fraction of a day and a format, and the tree's clock shapes and its elapsed shapes are both here (§287) | §287 |
 | the **ordinals** of a fill | **built.** A text with an English ordinal ending is filled with the ending rewritten to suit the number (§288) | §288 |
+| the **fill** of a time | **built.** A single number under a time format counts an hour on, as a date counts a day on (§289) | §289 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20089,3 +20090,57 @@ The tree counts more than the number.
   not.
 - **The tree's quarters in a text are not here**: `Qtr3` and
   `Quarter 4` wrap after four in the tree, and here they count on.
+
+## 289. The fill of a time
+
+§287 gave the grid a **time**, and §288 gave a fill an **ordinal**. The
+tree's fill knows about the time as well.
+
+### What was built
+
+- A single number under a **time format** counts an **hour** on when it
+  is filled: `9:00` is filled as `10:00` and `11:00`.
+- The fill carries over the **midnight**: `23:30` is filled as `0:30`,
+  and the day counts on with it.
+
+### What the port found
+
+- **The tree's time is a number, and so the tree's fill of a time is
+  the tree's fill of a number.** The tree's `detect` looks at the
+  **format code** and not at the value: a code with an `h` in it is a
+  time, and a single number under one steps by `1/24` — an hour. A
+  single number under a date format steps by a day, and a single number
+  under no format at all is copied.
+- **The tree's time and its date are told apart by the code.** The
+  tree's test is `fmt.contains('d') || fmt.contains('y') || (fmt
+  .contains('m') && !fmt.contains('h'))` — the `h` is what says a
+  format is a time and not a date, and the `m` of a month is not a
+  month when the code has an `h` in it.
+- **The tree's time in a cell is a typed time.** The tree's own test
+  fills a cell that holds the text `9:00` and gets `10:00` and
+  `11:00`, because the tree's parser reads a typed time as a number
+  under a time format. Here a time is put in a cell by a command (§287)
+  and a typed `9:00` is a text — so the fill of a *text* that looks
+  like a time is a text that counts its last run of digits, and that
+  is a difference the tree does not have.
+
+### What it cost
+
+- **Five tests** in the grid battery (`tests/time_fill.rs`): a time
+  counts an hour on, the fill carries over the midnight, a date counts
+  a day on, a number with no format is copied, and the fill keeps the
+  format of the time.
+- **No new command**: this is what `grid.range.fill` does with a
+  number under a time format. The grid battery still carries **14**
+  commands and the MCP server **370**.
+
+### What it does not settle
+
+- **The tree's typed time is not here**: the tree's parser reads a
+  typed `9:00` as a time, and here a typed text is a text — a time is
+  put in a cell by `grid.cell.time` (§287) and the tree's own typed
+  input is not here.
+- **The tree's time in a fill of two cells is a line and not an
+  hour.** The tree's `detect` steps by an hour only when there is a
+  single number; two or more are a least squares line, and so are they
+  here.
