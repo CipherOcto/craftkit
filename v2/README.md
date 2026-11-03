@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1969 tests.** The MCP server links **all fifteen batteries** in, so the
+**1978 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1969 tests
+cargo test          # 1978 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3715,6 +3715,7 @@ so.
 | the **`TEXT`** of a formula | **built.** A formula writes a value with a format code, and the code may be in a cell (§278) | §278 |
 | the **formats** and **values** of a fill | **built.** The tree's last two fills: one gives the cell the format of the source and one gives it the value (§279) | §279 |
 | the **interpolation** of a keyframe | **built.** A keyframe leaves on a linear, a bezier or a hold, and a bezier has a speed and an influence (§280) | §280 |
+| the **reversal** of a clip | **built.** A clip may play its media backwards, and the direction changes what its edges consume (§281) | §281 |
 
 ### The list of things that are honestly not there: empty
 
@@ -19514,3 +19515,89 @@ here now.
   on, and the side it is entered on is linear.
 - **The expression is not here**, and the tree's expressions may
   drive a property that has keyframes as well.
+
+## 281. The reversal of a clip
+
+The tree's clip may play its media **backwards**, and the flag is not a
+property of the media — the media is the same — it is a property of the
+**direction** the clip plays in. It is here now.
+
+### What was built
+
+- The command `film.clip.reverse` turns a clip around.
+- The **trim** of a reversed clip consumes the media at the **other
+  end** of its range: its in edge takes the media *after* its out point
+  and its out edge takes the media *before* its in point.
+- The **split** of a reversed clip keeps the content continuous: the
+  piece before the place shows the later media and the piece after it
+  shows the earlier media.
+- A clip's payload keeps what it carries when its clocks are written,
+  so a reversal survives a trim, a move, an insert, a lift and a
+  ripple.
+
+### What the port found
+
+- **The tree's reversal is a direction and not a media.** The tree's
+  clip has a `reverse` flag and the media it plays is the same media
+  either way; what changes is which end of the media the clip's head
+  is at. That is a different thing from "the clip plays the other
+  file" — and it is the tree's flag and not a second item that says
+  so.
+- **The tree's `move_edge` is where the tree says it, and it is a
+  swap.** For a clip that plays forwards, the in edge moves the source
+  in point **forward** and the out edge leaves it alone; for a clip
+  that plays backwards, the in edge leaves the source in point alone
+  and the out edge moves it **backwards**. So the two edges take
+  turns: the head of a reversed clip is the *end* of its media, and
+  the tail is the *beginning* of it. Here the same — and the bound
+  moves with it, because a reversed clip may not reach before the
+  media begins.
+- **The tree's split of a reversed clip keeps the content
+  continuous, and the port had no idea that a split had a direction
+  in it.** The tree's split writes the pieces' source in points in the
+  other order when the clip plays backwards: the piece before the
+  place takes the media the piece after it had, so that the two
+  pieces show the same frames in the same order. Here the same, and
+  the test says so: the first piece is at the later media and the
+  second at the earlier.
+- **The tree's `reverse` lives beside the clip's clocks, and a port
+  that writes a payload from scratch loses it.** The trim, the split,
+  the move, the insert, the lift and the ripple each wrote the
+  clip's payload whole — three clocks and nothing else — so a flag
+  that is not one of the three clocks was taken away by every one of
+  them. The payload of a clip now keeps what it carries, and the
+  clocks are written into it. That is the finding of this arc that is
+  not about the reversal at all: **a command that writes a payload
+  from scratch throws away everything the payload carried**, and the
+  tree's `edit` crate writes one field at a time.
+- **The tree's reversal and the tree's speed are one command.** The
+  tree's `set_speed` takes the speed and the direction together, and a
+  clip that is reversed at a speed of a half plays its media backwards
+  at half the speed. Here the direction is a command of its own and
+  the speed is not here.
+
+### What it cost
+
+- **Eight tests** in the film battery (`tests/reverse.rs`): a clip may
+  play its media backwards, a clip reversed twice plays forwards again,
+  the in edge of a reversed clip does not move the media, the out edge
+  of a reversed clip takes the media before it, the out edge of a
+  reversed clip stops at the media, the split of a reversed clip keeps
+  the content continuous, the split of a clip that plays forwards moves
+  the media, a clip that is not there is refused and a node that is not
+  a clip is refused.
+- **One new command**: `film.clip.reverse`. The film battery now
+  carries **14** commands and the MCP server **365**.
+- **Six commands changed**: the trim, the split, the move, the insert,
+  the lift and the ripple write the clip's payload whole, and now they
+  write its three clocks into the payload it has.
+
+### What it does not settle
+
+- **The tree's speed is not here**, and the tree's speed and direction
+  are one command: a clip reversed at a speed of a half plays its media
+  backwards at half the speed.
+- **The tree's frame hold is not here**: a clip may hold a frame for a
+  while, and a held frame has no media to consume at one end.
+- **The tree's transitions are not here**: a transition between two
+  clips overlaps them, and the overlap is not a clip.
