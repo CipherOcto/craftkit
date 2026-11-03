@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2226 tests.** The MCP server links **all fifteen batteries** in, so the
+**2238 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2009 tests
+cargo test          # 2238 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3746,6 +3746,7 @@ so.
 | the **currency** of a cell | **built.** A cell may write a number with a symbol on it, as the tree writes its currencies (§309) | §309 |
 | the **sign** of a number that rounds away | **built.** A negative number that rounds to zero is written without its sign (§310) | §310 |
 | the **styles** of a workbook | **built.** A style is a named format that cells share, and changing it changes every cell that names it (§311) | §311 |
+| the **path** of a spatial property | **built.** A property whose value is a point follows a path, and the time maps to the length along it (§312) | §312 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21554,3 +21555,100 @@ formats. Now a cell may name a **style**.
 - **The tree's style is not written here by the tree**: the tree's
   styles come from the file and are applied by a command, and here a
   style is a fact of the workbook that three commands write.
+
+## 312. The spatial path of a property
+
+The tree's spatial property does not move along the straight line from
+one keyframe to the next. It follows a **path** in the plane, and the
+time maps to the **length** along that path. That is the whole of the
+difference, and it is a large one: the property travels at the speed
+of the path and not at the speed of the chord.
+
+### What was built
+
+- A property may be **spatial**: the command `fx.prop.spatial` sets
+  the flag, and the value of a spatial property at a frame is the
+  point on its **path** at that time.
+- The **path** is a cubic through the two keyframes, with the **auto**
+  tangents as its handles: a sixth of the way from the keyframe before
+  to the keyframe after, and the key times play no part in it.
+- The **length** of the path is worked out with a **table** — the
+  curve is cut into ninety-six cells, the length of each cell is
+  added up, and the point at a given length is found by walking the
+  table and refining with Newton steps.
+- The time maps to that length: the **eases** of the two sides say how
+  fast the value is moving **along the path**, and the ease's speed is
+  scaled by the time over the path's length.
+- A property that is spatial needs **keyframes** and **points**: a
+  value that is not a point, a property that is not animated, and a
+  property whose keyframes are of two widths are all refused.
+
+### What the port found
+
+- **The tree's spatial property is a motion path, and the time is a
+  length.** The tree does not interpolate the two points; it walks the
+  path, and the fraction of the segment is a fraction of the path's
+  length. So the property is *behind* the straight line at the middle
+  of a curved segment — it has covered half the **path**, and half
+  the path is more than half the chord.
+- **The tree's tangents are the auto ones, and they ignore the time.**
+  The out tangent is a sixth of the way from the keyframe **before** to
+  the keyframe **after**, and the in tangent is its mirror; the times
+  play no part. A keyframe at the end of the list uses the one
+  neighbour it has, so the path leaves the first keyframe and enters
+  the last one.
+- **The tree's path is measured, not parameterised.** The tree cuts
+  the curve into cells and adds up the length of each with a
+  five-point Gauss-Legendre rule, and then finds the point at a given
+  length by refining the cell's linear guess with Newton steps on the
+  true length. The position is smooth along a curved path and not
+  piecewise linear per cell — and that smoothness is the reason the
+  tree does it this way.
+- **The tree's straight path is the chord itself.** When both control
+  points lie on the chord, the tree interpolates the line exactly
+  instead of walking the table, so a property on a line is not
+  slightly off it.
+- **The tree's ease of a spatial side is a speed along the path.** A
+  linear side is the length of the path over the time it takes, and a
+  third; and the speed of the ease is divided by the path's length,
+  because the ease says how fast the value moves and the path is
+  longer than the chord.
+- **The tree's spatial is a property of the value, not of the
+  property.** The tree decides a keyframe is spatial by looking at
+  whether its value is a pair or a triple of numbers. Here the
+  property carries the flag, and the command refuses to set it on a
+  property whose keyframes are not points — so the two agree, and the
+  disagreement is caught rather than ignored.
+
+### What it cost
+
+- **Twelve tests** in the fx battery (`tests/spatial.rs`): a straight
+  path is the chord, the ends of the path are the keyframes' own
+  values, a path that turns leaves the chord, the time maps to the
+  length of the path, the flag is what makes the path, the flag is
+  kept, the flag is cleared, and five refusals — a property that is
+  not animated, a value that is not a point, keyframes of two widths,
+  a property that is not there, and a triple that is a point too.
+- **One new command**: `fx.prop.spatial`. The fx battery now carries
+  **11** commands and the MCP server **392**.
+- **One new module** (`src/spatial.rs`): the cubic, its table, the
+  auto tangents, the chord test and the progress of a segment.
+- **The keyframe's value is visible to the crate.** The command that
+  sets the flag has to look at the keyframes' values, and the keyframe
+  is the module's own, so the field is `pub(crate)` now.
+
+### What it does not settle
+
+- **The tree's spatial tangents may be written down.** The tree keeps
+  a keyframe's spatial tangents and uses them when the keyframe is not
+  an **auto** one, and its graph shows handles that may be dragged into
+  a curve. Here every path has auto tangents and there is no command
+  that writes them down.
+- **The tree's roving keys are not here.** The tree re-times the
+  keyframes of a run so that the speed along the path is even, and
+  that is a different edit from the one that moves a keyframe.
+- **The tree's velocity is not here**: the speed of a spatial property
+  at a time, and the graph of it.
+- **The path is in the value's own plane.** A pair or a triple is a
+  point and a point has a path; a value of four numbers is not a
+  point here and is refused.
