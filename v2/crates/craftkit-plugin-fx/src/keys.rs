@@ -84,8 +84,11 @@
 //!   keyframe's spatial tangents and computes them when the keyframe
 //!   is an **auto** one; here every spatial path has auto tangents,
 //!   and there is no command that writes them down.
-//! - **The expression is not here.** The tree may put an expression on
-//!   a property, and the expression is the plugin's own language.
+//! - **The expression is the plugin's own language, and not the
+//!   tree's.** The tree's expressions are JavaScript on a JavaScript
+//!   engine, and here they are a small arithmetic language (the module
+//!   `expressions`): the numbers, the operators, the names `time` and
+//!   `value`, and the tree's eases and functions.
 
 use craftkit_derive::Command;
 
@@ -894,9 +897,27 @@ impl ValueAt {
         // The property may be **spatial**: its value is a point, and it
         // follows a path.
         let spatial = current.get("spatial").and_then(|spatial| spatial.as_bool()).unwrap_or(false);
-        let value = match keys_of(&current) {
+        // The property's **own** value: the one its keyframes give.
+        let own = match keys_of(&current) {
             Some(keys) => value_at(&keys, frame, spatial).unwrap_or(serde_json::Value::Null),
-            None => current,
+            None => serde_json::Value::Null,
+        };
+        // The **expression** says what the value is, and the name
+        // `value` inside it is the property's own value.
+        let value = match current.get("expression").and_then(|text| text.as_str()) {
+            Some(text) => {
+                let expression = crate::expressions::parse(text)
+                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                let own = own.as_f64().unwrap_or(0.0);
+                let number = expression
+                    .value(frame, own)
+                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                serde_json::json!(number)
+            }
+            None => match keys_of(&current) {
+                Some(_) => own,
+                None => current,
+            },
         };
         let message = format!("`{path}` is {value} at frame {frame}");
         Ok(Outcome::new(message)

@@ -54,7 +54,10 @@
 //!
 //! And one that is not a finding but a fact: the **expressions** are the
 //! plugin's own language, and they live in the payload beside the
-//! keyframes they sit on.
+//! keyframes they sit on. The tree's expressions are JavaScript on a
+//! JavaScript engine, and here they are a small arithmetic language
+//! (the module `expressions`): the numbers, the operators `+ - * / % ^`,
+//! the names `time` and `value`, and the tree's eases and functions.
 //!
 //! And the **spatial** property is here too: a property whose value is
 //! a **point** does not move along the straight line from one keyframe
@@ -77,9 +80,11 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+mod expressions;
 mod keys;
 mod spatial;
 
+pub use expressions::{DeleteExpression, SetExpression};
 use keys::keys_of;
 pub use keys::{RemoveKeyframe, SetAuto, SetContinuous, SetInterpolation, SetKeyframe, ValueAt};
 
