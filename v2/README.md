@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1959 tests.** The MCP server links **all fifteen batteries** in, so the
+**1969 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1959 tests
+cargo test          # 1969 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3714,6 +3714,7 @@ so.
 | the **fill of dates** | **built.** The tree's four date fills — days, weekdays, months and years — step through the calendar (§277) | §277 |
 | the **`TEXT`** of a formula | **built.** A formula writes a value with a format code, and the code may be in a cell (§278) | §278 |
 | the **formats** and **values** of a fill | **built.** The tree's last two fills: one gives the cell the format of the source and one gives it the value (§279) | §279 |
+| the **interpolation** of a keyframe | **built.** A keyframe leaves on a linear, a bezier or a hold, and a bezier has a speed and an influence (§280) | §280 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18307,15 +18308,17 @@ the value at a time is derived, so there was no way to make one.
 - **A keyframe in the tree is more than a frame and a value.** The
   tree's `Keyframe` carries an interpolation on **each side** —
   linear, bezier or hold — and an ease with a speed and an influence,
-  and the handles of a spatial curve, and a label. Here a keyframe is
-  a frame and a value, and the curve is the line: the tree's `Interp`
-  has three values and one of them is here.
+  and the handles of a spatial curve, and a label. Here a keyframe was
+  a frame and a value, and the curve was the line: the tree's `Interp`
+  has three values and one of them was here. The three are here now
+  (§280), and the spatial handles and the label are not.
 - **The tree keeps the shape of a keyframe when only its value
   changes.** The tree's `set_key` replaces a key at the same time and
   **keeps its interpolation, its eases, its handles and its label** —
   the curve is the keyframe's, and the value is a thing that comes and
-  goes. Here there is no curve to keep, and the keyframe is the frame
-  and the value, so changing the value changes the keyframe.
+  goes. Here there was no curve to keep, and the keyframe was the
+  frame and the value, so changing the value changed the keyframe.
+  There is a curve to keep now (§280), and it is kept.
 - **The hold is a property of the value and not only of the curve.**
   The tree's `segment_value` holds the earlier value when
   `a.value.interpolates()` is false — a colour or a string does not
@@ -19429,3 +19432,85 @@ The tree has **ten** ways of filling a range. Eight of them are here
   quarters and the ordinals.
 - **The tree's flash fill is not here**: it reads the pattern out of
   the text beside the source.
+
+## 280. The interpolation of a keyframe
+
+§265 said the shape of the curve was the tree's business, and that a
+keyframe here was a frame and a value. The shape of the curve is
+here now.
+
+### What was built
+
+- A keyframe has an **interpolation** on the side it leaves on, and it
+  is one of the tree's three: `linear`, `bezier` and `hold`.
+- A **bezier** has an **ease** — a **speed** and an **influence** — and
+  the ease is what shapes the curve.
+- The command `fx.keyframe.interp` sets the interpolation and the ease
+  of a keyframe.
+- The value at a frame follows the curve: the line, the hold, or the
+  bezier.
+- The interpolation is **kept** when the value of a keyframe is
+  changed, as the tree's `set_key` keeps it.
+
+### What the port found
+
+- **The tree does not keep a curve: it keeps a speed and an
+  influence.** The tree's `Ease` is two numbers — the speed in value
+  units per second and the influence, the fraction of the segment the
+  handle takes — and the curve is a cubic Bezier in the (time, value)
+  plane whose handles those two numbers make. That is the finding: the
+  tree's curve is not a curve in the document, it is a **speed** and a
+  **place**, and the shape is computed. Here the same, and the speed
+  is in units per **frame**, because a frame is the unit of this tree
+  and there is no clock in a frame.
+- **A bezier at the speed of the straight line is the straight line.**
+  The tree's arithmetic says so: the handle is then on the chord, and
+  the curve is the chord. It is worth knowing, because it means the
+  tree's ease is not a shape and a speed but one number — and that a
+  speed of nothing with an influence of nothing is the line too.
+- **The tree's keyframe has an interpolation on **each** side, and the
+  segment between two keyframes is shaped by both.** The out side of
+  the first keyframe and the in side of the second. Here a keyframe
+  has the side it leaves on, and the side it is entered on is linear —
+  and the tree's linear side is not a plain line either: it is a
+  handle at a third of the segment, so a segment with a bezier on one
+  end and a linear one on the other is not a straight line.
+- **The tree's hold is the business of the keyframe the segment
+  leaves.** The tree's `segment_value` holds the earlier value when
+  `a.out_interp` is `Hold` — and the in side of the later keyframe
+  does not matter at all for a hold. Here the same: the hold is the
+  out side's.
+- **§265 said the port had no curve to keep, and that was true then
+  and is not true now.** The tree's `set_key` keeps the interpolation
+  and the eases when the value of a key changes — the curve is the
+  keyframe's and the value is a thing that comes and goes. There is a
+  curve to keep now, and it is kept.
+
+### What it cost
+
+- **Ten tests** in the fx battery (`tests/interp.rs`): a linear
+  keyframe moves the value in a line, a hold keyframe does not move the
+  value at all, a bezier is not a line, a bezier at the speed of the
+  line is the line, an influence is a fraction of the segment, a list of
+  numbers is eased number by number, the interpolation is kept when the
+  value is changed, an interpolation that is not one of the three is
+  refused, an influence that is not a fraction is refused, and a
+  keyframe that is not there is refused.
+- **One new command**: `fx.keyframe.interp`. The fx battery now carries
+  **8** commands and the MCP server **364**.
+- **The keyframe's payload changed**: it carries the interpolation and
+  the ease beside the frame and the value.
+
+### What it does not settle
+
+- **The tree's spatial handles are not here.** A spatial property
+  moves along a **path** with tangents of its own, sampled through an
+  arc-length table, and the path is a thing the tree computes and does
+  not store.
+- **The tree's auto-bezier and continuous-bezier are not here**: the
+  tree derives the tangents of a key from its **neighbours**, and a
+  key that asks for it has no tangents of its own.
+- **The tree's in side is not here**: a keyframe has the side it leaves
+  on, and the side it is entered on is linear.
+- **The expression is not here**, and the tree's expressions may
+  drive a property that has keyframes as well.
