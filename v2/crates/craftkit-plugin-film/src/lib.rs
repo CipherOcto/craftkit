@@ -94,6 +94,11 @@
 //! without a gap — and a slide that would cross a bound is **refused**
 //! and says which bound stopped it (the module `sliding`).
 //!
+//! And a clip may be **stretched**: it gets longer or shorter and its
+//! speed changes the other way, so that it plays the **same material**
+//! — and a stretch that would cross a bound is **refused** and says
+//! which bound stopped it (the module `stretching`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -154,6 +159,7 @@ mod sliding;
 mod slipping;
 pub mod speed;
 mod splitting;
+mod stretching;
 mod transitions;
 mod trim;
 
@@ -172,6 +178,7 @@ pub use sliding::SlideClip;
 pub use slipping::SlipClip;
 pub use speed::SetSpeed;
 pub use splitting::SplitClip;
+pub use stretching::StretchClip;
 pub use transitions::{AddTransition, RemoveTransition, SetTransition, TransitionKind};
 pub use trim::TrimClip;
 
@@ -597,6 +604,60 @@ pub fn clocks_of(
     new
 }
 
+/// A **neighbour** of a clip on its own track: which clip it is,
+/// where it starts and where it ends.
+#[derive(Clone, Copy)]
+pub struct Neighbour {
+    /// Which clip it is.
+    pub id: u64,
+    /// Where it starts on the timeline.
+    pub start: u64,
+    /// Where it ends on the timeline.
+    pub end: u64,
+}
+
+/// The **neighbours** of a clip on its own track: the clip before it
+/// and the clip after it.
+///
+/// A neighbour is the clip whose end is the nearest before the clip's
+/// start, and the clip whose start is the nearest after the clip's
+/// end. A **gap** is not a neighbour: a clip with a gap between it and
+/// the next one is still the next one.
+pub fn neighbours_of(session: &Session, clip: u64) -> (Option<Neighbour>, Option<Neighbour>) {
+    let mut before: Option<Neighbour> = None;
+    let mut after: Option<Neighbour> = None;
+    let Some(node) = session.document().node(clip) else {
+        return (before, after);
+    };
+    let start = node.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
+    let duration = node.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
+    let end = start + duration;
+    let Some(track) = track_of(session, clip) else {
+        return (before, after);
+    };
+    let Some(track_node) = session.document().node(track) else {
+        return (before, after);
+    };
+    for child in track_node.children.iter().filter(|child| child.kind == "film.clip") {
+        if child.id == clip {
+            continue;
+        }
+        let Some(other_start) = child.data.get("start").and_then(|start| start.as_u64()) else {
+            continue;
+        };
+        let Some(duration) = child.data.get("duration").and_then(|duration| duration.as_u64()) else {
+            continue;
+        };
+        let other_end = other_start + duration;
+        if other_end <= start && before.map(|neighbour| other_end > neighbour.end).unwrap_or(true) {
+            before = Some(Neighbour { id: child.id, start: other_start, end: other_end });
+        } else if other_start >= end && after.map(|neighbour| other_start < neighbour.start).unwrap_or(true) {
+            after = Some(Neighbour { id: child.id, start: other_start, end: other_end });
+        }
+    }
+    (before, after)
+}
+
 /// How long the **media** a clip plays is.
 ///
 /// The item the clip plays is a relation, and the item's own length is
@@ -695,6 +756,7 @@ craftkit_sdk::plugin_anchor!(
     LockTrack,
     SlipClip,
     SlideClip,
+    StretchClip,
     RollCut,
     TimelineEvaluator,
     FilmPanel

@@ -225,7 +225,7 @@ fn plan(session: &Session, clip: u64, delta: i64, members: &[u64]) -> Result<Pla
         return Err(format!("the track `{track}` is locked"));
     }
     let end = start + duration;
-    let (before, after) = neighbours(session, track, clip, start, end);
+    let (before, after) = crate::neighbours_of(session, clip);
     // A **linked** neighbour is not a neighbour that may give way: the
     // linked clip slides by itself, and two clips that are linked and
     // neighbours on one track have no single answer.
@@ -304,50 +304,4 @@ impl Clock {
             source_in: clock.2.max(0) as u64,
         }
     }
-}
-
-/// A **neighbour** of a clip: which clip it is, where it starts and
-/// where it ends.
-#[derive(Clone, Copy)]
-struct Neighbour {
-    /// Which clip it is.
-    id: u64,
-    /// Where it starts on the timeline.
-    start: u64,
-    /// Where it ends on the timeline.
-    end: u64,
-}
-
-/// The **neighbours** of a clip on its own track: the clip before it
-/// and the clip after it, with their starts and their ends.
-fn neighbours(
-    session: &Session,
-    track: u64,
-    clip: u64,
-    start: u64,
-    end: u64,
-) -> (Option<Neighbour>, Option<Neighbour>) {
-    let mut before: Option<Neighbour> = None;
-    let mut after: Option<Neighbour> = None;
-    let Some(track_node) = session.document().node(track) else {
-        return (before, after);
-    };
-    for child in track_node.children.iter().filter(|child| child.kind == "film.clip") {
-        if child.id == clip {
-            continue;
-        }
-        let Some(other_start) = child.data.get("start").and_then(|start| start.as_u64()) else {
-            continue;
-        };
-        let Some(duration) = child.data.get("duration").and_then(|duration| duration.as_u64()) else {
-            continue;
-        };
-        let other_end = other_start + duration;
-        if other_end <= start && before.map(|neighbour| other_end > neighbour.end).unwrap_or(true) {
-            before = Some(Neighbour { id: child.id, start: other_start, end: other_end });
-        } else if other_start >= end && after.map(|neighbour| other_start < neighbour.start).unwrap_or(true) {
-            after = Some(Neighbour { id: child.id, start: other_start, end: other_end });
-        }
-    }
-    (before, after)
 }
