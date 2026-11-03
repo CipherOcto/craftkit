@@ -24,6 +24,8 @@
 //! And a sheet's rows have a **height** and its columns have a
 //! **width** (the module `sizes`).
 //!
+//! And a row and a column may be **hidden** (the module `hiding`).
+//!
 //! # The mapping
 //!
 //! | the application | v2 |
@@ -142,6 +144,7 @@ mod flash;
 mod format;
 mod formula;
 mod fractions;
+mod hiding;
 mod merges;
 mod names;
 mod sections;
@@ -159,6 +162,7 @@ use fill::FillRange;
 use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
+pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
 pub use merges::{ClearMerge, SetMerge};
 pub use names::{DeleteName, SetName};
 pub use sizes::{SetColumnWidth, SetRowHeight};
@@ -1317,6 +1321,10 @@ craftkit_sdk::plugin_anchor!(
     ClearMerge,
     SetRowHeight,
     SetColumnWidth,
+    HideRow,
+    ShowRow,
+    HideColumn,
+    ShowColumn,
     ClearCell,
     ReadPrecedents,
     ReadDependents,
