@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2192 tests.** The MCP server links **all fifteen batteries** in, so the
+**2196 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3741,6 +3741,7 @@ so.
 | the **removal** of a page | **built.** A page may be taken away, the tree of pages is right afterwards, and the destinations that went to it go with it (§304) | §304 |
 | the **removal** of an anchor | **built.** An anchor may be taken away, and the contour becomes the stretches that are left (§305) | §305 |
 | the **transitions** of a trim | **built.** A transition that no longer fits inside the two clips it joins is brought back inside them (§306) | §306 |
+| the **widgets** of a page that is gone | **built.** The fields of a page that is taken away leave the form (§307) | §307 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21122,8 +21123,9 @@ of pages, and everything that pointed at it has to stop pointing at it.
 
 ### What it does not settle
 
-- **The tree's form fields do not leave the form here.** The widgets
-  of a page that is gone stay in the document and in the form.
+- **The tree's form fields do not leave the form here** — and they do
+  now (§307): the widgets of a page that is gone stay in the document
+  and in the form.
 - **The tree's rebuild is not here**: the attributes that a page
   inherits stay with the tree of pages and are not moved down.
 - **The tree's freed numbers are not here**: there is no pool of them
@@ -21259,3 +21261,62 @@ it: the tree brings them back inside the clips they join.
 - **The tree's speed change does not move the transitions here**: a
   clip that gets shorter because its speed changed keeps its
   transitions as they are.
+
+## 307. The widgets of a page that is gone
+
+§304 took a page away. The tree does more: it takes the **fields** of
+that page out of the **form**, because a field that points at a page
+that is not there keeps that page — with its content — in the file that
+is written.
+
+### What was built
+
+- The **widgets** of a page that is gone **leave the form**: a widget
+  is taken out of the field that holds it, or out of the form's fields
+  when the widget is a field itself.
+- A field left with **no children** leaves the form as well: it is
+  taken out of the field that holds it, or out of the form.
+- The widget itself **stays** in the document: it is an object of its
+  own, and an object that nothing refers to any more is still an
+  object.
+
+### What the port found
+
+- **The tree's reason is the file and not the document.** The tree
+  says it in one sentence: *the deleted pages go for good — bookmarks,
+  links and widgets that still point at one would otherwise keep it,
+  with its content, in the saved file*. So the widget leaves the form
+  because of what the **file** would carry, and not because of what
+  the document holds.
+- **The tree's field that is left with no children goes as well.** The
+  tree's `drop_widgets` unlinks the widget from the field's `/Kids`,
+  and when the field's children are all gone the field is unlinked in
+  turn — from the field above it, or from the form. So the chain of
+  fields empties upwards, one field at a time.
+- **The tree's widget is not freed.** The tree frees the **page** and
+  its number; the widget objects stay in the document as objects that
+  nothing refers to any more. That is the rule this tree already had
+  for a removed object, and it is the tree's rule too.
+- **The tree's form may be a dictionary inside the catalog.** The tree
+  resolves the root's `AcroForm`, and it may be a reference to an
+  object or a dictionary in the root itself. Here the form is an
+  object of its own, and the catalog names it.
+
+### What it cost
+
+- **Four tests** in the PDF battery (`tests/page_widgets.rs`): the
+  widget of a page that is gone leaves the form, a field left with no
+  children leaves the form, the widgets of a page that stays are not
+  touched, and a file with no form is not troubled.
+- **No new command**: this is what `pdf.page.remove` does. The PDF
+  battery still carries **21** commands and the MCP server **386**.
+
+### What it does not settle
+
+- **The tree's widget objects are not freed**: they stay in the
+  document, with their content and their appearance.
+- **The tree's form inside the catalog is not here**: the form is an
+  object of its own here.
+- **The tree's fields that are not widgets are not here**: a field
+  that a page does not hold is not touched, because a page does not
+  hold it.
