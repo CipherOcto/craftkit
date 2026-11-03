@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2340 tests.** The MCP server links **all fifteen batteries** in, so the
+**2351 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2340 tests
+cargo test          # 2351 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3757,6 +3757,7 @@ so.
 | the **recording** of a track | **built.** A track may be armed for recording and may hear its input, and the recording modes are settings of the session (§320) | §320 |
 | the **frozen** track | **built.** A track may be frozen, and the flag is a fact of the track (§321) | §321 |
 | the **VCA** of a track | **built.** A track may be put under a VCA master, whose fader offsets its level and whose mute mutes it (§322) | §322 |
+| the **switches** of a layer | **built.** A layer has switches beside its properties, and what they do is derived (§323) | §323 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22311,6 +22312,63 @@ mutes them. It is the tree's own second fader over a group.
 - **A tree's VCA master is not in the mix and not a stem here either**,
   but a master of this tree is a master of the whole mix and a VCA is
   not: the two kinds are different facts.
+
+## 323. The switches of a layer
+
+A layer has **switches** beside its properties: the eye that says it
+is drawn, the speaker that says it is heard, the solo that says it is
+alone, the lock that says it is not edited, and the shy that says it
+steps aside.
+
+### What was built
+
+- The command `fx.layer.switch` puts a switch on a layer, or off.
+- The command `fx.comp.switch` puts the composition's *hide shy
+  layers* switch on, or off.
+- The **evaluator** `fx.switches` says what the switches do: which
+  layers are drawn, which are heard, and which may be edited.
+
+### What the port found
+
+- **A switch is a fact and what it does is derived.** The tree keeps
+  the switches on the layer and the rules that read them are of their
+  own: the renderer draws the soloed layers alone, the picker steps
+  over the shy layers of a composition that hides them, and the
+  editing commands leave a locked layer alone. So the switches are
+  stored and the consequences are **derived** — they change when a
+  switch is turned, and nobody writes them down.
+- **The tree's switches are booleans, and two of them are not.** The
+  tree's quality and frame-blend switches are words and not yes-or-no,
+  and the tree's *hide shy layers* is a switch of the **composition**
+  rather than of the layer — so it is a command of its own here.
+- **The tree's names are aliases.** The eye is the video switch, the
+  lock is the locked one, and the three dimensions are the
+  three-dimensional one; the names here are the tree's, aliases and
+  all, and a name that is not a switch is refused.
+
+### What it cost
+
+- **Eleven tests** in the fx battery (`tests/switches.rs`): the
+  tree's own defaults, a switch being put on, a switch being toggled,
+  a switch that does not exist refused, the tree's own names, a solo
+  silencing the others, a shy layer stepping aside, the composition's
+  switch being toggled, a locked layer not being edited, a switch that
+  is not a composition's refused, and the switches being saved with
+  the layer.
+- **Two new commands** and **one new evaluator**: `fx.layer.switch`,
+  `fx.comp.switch` and `fx.switches`. The fx battery now carries
+  **15** commands and the MCP server **405**.
+
+### What it does not settle
+
+- **The tree's commands leave a locked layer alone**, and this tree's
+  do not: the switches say a layer is locked and the evaluator says
+  it is not editable, and the editing commands do not yet read that.
+- **The tree's quality and frame-blend switches are not here**: a
+  switch that is a word and not a yes-or-no is a different thing.
+- **The tree's switch of a *selection*** — the tree's command sets a
+  switch on the layers that are selected — is not here either, and
+  this tree's command names its layer.
 
 ## 321. The frozen track
 
