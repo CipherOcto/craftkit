@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2021 tests.** The MCP server links **all fifteen batteries** in, so the
+**2038 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3721,6 +3721,7 @@ so.
 | the **fades** of a range | **built.** A range of a track fades in the clips that start in it and fades out the clips that end in it (§284) | §284 |
 | the **crossfade** | **built.** A range that covers the boundary between two clips makes them overlap, and the fades meet in the overlap (§285) | §285 |
 | the **flash fill** | **built.** A column learns a **program** from the rows that are filled and runs it on the rows that are empty (§286) | §286 |
+| the **time** of a cell | **built.** A time is a fraction of a day and a format, and the tree's clock shapes and its elapsed shapes are both here (§287) | §287 |
 
 ### The list of things that are honestly not there: empty
 
@@ -18798,11 +18799,11 @@ is **written**.
 
 ### What it does not settle
 
-- **The tree's times, currency, accounting, fractions and scientific
+- **The tree's currency, accounting, fractions and scientific
   formats are not here**, and neither are the tree's **sections** — a
   format with one code for positive numbers and another for negative
   ones is not here. The tree's **dates** are here now, and they are a
-  list of nine shapes (§276).
+  list of nine shapes (§276), and its **times** are here (§287).
 - **The tree's style is not here**: a style is shared between cells and
   carries a font, a fill, borders, an alignment and a protection, and
   here the format is the cell's own.
@@ -19197,15 +19198,17 @@ things that are missing. They are here now.
 - **The tree's 1904 date system is not here**: it is the system of the
   old Macintosh Excel, and a workbook that says which system it uses is
   a workbook that was made somewhere else.
-- **The tree's times are not here**: there is no `hh:mm`, no seconds,
-  no a.m. and p.m., and a date with a time in it is a number here.
+- **The tree's times are not here** — and they are now (§287): there is
+  `hh:mm`, there are seconds, there is a.m. and p.m., and a date with
+  a time in it is still a number here.
 - **A fill of dates is not here yet**: the tree's `days`, `weekdays`,
   `months` and `years` modes step through the calendar, and the
   arithmetic they need is here but the modes are not (§274).
 - **The tree's date and time parsing is not here**: the tree reads a
   time of day as well as a date, and a date with a time in it, and
   here a date is a date — a date **written** the tree's way is here
-  (§276), and a time of day is not.
+  (§276), and a time of day is now (§287), and a date with a time in
+  it is not.
 
 ## 277. The fill of dates
 
@@ -19949,3 +19952,84 @@ tree has one fill that does neither: it **learns**.
   in the region at all, and a row in the middle whose source is empty
   is in it: the program is run on an empty source, it does not fit, and
   the row is left alone.
+
+## 287. The time of a cell
+
+§276 gave the grid a **date**: a number and a format. The tree has one
+more thing of that shape, and it is here now.
+
+### What was built
+
+- A cell may hold a **time**: a **number** and a **format**, like a
+  date. The number is the **fraction of the day** and the format says
+  that the number is a time and how it is written.
+- The **thirteen time formats** the tree has are here: `h`, `hh`,
+  `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`, `h AM/PM`, `h:mm AM/PM`,
+  `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`, and the three **elapsed** shapes
+  `[h]:mm`, `[h]:mm:ss` and `[mm]:ss`.
+- A time is **written** the tree's way — `13:45`, `13:45:30`,
+  `1:45 pm` — and the shape it was written in is the format it is
+  written with, as a date's shape is (§276).
+- A time that **did not happen** is refused: the sixtieth minute is
+  not a minute, and a lone number is not a time.
+
+### What the port found
+
+- **A time is a fraction of a day and not a kind of value.** The tree's
+  `time_fraction` is `(h × 3600 + m × 60 + s) / 86400`, and the tree's
+  own `General` format shows a time as a number — so the number is the
+  time and the format is what says so. That is the same bargain a date
+  makes, and it is made twice.
+- **The tree's clock has two faces and the format chooses.** The same
+  number is `18:00` under `h:mm` and `6:00 PM` under `h:mm AM/PM`, and
+  the twelve-hour face has the noon as the twelve and the midnight as
+  the zero — and the midnight is `12:00 AM`, never `0:00 AM`.
+- **The tree's elapsed shapes are a different thing entirely.** The
+  clock shapes look at the *time of day* and throw the day away; the
+  elapsed shapes look at the *whole number* and count it — a day and a
+  half is thirty-six hours under `[h]:mm`, and the hours do not stop
+  at twenty-four. The tree's square brackets are what say so, and they
+  are the tree's own convention.
+- **The tree rounds a time to the nearest second, and the rounding
+  carries.** A time of 12:00:59.6 is 12:01:00, and a time of
+  23:59:59.7 is 00:00:00 — the tree rounds the milliseconds to the
+  second and a second that rounds to the next one carries into the
+  minute and into the day.
+- **The tree's written time is half of a day at the noon and a half of
+  a day at the midnight.** `12:00 pm` is 0.5 and `12:00 am` is 0.0,
+  because the tree reads a clock of twelve: the twelve of the morning
+  is the zero of the day.
+- **The tree's parser refuses more than it accepts.** A lone `13` is
+  not a time, `13:60` is not a time, and `1:45:30.5` is not a time
+  either — the tree's parser has no thousandths. Here the same three
+  are refused.
+
+### What it cost
+
+- **Seventeen tests** in the grid battery (`tests/times.rs`): a time is
+  put in a cell, a time is a number, the clock is of twenty-four
+  hours, the clock of twelve says the half of the day, the midnight is
+  twelve in the morning, the noon is twelve in the afternoon, the
+  seconds are written, the time is rounded to the second, the elapsed
+  hours do not stop at twenty-four, the elapsed minutes are the
+  minutes, a time on a clock of twelve is written as it was, the noon
+  and the midnight written with a half of the day, a time that did not
+  happen is refused, a number on its own is not a time, a format that
+  is not a time format is refused, and a time may be written with
+  another format.
+- **One new command**: `grid.cell.time`. The grid battery now carries
+  **14** commands and the MCP server **370**.
+
+### What it does not settle
+
+- **The tree's thousandths are not here.** The tree's clock can show
+  `mm:ss.0` and `mm:ss.00`, and the tree's parser reads a fraction of a
+  second; here a time is a whole second and a code with a point in it
+  is refused.
+- **The tree's `[s]` is not here**: the elapsed seconds on their own
+  are a shape the tree has and this one does not.
+- **The tree's `a/p` is not here**: the tree writes `6 a` and `6 p`,
+  and here the half of the day is `AM` or `PM`.
+- **The tree's date with a time in it is not here**: `2026-10-26
+  13:45` is a date and a time in the tree, and here it is neither a
+  date nor a time — a date is a date and a time is a time.
