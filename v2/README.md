@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2351 tests.** The MCP server links **all fifteen batteries** in, so the
+**2361 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2351 tests
+cargo test          # 2361 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3758,6 +3758,7 @@ so.
 | the **frozen** track | **built.** A track may be frozen, and the flag is a fact of the track (§321) | §321 |
 | the **VCA** of a track | **built.** A track may be put under a VCA master, whose fader offsets its level and whose mute mutes it (§322) | §322 |
 | the **switches** of a layer | **built.** A layer has switches beside its properties, and what they do is derived (§323) | §323 |
+| the **blending mode** of a layer | **built.** A layer says how it is laid over what is under it, in the tree's own thirty-eight modes (§324) | §324 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22369,6 +22370,58 @@ steps aside.
 - **The tree's switch of a *selection*** — the tree's command sets a
   switch on the layers that are selected — is not here either, and
   this tree's command names its layer.
+
+## 324. The blending mode of a layer
+
+A layer says how it is laid over what is under it: the **normal** mode
+is the plain one, and the others mix the layer's colour with the
+backdrop's by a rule.
+
+### What was built
+
+- The command `fx.layer.blend` sets the blending mode of a layer, by
+  name or by a step.
+- The tree's own **thirty-eight modes**, in the tree's own order, and
+  the tree's own names.
+- The **stencil** modes are reported: they act on everything below the
+  layer and not on the layer alone.
+
+### What the port found
+
+- **The tree's mode names are not the names they are written with.** A
+  mode is found by its name with everything that is not a letter or a
+  digit taken out and the case put down, so `Color Burn`, `ColorBurn`
+  and `color-burn` are one mode and not three. The tree's rule, and
+  the reason a menu may write a mode however it likes.
+- **The tree's list wraps.** A step of one goes to the next mode and a
+  step of minus one to the one before, and the step past the end comes
+  back to the beginning.
+- **The tree's stencil modes are a different kind of mode.** They act
+  on everything below the layer — the accumulated composition — and
+  not on the layer alone, so the mode says two things and one of them
+  is about the stack.
+
+### What it cost
+
+- **Ten tests** in the fx battery (`tests/blend.rs`): a new layer being
+  blended normally, a layer being blended differently, the tree's own
+  names, a mode that does not exist refused, a step going to the next
+  mode and wrapping around, a step of zero refused, a mode and a step
+  refused, a command with neither refused, the stencil modes being the
+  tree's, and the mode being saved with the layer.
+- **One new command**: `fx.layer.blend`. The fx battery now carries
+  **16** commands and the MCP server **406**.
+
+### What it does not settle
+
+- **No mode mixes a colour here.** The tree's renderer lays the layer
+  over the backdrop by the mode's formula, and this tree's fx battery
+  has no renderer at all: the mode is a fact of the layer and not yet
+  a picture.
+- **The tree's groups are not drawn here**: the last mode of each
+  group is known, and no menu draws a line after it.
+- **The tree's HDR modes are not here**: the modes whose formulas are
+  defined for over-range values are the tree's business.
 
 ## 321. The frozen track
 
