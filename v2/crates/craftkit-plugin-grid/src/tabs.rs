@@ -20,7 +20,7 @@ use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
 
 /// The **sheets** of a workbook, and which of them are visible.
-fn sheets_of(session: &Session, workbook: u64) -> Vec<(u64, bool)> {
+pub(crate) fn sheets_of(session: &Session, workbook: u64) -> Vec<(u64, bool)> {
     let Some(node) = session.document().node(workbook) else { return Vec::new() };
     node.children
         .iter()
@@ -32,7 +32,7 @@ fn sheets_of(session: &Session, workbook: u64) -> Vec<(u64, bool)> {
 }
 
 /// The **workbook** a sheet is in, if it is in one.
-fn workbook_of(session: &Session, sheet: u64) -> Option<u64> {
+pub(crate) fn workbook_of(session: &Session, sheet: u64) -> Option<u64> {
     session
         .document()
         .walk()
