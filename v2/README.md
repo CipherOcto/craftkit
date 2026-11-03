@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2055 tests.** The MCP server links **all fifteen batteries** in, so the
+**2064 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3725,6 +3725,7 @@ so.
 | the **ordinals** of a fill | **built.** A text with an English ordinal ending is filled with the ending rewritten to suit the number (§288) | §288 |
 | the **fill** of a time | **built.** A single number under a time format counts an hour on, as a date counts a day on (§289) | §289 |
 | the **quarters** in a text | **built.** A text that says a quarter wraps after four, as the list of the quarters does (§290) | §290 |
+| the **in side** of a keyframe | **built.** A keyframe has an interpolation on each side, and the segment between two keyframes is shaped by both (§291) | §291 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20191,3 +20192,65 @@ tree has the rule twice.
 - **The tree's own list of words is not here**: the tree's fill may be
   given a list of words to step through, and here the lists are the
   tree's five (§282).
+
+## 291. The in side of a keyframe
+
+§280 gave the fx battery the **interpolation** of a keyframe, and it
+gave it the side the keyframe **leaves** on. The tree has two sides.
+
+### What was built
+
+- A keyframe has an interpolation on **each** side: the side it leaves
+  on and the side it is entered on, and both are set by the same
+  command with the **side** it names — `out` or `in`.
+- The segment between two keyframes is shaped by **both** sides: the
+  side the first leaves on and the side the second is entered on.
+
+### What the port found
+
+- **The tree's out side decides the shape of the segment and the in
+  side shapes the handle.** The tree's `segment_value` asks the out
+  side first: a hold out side holds the value, whatever the in side
+  says. The in side only ever moves the handle that comes in.
+- **The tree's in side that is not a bezier is a linear side.** The
+  tree's test is `b.in_interp != Interp::Bezier`, so a **hold** in
+  side shapes the segment it ends like a line — the tree says so in a
+  comment: a hold in side only matters for the segment it ends, which
+  the out side decides, and it shapes the incoming segment like a
+  linear side, as the Graph Editor and the Lottie export do.
+- **The tree's linear side is a third of the segment.** The tree's
+  linear side is not a line drawn from the two values but an *ease*:
+  a speed of the whole difference over the duration and an influence
+  of a third. That is the same curve as the line — the handles are a
+  third of the way to the other value — and it is what makes the
+  tree's two eases interchangeable with a linear one.
+- **The tree's linear out side with a bezier in side is a curve.** The
+  tree's `lin_out && lin_in` is the test for a plain line, and a
+  bezier in side makes it false: the segment is a Bezier whose out
+  handle is the linear one and whose in handle is the bezier one.
+
+### What it cost
+
+- **Nine tests** in the fx battery (`tests/insides.rs`): the in side is
+  set on its own, the side that is not named is the out side, the in
+  side shapes the segment, a hold on the in side is a linear side, the
+  out side decides the shape, a linear out side with a bezier in side
+  is a curve, the ease of the in side is kept, a side that is not a
+  side is refused, and the outcome says which side was set.
+- **No new command**: `fx.keyframe.interp` takes the side it sets, and
+  the fx battery still carries **8** commands and the MCP server
+  **370**.
+
+### What it does not settle
+
+- **The tree's auto-Bezier is not here.** The tree's keyframe may be
+  an *auto* key, whose ease is the slope to its neighbours and whose
+  influence is a sixth — the tree's `auto_bezier`. Here the ease is
+  always written down.
+- **The tree's ease is per dimension and here it is one.** The tree
+  keeps an ease for each dimension of the value, so a list of numbers
+  may curve one way and another way; here the ease is the ease of the
+  whole value.
+- **The tree's spatial handles are not here**: they are the same idea
+  in three dimensions, along a path, and they are a thing of their
+  own.
