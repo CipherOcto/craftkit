@@ -47,6 +47,12 @@
 //! An in side that is not a bezier is a linear side, so a hold in side
 //! shapes the segment it ends like a line.
 //!
+//! And a keyframe may be an **auto** bezier: its ease is not written
+//! down but comes from its **neighbours** — the slope from the
+//! keyframe before to the keyframe after, and an influence of a sixth.
+//! So an auto keyframe follows the keys around it, and a keyframe with
+//! no neighbour on one side is not an auto one.
+//!
 //! # What it does not do
 //!
 //! - **The spatial handles are not here.** The tree's spatial
@@ -59,7 +65,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Session, Text};
 
 use crate::{get_at, parse_path, set_at};
 
@@ -143,6 +149,9 @@ struct Key {
     in_interp: Interp,
     /// The ease of the side the keyframe is entered on.
     in_ease: Ease,
+    /// Whether the keyframe is an **auto** bezier: its ease is not
+    /// written down but comes from its neighbours.
+    auto: bool,
 }
 
 impl Key {
@@ -178,7 +187,8 @@ impl Key {
             },
             None => Ease::default(),
         };
-        Some(Key { frame, value, interp, ease, in_interp, in_ease })
+        let auto = key.get("auto").and_then(|auto| auto.as_bool()).unwrap_or(false);
+        Some(Key { frame, value, interp, ease, in_interp, in_ease, auto })
     }
 
     /// The keyframe, as the payload holds it.
@@ -190,6 +200,7 @@ impl Key {
             "ease": { "speed": self.ease.speed, "influence": self.ease.influence },
             "in_interp": self.in_interp.name(),
             "in_ease": { "speed": self.in_ease.speed, "influence": self.in_ease.influence },
+            "auto": self.auto,
         })
     }
 }
@@ -296,6 +307,7 @@ impl SetKeyframe {
                     ease: Ease::default(),
                     in_interp: Interp::Linear,
                     in_ease: Ease::default(),
+                    auto: false,
                 });
                 keys.sort_by_key(|key| key.frame);
             }
@@ -386,6 +398,91 @@ impl RemoveKeyframe {
         }
         Ok(Outcome::changed(format!("`{path}` has no keyframe at frame {frame}"))
             .with_data(serde_json::json!({ "layer": layer, "path": path, "frame": frame })))
+    }
+}
+
+/// **Set** or **clear** the **auto bezier** of a keyframe.
+///
+/// An auto keyframe's ease is not written down: it is the **slope** to
+/// the keyframes on the other side of it, and its influence is a
+/// sixth. So an auto keyframe follows its neighbours: move one and the
+/// curve moves with it.
+///
+/// A keyframe with no neighbour on one side is not an auto one, and
+/// the ease that is written down is used instead.
+#[derive(Command)]
+#[command(id = "fx.keyframe.auto", area = "fx", layer = "fx", icon = "pencil", mutates, undoable)]
+pub struct SetAuto {
+    /// The layer the property is on.
+    pub layer: NodeRef,
+    /// The path of the property.
+    pub path: Text,
+    /// The frame the keyframe is on.
+    pub frame: Number,
+    /// Whether the keyframe is an auto bezier.
+    pub auto: Bool,
+}
+
+impl SetAuto {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "fx.keyframe.auto".to_string();
+        let layer = self.layer.0;
+        let path = self.path.0.clone();
+        let segments = parse_path(&path);
+        if segments.is_empty() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a path has something in it".to_string(),
+            });
+        }
+        let frame = self.frame.0;
+        if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a frame is a whole number".to_string(),
+            });
+        }
+        let frame = frame as u64;
+        let Some(node) = session.document().node(layer) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no layer `{layer}`"),
+            });
+        };
+        if node.kind != "fx.layer" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+            });
+        }
+        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+        let Some(current) = get_at(&props, &segments).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no `{path}` here"),
+            });
+        };
+        let Some(mut keys) = keys_of(&current) else {
+            return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
+        };
+        let Some(key) = keys.iter_mut().find(|key| key.frame == frame) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("`{path}` has no keyframe at frame {frame}"),
+            });
+        };
+        key.auto = self.auto.0;
+        let new = with_keys(&current, &keys);
+        if let Some(node) = session.document_mut()?.node_mut(layer) {
+            let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            set_at(&mut props, &segments, new)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            node.data["props"] = props;
+        }
+        let state = if self.auto.0 { "an auto bezier" } else { "not an auto bezier" };
+        Ok(Outcome::changed(format!("the keyframe at frame {frame} is {state}")).with_data(
+            serde_json::json!({ "layer": layer, "path": path, "frame": frame, "auto": self.auto.0 }),
+        ))
     }
 }
 
@@ -526,6 +623,12 @@ impl SetInterpolation {
                 key.in_ease = ease;
             }
         }
+        // A **written** ease is a manual one, and the tree's manual
+        // ease is not an auto one: the keyframe follows its neighbours
+        // again only when nobody has said otherwise.
+        if self.speed.is_some() || self.influence.is_some() {
+            key.auto = false;
+        }
         let new = with_keys(&current, &keys);
         if let Some(node) = session.document_mut()?.node_mut(layer) {
             let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
@@ -654,9 +757,35 @@ fn value_at(keys: &[Key], frame: f64) -> Option<serde_json::Value> {
             if lin_out && lin_in {
                 interpolate(&start.value, &end.value, x)
             } else {
-                let out_ease = if lin_out { None } else { Some(start.ease) };
-                let in_ease = if lin_in { None } else { Some(end.in_ease) };
-                eased(&start.value, &end.value, x, span, out_ease, in_ease)
+                // The tree's **auto** bezier: the ease of an auto
+                // keyframe is not written down, it is the slope to its
+                // neighbours — and a keyframe without a neighbour on
+                // each side is not an auto one.
+                let out = if lin_out {
+                    Handle::Linear
+                } else if start.auto {
+                    match (index.checked_sub(1).and_then(|at| keys.get(at)), Some(end)) {
+                        (Some(previous), Some(next)) => {
+                            Handle::Auto { previous: previous.clone(), next: next.clone() }
+                        }
+                        _ => Handle::Written(start.ease),
+                    }
+                } else {
+                    Handle::Written(start.ease)
+                };
+                let in_handle = if lin_in {
+                    Handle::Linear
+                } else if end.auto {
+                    match (keys.get(index), keys.get(index + 2)) {
+                        (Some(previous), Some(next)) => {
+                            Handle::Auto { previous: previous.clone(), next: next.clone() }
+                        }
+                        _ => Handle::Written(end.in_ease),
+                    }
+                } else {
+                    Handle::Written(end.in_ease)
+                };
+                eased(&start.value, &end.value, x, span, &out, &in_handle)
             }
         }
     })
@@ -701,14 +830,14 @@ fn eased(
     b: &serde_json::Value,
     x: f64,
     span: f64,
-    out_ease: Option<Ease>,
-    in_ease: Option<Ease>,
+    out: &Handle,
+    in_side: &Handle,
 ) -> serde_json::Value {
     if let (Some(a), Some(b)) = (a.as_f64(), b.as_f64()) {
         let difference = b - a;
-        let (out, out_offset) = handle(out_ease, difference, span);
-        let (into, in_offset) = handle(in_ease, difference, span);
-        let u = solve_u(0.0, out, 1.0 - into, 1.0, x);
+        let (out_inf, out_offset) = handle(out, 0, difference, span);
+        let (into, in_offset) = handle(in_side, 0, difference, span);
+        let u = solve_u(0.0, out_inf, 1.0 - into, 1.0, x);
         let value = bez(a, a + out_offset, b - in_offset, b, u);
         return serde_json::json!(value);
     }
@@ -719,32 +848,75 @@ fn eased(
         return a.clone();
     }
     let mut out_values: Vec<serde_json::Value> = Vec::with_capacity(list_a.len());
-    for (from, to) in list_a.iter().zip(list_b.iter()) {
+    for (index, (from, to)) in list_a.iter().zip(list_b.iter()).enumerate() {
         let (Some(from), Some(to)) = (from.as_f64(), to.as_f64()) else {
             return a.clone();
         };
         let difference = to - from;
-        let (out, out_offset) = handle(out_ease, difference, span);
-        let (into, in_offset) = handle(in_ease, difference, span);
-        let u = solve_u(0.0, out, 1.0 - into, 1.0, x);
+        let (out_inf, out_offset) = handle(out, index, difference, span);
+        let (into, in_offset) = handle(in_side, index, difference, span);
+        let u = solve_u(0.0, out_inf, 1.0 - into, 1.0, x);
         let value = bez(from, from + out_offset, to - in_offset, to, u);
         out_values.push(serde_json::json!(value));
     }
     serde_json::Value::Array(out_values)
 }
 
-/// A **handle**: the influence of the side and how far the handle is
-/// from the value it is on.
+/// The **handle** of one side of a segment.
+#[derive(Debug, Clone)]
+enum Handle {
+    /// A **linear** side: it takes a third of the segment, as the
+    /// tree's linear side does.
+    Linear,
+    /// A **bezier** side with an ease that is written down.
+    Written(Ease),
+    /// An **auto** bezier side: the ease is the slope to the
+    /// keyframes on the other side of the keyframe, and the influence
+    /// is a sixth.
+    Auto {
+        /// The keyframe before, and its value.
+        previous: Key,
+        /// The keyframe after, and its value.
+        next: Key,
+    },
+}
+
+/// The **influence** of a side and how far its handle is from the value
+/// it is on.
 ///
 /// A side with no ease is a **linear** side: it takes a third of the
-/// segment, as the tree's linear side does.
-fn handle(ease: Option<Ease>, difference: f64, span: f64) -> (f64, f64) {
-    match ease {
-        Some(ease) => {
+/// segment, as the tree's linear side does. An **auto** side is the
+/// slope to the keyframes on the other side of its keyframe, and it
+/// takes a sixth.
+fn handle(handle: &Handle, index: usize, difference: f64, span: f64) -> (f64, f64) {
+    match handle {
+        Handle::Linear => (1.0 / 3.0, difference / 3.0),
+        Handle::Written(ease) => {
             let influence = ease.influence.clamp(0.0, 1.0);
             (influence, ease.speed * influence * span)
         }
-        None => (1.0 / 3.0, difference / 3.0),
+        Handle::Auto { previous, next } => {
+            let influence = 1.0 / 6.0;
+            let span_of_neighbours = next.frame as f64 - previous.frame as f64;
+            if span_of_neighbours <= 0.0 {
+                return (influence, 0.0);
+            }
+            let (Some(from), Some(to)) = (component(&previous.value, index), component(&next.value, index))
+            else {
+                return (influence, 0.0);
+            };
+            let slope = (to - from) / span_of_neighbours;
+            (influence, slope * influence * span)
+        }
+    }
+}
+
+/// The **component** of a value: the number itself, or the number at
+/// that place in a list.
+fn component(value: &serde_json::Value, index: usize) -> Option<f64> {
+    match value {
+        serde_json::Value::Array(list) => list.get(index).and_then(|value| value.as_f64()),
+        _ => value.as_f64(),
     }
 }
 

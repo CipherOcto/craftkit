@@ -72,7 +72,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 mod keys;
 
-pub use keys::{RemoveKeyframe, SetInterpolation, SetKeyframe, ValueAt};
+pub use keys::{RemoveKeyframe, SetAuto, SetInterpolation, SetKeyframe, ValueAt};
 
 /// The compositing layer.
 ///
@@ -490,6 +490,7 @@ craftkit_sdk::plugin_anchor!(
     PropsEvaluator,
     SetKeyframe,
     RemoveKeyframe,
+    SetAuto,
     ValueAt,
     FxPanel
 );
