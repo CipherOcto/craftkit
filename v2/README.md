@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2085 tests.** The MCP server links **all fifteen batteries** in, so the
+**2094 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3728,6 +3728,7 @@ so.
 | the **in side** of a keyframe | **built.** A keyframe has an interpolation on each side, and the segment between two keyframes is shaped by both (§291) | §291 |
 | the **auto bezier** of a keyframe | **built.** An auto keyframe's ease is not written down but comes from its neighbours (§292) | §292 |
 | the **transitions** of a track | **built.** A transition sits over the cut between two clips, with a duration and an alignment on the cut (§293) | §293 |
+| the **speed** of a clip | **built.** A clip may play its media faster or slower, and the media it plays is its length multiplied by its speed (§294) | §294 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20403,3 +20404,71 @@ that sits **over the cut** between two clips.
 - **The tree's linked clips are not here**, and so a transition over
   the cut of a linked pair is not here either: a linked clip is a
   thing of its own.
+
+## 294. The speed of a clip
+
+The film battery had **two clocks** and a clip that played its media
+as it was. The tree has a third thing.
+
+### What was built
+
+- A clip may play its media **faster or slower** than it is: a new
+  command, `film.clip.speed`, and a `speed` in the clip's payload.
+- The clip's **length follows**: a clip that plays twice as fast is
+  half as long, and it plays the **same material**.
+- The **trim** and the **split** count the media through the speed: a
+  trim of five frames of a clip that plays twice as fast moves the
+  media ten frames, and a split cuts the media at the speed's worth.
+
+### What the port found
+
+- **The tree's speed is the third thing that joins the two clocks.**
+  The tree's clip has a `start` and a `duration` in the timeline's
+  ticks, a `source_in` in the media's ticks, and a `speed` — and the
+  media a clip plays is `duration × speed`. The tree's own `move_edge`
+  says so: the media a trim takes is `src_of(delta, speed)`.
+- **The tree's speed keeps the media the same.** The tree's
+  `set_speed` computes the new length as `source length / speed`, so
+  the clip is the same material at another rate — and not a different
+  material at the same rate.
+- **The tree's speed is not the tree's reverse.** The tree's speed may
+  be negative and a negative speed is a reverse, and the tree's
+  `move_edge` takes the absolute value. Here the direction is a
+  property of the clip and not of the speed (§281), so a speed here is
+  a number that is more than nothing.
+- **The tree's speed may not run into the next clip.** The tree bounds
+  the new length by the space there is — `new_dur.min(next_start -
+  it.start)` — so a clip that would grow into its neighbour is
+  shortened by the tree and **refused** here.
+- **The tree's rounding is a bound of its own, and the tree has no
+  such bound.** Fifty frames of media at three times the speed is
+  seventeen frames long, and seventeen frames at three times the speed
+  is fifty-one frames of media: the rounding of the length may make a
+  clip play a frame more of the media than it did. The tree's `check`
+  looks at the length of a clip, at the time bounds and at the
+  transitions — and **not** at the media, so the tree says nothing
+  about a clip that plays past the end of its item. Here it is
+  refused.
+
+### What it cost
+
+- **Nine tests** in the film battery (`tests/speed.rs`): a faster clip
+  is shorter, a slower clip is longer, the media is the same material,
+  a speed that is not a speed is refused, a locked track refuses a
+  speed, a clip that would overlap is refused, the trim moves the
+  media by the speed, the split cuts the media at the speed, and the
+  media may not run past its end.
+- **One new command**: `film.clip.speed`. The film battery now carries
+  **19** commands and the MCP server **375**.
+
+### What it does not settle
+
+- **The tree's ripple is not here**: the tree's speed change may
+  ripple — the later material moves with the clip — and here the clip
+  changes and the gap it leaves is a gap.
+- **The tree's speed on a group of linked clips is not here**: the
+  tree changes the speed of a clip and its linked partners as one
+  edit, and the linked clips are not here either.
+- **The tree's rate and stretch are not here**: the tree's
+  `rate_stretch` changes the speed by dragging an edge, and the speed
+  it leaves is the speed of the new length.
