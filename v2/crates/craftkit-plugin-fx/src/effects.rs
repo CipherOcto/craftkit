@@ -307,6 +307,16 @@ impl ToggleEffect {
     }
 }
 
+/// The **parameters** of an instance, with their values.
+fn parameters_of(instance: &serde_json::Value) -> Vec<(String, serde_json::Value)> {
+    let Some(fields) = instance.as_object() else { return Vec::new() };
+    fields
+        .iter()
+        .filter(|(name, _)| name.as_str() != "effect" && name.as_str() != "enabled")
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect()
+}
+
 /// The **effects** of a layer that **run**.
 ///
 /// An effect runs when it is **enabled** and the layer's own effects
@@ -327,6 +337,256 @@ pub fn running_effects(node: &Node, effects_switch: bool) -> usize {
         .iter()
         .filter(|effect| effect.get("enabled").and_then(|enabled| enabled.as_bool()).unwrap_or(true))
         .count()
+}
+
+/// Put the parameters of an effect back to their **defaults**.
+///
+/// The tree's `effect.reset`. An effect whose parameters carry
+/// **keyframes** may not be reset: the tree keys the value at the
+/// current time and keeps the keys, and this tree has no current time
+/// in a command — so a reset here would lose them, and a reset that
+/// loses something is refused.
+#[derive(Command)]
+#[command(id = "fx.effect.reset", area = "fx", layer = "fx", icon = "undo", mutates, undoable)]
+pub struct ResetEffect {
+    /// The layer the effect is on.
+    pub layer: NodeRef,
+    /// Which effect it is, counting from one.
+    pub effect: Number,
+}
+
+impl ResetEffect {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "fx.effect.reset".to_string();
+        let layer = self.layer.0;
+        let Some(node) = session.document().node(layer) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{layer}`"),
+            });
+        };
+        if node.kind != "fx.layer" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+            });
+        }
+        let index = self.effect.0;
+        if !index.is_finite() || index < 1.0 || index.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("an effect is counted from one: {index} is not one"),
+            });
+        }
+        let index = index as usize;
+        let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+        let mut effects = match props.get("effects") {
+            Some(effects) if effects.is_array() => effects.as_array().cloned().unwrap_or_default(),
+            Some(_) => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the effects of the layer `{layer}` are not a list"),
+                });
+            }
+            None => Vec::new(),
+        };
+        if index > effects.len() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no effect number {index} on the layer `{layer}`"),
+            });
+        }
+        let Some(spec) =
+            spec_of(effects[index - 1].get("effect").and_then(|effect| effect.as_str()).unwrap_or(""))
+        else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the effect number {index} is not one this tree has"),
+            });
+        };
+        for (name, value) in parameters_of(&effects[index - 1]) {
+            if value.get("keys").is_some() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the parameter `{name}` of the effect number {index} has keyframes, and a reset would lose them"
+                    ),
+                });
+            }
+        }
+        for param in spec.params {
+            effects[index - 1][param.id] = param.kind.default_value();
+        }
+        props["effects"] = serde_json::json!(effects);
+        if let Some(node) = session.document_mut()?.node_mut(layer) {
+            node.data["props"] = props;
+        }
+        Ok(Outcome::changed(format!("the effect number {index} of the layer `{layer}` is reset"))
+            .with_data(serde_json::json!({ "layer": layer, "effect": index, "effect_id": spec.id })))
+    }
+}
+
+/// **Copy** an effect of a layer.
+///
+/// The copy goes **right after** the one it is a copy of, and it holds
+/// the same values: the tree's `effect.duplicate`.
+#[derive(Command)]
+#[command(id = "fx.effect.duplicate", area = "fx", layer = "fx", icon = "copy", mutates, undoable)]
+pub struct DuplicateEffect {
+    /// The layer the effect is on.
+    pub layer: NodeRef,
+    /// Which effect it is, counting from one.
+    pub effect: Number,
+}
+
+impl DuplicateEffect {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "fx.effect.duplicate".to_string();
+        let layer = self.layer.0;
+        let Some(node) = session.document().node(layer) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{layer}`"),
+            });
+        };
+        if node.kind != "fx.layer" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+            });
+        }
+        let index = self.effect.0;
+        if !index.is_finite() || index < 1.0 || index.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("an effect is counted from one: {index} is not one"),
+            });
+        }
+        let index = index as usize;
+        let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+        let mut effects = match props.get("effects") {
+            Some(effects) if effects.is_array() => effects.as_array().cloned().unwrap_or_default(),
+            Some(_) => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the effects of the layer `{layer}` are not a list"),
+                });
+            }
+            None => Vec::new(),
+        };
+        if index > effects.len() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no effect number {index} on the layer `{layer}`"),
+            });
+        }
+        let copy = effects[index - 1].clone();
+        effects.insert(index, copy);
+        let now = index + 1;
+        props["effects"] = serde_json::json!(effects);
+        if let Some(node) = session.document_mut()?.node_mut(layer) {
+            node.data["props"] = props;
+        }
+        Ok(Outcome::changed(format!("the effect number {index} of the layer `{layer}` is copied"))
+            .with_data(serde_json::json!({ "layer": layer, "effect": index, "copy": now })))
+    }
+}
+
+/// **Move** an effect to another place in the stack of a layer.
+///
+/// The tree's `effect.reorder`. The effect is addressed by its
+/// **number**, so a move changes what a path says — and the answer
+/// says which number the effect is now, so a caller knows.
+#[derive(Command)]
+#[command(id = "fx.effect.reorder", area = "fx", layer = "fx", icon = "arrow", mutates, undoable)]
+pub struct ReorderEffect {
+    /// The layer the effect is on.
+    pub layer: NodeRef,
+    /// Which effect it is, counting from one.
+    pub effect: Number,
+    /// Which place it goes to, counting from one.
+    pub to: Number,
+}
+
+impl ReorderEffect {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "fx.effect.reorder".to_string();
+        let layer = self.layer.0;
+        let Some(node) = session.document().node(layer) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{layer}`"),
+            });
+        };
+        if node.kind != "fx.layer" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+            });
+        }
+        let index = self.effect.0;
+        if !index.is_finite() || index < 1.0 || index.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("an effect is counted from one: {index} is not one"),
+            });
+        }
+        let index = index as usize;
+        let to = self.to.0;
+        if !to.is_finite() || to < 1.0 || to.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("a place is counted from one: {to} is not one"),
+            });
+        }
+        let to = to as usize;
+        let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+        let mut effects = match props.get("effects") {
+            Some(effects) if effects.is_array() => effects.as_array().cloned().unwrap_or_default(),
+            Some(_) => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the effects of the layer `{layer}` are not a list"),
+                });
+            }
+            None => Vec::new(),
+        };
+        if index > effects.len() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no effect number {index} on the layer `{layer}`"),
+            });
+        }
+        if to > effects.len() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "there are {} effects on the layer `{layer}` and the {to} is not one of them",
+                    effects.len()
+                ),
+            });
+        }
+        if to == index {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the effect number {index} is already the {to}"),
+            });
+        }
+        let moved = effects.remove(index - 1);
+        let name = moved.get("effect").and_then(|effect| effect.as_str()).unwrap_or("").to_string();
+        effects.insert(to - 1, moved);
+        props["effects"] = serde_json::json!(effects);
+        if let Some(node) = session.document_mut()?.node_mut(layer) {
+            node.data["props"] = props;
+        }
+        Ok(Outcome::changed(format!("the effect number {index} of the layer `{layer}` is now the {to}"))
+            .with_data(serde_json::json!({
+                "layer": layer,
+                "effect": index,
+                "to": to,
+                "name": name,
+            })))
+    }
 }
 
 /// The **names** of the effects there are.

@@ -121,7 +121,9 @@ mod spatial;
 mod switches;
 
 pub use blend::SetBlend;
-pub use effects::{AddEffect, ListEffects, RemoveEffect, ToggleEffect};
+pub use effects::{
+    AddEffect, DuplicateEffect, ListEffects, RemoveEffect, ReorderEffect, ResetEffect, ToggleEffect,
+};
 pub use expressions::{DeleteExpression, SetExpression};
 use keys::keys_of;
 pub use keys::{RemoveKeyframe, SetAuto, SetContinuous, SetInterpolation, SetKeyframe, ValueAt};
@@ -701,6 +703,9 @@ craftkit_sdk::plugin_anchor!(
     AddEffect,
     RemoveEffect,
     ToggleEffect,
+    ResetEffect,
+    DuplicateEffect,
+    ReorderEffect,
     PropsEvaluator,
     SetKeyframe,
     RemoveKeyframe,
