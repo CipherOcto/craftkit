@@ -17,6 +17,10 @@
 //! cells, and a formula may use the word where it would use the range
 //! (the module `names`).
 //!
+//! And a sheet may carry **merges**: a range of cells that is one cell,
+//! whose value is the value of the cell at the top left (the module
+//! `merges`).
+//!
 //! # The mapping
 //!
 //! | the application | v2 |
@@ -135,6 +139,7 @@ mod flash;
 mod format;
 mod formula;
 mod fractions;
+mod merges;
 mod names;
 mod sections;
 mod styles;
@@ -150,6 +155,7 @@ use fill::FillRange;
 use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
+pub use merges::{ClearMerge, SetMerge};
 pub use names::{DeleteName, SetName};
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
 pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
@@ -699,6 +705,7 @@ impl SetCell {
                 message: format!("the node `{sheet}` is not a sheet"),
             });
         }
+        merges::refuse_covered(node, &[cell], "grid.cell.set")?;
         let mut cells = sheet_cells_mut(node);
         cells.set_value(cell, value.clone());
         node.data["cells"] = cells_into(&cells);
@@ -838,6 +845,7 @@ impl SetDate {
                 message: format!("the node `{sheet}` is not a sheet"),
             });
         }
+        merges::refuse_covered(node, &[cell], &id)?;
         let mut cells = sheet_cells_mut(node);
         cells.set_value(cell, Value::Number(serial));
         cells.set_format(cell, Some(style.code().to_string()));
@@ -914,6 +922,7 @@ impl SetTime {
                 message: format!("the node `{sheet}` is not a sheet"),
             });
         }
+        merges::refuse_covered(node, &[cell], &id)?;
         let mut cells = sheet_cells_mut(node);
         cells.set_value(cell, Value::Number(serial));
         cells.set_format(cell, Some(style.code().to_string()));
@@ -1023,6 +1032,7 @@ impl SetFormula {
                 message: format!("the node `{sheet}` is not a sheet"),
             });
         }
+        merges::refuse_covered(node, &[cell], "grid.formula.set")?;
         let name = node.name.clone();
         let mut cells = cells_of(node);
         // The cycle check: with the new formula in place, does the cell
@@ -1298,6 +1308,8 @@ craftkit_sdk::plugin_anchor!(
     SetFormula,
     SetName,
     DeleteName,
+    SetMerge,
+    ClearMerge,
     ClearCell,
     ReadPrecedents,
     ReadDependents,

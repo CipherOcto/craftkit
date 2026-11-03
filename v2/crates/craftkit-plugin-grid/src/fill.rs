@@ -822,7 +822,13 @@ impl FillRange {
                 }
             }
         }
-        // The **writes**.
+        // The **writes**. A cell that a **merge** covers may not be
+        // written to: the value of a merged region is the value of its
+        // top left cell.
+        if let Some(node) = session.document().node(sheet) {
+            let cells: Vec<crate::formula::CellRef> = writes.iter().map(|write| write.cell).collect();
+            crate::merges::refuse_covered(node, &cells, &id)?;
+        }
         let mut written: Vec<serde_json::Value> = Vec::new();
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
             let mut sheet_cells = sheet_cells_mut(node);

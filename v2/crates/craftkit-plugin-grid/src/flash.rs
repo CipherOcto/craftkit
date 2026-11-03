@@ -109,6 +109,11 @@ impl FlashFill {
         // The **format** of the column: the tree's fill takes the style
         // of the top of the column it fills.
         let format = cells.format(CellRef { col: at.col, row: top }).map(|code| code.to_string());
+        // A cell that a **merge** covers may not be written to.
+        if let Some(node) = session.document().node(sheet) {
+            let cells: Vec<crate::formula::CellRef> = todo.iter().map(|(cell, _)| *cell).collect();
+            crate::merges::refuse_covered(node, &cells, "grid.flash.fill")?;
+        }
         let mut written: Vec<serde_json::Value> = Vec::new();
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
             let mut cells = crate::sheet_cells_mut(node);
