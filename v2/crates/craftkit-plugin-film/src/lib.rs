@@ -18,6 +18,11 @@
 //! That last part is the **two clocks**: a clip has a place on the
 //! timeline and a place in the media, and they are not the same place.
 //!
+//! And a clip may carry a **label**: one of the tree's own sixteen
+//! colours, and the clips that carry the same one are a **group** — the
+//! group is derived from the labels and not written down (the module
+//! `labels`).
+//!
 //! And a clip may be **trimmed**: one of its two edges moves, and a
 //! trim that would cross a bound is **refused** and says which bound
 //! stopped it — the tree clamps the same trim and says nothing (the
@@ -119,6 +124,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 mod hold;
 mod inserting;
+mod labels;
 mod lifting;
 mod linking;
 mod locking;
@@ -133,6 +139,7 @@ mod trim;
 
 pub use hold::{DeleteHold, SetHold};
 pub use inserting::InsertClip;
+pub use labels::{DeleteLabel, LabelGroup, SetLabel};
 pub use lifting::LiftRange;
 pub use linking::{LinkClips, UnlinkClip};
 pub use locking::LockTrack;
