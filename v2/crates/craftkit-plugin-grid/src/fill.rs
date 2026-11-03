@@ -68,11 +68,13 @@
 //!
 //! # What it does not do
 //!
-//! - **The tree's lists are not here** — the days, the months, the
-//!   quarters — and a text that is a day of the week is copied here,
-//!   and the tree would step through the week. The tree's **dates**
-//!   are here: the `days`, `weekdays`, `months` and `years` modes,
-//!   and the calendar they step through (§276).
+//! - **The tree's lists are here** — the days of the week, the months
+//!   and the quarters — and a text that is in one of them steps
+//!   through it. The tree's **dates** are here too: the `days`,
+//!   `weekdays`, `months` and `years` modes, and the calendar they
+//!   step through (§276).
+//! - **The tree's custom lists are not here**: a list the user made
+//!   is a list of their own, and there is nowhere to keep it here.
 //! - **The tree's style is not here**, and only its format is: the
 //!   tree's style carries the font, the fill, the borders, the
 //!   alignment and the protection as well, and a fill copies the
@@ -199,6 +201,22 @@ enum Pattern {
         /// How many months it steps by.
         months: i64,
     },
+    /// A position in a **list**: the days of the week, the months, the
+    /// quarters.
+    List {
+        /// The items of the list.
+        list: Vec<String>,
+        /// The item it ends on, at the source.
+        last: usize,
+        /// The item it starts from.
+        first: usize,
+        /// How much it steps on by.
+        step: i64,
+        /// Whether the items are written in capitals.
+        upper: bool,
+        /// Whether the items are written in small letters.
+        lower: bool,
+    },
     /// Text with a number in it: `Item 1`.
     TextNum {
         /// The text before the number.
@@ -228,6 +246,22 @@ impl Pattern {
             Pattern::Linear { first, last, step } => {
                 let base = if forward { *last } else { *first };
                 Some(Value::Number(round15(base + step * (k * sign) as f64)))
+            }
+            Pattern::List { list, last, first, step, upper, lower } => {
+                let length = list.len() as i64;
+                if length == 0 {
+                    return None;
+                }
+                let base = if forward { *last } else { *first } as i64;
+                let index = (base + step.checked_mul(k)?.checked_mul(sign)?).rem_euclid(length) as usize;
+                let item = list.get(index)?.clone();
+                Some(Value::Text(if *upper {
+                    item.to_uppercase()
+                } else if *lower && !item.chars().next().is_some_and(char::is_uppercase) {
+                    item.to_lowercase()
+                } else {
+                    item
+                }))
             }
             Pattern::TextNum { prefix, suffix, first, last, step, width } => {
                 let base = if forward { *last } else { *first };
@@ -311,6 +345,28 @@ impl Pattern {
                     _ => None,
                 })
                 .collect();
+            // The tree's **lists**: the days of the week, the months
+            // and the quarters. A text that is in a list steps through
+            // the list.
+            for list in lists() {
+                let indexes: Option<Vec<usize>> = texts
+                    .iter()
+                    .map(|text| list.iter().position(|item| item.eq_ignore_ascii_case(text)))
+                    .collect();
+                let Some(indexes) = indexes else { continue };
+                let first = indexes.first().copied().unwrap_or(0);
+                let last = indexes.last().copied().unwrap_or(0);
+                let step = if indexes.len() >= 2 { indexes[1] as i64 - indexes[0] as i64 } else { 1 };
+                // The tree's rule: the case of the source is the case
+                // of the list — a source in capitals fills with
+                // capitals.
+                let source = texts.first().cloned().unwrap_or_default();
+                let upper = source.chars().all(|character| !character.is_lowercase())
+                    && source.chars().any(char::is_alphabetic)
+                    && source.len() > 1;
+                let lower = source.chars().all(|character| !character.is_uppercase());
+                return Pattern::List { list, last, first, step, upper, lower };
+            }
             let parts: Vec<Option<(String, i64, String, usize)>> =
                 texts.iter().map(|text| split_num(text)).collect();
             if parts.iter().all(|part| part.is_some()) {
@@ -340,6 +396,23 @@ impl Pattern {
     fn is_copy(&self) -> bool {
         matches!(self, Pattern::Copy)
     }
+}
+
+/// The **lists** a fill may step through.
+///
+/// The tree's lists: the days of the week in three letters and in
+/// full, the months in three letters and in full, and the quarters.
+fn lists() -> Vec<Vec<String>> {
+    let short_days: Vec<String> = dates::WEEKDAYS.iter().map(|day| day.chars().take(3).collect()).collect();
+    let short_months: Vec<String> =
+        dates::MONTHS.iter().map(|month| month.chars().take(3).collect()).collect();
+    vec![
+        short_days,
+        dates::WEEKDAYS.iter().map(|day| day.to_string()).collect(),
+        short_months,
+        dates::MONTHS.iter().map(|month| month.to_string()).collect(),
+        vec!["Q1".to_string(), "Q2".to_string(), "Q3".to_string(), "Q4".to_string()],
+    ]
 }
 
 /// A text with a number in it: the text before it, the number, the
