@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2143 tests.** The MCP server links **all fifteen batteries** in, so the
+**2152 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3735,6 +3735,7 @@ so.
 | the **custom lists** of a workbook | **built.** A workbook may carry lists of your own, and a fill steps through one (§298) | §298 |
 | the **trim** of a linked group | **built.** A linked group is trimmed as one edit, and a member that cannot take the delta refuses it (§299) | §299 |
 | the **split** of a linked group | **built.** A linked group is split as one edit, and the right-hand pieces are a new group (§300) | §300 |
+| the **frame hold** of a clip | **built.** A clip may hold a frame of its media to the end of the clip, and its material is then shorter than the clip (§301) | §301 |
 
 ### The list of things that are honestly not there: empty
 
@@ -19621,8 +19622,9 @@ property of the media — the media is the same — it is a property of the
 - **The tree's speed is not here**, and the tree's speed and direction
   are one command: a clip reversed at a speed of a half plays its media
   backwards at half the speed.
-- **The tree's frame hold is not here**: a clip may hold a frame for a
-  while, and a held frame has no media to consume at one end.
+- **The tree's frame hold is not here** — and it is now (§301): a clip
+  may hold a frame for a while, and a held frame has no media to
+  consume at one end.
 - **The tree's transitions are not here**: a transition between two
   clips overlaps them, and the overlap is not a clip.
 
@@ -20852,3 +20854,77 @@ is the last of the tree's link rules.
   tree's razor may be given a track and cuts everything on it, and
   the groups it cuts are made new links as well. Here a split is of
   one group and its members.
+
+## 301. The frame hold of a clip
+
+§294 gave the film battery the **speed** of a clip. The frame hold is
+the third thing that changes what a clip plays: a clip may play its
+media up to a point and then **hold** one frame to the end of itself.
+
+### What was built
+
+- A clip may **hold a frame**: it plays its media up to a frame of the
+  media and then holds that frame to the end of the clip. Two commands:
+  `film.clip.hold` and `film.clip.hold.delete`.
+- The hold is a **source** frame — a frame of the media and not a frame
+  of the timeline — because it is the media that stops and not the
+  timeline.
+- The **trim honours it**: a held clip has no head handle, so a trim of
+  its in edge moves the clip and leaves the media where it is, and the
+  media does not bound a held clip at all.
+
+### What the port found
+
+- **A held clip has no media length.** The tree's `media_len` answers
+  *nothing* when a clip holds a frame: the media does not bound the
+  clip, and the bound is the hold. So a held clip's material is
+  **shorter** than the clip — it ends at the hold, and the rest of the
+  clip is that one frame.
+- **A held clip has no head handle.** The tree's `head` gives a held
+  clip its own source in point, so there is no media before it to be
+  taken: a trim of the in edge moves the clip and not the media. The
+  tree says it in the same place — *a frame hold needs no source head*.
+- **The tree's hold is a tick of the media, snapped to the rate.** The
+  tree clamps it to zero and snaps it to the frame rate of the item.
+  Here it is a whole number of frames, and a number that is not a
+  whole number is refused.
+- **The tree's Add Frame Hold is two edits, and the hold is not one of
+  them.** The tree's `add_frame_hold` **razors** the clip at the
+  playhead and gives the right-hand piece the hold — so the tree's
+  command is a split and a hold in one, and the hold belongs to a clip
+  that did not exist before it. Here the split is its own command
+  (`film.clip.split`) and the hold is a fact about a clip that is
+  already there: **one command per thing**.
+- **The tree's hold has five ways to be named** — the in point, the out
+  point, the playhead, the sequence time and the source timecode — and
+  every one of them is the same source frame by another route. Here
+  there is one way: the frame itself.
+
+### What it cost
+
+- **Nine tests** in the film battery (`tests/hold.rs`): the clip holds
+  the frame, the frame is a frame of the media, a frame outside the
+  media is refused, a frame past the material is refused, a locked
+  track refuses the hold, the hold may be taken away and may not be
+  taken away twice, and the two edges of the trim of a held clip move
+  the clip and not the media.
+- **Two new commands**: `film.clip.hold` and `film.clip.hold.delete`.
+  The film battery now carries **23** commands and the MCP server
+  **383**.
+- **One rule changed** in the trim: the media bound does not apply to a
+  held clip, because the tree's `media_len` is nothing for one.
+
+### What it does not settle
+
+- **The tree's frame hold options are not here**: the tree may hold
+  the frame at the in point, the out point, the playhead, the sequence
+  time or the source timecode, and it snaps the hold to the frame
+  rate. Here the frame is given as a number.
+- **The tree's hold filters are not here**: the tree's `hold_filters`
+  says whether the filters keep running over the held frame. Here the
+  hold is the picture alone.
+- **The tree's insert-frame-hold-segment is not here**: the tree may
+  insert a new clip that holds a frame for so many seconds. Here a
+  clip that holds a frame is a clip that is already there, and making
+  one is a clip that is added.
+
