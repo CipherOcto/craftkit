@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2168 tests.** The MCP server links **all fifteen batteries** in, so the
+**2176 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3738,6 +3738,7 @@ so.
 | the **frame hold** of a clip | **built.** A clip may hold a frame of its media to the end of the clip, and its material is then shorter than the clip (§301) | §301 |
 | the **transitions** of a split | **built.** A transition that follows a cut joins the piece after it, and one that spans the cut keeps the piece before it (§302) | §302 |
 | the **average** of the points of a path | **built.** The points of a path may be put on one line, in one column, or all in one place (§303) | §303 |
+| the **removal** of a page | **built.** A page may be taken away, the tree of pages is right afterwards, and the destinations that went to it go with it (§304) | §304 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21049,3 +21050,81 @@ selection.
 - **The tree's other point commands are not here**: the tree's
   `path.convertAnchors` turns the direct-selected points into corner
   or smooth points, and its `path.deleteAnchors` takes them away.
+
+## 304. The removal of a page
+
+The PDF battery could take an **object** away; it could not take a
+**page** away. A page is not only an object: it is a page of the tree
+of pages, and everything that pointed at it has to stop pointing at it.
+
+### What was built
+
+- The command `pdf.page.remove` takes a **page** away: the node goes,
+  the **tree of pages** is right afterwards, and the **destinations**
+  that went to the page go with it.
+- The **count** of the children of the tree of pages is **derived**:
+  it is worked out from the edges that are left, and not kept.
+- The **last page** cannot go: a file with no pages is not a file.
+
+### What the port found
+
+- **The tree's destination goes whole.** The tree's
+  `drop_destinations_to` looks at the bookmarks and at the link
+  annotations of the pages that stay, and for each of them: a `/Dest`
+  that goes to a page that is gone loses its key, and a `/A` that is a
+  `GoTo` whose `/D` goes to a page that is gone loses its key. Half a
+  destination is not a destination — the tree does not leave a lonely
+  `Fit` behind where the destination was. This tree's rule for taking
+  an **object** away is the plain one: a list loses the one element
+  that names the object, and the rest of the list stays, so a
+  destination would have been left broken. The page rule is the
+  tree's.
+- **The tree's rule is about the holders it names**, and here it is
+  about every dictionary: the tree looks at the bookmarks and at the
+  links of the pages that stay; this tree looks at every object and
+  every stream that has a `/Dest` or an `/A`. The same rule, and more
+  of the file.
+- **The tree frees the number of the page.** The tree's `free` marks
+  the object number as free and its generation one higher, and the
+  file writes that number as a free entry, so that the numbers of the
+  file do not move. Here the number is free the moment the object
+  goes, and a new object may take it: this tree has no pool of freed
+  numbers and no generation to raise.
+- **The tree rebuilds the tree of pages.** The tree's rebuild moves
+  the attributes a page inherits — the media box, the resources, the
+  crop box, the rotation — down into the pages that are left and takes
+  them out of the root, so that the root says nothing but the tree.
+  Here the attributes stay where they are, and the pages that are left
+  inherit them as they did.
+- **The tree's form fields leave the form.** The tree takes the
+  widgets of a page that is gone out of the form, so that a field
+  does not point at a page that is not there. Here they stay: an
+  annotation of a page that is gone is an object of its own, and it
+  stays — which is the rule this tree already had for a removed
+  object, and the tree's rule is the better one.
+- **The tree takes several pages at once.** The tree's `delete_pages`
+  takes a list of indices and refuses the whole list when it would
+  leave no pages. Here a command takes one page, so several pages are
+  several commands.
+
+### What it cost
+
+- **Eight tests** in the PDF battery (`tests/page_removal.rs`): a page
+  may be taken away, the last page cannot go, the tree of pages is
+  right afterwards, a destination that went to the page goes with it,
+  an action that goes to the page goes with it, what the page held
+  stays, a node that is not a page is refused, and a page that is not
+  there is refused.
+- **One new command**: `pdf.page.remove`. The PDF battery now carries
+  **21** commands and the MCP server **385**.
+
+### What it does not settle
+
+- **The tree's form fields do not leave the form here.** The widgets
+  of a page that is gone stay in the document and in the form.
+- **The tree's rebuild is not here**: the attributes that a page
+  inherits stay with the tree of pages and are not moved down.
+- **The tree's freed numbers are not here**: there is no pool of them
+  and no generation, so a number that is free may be taken by a new
+  object.
+- **Several pages at once are not here**: one command, one page.
