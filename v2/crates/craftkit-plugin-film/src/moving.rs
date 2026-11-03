@@ -18,8 +18,12 @@
 //! - **The insert is not here.** The tree's insert mode pushes the
 //!   clips after the moved one along the track, so that nothing is
 //!   cut. That is a different command.
-//! - **The ripple is not here**, and neither is the **link**: the
-//!   tree's linked clips move together, and here a clip is a clip.
+//! - **The ripple is not here.** The tree's ripple pushes the clips
+//!   after the moved one along the track, so that nothing is cut. That
+//!   is a different command.
+//! - **The link is here, and the move honours it**: the tree's linked
+//!   clips move together, by the same offset on their own tracks (the
+//!   module `linking`).
 
 use craftkit_derive::Command;
 
@@ -41,6 +45,26 @@ pub struct MoveClip {
     pub track: NodeRef,
     /// Where it starts on that track, in frames.
     pub start: Number,
+}
+
+/// The **clip** on a track that a clip of that span would run into.
+fn the_clip_under(session: &Session, track: u64, start: u64, end: u64, clip: u64) -> Option<(u64, u64, u64)> {
+    session
+        .document()
+        .walk()
+        .filter(|node| node.kind == "film.track" && node.id == track)
+        .flat_map(|node| node.children.iter())
+        .filter(|child| child.kind == "film.clip" && child.id != clip)
+        .find_map(|other| {
+            let other_start = other.data.get("start").and_then(|start| start.as_u64())?;
+            let other_duration = other.data.get("duration").and_then(|duration| duration.as_u64())?;
+            let other_end = other_start + other_duration;
+            if start < other_end && other_start < end {
+                Some((other.id, other_start, other_end))
+            } else {
+                None
+            }
+        })
 }
 
 impl MoveClip {
@@ -96,30 +120,66 @@ impl MoveClip {
         let end = start + duration;
         // The **clips** that are on the track it goes on: the move may
         // not land on any of them.
-        for other in session
+        if let Some((_other, other_start, other_end)) = the_clip_under(session, track, start, end, clip) {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the clip would run from frame {start} to frame {end}, and the clip on the track runs from frame {other_start} to frame {other_end}"
+                ),
+            });
+        }
+        // The **partners** of a linked clip move with it: the tree's
+        // rule is the same offset on their own tracks, so that the
+        // picture and the sound stay in step. A partner on a locked
+        // track stays where it is.
+        let old_start = session
             .document()
-            .walk()
-            .filter(|node| node.kind == "film.track")
-            .filter(|node| node.id == track)
-            .flat_map(|node| node.children.iter())
-            .filter(|child| child.kind == "film.clip" && child.id != clip)
-        {
-            let Some(other_start) = other.data.get("start").and_then(|start| start.as_u64()) else {
+            .node(clip)
+            .and_then(|node| node.data.get("start").and_then(|start| start.as_u64()))
+            .unwrap_or(start);
+        let offset = start as i64 - old_start as i64;
+        let mut partner_moves: Vec<(u64, u64, u64)> = Vec::new();
+        for partner in crate::linking::partners(session, clip) {
+            let Some(node) = session.document().node(partner) else {
                 continue;
             };
-            let Some(other_duration) = other.data.get("duration").and_then(|duration| duration.as_u64())
+            let Some(partner_track) = crate::track_of(session, partner) else {
+                continue;
+            };
+            if crate::is_locked(session, partner_track) {
+                // A **locked** track cannot be edited: the partner
+                // stays where it is.
+                continue;
+            }
+            let Some(partner_start) = node.data.get("start").and_then(|start| start.as_u64()) else {
+                continue;
+            };
+            let Some(partner_duration) = node.data.get("duration").and_then(|duration| duration.as_u64())
             else {
                 continue;
             };
-            let other_end = other_start + other_duration;
-            if start < other_end && other_start < end {
+            let partner_new = partner_start as i64 + offset;
+            if partner_new < 0 {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "the clip would run from frame {start} to frame {end}, and the clip on the track runs from frame {other_start} to frame {other_end}"
+                        "the clip `{partner}` would start at frame {partner_new}, and the timeline begins at frame 0"
                     ),
                 });
             }
+            let partner_new = partner_new as u64;
+            let partner_end = partner_new + partner_duration;
+            if let Some((other, other_start, other_end)) =
+                the_clip_under(session, partner_track, partner_new, partner_end, partner)
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the clip `{partner}` would run from frame {partner_new} to frame {partner_end}, and the clip `{other}` on its track runs from frame {other_start} to frame {other_end}"
+                    ),
+                });
+            }
+            partner_moves.push((partner, partner_new, partner_duration));
         }
         // The **track** it is on now, if it is another one.
         let from = session
@@ -163,9 +223,22 @@ impl MoveClip {
             };
             track_node.add_child(node);
         }
+        // The **partners** move after the clip, on their own tracks.
+        for (partner, partner_start, partner_duration) in &partner_moves {
+            if let Some(node) = session.document_mut()?.node_mut(*partner) {
+                let source_in = node.data.get("source_in").cloned().unwrap_or(serde_json::Value::Null);
+                node.data = crate::clocks_of(&node.data, *partner_start, *partner_duration, &source_in);
+                node.name = format!("clip at {partner_start}");
+            }
+        }
+        let partners: Vec<u64> = partner_moves.iter().map(|(partner, _, _)| *partner).collect();
         Ok(Outcome::changed(format!("the clip `{clip}` is at frame {start} of the track `{track}`"))
-            .with_data(
-                serde_json::json!({ "id": clip, "track": track, "start": start, "duration": duration }),
-            ))
+            .with_data(serde_json::json!({
+                "id": clip,
+                "track": track,
+                "start": start,
+                "duration": duration,
+                "partners": partners,
+            })))
     }
 }

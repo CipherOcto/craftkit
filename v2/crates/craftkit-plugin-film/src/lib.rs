@@ -64,6 +64,10 @@
 //! clip plays is its length multiplied by its speed (the module
 //! `speed`).
 //!
+//! And two clips may be **linked**: the same thing on two tracks — a
+//! picture and its sound — and a move of one moves the other (the
+//! module `linking`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -111,6 +115,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 mod inserting;
 mod lifting;
+mod linking;
 mod locking;
 mod moving;
 mod removal;
@@ -123,6 +128,7 @@ mod trim;
 
 pub use inserting::InsertClip;
 pub use lifting::LiftRange;
+pub use linking::{LinkClips, UnlinkClip};
 pub use locking::LockTrack;
 pub use moving::MoveClip;
 pub use removal::RemoveClip;
@@ -423,6 +429,7 @@ impl AddClip {
             "duration": duration,
             "source_in": source_in,
             "speed": 1.0,
+            "link": serde_json::Value::Null,
         });
         let name = format!("clip at {start}");
         let id =
@@ -570,6 +577,16 @@ pub fn media_length_of(session: &Session, clip: u64) -> Option<u64> {
     if duration == 0 { None } else { Some(duration) }
 }
 
+/// The **sequence** a clip is in: the item the track is in.
+pub fn sequence_of(session: &Session, clip: u64) -> Option<u64> {
+    let track = track_of(session, clip)?;
+    session
+        .document()
+        .walk()
+        .find(|node| node.children.iter().any(|child| child.id == track))
+        .map(|node| node.id)
+}
+
 /// The **track** a clip is on.
 pub fn track_of(session: &Session, clip: u64) -> Option<u64> {
     session
@@ -631,6 +648,8 @@ craftkit_sdk::plugin_anchor!(
     LiftRange,
     TransitionKind,
     SetSpeed,
+    LinkClips,
+    UnlinkClip,
     AddTransition,
     SetTransition,
     RemoveTransition,

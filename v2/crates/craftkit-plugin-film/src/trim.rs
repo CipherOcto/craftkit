@@ -99,6 +99,16 @@ impl TrimClip {
                 message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
             });
         }
+        // A clip that is **linked** is trimmed with its partners: the
+        // tree trims the group as one edit, with the delta that every
+        // member can take. That is not here yet, and a trim that
+        // trimmed one member would break the link.
+        if crate::linking::link_of(&node.data).is_some() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "not supported yet: a clip that is linked is trimmed with its partners".to_string(),
+            });
+        }
         let Some(clock) = Clock::of(&node.data) else {
             return Err(EngineError::Failed {
                 id: id.clone(),

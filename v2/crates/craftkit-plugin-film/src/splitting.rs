@@ -56,6 +56,16 @@ impl SplitClip {
                 message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
             });
         }
+        // A clip that is **linked** is split with its partners: the
+        // tree splits the group as one edit and the right-hand pieces
+        // keep a link to each other and not to the left-hand ones.
+        // That is not here yet.
+        if crate::linking::link_of(&node.data).is_some() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "not supported yet: a clip that is linked is split with its partners".to_string(),
+            });
+        }
         let Some(start) = node.data.get("start").and_then(|start| start.as_u64()) else {
             return Err(EngineError::Failed {
                 id: id.clone(),
