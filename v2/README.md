@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2466 tests.** The MCP server links **all fifteen batteries** in, so the
+**2481 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2466 tests
+cargo test          # 2481 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3770,6 +3770,7 @@ so.
 | the **opacity** of a path | **built.** A path says how solid it is, and the opacity multiplies into the fill and the line (§333) | §333 |
 | the **slip** of a clip | **built.** A clip stays where it is and shows a different part of its media, and a slip past the end of the media is refused (§334) | §334 |
 | the **roll** of a cut | **built.** The place where two clips meet may be moved, and a roll that would cross a bound is refused (§335) | §335 |
+| the **slide** of a clip | **built.** A clip may be slid between its neighbours, and the neighbours give way (§336) | §336 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23013,10 +23014,80 @@ else, and a roll moves the boundary and **both** clips go with it.
 
 ### What it does not settle
 
-- **The slide is not here.** The tree's **slide** moves a clip between
-  its neighbours, and it is an edit of the **place** of a clip and not
-  of its content. It is a command of its own.
+- **The slide is here now** (§336). The tree's **rate stretch** — the
+  change of how fast a clip plays its media — is not, and it is an
+  edit of the **media** and not of the place.
 - **The tree's time remapping is not here.** The tree may remap the
   time of a clip when it rolls, and it may remap the media with it.
   Here a roll moves the cut and the media with it, and the media is
   the media the clip plays.
+
+## 336. The slide of a clip
+
+A clip on a track may be **slid** between the clips around it: the
+clip moves, and the clips around it **give way** — the one before it
+grows or shrinks, and the one after it moves and shrinks or grows — so
+that the span they share stays **without a gap**. It is the third way
+of moving a boundary between two clips, and it is not like the other
+two: a **trim** moves one edge of one clip and leaves its neighbour
+alone, a **roll** moves the boundary and both of the clips go with it,
+and a **slide** moves the clip in the middle and its neighbours go with
+it.
+
+### What was built
+
+- The command `film.clip.slide` slides a clip between its neighbours.
+- The slide is **refused** when it would cross a bound, and the
+  refusal says which bound: a neighbour is at least one frame long, a
+  neighbour may not run past the end of its media, a neighbour may not
+  begin before the media, and the slid clip may not start before the
+  timeline.
+- A neighbour that is **not next to** the slid clip — a gap between
+  them — is a bound of its own: the slid clip may not run into it.
+- The **link** is honoured: the linked clips slide together, by the
+  same delta on their own tracks.
+- A **transition** over a cut that moved follows the cut, and it stays
+  inside the two clips it joins.
+
+### What the port found
+
+- **The tree's linked slide is scaled down and this one is refused.**
+  The tree's `slide_items` slides every clip of the group by the delta
+  the **most restrictive** one can take, so the group slides a little
+  and nothing says so. Here every member takes the same delta, and a
+  member that cannot take it refuses the whole slide — the rule the
+  trim of a linked group already had (§299).
+- **The tree's slide is a slide of one clip at a time.** The tree
+  slides a clip and its neighbours, and a group of linked clips is
+  slid afterwards by a second rule, on a copy of the sequence. Here
+  the group is one edit, and the plan is worked out before anything
+  is changed, so that a refusal leaves every clip as it was.
+
+### What it cost
+
+- **Fifteen tests** in the film battery (`tests/sliding.rs`): the
+  slide moving the clip and its neighbours, the span staying without a
+  gap, a slide going backwards, a slide that would leave a neighbour
+  shorter than a frame refused, a slide past the end of the media
+  refused, a slide before the media refused, a slide before the
+  timeline refused, a gap being a bound, a slide on a locked track
+  refused, the linked clip sliding too, a linked clip that cannot
+  slide refusing it, a slide of nothing refused, a slide of half a
+  frame refused, a node that is not a clip refused, and the slide being
+  saved.
+- **The transition that follows a cut is now one function.** The roll
+  had its own copy of it and the slide needed the same thing, so it
+  is now `transitions::follow_cut` and both of them use it.
+- **One new command**: `film.clip.slide`. The film battery now carries
+  **29** commands and the MCP server **431**.
+
+### What it does not settle
+
+- **The rate stretch is not here.** The tree may change how fast a
+  clip plays its media by dragging one of its edges, and the linked
+  partners stretch with it, so that they keep one speed. That is an
+  edit of the **media** and not of the place, and it is a command of
+  its own.
+- **The tree's time remapping is not here**, and neither is its
+  remapping of the media: a slide moves the clip and its neighbours,
+  and the media of the slid clip is the media it was showing.
