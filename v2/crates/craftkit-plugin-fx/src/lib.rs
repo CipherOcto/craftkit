@@ -59,6 +59,14 @@
 //! (the module `expressions`): the numbers, the operators `+ - * / % ^`,
 //! the names `time` and `value`, and the tree's eases and functions.
 //!
+//! And the **switches** of a layer are here: the eye that says it is
+//! drawn, the speaker that says it is heard, the solo that says it is
+//! alone, the lock that says it is not edited, and the shy that says
+//! it steps aside. The switches are **facts** and what they do is
+//! **derived**: a solo silences the others, a shy layer steps aside
+//! when the composition hides the shy layers, and a locked layer is
+//! not edited (the module `switches`).
+//!
 //! And the **spatial** property is here too: a property whose value is
 //! a **point** does not move along the straight line from one keyframe
 //! to the next, it follows a **path** in the plane, and the time maps
@@ -83,10 +91,12 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 mod expressions;
 mod keys;
 mod spatial;
+mod switches;
 
 pub use expressions::{DeleteExpression, SetExpression};
 use keys::keys_of;
 pub use keys::{RemoveKeyframe, SetAuto, SetContinuous, SetInterpolation, SetKeyframe, ValueAt};
+pub use switches::{SetCompSwitch, SetSwitch, SwitchesEvaluator};
 
 /// The compositing layer.
 ///
@@ -198,7 +208,10 @@ impl AddLayer {
                 message: "a layer has a name".to_string(),
             });
         }
-        let data = serde_json::json!({ "props": serde_json::json!({}) });
+        let data = serde_json::json!({
+            "props": serde_json::json!({}),
+            "switches": crate::switches::Switches::default().to_json(),
+        });
         let id =
             session.document_mut()?.add_node_with_under(Some(comp), name.clone(), "fx.layer", None, data);
         Ok(Outcome::changed(format!("added the layer `{name}`"))
