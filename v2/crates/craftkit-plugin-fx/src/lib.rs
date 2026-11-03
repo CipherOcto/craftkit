@@ -67,6 +67,12 @@
 //! when the composition hides the shy layers, and a locked layer is
 //! not edited (the module `switches`).
 //!
+//! And the **blending mode** of a layer is here: the tree's own
+//! thirty-eight modes, in the tree's own order, found by a name with
+//! everything that is not a letter or a digit taken out, and stepped
+//! one mode at a time with the list wrapping around (the module
+//! `blend`).
+//!
 //! And the **spatial** property is here too: a property whose value is
 //! a **point** does not move along the straight line from one keyframe
 //! to the next, it follows a **path** in the plane, and the time maps
@@ -88,11 +94,13 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+mod blend;
 mod expressions;
 mod keys;
 mod spatial;
 mod switches;
 
+pub use blend::SetBlend;
 pub use expressions::{DeleteExpression, SetExpression};
 use keys::keys_of;
 pub use keys::{RemoveKeyframe, SetAuto, SetContinuous, SetInterpolation, SetKeyframe, ValueAt};
@@ -211,6 +219,7 @@ impl AddLayer {
         let data = serde_json::json!({
             "props": serde_json::json!({}),
             "switches": crate::switches::Switches::default().to_json(),
+            "blend_mode": "Normal",
         });
         let id =
             session.document_mut()?.add_node_with_under(Some(comp), name.clone(), "fx.layer", None, data);
