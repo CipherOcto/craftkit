@@ -73,6 +73,12 @@
 //! one mode at a time with the list wrapping around (the module
 //! `blend`).
 //!
+//! And the **parent** of a layer is here: a layer may be under another
+//! layer, and the chain of parents may not be a **circle** — a layer
+//! under a layer under itself would carry itself forever, and the
+//! refusal comes before the edit, so a refused parenting changes
+//! nothing (the module `parent`).
+//!
 //! And the **spatial** property is here too: a property whose value is
 //! a **point** does not move along the straight line from one keyframe
 //! to the next, it follows a **path** in the plane, and the time maps
@@ -97,6 +103,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 mod blend;
 mod expressions;
 mod keys;
+mod parent;
 mod spatial;
 mod switches;
 
@@ -104,6 +111,7 @@ pub use blend::SetBlend;
 pub use expressions::{DeleteExpression, SetExpression};
 use keys::keys_of;
 pub use keys::{RemoveKeyframe, SetAuto, SetContinuous, SetInterpolation, SetKeyframe, ValueAt};
+pub use parent::{DeleteParent, SetParent};
 pub use switches::{SetCompSwitch, SetSwitch, SwitchesEvaluator};
 
 /// The compositing layer.
