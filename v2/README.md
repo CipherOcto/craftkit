@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2589 tests.** The MCP server links **all fifteen batteries** in, so the
+**2601 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2589 tests
+cargo test          # 2601 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3779,6 +3779,7 @@ so.
 | the **merges** of a sheet | **built.** A range of cells may be one cell, and a covered cell may not be written to (§342) | §342 |
 | the **sizes** of a sheet | **built.** A row has a height and a column has a width, and a size of nothing is refused (§343) | §343 |
 | the **properties** of a paragraph | **built.** A paragraph may stand, be indented and have space around it (§344) | §344 |
+| the **hiding** of a row and a column | **built.** A row and a column may be hidden, and a hidden row is still a row (§345) | §345 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23625,3 +23626,64 @@ some runs.
   the characters of a run — a letter at a time — and its paragraph
   indents cancel them. Here a run carries a length, a bold and an
   italic, and the indents of a paragraph are the paragraph's own.
+
+## 345. The hiding of a row and a column
+
+A row may be **hidden** and a column may be hidden, and a hidden one is
+still there: its cells are still there, they still hold what they hold,
+and they are still worked out. The tree's hidden row is not a row that
+is gone; it is a row that is not shown.
+
+### What was built
+
+- The command `grid.row.hide` hides a row and the command
+  `grid.row.show` shows it again.
+- The command `grid.column.hide` hides a column and the command
+  `grid.column.show` shows it again.
+- A row or a column that is **already** hidden may not be hidden again
+  and one that is **not** hidden may not be shown: a command that does
+  nothing did not do anything.
+
+### What the port found
+
+- **The tree's hidden row is a flag on the row and this tree's is a
+  list on the sheet.** The tree's sheet carries a line of information
+  for every row, hidden or not, and the hidden flag is on that line.
+  Here a sheet carries the **list** of the rows that are hidden and the
+  list of the columns that are hidden, and a row that is not on the
+  list is shown.
+- **The tree's hidden row has its own size.** The tree's row of no
+  height is a hidden row, and the tree's height command and its hide
+  command are two ways of saying the same thing. Here they are not: a
+  size of nothing is **refused** (§343) and the hiding is a fact of
+  its own.
+- **The tree's `SUBTOTAL` leaves the hidden rows out and this tree's
+  formulas do not.** The tree's `SUBTOTAL` skips the hidden rows when
+  the function number says so, and its `SUM` does not. This tree has
+  no `SUBTOTAL` — so nothing here changes what a formula reads, and a
+  hidden row is a row that is not shown and that is all it is.
+
+### What it cost
+
+- **Twelve tests** in the grid battery (`tests/hiding.rs`): a row
+  being hidden, a hidden row still being a row, a row that is already
+  hidden refused, a hidden row being shown, a row that is not hidden
+  refused, a column being hidden and shown, a column that is already
+  hidden refused, a column that is not hidden refused, a column that is
+  not a column refused, a row that is not there refused, a node that is
+  not a sheet refused, and the hiding being saved.
+- **Four new commands**: `grid.row.hide`, `grid.row.show`,
+  `grid.column.hide` and `grid.column.show`. The grid battery now
+  carries **42** commands and the MCP server **455**.
+
+### What it does not settle
+
+- **The tree's `SUBTOTAL` is not here**, and it is the one thing that
+  reads the hidden rows. It is a function of its own, with its own
+  rules about the nested totals it leaves out, and it is not a
+  function of this tree yet.
+- **The tree hides a row and the rows above it.** The tree's
+  `home.hideRows` hides the rows that are chosen and the tree's
+  filter hides the rows that do not match. Here a row is hidden by
+  itself, and a filter that hides rows is a thing this tree has not
+  got.
