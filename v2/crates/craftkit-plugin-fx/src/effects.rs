@@ -52,7 +52,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session, Text};
 
 /// The **kind** of a parameter, and what it holds.
 #[derive(Clone, Copy)]
@@ -231,6 +231,104 @@ pub fn spec_of(id: &str) -> Option<&'static EffectSpec> {
     CATALOGUE.iter().find(|spec| spec.id.eq_ignore_ascii_case(wanted))
 }
 
+/// **Switch** one effect of a layer off or on.
+///
+/// The tree's `effect.toggle`: the values of the effect stay where they
+/// are, and only the switch changes. When no value is given the
+/// switch is **toggled** — the tree's own rule.
+#[derive(Command)]
+#[command(id = "fx.effect.toggle", area = "fx", layer = "fx", icon = "power", mutates, undoable)]
+pub struct ToggleEffect {
+    /// The layer the effect is on.
+    pub layer: NodeRef,
+    /// Which effect it is, counting from one.
+    pub effect: Number,
+    /// Whether it runs. Without it the switch is toggled.
+    pub on: Option<Bool>,
+}
+
+impl ToggleEffect {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "fx.effect.toggle".to_string();
+        let layer = self.layer.0;
+        let Some(node) = session.document().node(layer) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{layer}`"),
+            });
+        };
+        if node.kind != "fx.layer" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+            });
+        }
+        let index = self.effect.0;
+        if !index.is_finite() || index < 1.0 || index.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("an effect is counted from one: {index} is not one"),
+            });
+        }
+        let index = index as usize;
+        let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+        let mut effects = match props.get("effects") {
+            Some(effects) if effects.is_array() => effects.as_array().cloned().unwrap_or_default(),
+            Some(_) => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the effects of the layer `{layer}` are not a list"),
+                });
+            }
+            None => Vec::new(),
+        };
+        if index > effects.len() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no effect number {index} on the layer `{layer}`"),
+            });
+        }
+        let was = effects[index - 1].get("enabled").and_then(|enabled| enabled.as_bool()).unwrap_or(true);
+        let now = self.on.map(|on| on.0).unwrap_or(!was);
+        effects[index - 1]["enabled"] = serde_json::json!(now);
+        props["effects"] = serde_json::json!(effects);
+        if let Some(node) = session.document_mut()?.node_mut(layer) {
+            node.data["props"] = props;
+        }
+        Ok(Outcome::changed(format!(
+            "the effect number {index} of the layer `{layer}` is now {}",
+            if now { "on" } else { "off" }
+        ))
+        .with_data(serde_json::json!({
+            "layer": layer,
+            "effect": index,
+            "enabled": now,
+        })))
+    }
+}
+
+/// The **effects** of a layer that **run**.
+///
+/// An effect runs when it is **enabled** and the layer's own effects
+/// switch is **on**: the switch of the layer says whether its effects
+/// run at all, and the switch of the effect says whether this one
+/// does.
+pub fn running_effects(node: &Node, effects_switch: bool) -> usize {
+    if !effects_switch {
+        return 0;
+    }
+    let Some(effects) = node.data.get("props").and_then(|props| props.get("effects")) else {
+        return 0;
+    };
+    let Some(effects) = effects.as_array() else {
+        return 0;
+    };
+    effects
+        .iter()
+        .filter(|effect| effect.get("enabled").and_then(|enabled| enabled.as_bool()).unwrap_or(true))
+        .count()
+}
+
 /// The **names** of the effects there are.
 fn names() -> String {
     CATALOGUE.iter().map(|spec| spec.id).collect::<Vec<_>>().join(", ")
@@ -321,9 +419,9 @@ impl AddEffect {
                 message: format!("there is no effect `{}`: the effects are {}", wanted.trim(), names()),
             });
         };
-        // The **instance**: the effect's own name and its parameters at
-        // their defaults.
-        let mut instance = serde_json::json!({ "effect": spec.id });
+        // The **instance**: the effect's own name, its own switch and
+        // its parameters at their defaults.
+        let mut instance = serde_json::json!({ "effect": spec.id, "enabled": true });
         for param in spec.params {
             instance[param.id] = param.kind.default_value();
         }

@@ -359,6 +359,9 @@ impl SwitchesEvaluator {
                 let drawn = switches.video && !shy && (!any_solo || switches.solo);
                 let heard = switches.audio && (!any_solo || switches.solo);
                 let editable = !switches.locked && !shy;
+                // The **effects** that run: the ones that are enabled
+                // and the layer's own effects switch is on.
+                let effects = crate::effects::running_effects(layer, switches.effects);
                 plan.items.push(PlanItem {
                     node: layer.id,
                     kind: "fx.switches".to_string(),
@@ -368,6 +371,7 @@ impl SwitchesEvaluator {
                         "heard": heard,
                         "editable": editable,
                         "any_solo": any_solo,
+                        "effects": effects,
                         "hide_shy": hide_shy,
                     }),
                 });
