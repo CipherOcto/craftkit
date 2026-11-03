@@ -32,6 +32,10 @@
 //! the rows the filter hides are derived from it (the module
 //! `filters`).
 //!
+//! And a sheet may carry **conditional formats**: a range, a criterion
+//! and a format, and the cells that match are written with it (the
+//! module `conditional`).
+//!
 //! # The mapping
 //!
 //! | the application | v2 |
@@ -144,6 +148,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod conditional;
 mod dates;
 mod fill;
 mod filters;
@@ -165,6 +170,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+pub use conditional::{CheckConditional, ClearConditional, SetConditional};
 use fill::FillRange;
 pub use filters::{ClearFilter, FilteredRows, SetFilter};
 use flash::FlashFill;
@@ -268,7 +274,10 @@ fn book_of(document: &Document) -> Book {
             let op = filter.get("op").and_then(|op| op.as_str()).unwrap_or("=").to_string();
             let value = filter.get("value").and_then(|value| value.as_str()).unwrap_or("").to_string();
             if let Some(column) = column {
-                book.set_filter(&node.name, formula::Filter { column, op, value });
+                book.set_filter(
+                    &node.name,
+                    formula::Filter { column, criterion: formula::Criterion { op, value } },
+                );
             }
         }
     }
@@ -1009,9 +1018,6 @@ impl CellText {
         }
         let name = node.name.clone();
         let cells = cells_of(node);
-        // The **format** the cell is written with: the format of the
-        // style it names, if it names one, and its own otherwise.
-        let format = format_of(session, sheet, &cells, cell);
         // The **value**: the one the cell holds, or the one its formula
         // computes.
         let value = match cells.get(cell) {
@@ -1024,6 +1030,14 @@ impl CellText {
                 (None, None) => Value::Empty,
             },
             None => Value::Empty,
+        };
+        // The **format** the cell is written with: the **conditional**
+        // format that matches it, if there is one — a rule is on top
+        // of a fact — and otherwise the format of the style it names,
+        // if it names one, and its own otherwise.
+        let format = match conditional::format_for(node, cell, &value) {
+            Some(code) => Format::parse(&code).unwrap_or(Format::General),
+            None => format_of(session, sheet, &cells, cell),
         };
         let text = format.text(&value, system_of(session, sheet));
         Ok(Outcome::new(format!("{} shows `{text}`", cell.to_text())).with_data(
@@ -1356,6 +1370,9 @@ craftkit_sdk::plugin_anchor!(
     SetFilter,
     ClearFilter,
     FilteredRows,
+    SetConditional,
+    ClearConditional,
+    CheckConditional,
     ClearCell,
     ReadPrecedents,
     ReadDependents,

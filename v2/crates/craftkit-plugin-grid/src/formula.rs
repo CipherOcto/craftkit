@@ -376,25 +376,31 @@ pub struct Name {
     pub area: Area,
 }
 
-/// A **filter**: a column of a sheet and a criterion.
+/// A **criterion**: an operation and a value.
 ///
-/// The criterion is an **operation** and a **value**, and the value may
-/// hold the tree's `*` wildcard — `*abc*` is "contains abc" and `abc*`
-/// is "begins with abc".
+/// The value may hold the tree's `*` wildcard — `*abc*` is "contains
+/// abc" and `abc*` is "begins with abc".
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Filter {
-    /// The column it filters, counted from zero.
-    pub column: u32,
+pub struct Criterion {
     /// The operation: `=`, `!=`, `<`, `<=`, `>` or `>=`.
     pub op: String,
     /// The value it compares with.
     pub value: String,
 }
 
+/// A **filter**: a column of a sheet and a criterion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Filter {
+    /// The column it filters, counted from zero.
+    pub column: u32,
+    /// The criterion the column's cells are judged by.
+    pub criterion: Criterion,
+}
+
 /// The **operations** a filter may have.
 pub const FILTER_OPS: [&str; 6] = ["=", "!=", "<", "<=", ">", ">="];
 
-impl Filter {
+impl Criterion {
     /// Whether the operation is one of the tree's own.
     pub fn op_is_known(op: &str) -> bool {
         FILTER_OPS.contains(&op)
@@ -1085,7 +1091,7 @@ impl Book {
                 .get(CellRef { col: filter.column, row: cell.row })
                 .and_then(|cell| cell.value.clone())
                 .unwrap_or(Value::Empty);
-            if !filter.matches(&value) {
+            if !filter.criterion.matches(&value) {
                 rows.push(row);
             }
         }

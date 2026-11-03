@@ -41,7 +41,7 @@ use craftkit_derive::Command;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
 
-use crate::formula::{CellRef, FILTER_OPS, Filter};
+use crate::formula::{CellRef, Criterion, FILTER_OPS, Filter};
 
 /// **Filter** a sheet by a column.
 ///
@@ -85,7 +85,7 @@ impl SetFilter {
             });
         };
         let op = self.op.0.trim().to_string();
-        if !Filter::op_is_known(&op) {
+        if !Criterion::op_is_known(&op) {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!(
@@ -101,16 +101,17 @@ impl SetFilter {
                 message: format!("the operation `{op}` compares numbers, and `{value}` is not one"),
             });
         }
-        let filter = Filter { column: index, op, value: value.clone() };
+        let filter = Filter { column: index, criterion: Criterion { op, value: value.clone() } };
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
             node.data["filter"] = json!({
                 "column": column,
-                "op": filter.op,
+                "op": filter.criterion.op,
                 "value": value,
             });
         }
-        Ok(Outcome::changed(format!("the sheet `{sheet}` is filtered by the column {column}"))
-            .with_data(json!({ "sheet": sheet, "column": column, "op": filter.op, "value": value })))
+        Ok(Outcome::changed(format!("the sheet `{sheet}` is filtered by the column {column}")).with_data(
+            json!({ "sheet": sheet, "column": column, "op": filter.criterion.op, "value": value }),
+        ))
     }
 }
 
