@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2133 tests.** The MCP server links **all fifteen batteries** in, so the
+**2138 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3733,6 +3733,7 @@ so.
 | the **date system** of a workbook | **built.** A workbook says which calendar its serials are counted in, and every date in it is read in that calendar (§296) | §296 |
 | the **continuous** keyframe | **built.** A keyframe's two sides may be locked to each other, so the curve is smooth at it (§297) | §297 |
 | the **custom lists** of a workbook | **built.** A workbook may carry lists of your own, and a fill steps through one (§298) | §298 |
+| the **trim** of a linked group | **built.** A linked group is trimmed as one edit, and a member that cannot take the delta refuses it (§299) | §299 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20534,10 +20535,10 @@ that are **the same thing on two tracks** — a picture and its sound.
 
 ### What it does not settle
 
-- **The trim of a linked clip is refused, and it is not here yet.** The
-  tree trims the group as **one edit**, with the delta that every
-  member can take — the smallest of their bounds — and it applies
-  that delta to all of them.
+- **The trim of a linked clip is refused, and it is not here yet** —
+  and it is now (§299): the tree trims the group as **one edit**, with
+  the delta that every member can take — the smallest of their bounds —
+  and it applies that delta to all of them.
 - **The split of a linked clip is refused, and it is not here yet.**
   The tree splits the group as one edit and the right-hand pieces get
   a **new** link, so that they stay linked to each other and not to
@@ -20747,3 +20748,55 @@ it is empty.
 - **The tree's list is written in a user interface and not by a
   command**: the tree's field is the *Options › Custom Lists* of a
   spreadsheet, and here the words are given one per line.
+
+## 299. The trim of a linked group
+
+§295 gave the film battery the **link** between two clips, and it
+refused the trim of a linked clip. The tree has no such refusal.
+
+### What was built
+
+- The trim of a linked clip trims the **whole group**: every member
+  takes the same delta, and the media of every member moves with it.
+- A member that **cannot take** the delta refuses the whole trim, and
+  the refusal names the member.
+- A clip that is **not** linked is trimmed on its own, as before.
+
+### What the port found
+
+- **The tree's trim of a group is one edit and not many.** The tree's
+  `clamp_trim_linked` and `trim_delta_linked` take the **delta** every
+  member can take: the tree computes the bound of each member and uses
+  the smallest, so the picture and the sound are trimmed by the same
+  number of frames and stay in step.
+- **The tree clamps and this tree refuses.** The tree's trim computes
+  the biggest delta the trim may have and uses that, so a drag that
+  goes too far stops at the bound and the editor never says that it
+  did (§287's rule, §285's too). Here a trim that a member cannot take
+  is an **error** that says which member stopped it, and the group is
+  as it was.
+- **The tree's group trim is the same delta for every member** — the
+  tree's `trim_delta_linked` returns one delta for the whole group and
+  every member is trimmed by it. So a picture and its sound are
+  trimmed by the same number of frames, and the media they play moves
+  with them.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/linked_trim.rs`): the
+  partner is trimmed too, the in edge moves the media of every member,
+  a member that cannot take it refuses the trim, the outcome names the
+  group, and a clip that is not linked is trimmed on its own.
+- **No new command**: this is what `film.clip.trim` does with a linked
+  clip. The film battery still carries **21** commands and the MCP
+  server **381**.
+
+### What it does not settle
+
+- **The tree's clamp is not here**: the tree's trim takes the biggest
+  delta it may and says nothing about it; here the trim is refused and
+  the member that could not take it is named.
+- **The split of a linked group is refused, and it is not here yet.**
+  The tree splits the group as one edit and the right-hand pieces get a
+  **new** link, so that they stay linked to each other and not to the
+  left-hand ones.
