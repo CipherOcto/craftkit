@@ -41,7 +41,9 @@
 //! does not have.
 //!
 //! The tree's **rounding** is the tree's: a number is rounded away from
-//! zero, so `0.125` with two decimals is `0.13` and not `0.12`. The
+//! zero, so `0.125` with two decimals is `0.13` and not `0.12`. And a
+//! negative number that rounds to zero is written **without its sign**:
+//! the sign of a number that is not there is not written. The
 //! tree's **General** format fits the number to the width of the
 //! column, which is a thing about a screen and not about a document;
 //! here the General format is the number as it is.
@@ -441,7 +443,9 @@ fn currency(number: f64, symbol: &str, before: bool, decimals: usize, thousands:
     if !number.is_finite() {
         return general(number);
     }
-    let sign = if number < 0.0 { "-" } else { "" };
+    let factor = 10f64.powi(decimals as i32);
+    let scaled = (number.abs() * factor).round();
+    let sign = if number < 0.0 && scaled > 0.0 { "-" } else { "" };
     let written = fixed(number.abs(), decimals, thousands, false);
     if before { format!("{sign}{symbol}{written}") } else { format!("{sign}{written}{symbol}") }
 }
@@ -480,7 +484,10 @@ fn fixed(number: f64, decimals: usize, thousands: bool, percent: bool) -> String
     let integer = units / divisor;
     let fraction = units % divisor;
     let mut out = String::new();
-    if number < 0.0 {
+    // The tree's rule: a negative number that **rounds to zero** shows
+    // no sign at all — the sign of a number that is not there is not
+    // written.
+    if number < 0.0 && units > 0 {
         out.push('-');
     }
     out.push_str(&grouped(integer, thousands));
