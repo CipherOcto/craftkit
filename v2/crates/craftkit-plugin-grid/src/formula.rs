@@ -317,6 +317,9 @@ pub enum Expr {
         /// The last corner, and its anchoring.
         end: Anchor,
     },
+    /// A **name**: a word that is not a cell and not a function, and
+    /// that stands for a range of cells.
+    Name(String),
     /// A function and its arguments.
     Call(String, Vec<Expr>),
     /// A negation.
@@ -348,6 +351,18 @@ impl Reference {
     }
 }
 
+/// A **name**: what a name stands for.
+///
+/// A name is a range of cells in a sheet. It is not a formula and not
+/// another name, so a name may not be a cycle.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Name {
+    /// The sheet the range is in.
+    pub sheet: String,
+    /// The area of cells.
+    pub area: Area,
+}
+
 /// A formula that did not parse.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FormulaError {
@@ -377,13 +392,13 @@ pub fn parse(text: &str) -> Result<Expr, FormulaError> {
 }
 
 /// The cells and ranges a formula reads.
-pub fn precedents(expression: &Expr) -> Vec<Reference> {
+pub fn precedents(expression: &Expr, names: &BTreeMap<String, Name>) -> Vec<Reference> {
     let mut found: Vec<Reference> = Vec::new();
-    collect_precedents(expression, &mut found);
+    collect_precedents(expression, names, &mut found);
     found
 }
 
-fn collect_precedents(expression: &Expr, found: &mut Vec<Reference>) {
+fn collect_precedents(expression: &Expr, names: &BTreeMap<String, Name>, found: &mut Vec<Reference>) {
     match expression {
         Expr::Cell { sheet, anchor } => {
             found.push(Reference { sheet: sheet.clone(), area: Area::new(anchor.cell, anchor.cell) })
@@ -391,15 +406,22 @@ fn collect_precedents(expression: &Expr, found: &mut Vec<Reference>) {
         Expr::Range { sheet, start, end } => {
             found.push(Reference { sheet: sheet.clone(), area: Area::new(start.cell, end.cell) })
         }
-        Expr::Call(_, arguments) => {
-            for argument in arguments {
-                collect_precedents(argument, found);
+        Expr::Name(name) => {
+            // A name stands for a range, and the range is what the
+            // formula reads.
+            if let Some(name) = names.get(name) {
+                found.push(Reference { sheet: Some(name.sheet.clone()), area: name.area });
             }
         }
-        Expr::Negate(inner) => collect_precedents(inner, found),
+        Expr::Call(_, arguments) => {
+            for argument in arguments {
+                collect_precedents(argument, names, found);
+            }
+        }
+        Expr::Negate(inner) => collect_precedents(inner, names, found),
         Expr::Binary(_, left, right) => {
-            collect_precedents(left, found);
-            collect_precedents(right, found);
+            collect_precedents(left, names, found);
+            collect_precedents(right, names, found);
         }
         Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => {}
     }
@@ -675,6 +697,13 @@ impl Parser {
             }
             return Ok(Expr::Call(word.to_ascii_uppercase(), arguments));
         }
+        // A **name**: a word that is not a cell. The parser does not
+        // know the names of the workbook — it is a parser and not a
+        // book — so a name is a word here and is resolved when the
+        // formula is worked out.
+        if Anchor::parse(&word).is_none() {
+            return Ok(Expr::Name(word));
+        }
         self.reference_to(word, None)
     }
 
@@ -871,6 +900,8 @@ impl Cells {
 pub struct Book {
     /// The sheets, by name.
     sheets: BTreeMap<String, Cells>,
+    /// The **names**, by name.
+    names: BTreeMap<String, Name>,
     /// The **date system** of the workbook the sheets are in.
     system: crate::dates::System,
 }
@@ -878,7 +909,17 @@ pub struct Book {
 impl Book {
     /// A workbook in a **date system**.
     pub fn in_system(system: crate::dates::System) -> Book {
-        Book { sheets: BTreeMap::new(), system }
+        Book { sheets: BTreeMap::new(), names: BTreeMap::new(), system }
+    }
+
+    /// Put a **name** in the workbook.
+    pub fn add_name(&mut self, name: &str, name_of: Name) {
+        self.names.insert(name.to_string(), name_of);
+    }
+
+    /// The **names** of the workbook.
+    pub fn names(&self) -> &BTreeMap<String, Name> {
+        &self.names
     }
 
     /// Put a sheet in the workbook.
@@ -907,7 +948,7 @@ impl Book {
         }
         being.push((sheet.to_string(), cell));
         let mut found = false;
-        for reference in precedents(&expression) {
+        for reference in precedents(&expression, &self.names) {
             let name = reference.sheet.as_deref().unwrap_or(sheet);
             for row in reference.area.start.row..=reference.area.end.row {
                 for col in reference.area.start.col..=reference.area.end.col {
@@ -990,6 +1031,19 @@ impl Book {
                 }
                 Value::Text(format!("{} values", values.len()))
             }
+            Expr::Name(name) => {
+                let Some(name) = self.names.get(name) else {
+                    return Value::Error(format!("there is no name `{name}`"));
+                };
+                let area = name.area;
+                let mut values = Vec::new();
+                for row in area.start.row..=area.end.row {
+                    for col in area.start.col..=area.end.col {
+                        values.push(self.value_of_guarded(&name.sheet, CellRef { col, row }, being));
+                    }
+                }
+                Value::Text(format!("{} values", values.len()))
+            }
             Expr::Negate(inner) => match self.evaluate(sheet, inner, being).as_number() {
                 Some(number) => Value::Number(-number),
                 None => Value::Error("#VALUE!".to_string()),
@@ -1022,6 +1076,20 @@ impl Book {
                     for row in area.start.row..=area.end.row {
                         for col in area.start.col..=area.end.col {
                             let value = self.value_of_guarded(name, CellRef { col, row }, being);
+                            if let Some(number) = value.as_number() {
+                                numbers.push(number);
+                            }
+                        }
+                    }
+                }
+                Expr::Name(name) => {
+                    let Some(name) = self.names.get(name) else {
+                        return Value::Error(format!("there is no name `{name}`"));
+                    };
+                    let area = name.area;
+                    for row in area.start.row..=area.end.row {
+                        for col in area.start.col..=area.end.col {
+                            let value = self.value_of_guarded(&name.sheet, CellRef { col, row }, being);
                             if let Some(number) = value.as_number() {
                                 numbers.push(number);
                             }
@@ -1203,6 +1271,7 @@ fn expression_text(expression: &Expr, min_precedence: u8) -> String {
                 "FALSE".to_string()
             }
         }
+        Expr::Name(name) => name.clone(),
         Expr::Cell { sheet, anchor } => format!("{}{}", sheet_prefix(sheet), anchor.to_text()),
         Expr::Range { sheet, start, end } => {
             format!("{}{}:{}", sheet_prefix(sheet), start.to_text(), end.to_text())
@@ -1270,6 +1339,9 @@ pub struct ShiftError {
 pub fn shift(expression: &Expr, dr: i64, dc: i64) -> Result<Expr, ShiftError> {
     match expression {
         Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => Ok(expression.clone()),
+        // A **name** does not move: it stands for a range and not for
+        // a place, so there is nothing relative in it.
+        Expr::Name(_) => Ok(expression.clone()),
         Expr::Cell { sheet, anchor } => {
             let moved = anchor.moved(dr, dc).ok_or_else(|| ShiftError {
                 message: format!("the reference {} would leave the sheet", anchor.to_text()),

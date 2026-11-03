@@ -13,6 +13,10 @@
 //! - the **value** of a formula cell, which the application computes and
 //!   **stores** beside the formula.
 //!
+//! And a workbook may carry **names**: a word that stands for a range of
+//! cells, and a formula may use the word where it would use the range
+//! (the module `names`).
+//!
 //! # The mapping
 //!
 //! | the application | v2 |
@@ -131,6 +135,7 @@ mod flash;
 mod format;
 mod formula;
 mod fractions;
+mod names;
 mod sections;
 mod styles;
 mod tabs;
@@ -145,6 +150,7 @@ use fill::FillRange;
 use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
+pub use names::{DeleteName, SetName};
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
 pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
 pub use validation::{CheckValidation, ClearValidation, SetValidation};
@@ -222,6 +228,16 @@ fn book_of(document: &Document) -> Book {
     let mut book = Book::in_system(system);
     for node in document.walk().filter(|node| node.kind == "grid.sheet") {
         book.add(&node.name, cells_of(node));
+    }
+    // The **names** of the workbook: what a name stands for.
+    if let Some(workbook) = document.walk().find(|node| node.kind == "grid.workbook")
+        && let Some(names) = workbook.data.get("names").and_then(|names| names.as_object())
+    {
+        for (name, refers_to) in names {
+            let Some(text) = refers_to.as_str() else { continue };
+            let Ok((sheet, area)) = names::parse_refers_to(text) else { continue };
+            book.add_name(name, formula::Name { sheet, area });
+        }
     }
     book
 }
@@ -1029,7 +1045,7 @@ impl SetFormula {
             });
         };
         node.data["cells"] = cells_into(&cells);
-        let precedents = formula::precedents(&expression);
+        let precedents = formula::precedents(&expression, book.names());
         Ok(Outcome::changed(format!("set the formula in {}", cell.to_text())).with_data(json!({
             "sheet": sheet,
             "cell": cell.to_text(),
@@ -1107,7 +1123,8 @@ impl ReadPrecedents {
             id: "grid.precedents".to_string(),
             message: error.message,
         })?;
-        let areas = formula::precedents(&expression);
+        let book = book_of(session.document());
+        let areas = formula::precedents(&expression, book.names());
         Ok(Outcome::new(format!("{} area(s)", areas.len())).with_data(json!({
             "sheet": sheet,
             "cell": cell.to_text(),
@@ -1147,13 +1164,14 @@ impl ReadDependents {
         // The dependents of a cell are the cells that read it, in this
         // sheet **or in another**: a formula in `Sheet2` that reads
         // `Sheet1!A1` depends on it.
+        let book = book_of(session.document());
         let mut dependents: Vec<Json> = Vec::new();
         for sheet_node in session.document().walk().filter(|node| node.kind == "grid.sheet") {
             let cells = cells_of(sheet_node);
             for (other, entry) in cells.iter() {
                 let Some(formula) = &entry.formula else { continue };
                 let Ok(expression) = formula::parse(formula) else { continue };
-                for reference in formula::precedents(&expression) {
+                for reference in formula::precedents(&expression, book.names()) {
                     // A reference in another sheet does not read this cell.
                     if reference.sheet.as_deref().is_some_and(|other| other != name) {
                         continue;
@@ -1278,6 +1296,8 @@ craftkit_sdk::plugin_anchor!(
     AddSheet,
     SetCell,
     SetFormula,
+    SetName,
+    DeleteName,
     ClearCell,
     ReadPrecedents,
     ReadDependents,
