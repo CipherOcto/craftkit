@@ -282,8 +282,9 @@
 //!
 //! And a **range** of a track may be faded: a clip that starts inside
 //! the range fades in and a clip that ends inside it fades out — the
-//! tree's `create_fades` over a selection, and not over a clip (the
-//! module `fades`).
+//! tree's `create_fades` over a selection, and not over a clip. And a
+//! range that covers the **boundary** between two clips makes them
+//! **overlap**: the tree's crossfade (the module `fades`).
 //!
 //! **The tree's fade is to the playhead and this tree's is to a
 //! place.** The tree's "Fade to Start" and "Fade to End" fade the clip
