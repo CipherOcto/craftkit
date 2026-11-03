@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2152 tests.** The MCP server links **all fifteen batteries** in, so the
+**2158 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3736,6 +3736,7 @@ so.
 | the **trim** of a linked group | **built.** A linked group is trimmed as one edit, and a member that cannot take the delta refuses it (§299) | §299 |
 | the **split** of a linked group | **built.** A linked group is split as one edit, and the right-hand pieces are a new group (§300) | §300 |
 | the **frame hold** of a clip | **built.** A clip may hold a frame of its media to the end of the clip, and its material is then shorter than the clip (§301) | §301 |
+| the **transitions** of a split | **built.** A transition that follows a cut joins the piece after it, and one that spans the cut keeps the piece before it (§302) | §302 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20847,9 +20848,11 @@ is the last of the tree's link rules.
 
 ### What it does not settle
 
-- **The tree's transitions are not here**: the tree's split moves the
-  transitions that follow the cut onto the right-hand piece and takes
-  away the ones that span it. Here a split is a split.
+- **The tree's transitions are not here** — and they are now (§302):
+  the tree's split moves the transitions that follow the cut onto the
+  right-hand piece, and it takes away the ones that span it only when
+  they are a fade to nothing. Here a split moves the transitions that
+  follow it, and nothing is taken away.
 - **The tree's group split is a **razor** of the whole group**: the
   tree's razor may be given a track and cuts everything on it, and
   the groups it cuts are made new links as well. Here a split is of
@@ -20927,4 +20930,62 @@ media up to a point and then **hold** one frame to the end of itself.
   insert a new clip that holds a frame for so many seconds. Here a
   clip that holds a frame is a clip that is already there, and making
   one is a clip that is added.
+
+## 302. The transitions of a split
+
+§293 gave the film battery the **transitions** of a track. §300 gave it
+the **split** of a linked group. This is where the two meet: a cut
+through a clip has to answer for the transitions that sit over it.
+
+### What was built
+
+- A split moves the **transitions that follow it**: a transition that
+  begins at or after the cut now joins the piece after the cut.
+- The split **says** which transitions it moved, so that an agent
+  driving it does not have to go looking.
+
+### What the port found
+
+- **The tree's rule is about the transition's start, and not about the
+  cut it sits on.** The tree's `split_track_at` moves a transition
+  whose `start` is at or after the cut and that names the split clip as
+  its **outgoing** side. A transition that **spans** the cut — its
+  span covers it — keeps the piece before it, and the two clips it
+  joins are then no longer next to each other. The tree allows that,
+  and so does this tree.
+- **The tree's removal of a spanning transition is for the fades to
+  nothing.** The tree's `retain` drops a transition that spans the cut
+  and names the split clip only when it does **not** join two clips —
+  that is, a fade in from nothing or a fade out to nothing. Every
+  transition in this tree joins two clips, so here nothing is taken
+  away. The tree's own sentence — *a transition spanning the cut on
+  this clip's interior is removed* — is about the fades, and the
+  earlier draft of this README said it was about every transition,
+  which was wrong.
+- **Only the outgoing side moves.** The tree rewrites `from` and never
+  `to`: a transition that ends at the split clip still ends at the
+  piece before the cut, because that is where the cut it sits on now
+  is.
+
+### What it cost
+
+- **Six tests** in the film battery (`tests/split_transitions.rs`): a
+  transition after the cut joins the piece after it, a transition that
+  spans the cut keeps the piece before it, a transition that ends at
+  the clip is not moved, a transition of another cut is not touched,
+  the transitions of a linked group follow the cut on every track, and
+  the split says which transitions it moved.
+- **No new command**: this is what `film.clip.split` does. The film
+  battery still carries **23** commands and the MCP server **383**.
+
+### What it does not settle
+
+- **The tree's fades to nothing are not here**, so the tree's rule that
+  takes away a transition spanning the cut has nothing to take away.
+- **The tree's trim does not move the transitions here**: the tree
+  keeps a transition within the clips it joins after a trim, and it
+  moves them when a ripple or a speed change moves the cut. Here only
+  the split moves them.
+- **The tree's transitions carry a kind of their own** — a registry of
+  them — and this tree has the one the tree's default names.
 
