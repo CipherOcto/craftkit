@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2418 tests.** The MCP server links **all fifteen batteries** in, so the
+**2425 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2418 tests
+cargo test          # 2425 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3765,6 +3765,7 @@ so.
 | the **tabs** of a workbook | **built.** A sheet may be hidden, and its tab may be coloured (§328) | §328 |
 | the **validation** of a range of cells | **built.** A rule says what may be typed into a range, written for the first cell of it (§329) | §329 |
 | the **boxes** of a page | **built.** A page has five boxes, a chain where each falls back to the one before it (§330) | §330 |
+| the **rotation** of a page | **built.** A page may be turned, by a multiple of ninety degrees (§331) | §331 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22718,6 +22719,49 @@ the page is cut and where the artwork is.
   crop box does not come back.
 - **Nothing is drawn**: the boxes are the geometry of a page, and this
   tree's pdf battery renders nothing.
+
+## 331. The rotation of a page
+
+A page may be **turned**: `/Rotate` says by how many degrees, and a
+positive number turns the page **clockwise**.
+
+### What was built
+
+- The command `pdf.page.rotate` turns a page.
+- The command `pdf.page.rotation` says how a page is turned.
+
+### What the port found
+
+- **The degrees are a multiple of ninety.** The tree's command
+  truncates the amount it is given to the multiple of ninety in it —
+  forty-five degrees becomes no turn at all — and here the amount is
+  **refused**: a page turned by forty-five degrees is not a page that
+  is turned.
+- **The number is taken back into the circle.** A page turned four
+  times is a page not turned at all, and the tree's own rule is the
+  remainder: a negative turn is a turn the other way.
+- **The rotation may be inherited.** It is among the keys a page may
+  leave out and take from an ancestor, and the command says whether
+  the page has one of its own.
+
+### What it cost
+
+- **Seven tests** in the pdf battery (`tests/rotation.rs`): a page
+  that is not turned being at zero, a page being turned, a page turned
+  again being turned further, the number being taken back into the
+  circle, a negative amount turning the page the other way, an amount
+  that is not a multiple of ninety refused, and the rotation being
+  saved with the page.
+- **Two new commands**: `pdf.page.rotate` and `pdf.page.rotation`. The
+  pdf battery now carries **26** commands and the MCP server **424**.
+
+### What it does not settle
+
+- **Nothing is turned here**: the rotation is a number on a page, and
+  this tree's pdf battery renders nothing.
+- **The tree's rotation of many pages at once is not here**: the
+  tree's command takes a list of pages, and this tree's command turns
+  one page.
 
 ## 321. The frozen track
 
