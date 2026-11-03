@@ -15,6 +15,9 @@
 //!   `"$"#,##0.00` or `#,##0.00" kr"`;
 //! - the **fractions**: `# ?/?`, `# ??/??`, `?/?` and `# ?/4` — a
 //!   number written as the nearest fraction (the module `fractions`);
+//! - the **sections**: a code with a semicolon in it has a different
+//!   code for the positive numbers, the negative ones and the zero
+//!   (the module `sections`);
 //! - the **dates**: `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`,
 //!   `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`.
 //! - the **times**: `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`,
@@ -58,20 +61,24 @@
 //!   and nothing else, because a format is the only thing this tree
 //!   writes on a cell — and the format of a cell is still the cell's
 //!   own (the module `styles`).
-//! - **The tree's scientific formats are not here**, and neither are
-//!   its **sections** — a format with a different code for negative
-//!   numbers is not here. The tree's **currency** is here: a number
-//!   with a symbol on it, and the symbol is a literal in quotes. The
-//!   tree's **times** are here: a time is a fraction of a day and a
-//!   format, and the tree's clock shapes and its elapsed shapes are
-//!   both here.
+//! - **The tree's scientific formats are not here**. The tree's
+//!   **currency** is here: a number with a symbol on it, and the symbol
+//!   is a literal in quotes. The tree's **times** are here: a time is
+//!   a fraction of a day and a format, and the tree's clock shapes and
+//!   its elapsed shapes are both here.
 //! - **The tree's date formats are a language, and here they are a
 //!   list**: the nine shapes above are the ones this tree has, and a
 //!   date format that is not one of them is refused.
+//! - **The tree's sections are here, and the tree's conditions are
+//!   not**: a format may have a different code for the positive
+//!   numbers, the negative ones and the zero (the module `sections`),
+//!   but the sections are picked by the number's sign and by whether
+//!   it is zero, and not by a condition the code carries.
 
 use crate::dates::{self, Date};
 use crate::formula::Value;
 use crate::fractions;
+use crate::sections;
 
 /// The most characters a format code may have.
 ///
@@ -121,6 +128,18 @@ pub enum Format {
     },
     /// A **fraction**: a number written as a fraction.
     Fraction(fractions::Fraction),
+    /// A format with **sections**: a different code for the positive
+    /// numbers, the negative ones and the zero.
+    Sections {
+        /// The code of the positive numbers.
+        positive: Box<Format>,
+        /// The code of the negative numbers: the tree's second
+        /// section. It shows the absolute value, and the sign is not
+        /// written.
+        negative: Option<Box<Format>>,
+        /// The code of the zero.
+        zero: Option<Box<Format>>,
+    },
 }
 
 /// The **time formats** this tree knows.
@@ -329,6 +348,33 @@ impl Format {
         if code.is_empty() || code.eq_ignore_ascii_case("general") {
             return Some(Format::General);
         }
+        // A code with **sections** is a list of codes, and the list is
+        // split first: a section is a code of its own. A semicolon
+        // inside a literal in quotes is not a separator.
+        if code.contains(';') {
+            let parts = sections::split(code)?;
+            if parts.len() > 1 {
+                if parts.len() > 3 {
+                    return None;
+                }
+                // An **empty** section is refused: the tree's empty
+                // section shows nothing for the numbers it covers, and
+                // that is not a thing here.
+                if parts.iter().any(|part| part.is_empty()) {
+                    return None;
+                }
+                let positive = Box::new(Format::parse(&parts[0])?);
+                let negative = match parts.get(1) {
+                    Some(code) => Some(Box::new(Format::parse(code)?)),
+                    None => None,
+                };
+                let zero = match parts.get(2) {
+                    Some(code) => Some(Box::new(Format::parse(code)?)),
+                    None => None,
+                };
+                return Some(Format::Sections { positive, negative, zero });
+            }
+        }
         // A **date** is a shape of its own, and it is asked for before
         // the number: `yyyy` is not a number with two decimals. A
         // **time** is a shape of its own too.
@@ -382,6 +428,24 @@ impl Format {
                 }
                 // A fraction is a **number** written as a fraction.
                 Format::Fraction(fraction) => fractions::text(*number, fraction),
+                // A format with **sections**: the section that the
+                // number belongs to is the one that writes it.
+                Format::Sections { positive, negative, zero } => {
+                    if *number < 0.0
+                        && let Some(negative) = negative
+                    {
+                        // The tree's rule: the negative section shows
+                        // the absolute value, and the sign is not
+                        // written.
+                        negative.text(&Value::Number(number.abs()), system)
+                    } else if *number == 0.0
+                        && let Some(zero) = zero
+                    {
+                        zero.text(value, system)
+                    } else {
+                        positive.text(value, system)
+                    }
+                }
             },
             // A format does not change a text: the tree's text sections
             // are not here.
