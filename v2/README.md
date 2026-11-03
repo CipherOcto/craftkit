@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2540 tests.** The MCP server links **all fifteen batteries** in, so the
+**2555 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2540 tests
+cargo test          # 2555 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3775,6 +3775,7 @@ so.
 | the **markers** of a sequence | **built.** A sequence carries named places, with a colour and a kind (§338) | §338 |
 | the **effects** of a layer | **built.** The kit has a catalogue of effects, and an instance is a group with the parameters at their defaults (§339) | §339 |
 | the **editing** of a document | **built.** A paragraph's text may be changed, a block may be taken away, and a block may be moved (§340) | §340 |
+| the **names** of a workbook | **built.** A word may stand for a range of cells, and a formula may use the word (§341) | §341 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23365,3 +23366,79 @@ it says — and this tree could only do the first of those.
   the characters that were chosen. Here a run carries a length, a bold
   and an italic, and the interval algebra of a formatted range is a
   separate arc.
+
+## 341. The names of a workbook
+
+A **name** is a **word** that stands for a range of cells: `Sales` for
+the numbers in `Sheet1!A1:B4`. A formula may use the name where it
+would use the range, and the range is what the formula reads — so a
+name is a way of saying the same thing twice. The tree has them, and
+this tree had none.
+
+### What was built
+
+- The command `grid.name.set` writes a name, and the command
+  `grid.name.delete` takes one away.
+- A name is **refused** when it may not be used, and the refusal says
+  why: it is empty, it is longer than 255 characters, it does not
+  begin with a letter or an underscore or a backslash, it holds a
+  character a name may not hold, it looks like a cell address, it
+  looks like an R1C1 reference, or it is one of the constants.
+- A name stands for a range in a sheet that **exists**, and the range
+  **names its sheet**: `Sheet1!A1:B4`. A name is therefore never a
+  name for "the sheet it was written on", and it never moves.
+- The **formula engine** knows a name: a word that is not a cell and
+  not a function is a name, and it is resolved when the formula is
+  worked out. A name that is not there is an error in the cell, and
+  the error says which name is missing.
+- The **precedents** of a formula that uses a name are the cells of
+  the range the name stands for, so the cycle check sees through it.
+
+### What the port found
+
+- **The tree keeps its names in a hidden stash of the file.** The
+  tree's names are kept in the workbook's own list of defined names
+  and are written out in the file's format. Here they are in the
+  workbook's **payload**, which is where every other fact of a grid
+  lives.
+- **The tree renames a name in the formulas that use it.** The tree's
+  `rename_defined_name` goes through every formula of every sheet and
+  rewrites the word. Here a name is written with `grid.name.set` and
+  taken away with `grid.name.delete`, and a name that is **renamed** —
+  taken away and written again under another word — leaves the
+  formulas that used it reading a name that is not there. That is an
+  error in the cell, and the error says which name is missing.
+- **The tree's names are in two scopes and this tree's are in one.**
+  The tree has a name on a sheet and a name on the workbook, and the
+  sheet's own name wins. Here a name is **workbook**-wide: every
+  sheet may use it, and there is one place it lives.
+
+### What it cost
+
+- **Fifteen tests** in the grid battery (`tests/names.rs`): a name
+  being written, a name being a range, a name that is not there being
+  an error, a name being taken away, a name that is not there not
+  being taken away, a name being written again, a name that looks
+  like a cell refused, a name that looks like an R1C1 reference
+  refused, a name that is a constant refused, a name that does not
+  begin with a letter refused, a range that does not name its sheet
+  refused, a range in a sheet that is not there refused, a node that
+  is not a workbook refused, a name being workbook-wide, and the name
+  being saved.
+- **The formula engine learned a name.** A word that is not a cell is
+  now an expression of its own, and the book carries the names, and
+  the precedents of a formula look through a name to the range it
+  stands for.
+- **Two new commands**: `grid.name.set` and `grid.name.delete`. The
+  grid battery now carries **34** commands and the MCP server **444**.
+
+### What it does not settle
+
+- **The tree's name may be a formula and this one's may not.** The
+  tree's a name may stand for `=Sheet1!$A$1*2`, and the tree works
+  it out. Here a name stands for a **range**, and so a name may not be
+  a cycle and may not be a formula.
+- **The tree's names are written out in the file's format.** This
+  tree's grid is a payload in a document and not a file with a format
+  of its own, so the names live in the payload and the writing out of
+  a file is a separate thing.
