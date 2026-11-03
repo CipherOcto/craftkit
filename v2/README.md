@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2248 tests.** The MCP server links **all fifteen batteries** in, so the
+**2256 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2248 tests
+cargo test          # 2256 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3748,6 +3748,7 @@ so.
 | the **styles** of a workbook | **built.** A style is a named format that cells share, and changing it changes every cell that names it (§311) | §311 |
 | the **path** of a spatial property | **built.** A property whose value is a point follows a path, and the time maps to the length along it (§312) | §312 |
 | the **free numbers** of a file | **built.** A number whose object is taken away is free and is not used again, and the file says so (§313) | §313 |
+| the **ripple** of a speed change | **built.** A speed change may ripple: the clips that were after it move up by the change, and the transitions follow the cuts (§314) | §314 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21741,3 +21742,75 @@ the finding: a number that is taken away is **not given back**.
 - **The generation of a live object is not here.** Every object of
   this tree is written with the generation zero, so a number that is
   freed gets the generation one — the one after the generation it had.
+
+## 314. The ripple of a speed change
+
+A speed change makes a clip longer or shorter, and the space after it
+may not be there. The tree has two ways out, and the second one is a
+**ripple**: the clips that were after the clip move **up** by the
+change in its length, and the time the clip took is time that is free.
+
+### What was built
+
+- The command `film.clip.speed` takes a **`ripple`**: the clips that
+  were after the clip move up by the change in its length, and the
+  track's material after the clip moves with it.
+- The **transitions** follow the cuts: one whose cut moved moves with
+  it, and one that no longer fits inside the two clips it joins is
+  brought back inside them.
+- Without a ripple the change is still **refused** when the clip
+  would run into its neighbour.
+
+### What the port found
+
+- **The tree's first way out is a clamp, and a clamp is a quiet lie.**
+  The tree bounds the new length by the space there is and takes the
+  shorter length, so the clip's **speed** says one thing and its
+  **length** says another, and nothing says that the length was not
+  the one that was asked for. Here the change that does not fit is
+  **refused**: the clip does not move at all, and the caller is told
+  why.
+- **The tree's ripple moves the clips that start at or after the OLD
+  end of the clip that changed** — not the new one, and not the start
+  of it. A clip that is still running when the change happens is left
+  where it is.
+- **The tree's ripple moves the sync-locked tracks as well.** The
+  tracks that are **sync-locked** with the track that changed move
+  with it, so that a group of tracks stays together, and the clips on
+  them move by the same shift — one shift for all of them, and the
+  largest of the changes when several clips changed at once. Here only
+  the track the clip is on moves.
+- **The tree's transitions follow the cuts by their anchor.** The tree
+  works out how far each transition's anchor moved between the
+  sequence before the change and the sequence after it, moves the
+  transition by that much, and then keeps it inside the two clips it
+  joins. Here the same: a transition whose cut moved moves with it,
+  and one that no longer fits is brought back and shortened.
+- **The tree refuses a ripple that would move later clips past the
+  end of the timeline.** Here the length of a track is **derived** —
+  it is the end of its last clip — so there is no end to pass, and the
+  clips may move as far as they like.
+
+### What it cost
+
+- **Eight tests** in the film battery (`tests/speed_ripple.rs`): a
+  change that does not fit is refused, a ripple moves the clips after
+  it, the moved clips keep their length, a shorter clip moves them
+  down, the clips before it do not move, the transitions follow the
+  cuts, a transition that no longer fits is brought back, and a locked
+  track refuses the ripple.
+- **No new command**: `film.clip.speed` takes the `ripple`, and the
+  film battery still carries **23** commands and the MCP server
+  **393**.
+
+### What it does not settle
+
+- **The sync-locked tracks are not here**: a ripple moves the track
+  the clip is on and no other.
+- **The tree's end of the timeline is not here**: the length of a
+  track is derived, so nothing refuses a change that moves a clip past
+  the end of it.
+- **The tree changes several clips at once.** The tree's command takes
+  a list of clips and a group of them changes speed as one edit, and
+  the ripple is one shift for all of them. Here one clip changes at a
+  time.
