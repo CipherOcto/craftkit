@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **thirty-four commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **thirty-five commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.unite`,
@@ -37,7 +37,8 @@
 //!   `vector.path.radial` make the copies of a path — in a grid, over a
 //!   mirror and round a centre;
 //!   `vector.path.join` and `vector.path.cap` say how the line's
-//!   corners and ends are finished; `vector.path.smooth` makes a point
+//!   corners and ends are finished; `vector.path.reshape` grabs the
+//!   path at a point and drags it, and the anchors around follow; `vector.path.smooth` makes a point
 //!   of a path smooth, and `vector.path.corner` makes it a corner; `vector.path.transform` says where
 //!   the path is put; `vector.path.outline` makes the shape a line
 //!   covers into a path of its own; `vector.path.order` says which
@@ -69,6 +70,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod reshape;
 mod shapes;
 
 pub use shapes::{AddLine, AddSpiral, AddStar};
@@ -2098,6 +2100,143 @@ impl CornerPoint {
         Ok(Outcome::changed("the point is a corner")
             .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
     }
+}
+
+/// **Reshape** a path: grab it at a point and drag it.
+///
+/// The anchors around the grab follow with a **smooth falloff** over a
+/// radius, and the radius is measured **along** the path — not in a
+/// straight line from the grab, but along the curve the path is.
+///
+/// The grab may be on a point that is not an anchor: the path is
+/// grabbed where it is nearest to the point, and an anchor is added
+/// there — unless an anchor is already within the tolerance.
+#[derive(Command)]
+#[command(
+    id = "vector.path.reshape",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Reshape"),
+    mutates,
+    undoable
+)]
+pub struct ReshapePath {
+    /// The path.
+    pub path: NodeRef,
+    /// Where the path is grabbed: the x of the point.
+    pub x: Number,
+    /// Where the path is grabbed: the y of the point.
+    pub y: Number,
+    /// How far the grab is dragged: the x.
+    pub dx: Number,
+    /// How far the grab is dragged: the y.
+    pub dy: Number,
+    /// How near an anchor must be for it to be the one that is grabbed.
+    /// The tree's own default is three.
+    pub tol: Option<Number>,
+    /// How far the anchors around follow, measured along the path. The
+    /// default is half the size of the contour, and it is never less
+    /// than one.
+    pub radius: Option<Number>,
+}
+
+impl ReshapePath {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.path.0)?;
+        let at = Point::new(self.x.0, self.y.0);
+        let delta = Point::new(self.dx.0, self.dy.0);
+        let tol = self.tol.as_ref().map(|tol| tol.0).unwrap_or(3.0);
+        if !tol.is_finite() || tol < 0.0 {
+            return Err(EngineError::Failed {
+                id: "vector.path.reshape".to_string(),
+                message: "the tolerance is a distance, and it is not a negative one".to_string(),
+            });
+        }
+        let radius = self.radius.as_ref().map(|radius| radius.0);
+        if let Some(radius) = radius
+            && (!radius.is_finite() || radius < 0.0)
+        {
+            return Err(EngineError::Failed {
+                id: "vector.path.reshape".to_string(),
+                message: "the radius is a distance, and it is not a negative one".to_string(),
+            });
+        }
+        // Where the path is **nearest** to the grab.
+        let Some(nearest) = reshape::nearest(&vector.path, at) else {
+            return Err(EngineError::Failed {
+                id: "vector.path.reshape".to_string(),
+                message: "the path is empty, and there is nothing to reshape".to_string(),
+            });
+        };
+        // The **contour** the grab is on.
+        let Some(subpath) = vector.path.subpaths.get(nearest.contour).cloned() else {
+            return Err(EngineError::Failed {
+                id: "vector.path.reshape".to_string(),
+                message: format!("the path has no contour {}", nearest.contour),
+            });
+        };
+        // The **anchor** that is grabbed: the nearest one, when it is
+        // near enough, and otherwise an anchor that is added there.
+        let anchors = reshape::anchors(&subpath);
+        let nearest_anchor = anchors
+            .iter()
+            .enumerate()
+            .map(|(index, anchor)| (index, distance(*anchor, at)))
+            .min_by(|left, right| left.1.total_cmp(&right.1));
+        let mut subpath = subpath;
+        let grabbed = match nearest_anchor {
+            Some((index, distance)) if distance <= tol => index,
+            _ => {
+                let split = geom::split_segment(&subpath, nearest.segment, nearest.t).map_err(|reason| {
+                    EngineError::Failed {
+                        id: "vector.path.reshape".to_string(),
+                        message: format!("the path cannot be reshaped there: {reason}"),
+                    }
+                })?;
+                subpath = split;
+                nearest.segment + 1
+            }
+        };
+        vector.path.subpaths[nearest.contour] = subpath.clone();
+        // The **positions** of the anchors along the path, and the
+        // **radius** the falloff is measured over.
+        let (positions, total) = reshape::positions(&subpath);
+        let radius = radius.unwrap_or_else(|| reshape::size(&subpath));
+        let from = positions.get(grabbed).copied().unwrap_or(0.0);
+        let anchors = reshape::anchors(&subpath);
+        let closed = subpath.closed;
+        // The anchors **move**: the grabbed one the whole way, and the
+        // others by their weight.
+        for (index, anchor) in anchors.iter().enumerate() {
+            let weight = if index == grabbed {
+                1.0
+            } else {
+                let away = (positions.get(index).copied().unwrap_or(f64::INFINITY) - from).abs();
+                let away = if closed { away.min(total - away) } else { away };
+                reshape::weight(away, radius)
+            };
+            if weight == 0.0 {
+                continue;
+            }
+            let moved = Point::new(anchor.x + delta.x * weight, anchor.y + delta.y * weight);
+            move_point(&mut vector.path, nearest.contour, index, moved).map_err(|reason| {
+                EngineError::Failed { id: "vector.path.reshape".to_string(), message: reason }
+            })?;
+        }
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed("the path is reshaped").with_data(serde_json::json!({
+            "id": self.path.0,
+            "contour": nearest.contour,
+            "point": grabbed,
+            "radius": radius,
+        })))
+    }
+}
+
+/// How far two points are.
+fn distance(from: Point, to: Point) -> f64 {
+    ((from.x - to.x).powi(2) + (from.y - to.y).powi(2)).sqrt()
 }
 
 /// Pull the **handles** at a point back to it.
