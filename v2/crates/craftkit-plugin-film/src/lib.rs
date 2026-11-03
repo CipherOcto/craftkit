@@ -99,6 +99,9 @@
 //! — and a stretch that would cross a bound is **refused** and says
 //! which bound stopped it (the module `stretching`).
 //!
+//! And a sequence may carry **markers**: named places on its timeline,
+//! with a comment, a colour and a kind (the module `markers`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -150,6 +153,7 @@ mod labels;
 mod lifting;
 mod linking;
 mod locking;
+mod markers;
 mod moving;
 mod removal;
 mod reversing;
@@ -169,6 +173,7 @@ pub use labels::{DeleteLabel, LabelGroup, SetLabel};
 pub use lifting::LiftRange;
 pub use linking::{LinkClips, UnlinkClip};
 pub use locking::LockTrack;
+pub use markers::{AddMarker, ClearMarkers, MarkerKind, RemoveMarker, SetMarker};
 pub use moving::MoveClip;
 pub use removal::RemoveClip;
 pub use reversing::ReverseClip;
@@ -744,6 +749,11 @@ craftkit_sdk::plugin_anchor!(
     RippleClip,
     LiftRange,
     TransitionKind,
+    MarkerKind,
+    AddMarker,
+    SetMarker,
+    RemoveMarker,
+    ClearMarkers,
     SetSpeed,
     LinkClips,
     UnlinkClip,
