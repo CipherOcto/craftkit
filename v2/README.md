@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2369 tests.** The MCP server links **all fifteen batteries** in, so the
+**2377 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2369 tests
+cargo test          # 2377 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3760,6 +3760,7 @@ so.
 | the **switches** of a layer | **built.** A layer has switches beside its properties, and what they do is derived (§323) | §323 |
 | the **blending mode** of a layer | **built.** A layer says how it is laid over what is under it, in the tree's own thirty-eight modes (§324) | §324 |
 | the **parent** of a layer | **built.** A layer may be under another layer, and the chain may not be a circle (§325) | §325 |
+| the **markers** of a composition | **built.** A marker is a moment with something said about it, and they stand in time order (§326) | §326 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22466,6 +22467,51 @@ the child with it.
 - **The tree's safety limits are not here**: the tree's command walks
   the chain with a limit on the visits and on the work, and this
   tree's chain is bounded by the document itself.
+
+## 326. The markers of a composition
+
+A marker is a **moment** in a composition with something said about it.
+
+### What was built
+
+- The command `fx.marker.add` puts a marker in a composition.
+- The command `fx.marker.set` moves a marker or changes what it says.
+- The **evaluator** `fx.markers` lists the markers of a composition in
+  the order of their time.
+
+### What the port found
+
+- **The tree's markers are sorted as they are added.** The tree's
+  command pushes a marker and sorts the list, so the markers of a
+  composition always stand in the order of their time — and the order
+  is **derived** here too: it changes when a marker moves, and nobody
+  writes it down.
+- **The tree's marker has more in it.** The tree's marker carries a
+  label, a chapter, a link, and a duration for the protected ones that
+  set the timing of a responsive composition; only the time and the
+  comment are here.
+
+### What it cost
+
+- **Eight tests** in the fx battery (`tests/markers.rs`): a marker
+  being put in a composition, the markers standing in the order of
+  their time, a marker with no comment, a marker being moved, a
+  marker's comment being changed, a frame that is not a frame refused,
+  a composition that is not there refused, and the marker being saved
+  with the composition.
+- **Two new commands** and **one new evaluator**: `fx.marker.add`,
+  `fx.marker.set` and `fx.markers`. The fx battery now carries **20**
+  commands and the MCP server **410**.
+
+### What it does not settle
+
+- **The tree's marker carries more than a time and a comment**: the
+  label, the chapter, the link and the protected duration are not
+  here.
+- **The tree's layer markers are not here**: the tree's layers carry
+  markers of their own, and only the composition's are here.
+- **No marker is drawn**: the tree's marker is a line on the timeline,
+  and this tree's fx battery draws nothing at all.
 
 ## 321. The frozen track
 
