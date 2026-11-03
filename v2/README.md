@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2496 tests.** The MCP server links **all fifteen batteries** in, so the
+**2510 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2496 tests
+cargo test          # 2510 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3772,6 +3772,7 @@ so.
 | the **roll** of a cut | **built.** The place where two clips meet may be moved, and a roll that would cross a bound is refused (§335) | §335 |
 | the **slide** of a clip | **built.** A clip may be slid between its neighbours, and the neighbours give way (§336) | §336 |
 | the **stretch** of a clip | **built.** A clip may be stretched, and it plays the same material at another speed (§337) | §337 |
+| the **markers** of a sequence | **built.** A sequence carries named places, with a colour and a kind (§338) | §338 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23158,3 +23159,64 @@ the media it shows does not.
 - **The tree's time remapping is not here**, and neither is its
   remapping of the media: a stretch changes the rate a clip plays its
   media at, and the material it plays is the material it played.
+
+## 338. The markers of a sequence
+
+A **marker** is a **named place** on the timeline: a point, or a span,
+with a name and a comment and a colour, and it belongs to the
+**sequence** and not to a track. It is the tree's `Marker`, and it is a
+thing of its own with an id of its own.
+
+### What was built
+
+- The kind `film.marker` — a node under the sequence, with the place,
+  the name, the comment, the colour and the kind in its payload.
+- The command `film.marker.add` puts a marker on a sequence.
+- The command `film.marker.set` changes a marker, and only what is
+  named is changed.
+- The command `film.marker.remove` takes one marker away, and the
+  command `film.marker.clear` takes every marker of a sequence away.
+- The **colour** is one of the tree's own sixteen labels and a name
+  that is not one of them is refused, and the **kind** is one of the
+  tree's own five — `Comment`, `Chapter`, `Segmentation`, `WebLink`
+  and `FlashCue` — and a name that is not one of them is refused.
+
+### What the port found
+
+- **The tree's markers are the sequence's own list.** The tree keeps
+  them in a vector on the sequence and sorts them by their place, and
+  a marker is not a child of anything. Here a marker is a **node**
+  under the sequence, so that a marker is a thing in the tree and not
+  a row in a list — the tree is containment and relations, and the
+  containment is a fact.
+- **The tree's playhead commands are not here.** The tree's
+  `markers.goNext` and `markers.goPrev` move the playhead to the next
+  marker, and the playhead is the state of the editor and not a fact
+  of the document. Here the markers are facts and the playhead is not
+  a thing at all.
+
+### What it cost
+
+- **Fourteen tests** in the film battery (`tests/markers.rs`): a
+  marker being added, the marker being in the sequence, a marker
+  carrying its facts, a colour that is not a label refused, a kind
+  that is not a kind refused, a marker before the timeline refused, a
+  marker of half a frame refused, a node that is not a sequence
+  refused, a marker being changed, a change to an unknown colour
+  refused, a node that is not a marker refused, a marker being taken
+  away, every marker of a sequence being taken away while another's
+  are not, and the marker being saved.
+- **Four new commands**: `film.marker.add`, `film.marker.set`,
+  `film.marker.remove` and `film.marker.clear`. The film battery now
+  carries **34** commands and the MCP server **436**.
+
+### What it does not settle
+
+- **The tree's ripple of the markers is not here.** The tree may move
+  the markers with the clips when a ripple edit closes a gap, and that
+  is a setting of the tree. Here a marker stays where it is when the
+  clips around it move: it is a place the caller gave it, and nothing
+  moves it but a command that says so.
+- **The tree's export of the markers is not here.** The tree may write
+  the markers of a sequence out as a CSV file. That is a file and not
+  a fact of the document.
