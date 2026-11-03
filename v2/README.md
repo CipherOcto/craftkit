@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2395 tests.** The MCP server links **all fifteen batteries** in, so the
+**2409 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2395 tests
+cargo test          # 2409 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3763,6 +3763,7 @@ so.
 | the **markers** of a composition | **built.** A marker is a moment with something said about it, and they stand in time order (§326) | §326 |
 | the **view** of a sheet | **built.** A sheet says what is drawn of it and how far it is zoomed, and its panes may be frozen (§327) | §327 |
 | the **tabs** of a workbook | **built.** A sheet may be hidden, and its tab may be coloured (§328) | §328 |
+| the **validation** of a range of cells | **built.** A rule says what may be typed into a range, written for the first cell of it (§329) | §329 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22611,6 +22612,58 @@ A sheet may be **hidden**, and a sheet's **tab** may be coloured.
 - **The tree's theme colours and its workbook protection are not
   here**: the tree's tab colour may be a theme colour and not a hex
   one, and the tree refuses every change to a protected workbook.
+
+## 329. The validation of a range of cells
+
+A **validation rule** says what may be typed into a range: a whole
+number, a decimal, a word from a list, a date, a time, a length of
+text — with an operator and the formulas that go with it.
+
+### What was built
+
+- The command `grid.validation.set` puts a rule on a range.
+- The command `grid.validation.clear` takes the rules off a range.
+- The command `grid.validation.check` says whether a value passes the
+  rules of a cell.
+
+### What the port found
+
+- **A rule is written for the first cell of its range.** The relative
+  references in a rule's formula move with the cell it is checked at:
+  a rule on `A1:A9` whose formula is `A1>10` is checked at `A5` as
+  `A5>10`. The tree's own rule, and the tree's `shift_relative`.
+- **An unknown kind is refused.** The tree's command used to give an
+  "any value" rule for a kind it did not know, and it does not any
+  more — a rule that is not a rule cannot be checked.
+- **A list rule needs a list.** The tree's command refuses a list rule
+  with nothing in it, and so does this one.
+
+### What it cost
+
+- **Fourteen tests** in the grid battery (`tests/validation.rs`): a
+  whole number between one and ten passing, one outside the range
+  failing, a fraction not being a whole number, a value that is not a
+  number failing, a blank passing by default, a blank being refused, a
+  list rule taking a word from the list, a list rule with no list
+  refused, a kind that is not a kind refused, an operator that is not
+  an operator refused, a rule moving with the cell, the rules being
+  cleared, a range that is not a range refused, and the rules being
+  saved with the sheet.
+- **Three new commands**: `grid.validation.set`,
+  `grid.validation.clear` and `grid.validation.check`. The grid
+  battery now carries **31** commands and the MCP server **420**.
+
+### What it does not settle
+
+- **The tree's custom rule is not here.** The tree's rule of the kind
+  `custom` is a formula that says yes or no about the value being
+  typed; this tree's formula engine cannot see a value that is not in
+  a cell yet.
+- **The tree's error style is not here**: whether a bad value is an
+  error, a warning or a note is about a host's message.
+- **The tree's "circle invalid data" is not here**: the tree's command
+  walks a sheet and lists the cells that fail their rules, and this
+  tree's rules are checked one value at a time.
 
 ## 321. The frozen track
 
