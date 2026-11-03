@@ -16,12 +16,36 @@
 //! keyframe — because a value that does not interpolate does not
 //! interpolate.
 //!
+//! # The shape of the curve
+//!
+//! The tree's keyframe has an interpolation on the side it **leaves**
+//! on, and there are **three** of them: `linear`, `bezier` and `hold`.
+//!
+//! - a **linear** keyframe moves the value in a straight line;
+//! - a **hold** keyframe does not move the value at all until the next
+//!   keyframe;
+//! - a **bezier** keyframe moves the value along a curve, and the
+//!   shape of the curve is the **ease**: a **speed** and an
+//!   **influence**.
+//!
+//! The ease is the tree's, and it is the finding: the tree does not
+//! store a curve, it stores **how fast the value is moving** and **how
+//! much of the segment the handle takes**. The speed here is in value
+//! units per **frame** — the tree's is in units per second, and a
+//! frame is the unit of this tree.
+//!
+//! The tree's keyframe has an interpolation on **each** side — in and
+//! out — and the segment between two keyframes is shaped by the out
+//! side of the first and the in side of the second. Here a keyframe
+//! has the interpolation of the side it leaves on, and the side it is
+//! entered on is linear.
+//!
 //! # What it does not do
 //!
-//! - **The shape of the curve is not here.** The tree's keyframes have
-//!   an interpolation on each side — linear, bezier or hold — and
-//!   eases with a speed and an influence. Here the interpolation is
-//!   linear, or a hold, and the shape is the tree's business.
+//! - **The spatial handles are not here.** The tree's spatial
+//!   properties move along a path with tangents of their own, and the
+//!   path is sampled through an arc-length table; here a property is a
+//!   number or a list of numbers and it moves in the value.
 //! - **The expression is not here.** The tree may put an expression on
 //!   a property, and the expression is the plugin's own language.
 
@@ -32,14 +56,113 @@ use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
 
 use crate::{get_at, parse_path, set_at};
 
-/// The **keys** of a property: the keyframes, sorted by frame.
-fn keys_of(value: &serde_json::Value) -> Option<Vec<(u64, serde_json::Value)>> {
-    let list = value.get("keys")?.as_array()?;
-    let mut keys: Vec<(u64, serde_json::Value)> = Vec::with_capacity(list.len());
-    for key in list {
+/// The **interpolation** of a keyframe on the side it leaves on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Interp {
+    /// The value moves in a straight line.
+    Linear,
+    /// The value moves along a **Bezier** curve, and the shape of it
+    /// is the ease.
+    Bezier,
+    /// The value does not move at all until the next keyframe.
+    Hold,
+}
+
+impl Interp {
+    /// The interpolation a name says, if it says one this tree knows.
+    pub fn parse(name: &str) -> Option<Interp> {
+        match name.trim().to_lowercase().as_str() {
+            "linear" => Some(Interp::Linear),
+            "bezier" => Some(Interp::Bezier),
+            "hold" => Some(Interp::Hold),
+            _ => None,
+        }
+    }
+
+    /// The name of the interpolation.
+    pub fn name(self) -> &'static str {
+        match self {
+            Interp::Linear => "linear",
+            Interp::Bezier => "bezier",
+            Interp::Hold => "hold",
+        }
+    }
+}
+
+/// The **ease** of a keyframe: a speed and an influence.
+///
+/// The tree's `Ease`: the speed is in value units per second and the
+/// influence is the fraction of the segment the handle takes. Here the
+/// speed is in value units per **frame**, because a frame is the unit
+/// of this tree and there is no clock in a frame.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Ease {
+    /// The speed, in value units per frame.
+    pub speed: f64,
+    /// The influence: the fraction of the segment the handle takes, from
+    /// nothing at all to the whole of it.
+    pub influence: f64,
+}
+
+impl Default for Ease {
+    /// The tree's own default: no speed, and a sixth of the segment.
+    fn default() -> Ease {
+        Ease { speed: 0.0, influence: 1.0 / 6.0 }
+    }
+}
+
+/// A **keyframe**: a frame, a value, and how it leaves.
+#[derive(Debug, Clone)]
+struct Key {
+    /// The frame the keyframe is on.
+    frame: u64,
+    /// The value of the property at that frame.
+    value: serde_json::Value,
+    /// The interpolation of the side the keyframe leaves on.
+    interp: Interp,
+    /// The ease of a bezier.
+    ease: Ease,
+}
+
+impl Key {
+    /// The keyframe a piece of the payload holds.
+    fn from_json(key: &serde_json::Value) -> Option<Key> {
         let frame = key.get("frame")?.as_u64()?;
         let value = key.get("value")?.clone();
-        keys.push((frame, value));
+        let interp = match key.get("interp").and_then(|interp| interp.as_str()) {
+            Some(name) => Interp::parse(name)?,
+            None => Interp::Linear,
+        };
+        let ease = match key.get("ease") {
+            Some(ease) => Ease {
+                speed: ease.get("speed").and_then(|speed| speed.as_f64()).unwrap_or(0.0),
+                influence: ease
+                    .get("influence")
+                    .and_then(|influence| influence.as_f64())
+                    .unwrap_or(Ease::default().influence),
+            },
+            None => Ease::default(),
+        };
+        Some(Key { frame, value, interp, ease })
+    }
+
+    /// The keyframe, as the payload holds it.
+    fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "frame": self.frame,
+            "value": self.value,
+            "interp": self.interp.name(),
+            "ease": { "speed": self.ease.speed, "influence": self.ease.influence },
+        })
+    }
+}
+
+/// The **keys** of a property: the keyframes, sorted by frame.
+fn keys_of(value: &serde_json::Value) -> Option<Vec<Key>> {
+    let list = value.get("keys")?.as_array()?;
+    let mut keys: Vec<Key> = Vec::with_capacity(list.len());
+    for key in list {
+        keys.push(Key::from_json(key)?);
     }
     Some(keys)
 }
@@ -49,9 +172,8 @@ fn keys_of(value: &serde_json::Value) -> Option<Vec<(u64, serde_json::Value)>> {
 /// The rest of the value is kept: a property may carry more than its
 /// keyframes, and taking it away would be taking away something the
 /// caller did not ask about.
-fn with_keys(value: &serde_json::Value, keys: &[(u64, serde_json::Value)]) -> serde_json::Value {
-    let list: Vec<serde_json::Value> =
-        keys.iter().map(|(frame, value)| serde_json::json!({ "frame": frame, "value": value })).collect();
+fn with_keys(value: &serde_json::Value, keys: &[Key]) -> serde_json::Value {
+    let list: Vec<serde_json::Value> = keys.iter().map(|key| key.to_json()).collect();
     let mut new = value.clone();
     if !new.is_object() {
         new = serde_json::json!({});
@@ -66,6 +188,9 @@ fn with_keys(value: &serde_json::Value, keys: &[(u64, serde_json::Value)]) -> se
 /// keyframes — and a keyframe that is already there is **changed**,
 /// and one that is not there is **added**, and the list stays sorted
 /// by frame.
+///
+/// The **interpolation** of a keyframe is kept when its value is
+/// changed, as the tree's `set_key` keeps it.
 #[derive(Command)]
 #[command(id = "fx.keyframe.set", area = "fx", layer = "fx", icon = "plus", mutates, undoable)]
 pub struct SetKeyframe {
@@ -124,11 +249,11 @@ impl SetKeyframe {
         // The keyframe that is there is changed, and the one that is
         // not there is added, and the list stays sorted.
         let value = self.value.clone();
-        match keys.iter_mut().find(|(at, _)| *at == frame) {
-            Some(key) => key.1 = value,
+        match keys.iter_mut().find(|key| key.frame == frame) {
+            Some(key) => key.value = value,
             None => {
-                keys.push((frame, value));
-                keys.sort_by_key(|(at, _)| *at);
+                keys.push(Key { frame, value, interp: Interp::Linear, ease: Ease::default() });
+                keys.sort_by_key(|key| key.frame);
             }
         }
         let new = with_keys(&current, &keys);
@@ -201,7 +326,7 @@ impl RemoveKeyframe {
             return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
         };
         let before = keys.len();
-        keys.retain(|(at, _)| *at != frame);
+        keys.retain(|key| key.frame != frame);
         if keys.len() == before {
             return Err(EngineError::Failed {
                 id: id.clone(),
@@ -220,12 +345,138 @@ impl RemoveKeyframe {
     }
 }
 
+/// The **interpolation** of a keyframe.
+///
+/// The tree's keyframe has an interpolation on the side it leaves on,
+/// and it is one of three: `linear`, `bezier` and `hold`. A **bezier**
+/// has an **ease** — a speed and an influence — and the ease is what
+/// shapes the curve.
+///
+/// A keyframe that is **not there** is refused, and so is an
+/// interpolation that is not one of the three, and an influence that
+/// is not a fraction of the segment.
+#[derive(Command)]
+#[command(id = "fx.keyframe.interp", area = "fx", layer = "fx", icon = "pencil", mutates, undoable)]
+pub struct SetInterpolation {
+    /// The layer the property is on.
+    pub layer: NodeRef,
+    /// The path of the property.
+    pub path: Text,
+    /// The frame the keyframe is on.
+    pub frame: Number,
+    /// `linear`, `bezier` or `hold`.
+    pub interp: Text,
+    /// The speed of a bezier, in value units per frame.
+    pub speed: Option<Number>,
+    /// The influence of a bezier: the fraction of the segment its
+    /// handle takes.
+    pub influence: Option<Number>,
+}
+
+impl SetInterpolation {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "fx.keyframe.interp".to_string();
+        let layer = self.layer.0;
+        let path = self.path.0.clone();
+        let segments = parse_path(&path);
+        if segments.is_empty() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a path has something in it".to_string(),
+            });
+        }
+        let frame = self.frame.0;
+        if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a frame is a whole number".to_string(),
+            });
+        }
+        let frame = frame as u64;
+        let interp = Interp::parse(&self.interp.0).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!(
+                "`{}` is not an interpolation: a keyframe is `linear`, `bezier` or `hold`",
+                self.interp.0.trim()
+            ),
+        })?;
+        let mut ease = Ease::default();
+        if let Some(speed) = &self.speed {
+            if !speed.0.is_finite() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a speed is a number that is there".to_string(),
+                });
+            }
+            ease.speed = speed.0;
+        }
+        if let Some(influence) = &self.influence {
+            if !influence.0.is_finite() || !(0.0..=1.0).contains(&influence.0) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "an influence is a fraction of the segment, from 0 to 1, and `{}` is not one",
+                        influence.0
+                    ),
+                });
+            }
+            ease.influence = influence.0;
+        }
+        let Some(node) = session.document().node(layer) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no layer `{layer}`"),
+            });
+        };
+        if node.kind != "fx.layer" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+            });
+        }
+        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+        let Some(current) = get_at(&props, &segments).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no `{path}` here"),
+            });
+        };
+        let Some(mut keys) = keys_of(&current) else {
+            return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
+        };
+        let Some(key) = keys.iter_mut().find(|key| key.frame == frame) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("`{path}` has no keyframe at frame {frame}"),
+            });
+        };
+        key.interp = interp;
+        key.ease = ease;
+        let new = with_keys(&current, &keys);
+        if let Some(node) = session.document_mut()?.node_mut(layer) {
+            let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            set_at(&mut props, &segments, new)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            node.data["props"] = props;
+        }
+        Ok(Outcome::changed(format!("`{path}` leaves frame {frame} on a {}", interp.name())).with_data(
+            serde_json::json!({
+                "layer": layer,
+                "path": path,
+                "frame": frame,
+                "interp": interp.name(),
+                "ease": { "speed": ease.speed, "influence": ease.influence },
+            }),
+        ))
+    }
+}
+
 /// The **value** of a property at a frame.
 ///
 /// A property that is not animated has the same value at every frame,
 /// and an animated one has the **interpolation** of its keyframes: the
 /// first key's value before the first key, the last key's value after
-/// the last key, and the line between them in between.
+/// the last key, and the curve between them in between.
 #[derive(Command)]
 #[command(id = "fx.prop.at", area = "fx", layer = "fx", icon = "list")]
 pub struct ValueAt {
@@ -289,26 +540,33 @@ impl ValueAt {
 ///
 /// Before the first keyframe it is the first keyframe's value, after
 /// the last one it is the last keyframe's value, and in between it is
-/// the line between the two keyframes around it — when the values
-/// interpolate, and the earlier value when they do not.
-fn value_at(keys: &[(u64, serde_json::Value)], frame: f64) -> Option<serde_json::Value> {
+/// the curve between the two keyframes around it — the line, the hold
+/// or the bezier, as the keyframe it leaves says — and the earlier
+/// value when the values do not interpolate.
+fn value_at(keys: &[Key], frame: f64) -> Option<serde_json::Value> {
     let first = keys.first()?;
     let last = keys.last()?;
-    if keys.len() == 1 || frame <= first.0 as f64 {
-        return Some(first.1.clone());
+    if keys.len() == 1 || frame <= first.frame as f64 {
+        return Some(first.value.clone());
     }
-    if frame >= last.0 as f64 {
-        return Some(last.1.clone());
+    if frame >= last.frame as f64 {
+        return Some(last.value.clone());
     }
-    let index = keys.partition_point(|(at, _)| *at as f64 <= frame).saturating_sub(1);
-    let (start, from) = keys.get(index)?;
-    let (end, to) = keys.get(index + 1)?;
-    let span = (end - start) as f64;
+    let index = keys.partition_point(|key| key.frame as f64 <= frame).saturating_sub(1);
+    let start = keys.get(index)?;
+    let end = keys.get(index + 1)?;
+    let span = (end.frame - start.frame) as f64;
     if span <= 0.0 {
-        return Some(from.clone());
+        return Some(start.value.clone());
     }
-    let x = (frame - *start as f64) / span;
-    Some(interpolate(from, to, x))
+    let x = (frame - start.frame as f64) / span;
+    Some(match start.interp {
+        // The tree's hold: the value does not move until the next
+        // keyframe.
+        Interp::Hold => start.value.clone(),
+        Interp::Linear => interpolate(&start.value, &end.value, x),
+        Interp::Bezier => eased(&start.value, &end.value, x, span, start.ease),
+    })
 }
 
 /// The line between two values.
@@ -333,4 +591,92 @@ fn interpolate(a: &serde_json::Value, b: &serde_json::Value, x: f64) -> serde_js
         out.push(serde_json::json!(from + (to - from) * x));
     }
     serde_json::Value::Array(out)
+}
+
+/// The value between two keyframes on a **Bezier** curve.
+///
+/// The tree's shape of it: the curve is a cubic Bezier in the (time,
+/// value) plane, and the two handles are the eases of the two
+/// keyframes — the **speed** says how fast the value is moving and the
+/// **influence** says how much of the segment the handle takes.
+///
+/// The side that is **entered** is linear here, as the tree's linear
+/// side is: a third of the segment.
+fn eased(a: &serde_json::Value, b: &serde_json::Value, x: f64, span: f64, ease: Ease) -> serde_json::Value {
+    let out = ease.influence.clamp(0.0, 1.0);
+    let into = 1.0 / 3.0;
+    if let (Some(a), Some(b)) = (a.as_f64(), b.as_f64()) {
+        let difference = b - a;
+        let u = solve_u(0.0, out, 1.0 - into, 1.0, x);
+        let value = bez(a, a + ease.speed * out * span, b - difference * into, b, u);
+        return serde_json::json!(value);
+    }
+    let (Some(list_a), Some(list_b)) = (a.as_array(), b.as_array()) else {
+        return a.clone();
+    };
+    if list_a.len() != list_b.len() {
+        return a.clone();
+    }
+    let mut out_values: Vec<serde_json::Value> = Vec::with_capacity(list_a.len());
+    for (from, to) in list_a.iter().zip(list_b.iter()) {
+        let (Some(from), Some(to)) = (from.as_f64(), to.as_f64()) else {
+            return a.clone();
+        };
+        let difference = to - from;
+        let u = solve_u(0.0, out, 1.0 - into, 1.0, x);
+        let value = bez(from, from + ease.speed * out * span, to - difference * into, to, u);
+        out_values.push(serde_json::json!(value));
+    }
+    serde_json::Value::Array(out_values)
+}
+
+/// A cubic Bezier in one dimension.
+fn bez(p0: f64, p1: f64, p2: f64, p3: f64, u: f64) -> f64 {
+    let v = 1.0 - u;
+    v * v * v * p0 + 3.0 * v * v * u * p1 + 3.0 * v * u * u * p2 + u * u * u * p3
+}
+
+/// The slope of a cubic Bezier in one dimension.
+fn bez_d(p0: f64, p1: f64, p2: f64, p3: f64, u: f64) -> f64 {
+    let v = 1.0 - u;
+    3.0 * v * v * (p1 - p0) + 6.0 * v * u * (p2 - p1) + 3.0 * u * u * (p3 - p2)
+}
+
+/// The parameter at which a cubic Bezier reaches `x`.
+///
+/// The tree's `solve_u`: a Newton step and then a bisection, so the
+/// answer is found and not merely approached.
+fn solve_u(x0: f64, x1: f64, x2: f64, x3: f64, x: f64) -> f64 {
+    if x <= x0 {
+        return 0.0;
+    }
+    if x >= x3 {
+        return 1.0;
+    }
+    let mut u = (x - x0) / (x3 - x0);
+    for _ in 0..8 {
+        let f = bez(x0, x1, x2, x3, u) - x;
+        let d = bez_d(x0, x1, x2, x3, u);
+        if d.abs() < 1e-12 {
+            break;
+        }
+        if (f / d).abs() < 1e-12 {
+            return u;
+        }
+        let next = u - f / d;
+        if !(0.0..=1.0).contains(&next) {
+            break;
+        }
+        u = next;
+    }
+    let (mut low, mut high) = (0.0, 1.0);
+    for _ in 0..60 {
+        let middle = (low + high) * 0.5;
+        if bez(x0, x1, x2, x3, middle) < x {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+    (low + high) * 0.5
 }

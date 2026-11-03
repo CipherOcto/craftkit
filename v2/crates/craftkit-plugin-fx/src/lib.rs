@@ -46,6 +46,12 @@
 //! earlier value, when the value does not interpolate (the module
 //! `keys`).
 //!
+//! And the **shape** of the curve is here too: a keyframe leaves on a
+//! `linear`, a `bezier` or a `hold`, and a bezier has an **ease** —
+//! a speed and an influence — and that is the tree's own way of saying
+//! how fast a value moves and how much of the segment its handle
+//! takes.
+//!
 //! And one that is not a finding but a fact: the **expressions** are the
 //! plugin's own language, and they live in the payload beside the
 //! keyframes they sit on.
@@ -66,7 +72,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 mod keys;
 
-pub use keys::{RemoveKeyframe, SetKeyframe, ValueAt};
+pub use keys::{RemoveKeyframe, SetInterpolation, SetKeyframe, ValueAt};
 
 /// The compositing layer.
 ///
