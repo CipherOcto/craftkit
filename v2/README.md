@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1986 tests.** The MCP server links **all fifteen batteries** in, so the
+**1995 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1986 tests
+cargo test          # 1995 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3717,6 +3717,7 @@ so.
 | the **interpolation** of a keyframe | **built.** A keyframe leaves on a linear, a bezier or a hold, and a bezier has a speed and an influence (§280) | §280 |
 | the **reversal** of a clip | **built.** A clip may play its media backwards, and the direction changes what its edges consume (§281) | §281 |
 | the **lists** of a fill | **built.** A text that is a day, a month or a quarter steps through the list (§282) | §282 |
+| the **locked** track | **built.** A locked track cannot be edited, and every command that would edit it is refused (§283) | §283 |
 
 ### The list of things that are honestly not there: empty
 
@@ -19666,3 +19667,61 @@ months and the quarters. That is here now.
   of their own.
 - **The tree's flash fill is not here**: it reads the pattern out of
   the text beside the source.
+
+## 283. The locked track
+
+The tree's track may be **locked**, and a locked track cannot be
+edited. That is here now.
+
+### What was built
+
+- The command `film.track.lock` locks a track and unlocks it.
+- Every command that would **edit** a track is refused when the track is
+  locked: the add of a clip, the trim, the move, the insert, the
+  split, the removal, the ripple, the lift and the extract.
+- The refusal says which track is locked.
+
+### What the port found
+
+- **The tree's lock is a property of the track and not of the clip,
+  and it is asked about at the moment of the edit.** The tree's
+  `unlocked_track` is asked for the track of the clip that is being
+  edited, and a locked track is the error `Locked`. So the lock is
+  not a thing the clip remembers and not a thing the sequence decides:
+  it is a fact about the track, and every edit asks the track.
+- **The tree checks the lock before the edit and not after it.** The
+  tree's `overwrite` and `insert` look at every track they are about to
+  write to and refuse if any of them is locked — before anything is
+  written, so that a refused edit leaves nothing half done. Here the
+  same: the check is at the top of the command, and a refused edit
+  changes nothing.
+- **The tree's lock is not the tree's sync lock, and the two are
+  different facts.** The tree's *sync-locked* track is one that moves
+  with the others — an insert opens a gap on it too — and the tree's
+  *locked* track is one that may not be touched. Here the lock is
+  here and the sync lock is not.
+- **The tree's lock is on the track and not on the sequence, and a
+  caption track has one too.** The tree's caption tracks are locked
+  and sync-locked as well, and a caption track is not a thing this
+  tree has.
+
+### What it cost
+
+- **Nine tests** in the film battery (`tests/locked.rs`): a track may
+  be locked and unlocked, and a locked track refuses a trim, a move, a
+  split, a removal, a ripple, a lift, an extract and a new clip, and
+  an unlocked track may be edited again.
+- **One new command**: `film.track.lock`. The film battery now carries
+  **15** commands and the MCP server **366**.
+- **Nine commands changed**: the add, the trim, the move, the insert,
+  the split, the removal, the ripple, the lift and the extract all ask
+  the track whether it is locked.
+
+### What it does not settle
+
+- **The tree's sync lock is not here**: a sync-locked track moves with
+  the others, and an insert opens a gap on it too.
+- **The tree's caption tracks are not here**, and they may be locked
+  and sync-locked as well.
+- **The tree's track solo and the tree's track freeze are not here**,
+  and they are locks of another kind.
