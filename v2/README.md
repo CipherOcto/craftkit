@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2050 tests.** The MCP server links **all fifteen batteries** in, so the
+**2055 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3724,6 +3724,7 @@ so.
 | the **time** of a cell | **built.** A time is a fraction of a day and a format, and the tree's clock shapes and its elapsed shapes are both here (§287) | §287 |
 | the **ordinals** of a fill | **built.** A text with an English ordinal ending is filled with the ending rewritten to suit the number (§288) | §288 |
 | the **fill** of a time | **built.** A single number under a time format counts an hour on, as a date counts a day on (§289) | §289 |
+| the **quarters** in a text | **built.** A text that says a quarter wraps after four, as the list of the quarters does (§290) | §290 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20144,3 +20145,49 @@ tree's fill knows about the time as well.
   hour.** The tree's `detect` steps by an hour only when there is a
   single number; two or more are a least squares line, and so are they
   here.
+
+## 290. The quarters in a text
+
+§282 gave the grid the **list** of the quarters, and a list wraps. The
+tree has the rule twice.
+
+### What was built
+
+- A text that says a **quarter** wraps after four, as the list does:
+  `Qtr3` is filled as `Qtr4` and `Qtr1`, and `Quarter 4` is filled as
+  `Quarter 1`.
+
+### What the port found
+
+- **The tree's quarter in a text is the list of the quarters again,
+  with a prefix.** The tree's list holds `Q1`, `Q2`, `Q3` and `Q4`, and
+  a text that is one of them is filled from the list. A text that says
+  a quarter in **words** — `Qtr3`, `Quarter 3` — is not in the list, so
+  the tree has a second rule for it: the text before the number, with
+  its spaces trimmed and its case lowered, is `Q`, `Qtr` or `Quarter`.
+- **The tree's second rule is about the source and not about the
+  value.** The tree tests the number it is filling *from*: `Qtr7` is
+  not a quarter — seven is not one of the four — and it counts on to
+  `Qtr8`. The test is on the source so that a fill that starts at a
+  quarter stays a quarter all the way round.
+- **The tree's second rule wants nothing after the number.** `Qtr3x` is
+  not a quarter, because the text after the number is not empty, and it
+  counts on.
+
+### What it cost
+
+- **Five tests** in the grid battery (`tests/quarters.rs`): a quarter
+  wraps after four, a quarter in words wraps, a number that is not a
+  quarter counts on, a text with a suffix is not a quarter, and the
+  list of the quarters wraps as well.
+- **No new command**: this is what `grid.range.fill` does with a text
+  that says a quarter. The grid battery still carries **14** commands
+  and the MCP server **370**.
+
+### What it does not settle
+
+- **The tree's other quarter words are not here**: `Q` and `Qtr` and
+  `Quarter` are the three the tree has, and `Trimester` is not.
+- **The tree's own list of words is not here**: the tree's fill may be
+  given a list of words to step through, and here the lists are the
+  tree's five (§282).
