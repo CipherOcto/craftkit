@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2452 tests.** The MCP server links **all fifteen batteries** in, so the
+**2466 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2452 tests
+cargo test          # 2466 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3769,6 +3769,7 @@ so.
 | the **label** of a clip | **built.** A clip carries one of the tree's own sixteen colours, and the clips with the same one are a group (§332) | §332 |
 | the **opacity** of a path | **built.** A path says how solid it is, and the opacity multiplies into the fill and the line (§333) | §333 |
 | the **slip** of a clip | **built.** A clip stays where it is and shows a different part of its media, and a slip past the end of the media is refused (§334) | §334 |
+| the **roll** of a cut | **built.** The place where two clips meet may be moved, and a roll that would cross a bound is refused (§335) | §335 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22944,11 +22945,78 @@ it shows a **different part of its media**.
 
 ### What it does not settle
 
-- **The roll and the slide are not here.** The tree's **roll** moves
-  the cut between two clips and the tree's **slide** moves a clip
-  between its neighbours, and both are edits of the **place** of a
-  clip and not of its content. They are commands of their own.
+- **The roll is here now** (§335), and the **slide** is not. The
+  tree's **slide** moves a clip between its neighbours, and it is an
+  edit of the **place** of a clip and not of its content. It is a
+  command of its own.
 - **The tree's subclip restriction is not here.** The tree's slip may
   not leave the range of a subclip, and the tree's own media may start
   at a mark that is not the first frame. Here the media begins at
   frame zero and there are no marks.
+
+## 335. The roll of a cut
+
+A **cut** is the place where one clip ends and the next begins, and a
+**roll** moves it: the clip before the cut gets longer, the clip after
+it gets shorter, and the media of both follows the cut. It is the
+third way of moving the boundary between two clips, and it is not like
+the other two: a **trim** moves one edge of one clip and leaves its
+neighbour alone, a **move** takes a clip away and puts it somewhere
+else, and a roll moves the boundary and **both** clips go with it.
+
+### What was built
+
+- The command `film.clip.roll` moves the cut between two clips that are
+  next to each other on one track.
+- The roll is **refused** when it would cross a bound, and the refusal
+  says which bound: a clip is at least one frame long, a clip may not
+  run past the end of its media, and a clip may not begin before the
+  media does.
+- The **link** is honoured: the linked pairs at the same cut roll with
+  the pair that was named, so that the picture and the sound stay in
+  step.
+- A **transition** over a cut that moved follows the cut, and it stays
+  inside the two clips it joins.
+
+### What the port found
+
+- **The tree's linked roll is clamped and this one is refused.** The
+  tree's `clamp_roll_linked` tries the roll on a copy of the sequence
+  for every linked pair and keeps the delta that every pair can take,
+  so a linked roll that cannot go the whole way goes part of the way
+  and nothing says so. Here every pair takes the same delta, and a
+  pair that cannot take it refuses the whole roll — the rule the trim
+  of a linked group already had (§299).
+- **The tree's linked selection is not a thing here.** The tree rolls
+  the linked cuts only when its linked selection is on. This tree has
+  no such a switch: the link is a fact of the clip, and the roll
+  honours it.
+
+### What it cost
+
+- **Fourteen tests** in the film battery (`tests/rolling.rs`): the
+  cut moving, the media following the cut, a roll going backwards, a
+  roll before the media refused, a roll that would leave a clip shorter
+  than a frame refused, a roll past the end of the media refused, two
+  clips that are not next to each other refused, clips on two tracks
+  refused, a roll on a locked track refused, the linked cut rolling
+  too, a transition over the cut following it, a roll of nothing
+  refused, a node that is not a clip refused, and the roll being saved.
+- **The trim was opened up.** The trim's own maths — the new clock of
+  a clip whose edge is trimmed, with every bound but the neighbours' —
+  is now `trim::clock_after`, and the roll uses it on both sides of the
+  cut: the left clip's **out** edge and the right clip's **in** edge.
+  The neighbours' bound is not used, because a roll moves the neighbour
+  with it, and that is the difference between the two edits.
+- **One new command**: `film.clip.roll`. The film battery now carries
+  **28** commands and the MCP server **430**.
+
+### What it does not settle
+
+- **The slide is not here.** The tree's **slide** moves a clip between
+  its neighbours, and it is an edit of the **place** of a clip and not
+  of its content. It is a command of its own.
+- **The tree's time remapping is not here.** The tree may remap the
+  time of a clip when it rolls, and it may remap the media with it.
+  Here a roll moves the cut and the media with it, and the media is
+  the media the clip plays.
