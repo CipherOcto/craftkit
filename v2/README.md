@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2425 tests.** The MCP server links **all fifteen batteries** in, so the
+**2433 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2425 tests
+cargo test          # 2433 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3766,6 +3766,7 @@ so.
 | the **validation** of a range of cells | **built.** A rule says what may be typed into a range, written for the first cell of it (§329) | §329 |
 | the **boxes** of a page | **built.** A page has five boxes, a chain where each falls back to the one before it (§330) | §330 |
 | the **rotation** of a page | **built.** A page may be turned, by a multiple of ninety degrees (§331) | §331 |
+| the **label** of a clip | **built.** A clip carries one of the tree's own sixteen colours, and the clips with the same one are a group (§332) | §332 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22762,6 +22763,52 @@ positive number turns the page **clockwise**.
 - **The tree's rotation of many pages at once is not here**: the
   tree's command takes a list of pages, and this tree's command turns
   one page.
+
+## 332. The label of a clip
+
+A **label** is a colour and not a number: the tree's own sixteen
+names, in the tree's own order.
+
+### What was built
+
+- The command `film.clip.label` puts a label on a clip.
+- The command `film.clip.label.delete` takes it away.
+- The command `film.clip.label.group` says the clips that carry the
+  same label.
+
+### What the port found
+
+- **A label is a group, and the group is derived.** The tree's *select
+  label group* command takes every clip that carries one of the labels
+  of the clips that are selected, and selects them; so the group is
+  read from the labels and is not written down, and it changes when a
+  label is put on a clip and not when it is taken off.
+- **The tree's list is closed.** A name that is not one of the tree's
+  sixteen is refused — a colour that the tree does not have is not a
+  colour — and the case does not matter, so `cerulean` and `Cerulean`
+  are one label.
+
+### What it cost
+
+- **Eight tests** in the film battery (`tests/labels.rs`): a clip
+  being labelled, the tree's own names, a label that is not a label
+  refused, the label being taken away, the clips with the same label
+  being a group, a clip with no label being in no group, a clip that
+  is not a clip refused, and the label being saved with the clip.
+- **Three new commands**: `film.clip.label`, `film.clip.label.delete`
+  and `film.clip.label.group`. The film battery now carries **26**
+  commands and the MCP server **427**.
+
+### What it does not settle
+
+- **No colour is drawn**: the label is a name on a clip, and this
+  tree's film battery renders nothing.
+- **The tree's label is on the project items as well as on the
+  clips**: the tree labels a clip in the project panel and a clip in a
+  sequence, and only the sequence's is here.
+- **The tree's label groups are selected, not listed**: the tree's
+  command changes the selection, and this tree's command says which
+  clips are in the group.
 
 ## 321. The frozen track
 
