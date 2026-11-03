@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2094 tests.** The MCP server links **all fifteen batteries** in, so the
+**2104 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3729,6 +3729,7 @@ so.
 | the **auto bezier** of a keyframe | **built.** An auto keyframe's ease is not written down but comes from its neighbours (§292) | §292 |
 | the **transitions** of a track | **built.** A transition sits over the cut between two clips, with a duration and an alignment on the cut (§293) | §293 |
 | the **speed** of a clip | **built.** A clip may play its media faster or slower, and the media it plays is its length multiplied by its speed (§294) | §294 |
+| the **link** of a clip | **built.** Two clips may be the same thing on two tracks, and a move of one moves the other (§295) | §295 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20472,3 +20473,73 @@ as it was. The tree has a third thing.
 - **The tree's rate and stretch are not here**: the tree's
   `rate_stretch` changes the speed by dragging an edge, and the speed
   it leaves is the speed of the new length.
+
+## 295. The link of a clip
+
+The tree's timeline has a thing that is not on the timeline: two clips
+that are **the same thing on two tracks** — a picture and its sound.
+
+### What was built
+
+- Two clips may be **linked**: a new command, `film.clip.link`, and a
+  `link` in the clip's payload. A clip may be **unlinked** with
+  `film.clip.unlink`.
+- A **move** of a linked clip moves its **partners** by the same
+  offset, on their own tracks.
+- A partner on a **locked** track stays where it is.
+- A partner left **alone** in its link is unlinked too: a link with
+  nothing to follow reads as if it were something.
+
+### What the port found
+
+- **The tree's link is a number in the clip, and the clips with the
+  same number are the group.** The tree's `TrackItem` has a `link:
+  Option<u64>` and the tree's edit context allocates the number. Here
+  the link is the id of the **first clip of the group** — the smallest
+  id in it — so the group has a name that is in the document and two
+  groups can be merged by taking the smaller name.
+- **The tree's move of a linked clip moves the partners by the same
+  offset and not to the same place.** The tree's `timeline.move` puts
+  each partner at `partner.start + offset` on **its own track**: the
+  picture and the sound keep their own places on their own tracks and
+  stay in step.
+- **The tree's partner on a locked track stays.** The tree's move
+  looks at the tracks that are not locked and leaves the partners on
+  the locked ones alone — the same rule the locked track has for
+  every other edit (§283).
+- **The tree's group of one is not a group.** The tree's link command
+  says so in its own words: "a partner left alone in its link is
+  unlinked too: a one-member link would read as linked with nothing
+  to follow".
+- **The tree's link command is a command on a *selection*.** The tree
+  links everything that is selected, and it pairs a video clip with
+  the audio clip of the same item that overlaps it. Here two clips
+  are named, and nothing is guessed.
+
+### What it cost
+
+- **Ten tests** in the film battery (`tests/links.rs`): two clips are
+  linked, a move moves the partner, a partner on a locked track stays,
+  an unlinked clip leaves the others, a partner left alone is unlinked,
+  a clip that is not linked cannot be unlinked, a clip may not be
+  linked to itself, two clips in different sequences are refused, the
+  trim of a linked clip is refused, and the split of a linked clip is
+  refused.
+- **Two new commands**: `film.clip.link` and `film.clip.unlink`. The
+  film battery now carries **21** commands and the MCP server **377**.
+
+### What it does not settle
+
+- **The trim of a linked clip is refused, and it is not here yet.** The
+  tree trims the group as **one edit**, with the delta that every
+  member can take — the smallest of their bounds — and it applies
+  that delta to all of them.
+- **The split of a linked clip is refused, and it is not here yet.**
+  The tree splits the group as one edit and the right-hand pieces get
+  a **new** link, so that they stay linked to each other and not to
+  the left-hand ones.
+- **The tree's copy of a linked clip is not here**: the tree's copies
+  of linked clips are linked to each other and not to the originals.
+- **The tree's selection is not here**: the tree links what is
+  selected and pairs a video clip with the audio clip of the same item
+  that overlaps it; here two clips are named.
