@@ -81,14 +81,16 @@ fn a_file_is_written_out_again() {
     let out = format!("{directory}/out.pdf");
     session.execute("pdf.file.write", &json!({ "path": out.clone() })).expect("the file is written");
     let entries = entries_of(&mut session, &out);
-    // The three objects the document held.
-    assert_eq!(entries.len(), 3, "the file holds three entries");
+    // The three objects the document held, and the row of the number
+    // zero, which is always free.
+    assert_eq!(entries.len(), 4, "the file holds four entries: {entries:?}");
     let numbers: Vec<u64> = entries.iter().filter_map(|entry| entry["object"].as_u64()).collect();
     assert!(numbers.contains(&1), "the catalog is there");
     assert!(numbers.contains(&3), "and the page is there");
     let kinds: Vec<String> =
         entries.iter().filter_map(|entry| entry["kind"].as_str().map(|kind| kind.to_string())).collect();
     assert_eq!(kinds.iter().filter(|kind| *kind == "in-file").count(), 3, "all three are in the file");
+    assert_eq!(kinds.iter().filter(|kind| *kind == "free").count(), 1, "and the number zero is free");
 }
 
 /// The file that is written out is **read back**: the same objects, in

@@ -13,9 +13,16 @@
 //! is written later in the file. So the graph is built in two passes —
 //! the objects first, and the references after — and that is a
 //! plugin's business, and the price of the core's rule.
+//!
+//! # The free numbers
+//!
+//! The numbers the file says are **free** are read as well: they are
+//! numbers something had, and the file says which they are and the
+//! generation each of them gets if it is used again.
 
 use craftkit_sdk::serde_json::Value as Json;
 
+use crate::free::Free;
 use crate::objects::{self, Error as ObjectsError};
 use crate::xref::{self, Error as XrefError};
 
@@ -55,14 +62,35 @@ pub struct Reference {
     pub generation: u64,
 }
 
+/// A **file** that has been read: its objects, and the numbers that
+/// are **free**.
+#[derive(Debug, Clone, PartialEq)]
+pub struct File {
+    /// The objects of the file.
+    pub objects: Vec<Loaded>,
+    /// The numbers that are not in use, and the generation each of
+    /// them gets if it is used again.
+    pub free: Vec<Free>,
+}
+
 /// Read the **objects** of a file.
 ///
 /// The bytes are the file's own, and the objects are read in the order
-/// the file's index has them.
-pub fn load(bytes: &[u8]) -> Result<Vec<Loaded>, Error> {
+/// the file's index has them. The numbers the file says are **free**
+/// are read too: they are numbers something had, and the file says so.
+pub fn load(bytes: &[u8]) -> Result<File, Error> {
     let table = xref::read(bytes).map_err(from_xref)?;
     let mut loaded: Vec<Loaded> = Vec::with_capacity(table.entries.len());
+    let mut free: Vec<Free> = Vec::new();
     for entry in &table.entries {
+        if entry.kind == xref::Kind::Free {
+            // A free row of the table says the generation the number
+            // gets if it is used again.
+            if entry.number > 0 {
+                free.push(Free { number: entry.number, generation: entry.generation });
+            }
+            continue;
+        }
         if entry.kind != xref::Kind::InFile {
             continue;
         }
@@ -99,7 +127,7 @@ pub fn load(bytes: &[u8]) -> Result<Vec<Loaded>, Error> {
             references,
         });
     }
-    Ok(loaded)
+    Ok(File { objects: loaded, free })
 }
 
 /// The **references** a value holds.

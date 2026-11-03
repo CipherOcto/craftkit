@@ -19,6 +19,9 @@
 //! that is gone, and keeps the rest; a key whose list becomes empty
 //! goes too, because an empty list is not what the file had.
 //!
+//! And the **number** of the object that is gone is **free**: it is
+//! not used again, and the file says so.
+//!
 //! # What it does not do
 //!
 //! - **The root cannot go.** The file needs a root, and the root is
@@ -133,6 +136,9 @@ impl RemoveObject {
                 message: format!("there is no node `{object}`"),
             });
         }
+        // The **number** of the object that is gone is **free**: it is
+        // not used again, and the file says so.
+        crate::free::free_number(session.document_mut()?, number, 0);
         Ok(Outcome::changed(format!("the object `{object}` is gone"))
             .with_data(serde_json::json!({ "id": object, "object": number, "unlinked": unlinked })))
     }

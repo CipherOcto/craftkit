@@ -57,6 +57,12 @@
 //! **derived**: how many items are visible below an item, and the sign
 //! saying whether it is open or closed.
 //!
+//! And the **free numbers** are here: a number that is not in use is
+//! **free**, a number whose object is taken away is freed and is not
+//! used again, and the file says so — the table has a row for the
+//! number and the generation it gets if it is used again (the module
+//! `free`).
+//!
 //! # The mapping
 //!
 //! | the object model | v2 |
@@ -109,6 +115,7 @@
 
 mod content;
 mod filters;
+mod free;
 mod loader;
 mod number;
 mod objects;
@@ -254,6 +261,15 @@ impl AddObject {
             return Err(EngineError::Failed {
                 id: "pdf.object.add".to_string(),
                 message: format!("the number `{number}` is the number of the object `{other}`"),
+            });
+        }
+        // A number that is **free** is not used again: it was the
+        // number of an object that was taken away, and the file still
+        // says the number is free.
+        if free::the_free(session.document()).iter().any(|entry| entry.number == number) {
+            return Err(EngineError::Failed {
+                id: "pdf.object.add".to_string(),
+                message: format!("the number `{number}` is free, and a free number is not used again"),
             });
         }
         let data = serde_json::json!({ "object": number, "entries": entries });
@@ -1222,18 +1238,10 @@ fn the_number_of(node: &Node) -> Option<u64> {
 /// The next **free** object number.
 ///
 /// A number nothing else has: the file says which object an action is,
-/// and the file's objects are numbered.
+/// and the file's objects are numbered. A number that is **free** is a
+/// number something had, so the next number is past it.
 fn the_next_number(document: &Document, after: u64) -> u64 {
-    let mut highest = after;
-    for node in document.walk() {
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            continue;
-        }
-        if let Some(number) = the_number_of(node) {
-            highest = highest.max(number);
-        }
-    }
-    highest + 1
+    free::the_next_number(document, after)
 }
 
 /// A **name**, from a text a caller sent.
@@ -1475,10 +1483,11 @@ impl LoadFile {
             id: "pdf.file.load".to_string(),
             message: format!("the file cannot be read: {message}"),
         })?;
-        let objects = loader::load(&bytes).map_err(|error| EngineError::Failed {
+        let file = loader::load(&bytes).map_err(|error| EngineError::Failed {
             id: "pdf.file.load".to_string(),
             message: format!("the file cannot be loaded: {error:?}"),
         })?;
+        let objects = file.objects;
         std::fs::create_dir_all(&into).map_err(|error| EngineError::Failed {
             id: "pdf.file.load".to_string(),
             message: format!("the streams' bytes have nowhere to go: {error}"),
@@ -1533,11 +1542,20 @@ impl LoadFile {
             }
         }
         let count = objects.len();
+        // The **free numbers** of the file: the numbers the file says
+        // are not in use. They are kept, because a number that is free
+        // is a number something had.
+        let free = file.free;
+        if !free.is_empty() {
+            let document = session.document_mut()?;
+            free::set_the_free(document, &free);
+        }
         Ok(Outcome::changed(format!("loaded {count} object(s)")).with_data(serde_json::json!({
             "path": path,
             "into": into,
             "objects": count,
             "relations": relations,
+            "free": free.len(),
         })))
     }
 }
@@ -1627,7 +1645,8 @@ impl WriteFile {
                     message: "the document holds no catalog to be the root of the file".to_string(),
                 })?,
         };
-        let file = writer::write(&objects, root).map_err(|error| EngineError::Failed {
+        let free = free::the_free(session.document());
+        let file = writer::write(&objects, &free, root).map_err(|error| EngineError::Failed {
             id: "pdf.file.write".to_string(),
             message: format!("the file cannot be written: {error:?}"),
         })?;
@@ -1635,8 +1654,53 @@ impl WriteFile {
             id: "pdf.file.write".to_string(),
             message: format!("the file cannot be written to `{path}`: {error}"),
         })?;
-        Ok(Outcome::changed(format!("wrote {} object(s)", objects.len()))
-            .with_data(serde_json::json!({ "path": path, "root": root, "bytes": file.len() })))
+        Ok(Outcome::changed(format!("wrote {} object(s)", objects.len())).with_data(serde_json::json!({
+            "path": path,
+            "root": root,
+            "bytes": file.len(),
+            "free": free.len(),
+        })))
+    }
+}
+
+/// The **free numbers** of the file.
+///
+/// A number that is not in use is **free**, and a free number is not
+/// used again: it was the number of an object that was taken away,
+/// and the file still says the number is free.
+///
+/// The **next number** is past them all, because a free number is a
+/// number something had.
+#[derive(Command)]
+#[command(id = "pdf.file.free", area = "pdf", layer = "pdf", icon = "list")]
+pub struct ReadFree {
+    /// The number to start from: the next number is past this one as
+    /// well as past the free ones. Leave it out and the next number
+    /// is past the file's own numbers.
+    pub after: Option<Number>,
+}
+
+impl ReadFree {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.file.free".to_string();
+        let mut after = 0_u64;
+        if let Some(number) = &self.after {
+            if !number.0.is_finite() || number.0 < 0.0 || number.0.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "an object number is a whole number".to_string(),
+                });
+            }
+            after = number.0 as u64;
+        }
+        let free = free::the_free(session.document());
+        let numbers: Vec<serde_json::Value> = free
+            .iter()
+            .map(|entry| serde_json::json!({ "object": entry.number, "generation": entry.generation }))
+            .collect();
+        let next = free::the_next_number(session.document(), after);
+        Ok(Outcome::new(format!("the file has {} free number(s)", free.len()))
+            .with_data(serde_json::json!({ "free": numbers, "count": free.len(), "next": next })))
     }
 }
 

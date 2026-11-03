@@ -15,13 +15,15 @@
 //!
 //! # What it does not do
 //!
-//! - **The predictors are not here.** A predictor is a second step on
-//!   top of Flate or LZW, and it is the next arc.
 //! - **There is no encoder.** A filter that undoes a stream is worth
 //!   having on its own: the tree's encoder writes the streams it reads.
 //! - **The bytes are bounded, and the bound is the caller's.** A
 //!   stream that decodes to more than the limit allows is refused, and
 //!   it is refused before the memory is spent.
+//!
+//! The **predictors** — the second step on top of Flate or LZW — are
+//! in the module `predictors`, and the command `pdf.stream.decode`
+//! undoes them as well.
 
 use craftkit_sdk::serde_json::Value as Json;
 

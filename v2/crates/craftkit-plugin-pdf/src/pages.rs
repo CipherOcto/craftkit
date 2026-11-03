@@ -11,11 +11,15 @@
 //! taken away as well, because the file is written from the
 //! dictionaries and not from the edges.
 //!
+//! And the **widgets** of the page leave the **form**: a widget is a
+//! field of the form, and a field that points at a page that is not
+//! there would keep it, with its content, in the file that is written.
+//!
+//! And the **number** of the page that is gone is **free**: it is not
+//! used again, and the file says so.
+//!
 //! # What it does not do
 //!
-//! - **The widgets of the page do not leave the form.** The tree takes
-//!   the form fields of a page that is gone out of the form; that is
-//!   not here yet.
 //! - **The tree of pages is not rebuilt.** The tree moves the
 //!   attributes that a page inherits down into the pages that are left
 //!   and takes them out of the root. Here the tree keeps the
@@ -148,6 +152,9 @@ impl RemovePage {
                 node.data = crate::with_entry(&node.data, "Count", serde_json::json!(children));
             }
         }
+        // The **number** of the page that is gone is **free**: it is
+        // not used again, and the file says so.
+        crate::free::free_number(session.document_mut()?, number, 0);
         Ok(Outcome::changed(format!("the page `{page}` is gone"))
             .with_data(serde_json::json!({ "id": page, "object": number, "unlinked": unlinked })))
     }

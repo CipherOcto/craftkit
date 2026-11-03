@@ -8,8 +8,10 @@
 //!
 //! - The **objects**, one after another, each with its number and the
 //!   word `obj`;
-//! - the **cross-reference table** that says where they are;
-//! - the **trailer**, which says how many objects there are and which
+//! - the **cross-reference table** that says where they are, with a
+//!   row for the numbers that are **free** and a row for the number
+//!   zero;
+//! - the **trailer**, which says how many numbers there are and which
 //!   one is the root.
 //!
 //! # What it does not do
@@ -21,6 +23,8 @@
 //!   the writer knows which is which.
 
 use craftkit_sdk::serde_json::Value as Json;
+
+use crate::free::Free;
 
 /// Why a document could not be **written**.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,18 +48,23 @@ pub struct Object {
 ///
 /// The root is the object that is the file's **catalog** — the one the
 /// trailer names — and the file is not a file without it.
-pub fn write(objects: &[Object], root: u64) -> Result<Vec<u8>, Error> {
+///
+/// The **free numbers** are the numbers that are not in use: the table
+/// has a row for each of them, and the row says the number is free and
+/// the generation it gets if it is used again. The number zero is free
+/// as well, and the table says so in its first row.
+pub fn write(objects: &[Object], free: &[Free], root: u64) -> Result<Vec<u8>, Error> {
     if objects.iter().all(|object| object.number != root) {
         return Err(Error::Malformed(format!("the file has no object {root} to be its root")));
     }
     let mut file: Vec<u8> = Vec::new();
     file.extend_from_slice(b"%PDF-1.7\n%\xE2\xE3\xCF\xD3\n");
     // The **objects**, and where each one is.
-    let mut offsets: Vec<(u64, usize)> = Vec::with_capacity(objects.len());
+    let mut rows: Vec<Row> = Vec::with_capacity(objects.len() + free.len() + 1);
     let mut ordered: Vec<&Object> = objects.iter().collect();
     ordered.sort_by_key(|object| object.number);
     for object in &ordered {
-        offsets.push((object.number, file.len()));
+        let offset = file.len();
         file.extend_from_slice(format!("{} 0 obj\n", object.number).as_bytes());
         let mut entries = object.entries.clone();
         if object.stream.is_some() {
@@ -73,25 +82,50 @@ pub fn write(objects: &[Object], root: u64) -> Result<Vec<u8>, Error> {
             file.extend_from_slice(b"endstream");
         }
         file.extend_from_slice(b"\nendobj\n");
+        rows.push(Row { number: object.number, offset: offset as u64, generation: 0, in_file: true });
     }
+    // The **free numbers**: they are not in the file, and the table
+    // says so.
+    for entry in free {
+        rows.push(Row { number: entry.number, offset: 0, generation: entry.generation, in_file: false });
+    }
+    // The number zero is free, and the table's first row is its own.
+    rows.push(Row { number: 0, offset: 0, generation: 65_535, in_file: false });
+    rows.sort_by_key(|row| row.number);
+    rows.dedup_by_key(|row| row.number);
+    // The **size** of the file: the next number, and not the count of
+    // the objects — a file with a free number in it has more numbers
+    // than it has objects.
+    let size = rows.iter().map(|row| row.number).max().unwrap_or(0) + 1;
     // The **table**: where each object is.
     let table_at = file.len();
     file.extend_from_slice(b"xref\n");
-    for (first, count) in runs(&offsets) {
+    for (first, count) in runs(&rows) {
         file.extend_from_slice(format!("{first} {count}\n").as_bytes());
-        for (number, offset) in &offsets {
-            if *number < first || *number >= first + count {
+        for row in &rows {
+            if row.number < first || row.number >= first + count {
                 continue;
             }
-            file.extend_from_slice(format!("{offset:010} 00000 n\r\n").as_bytes());
+            let kind = if row.in_file { 'n' } else { 'f' };
+            file.extend_from_slice(format!("{:010} {:05} {kind}\r\n", row.offset, row.generation).as_bytes());
         }
     }
-    file.extend_from_slice(
-        format!("trailer\n<< /Size {} /Root {root} 0 R >>\nstartxref\n", objects.len()).as_bytes(),
-    );
+    file.extend_from_slice(format!("trailer\n<< /Size {size} /Root {root} 0 R >>\nstartxref\n").as_bytes());
     file.extend_from_slice(table_at.to_string().as_bytes());
     file.extend_from_slice(b"\n%%EOF\n");
     Ok(file)
+}
+
+/// One **row** of the table: a number, and where it is.
+struct Row {
+    /// The number.
+    number: u64,
+    /// Where it is, for an object that is in the file.
+    offset: u64,
+    /// Its generation.
+    generation: u64,
+    /// Whether it is in the file.
+    in_file: bool,
 }
 
 /// The **runs** of consecutive object numbers in the table.
@@ -99,12 +133,12 @@ pub fn write(objects: &[Object], root: u64) -> Result<Vec<u8>, Error> {
 /// The table is a list of subsections, and a subsection is a first
 /// object and a count, so the numbers that are not consecutive are in
 /// subsections of their own.
-fn runs(offsets: &[(u64, usize)]) -> Vec<(u64, u64)> {
+fn runs(rows: &[Row]) -> Vec<(u64, u64)> {
     let mut runs: Vec<(u64, u64)> = Vec::new();
-    for (number, _) in offsets {
+    for row in rows {
         match runs.last_mut() {
-            Some((first, count)) if *first + *count == *number => *count += 1,
-            _ => runs.push((*number, 1)),
+            Some((first, count)) if *first + *count == row.number => *count += 1,
+            _ => runs.push((row.number, 1)),
         }
     }
     runs
