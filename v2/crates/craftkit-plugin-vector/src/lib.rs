@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **thirty-one commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **thirty-two commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.unite`,
@@ -25,7 +25,9 @@
 //!   `vector.path.exclude`, `vector.path.simplify` and
 //!   `vector.path.offset` work on whole paths; `vector.path.move` and
 //!   `vector.path.handle` move a point of a path and set the handles of
-//!   the curves that leave and arrive at it; `vector.path.fill` and
+//!   the curves that leave and arrive at it; `vector.path.average`
+//!   puts the points of a path on one line, in one column, or all in
+//!   one place; `vector.path.fill` and
 //!   `vector.path.stroke` say what the path is painted with, and
 //!   `vector.path.gradient` says what the colours are, and
 //!   `vector.path.blend` says how the path mixes with what is under
@@ -843,6 +845,155 @@ impl MovePoint {
         Ok(Outcome::changed("the point has moved")
             .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
     }
+}
+
+/// **Average** the points of a path.
+///
+/// The points that are averaged are given **one per line**, as
+/// `contour:point`, because the tree's average works on the points that
+/// are selected and this tree has no selection: a range is a fact and
+/// a selection is not.
+///
+/// The **axis** says what is averaged: `horizontal` puts the points on
+/// one line, `vertical` puts them in one column, and `both` puts them
+/// all in one place. The default is `both`.
+///
+/// The tree's average works on the selected points of **several**
+/// paths at once; here a command works on one path, because a command
+/// works on one node.
+#[derive(Command)]
+#[command(
+    id = "vector.path.average",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Points"),
+    mutates,
+    undoable
+)]
+pub struct AveragePoints {
+    /// The path.
+    pub path: NodeRef,
+    /// The points to average, one per line, each `contour:point`.
+    pub points: Text,
+    /// The axis: `horizontal`, `vertical` or `both`. The default is
+    /// `both`.
+    pub axis: Option<Text>,
+}
+
+impl AveragePoints {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "vector.path.average".to_string();
+        let mut vector = vector_of(session, self.path.0)?;
+        let axis = match &self.axis {
+            Some(axis) => match axis.0.trim().to_ascii_lowercase().as_str() {
+                "horizontal" => Axis::Horizontal,
+                "vertical" => Axis::Vertical,
+                "both" => Axis::Both,
+                other => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "`{other}` is not an axis: an axis is `horizontal`, `vertical` or `both`"
+                        ),
+                    });
+                }
+            },
+            None => Axis::Both,
+        };
+        // The **points**: one per line, each `contour:point`.
+        let mut wanted: Vec<(usize, usize)> = Vec::new();
+        for line in self.points.0.lines().map(|line| line.trim()).filter(|line| !line.is_empty()) {
+            let Some((contour, point)) = line.split_once(':') else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{line}` is not a point: a point is `contour:point`"),
+                });
+            };
+            let (Ok(contour), Ok(point)) = (contour.trim().parse::<usize>(), point.trim().parse::<usize>())
+            else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{line}` is not a point: a point is `contour:point`"),
+                });
+            };
+            if wanted.contains(&(contour, point)) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the point `{line}` is in the list twice"),
+                });
+            }
+            wanted.push((contour, point));
+        }
+        if wanted.is_empty() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "there are no points to average".to_string(),
+            });
+        }
+        // The **centre**: the mean of the points that are averaged, and
+        // it is worked out before any point moves.
+        let mut sum = Point::new(0.0, 0.0);
+        for (contour, point) in &wanted {
+            let at = point_at(&vector.path, *contour, *point).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the path has no point {contour}:{point}"),
+            })?;
+            sum = Point::new(sum.x + at.x, sum.y + at.y);
+        }
+        let count = wanted.len() as f64;
+        let centre = Point::new(sum.x / count, sum.y / count);
+        for (contour, point) in &wanted {
+            let at = point_at(&vector.path, *contour, *point).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the path has no point {contour}:{point}"),
+            })?;
+            let to = match axis {
+                Axis::Horizontal => Point::new(at.x, centre.y),
+                Axis::Vertical => Point::new(centre.x, at.y),
+                Axis::Both => centre,
+            };
+            move_point(&mut vector.path, *contour, *point, to)
+                .map_err(|reason| EngineError::Failed { id: id.clone(), message: reason })?;
+        }
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed(format!("{} points are averaged", wanted.len())).with_data(
+            serde_json::json!({
+                "id": self.path.0,
+                "points": wanted.iter().map(|(contour, point)| serde_json::json!([contour, point])).collect::<Vec<_>>(),
+                "centre": { "x": centre.x, "y": centre.y },
+                "axis": axis.name(),
+            }),
+        ))
+    }
+}
+
+/// The **axis** a set of points is averaged along.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Axis {
+    /// The points end up on one line: the mean of their heights.
+    Horizontal,
+    /// The points end up in one column: the mean of their widths.
+    Vertical,
+    /// The points end up in one place.
+    Both,
+}
+
+impl Axis {
+    /// The name of the axis.
+    fn name(self) -> &'static str {
+        match self {
+            Axis::Horizontal => "horizontal",
+            Axis::Vertical => "vertical",
+            Axis::Both => "both",
+        }
+    }
+}
+
+/// Where a **point** of a contour is.
+fn point_at(path: &Path, contour: usize, point: usize) -> Option<Point> {
+    let subpath = path.subpaths.get(contour)?;
+    if point == 0 { Some(subpath.start) } else { Some(subpath.segments.get(point - 1)?.end()) }
 }
 
 /// Set the **handles** of a point.
