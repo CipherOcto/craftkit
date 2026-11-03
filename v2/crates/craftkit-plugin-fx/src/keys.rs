@@ -53,6 +53,12 @@
 //! So an auto keyframe follows the keys around it, and a keyframe with
 //! no neighbour on one side is not an auto one.
 //!
+//! And a keyframe may be **continuous**: its two sides are locked to
+//! each other, so the outgoing side takes the ease of the incoming one
+//! and the curve is smooth at the keyframe. The **flag** does not
+//! change the curve — the curve follows the eases that were written —
+//! so the flag is a memory of the writing.
+//!
 //! # What it does not do
 //!
 //! - **The spatial handles are not here.** The tree's spatial
@@ -152,6 +158,9 @@ struct Key {
     /// Whether the keyframe is an **auto** bezier: its ease is not
     /// written down but comes from its neighbours.
     auto: bool,
+    /// Whether the keyframe is **continuous**: its two sides are
+    /// locked to each other.
+    continuous: bool,
 }
 
 impl Key {
@@ -188,7 +197,8 @@ impl Key {
             None => Ease::default(),
         };
         let auto = key.get("auto").and_then(|auto| auto.as_bool()).unwrap_or(false);
-        Some(Key { frame, value, interp, ease, in_interp, in_ease, auto })
+        let continuous = key.get("continuous").and_then(|continuous| continuous.as_bool()).unwrap_or(false);
+        Some(Key { frame, value, interp, ease, in_interp, in_ease, auto, continuous })
     }
 
     /// The keyframe, as the payload holds it.
@@ -201,6 +211,7 @@ impl Key {
             "in_interp": self.in_interp.name(),
             "in_ease": { "speed": self.in_ease.speed, "influence": self.in_ease.influence },
             "auto": self.auto,
+            "continuous": self.continuous,
         })
     }
 }
@@ -308,6 +319,7 @@ impl SetKeyframe {
                     in_interp: Interp::Linear,
                     in_ease: Ease::default(),
                     auto: false,
+                    continuous: false,
                 });
                 keys.sort_by_key(|key| key.frame);
             }
@@ -398,6 +410,158 @@ impl RemoveKeyframe {
         }
         Ok(Outcome::changed(format!("`{path}` has no keyframe at frame {frame}"))
             .with_data(serde_json::json!({ "layer": layer, "path": path, "frame": frame })))
+    }
+}
+
+/// **Lock** the two sides of a keyframe together: a **continuous**
+/// keyframe.
+///
+/// The tree's rule: the outgoing side follows the incoming one — the
+/// side that is not named takes the ease of the side that is — and
+/// the keyframe is marked continuous, and the auto flag is cleared.
+///
+/// And the tree's finding: the **flag** does not change the curve. The
+/// curve follows the eases that were written; the flag is a memory of
+/// the writing. So a continuous keyframe is smooth because its two
+/// eases are the same, and not because it is marked.
+#[derive(Command)]
+#[command(id = "fx.keyframe.continuous", area = "fx", layer = "fx", icon = "pencil", mutates, undoable)]
+pub struct SetContinuous {
+    /// The layer the property is on.
+    pub layer: NodeRef,
+    /// The path of the property.
+    pub path: Text,
+    /// The frame the keyframe is on.
+    pub frame: Number,
+    /// Whether the keyframe is continuous. The default is that it is.
+    pub continuous: Option<Bool>,
+    /// The speed of both sides, in value units per frame. The default
+    /// is the speed the keyframe has on the side it is entered on.
+    pub speed: Option<Number>,
+    /// The influence of both sides: the fraction of the segment each
+    /// handle takes.
+    pub influence: Option<Number>,
+}
+
+impl SetContinuous {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "fx.keyframe.continuous".to_string();
+        let layer = self.layer.0;
+        let path = self.path.0.clone();
+        let segments = parse_path(&path);
+        if segments.is_empty() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a path has something in it".to_string(),
+            });
+        }
+        let frame = self.frame.0;
+        if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a frame is a whole number".to_string(),
+            });
+        }
+        let frame = frame as u64;
+        let continuous = self.continuous.map(|continuous| continuous.0).unwrap_or(true);
+        let Some(node) = session.document().node(layer) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no layer `{layer}`"),
+            });
+        };
+        if node.kind != "fx.layer" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+            });
+        }
+        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+        let Some(current) = get_at(&props, &segments).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no `{path}` here"),
+            });
+        };
+        let Some(mut keys) = keys_of(&current) else {
+            return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
+        };
+        let Some(key) = keys.iter_mut().find(|key| key.frame == frame) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("`{path}` has no keyframe at frame {frame}"),
+            });
+        };
+        if !continuous {
+            // The **flag** is cleared and nothing else changes: the
+            // eases stay as they are, as they do in the tree.
+            key.continuous = false;
+            let data = with_keys(&current, &keys);
+            if let Some(node) = session.document_mut()?.node_mut(layer) {
+                let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+                set_at(&mut props, &segments, data)
+                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                node.data["props"] = props;
+            }
+            return Ok(Outcome::changed(format!("the keyframe at frame {frame} is not continuous"))
+                .with_data(serde_json::json!({
+                    "layer": layer,
+                    "path": path,
+                    "frame": frame,
+                    "continuous": false,
+                })));
+        }
+        // The **ease**: the one that is given, or the one the keyframe
+        // has on the side it is entered on — the tree's rule that the
+        // side that is not named takes the ease of the side that is.
+        let mut ease = key.in_ease;
+        if let Some(speed) = &self.speed {
+            if !speed.0.is_finite() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a speed is a number that is there".to_string(),
+                });
+            }
+            ease.speed = speed.0;
+        }
+        if let Some(influence) = &self.influence {
+            if !influence.0.is_finite() || !(0.0..=1.0).contains(&influence.0) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "an influence is a fraction of the segment, from 0 to 1, and `{}` is not one",
+                        influence.0
+                    ),
+                });
+            }
+            ease.influence = influence.0;
+        }
+        // Both sides are **beziers** with the same ease, so the
+        // handles are mirrors of each other and the curve is smooth
+        // at the keyframe.
+        key.interp = Interp::Bezier;
+        key.in_interp = Interp::Bezier;
+        key.ease = ease;
+        key.in_ease = ease;
+        // A **manual** ease is not an auto one.
+        key.auto = false;
+        key.continuous = true;
+        let data = with_keys(&current, &keys);
+        if let Some(node) = session.document_mut()?.node_mut(layer) {
+            let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            set_at(&mut props, &segments, data)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            node.data["props"] = props;
+        }
+        Ok(Outcome::changed(format!("the keyframe at frame {frame} is continuous")).with_data(
+            serde_json::json!({
+                "layer": layer,
+                "path": path,
+                "frame": frame,
+                "continuous": true,
+                "ease": { "speed": ease.speed, "influence": ease.influence },
+            }),
+        ))
     }
 }
 
