@@ -106,7 +106,10 @@ impl RemovePage {
                 Some(Holder { id: node.id, kept, gone })
             })
             .collect();
-        // The page goes, and the edges of the kind `ref` die with it.
+        // The **widgets** of the page leave the **form**: a field that
+        // points at a page that is not there would keep it, with its
+        // content, in the file that is written.
+        let widgets = drop_widgets(session, page)?;
         if !session.document_mut()?.remove_node(page) {
             return Err(EngineError::Failed {
                 id: id.clone(),
@@ -114,6 +117,9 @@ impl RemovePage {
             });
         }
         let mut unlinked: Vec<serde_json::Value> = Vec::new();
+        for widget in &widgets {
+            unlinked.push(serde_json::json!({ "widget": widget, "form": true }));
+        }
         for holder in holders {
             for key in &holder.gone {
                 unlinked.push(serde_json::json!({ "object": holder.id, "key": key }));
@@ -155,6 +161,126 @@ struct Holder {
     kept: Vec<(String, serde_json::Value)>,
     /// The keys that went.
     gone: Vec<String>,
+}
+
+/// The **widgets** of a page leave the **form**, and the page goes.
+///
+/// A widget is an annotation whose subtype is `Widget`, and a widget
+/// is a **field** of the form: the form holds it, or the field it
+/// belongs to holds it. The tree takes the widget out of the list that
+/// holds it — out of the field's `Kids`, or out of the form's `Fields`
+/// when the widget is a field itself — and a field left with no
+/// children goes as well.
+///
+/// The widget **stays** in the document: it is an object of its own,
+/// and an object that nothing refers to any more is still an object.
+fn drop_widgets(session: &mut Session, page: u64) -> Result<Vec<u64>, EngineError> {
+    // The **annotations** of the page, and the widgets among them.
+    let Some(node) = session.document().node(page) else { return Ok(Vec::new()) };
+    let annots: Vec<u64> = entries_of(&node.data)
+        .into_iter()
+        .find(|(key, _)| key == "Annots")
+        .and_then(|(_, value)| value.as_array().cloned())
+        .unwrap_or_default()
+        .iter()
+        .filter_map(number_named)
+        .collect();
+    let mut widgets: Vec<u64> = Vec::new();
+    for annot in annots {
+        let Some(node) = session.document().walk().find(|node| the_number_of(node) == Some(annot)) else {
+            continue;
+        };
+        let subtype = entries_of(&node.data)
+            .into_iter()
+            .find(|(key, _)| key == "Subtype")
+            .and_then(|(_, value)| value.as_str().map(|subtype| subtype.to_string()));
+        if subtype.as_deref() == Some("Widget") {
+            widgets.push(annot);
+        }
+    }
+    // Each widget leaves the list that holds it, and a field left with
+    // no children goes as well.
+    let mut gone: Vec<u64> = Vec::new();
+    let mut pending: Vec<u64> = widgets.clone();
+    while let Some(widget) = pending.pop() {
+        let Some(node) = session.document().walk().find(|node| the_number_of(node) == Some(widget)) else {
+            continue;
+        };
+        let parent = entries_of(&node.data)
+            .into_iter()
+            .find(|(key, _)| key == "Parent")
+            .and_then(|(_, value)| number_named(&value));
+        let holder = match parent {
+            Some(parent) => {
+                let empty = unlink_from(session, parent, "Kids", widget)?;
+                if empty {
+                    pending.push(parent);
+                }
+                Some(parent)
+            }
+            None => {
+                unlink_from_form(session, widget)?;
+                None
+            }
+        };
+        gone.push(widget);
+        let _ = holder;
+    }
+    Ok(gone)
+}
+
+/// Take a number out of a **list** of a dictionary, and say whether
+/// the list is empty afterwards.
+fn unlink_from(session: &mut Session, object: u64, key: &str, number: u64) -> Result<bool, EngineError> {
+    let Some(found) = session.document().walk().find(|node| the_number_of(node) == Some(object)) else {
+        return Ok(false);
+    };
+    let id = found.id;
+    let entries = entries_of(&found.data);
+    let Some((_, value)) = entries.iter().find(|(name, _)| name == key) else { return Ok(false) };
+    let Some(list) = value.as_array() else { return Ok(false) };
+    if !list.iter().any(|item| number_named(item) == Some(number)) {
+        return Ok(false);
+    }
+    let rest: Vec<serde_json::Value> =
+        list.iter().filter(|item| number_named(item) != Some(number)).cloned().collect();
+    let empty = rest.is_empty();
+    let kept: Vec<(String, serde_json::Value)> = entries
+        .into_iter()
+        .map(|(name, value)| if name == key { (name, serde_json::json!(rest)) } else { (name, value) })
+        .collect();
+    if let Some(node) = session.document_mut()?.node_mut(id) {
+        node.data = serde_json::json!({
+            "object": node.data.get("object").cloned().unwrap_or(serde_json::Value::Null),
+            "entries": pairs_of(&kept),
+        });
+    }
+    Ok(empty)
+}
+
+/// Take a number out of the **fields** of the form.
+fn unlink_from_form(session: &mut Session, number: u64) -> Result<(), EngineError> {
+    let Some(form) = the_form(session) else { return Ok(()) };
+    unlink_from(session, form, "Fields", number)?;
+    Ok(())
+}
+
+/// The **form** of the file: the object the catalog names in its
+/// `AcroForm`, by its number.
+fn the_form(session: &Session) -> Option<u64> {
+    let catalog = session.document().walk().find(|node| {
+        (node.kind == "pdf.object" || node.kind == "pdf.stream")
+            && entries_of(&node.data)
+                .iter()
+                .any(|(key, value)| key == "Type" && value.as_str() == Some("Catalog"))
+    })?;
+    let form = entries_of(&catalog.data)
+        .into_iter()
+        .find(|(key, _)| key == "AcroForm")
+        .and_then(|(_, value)| number_named(&value))?;
+    // The **number** of the form: the lists hold numbers and not node
+    // ids.
+    Some(form)
 }
 
 /// Whether a node is a **page**: an object whose type is `Page`.
