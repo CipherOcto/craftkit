@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2196 tests.** The MCP server links **all fifteen batteries** in, so the
+**2202 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3742,6 +3742,7 @@ so.
 | the **removal** of an anchor | **built.** An anchor may be taken away, and the contour becomes the stretches that are left (§305) | §305 |
 | the **transitions** of a trim | **built.** A transition that no longer fits inside the two clips it joins is brought back inside them (§306) | §306 |
 | the **widgets** of a page that is gone | **built.** The fields of a page that is taken away leave the form (§307) | §307 |
+| the **corner** of a point | **built.** The handles at a point may be pulled back to it, and the point becomes a corner (§308) | §308 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21320,3 +21321,56 @@ is written.
 - **The tree's fields that are not widgets are not here**: a field
   that a page does not hold is not touched, because a page does not
   hold it.
+
+## 308. The corner of a point
+
+A point with handles on it is a curve. A point with its handles pulled
+back to it is a **corner**, and the two sides leave it as straight
+lines. The tree's smooth point was here; the corner was not.
+
+### What was built
+
+- The command `vector.path.corner` makes a point of a path a
+  **corner**: the handles at the point are pulled back to it, and the
+  two sides leave it as straight lines.
+- The handles at the **other ends** of those sides are not touched:
+  they belong to other points.
+- A point with **no handles** is refused: it is a corner already.
+
+### What the port found
+
+- **The tree's command is one command for two things.** The tree's
+  `path.convertAnchors` takes a `to` that says `corner` or `smooth`,
+  and does one or the other. This tree has one command for each: the
+  smooth one was `vector.path.smooth` and the corner one is
+  `vector.path.corner`. One command per thing.
+- **The tree's corner is the handles pulled back to the point.** The
+  tree's `retract` sets the point's two handles to the point itself,
+  and the segments on either side become straight lines. The handles at
+  the other ends of those segments are untouched — they belong to the
+  other points.
+- **The tree's smooth is not the same rule.** The tree's
+  `smooth_anchor` puts the handles along the line from the previous
+  point to the next one, a third of the way to each; a corner is the
+  opposite of that, and the two are the two halves of one idea: where
+  the handles are says whether the point is a corner or a curve.
+- **The tree does nothing when there is nothing to do.** The tree's
+  command on a point that is already a corner changes nothing and says
+  nothing. Here a point with no handles is **refused**, as the smooth
+  command refuses a point with no handles to smooth.
+
+### What it cost
+
+- **Six tests** in the vector battery (`tests/corner.rs`): the handles
+  at the point are pulled back, the handles at the other ends are not
+  touched, the point does not move, and three refusals.
+- **One new command**: `vector.path.corner`. The vector battery now
+  carries **34** commands and the MCP server **387**.
+
+### What it does not settle
+
+- **The tree's selection is not here**: the tree's command works on
+  every selected point at once, and here a command works on one point.
+- **The tree's anchor kind is not here**: the tree remembers whether
+  an anchor is a corner or a smooth one, and this tree's points do not
+  carry that — the handles say it.
