@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2138 tests.** The MCP server links **all fifteen batteries** in, so the
+**2143 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3734,6 +3734,7 @@ so.
 | the **continuous** keyframe | **built.** A keyframe's two sides may be locked to each other, so the curve is smooth at it (§297) | §297 |
 | the **custom lists** of a workbook | **built.** A workbook may carry lists of your own, and a fill steps through one (§298) | §298 |
 | the **trim** of a linked group | **built.** A linked group is trimmed as one edit, and a member that cannot take the delta refuses it (§299) | §299 |
+| the **split** of a linked group | **built.** A linked group is split as one edit, and the right-hand pieces are a new group (§300) | §300 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20796,7 +20797,58 @@ refused the trim of a linked clip. The tree has no such refusal.
 - **The tree's clamp is not here**: the tree's trim takes the biggest
   delta it may and says nothing about it; here the trim is refused and
   the member that could not take it is named.
-- **The split of a linked group is refused, and it is not here yet.**
-  The tree splits the group as one edit and the right-hand pieces get a
-  **new** link, so that they stay linked to each other and not to the
-  left-hand ones.
+- **The split of a linked group is refused, and it is not here yet** —
+  and it is now (§300): the tree splits the group as one edit and the
+  right-hand pieces get a **new** link, so that they stay linked to
+  each other and not to the left-hand ones.
+
+## 300. The split of a linked group
+
+§299 gave the film battery the **trim** of a linked group. The split
+is the last of the tree's link rules.
+
+### What was built
+
+- The split of a linked clip splits the **group**: every member that
+  covers the place is cut at the same frame, and the media of every
+  member moves with the cut.
+- The **right-hand pieces** are a **new group**: they are linked to
+  each other and not to the left-hand ones, as the tree's split does.
+
+### What the port found
+
+- **The tree's split of a group mints a new link for the right-hand
+  pieces.** The tree's `split_track_at` takes a map of the old groups
+  to the new ones and gives the right-hand piece a link from it — so
+  the two pieces of a group are still linked **to each other** and not
+  to the left halves. A split does not break a link; it makes a new
+  one.
+- **The tree's split of a group cuts the members that are under the
+  place.** The tree's `razor_items` splits the tracks of the given
+  clips, and only where the item at the place is one of them: a
+  partner that does not reach the place is not cut, and the group is
+  one link smaller for it.
+- **The tree's split is the same place for every member** — the
+  timeline frame, not the source frame. So a picture and its sound are
+  cut at the same moment on the timeline, and each of them takes the
+  media that goes with its own cut.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/linked_split.rs`): the
+  partner is split too, the right-hand pieces are a new group, the
+  media moves with the cut, a member that does not cover the place is
+  left alone, and a place that is not inside is refused.
+- **No new command**: this is what `film.clip.split` does with a
+  linked clip. The film battery still carries **21** commands and the
+  MCP server **381**.
+
+### What it does not settle
+
+- **The tree's transitions are not here**: the tree's split moves the
+  transitions that follow the cut onto the right-hand piece and takes
+  away the ones that span it. Here a split is a split.
+- **The tree's group split is a **razor** of the whole group**: the
+  tree's razor may be given a track and cuts everything on it, and
+  the groups it cuts are made new links as well. Here a split is of
+  one group and its members.
