@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and twenty-seven commands**, one for each thing a person does to a
+//! - **a hundred and twenty-nine commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -280,6 +280,11 @@
 //! because a track is a node and a node is something a command can be
 //! given (§234).
 //!
+//! And a **range** of a track may be faded: a clip that starts inside
+//! the range fades in and a clip that ends inside it fades out — the
+//! tree's `create_fades` over a selection, and not over a clip (the
+//! module `fades`).
+//!
 //! **The tree's fade is to the playhead and this tree's is to a
 //! place.** The tree's "Fade to Start" and "Fade to End" fade the clip
 //! under the playhead up to it or down from it. Here the place is
@@ -497,6 +502,7 @@ mod midi;
 mod clipboard;
 mod commit;
 mod duplicate;
+mod fades;
 mod heal;
 mod inactive;
 mod keys;
@@ -520,6 +526,7 @@ use craftkit_sdk::{
     Bool, Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
 };
 pub use duplicate::DuplicateTrack;
+pub use fades::{DeleteRangeFades, FadeRange};
 pub use gain::{BypassGain, SetGain};
 pub use grid::{Quantize, ReadGrid, SetGrid};
 pub use group::{Group, GroupKind, ReadGroup, SetGroupFlags, SetTrackGroup, Ungroup, UngroupTracks};
