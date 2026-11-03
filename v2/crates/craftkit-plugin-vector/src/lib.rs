@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **thirty-two commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **thirty-three commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.unite`,
@@ -27,7 +27,9 @@
 //!   `vector.path.handle` move a point of a path and set the handles of
 //!   the curves that leave and arrive at it; `vector.path.average`
 //!   puts the points of a path on one line, in one column, or all in
-//!   one place; `vector.path.fill` and
+//!   one place; `vector.path.anchor.remove` takes an anchor away, and
+//!   the contour becomes the stretches that are left; `vector.path.fill`
+//!   and
 //!   `vector.path.stroke` say what the path is painted with, and
 //!   `vector.path.gradient` says what the colours are, and
 //!   `vector.path.blend` says how the path mixes with what is under
@@ -686,6 +688,151 @@ impl AddAnchor {
         Ok(Outcome::changed("the path has one more anchor")
             .with_data(serde_json::json!({ "id": self.node.0, "subpath": which, "segment": index })))
     }
+}
+
+/// Take an **anchor** away.
+///
+/// The tree's rule: the segments that touch the anchor go with it, and
+/// the contour **splits** into the runs that are left — the surviving
+/// stretches stay separate rather than joining across the gap. A run
+/// with fewer than two points is not a run, and it is gone; and a
+/// contour that was closed is open afterwards.
+///
+/// The anchors are given one at a time: this tree has no selection,
+/// and a selection is not a fact.
+#[derive(Command)]
+#[command(
+    id = "vector.path.anchor.remove",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path"),
+    mutates,
+    undoable
+)]
+pub struct RemoveAnchor {
+    /// The path.
+    pub node: NodeRef,
+    /// Which contour of the path.
+    pub subpath: Option<Number>,
+    /// Which anchor of the contour.
+    pub anchor: Number,
+}
+
+impl RemoveAnchor {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "vector.path.anchor.remove".to_string();
+        let index = self.anchor.0;
+        if !index.is_finite() || index < 0.0 || index.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id,
+                message: "an anchor is a number and not a negative one".to_string(),
+            });
+        }
+        let anchor = index as usize;
+        let mut vector = vector_of(session, self.node.0)?;
+        let which = match &self.subpath {
+            Some(subpath) => subpath.0,
+            None => 0.0,
+        };
+        if !which.is_finite() || which < 0.0 || which.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id,
+                message: "a contour is a number and not a negative one".to_string(),
+            });
+        }
+        let which = which as usize;
+        let Some(subpath) = vector.path.subpaths.get(which).cloned() else {
+            return Err(EngineError::Failed { id, message: format!("the path has no contour {which}") });
+        };
+        let anchors = subpath.segments.len() + 1;
+        if anchor >= anchors {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the contour has {anchors} anchors and not an anchor {anchor}"),
+            });
+        }
+        // The **runs** that are left: the stretches that survive stay
+        // separate rather than joining across the gap.
+        let runs = without_anchor(&subpath, anchor);
+        let mut contours = Vec::with_capacity(vector.path.subpaths.len() + runs.len());
+        for (index, contour) in vector.path.subpaths.iter().enumerate() {
+            if index != which {
+                contours.push(contour.clone());
+            }
+        }
+        for run in runs {
+            contours.push(run);
+        }
+        vector.path.subpaths = contours;
+        write_back(session, self.node.0, &vector)?;
+        Ok(Outcome::changed("the path has one anchor less")
+            .with_data(serde_json::json!({ "id": self.node.0, "subpath": which, "anchor": anchor })))
+    }
+}
+
+/// The **runs** of a contour that are left when an anchor is taken away.
+///
+/// The segments that touch the anchor go with it: the one that arrives
+/// at it and the one that leaves it.
+///
+/// A closed contour is a **cycle**, so one anchor away leaves **one**
+/// stretch, and the edge that closed the contour becomes an edge of
+/// its own. An open contour is a **line** of points, so one anchor
+/// away leaves the stretches on either side of it — two stretches and
+/// not one, because the tree keeps them apart rather than joining
+/// across the gap.
+///
+/// A stretch with fewer than two points is not a stretch, and it is
+/// gone.
+fn without_anchor(subpath: &SubPath, anchor: usize) -> Vec<SubPath> {
+    let segments = &subpath.segments;
+    let count = segments.len();
+    if subpath.closed {
+        // A closed contour is a **cycle**, so taking one anchor away
+        // leaves **one** stretch: the edge that closed the contour
+        // becomes an edge of its own, and in this model that edge is a
+        // straight line.
+        let mut kept: Vec<Segment> = Vec::new();
+        let mut start = subpath.start;
+        // The stretch **after** the anchor.
+        if anchor < count {
+            start = segments[anchor].end();
+            kept.extend_from_slice(&segments[anchor + 1..]);
+        }
+        // The edge that **closed** the contour: it touches the first
+        // point and the last one, so it goes when the anchor is one of
+        // them — and when it is there, it is a straight line.
+        if anchor > 0 && anchor < count {
+            let from = kept.last().map(|segment| segment.end()).unwrap_or(start);
+            if from != subpath.start {
+                kept.push(Segment::Line { to: subpath.start });
+            }
+        }
+        // And the stretch **before** the anchor.
+        if anchor > 1 {
+            kept.extend_from_slice(&segments[..anchor - 1]);
+        }
+        if kept.is_empty() {
+            return Vec::new();
+        }
+        return vec![SubPath { start, segments: kept, closed: false }];
+    }
+    // An open contour is a **line** of points, so taking one anchor
+    // away leaves the stretches that are on either side of it.
+    let mut runs: Vec<SubPath> = Vec::new();
+    // The stretch **before** the anchor.
+    if anchor >= 2 {
+        runs.push(SubPath { start: subpath.start, segments: segments[..anchor - 1].to_vec(), closed: false });
+    }
+    // And the stretch **after** it.
+    if anchor < count {
+        let kept = segments[anchor + 1..].to_vec();
+        if !kept.is_empty() {
+            runs.push(SubPath { start: segments[anchor].end(), segments: kept, closed: false });
+        }
+    }
+    runs
 }
 
 /// A contour the other way round.
@@ -2361,6 +2508,8 @@ craftkit_sdk::plugin_anchor!(
     ClosePath,
     ReversePath,
     AddAnchor,
+    RemoveAnchor,
+    AveragePoints,
     VectorPanel,
     TotalAreaEvaluator
 );
