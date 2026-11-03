@@ -44,6 +44,11 @@
 //! format says that the number is a date. The tree's calendar is here,
 //! and it has the day in it that never happened (the module `dates`).
 //!
+//! And a column may be **flash filled**: the rows that are filled are
+//! the **examples**, and what the examples say is a **program** —
+//! literals, tokens of the source and the first letter of a token —
+//! that is then run on the rows that are empty (the module `flash`).
+//!
 //! # The three things the port found
 //!
 //! - **A grid is not a tree, and the cells are in the payload.** A cell
@@ -79,6 +84,7 @@
 
 mod dates;
 mod fill;
+mod flash;
 mod format;
 mod formula;
 
@@ -87,6 +93,7 @@ use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Session, Text};
 
 use fill::FillRange;
+use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS};
 use formula::{Book, CellRef, Cells, Value};
 
@@ -822,6 +829,7 @@ craftkit_sdk::plugin_anchor!(
     ReadDependents,
     CalcSheet,
     FillRange,
+    FlashFill,
     SetFormat,
     CellText,
     CalcEvaluator,
