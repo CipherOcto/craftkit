@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2009 tests.** The MCP server links **all fifteen batteries** in, so the
+**2021 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3720,6 +3720,7 @@ so.
 | the **locked** track | **built.** A locked track cannot be edited, and every command that would edit it is refused (§283) | §283 |
 | the **fades** of a range | **built.** A range of a track fades in the clips that start in it and fades out the clips that end in it (§284) | §284 |
 | the **crossfade** | **built.** A range that covers the boundary between two clips makes them overlap, and the fades meet in the overlap (§285) | §285 |
+| the **flash fill** | **built.** A column learns a **program** from the rows that are filled and runs it on the rows that are empty (§286) | §286 |
 
 ### The list of things that are honestly not there: empty
 
@@ -19016,7 +19017,7 @@ tree's now.
 - **A formula is not filled** — and that is no longer true: a formula
   is filled, and its references are shifted (§275). The tree's **flash
   fill**, which reads the pattern out of the text beside the source, is
-  still not here.
+  now (§286).
 
 ## 275. The fill of a formula
 
@@ -19100,7 +19101,8 @@ formula and **shifts its references**. That is the tree's
 ### What it does not settle
 
 - **The tree's flash fill** is not here: it reads the pattern out of
-  the text beside the source, and that is a thing of its own.
+  the text beside the source, and that is a thing of its own — and it is
+  now (§286).
 - **The tree's `formats` and `values` modes** are still not here, and
   neither are its **lists** — the days, the months, the quarters — nor
   its **dates**: the `formats` and `values` modes are now (§279), the
@@ -19289,7 +19291,7 @@ were not here. They are here now.
   quarters and the ordinals — and the days, the months and the
   quarters are now (§282). The **ordinals** are not.
 - **The tree's flash fill is not here**: it reads the pattern out of
-  the text beside the source.
+  the text beside the source — and it is now (§286).
 - **The tree's `formats` and `values` modes are not here** — and they
   are now (§279): the first copies the style without the value, the
   second copies the value without the style.
@@ -19437,7 +19439,7 @@ The tree has **ten** ways of filling a range. Eight of them are here
   quarters and the ordinals — and the days, the months and the
   quarters are now (§282). The **ordinals** are not.
 - **The tree's flash fill is not here**: it reads the pattern out of
-  the text beside the source.
+  the text beside the source — and it is now (§286).
 
 ## 280. The interpolation of a keyframe
 
@@ -19668,7 +19670,7 @@ months and the quarters. That is here now.
 - **The tree's ordinal is not here**: `1st`, `2nd` and `3rd` are a rule
   of their own.
 - **The tree's flash fill is not here**: it reads the pattern out of
-  the text beside the source.
+  the text beside the source — and it is now (§286).
 
 ## 283. The locked track
 
@@ -19866,3 +19868,84 @@ tree's **range** of fades was not: the tree's `create_fades` walks a
   `EqualPower` shape, and it is here as a shape — but the tree's
   renderer chooses between the shapes by whether the two clips are of
   the same material, and that choice is not here.
+
+## 286. The flash fill
+
+The tree's fills (§270, §274, §275) all copy a value or a series. The
+tree has one fill that does neither: it **learns**.
+
+### What was built
+
+- A column is **flash filled**: the column beside it is the **source**,
+  the rows that are filled are the **examples**, and what the examples
+  say is a **program** — literals, tokens of the source and the first
+  letter of a token — that is then run on the rows that are empty.
+- The program is learned from the **shown text**: a date is read as the
+  date it shows and not as the number it holds.
+- The fill takes the **format** of the top of the column it fills, as
+  the tree's fill takes the style of the top of the column.
+- Four things are **refused**: the first column, which has nothing
+  beside it to learn from; a column with no filled rows, which has
+  nothing to learn from; a column whose examples share no program; and
+  a column that is already full, which has nothing to fill.
+
+### What the port found
+
+- **The tree's flash fill learns a program and not a pattern.** Its
+  pieces are a literal, a token by index with a case, and the first
+  letter of a token; the target is cut greedily — the longest token that
+  starts the rest of it wins, and whatever is left over becomes a
+  literal. "Smith, John" is the second token, a literal `", "`, and the
+  first token.
+- **The tree tries two index conventions.** The first program counts
+  the tokens from the front and the second counts them from the back,
+  so "the last name" is one program written `-1`.
+- **The tree's flash fill reads what the cell shows.** A date is the
+  date it shows, so a column of dates is a column of texts and a date
+  written in one shape can be rewritten in another.
+- **The tree's learning cannot fail on a single example.** "Write this
+  text" is always a program, so the tree's own test — one example, and
+  the program that explains it — always finds something. Only two
+  examples that disagree can fail, and then the tree writes nothing.
+- **The tree's flash fill is silent when it cannot learn.** It returns
+  zero and the caller cannot tell a refusal from a column that was
+  already full. Here both are refusals, and the refusal says which.
+- **The tree's flash fill writes the style of the top of the column**,
+  which is a style and is shared. Here a format is the cell's own, and
+  the format of the top cell is copied onto the cells that are written.
+- **The tree's own comment overstates it.** The tree's `flash_fill`
+  says it supports "fixed-position substrings", and its program has no
+  piece for one: there are literals, tokens and initials, and nothing
+  else.
+
+### What it cost
+
+- **Twelve tests** in the grid battery (`tests/flash.rs`): a token is
+  learned and filled, the initials are learned, a literal is learned,
+  the shown text of a date is read, the format of the column is taken,
+  the first column is refused, a column with no examples is refused,
+  examples that share no program are refused, a full column is refused,
+  a cell that holds a formula is not empty, the outcome says what was
+  written, and the value that is written is a text.
+- **One new command**: `grid.flash.fill`. The grid battery now carries
+  **13** commands and the MCP server **369**.
+
+### What it does not settle
+
+- **The tree's flash fill is the editor's, and the editor names a
+  selection.** Here the command names the cell whose column is filled,
+  and the region is the run of the source column around it.
+- **The tree's examples are the rows of the source column and the
+  target together; the region's ends are the ends of the source
+  column.** A row whose source is empty ends the region, and the tree
+  counts it in neither.
+- **The tree's program is only ever tried on the rows that are
+  filled.** A program that explains the examples may not fit a source —
+  and then the tree writes nothing for that row and says nothing about
+  it. Here the same: a row the program does not fit is left alone, and
+  the count in the outcome is the count of the rows that were written.
+- **The region's ends are the ends of the run of the source column
+  around the cell that named it.** A row above or below that run is not
+  in the region at all, and a row in the middle whose source is empty
+  is in it: the program is run on an empty source, it does not fit, and
+  the row is left alone.
