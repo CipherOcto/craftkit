@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2652 tests.** The MCP server links **all fifteen batteries** in, so the
+**2663 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2652 tests
+cargo test          # 2663 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3785,6 +3785,7 @@ so.
 | the **switch** of one effect | **built.** An effect may be switched off and keep its values (§348) | §348 |
 | the **line spacing** of a paragraph | **built.** The lines may be spaced by a multiple, a minimum or an exact number (§349) | §349 |
 | the **conditional formats** of a sheet | **built.** A range, a criterion and a format, and the cells that match are written with it (§350) | §350 |
+| the other **commands on an effect** | **built.** An effect's parameters may be reset, it may be copied and it may be moved (§351) | §351 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24011,3 +24012,61 @@ without the colours.
 - **The tree's colour scales, data bars and icon sets are not here**,
   and neither is its **expression** rule: a rule that is a formula
   judged for every cell of the range.
+
+## 351. The other commands on an effect
+
+An effect on a layer has three more commands of its own: its
+parameters may be put back to their **defaults**, it may be **copied**,
+and it may be **moved** in the stack.
+
+### What was built
+
+- The command `fx.effect.reset` puts the parameters of an effect back
+  to their defaults, and it is **refused** when a parameter carries
+  **keyframes**: the reset would lose them.
+- The command `fx.effect.duplicate` copies an effect, and the copy
+  goes **right after** the one it is a copy of and holds the same
+  values.
+- The command `fx.effect.reorder` moves an effect in the stack, and a
+  place that is **not there** is refused — the tree clamps it and says
+  nothing. The answer says which number the effect is now, because the
+  paths address an effect by its number.
+- An effect that is already in that place may not be moved: a command
+  that does nothing did not do anything.
+
+### What the port found
+
+- **The tree's instance has a uid and this tree's has its number.** The
+  tree's instance is a group with a uid, so moving it in the stack
+  does not move what addresses it. Here the instance is addressed by
+  its **number** — `effects/#2/radius` — so a move changes what a
+  path says, and the answer says which number the effect is now.
+- **The tree's reset keys the value and keeps the keys.** The tree's
+  `effect.reset` writes the value at the layer's current time and
+  leaves the keys where they are. This tree has no current time in a
+  command, so a reset of an animated parameter would lose the keys —
+  and it is **refused** and says so.
+- **The tree's duplicate gives the copy a new uid and a unique name.**
+  Here the copy is a copy of the group: the same effect, the same
+  values and the same switch, and the paths say which number it is.
+
+### What it cost
+
+- **Eleven tests** in the fx battery (`tests/instance.rs`): the
+  parameters being reset, a reset that would lose the keyframes
+  refused, an effect being copied, the copy going right after, an
+  effect being moved, a move saying where the effect is now, a place
+  that is not there refused, an effect that is already there refused,
+  an effect that is not there refused, a node that is not a layer
+  refused, and the commands being saved.
+- **Three new commands**: `fx.effect.reset`, `fx.effect.duplicate` and
+  `fx.effect.reorder`. The fx battery now carries **27** commands and
+  the MCP server **466**.
+
+### What it does not settle
+
+- **The tree's effects are applied in an order and this tree's order is
+  the order of the list** — and nothing here *renders* it, so the
+  order is a fact and not a picture.
+- **The tree's own colours are not here** (§350), and neither are its
+  other kinds of rule.
