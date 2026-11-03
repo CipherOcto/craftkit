@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**1978 tests.** The MCP server links **all fifteen batteries** in, so the
+**1986 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 1978 tests
+cargo test          # 1986 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3716,6 +3716,7 @@ so.
 | the **formats** and **values** of a fill | **built.** The tree's last two fills: one gives the cell the format of the source and one gives it the value (§279) | §279 |
 | the **interpolation** of a keyframe | **built.** A keyframe leaves on a linear, a bezier or a hold, and a bezier has a speed and an influence (§280) | §280 |
 | the **reversal** of a clip | **built.** A clip may play its media backwards, and the direction changes what its edges consume (§281) | §281 |
+| the **lists** of a fill | **built.** A text that is a day, a month or a quarter steps through the list (§282) | §282 |
 
 ### The list of things that are honestly not there: empty
 
@@ -19002,11 +19003,10 @@ tree's now.
 
 ### What it does not settle
 
-- **The tree's lists are not here** — the days, the months, the
-  quarters — and a text that is a day of the week is copied here, and
-  the tree would step through the week. The tree's `days`, `weekdays`,
-  `months` and `years` **modes** were not here either, and they are
-  now (§277).
+- **The tree's lists are not here** — and they are now (§282): the
+  days of the week, the months and the quarters. The tree's `days`,
+  `weekdays`, `months` and `years` **modes** were not here either, and
+  they are now (§277).
 - **The tree's `formats` and `values` modes are not here** — and they
   are now (§279): the first copies the style without the value, the
   second copies the value without the style.
@@ -19199,7 +19199,8 @@ things that are missing. They are here now.
   arithmetic they need is here but the modes are not (§274).
 - **The tree's date and time parsing is not here**: the tree reads a
   time of day as well as a date, and a date with a time in it, and
-  here a date is a date.
+  here a date is a date — a date **written** the tree's way is here
+  (§276), and a time of day is not.
 
 ## 277. The fill of dates
 
@@ -19282,8 +19283,8 @@ were not here. They are here now.
 ### What it does not settle
 
 - **The tree's lists are not here**: the days, the months, the
-  quarters and the ordinals, and a text that is a day of the week is
-  copied here and the tree would step through the week.
+  quarters and the ordinals — and the days, the months and the
+  quarters are now (§282). The **ordinals** are not.
 - **The tree's flash fill is not here**: it reads the pattern out of
   the text beside the source.
 - **The tree's `formats` and `values` modes are not here** — and they
@@ -19430,7 +19431,8 @@ The tree has **ten** ways of filling a range. Eight of them are here
   font, the fill, the borders, the alignment and the protection are
   not here, and a fill copies the format and not the style.
 - **The tree's lists are not here**: the days, the months, the
-  quarters and the ordinals.
+  quarters and the ordinals — and the days, the months and the
+  quarters are now (§282). The **ordinals** are not.
 - **The tree's flash fill is not here**: it reads the pattern out of
   the text beside the source.
 
@@ -19601,3 +19603,66 @@ property of the media — the media is the same — it is a property of the
   while, and a held frame has no media to consume at one end.
 - **The tree's transitions are not here**: a transition between two
   clips overlaps them, and the overlap is not a clip.
+
+## 282. The lists of a fill
+
+The tree's fill steps through a **list**: the days of the week, the
+months and the quarters. That is here now.
+
+### What was built
+
+- A text that is in one of the tree's lists steps through it: the days
+  of the week in three letters and in full, the months in three
+  letters and in full, and the quarters.
+- The list **wraps around**: a fill that runs past the end of the week
+  begins again at the start of it.
+- The **step** is the distance between the first two items of the
+  source, so two days apart are a fill of every second day.
+- The **case** of the source is the case of the list: a source in
+  capitals fills with capitals.
+
+### What the port found
+
+- **The tree's list is found by membership and not by a name.** The
+  tree keeps five lists — the days in three letters, the days in full,
+  the months in three letters, the months in full and the quarters —
+  and the fill looks at the source's texts and asks which of the lists
+  holds **all** of them. There is no "this is a list" in the document:
+  the list is a fact about the texts. Here the same, and the lists
+  are the tree's five.
+- **The tree's list has a case of its own, and the case comes from the
+  source.** The tree's `Pattern::List` carries an `upper` and a `lower`
+  flag, and they are read off the **first text** of the source: a
+  source in capitals fills with capitals and a source in small letters
+  fills with small letters. Here the same — with the tree's own
+  subtlety kept: the items of the tree's lists begin with a capital,
+  so the small-letter flag leaves them alone.
+- **The tree's custom lists are not here, and they are a fact about the
+  workbook and not about the sheet.** The tree's `lists()` is the
+  tree's own five, and the tree's *custom* lists are the user's, kept
+  in the workbook beside the sheets. A custom list is a thing a user
+  made, and there is nowhere to keep it here.
+- **The tree's ordinal is not here.** The tree's fill has a rule for
+  `1st`, `2nd` and `3rd` — the number counts on and the suffix comes
+  with it — and it is a rule of its own and not a list.
+
+### What it cost
+
+- **Eight tests** in the grid battery (`tests/lists.rs`): a fill of a
+  day steps through the week, a fill of a day in full steps through the
+  week, a fill of a month steps through the months, a fill of a quarter
+  steps through the quarters, the list wraps around, two days apart are
+  a fill of every second day, the case of the source is the case of the
+  list, and a text that is not in a list is copied.
+- **No new command**: the fill is the same one and it finds the list by
+  itself. The grid battery still carries **12** commands and the MCP
+  server **365**.
+
+### What it does not settle
+
+- **The tree's custom lists are not here**: a list the user made is a
+  list of their own.
+- **The tree's ordinal is not here**: `1st`, `2nd` and `3rd` are a rule
+  of their own.
+- **The tree's flash fill is not here**: it reads the pattern out of
+  the text beside the source.
