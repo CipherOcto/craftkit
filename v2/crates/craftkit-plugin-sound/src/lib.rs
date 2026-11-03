@@ -16,7 +16,7 @@
 //!   `sound.tempo`, `sound.meter`, `sound.key`, `sound.marker`,
 //!   `sound.ruler`, `sound.playhead`, `sound.source`, `sound.group` and
 //!   `sound.autoname`;
-//! - **a hundred and thirty-four commands**, one for each thing a person does to a
+//! - **a hundred and thirty-six commands**, one for each thing a person does to a
 //!   sound document: make a track, set a track, make a clip, mute a
 //!   clip, space the clips against each other, snap a clip to its
 //!   neighbour, loop a clip and take the
@@ -33,7 +33,8 @@
 //!   set a track's **fader** and its **pan**, put a track's sound
 //!   **in the room** with a **surround pan** and take it away, **arm**
 //!   a track for **recording** and let it hear its input, **freeze**
-//!   a track, move a
+//!   a track, put a track under a **VCA master** and take it out,
+//!   move a
 //!   clip's **pitch**,
 //!   do a **process** to a clip's sound and take it off, render the
 //!   **stems**, **separate** a clip into two or on the **grid**,
@@ -527,6 +528,9 @@ mod recording;
 // The **surround pan** of a track: where its sound is in the room.
 mod surround;
 
+// The **VCA** of a track: the master whose fader offsets its own.
+mod vca;
+
 mod time;
 
 use std::collections::HashMap;
@@ -567,6 +571,7 @@ pub use repeat::RepeatRange;
 pub use split::SplitMono;
 pub use surround::{DeleteSurround, SetSurround};
 pub use time::{CutTime, InsertTime};
+pub use vca::{DeleteVca, SetVca};
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::Value as Json;
@@ -1416,6 +1421,13 @@ struct TrackPayload {
     /// much of the sound is on the left, and the surround pan says
     /// where the sound is. A track with no surround pan is balanced.
     surround: Option<surround::SurroundPan>,
+    /// The **VCA master** of the track: the track whose fader offsets
+    /// this one's.
+    ///
+    /// The tree's mixer asks the track for its VCA and adds the
+    /// master's level to the member's, and a muted master mutes the
+    /// member. A track with no VCA is heard at its own level.
+    vca: Option<u64>,
     /// The **elastic algorithm** of the track: how its clips are
     /// stretched.
     ///
@@ -1447,6 +1459,7 @@ impl TrackPayload {
             "inactive": self.inactive,
             "elastic": self.elastic,
             "surround": self.surround.map(|surround| surround.to_json()),
+            "vca": self.vca,
             "record_arm": self.record_arm,
             "input_monitor": self.input_monitor,
             "frozen": self.frozen,
@@ -1474,6 +1487,7 @@ impl TrackPayload {
                 .and_then(|elastic| elastic.as_str())
                 .map(|elastic| elastic.to_string()),
             surround: value.get("surround").and_then(surround::SurroundPan::from_json),
+            vca: value.get("vca").and_then(|vca| vca.as_u64()),
             frozen: value.get("frozen").and_then(|frozen| frozen.as_bool()).unwrap_or(false),
             record_arm: value.get("record_arm").and_then(|armed| armed.as_bool()).unwrap_or(false),
             input_monitor: value.get("input_monitor").and_then(|monitor| monitor.as_bool()).unwrap_or(false),
@@ -2079,6 +2093,7 @@ impl AddTrack {
             inactive: false,
             elastic: None,
             surround: None,
+            vca: None,
             record_arm: false,
             input_monitor: false,
             frozen: false,
@@ -6459,6 +6474,10 @@ fn mix_of(document: &Document, id: &str, capture: Option<u64>) -> Result<Mix, En
     for track in document.walk().filter(|node| {
         node.kind == "sound.track"
             && !is_master(node)
+            // A **VCA master** carries no sound of its own: it is a
+            // fader over the tracks under it, and the tree's mixer
+            // leaves it out of the mix.
+            && !crate::vca::is_vca(node)
             && !is_inactive(node)
             && !mixer::reads_bus(document, node.id)
     }) {
@@ -6533,6 +6552,10 @@ fn mix_of(document: &Document, id: &str, capture: Option<u64>) -> Result<Mix, En
         // The **fader**: the track's volume, over the whole signal
         // and not over one clip.
         let faded = automate::apply_fader(&automation, &gated, channels as usize, 0);
+        // The **VCA master**: its fader offsets this track's level and
+        // its mute mutes it. The tree's mixer adds the master's level
+        // to the member's, and the two are the same thing in gains.
+        let faded = crate::vca::apply_vca(document, track, faded, channels as usize);
         if sends_of(document).iter().any(|send| send.track == track.id && send.pre_fader) {
             pre_fader.push((track.id, gated));
         }
@@ -6786,10 +6809,9 @@ impl RenderStems {
         // fader of the mix and not a sound of its own), and a muted
         // track is not bounced.
         let mut files = Vec::new();
-        for track in document
-            .walk()
-            .filter(|node| node.kind == "sound.track" && !is_master(node) && !is_inactive(node))
-        {
+        for track in document.walk().filter(|node| {
+            node.kind == "sound.track" && !is_master(node) && !crate::vca::is_vca(node) && !is_inactive(node)
+        }) {
             // The **mute** is a field of the track and a lane over it:
             // a muted track is one whose own mute is on, or one whose
             // mute lane says so.
@@ -8002,6 +8024,7 @@ pub(crate) fn add_track(session: &mut Session, name: &str) -> Result<u64, Engine
         inactive: false,
         elastic: None,
         surround: None,
+        vca: None,
         record_arm: false,
         input_monitor: false,
         frozen: false,

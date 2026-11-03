@@ -166,6 +166,7 @@ impl CommitTrack {
             inactive: false,
             elastic: None,
             surround: None,
+            vca: None,
             record_arm: false,
             input_monitor: false,
             frozen: false,
