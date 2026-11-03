@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2481 tests.** The MCP server links **all fifteen batteries** in, so the
+**2496 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2481 tests
+cargo test          # 2496 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3771,6 +3771,7 @@ so.
 | the **slip** of a clip | **built.** A clip stays where it is and shows a different part of its media, and a slip past the end of the media is refused (§334) | §334 |
 | the **roll** of a cut | **built.** The place where two clips meet may be moved, and a roll that would cross a bound is refused (§335) | §335 |
 | the **slide** of a clip | **built.** A clip may be slid between its neighbours, and the neighbours give way (§336) | §336 |
+| the **stretch** of a clip | **built.** A clip may be stretched, and it plays the same material at another speed (§337) | §337 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23083,11 +23084,77 @@ it.
 
 ### What it does not settle
 
-- **The rate stretch is not here.** The tree may change how fast a
-  clip plays its media by dragging one of its edges, and the linked
-  partners stretch with it, so that they keep one speed. That is an
-  edit of the **media** and not of the place, and it is a command of
-  its own.
+- **The rate stretch is here now** (§337). The tree's **sync-locked**
+  tracks — the tracks that are locked to the track that changed — are
+  not, and neither is the tree's way of setting the speed and the
+  length together.
 - **The tree's time remapping is not here**, and neither is its
   remapping of the media: a slide moves the clip and its neighbours,
   and the media of the slid clip is the media it was showing.
+
+## 337. The stretch of a clip
+
+A clip plays its media at a **speed**, and the speed says how much of
+the media a frame of the clip shows. A **stretch** changes that speed
+by dragging one of the clip's edges: the clip gets longer or shorter
+and the speed changes the other way, so that the clip plays **the same
+material**. It is not the **speed** command — that one is given a rate
+and the length follows — and it is not the **trim** — that one moves an
+edge and the media it shows changes, while a stretch moves an edge and
+the media it shows does not.
+
+### What was built
+
+- The command `film.clip.stretch` stretches one edge of a clip.
+- The stretch is **refused** when it would cross a bound, and the
+  refusal says which bound: a clip is at least one frame long, a clip
+  may not run into the clip after it, a clip may not begin before the
+  clip before it ends, and a clip may not start before the timeline.
+- A clip that **holds a frame** may not be stretched: the material it
+  plays is shorter than the clip, and there is no one number for it.
+- The **link** is honoured: the linked clips stretch together, by the
+  same delta on their own tracks.
+
+### What the port found
+
+- **The tree's linked stretch is scaled down and this one is refused.**
+  The tree's `rate_stretch_items` clamps every member to the room the
+  **tightest** neighbour leaves, so a group that cannot stretch as far
+  as it was told stretches as far as it may and nothing says so. Here
+  every member takes the same delta, and a member that cannot take it
+  refuses the stretch — the rule the trim of a linked group already
+  had (§299).
+- **The tree's speed and duration dialogue is not one thing here.** The
+  tree may set the speed and the length together, and may ripple the
+  clips that were after the clip. Here the speed is a command of its
+  own (the module `speed`), it is the one that ripples, and the
+  stretch is a separate edit: the length is given and the speed
+  follows.
+
+### What it cost
+
+- **Fifteen tests** in the film battery (`tests/stretching.rs`): the
+  out edge stretched, the in edge stretched, the material staying the
+  same, a stretch that would leave a clip shorter than a frame
+  refused, a stretch into the next clip refused, a stretch before the
+  previous clip refused, a stretch before the timeline refused, a held
+  clip refused, a stretch on a locked track refused, the linked clip
+  stretching too, a linked clip that cannot stretch refusing it, a
+  stretch of nothing refused, an edge that is not an edge refused, a
+  node that is not a clip refused, and the stretch being saved.
+- **The neighbours of a clip are now one function.** The slide and the
+  stretch both need the clip before a clip and the clip after it, so
+  they are now `neighbours_of` in the crate's own library, and the two
+  of them use it.
+- **One new command**: `film.clip.stretch`. The film battery now
+  carries **30** commands and the MCP server **432**.
+
+### What it does not settle
+
+- **The sync-locked tracks are not here.** The tree's speed change
+  moves the tracks that are locked to the track that changed, so that
+  a group of tracks stays together. Here only the track the clip is on
+  moves.
+- **The tree's time remapping is not here**, and neither is its
+  remapping of the media: a stretch changes the rate a clip plays its
+  media at, and the material it plays is the material it played.
