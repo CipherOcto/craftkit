@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2186 tests.** The MCP server links **all fifteen batteries** in, so the
+**2192 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3740,6 +3740,7 @@ so.
 | the **average** of the points of a path | **built.** The points of a path may be put on one line, in one column, or all in one place (§303) | §303 |
 | the **removal** of a page | **built.** A page may be taken away, the tree of pages is right afterwards, and the destinations that went to it go with it (§304) | §304 |
 | the **removal** of an anchor | **built.** An anchor may be taken away, and the contour becomes the stretches that are left (§305) | §305 |
+| the **transitions** of a trim | **built.** A transition that no longer fits inside the two clips it joins is brought back inside them (§306) | §306 |
 
 ### The list of things that are honestly not there: empty
 
@@ -21194,3 +21195,67 @@ the contour has to answer for the gap.
   be cut on its own, keeping every curve around it.
 - **The tree's marquee is not here**, and with it the removal of a
   whole path that a marquee caught.
+
+## 306. The transitions of a trim
+
+A transition joins two clips, and it may not leave them. So a trim
+that makes a clip shorter has to answer for the transitions that join
+it: the tree brings them back inside the clips they join.
+
+### What was built
+
+- A **trim** brings the transitions that join the trimmed clip back
+  inside the two clips they join, and it **shortens** a transition when
+  the clips are now shorter than it.
+- The **alignment** is worked out again from where the transition ends
+  up: one that starts at the cut starts at it, one that ends at the cut
+  ends at it, and any other is centred.
+
+### What the port found
+
+- **The tree's rule is a bound and not a move.** The tree's
+  `keep_within_clips` leaves a transition alone when it is already
+  inside the two clips, and otherwise does two things: the duration
+  becomes the shorter of the transition's duration and the length of
+  the two clips together, and the start is brought back inside them.
+  So the transition is shortened first and moved second, and a
+  transition that is longer than the clips together is cut down to
+  their length.
+- **The tree works the alignment out again.** The tree stores the
+  alignment as one of *starts at the cut*, *ends at the cut* and
+  *centred at the cut*, and after a trim it reads the transition's new
+  place and writes the alignment that place says. A transition that
+  lands somewhere else is *centred* — the tree has no other variant
+  for a transition between two clips.
+- **The tree's rule is about the two clips and not about the gap.** The
+  bounds are the first clip's start and the second clip's end, so a
+  gap between the two clips is inside the bounds and the transition
+  may lie across it. The tree's regular trim cannot move a cut, so the
+  cut of a transition between two clips does not move either.
+- **The tree's other edits move the transitions as well.** The tree's
+  `transitions_follow_cuts` shifts a transition by as much as its cut
+  moved, after a ripple trim, a roll, a slide and a ripple speed
+  change. Here the trim moves the clip and nothing else — there is no
+  ripple here — so only the bound applies.
+
+### What it cost
+
+- **Six tests** in the film battery (`tests/trim_transitions.rs`): a
+  transition that reaches past the clips is moved back inside them, a
+  transition that is too long is shortened, the alignment is worked out
+  again, a transition that fits is left alone, a transition of another
+  cut is not touched, and a transition that starts at the cut keeps
+  that.
+- **No new command**: this is what `film.clip.trim` does. The film
+  battery still carries **23** commands and the MCP server **386**.
+
+### What it does not settle
+
+- **The tree's ripple is not here**, so the transitions do not follow a
+  cut that moves: only the bound is here.
+- **The tree's fades to nothing are not here**, so the tree's rule
+  that a one-sided fade follows the edge of its clip has nothing to
+  follow.
+- **The tree's speed change does not move the transitions here**: a
+  clip that gets shorter because its speed changed keeps its
+  transitions as they are.
