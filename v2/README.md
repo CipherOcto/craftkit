@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2064 tests.** The MCP server links **all fifteen batteries** in, so the
+**2071 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3726,6 +3726,7 @@ so.
 | the **fill** of a time | **built.** A single number under a time format counts an hour on, as a date counts a day on (§289) | §289 |
 | the **quarters** in a text | **built.** A text that says a quarter wraps after four, as the list of the quarters does (§290) | §290 |
 | the **in side** of a keyframe | **built.** A keyframe has an interpolation on each side, and the segment between two keyframes is shaped by both (§291) | §291 |
+| the **auto bezier** of a keyframe | **built.** An auto keyframe's ease is not written down but comes from its neighbours (§292) | §292 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20254,3 +20255,69 @@ gave it the side the keyframe **leaves** on. The tree has two sides.
 - **The tree's spatial handles are not here**: they are the same idea
   in three dimensions, along a path, and they are a thing of their
   own.
+
+## 292. The auto bezier of a keyframe
+
+§291 gave the fx battery the **in side** of a keyframe. The tree has
+one more thing about a keyframe's ease, and it is the opposite of
+writing it down.
+
+### What was built
+
+- A keyframe may be an **auto** bezier: its ease is not written down
+  but comes from its **neighbours** — the slope from the keyframe
+  before to the keyframe after — and its influence is a **sixth**.
+- So an auto keyframe **follows** its neighbours: move one and the
+  curve moves with it.
+- A **written** ease is a manual one, and it clears the auto flag: the
+  keyframe follows its neighbours again only when nobody has said
+  otherwise.
+
+### What the port found
+
+- **The tree's auto ease is the slope to the neighbours, and not the
+  slope to the segment.** The tree's `effective_ease` takes the value
+  of the keyframe before and the value of the keyframe after and the
+  time between them: the slope is `(after − before) / (after time −
+  before time)`. The time of the keyframe itself is not in it — the
+  auto key's ease does not know where it sits between its neighbours.
+- **The tree's auto ease has an influence of a sixth, and the sixth is
+  the tree's own default.** The tree's `Ease::default` is a speed of
+  nothing and an influence of a sixth, and the auto ease is that
+  default with the speed filled in.
+- **The tree's auto key needs a neighbour on each side.** The tree's
+  test is `k.auto_bezier && i > 0 && i + 1 < keys.len()`, so the first
+  and the last keyframe of a property are never auto: there is no
+  slope to the other side.
+- **The tree's ease is per dimension and the written ease here is
+  not.** The tree keeps an ease for each dimension of the value, so a
+  list of numbers may curve one way and another way. Here an ease is
+  one speed and one influence for the whole value, and every number of
+  a list is curved by that same written ease. The **auto** slope is
+  the slope of each dimension, as the tree's is — an auto key of a
+  list still curves each number its own way.
+- **The tree's manual ease is not an auto one.** The tree's
+  `easy_ease` sets the ease and clears `auto_bezier`, so the two are
+  not together.
+
+### What it cost
+
+- **Seven tests** in the fx battery (`tests/auto.rs`): an auto
+  keyframe follows its neighbours, the auto flag is kept, the auto flag
+  is cleared, a written ease clears the auto flag, a keyframe with no
+  neighbour is not an auto one, the auto on a keyframe that is not
+  there is refused, and the outcome says the auto.
+- **One new command**: `fx.keyframe.auto`. The fx battery now carries
+  **9** commands and the MCP server **371**.
+
+### What it does not settle
+
+- **The tree's continuous bezier is not here**: the tree's keyframe
+  also has a `continuous` flag, whose ease is the slope to the
+  **segment** — the keyframe before for the in side and the keyframe
+  after for the out side — and that is a thing of its own.
+- **The tree's spatial auto bezier is not here**: it is the same idea
+  in three dimensions, along a path, with tangents instead of slopes.
+- **The tree's written ease per dimension is not here**: an ease is
+  one speed and one influence for the whole value, and every number of
+  a list is curved by it.
