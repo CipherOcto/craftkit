@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2114 tests.** The MCP server links **all fifteen batteries** in, so the
+**2123 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -3731,6 +3731,7 @@ so.
 | the **speed** of a clip | **built.** A clip may play its media faster or slower, and the media it plays is its length multiplied by its speed (§294) | §294 |
 | the **link** of a clip | **built.** Two clips may be the same thing on two tracks, and a move of one moves the other (§295) | §295 |
 | the **date system** of a workbook | **built.** A workbook says which calendar its serials are counted in, and every date in it is read in that calendar (§296) | §296 |
+| the **continuous** keyframe | **built.** A keyframe's two sides may be locked to each other, so the curve is smooth at it (§297) | §297 |
 
 ### The list of things that are honestly not there: empty
 
@@ -20612,3 +20613,71 @@ calendar. The tree has **two** calendars and a workbook says which one.
   calendar and rolls a month over into the next year.
 - **The tree's time zone is not here**: the tree's serial is a time
   without a zone, and here it is too.
+
+## 297. The continuous keyframe
+
+§292 gave the fx battery the **auto** bezier, whose ease is not
+written down. The tree has one more way a keyframe's ease may be
+decided.
+
+### What was built
+
+- A keyframe may be **continuous**: its two sides are **locked** to each
+  other, so the outgoing side takes the ease of the incoming one and
+  the curve is smooth at the keyframe. A new command,
+  `fx.keyframe.continuous`, and a `continuous` in the keyframe's
+  payload.
+- The ease that is **given** is written to both sides; when none is
+  given, the side the keyframe is **entered** on is the master and the
+  other takes its ease.
+- Both sides become **beziers**, the **auto** flag is cleared, and the
+  flag may be **cleared** again without touching the eases.
+
+### What the port found
+
+- **The tree's continuous flag does not change the curve.** The tree's
+  `effective_ease` — the function that decides a side's ease — reads
+  the `auto_bezier` flag and not the `continuous` one. So the curve of
+  a continuous keyframe is the curve of the eases that were written,
+  and the flag is a **memory** of the writing.
+- **The tree's continuity is a way of *writing* the two sides.** The
+  tree's velocity dialog is where the flag lives: "Continuous" makes
+  the outgoing velocity follow the incoming one, so the side that is
+  not named takes the ease of the side that is — and the tree's dialog
+  writes the two sides *together*.
+- **The tree's two sides are the same ease in the same sense.** The
+  tree's `side_ease` presents the incoming side's speed as the
+  **forward** rate of the segment and the outgoing side's speed as the
+  forward rate too, so copying one to the other gives the two handles
+  as **mirrors** — and the curve is smooth at the keyframe. Here the
+  eases are in the tree's sense as well (§280), so the mirror is a
+  mirror.
+- **The tree's manual ease is not an auto one, and a continuous ease is
+  a manual ease.** The tree's velocity command clears `auto_bezier`
+  when it writes, and so does this one.
+
+### What it cost
+
+- **Nine tests** in the fx battery (`tests/continuous.rs`): the two
+  sides are locked, the sides are beziers, the continuous flag is
+  kept, the flag may be cleared, the auto flag is cleared, the curve is
+  smooth at the keyframe, the in side is the master, a keyframe that
+  is not there is refused, and an influence that is not a fraction is
+  refused.
+- **One new command**: `fx.keyframe.continuous`. The fx battery now
+  carries **10** commands and the MCP server **379**.
+
+### What it does not settle
+
+- **The tree's continuous flag is not read by the tree's own curve**,
+  and here it is not read either: the flag is a memory and the eases
+  are the truth. A keyframe marked continuous whose eases were changed
+  afterwards is not continuous, and that is the tree's behaviour too.
+- **The tree's velocity dialog is not here**: it presents the ease of
+  each side as it is, writes a speed and an influence per dimension,
+  and keeps the parts that were not named. Here one ease is written to
+  both sides.
+- **The tree's ease per dimension is not here**: the tree keeps an ease
+  for each dimension of the value, so a continuous keyframe of a list
+  curves each number its own way; here one ease is written and every
+  dimension is curved by it.
