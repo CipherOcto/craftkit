@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **thirty-three commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **thirty-four commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.unite`,
@@ -38,7 +38,7 @@
 //!   mirror and round a centre;
 //!   `vector.path.join` and `vector.path.cap` say how the line's
 //!   corners and ends are finished; `vector.path.smooth` makes a point
-//!   of a path smooth; `vector.path.transform` says where
+//!   of a path smooth, and `vector.path.corner` makes it a corner; `vector.path.transform` says where
 //!   the path is put; `vector.path.outline` makes the shape a line
 //!   covers into a path of its own; `vector.path.order` says which
 //!   path is in front of the others; and `vector.path.rule` says which
@@ -2055,6 +2055,112 @@ fn smooth_point(path: &mut Path, contour: usize, point: usize) -> Result<(), Str
     Ok(())
 }
 
+/// Make a point of a path a **corner**.
+///
+/// The **handles** at the point are pulled back to it, so the two sides
+/// leave it as straight lines: the tree calls that a *corner*, and the
+/// point that has no handles at it is a corner already.
+///
+/// The tree's `path.convertAnchors` is one command with a `to` that
+/// says `corner` or `smooth`. This tree has one command for each, and
+/// this one is the corner; the smooth one is `vector.path.smooth`.
+#[derive(Command)]
+#[command(
+    id = "vector.path.corner",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Points"),
+    mutates,
+    undoable
+)]
+pub struct CornerPoint {
+    /// The path.
+    pub path: NodeRef,
+    /// Which contour of the path, counting from zero. The first one if
+    /// it is left out.
+    pub contour: Option<Number>,
+    /// Which point of the contour, counting from zero.
+    pub point: Number,
+}
+
+impl CornerPoint {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let mut vector = vector_of(session, self.path.0)?;
+        let contour = self.contour.as_ref().map(|contour| contour.0).unwrap_or(0.0);
+        let contour = usize::try_from(contour.max(0.0) as i64).unwrap_or(0);
+        let point = usize::try_from(self.point.0.max(0.0) as i64).unwrap_or(0);
+        corner_point(&mut vector.path, contour, point).map_err(|reason| EngineError::Failed {
+            id: "vector.path.corner".to_string(),
+            message: reason,
+        })?;
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed("the point is a corner")
+            .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
+    }
+}
+
+/// Pull the **handles** at a point back to it.
+///
+/// The handles at the point belong to the two sides that meet there:
+/// the side that leaves the point holds the handle that leaves it, and
+/// the side that arrives at the point holds the handle that arrives.
+/// The handles at the **other** ends of those sides are not touched —
+/// they belong to other points.
+fn corner_point(path: &mut Path, contour: usize, point: usize) -> Result<(), String> {
+    let Some(subpath) = path.subpaths.get_mut(contour) else {
+        return Err(format!("the path has no contour {contour}"));
+    };
+    let segments = subpath.segments.len();
+    let count = segments + 1;
+    if point >= count {
+        return Err(format!("the contour has {count} points and not a point {point}"));
+    }
+    // A closed contour may leave its **closing edge** out, and a handle
+    // needs a segment to hold it: the edge is made explicit when the
+    // point needs one.
+    if subpath.closed && closing_segment(subpath).is_none() && (point == 0 || point == segments) {
+        subpath.segments.push(Segment::Line { to: subpath.start });
+    }
+    let leaving = leaving_segment(subpath, point);
+    let arriving = arriving_segment(subpath, point);
+    // The **point** itself: where the two sides meet.
+    let at = match leaving {
+        Some(index) => {
+            if index == 0 {
+                subpath.start
+            } else {
+                subpath.segments[index - 1].end()
+            }
+        }
+        None => match arriving {
+            Some(index) => subpath.segments[index].end(),
+            None => subpath.start,
+        },
+    };
+    let mut pulled = 0;
+    // The side that **leaves** the point: its handle at the point goes
+    // back to the point.
+    if let Some(index) = leaving
+        && let Segment::Cubic { c1: _, c2, to } = subpath.segments[index]
+    {
+        subpath.segments[index] = Segment::Cubic { c1: at, c2, to };
+        pulled += 1;
+    }
+    // And the side that **arrives** at it: the same, the other way
+    // round.
+    if let Some(index) = arriving
+        && let Segment::Cubic { c1, c2: _, to } = subpath.segments[index]
+    {
+        subpath.segments[index] = Segment::Cubic { c1, c2: at, to };
+        pulled += 1;
+    }
+    if pulled == 0 {
+        return Err(format!("the point {point} has no handles to pull back"));
+    }
+    Ok(())
+}
+
 /// Say which parts of a path are **inside**.
 ///
 /// The rule is `nonzero` — the default, and the rule that makes a
@@ -2510,6 +2616,7 @@ craftkit_sdk::plugin_anchor!(
     AddAnchor,
     RemoveAnchor,
     AveragePoints,
+    CornerPoint,
     VectorPanel,
     TotalAreaEvaluator
 );
