@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2004 tests.** The MCP server links **all fifteen batteries** in, so the
+**2009 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2004 tests
+cargo test          # 2009 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3719,6 +3719,7 @@ so.
 | the **lists** of a fill | **built.** A text that is a day, a month or a quarter steps through the list (§282) | §282 |
 | the **locked** track | **built.** A locked track cannot be edited, and every command that would edit it is refused (§283) | §283 |
 | the **fades** of a range | **built.** A range of a track fades in the clips that start in it and fades out the clips that end in it (§284) | §284 |
+| the **crossfade** | **built.** A range that covers the boundary between two clips makes them overlap, and the fades meet in the overlap (§285) | §285 |
 
 ### The list of things that are honestly not there: empty
 
@@ -19802,3 +19803,66 @@ tree's **range** of fades was not: the tree's `create_fades` walks a
   midpoint** — the undo of the crossfade — and that is not here.
 - **The tree's fade to is not here**: a fade that runs to the start of
   the next clip.
+
+## 285. The crossfade
+
+§284 left the third case of the tree's rule out: a range that covers the
+**boundary** between two clips. That is here now.
+
+### What was built
+
+- A range that covers the boundary between two clips makes them
+  **overlap**: each is extended into the other's territory using its
+  **handle** — the material before it and the material after it.
+- The two fades **meet in the overlap**: the first clip fades out over
+  it and the second fades in over it.
+- Taking the fades away takes the **overlap** with them: the two clips
+  are trimmed back to the **midpoint**, and they are as long as they
+  were.
+
+### What the port found
+
+- **The tree's crossfade is an edit of two clips and not a fade of
+  one.** The tree's `create_fades` extends the first clip by the
+  material it has *after* it and starts the second clip earlier by the
+  material it has *before* it — and the two overlap. The crossfade is
+  that overlap, and the fades are the two curves that meet in it.
+- **The tree's handles are the material a clip does not play.** The
+  material after a clip is the source's frames less what the clip
+  plays, and the material before it is its offset. A crossfade cannot
+  reach further than the handles allow, and the tree takes what it can:
+  a clip with no material before it cannot be extended backwards.
+- **The tree's handles are measured in the source's samples while the
+  clip's length is in the timeline's, and the tree does not follow the
+  stretch.** Here the handles are measured in the **timeline's**
+  samples and the two agree whenever the clip is not stretched — and
+  the difference is the stretch, which the tree does not correct for.
+- **The tree's delete undoes the overlap by trimming to the
+  midpoint.** The tree's `delete_fades` clears the fades of every clip
+  that touches the range and then trims the overlapping neighbours
+  back to the middle of the overlap: the two clips are as long as they
+  were and the overlap is gone.
+- **The tree's crossfade needs the clips to be next to each other.**
+  The tree's test is that the second clip starts exactly where the
+  first one ends, and a gap between them is not a boundary: the range
+  fades the two apart instead, and the clips do not overlap.
+
+### What it cost
+
+- **Five tests** in the sound battery (`tests/crossfade.rs`): a range
+  that covers a boundary makes the clips overlap, the fades meet in the
+  overlap, a crossfade is limited by the handles, taking the fades away
+  takes the overlap with them, and two clips with a gap between them are
+  not a crossfade.
+- **No new command**: the crossfade is what `sound.track.fade` does
+  when the range covers a boundary. The sound battery still carries
+  **129** commands and the MCP server **368**.
+
+### What it does not settle
+
+- **The tree's fade to is not here**: a fade that runs to the start of
+  the next clip, and the tree's fade to the playhead.
+- **The tree's crossfade of uncorrelated material** is the tree's
+  `EqualPower` shape, and it is here as a shape — but the tree's
+  renderer chooses between the shapes by whether the two clips are of
+  the same material, and that choice is not here.
