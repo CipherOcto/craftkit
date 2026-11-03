@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2331 tests.** The MCP server links **all fifteen batteries** in, so the
+**2340 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2331 tests
+cargo test          # 2340 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3756,6 +3756,7 @@ so.
 | the **expression** of a property | **built.** An expression says what the value is at every frame, in a small language of this tree's own (§319) | §319 |
 | the **recording** of a track | **built.** A track may be armed for recording and may hear its input, and the recording modes are settings of the session (§320) | §320 |
 | the **frozen** track | **built.** A track may be frozen, and the flag is a fact of the track (§321) | §321 |
+| the **VCA** of a track | **built.** A track may be put under a VCA master, whose fader offsets its level and whose mute mutes it (§322) | §322 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22252,6 +22253,64 @@ is there is not.
   track is listening, and there is nothing to listen to.
 - **The tree's bulk "set record tracks to input only" is not here**,
   and there is no list of the armed tracks.
+
+## 322. The VCA of a track
+
+A **VCA master** is a track that carries no sound of its own: its
+fader **offsets** the faders of the tracks under it, and its **mute**
+mutes them. It is the tree's own second fader over a group.
+
+### What was built
+
+- The command `sound.track.vca` puts a track under a VCA master.
+- The command `sound.track.vca.delete` takes it out again.
+- The **mix** honours the master: its fader offsets the member's
+  level, and a muted master mutes its members.
+- A **VCA master** is not in the mix and is not a stem: it is a fader
+  over other tracks, and it carries no sound.
+
+### What the port found
+
+- **The tree's VCA is a kind of track, and the kinds are open.** The
+  tree's mixer has a `TrackKind::Vca` beside `Audio`, `Master` and
+  `Aux`, and it leaves the VCA master out of the mix and asks it for
+  its level instead. Here the kinds of a track are a **string** in the
+  track's payload, so the VCA master is a track whose kind is `vca`.
+- **The tree's VCA is not a group.** A group shares the mute and the
+  solo with the tracks that mix together; the VCA shares neither — it
+  *adds* its own level to the member's, and it silences the member
+  when it is muted. Two different things, and the tree keeps them
+  apart.
+- **The tree's VCA level is added in decibels, and the two are the
+  same thing.** The tree's mixer adds the master's level to the
+  member's and then converts; here the two are gains, and the
+  master's gain times the member's gain is the same number.
+- **The tree's mute is the master's own.** The tree's mixer asks the
+  master whether it is **muted** — the mixer mute, not a mute lane —
+  and a muted master mutes its members.
+
+### What it cost
+
+- **Nine tests** in the sound battery (`tests/vca.rs`): a track being
+  put under a master, the VCA being taken away, a track that is not a
+  VCA master refused, a track that may not be its own master, a
+  master that is not there refused, the master's fader offsetting the
+  member's level, a muted master muting its members, a VCA master not
+  being in the mix, and the VCA not being the mixing group.
+- **Two new commands**: `sound.track.vca` and `sound.track.vca.delete`.
+  The sound battery now carries **136** commands and the MCP server
+  **403**.
+
+### What it does not settle
+
+- **The tree's VCA master is a kind with its own mixer strip**, and
+  here it is a track that happens to hold no sound.
+- **The tree's VCA may be automated**, and here the master's own
+  volume lane is read as any other track's lane is read; the tree's
+  automation mode is not here.
+- **A tree's VCA master is not in the mix and not a stem here either**,
+  but a master of this tree is a master of the whole mix and a VCA is
+  not: the two kinds are different facts.
 
 ## 321. The frozen track
 
