@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2387 tests.** The MCP server links **all fifteen batteries** in, so the
+**2395 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2387 tests
+cargo test          # 2395 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3762,6 +3762,7 @@ so.
 | the **parent** of a layer | **built.** A layer may be under another layer, and the chain may not be a circle (§325) | §325 |
 | the **markers** of a composition | **built.** A marker is a moment with something said about it, and they stand in time order (§326) | §326 |
 | the **view** of a sheet | **built.** A sheet says what is drawn of it and how far it is zoomed, and its panes may be frozen (§327) | §327 |
+| the **tabs** of a workbook | **built.** A sheet may be hidden, and its tab may be coloured (§328) | §328 |
 
 ### The list of things that are honestly not there: empty
 
@@ -22565,6 +22566,51 @@ it runs right to left, and how far it is zoomed — and it may have
   was, and not about the sheet.
 - **The tree's outline symbols and its print settings are not here**:
   they are the tree's own, and they are about a printed sheet.
+
+## 328. The tabs of a workbook
+
+A sheet may be **hidden**, and a sheet's **tab** may be coloured.
+
+### What was built
+
+- The command `grid.sheet.hide` hides a sheet.
+- The command `grid.sheet.unhide` shows it again.
+- The command `grid.sheet.color` colours a sheet's tab.
+
+### What the port found
+
+- **A workbook must keep one visible sheet.** The tree's command
+  refuses to hide the last one: a workbook with no sheet to look at is
+  not a workbook, and the refusal is a refusal and not a clamp.
+- **The tree's tab colour is a colour and not a name.** The tree's
+  command takes a hex colour and `none`, and a colour that is not a
+  colour is refused — `red` is not a colour and `#FF00` is not one
+  either.
+- **The tree's hidden sheet is still a sheet.** It is there, with its
+  cells, and it is not in the way; the tree's hiding also moves the
+  looking to another sheet, and that is the tree's own.
+
+### What it cost
+
+- **Eight tests** in the grid battery (`tests/tabs.rs`): a sheet
+  being hidden, the last visible sheet not being hideable, a sheet
+  being unhidden, a tab being coloured, the colour being taken away, a
+  colour that is not a colour refused, a sheet that is not there
+  refused, and the hidden sheet and its colour being saved.
+- **Three new commands**: `grid.sheet.hide`, `grid.sheet.unhide` and
+  `grid.sheet.color`. The grid battery now carries **28** commands and
+  the MCP server **417**.
+
+### What it does not settle
+
+- **No tab is drawn**: the colour and the hidden state are facts of a
+  sheet, and this tree's grid battery draws nothing.
+- **The tree's active sheet does not move when a sheet is hidden**:
+  the tree's hiding moves the looking to another sheet, and there is
+  no looking here.
+- **The tree's theme colours and its workbook protection are not
+  here**: the tree's tab colour may be a theme colour and not a hex
+  one, and the tree refuses every change to a protected workbook.
 
 ## 321. The frozen track
 
