@@ -160,6 +160,7 @@ mod hiding;
 mod merges;
 mod names;
 mod sections;
+mod sheetnames;
 mod sizes;
 mod styles;
 mod tabs;
@@ -179,6 +180,7 @@ use formula::{Book, CellRef, Cells, Value};
 pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
 pub use merges::{ClearMerge, SetMerge};
 pub use names::{DeleteName, SetName};
+pub use sheetnames::RenameSheet;
 pub use sizes::{SetColumnWidth, SetRowHeight};
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
 pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
@@ -693,14 +695,30 @@ pub struct AddSheet {
 
 impl AddSheet {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.clone();
-        if name.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "grid.sheet.add".to_string(),
-                message: "a sheet has a name".to_string(),
-            });
-        }
+        let name = self.name.0.trim().to_string();
         let workbook = self.workbook.0;
+        // The **rules** of a sheet's name are the rules of the name and
+        // not of the command that writes it: the tree's `check_sheet_name`
+        // is used when a sheet is added and when it is renamed, and here
+        // they are one rule with two doors.
+        //
+        // The uniqueness is the tree's: a name is taken **in the
+        // workbook**, and two workbooks may hold sheets of one name.
+        let taken: Vec<String> = session
+            .document()
+            .node(workbook)
+            .map(|node| {
+                node.children
+                    .iter()
+                    .filter(|child| child.kind == "grid.sheet")
+                    .map(|child| child.name.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let taken = taken.iter().find(|other| other.eq_ignore_ascii_case(&name)).cloned();
+        if let Some(reason) = sheetnames::why_not(&name, taken.as_deref()) {
+            return Err(EngineError::Failed { id: "grid.sheet.add".to_string(), message: reason });
+        }
         if session.document().node(workbook).is_none() {
             return Err(EngineError::Failed {
                 id: "grid.sheet.add".to_string(),
@@ -1355,6 +1373,7 @@ craftkit_sdk::plugin_anchor!(
     SheetKind,
     AddWorkbook,
     AddSheet,
+    RenameSheet,
     SetCell,
     SetFormula,
     SetName,

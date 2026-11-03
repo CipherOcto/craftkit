@@ -1012,6 +1012,24 @@ impl Cells {
         self.cells.iter().map(|(cell, value)| (*cell, value))
     }
 
+    /// **Rename** the sheet in every formula that names it.
+    ///
+    /// A formula is **text**, so the text is parsed, the sheet is named
+    /// again and the expression is printed. A formula that does not
+    /// name the sheet is left exactly as the caller wrote it.
+    ///
+    /// The answer is how many formulas were rewritten.
+    pub fn rename_sheet(&mut self, old: &str, new: &str) -> usize {
+        let mut renamed = 0usize;
+        for entry in self.cells.values_mut() {
+            let Some(text) = &entry.formula else { continue };
+            let Some(rewritten) = rename_in_formula(text, old, new) else { continue };
+            entry.formula = Some(rewritten);
+            renamed += 1;
+        }
+        renamed
+    }
+
     /// How many cells there are.
     pub fn len(&self) -> usize {
         self.cells.len()
@@ -1589,6 +1607,45 @@ const POWER: u8 = 4;
 const UNARY: u8 = 5;
 
 impl Expr {
+    /// The expression with the **sheet** renamed in it.
+    ///
+    /// The tree's `adjust::rename_sheet`: every reference that names
+    /// the sheet is given the new name. The tree's comparison
+    /// **ignores case**, and so does this one.
+    ///
+    /// A name that is **sheet-qualified** — `Old!MyName` — is renamed
+    /// too, and the printer adds the quotes when the new name needs
+    /// them.
+    pub fn renamed_sheet(&self, old: &str, new: &str) -> Expr {
+        match self {
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => self.clone(),
+            Expr::Cell { sheet, anchor } => Expr::Cell {
+                sheet: sheet.as_ref().map(|sheet| {
+                    if sheet.eq_ignore_ascii_case(old) { new.to_string() } else { sheet.clone() }
+                }),
+                anchor: *anchor,
+            },
+            Expr::Range { sheet, start, end } => Expr::Range {
+                sheet: sheet.as_ref().map(|sheet| {
+                    if sheet.eq_ignore_ascii_case(old) { new.to_string() } else { sheet.clone() }
+                }),
+                start: *start,
+                end: *end,
+            },
+            Expr::Name(name) => Expr::Name(name.clone()),
+            Expr::Call(name, arguments) => Expr::Call(
+                name.clone(),
+                arguments.iter().map(|argument| argument.renamed_sheet(old, new)).collect(),
+            ),
+            Expr::Negate(inner) => Expr::Negate(Box::new(inner.renamed_sheet(old, new))),
+            Expr::Binary(operator, left, right) => Expr::Binary(
+                operator.clone(),
+                Box::new(left.renamed_sheet(old, new)),
+                Box::new(right.renamed_sheet(old, new)),
+            ),
+        }
+    }
+
     /// The formula's **text**: the expression written out.
     ///
     /// The tree's printer writes an expression back out, and a copied
@@ -1598,6 +1655,24 @@ impl Expr {
     pub fn to_text(&self) -> String {
         expression_text(self, 0)
     }
+}
+
+/// The formula's **text** with the sheet renamed in it, if it names it.
+///
+/// The formula is **text**, so the text is parsed, the sheet is named
+/// again and the expression is printed. A formula that does not name
+/// the sheet is left exactly as the caller wrote it.
+pub fn rename_in_formula(text: &str, old: &str, new: &str) -> Option<String> {
+    let expression = parse(text).ok()?;
+    let renamed = expression.renamed_sheet(old, new);
+    if renamed == expression {
+        return None;
+    }
+    let printed = renamed.to_text();
+    // The `=` is the caller's, and it is kept: a formula that was
+    // written with one keeps it, and one that was not does not get
+    // one.
+    if text.trim_start().starts_with('=') { Some(format!("={printed}")) } else { Some(printed) }
 }
 
 /// The precedence of an expression.
