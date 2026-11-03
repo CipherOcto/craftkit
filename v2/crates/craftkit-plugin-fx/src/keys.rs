@@ -59,12 +59,31 @@
 //! change the curve — the curve follows the eases that were written —
 //! so the flag is a memory of the writing.
 //!
+//! # The spatial property
+//!
+//! A property may be **spatial**: its value is then a **point** — a
+//! pair or a triple of numbers — and it does not move along the
+//! straight line from one keyframe to the next. It follows a **path**
+//! in the plane, and the time maps to the **length** along that path.
+//!
+//! The path is a cubic: the two keyframes are its ends, and its two
+//! control points are the ends plus the **tangents** of the keyframes.
+//! And the tangents are the **auto** ones — a sixth of the way from
+//! the keyframe before to the keyframe after — so the path is worked
+//! out from the keyframes around it and nobody writes it down.
+//!
+//! The path's **length** is what the time maps to, and it is worked out
+//! with a **table**: the curve is cut into cells, the length of each
+//! cell is added up, and the point at a given length is found by
+//! walking the table and refining with Newton steps. The module
+//! `spatial` holds it.
+//!
 //! # What it does not do
 //!
-//! - **The spatial handles are not here.** The tree's spatial
-//!   properties move along a path with tangents of their own, and the
-//!   path is sampled through an arc-length table; here a property is a
-//!   number or a list of numbers and it moves in the value.
+//! - **The spatial tangents are not written down.** The tree stores a
+//!   keyframe's spatial tangents and computes them when the keyframe
+//!   is an **auto** one; here every spatial path has auto tangents,
+//!   and there is no command that writes them down.
 //! - **The expression is not here.** The tree may put an expression on
 //!   a property, and the expression is the plugin's own language.
 
@@ -142,11 +161,11 @@ impl Default for Ease {
 
 /// A **keyframe**: a frame, a value, and how it leaves.
 #[derive(Debug, Clone)]
-struct Key {
+pub(crate) struct Key {
     /// The frame the keyframe is on.
     frame: u64,
     /// The value of the property at that frame.
-    value: serde_json::Value,
+    pub(crate) value: serde_json::Value,
     /// The interpolation of the side the keyframe leaves on.
     interp: Interp,
     /// The ease of a bezier.
@@ -217,7 +236,7 @@ impl Key {
 }
 
 /// The **keys** of a property: the keyframes, sorted by frame.
-fn keys_of(value: &serde_json::Value) -> Option<Vec<Key>> {
+pub(crate) fn keys_of(value: &serde_json::Value) -> Option<Vec<Key>> {
     let list = value.get("keys")?.as_array()?;
     let mut keys: Vec<Key> = Vec::with_capacity(list.len());
     for key in list {
@@ -872,8 +891,11 @@ impl ValueAt {
                 message: format!("there is no `{path}` here"),
             });
         };
+        // The property may be **spatial**: its value is a point, and it
+        // follows a path.
+        let spatial = current.get("spatial").and_then(|spatial| spatial.as_bool()).unwrap_or(false);
         let value = match keys_of(&current) {
-            Some(keys) => value_at(&keys, frame).unwrap_or(serde_json::Value::Null),
+            Some(keys) => value_at(&keys, frame, spatial).unwrap_or(serde_json::Value::Null),
             None => current,
         };
         let message = format!("`{path}` is {value} at frame {frame}");
@@ -889,7 +911,7 @@ impl ValueAt {
 /// the curve between the two keyframes around it — the line, the hold
 /// or the bezier, as the keyframe it leaves says — and the earlier
 /// value when the values do not interpolate.
-fn value_at(keys: &[Key], frame: f64) -> Option<serde_json::Value> {
+fn value_at(keys: &[Key], frame: f64, spatial: bool) -> Option<serde_json::Value> {
     let first = keys.first()?;
     let last = keys.last()?;
     if keys.len() == 1 || frame <= first.frame as f64 {
@@ -906,6 +928,12 @@ fn value_at(keys: &[Key], frame: f64) -> Option<serde_json::Value> {
         return Some(start.value.clone());
     }
     let x = (frame - start.frame as f64) / span;
+    // The **spatial** path: a spatial property does not move along a
+    // straight line from one keyframe to the next — it follows a path
+    // in the plane, and the time maps to the length along that path.
+    if spatial && let Some(value) = spatial_value(keys, index, x, span) {
+        return Some(value);
+    }
     // The tree's rule: the side the keyframe **leaves** on decides the
     // shape of the segment, and the side it is **entered** on shapes
     // the handle that comes in. An in side that is not a bezier is a
@@ -953,6 +981,103 @@ fn value_at(keys: &[Key], frame: f64) -> Option<serde_json::Value> {
             }
         }
     })
+}
+
+/// The value of a **spatial** property at a point of its path.
+///
+/// The path is the cubic through the two keyframes and their tangents,
+/// and the time maps to the **length** along it: the ease of the two
+/// sides says how fast the value is moving, and the path is longer than
+/// the straight line, so the progress along the path is slower.
+fn spatial_value(keys: &[Key], index: usize, x: f64, span: f64) -> Option<serde_json::Value> {
+    let start = keys.get(index)?;
+    let end = keys.get(index + 1)?;
+    let p0 = point_of(&start.value)?;
+    let p3 = point_of(&end.value)?;
+    // The **values** of the keyframes, as points: the tangents are
+    // worked out from the neighbours.
+    let values: Vec<[f64; 3]> =
+        keys.iter().map(|key| point_of(&key.value).unwrap_or([0.0, 0.0, 0.0])).collect();
+    let (_, out_tangent) = crate::spatial::auto_tangents(&values, index);
+    let (in_tangent, _) = crate::spatial::auto_tangents(&values, index + 1);
+    let p1 = [p0[0] + out_tangent[0], p0[1] + out_tangent[1], p0[2] + out_tangent[2]];
+    let p2 = [p3[0] + in_tangent[0], p3[1] + in_tangent[1], p3[2] + in_tangent[2]];
+    let seg = crate::spatial::Seg::new([p0, p1, p2, p3]);
+    let len = seg.length();
+    // The **progress**: the ease of the two sides, with the speed
+    // along the path.
+    let lin_out = start.interp == Interp::Linear;
+    let lin_in = end.in_interp != Interp::Bezier;
+    let f = if (lin_out && lin_in) || len <= 0.0 || !len.is_finite() {
+        x
+    } else {
+        let out = side_ease(start, keys, index, true, len, span);
+        let in_side = side_ease(end, keys, index + 1, false, len, span);
+        crate::spatial::ease_progress(
+            out.speed * span / len,
+            out.influence,
+            in_side.speed * span / len,
+            in_side.influence,
+            x,
+        )
+    };
+    // The **point**: a straight path is the chord itself, and any other
+    // path is walked by its length.
+    let p = if crate::spatial::on_chord(p0, p1, p3) && crate::spatial::on_chord(p0, p2, p3) {
+        [p0[0] + (p3[0] - p0[0]) * f, p0[1] + (p3[1] - p0[1]) * f, p0[2] + (p3[2] - p0[2]) * f]
+    } else {
+        seg.at_length(f * len)
+    };
+    Some(with_points(&start.value, p))
+}
+
+/// The **ease** of one side of a segment, in the units of the path.
+///
+/// A **linear** side is the speed of the straight line — the length of
+/// the path over the time it takes — and a third of the segment. An
+/// **auto** side is the speed to the neighbours, measured along the
+/// path, and a sixth. A side with an ease written down is that ease.
+fn side_ease(key: &Key, keys: &[Key], index: usize, out: bool, len: f64, span: f64) -> Ease {
+    if out {
+        if key.interp == Interp::Linear {
+            return Ease { speed: len / span, influence: 1.0 / 3.0 };
+        }
+    } else if key.in_interp != Interp::Bezier {
+        return Ease { speed: len / span, influence: 1.0 / 3.0 };
+    }
+    if key.auto && index > 0 && index + 1 < keys.len() {
+        let previous = point_of(&keys[index - 1].value).unwrap_or([0.0, 0.0, 0.0]);
+        let next = point_of(&keys[index + 1].value).unwrap_or([0.0, 0.0, 0.0]);
+        let here = point_of(&key.value).unwrap_or([0.0, 0.0, 0.0]);
+        let dt = (keys[index + 1].frame - keys[index - 1].frame) as f64;
+        let slope = crate::spatial::distance(previous, next) / dt.max(1e-12);
+        let _ = here;
+        return Ease { speed: slope, influence: 1.0 / 6.0 };
+    }
+    if out { key.ease } else { key.in_ease }
+}
+
+/// A value as a **point** in the plane, when it is one.
+fn point_of(value: &serde_json::Value) -> Option<[f64; 3]> {
+    let list = value.as_array()?;
+    if list.len() < 2 || list.len() > 3 {
+        return None;
+    }
+    let mut point = [0.0; 3];
+    for (index, item) in list.iter().enumerate() {
+        point[index] = item.as_f64()?;
+    }
+    Some(point)
+}
+
+/// A value with its **components** replaced by a point.
+fn with_points(value: &serde_json::Value, point: [f64; 3]) -> serde_json::Value {
+    let Some(list) = value.as_array() else { return value.clone() };
+    let mut out: Vec<serde_json::Value> = Vec::with_capacity(list.len());
+    for value in point.iter().take(list.len()) {
+        out.push(serde_json::json!(value));
+    }
+    serde_json::Value::Array(out)
 }
 
 /// The line between two values.
@@ -1085,13 +1210,13 @@ fn component(value: &serde_json::Value, index: usize) -> Option<f64> {
 }
 
 /// A cubic Bezier in one dimension.
-fn bez(p0: f64, p1: f64, p2: f64, p3: f64, u: f64) -> f64 {
+pub(crate) fn bez(p0: f64, p1: f64, p2: f64, p3: f64, u: f64) -> f64 {
     let v = 1.0 - u;
     v * v * v * p0 + 3.0 * v * v * u * p1 + 3.0 * v * u * u * p2 + u * u * u * p3
 }
 
 /// The slope of a cubic Bezier in one dimension.
-fn bez_d(p0: f64, p1: f64, p2: f64, p3: f64, u: f64) -> f64 {
+pub(crate) fn bez_d(p0: f64, p1: f64, p2: f64, p3: f64, u: f64) -> f64 {
     let v = 1.0 - u;
     3.0 * v * v * (p1 - p0) + 6.0 * v * u * (p2 - p1) + 3.0 * u * u * (p3 - p2)
 }
@@ -1100,7 +1225,7 @@ fn bez_d(p0: f64, p1: f64, p2: f64, p3: f64, u: f64) -> f64 {
 ///
 /// The tree's `solve_u`: a Newton step and then a bisection, so the
 /// answer is found and not merely approached.
-fn solve_u(x0: f64, x1: f64, x2: f64, x3: f64, x: f64) -> f64 {
+pub(crate) fn solve_u(x0: f64, x1: f64, x2: f64, x3: f64, x: f64) -> f64 {
     if x <= x0 {
         return 0.0;
     }

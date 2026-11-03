@@ -55,6 +55,13 @@
 //! And one that is not a finding but a fact: the **expressions** are the
 //! plugin's own language, and they live in the payload beside the
 //! keyframes they sit on.
+//!
+//! And the **spatial** property is here too: a property whose value is
+//! a **point** does not move along the straight line from one keyframe
+//! to the next, it follows a **path** in the plane, and the time maps
+//! to the **length** along that path. The path is a cubic with the
+//! **auto** tangents — a sixth of the way from the keyframe before to
+//! the keyframe after — and its length is worked out with a table.
 
 #![deny(
     clippy::unwrap_used,
@@ -71,7 +78,9 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 mod keys;
+mod spatial;
 
+use keys::keys_of;
 pub use keys::{RemoveKeyframe, SetAuto, SetContinuous, SetInterpolation, SetKeyframe, ValueAt};
 
 /// The compositing layer.
@@ -229,6 +238,118 @@ impl SetProp {
         node.data["props"] = props;
         Ok(Outcome::changed(format!("`{path}` is set"))
             .with_data(serde_json::json!({ "layer": layer, "path": path })))
+    }
+}
+
+/// Make a property **spatial**.
+///
+/// A spatial property is one whose value is a **point**: a pair or a
+/// triple of numbers. It does not move along a straight line from one
+/// keyframe to the next — it follows a **path** in the plane, and the
+/// time maps to the **length** along that path.
+///
+/// The property must be **animated** — a path needs keyframes — and its
+/// value must be a point.
+#[derive(Command)]
+#[command(id = "fx.prop.spatial", area = "fx", layer = "fx", icon = "path", mutates, undoable)]
+pub struct SetSpatial {
+    /// The layer the property is on.
+    pub layer: NodeRef,
+    /// The path of the property.
+    pub path: Text,
+    /// Whether the property is spatial.
+    pub spatial: craftkit_sdk::Bool,
+}
+
+impl SetSpatial {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "fx.prop.spatial".to_string();
+        let layer = self.layer.0;
+        let path = self.path.0.clone();
+        let segments = parse_path(&path);
+        if segments.is_empty() {
+            return Err(EngineError::Failed { id, message: "a path has something in it".to_string() });
+        }
+        let Some(node) = session.document().node(layer) else {
+            return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
+        };
+        if node.kind != "fx.layer" {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+            });
+        }
+        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+        let Some(current) = get_at(&props, &segments).cloned() else {
+            return Err(EngineError::Failed { id, message: format!("there is no `{path}` here") });
+        };
+        // A path needs **keyframes**, and a point.
+        let Some(keys) = keys_of(&current) else {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("`{path}` is not animated, and a path needs keyframes"),
+            });
+        };
+        if self.spatial.0 {
+            // A path is made of **points**, and every keyframe of the
+            // property must be one: a pair or a triple of numbers, and
+            // the same number of them in each keyframe — a path whose
+            // width changes is not a path.
+            let mut width = 0usize;
+            for key in &keys {
+                let Some(list) = key.value.as_array() else {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!(
+                            "`{path}` is not a point: a spatial property's value is a pair or a triple of numbers"
+                        ),
+                    });
+                };
+                if (list.len() != 2 && list.len() != 3) || list.iter().any(|item| item.as_f64().is_none()) {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!(
+                            "`{path}` is not a point: a spatial property's value is a pair or a triple of numbers"
+                        ),
+                    });
+                }
+                if width == 0 {
+                    width = list.len();
+                } else if width != list.len() {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!(
+                            "`{path}` is not a path: its keyframes are {} and {} numbers wide",
+                            width,
+                            list.len()
+                        ),
+                    });
+                }
+            }
+            if width == 0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("`{path}` has no keyframes, and a path needs keyframes"),
+                });
+            }
+        }
+        let mut new = current.clone();
+        if !new.is_object() {
+            new = serde_json::json!({});
+        }
+        new["spatial"] = serde_json::json!(self.spatial.0);
+        let Some(node) = session.document_mut()?.node_mut(layer) else {
+            return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
+        };
+        let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+        set_at(&mut props, &segments, new)
+            .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+        node.data["props"] = props;
+        Ok(Outcome::changed(format!(
+            "`{path}` is {}",
+            if self.spatial.0 { "spatial" } else { "not spatial" }
+        ))
+        .with_data(serde_json::json!({ "layer": layer, "path": path, "spatial": self.spatial.0 })))
     }
 }
 
