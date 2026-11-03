@@ -23,6 +23,11 @@
 //! And a **split** answers for them: a transition that follows the cut
 //! joins the piece after it, and one that spans the cut keeps the piece
 //! before it (the module `splitting`).
+//!
+//! And a **trim** answers for them too: a transition may not leave the
+//! two clips it joins, so a trim that made a clip shorter brings the
+//! transition back inside them, and shortens it when they are now
+//! shorter than it (the module `trim`).
 
 use craftkit_derive::Command;
 
@@ -289,6 +294,64 @@ impl AddTransition {
             }),
         ))
     }
+}
+
+/// Keep the **transitions** that join a clip within the two clips they
+/// join.
+///
+/// The tree's rule: after a trim, a transition that reaches past the
+/// clips it joins is moved back inside them, and it is shortened when
+/// the clips are now shorter than it. The **alignment** is worked out
+/// again from where the transition ends up: one that starts at the cut
+/// starts at it, one that ends at the cut ends at it, and any other is
+/// centred.
+pub fn keep_within_clips(session: &mut Session, clip: u64) -> Result<(), EngineError> {
+    // The **transitions** of the track that join the clip.
+    let transitions: Vec<u64> = session
+        .document()
+        .walk()
+        .filter(|node| node.kind == "film.transition")
+        .filter(|node| {
+            node.data.get("from").and_then(|from| from.as_u64()) == Some(clip)
+                || node.data.get("to").and_then(|to| to.as_u64()) == Some(clip)
+        })
+        .map(|node| node.id)
+        .collect();
+    for transition in transitions {
+        let Some(node) = session.document().node(transition) else { continue };
+        let Some(from) = node.data.get("from").and_then(|from| from.as_u64()) else { continue };
+        let Some(to) = node.data.get("to").and_then(|to| to.as_u64()) else { continue };
+        let Some((from_start, _)) = span_of(session, from) else { continue };
+        let Some((to_start, to_duration)) = span_of(session, to) else { continue };
+        // The **bounds**: the two clips the transition joins, and the
+        // cut between them.
+        let lo = from_start;
+        let cut = to_start;
+        let hi = to_start + to_duration;
+        let start = node.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
+        let duration = node.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
+        if start >= lo && start.saturating_add(duration) <= hi {
+            continue;
+        }
+        // The transition is **shortened** when the clips are now
+        // shorter than it, and it is **moved** back inside them.
+        let duration = duration.min(hi.saturating_sub(lo));
+        let start = start.clamp(lo, hi.saturating_sub(duration));
+        // And the **alignment** is worked out again.
+        let align = if start == cut {
+            "start"
+        } else if start.saturating_add(duration) == cut {
+            "end"
+        } else {
+            "center"
+        };
+        if let Some(node) = session.document_mut()?.node_mut(transition) {
+            node.data["start"] = serde_json::json!(start);
+            node.data["duration"] = serde_json::json!(duration);
+            node.data["align"] = serde_json::json!(align);
+        }
+    }
+    Ok(())
 }
 
 /// **Change** a transition: its duration and its alignment.

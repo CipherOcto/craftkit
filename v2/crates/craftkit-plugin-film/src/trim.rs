@@ -37,6 +37,11 @@
 //!   in edge moves the clip and leaves the media where it is, and the
 //!   media does not bound it — the tree's `media_len` is nothing when a
 //!   clip holds a frame (the module `hold`).
+//! - **The transitions are here, and the trim honours them.** A
+//!   transition may not leave the two clips it joins, so a trim that
+//!   made a clip shorter brings the transition back inside them and
+//!   shortens it when they are now shorter than it (the module
+//!   `transitions`).
 //! - **The link is here, and the trim honours it.** The tree's linked
 //!   clips are trimmed as **one edit**: every member of the group takes
 //!   the same delta, and a member that cannot take it refuses the trim
@@ -163,6 +168,13 @@ impl TrimClip {
             let source_in = serde_json::json!(*source_in as u64);
             node.data = crate::clocks_of(&node.data, *start as u64, *duration as u64, &source_in);
             node.name = format!("clip at {start}");
+        }
+        // The **transitions** that join the trimmed clips stay within
+        // the two clips they join: a trim that made a clip shorter
+        // brings a transition back inside the clips (the module
+        // `transitions`).
+        for member in &members {
+            crate::transitions::keep_within_clips(session, *member)?;
         }
         let (start, duration, source_in) = planned
             .first()
