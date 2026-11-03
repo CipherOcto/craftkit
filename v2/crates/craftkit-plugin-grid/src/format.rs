@@ -347,7 +347,7 @@ impl Format {
     }
 
     /// The **text** a value is written with.
-    pub fn text(&self, value: &Value) -> String {
+    pub fn text(&self, value: &Value, system: dates::System) -> String {
         match value {
             Value::Empty => String::new(),
             Value::Number(number) => match self {
@@ -357,7 +357,7 @@ impl Format {
                 }
                 // A date is a **number** with a date format on it, and
                 // a number that is not a date is written as a number.
-                Format::Date { style } => match dates::from_serial(*number) {
+                Format::Date { style } => match dates::from_serial(*number, system) {
                     Some(date) => style.text(date),
                     None => general(*number),
                 },

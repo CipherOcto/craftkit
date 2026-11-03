@@ -844,12 +844,14 @@ impl Cells {
 pub struct Book {
     /// The sheets, by name.
     sheets: BTreeMap<String, Cells>,
+    /// The **date system** of the workbook the sheets are in.
+    system: crate::dates::System,
 }
 
 impl Book {
-    /// A workbook with no sheets in it.
-    pub fn new() -> Book {
-        Book { sheets: BTreeMap::new() }
+    /// A workbook in a **date system**.
+    pub fn in_system(system: crate::dates::System) -> Book {
+        Book { sheets: BTreeMap::new(), system }
     }
 
     /// Put a sheet in the workbook.
@@ -1060,7 +1062,7 @@ impl Book {
             return Value::Error("#VALUE!".to_string());
         };
         match Format::parse(&code) {
-            Some(format) => Value::Text(format.text(&value)),
+            Some(format) => Value::Text(format.text(&value, self.system)),
             None => Value::Error(format!("there is no format `{code}`")),
         }
     }

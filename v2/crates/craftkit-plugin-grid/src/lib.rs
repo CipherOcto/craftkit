@@ -49,6 +49,12 @@
 //! literals, tokens of the source and the first letter of a token —
 //! that is then run on the rows that are empty (the module `flash`).
 //!
+//! And a workbook says which **calendar** its serials are counted in:
+//! the 1900 system, with the day in it that never happened, or the
+//! 1904 system, without one. The system is a fact of the **workbook**,
+//! and every date in every sheet of it is read in that calendar (the
+//! module `dates`).
+//!
 //! And a cell may hold a **time**, which is a **fraction of a day**
 //! and a **format**: the number says how much of the day has gone and
 //! the format says that the number is a time and how it is written.
@@ -164,7 +170,15 @@ impl SheetKind {
 /// fact about the workbook and not about the sheet: the sheets are
 /// gathered here, once, and the evaluation reads them.
 fn book_of(document: &Document) -> Book {
-    let mut book = Book::new();
+    // The **date system** is a fact of the workbook, and every sheet
+    // of it is read in that calendar.
+    let system = document
+        .walk()
+        .find(|node| node.kind == "grid.workbook")
+        .and_then(|node| node.data.get("date_system").and_then(|system| system.as_str()))
+        .and_then(dates::System::parse)
+        .unwrap_or_default();
+    let mut book = Book::in_system(system);
     for node in document.walk().filter(|node| node.kind == "grid.sheet") {
         book.add(&node.name, cells_of(node));
     }
@@ -224,6 +238,24 @@ fn sheet_cells_mut(node: &mut Node) -> Cells {
     cells_of(node)
 }
 
+/// The **date system** of the workbook a sheet is in.
+///
+/// The system is a fact of the **workbook**, as it is in the tree: the
+/// workbook says which calendar its serials are counted in, and every
+/// date in every sheet of it is read in that calendar.
+pub fn system_of(session: &Session, sheet: u64) -> dates::System {
+    let Some(book) =
+        session.document().walk().find(|node| node.children.iter().any(|child| child.id == sheet))
+    else {
+        return dates::System::default();
+    };
+    book.data
+        .get("date_system")
+        .and_then(|system| system.as_str())
+        .and_then(dates::System::parse)
+        .unwrap_or_default()
+}
+
 /// Put a **workbook** in the document.
 #[derive(Command)]
 #[command(id = "grid.workbook.add", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
@@ -241,10 +273,76 @@ impl AddWorkbook {
                 message: "a workbook has a name".to_string(),
             });
         }
-        let id =
-            session.document_mut()?.add_node_with_under(None, name.clone(), "grid.workbook", None, json!({}));
+        // A workbook carries the **date system** its serials are
+        // counted in, as the tree's workbook does.
+        let id = session.document_mut()?.add_node_with_under(
+            None,
+            name.clone(),
+            "grid.workbook",
+            None,
+            json!({ "date_system": dates::System::default().name() }),
+        );
         Ok(Outcome::changed(format!("added the workbook `{name}`"))
             .with_data(json!({ "id": id, "name": name })))
+    }
+}
+
+/// **Set** the **date system** of a workbook.
+///
+/// The system is the calendar the workbook's serials are counted in:
+/// the `1900` system counts from the 31st of December 1899 and has the
+/// 29th of February of 1900 in it — the day that never happened — and
+/// the `1904` system counts from the 1st of January 1904 and has no
+/// such day.
+///
+/// The two are 1462 days apart, so every date in the workbook moves.
+#[derive(Command)]
+#[command(
+    id = "grid.workbook.date.system",
+    area = "grid",
+    layer = "grid",
+    icon = "pencil",
+    mutates,
+    undoable
+)]
+pub struct SetDateSystem {
+    /// The workbook.
+    pub workbook: NodeRef,
+    /// `1900` or `1904`.
+    pub system: Text,
+}
+
+impl SetDateSystem {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.workbook.date.system".to_string();
+        let workbook = self.workbook.0;
+        let Some(node) = session.document().node(workbook) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no workbook `{workbook}`"),
+            });
+        };
+        if node.kind != "grid.workbook" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+            });
+        }
+        let system = dates::System::parse(&self.system.0).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!(
+                "`{}` is not a date system: a date system is `1900` or `1904`",
+                self.system.0.trim()
+            ),
+        })?;
+        if let Some(node) = session.document_mut()?.node_mut(workbook) {
+            node.data["date_system"] = json!(system.name());
+        }
+        Ok(Outcome::changed(format!(
+            "the workbook `{workbook}` counts its days in the {} system",
+            system.name()
+        ))
+        .with_data(json!({ "workbook": workbook, "system": system.name() })))
     }
 }
 
@@ -414,14 +512,18 @@ impl SetDate {
         let id = "grid.cell.date".to_string();
         let sheet = self.sheet.0;
         let cell = cell_at(&self.cell.0, &id)?;
-        let (date, shape) = dates::parse(&self.date.0).ok_or_else(|| EngineError::Failed {
+        // The **date system** of the workbook the sheet is in: the
+        // date is written in that calendar and the serial is that
+        // calendar's.
+        let system = system_of(session, sheet);
+        let (date, shape) = dates::parse(&self.date.0, system).ok_or_else(|| EngineError::Failed {
             id: id.clone(),
             message: format!(
                 "`{}` is not a date: a date is written as 2026-10-26, 10/26/2026 or 4-Mar-2026, and it is a day that happened",
                 self.date.0.trim()
             ),
         })?;
-        let serial = dates::to_serial(date.year, date.month, date.day).ok_or_else(|| {
+        let serial = dates::to_serial(date.year, date.month, date.day, system).ok_or_else(|| {
             EngineError::Failed { id: id.clone(), message: format!("`{}` is not a date", self.date.0.trim()) }
         })?;
         let style = match &self.format {
@@ -591,7 +693,7 @@ impl CellText {
             },
             None => Value::Empty,
         };
-        let text = format.text(&value);
+        let text = format.text(&value, system_of(session, sheet));
         Ok(Outcome::new(format!("{} shows `{text}`", cell.to_text())).with_data(
             json!({ "sheet": sheet, "cell": cell.to_text(), "text": text, "value": value.to_json() }),
         ))

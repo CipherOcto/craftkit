@@ -239,7 +239,7 @@ impl Pattern {
     ///
     /// A number that would overflow is **nothing**: the cell keeps
     /// what it had, as the tree does, rather than wrapping.
-    fn value(&self, k: i64, forward: bool) -> Option<Value> {
+    fn value(&self, k: i64, forward: bool, system: dates::System) -> Option<Value> {
         let sign = if forward { 1 } else { -1 };
         match self {
             Pattern::Copy => None,
@@ -284,12 +284,12 @@ impl Pattern {
             Pattern::Weekdays { first, last, step } => {
                 let base = if forward { *last } else { *first };
                 let count = step.checked_mul(k)?.checked_mul(sign)?;
-                dates::add_weekdays(base, count).map(Value::Number)
+                dates::add_weekdays(base, count, system).map(Value::Number)
             }
             Pattern::Months { first, last, months } => {
                 let base = if forward { *last } else { *first };
                 let count = months.checked_mul(k)?.checked_mul(sign)?;
-                dates::add_months(base, count).map(Value::Number)
+                dates::add_months(base, count, system).map(Value::Number)
             }
         }
     }
@@ -300,7 +300,7 @@ impl Pattern {
     /// through them — unless there is only one, which the tree copies.
     /// A lane of **text with a number** in it counts its number on. A
     /// lane of anything else is copied.
-    fn of(values: &[Value], format: Option<&Format>) -> Pattern {
+    fn of(values: &[Value], format: Option<&Format>, system: dates::System) -> Pattern {
         if values.is_empty() {
             return Pattern::Copy;
         }
@@ -329,7 +329,8 @@ impl Pattern {
             // The tree's rule: dates that differ by whole months go on
             // by months, and not by a line through them.
             if is_a_date(format)
-                && let (Some(a), Some(b)) = (dates::from_serial(numbers[0]), dates::from_serial(numbers[1]))
+                && let (Some(a), Some(b)) =
+                    (dates::from_serial(numbers[0], system), dates::from_serial(numbers[1], system))
                 && a.day == b.day
                 && (a.month != b.month || a.year != b.year)
             {
@@ -539,6 +540,9 @@ impl FillRange {
                 message: format!("the node `{sheet}` is not a sheet"),
             });
         }
+        // The **date system** of the workbook the sheet is in: the
+        // dates of a fill are counted in that calendar.
+        let system = crate::system_of(session, sheet);
         let source = area_at(&self.from.0, &id)?;
         let target = area_at(&self.to.0, &id)?;
         let mode = match &self.mode {
@@ -685,10 +689,10 @@ impl FillRange {
                 // The tree's date modes: a source of **dates** steps by
                 // its unit, and a source that is not dates extends like
                 // a plain drag.
-                the_dates(lane_sources, mode, format.as_ref())
-                    .unwrap_or_else(|| the_pattern(&lane_values, Mode::Series, format.as_ref()))
+                the_dates(lane_sources, mode, format.as_ref(), system)
+                    .unwrap_or_else(|| the_pattern(&lane_values, Mode::Series, format.as_ref(), system))
             } else {
-                the_pattern(&lane_values, mode, format.as_ref())
+                the_pattern(&lane_values, mode, format.as_ref(), system)
             };
             let per_cell: Vec<Pattern> = lane_sources
                 .iter()
@@ -697,7 +701,7 @@ impl FillRange {
                         Pattern::Copy
                     } else {
                         let cell_format = sheet_cells.format(from.cell).and_then(Format::parse);
-                        Pattern::of(std::slice::from_ref(&from.value), cell_format.as_ref())
+                        Pattern::of(std::slice::from_ref(&from.value), cell_format.as_ref(), system)
                     }
                 })
                 .collect();
@@ -761,12 +765,12 @@ impl FillRange {
                         // more than one cell, every cell continues
                         // **its own** series.
                         if mode.extends() && lane.cells.len() > 1 {
-                            per_cell[source_index].value(step / lane.cells.len() as i64 + 1, forward)
+                            per_cell[source_index].value(step / lane.cells.len() as i64 + 1, forward, system)
                         } else {
                             Some(from.value.clone())
                         }
                     }
-                    pattern => pattern.value(step, forward),
+                    pattern => pattern.value(step, forward, system),
                 };
                 let Some(value) = value else {
                     // A number that would overflow is nothing: the
@@ -900,8 +904,8 @@ struct Lane {
 /// tree's default — continues what it finds, the `extend` mode counts
 /// a lone number up, and the `alternate` mode counts a lone number up
 /// and copies everything else.
-fn the_pattern(values: &[Value], mode: Mode, format: Option<&Format>) -> Pattern {
-    let pattern = Pattern::of(values, format);
+fn the_pattern(values: &[Value], mode: Mode, format: Option<&Format>, system: dates::System) -> Pattern {
+    let pattern = Pattern::of(values, format, system);
     match mode {
         Mode::Copy => Pattern::Copy,
         // The tree's values mode extends like a plain drag.
@@ -968,7 +972,12 @@ fn is_a_time(format: Option<&Format>) -> bool {
 /// The tree's `Pattern::dates`: the source must be numbers under a
 /// date format, and a source that is **not** dates extends like a
 /// plain drag.
-fn the_dates(sources: &[Source], mode: Mode, format: Option<&Format>) -> Option<Pattern> {
+fn the_dates(
+    sources: &[Source],
+    mode: Mode,
+    format: Option<&Format>,
+    system: dates::System,
+) -> Option<Pattern> {
     if !is_a_date(format) {
         return None;
     }
@@ -996,7 +1005,7 @@ fn the_dates(sources: &[Source], mode: Mode, format: Option<&Format>) -> Option<
             // between the first two dates, and one when there is only
             // one date.
             let step = match second {
-                Some(other) => at_least_one(dates::weekdays_between(first, other)?),
+                Some(other) => at_least_one(dates::weekdays_between(first, other, system)?),
                 None => 1,
             };
             Some(Pattern::Weekdays { first, last, step })
@@ -1007,8 +1016,8 @@ fn the_dates(sources: &[Source], mode: Mode, format: Option<&Format>) -> Option<
             // them — and a lone date steps by a month, or by a year.
             let months = match second {
                 Some(other) => {
-                    let a = dates::from_serial(first)?;
-                    let b = dates::from_serial(other)?;
+                    let a = dates::from_serial(first, system)?;
+                    let b = dates::from_serial(other, system)?;
                     let years = i64::from(b.year) - i64::from(a.year);
                     if mode == Mode::Years {
                         at_least_one(years) * 12

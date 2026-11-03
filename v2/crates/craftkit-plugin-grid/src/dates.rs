@@ -11,9 +11,11 @@
 //! as a **leap year**, so the serial 60 is the **fictitious** 29th of
 //! February 1900.
 //!
-//! The tree's **1904 system** is not here: it is the system of the old
-//! Macintosh Excel, and a workbook that says which system it uses is a
-//! workbook that was made somewhere else.
+//! The tree's **1904 system** is here too: it is the system of the old
+//! Macintosh Excel, and it counts from the 1st of January 1904, so it
+//! has no day in it that never happened. Which system a workbook uses
+//! is a fact of the **workbook** — as it is in the tree — and every
+//! date in every sheet of it is read in that calendar.
 
 /// The months, in full.
 pub const MONTHS: [&str; 12] = [
@@ -45,6 +47,63 @@ pub const MAX_SERIAL: f64 = 2_958_465.0;
 /// The tree's own constant, and it is what makes the serial and the
 /// Unix day count one number apart.
 const UNIX_1899_12_30: i64 = -25_569;
+
+/// The days from the 1st of January 1904 to the 1st of January 1970.
+///
+/// The tree's own constant, and it is what makes the 1904 serial and
+/// the Unix day count one number apart.
+const UNIX_1904_01_01: i64 = -24_107;
+
+/// The **date system** of a workbook: the calendar its serials are
+/// counted in.
+///
+/// The tree's two systems, and they are the tree's own:
+///
+/// - the **1900** system counts from the 31st of December 1899, so the
+///   serial 1 is the 1st of January 1900 — and it has a day in it
+///   that never happened, the 29th of February of 1900, which is the
+///   serial 60;
+/// - the **1904** system counts from the 1st of January 1904, so the
+///   serial 0 is that day, and there is no day in it that never
+///   happened.
+///
+/// The two are **1462 days** apart: the same date is the serial 1462
+/// higher in the 1900 system.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum System {
+    /// The 1900 system, with the day in it that never happened.
+    #[default]
+    Y1900,
+    /// The 1904 system, without one.
+    Y1904,
+}
+
+impl System {
+    /// The system a name says, if it says one this tree knows.
+    pub fn parse(name: &str) -> Option<System> {
+        match name.trim() {
+            "1900" => Some(System::Y1900),
+            "1904" => Some(System::Y1904),
+            _ => None,
+        }
+    }
+
+    /// The name of the system.
+    pub fn name(self) -> &'static str {
+        match self {
+            System::Y1900 => "1900",
+            System::Y1904 => "1904",
+        }
+    }
+
+    /// The **largest** serial the system has.
+    pub fn max_serial(self) -> i64 {
+        match self {
+            System::Y1900 => MAX_SERIAL as i64,
+            System::Y1904 => MAX_SERIAL as i64 - 1462,
+        }
+    }
+}
 
 /// A **time of day**.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -186,52 +245,76 @@ impl Date {
     }
 }
 
-/// The date of a **serial**, in the 1900 system.
+/// The date of a **serial**, in the system it is counted in.
 ///
-/// The serial 60 is the fictitious 29th of February 1900, and the
-/// serial 0 is the day before the first of January 1900 — which the
-/// tree writes as the zeroth of January, because a day of a month
-/// cannot be zero and the tree does not pretend otherwise.
-pub fn from_serial(serial: f64) -> Option<Date> {
-    if !serial.is_finite() || !(0.0..MAX_SERIAL + 1.0).contains(&serial) {
+/// In the 1900 system the serial 60 is the fictitious 29th of February
+/// 1900, and the serial 0 is the day before the first of January 1900
+/// — which the tree writes as the zeroth of January, because a day of
+/// a month cannot be zero and the tree does not pretend otherwise.
+///
+/// In the 1904 system the serial 0 is the 1st of January 1904 and
+/// every day is a day that happened.
+pub fn from_serial(serial: f64, system: System) -> Option<Date> {
+    let max = system.max_serial();
+    if !serial.is_finite() || !(0.0..max as f64 + 1.0).contains(&serial) {
         return None;
     }
     let day = serial.floor() as i64;
-    // The tree's weekdays follow the **fictitious** calendar: the
-    // serial 1 is a Sunday, and every date after it is a day later
-    // than the day it really is.
-    let weekday = ((day + 6) % 7) as u32;
-    let (year, month, dom) = if day == 60 {
-        (1900, 2, 29)
-    } else if day == 0 {
-        (1900, 1, 0)
-    } else {
-        let real = if day < 60 { day + 1 } else { day };
-        let (year, month, dom) = civil_from_days(real + UNIX_1899_12_30);
-        (year, month, dom)
+    let (year, month, dom, weekday) = match system {
+        System::Y1900 => {
+            // The tree's weekdays follow the **fictitious** calendar:
+            // the serial 1 is a Sunday, and every date after it is a
+            // day later than the day it really is.
+            let weekday = ((day + 6) % 7) as u32;
+            if day == 60 {
+                (1900, 2, 29, weekday)
+            } else if day == 0 {
+                (1900, 1, 0, weekday)
+            } else {
+                let real = if day < 60 { day + 1 } else { day };
+                let (year, month, dom) = civil_from_days(real + UNIX_1899_12_30);
+                (year, month, dom, weekday)
+            }
+        }
+        System::Y1904 => {
+            let unix = day + UNIX_1904_01_01;
+            let (year, month, dom) = civil_from_days(unix);
+            (year, month, dom, ((unix + 4).rem_euclid(7)) as u32)
+        }
     };
     Some(Date { year, month, day: dom, weekday })
 }
 
-/// The **serial** of a date, in the 1900 system.
+/// The **serial** of a date, in the system it is counted in.
 ///
 /// A date that did not happen is refused: the 30th of February is not
 /// a date, and the tree's `DATE()` rolls it over, but a cell that
 /// holds a date holds a date that was.
-pub fn to_serial(year: i32, month: u32, day: u32) -> Option<f64> {
-    if !(1900..=9999).contains(&year) || !(1..=12).contains(&month) {
+///
+/// And a date before the system's own calendar is refused: the 1904
+/// system begins at the 1st of January 1904, and the 1900 system at
+/// the 1st of January 1900.
+pub fn to_serial(year: i32, month: u32, day: u32, system: System) -> Option<f64> {
+    let first_year = match system {
+        System::Y1900 => 1900,
+        System::Y1904 => 1904,
+    };
+    if !(first_year..=9999).contains(&year) || !(1..=12).contains(&month) {
         return None;
     }
     if day < 1 || day > days_in_month(year, month) {
         return None;
     }
     let first = days_from_civil(year, month, 1);
-    // Up to February 1900 the serial is one lower than the day count
-    // from the 30th of December 1899: the fictitious 29th of February
-    // comes before the 1st of March.
-    let first = first - UNIX_1899_12_30 - i64::from(year == 1900 && month <= 2);
+    let first = match system {
+        // Up to February 1900 the serial is one lower than the day
+        // count from the 30th of December 1899: the fictitious 29th of
+        // February comes before the 1st of March.
+        System::Y1900 => first - UNIX_1899_12_30 - i64::from(year == 1900 && month <= 2),
+        System::Y1904 => first - UNIX_1904_01_01,
+    };
     let serial = first + day as i64 - 1;
-    if !(0..=MAX_SERIAL as i64).contains(&serial) {
+    if !(0..=system.max_serial()).contains(&serial) {
         return None;
     }
     Some(serial as f64)
@@ -289,7 +372,7 @@ pub fn is_leap(year: i32) -> bool {
 /// The answer is the date and the **format code** the tree gives it,
 /// because a date in a spreadsheet is a number and a format, and the
 /// two go together.
-pub fn parse(text: &str) -> Option<(Date, &'static str)> {
+pub fn parse(text: &str, system: System) -> Option<(Date, &'static str)> {
     let text = text.trim().trim_end_matches(',');
     let parts: Vec<&str> = text.split(['/', '-', '.']).map(|part| part.trim()).collect();
     if parts.len() != 3 {
@@ -307,17 +390,17 @@ pub fn parse(text: &str) -> Option<(Date, &'static str)> {
     if first.len() == 4
         && let (Some(year), Some(month), Some(day)) = (number(first), number(second), number(third))
     {
-        let date = the_date(year, month, day)?;
+        let date = the_date(year, month, day, system)?;
         return Some((date, "yyyy-mm-dd"));
     }
     // The month first: `10/26/2026`.
     if let (Some(month), Some(day), Some(year)) = (number(first), number(second), number(third)) {
-        let date = the_date(the_year(year, third.len()), month, day)?;
+        let date = the_date(the_year(year, third.len()), month, day, system)?;
         return Some((date, "m/d/yyyy"));
     }
     // The month by name: `4-Mar-2026`.
     if let (Some(day), Some(month), Some(year)) = (number(first), month_from_name(second), number(third)) {
-        let date = the_date(the_year(year, third.len()), month as i64, day)?;
+        let date = the_date(the_year(year, third.len()), month as i64, day, system)?;
         return Some((date, "d-mmm-yyyy"));
     }
     None
@@ -342,23 +425,27 @@ fn month_from_name(text: &str) -> Option<u32> {
 
 /// The date a year, a month and a day say — if they say a day that
 /// happened.
-fn the_date(year: i64, month: i64, day: i64) -> Option<Date> {
-    if !(1900..=9999).contains(&year) || !(1..=12).contains(&month) {
+fn the_date(year: i64, month: i64, day: i64, system: System) -> Option<Date> {
+    let first_year = match system {
+        System::Y1900 => 1900,
+        System::Y1904 => 1904,
+    };
+    if !(first_year..=9999).contains(&year) || !(1..=12).contains(&month) {
         return None;
     }
     if day < 1 || day > days_in_month(year as i32, month as u32) as i64 {
         return None;
     }
-    let serial = to_serial(year as i32, month as u32, day as u32)?;
-    from_serial(serial)
+    let serial = to_serial(year as i32, month as u32, day as u32, system)?;
+    from_serial(serial, system)
 }
 
 /// Whether a serial falls on **Monday to Friday**.
 ///
 /// The Saturday is the sixth day and the Sunday is the zeroth, as the
 /// tree has them.
-pub fn is_weekday(serial: f64) -> Option<bool> {
-    from_serial(serial).map(|date| date.weekday != 0 && date.weekday != 6)
+pub fn is_weekday(serial: f64, system: System) -> Option<bool> {
+    from_serial(serial, system).map(|date| date.weekday != 0 && date.weekday != 6)
 }
 
 /// A serial moved by `n` **weekdays**.
@@ -366,7 +453,7 @@ pub fn is_weekday(serial: f64) -> Option<bool> {
 /// The Saturday and the Sunday are skipped, and a start that is on one
 /// of them moves to the next weekday for the first step. From a
 /// weekday every seven days hold five weekdays.
-pub fn add_weekdays(serial: f64, n: i64) -> Option<f64> {
+pub fn add_weekdays(serial: f64, n: i64, system: System) -> Option<f64> {
     if n == 0 {
         return Some(serial);
     }
@@ -375,7 +462,7 @@ pub fn add_weekdays(serial: f64, n: i64) -> Option<f64> {
     let next_weekday = |day: &mut f64| -> Option<()> {
         loop {
             *day += step;
-            match is_weekday(*day) {
+            match is_weekday(*day, system) {
                 Some(true) => return Some(()),
                 Some(false) => {}
                 None => return None,
@@ -388,21 +475,21 @@ pub fn add_weekdays(serial: f64, n: i64) -> Option<f64> {
     for _ in 0..rest % 5 {
         next_weekday(&mut day)?;
     }
-    from_serial(day)?;
+    from_serial(day, system)?;
     Some(day)
 }
 
 /// How many weekdays lie after `a` up to and including `b`.
 ///
 /// The count is negative when `b` comes first.
-pub fn weekdays_between(a: f64, b: f64) -> Option<i64> {
+pub fn weekdays_between(a: f64, b: f64, system: System) -> Option<i64> {
     let (low, high, sign) = if b >= a { (a.floor(), b.floor(), 1) } else { (b.floor(), a.floor(), -1) };
     let days = (high - low) as i64;
     let mut count = days / 7 * 5;
     let mut day = low + (days / 7 * 7) as f64;
     for _ in 0..days % 7 {
         day += 1.0;
-        if is_weekday(day)? {
+        if is_weekday(day, system)? {
             count += 1;
         }
     }
@@ -416,8 +503,8 @@ pub fn weekdays_between(a: f64, b: f64) -> Option<i64> {
 /// February — and the months are always counted from the **original**
 /// date, so a series does not drift: the 31st of January, the 28th of
 /// February, the 31st of March, the 30th of April.
-pub fn add_months(serial: f64, months: i64) -> Option<f64> {
-    let date = from_serial(serial)?;
+pub fn add_months(serial: f64, months: i64, system: System) -> Option<f64> {
+    let date = from_serial(serial, system)?;
     let total =
         i64::from(date.year).checked_mul(12)?.checked_add(i64::from(date.month) - 1)?.checked_add(months)?;
     let year = total.div_euclid(12);
@@ -425,7 +512,7 @@ pub fn add_months(serial: f64, months: i64) -> Option<f64> {
     let year = i32::try_from(year).ok()?;
     let last = days_in_month(year, month as u32);
     let day = i64::from(date.day).min(i64::from(last));
-    let base = to_serial(year, month as u32, day as u32)?;
+    let base = to_serial(year, month as u32, day as u32, system)?;
     Some(base + serial - serial.floor())
 }
 

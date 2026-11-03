@@ -61,6 +61,9 @@ impl FlashFill {
             });
         }
         let cells = crate::cells_of(node);
+        // The **date system** of the workbook: the text the cells show
+        // is the text they show in that calendar.
+        let system = crate::system_of(session, sheet);
         let source = CellRef { col: at.col - 1, row: at.row };
         // The **region**: the rows the source column holds, above the
         // cell and below it.
@@ -78,12 +81,12 @@ impl FlashFill {
         let mut examples: Vec<(String, String)> = Vec::new();
         let mut todo: Vec<(CellRef, String)> = Vec::new();
         for row in top..=bottom {
-            let from = shown_text(&cells, CellRef { col: source.col, row });
+            let from = shown_text(&cells, CellRef { col: source.col, row }, system);
             let to = CellRef { col: at.col, row };
             if is_empty(&cells, to) {
                 todo.push((to, from));
             } else {
-                examples.push((from, shown_text(&cells, to)));
+                examples.push((from, shown_text(&cells, to, system)));
             }
         }
         if examples.is_empty() {
@@ -148,13 +151,13 @@ fn is_empty(cells: &Cells, cell: CellRef) -> bool {
 }
 
 /// The **shown text** of a cell: its value with its format.
-fn shown_text(cells: &Cells, cell: CellRef) -> String {
+fn shown_text(cells: &Cells, cell: CellRef, system: crate::dates::System) -> String {
     let value = cells.get(cell).and_then(|entry| entry.value.clone()).unwrap_or(Value::Empty);
     let format = match cells.format(cell) {
         Some(code) => Format::parse(code).unwrap_or(Format::General),
         None => Format::General,
     };
-    format.text(&value)
+    format.text(&value, system)
 }
 
 /// A **piece** of a program.
