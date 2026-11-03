@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2611 tests.** The MCP server links **all fifteen batteries** in, so the
+**2623 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2611 tests
+cargo test          # 2623 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3781,6 +3781,7 @@ so.
 | the **properties** of a paragraph | **built.** A paragraph may stand, be indented and have space around it (§344) | §344 |
 | the **hiding** of a row and a column | **built.** A row and a column may be hidden, and a hidden row is still a row (§345) | §345 |
 | the **subtotal** of a range | **built.** The tree's own function, with the hundred-and-more form that leaves the hidden rows out (§346) | §346 |
+| the **filter** of a sheet | **built.** A column and a criterion, and the rows the filter hides are derived (§347) | §347 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23755,3 +23756,76 @@ hiding of a row (§345) is what makes it mean something.
   not a thing this tree knows: a hidden row here is a row hidden by
   hand, and the subtotal leaves it out only in the hundred-and-more
   form.
+
+## 347. The filter of a sheet
+
+A filter is a **column** and a **criterion**, and the criterion is an
+operation and a value: `B` is `>` `10`, and the rows whose `B` is not
+more than ten are the rows the filter **hides**.
+
+### What was built
+
+- The command `grid.filter.set` filters a sheet by a column, and the
+  command `grid.filter.clear` takes the filter away.
+- The command `grid.filter.rows` says which rows the filter hides.
+- The rows a filter hides are **derived**: they are worked out from the
+  cells each time they are asked for, and they are not written down.
+- The operation is one of the tree's own — `=`, `!=`, `<`, `<=`, `>`
+  or `>=` — and a name that is not one of them is refused.
+- The tree's `*` is a **wildcard**: `*abc*` is "contains abc" and
+  `abc*` is "begins with abc".
+- The comparison operations compare **numbers**, and a value that is
+  not a number is refused when the filter is written; the equality
+  operations compare the **text** of the cell, without case.
+- A **subtotal** leaves the rows a filter hides out, whatever the
+  function number — that is the tree's rule — and a plain `SUM` does
+  not.
+
+### What the port found
+
+- **The tree's filter has many kinds of criterion and this one has
+  one.** The tree's criterion may be a list of values, a pair of
+  comparisons joined by and or or, a top-ten, an above-the-average or
+  a colour. Here a criterion is **one** operation and **one** value —
+  the pair of comparisons — and the other kinds are commands of their
+  own when they come.
+- **The tree's filter is over a range and this one's is over a
+  column.** The tree's filter has a range and a criterion for each
+  column of it. Here a sheet has **one** filter and it is over one
+  column, and the rows it hides are the rows of the sheet.
+- **The tree's comparison is Excel's and this one's is simpler.** The
+  tree compares two numbers rounded to fifteen significant digits,
+  treats an empty cell as zero, as `""` or as `FALSE` depending on
+  the other side, and orders values of different kinds by rank. Here
+  the comparison operations compare **numbers** — an empty cell is
+  zero — and the equality operations compare the **text** of the cell,
+  without case, with the tree's `*`.
+- **The tree's filter and the tree's hiding are two facts.** The tree
+  knows whether a row is hidden by a filter and whether it is hidden
+  by hand, and its `SUBTOTAL` treats them differently. Here they are
+  two facts too — a list of rows hidden by hand and a criterion — and
+  the rows a filter hides are derived from the criterion.
+
+### What it cost
+
+- **Twelve tests** in the grid battery (`tests/filters.rs`): a filter
+  hiding the rows that do not match, the rows being derived, the
+  wildcard being the tree's, the text being compared without case, a
+  subtotal leaving the filtered rows out, a sum not leaving them out,
+  the filter being taken away, a sheet that is not filtered being
+  refused, an operation that is not one being refused, a comparison
+  with text being refused, a column that is not a column being
+  refused, and the filter being saved.
+- **The book carries the filters**, and the subtotal reads them.
+- **Three new commands**: `grid.filter.set`, `grid.filter.clear` and
+  `grid.filter.rows`. The grid battery now carries **45** commands
+  and the MCP server **458**.
+
+### What it does not settle
+
+- **The tree's other criteria are not here.** A list of values, a
+  top-ten, an above-the-average and a colour are four criteria of
+  their own, and each of them is a command with its own rules.
+- **The tree's sort is not here.** The tree may sort the rows of a
+  filtered table, and the order of the rows is then a fact of the
+  sheet. Here the rows are where they were put.
