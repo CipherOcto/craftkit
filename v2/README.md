@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2510 tests.** The MCP server links **all fifteen batteries** in, so the
+**2525 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2510 tests
+cargo test          # 2525 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3773,6 +3773,7 @@ so.
 | the **slide** of a clip | **built.** A clip may be slid between its neighbours, and the neighbours give way (§336) | §336 |
 | the **stretch** of a clip | **built.** A clip may be stretched, and it plays the same material at another speed (§337) | §337 |
 | the **markers** of a sequence | **built.** A sequence carries named places, with a colour and a kind (§338) | §338 |
+| the **effects** of a layer | **built.** The kit has a catalogue of effects, and an instance is a group with the parameters at their defaults (§339) | §339 |
 
 ### The list of things that are honestly not there: empty
 
@@ -23220,3 +23221,79 @@ thing of its own with an id of its own.
 - **The tree's export of the markers is not here.** The tree may write
   the markers of a sequence out as a CSV file. That is a file and not
   a fact of the document.
+
+## 339. The effects of a layer
+
+An **effect** is a named set of **parameters** that a layer may carry:
+a blur with a radius, a glow with a radius and an intensity. The
+tree's effect is a spec — an id, a name, a category and its typed
+parameters — and an **instance** of one on a layer is a property
+group, so that every parameter is animatable and addressable like any
+other property. And here there was a hole: the paths said
+`effects/#1/radius` and **nothing made an effect**.
+
+### What was built
+
+- The **catalogue**: six effects, each with its parameters, their
+  kinds, their bounds and their defaults. The kinds are a **number**
+  with its bounds, a **boolean**, and a **popup** with its options.
+- The command `fx.effect.list` says what there is to put on a layer:
+  every effect, its name, its category and every parameter of it.
+- The command `fx.effect.add` puts an effect on a layer, with its
+  parameters at their defaults.
+- The command `fx.effect.remove` takes one away, and the ones after
+  it move up.
+- **A property may not make an effect.** `fx.prop.set` refuses to
+  write the stack, refuses to write an effect that is not there, and
+  refuses to write the effect itself: the stack is made by
+  `fx.effect.add` and taken away by `fx.effect.remove`.
+
+### What the port found
+
+- **The tree's instance has a uid and v2's has its order.** The
+  tree's instance is a property group with a uid of its own, so
+  moving it in the stack does not move what addresses it. Here the
+  instance is addressed by its **number** in the stack —
+  `effects/#2/radius` — because that is how the property paths
+  address it, and so a move in the stack is a move of what the paths
+  say.
+- **The tree's catalogue is hundreds of effects and v2's is six.** The
+  tree renders them and this tree renders nothing: the `fx.layer`
+  kind says so in its own words ("a layer is not drawn"). So what is
+  ported is the **shape** of an effect — an id, a name, a category,
+  typed parameters with defaults — and a small catalogue that shows
+  the shape.
+- **The tree's catalogue is read before it is used.** The tree's
+  `effect.list` is what tells a caller which effects there are and
+  what they take, and it is a command and not a table in the source.
+  Here the catalogue is a table in the source and the command says it
+  out loud.
+
+### What it cost
+
+- **Fifteen tests** in the fx battery (`tests/effects.rs`): the
+  catalogue saying what there is, the catalogue saying the kinds, an
+  effect being put on a layer, two effects on a layer, the same
+  effect twice, a parameter being an ordinary property, an effect that
+  is not there refused, a node that is not a layer refused, an effect
+  being taken away, an effect that is not there may not be taken away,
+  an effect counted from one, a property not making an effect, a
+  property not making an effect by number, a property not writing the
+  effect itself, and the effect being saved.
+- **The studio's own test changed**, because it set the whole `effects`
+  array through a property — which is now refused. It makes two
+  effects with `fx.effect.add` and reads the second one's parameter.
+- **Three new commands**: `fx.effect.list`, `fx.effect.add` and
+  `fx.effect.remove`. The fx battery now carries **23** commands and
+  the MCP server **439**.
+
+### What it does not settle
+
+- **The tree's bypass of one instance is not here.** The tree may
+  switch one effect off and leave its values in place. Here the
+  layer's own `effects` switch says whether the effects run at all,
+  and one instance has no switch of its own.
+- **The tree's reorder, duplicate and reset are not here.** They are
+  commands on an instance, and they come when the instance is worth
+  having — and the reorder has to say what it does to the paths, which
+  address an instance by its number.
