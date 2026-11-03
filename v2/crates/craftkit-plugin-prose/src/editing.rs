@@ -473,6 +473,121 @@ fn spacing_of(value: Option<Number>, id: &str) -> Result<Option<f64>, EngineErro
     Ok(Some(points))
 }
 
+/// The **largest** a line spacing may be, in points.
+const MAX_LINE_SPACING: f64 = 1584.0;
+
+/// The **smallest** a multiple of single spacing may be.
+const MIN_MULTIPLE: f64 = 0.06;
+
+/// The **largest** a multiple of single spacing may be.
+const MAX_MULTIPLE: f64 = 132.0;
+
+/// The **smallest** an exact spacing may be, in points.
+const MIN_EXACT: f64 = 0.7;
+
+/// Say how the **lines** of a paragraph are spaced.
+///
+/// The tree's spacing is one of three things: a **multiple** of single
+/// spacing, a **minimum** number of points, or an **exact** number of
+/// points. Only one of them may be said, and a number outside the
+/// tree's own range is **refused**: the tree clamps it and says
+/// nothing.
+#[derive(Command)]
+#[command(
+    id = "prose.block.paragraph.linespacing",
+    area = "prose",
+    layer = "prose",
+    icon = "lines",
+    mutates,
+    undoable
+)]
+pub struct SetLineSpacing {
+    /// The paragraph.
+    pub block: NodeRef,
+    /// A multiple of single spacing: `1` is single, `1.5` is one and a
+    /// half, `2` is double.
+    pub multiple: Option<Number>,
+    /// At least this many points.
+    pub at_least: Option<Number>,
+    /// Exactly this many points.
+    pub exactly: Option<Number>,
+}
+
+impl SetLineSpacing {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "prose.block.paragraph.linespacing".to_string();
+        let block = self.block.0;
+        let Some(node) = session.document().node(block) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{block}`"),
+            });
+        };
+        if node.kind != "prose.block.paragraph" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
+            });
+        }
+        let said =
+            [self.multiple, self.at_least, self.exactly].iter().filter(|value| value.is_some()).count();
+        if said == 0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a line spacing is a multiple, a minimum or an exact number of points".to_string(),
+            });
+        }
+        if said > 1 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "a line spacing is one of the three and not more than one of them".to_string(),
+            });
+        }
+        let (kind, value) = if let Some(multiple) = self.multiple {
+            let multiple = multiple.0;
+            if !multiple.is_finite() || multiple < MIN_MULTIPLE || multiple > MAX_MULTIPLE {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "a multiple of single spacing is between {MIN_MULTIPLE} and {MAX_MULTIPLE}, and {multiple} is not"
+                    ),
+                });
+            }
+            ("multiple", multiple)
+        } else if let Some(at_least) = self.at_least {
+            let at_least = at_least.0;
+            if !at_least.is_finite() || at_least < 0.0 || at_least > MAX_LINE_SPACING {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "a minimum of points is between 0 and {MAX_LINE_SPACING}, and {at_least} is not"
+                    ),
+                });
+            }
+            ("at_least", at_least)
+        } else {
+            let exactly = self.exactly.map(|exactly| exactly.0).unwrap_or(0.0);
+            if !exactly.is_finite() || exactly < MIN_EXACT || exactly > MAX_LINE_SPACING {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "an exact number of points is between {MIN_EXACT} and {MAX_LINE_SPACING}, and {exactly} is not"
+                    ),
+                });
+            }
+            ("exactly", exactly)
+        };
+        if let Some(node) = session.document_mut()?.node_mut(block) {
+            node.data["line_spacing"] = json!({ "kind": kind, "value": value });
+        }
+        Ok(Outcome::changed(format!("the lines of the paragraph {block} are spaced")).with_data(json!({
+            "block": block,
+            "kind": kind,
+            "value": value,
+        })))
+    }
+}
+
 /// Whether a node is a **block**: a paragraph or a table.
 fn is_block(node: &Node) -> bool {
     node.kind.starts_with("prose.block.")

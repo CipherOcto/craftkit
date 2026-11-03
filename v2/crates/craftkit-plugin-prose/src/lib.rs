@@ -76,7 +76,9 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem
 
 mod editing;
 
-pub use editing::{MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetParagraphText, SetSpacing};
+pub use editing::{
+    MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
+};
 
 /// The prose layer.
 ///
@@ -726,6 +728,7 @@ craftkit_sdk::plugin_anchor!(
     SetAlignment,
     SetIndent,
     SetSpacing,
+    SetLineSpacing,
     BlocksEvaluator,
     ProsePanel
 );
