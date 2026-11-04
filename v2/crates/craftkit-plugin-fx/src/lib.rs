@@ -79,6 +79,10 @@
 //! refusal comes before the edit, so a refused parenting changes
 //! nothing (the module `parent`).
 //!
+//! And a composition has a **time**: the frame it is looked at, and
+//! the time is a fact of the composition and not of the window that
+//! happens to be open (the module `time`).
+//!
 //! And the **markers** of a composition are here: a moment and what is
 //! said about it, and the markers of a composition stand in the order
 //! of their time — the tree's command sorts them as it adds one, and
@@ -128,6 +132,7 @@ mod masks;
 mod parent;
 mod spatial;
 mod switches;
+mod time;
 
 pub use blend::SetBlend;
 pub use effects::{
@@ -140,6 +145,7 @@ pub use markers::{AddMarker, MarkerKind, MarkersEvaluator, SetMarker};
 pub use masks::{AddMask, InvertMask, ListMasks, LockMask, MaskKind, RemoveMask, SetMaskMode};
 pub use parent::{DeleteParent, SetParent};
 pub use switches::{SetCompSwitch, SetSwitch, SwitchesEvaluator};
+pub use time::{GetTime, GoToEnd, GoToStart, SetTime, StepTime};
 
 /// The compositing layer.
 ///
@@ -729,6 +735,11 @@ craftkit_sdk::plugin_anchor!(
     InvertMask,
     LockMask,
     ListMasks,
+    SetTime,
+    GetTime,
+    GoToStart,
+    GoToEnd,
+    StepTime,
     FxPanel
 );
 
