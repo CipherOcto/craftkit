@@ -160,6 +160,7 @@ mod enabling;
 mod gaps;
 mod hold;
 mod inserting;
+mod itemremoval;
 mod labels;
 mod lifting;
 mod linking;
@@ -186,6 +187,7 @@ pub use enabling::EnableClip;
 pub use gaps::CloseGap;
 pub use hold::{DeleteHold, SetHold};
 pub use inserting::InsertClip;
+pub use itemremoval::RemoveItem;
 pub use labels::{DeleteItemLabel, DeleteLabel, ItemLabelGroup, LabelGroup, SetItemLabel, SetLabel};
 pub use lifting::LiftRange;
 pub use linking::{LinkClips, UnlinkClip};
@@ -854,6 +856,7 @@ craftkit_sdk::plugin_anchor!(
     InsertClip,
     SplitClip,
     RemoveClip,
+    RemoveItem,
     RippleClip,
     LiftRange,
     TransitionKind,
