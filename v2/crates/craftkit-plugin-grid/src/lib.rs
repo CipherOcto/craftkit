@@ -63,6 +63,10 @@
 //! cells, and a formula may use the word where it would use the range
 //! (the module `names`).
 //!
+//! And a name may be **read**: the range it stands for and the values
+//! of the cells of it, and the values are derived (the module
+//! `namereading`).
+//!
 //! And a sheet may carry **merges**: a range of cells that is one cell,
 //! whose value is the value of the cell at the top left (the module
 //! `merges`).
@@ -215,6 +219,7 @@ mod hiding;
 mod links;
 mod lookups;
 mod merges;
+mod namereading;
 mod names;
 mod notes;
 mod protection;
@@ -248,6 +253,7 @@ use formula::{Book, CellRef, Cells, Value};
 pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
 pub use links::{DeleteLink, GetLink, SetLink};
 pub use merges::{ClearMerge, SetMerge};
+pub use namereading::ReadName;
 pub use names::{DeleteName, SetName};
 pub use notes::{DeleteNote, GetNote, SetNote};
 pub use protection::{ProtectSheet, UnprotectSheet};
