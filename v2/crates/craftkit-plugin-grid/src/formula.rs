@@ -1963,6 +1963,30 @@ impl Book {
                     Err(message) => Value::Error(message),
                 }
             }
+            "CONFIDENCE" | "CONFIDENCE.NORM" | "CONFIDENCE.T" => {
+                if arguments.len() != 3 {
+                    return Value::Error("#VALUE!".to_string());
+                }
+                let (alpha, deviation, size) = match (
+                    self.number_at(sheet, arguments, 0, being),
+                    self.number_at(sheet, arguments, 1, being),
+                    self.number_at(sheet, arguments, 2, being),
+                ) {
+                    (Ok(alpha), Ok(deviation), Ok(size)) => (alpha, deviation, size.trunc()),
+                    (Err(message), _, _) | (_, Err(message), _) | (_, _, Err(message)) => {
+                        return Value::Error(message);
+                    }
+                };
+                let value = if name == "CONFIDENCE.T" {
+                    crate::hypotheses::confidence_t(alpha, deviation, size)
+                } else {
+                    crate::hypotheses::confidence_norm(alpha, deviation, size)
+                };
+                match value {
+                    Ok(value) => Value::Number(value),
+                    Err(message) => Value::Error(message),
+                }
+            }
             _ => {
                 // Z.TEST: the set, the number, and the deviation.
                 if arguments.len() < 2 || arguments.len() > 3 {

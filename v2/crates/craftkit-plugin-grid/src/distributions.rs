@@ -134,7 +134,7 @@ fn t_pdf(t: f64, degrees: f64) -> f64 {
 
 /// The **tail** of Student's t, inverted: a number of zero or more at
 /// which the tail is the probability.
-fn t_inv_upper(probability: f64, degrees: f64) -> f64 {
+pub(crate) fn t_inv_upper(probability: f64, degrees: f64) -> f64 {
     if probability >= 0.5 {
         return 0.0;
     }

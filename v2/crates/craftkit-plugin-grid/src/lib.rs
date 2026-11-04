@@ -125,7 +125,8 @@
 //!
 //! And a formula may **test a hypothesis**: a t-test, a chi-square
 //! test, an F-test and a z-test — the questions two sets of numbers
-//! ask of each other (the module `hypotheses`).
+//! ask of each other — and may ask how wide the **confidence** of a
+//! mean is (the module `hypotheses`).
 //!
 //! And a sheet may be **searched**: the cells whose text holds what
 //! was looked for, with the tree's wildcards and the tree's rule about

@@ -35,7 +35,20 @@ use crate::formula::Value;
 
 /// Whether a **name** is the name of a test of a hypothesis.
 pub(crate) fn is_hypothesis_function(name: &str) -> bool {
-    matches!(name, "T.TEST" | "TTEST" | "CHISQ.TEST" | "CHITEST" | "F.TEST" | "FTEST" | "Z.TEST" | "ZTEST")
+    matches!(
+        name,
+        "T.TEST"
+            | "TTEST"
+            | "CHISQ.TEST"
+            | "CHITEST"
+            | "F.TEST"
+            | "FTEST"
+            | "Z.TEST"
+            | "ZTEST"
+            | "CONFIDENCE"
+            | "CONFIDENCE.NORM"
+            | "CONFIDENCE.T"
+    )
 }
 
 /// The **numbers** of a set of values; an error is the error.
@@ -180,4 +193,27 @@ pub(crate) fn z_test(values: &[Value], number: f64, deviation: Option<f64>) -> R
     }
     let z = (mean(&numbers)? - number) / (deviation / (numbers.len() as f64).sqrt());
     Ok(1.0 - crate::special::norm_cdf(z))
+}
+
+/// The **confidence** of a mean: how wide the mean's uncertainty is.
+///
+/// The confidence of the normal distribution is the normal quantile
+/// of the tail, and the confidence of Student's t is the t quantile
+/// of the tail with the degrees of freedom of the size less one.
+pub(crate) fn confidence_norm(alpha: f64, deviation: f64, size: f64) -> Result<f64, String> {
+    if !(alpha > 0.0 && alpha < 1.0) || deviation <= 0.0 || size < 1.0 {
+        return Err("#NUM!".to_string());
+    }
+    Ok(crate::special::norm_inv(1.0 - alpha / 2.0) * deviation / size.sqrt())
+}
+
+/// The **confidence** of a mean, with Student's t.
+pub(crate) fn confidence_t(alpha: f64, deviation: f64, size: f64) -> Result<f64, String> {
+    if !(alpha > 0.0 && alpha < 1.0) || deviation <= 0.0 || size < 1.0 {
+        return Err("#NUM!".to_string());
+    }
+    if size == 1.0 {
+        return Err("#DIV/0!".to_string());
+    }
+    Ok(crate::distributions::t_inv_upper(alpha / 2.0, size - 1.0) * deviation / size.sqrt())
 }
