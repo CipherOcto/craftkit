@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3237 tests.** The MCP server links **all fifteen batteries** in, so the
+**3242 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3237 tests
+cargo test          # 3242 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3882,6 +3882,7 @@ so.
 | the **cells** of a table | **built.** A table is a grid: a cell is found by its row and its column, and rows and columns go in and come out (§445) | §445 |
 | the **synchronisation** of a clip | **built.** Two clips are in step when their anchors agree, and the method says whether it is the in points or the out points (§446) | §446 |
 | **finding** and **replacing** | **built.** A find says where the pattern is and a replace rewrites the text and the runs together, and a tracked change is not replaced (§447) | §447 |
+| the **information** of a document | **built.** The trailer of a PDF file may name an information dictionary, and the document says which object it is (§448) | §448 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29717,3 +29718,49 @@ pattern, and it changes nothing. A replace is a **change**.
   groups `\1` to `\9` are not, and the wildcards are all there is.
 - **The tree's find goes on through the blocks and the documents**: it
   finds in a document and this finds in a block.
+
+## 448. The information of a document
+
+A PDF file has a **trailer**, and the trailer may name an
+**information dictionary**: the object that says who wrote the file,
+what it is called and when it was made.
+
+### What was built
+
+- The command `pdf.info.set`: it says which object is the file's
+  information, and the **trailer** of the written file names it:
+  `/Info 2 0 R`.
+- There is **one** information dictionary in a file, and a second one
+  is refused: two answers to one question.
+- The information dictionary is an **ordinary object**: its entries are
+  set and read as the entries of any other object are.
+
+### What the port found
+
+- **The tree's information is a table of its own**: the properties of
+  a document — its title, its author, its subject, its keywords, its
+  creator — are fields with names, and a document that has one of them
+  says so. Here the information is a **dictionary of entries**, and
+  the entries are the object's own: the tree's names are the PDF's
+  names, and the PDF's names are open.
+- **The tree's trailer writes the information under a name of its own**
+  (`DOCPROPS` in its own file format). Here the trailer writes
+  `/Info`, which is what a PDF file says.
+
+### What it cost
+
+- **Five tests** in the pdf battery (`tests/information.rs`): an object
+  may be made the information, the trailer names it, a file with no
+  information says nothing about it, a second information dictionary
+  is refused, and a node that is not an object is refused.
+- **One new module** (`information`): the information of a document is
+  its own. The pdf battery now carries **27** commands and the MCP
+  server **596**.
+
+### What it does not settle
+
+- **The tree's page labels are not here**: the labels of the pages —
+  their style, their prefix and the number they start at — are a
+  number tree in the page tree, and they are not written.
+- **The tree's document properties are named and here they are not**:
+  the entries are the PDF's own names, and the PDF's names are open.
