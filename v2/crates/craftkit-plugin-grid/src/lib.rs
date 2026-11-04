@@ -33,6 +33,10 @@
 //! belongs to the sheet and names the cell, as the tree's comment
 //! does (the module `notes`).
 //!
+//! And a cell may carry a **link**: a target that something else may
+//! open, and whether the target is inside this workbook is derived
+//! (the module `links`).
+//!
 //! And a workbook may carry **names**: a word that stands for a range of
 //! cells, and a formula may use the word where it would use the range
 //! (the module `names`).
@@ -178,6 +182,7 @@ mod format;
 mod formula;
 mod fractions;
 mod hiding;
+mod links;
 mod merges;
 mod names;
 mod notes;
@@ -206,6 +211,7 @@ use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
 pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
+pub use links::{DeleteLink, GetLink, SetLink};
 pub use merges::{ClearMerge, SetMerge};
 pub use names::{DeleteName, SetName};
 pub use notes::{DeleteNote, GetNote, SetNote};
@@ -1192,16 +1198,21 @@ impl ClearCell {
         let mut cells = sheet_cells_mut(node);
         let was_there = cells.clear(cell);
         node.data["cells"] = cells_into(&cells);
-        // The **note** goes with the cell: the tree's *clear all*
-        // takes the comment of the cell with it.
+        // The **note** and the **link** go with the cell: the tree's
+        // *clear all* takes the comment and the hyperlink of the cell
+        // with it.
         let mut notes = notes::notes_of(node);
         let had_note = notes.remove(&cell.to_text()).is_some();
         node.data["notes"] = notes::notes_into(&notes);
+        let mut links = links::links_of(node);
+        let had_link = links.remove(&cell.to_text()).is_some();
+        node.data["links"] = links::links_into(&links);
         Ok(Outcome::changed(format!("emptied the cell {}", cell.to_text())).with_data(json!({
             "sheet": sheet,
             "cell": cell.to_text(),
             "was_there": was_there,
             "had_note": had_note,
+            "had_link": had_link,
         })))
     }
 }
@@ -1418,10 +1429,13 @@ craftkit_sdk::plugin_anchor!(
     MoveSheet,
     ClearContents,
     ClearFormat,
+    DeleteLink,
     DeleteNote,
     FindCells,
+    GetLink,
     GetNote,
     ReadRange,
+    SetLink,
     SetNote,
     RemoveSheet,
     SetCell,
