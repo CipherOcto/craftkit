@@ -18,7 +18,7 @@
 //!   from the instance to the definition;
 //! - a **layer's settings** — whether it is on, frozen or locked, its
 //!   colour, the colour it is drawn in, its line type and its line
-//!   weight (the module `layers`);
+//!   weight (the module `layersettings`);
 //! - the **curves** — the ellipse, with its centre, its major axis
 //!   and its ratio, and the polyline, with its points (the module
 //!   `curves`);
@@ -63,7 +63,7 @@
 #![forbid(unsafe_code)]
 
 mod curves;
-mod layers;
+mod layersettings;
 mod modify;
 mod order;
 
@@ -74,7 +74,7 @@ use craftkit_sdk::{
     Plan, PlanItem, Point, Relation, Session, Stroke, Text,
 };
 pub use curves::{AddEllipse, AddPolyline};
-pub use layers::{
+pub use layersettings::{
     FreezeLayer, ListLayers, LockLayer, SetLayerColor, SetLayerFill, SetLayerLinetype, SetLayerLineweight,
     SetLayerOn,
 };
@@ -992,7 +992,7 @@ impl ExtentsEvaluator {
                         .relations_from(entity.id, Some(craftkit_sdk::layer::ON_LAYER))
                         .iter()
                         .filter_map(|relation| document.node(relation.to))
-                        .any(|layer| !layers::is_drawn(layer));
+                        .any(|layer| !layersettings::is_drawn(layer));
                     if hidden {
                         continue;
                     }
