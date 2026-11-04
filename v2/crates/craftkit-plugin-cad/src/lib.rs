@@ -21,6 +21,8 @@
 //!   weight (the module `layersettings`);
 //! - the **arc** — a piece of a circle, with its centre, its radius
 //!   and its two ends (the module `arcs`);
+//! - what may be **edited** — a layer that is locked or frozen locks
+//!   what is on it (the module `editable`);
 //! - the **audit** of a drawing — what is wrong with it, reported and
 //!   not repaired (the module `audits`);
 //! - the **mirror** of an entity — the same entity turned over a line
@@ -77,6 +79,7 @@ mod arcs;
 mod audits;
 mod copies;
 mod curves;
+mod editable;
 mod layersettings;
 mod measurements;
 mod mirrors;

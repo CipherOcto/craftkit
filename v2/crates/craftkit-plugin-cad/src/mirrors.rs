@@ -174,6 +174,7 @@ impl MirrorEntity {
         let id = "cad.entity.mirror".to_string();
         let entity = self.entity.0;
         let node = the_entity(session, &id, entity)?;
+        crate::editable::may_edit(session.document(), entity, &id)?;
         let kind = node.kind.clone();
         let from = point_of(&self.from, &id, "the first point of the line")?;
         let to = point_of(&self.to, &id, "the second point of the line")?;

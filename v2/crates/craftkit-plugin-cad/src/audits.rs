@@ -55,17 +55,6 @@ fn is_block(node: &Node) -> bool {
     node.kind == "cad.block"
 }
 
-/// Whether a layer is **locked**: a locked layer may not be edited.
-fn is_locked(layer: &Node) -> bool {
-    layer.data.get("locked").and_then(|locked| locked.as_bool()).unwrap_or(false)
-}
-
-/// Whether a layer is **frozen**: a frozen layer is not drawn and may
-/// not be edited.
-fn is_frozen(layer: &Node) -> bool {
-    layer.data.get("frozen").and_then(|frozen| frozen.as_bool()).unwrap_or(false)
-}
-
 /// The **entities** of a block.
 fn entities_of(block: &Node) -> Vec<&Node> {
     block
@@ -108,7 +97,7 @@ fn issues_of(document: &Document, drawing: &Node) -> Vec<Issue> {
                 if !is_layer(layer) {
                     continue;
                 }
-                if is_locked(layer) {
+                if crate::editable::is_locked(layer) {
                     issues.push(Issue {
                         kind: "onALockedLayer",
                         message: format!(
@@ -117,7 +106,7 @@ fn issues_of(document: &Document, drawing: &Node) -> Vec<Issue> {
                         ),
                     });
                 }
-                if is_frozen(layer) {
+                if crate::editable::is_frozen(layer) {
                     issues.push(Issue {
                         kind: "onAFrozenLayer",
                         message: format!(

@@ -98,6 +98,7 @@ impl CopyEntity {
         let id = "cad.entity.copy".to_string();
         let entity = self.entity.0;
         let node = the_entity(session, &id, entity)?;
+        crate::editable::may_edit(session.document(), entity, &id)?;
         let kind = node.kind.clone();
         let geometry = node.data.get("geometry").cloned().ok_or_else(|| EngineError::Failed {
             id: id.clone(),

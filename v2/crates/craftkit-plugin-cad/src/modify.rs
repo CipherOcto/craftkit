@@ -263,6 +263,7 @@ impl MoveEntity {
         let id = "cad.entity.move".to_string();
         let entity = self.entity.0;
         let node = the_entity(session, &id, entity)?;
+        crate::editable::may_edit(session.document(), entity, &id)?;
         let (dx, dy) = point_of(&self.by, &id, "the vector")?;
         let Some(geometry) = node.data.get("geometry") else {
             return Err(EngineError::Failed {
@@ -305,6 +306,7 @@ impl RotateEntity {
         let id = "cad.entity.rotate".to_string();
         let entity = self.entity.0;
         let node = the_entity(session, &id, entity)?;
+        crate::editable::may_edit(session.document(), entity, &id)?;
         let about = point_of(&self.about, &id, "the point")?;
         if !self.degrees.0.is_finite() {
             return Err(EngineError::Failed { id, message: "an angle is a number of degrees".to_string() });
@@ -350,6 +352,7 @@ impl ScaleEntity {
         let id = "cad.entity.scale".to_string();
         let entity = self.entity.0;
         let node = the_entity(session, &id, entity)?;
+        crate::editable::may_edit(session.document(), entity, &id)?;
         let about = point_of(&self.about, &id, "the point")?;
         if !self.factor.0.is_finite() || self.factor.0 <= 0.0 {
             return Err(EngineError::Failed {
@@ -394,6 +397,7 @@ impl RemoveEntity {
         let id = "cad.entity.remove".to_string();
         let entity = self.entity.0;
         the_entity(session, &id, entity)?;
+        crate::editable::may_edit(session.document(), entity, &id)?;
         if !session.document_mut()?.remove_node(entity) {
             return Err(EngineError::Failed { id, message: format!("there is no entity `{entity}`") });
         }
