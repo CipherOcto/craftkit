@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3154 tests.** The MCP server links **all fifteen batteries** in, so the
+**3164 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3154 tests
+cargo test          # 3164 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3871,6 +3871,7 @@ so.
 | the **curves** of a drawing | **built.** A CAD drawing has curves: the ellipse, with its centre, its major axis and its ratio, and the polyline, with its points (§434) | §434 |
 | the **order** the entities are drawn in | **built.** The entities of a block are drawn in an order, and an entity may be brought to the front or sent to the back (§435) | §435 |
 | the **modification** of an entity | **built.** A drawing is not a picture: things in it may be moved, turned and scaled, and they may be taken away (§436) | §436 |
+| the **measure** of a drawing | **built.** A drawing is not only a picture: things in it may be measured — how long, how big, how wide and how far apart (§437) | §437 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29141,3 +29142,65 @@ and **scaled**, and they may be **taken away**.
 - **The tree's copy of an entity is not here**: an entity is made by
   a command that makes one, and there is no copy of it yet.
 
+
+## 437. The measure of a drawing
+
+A drawing is not only a picture of things: it is a set of things whose
+**sizes** may be asked for.
+
+### What was built
+
+- The commands `cad.measure.length`, `cad.measure.area`,
+  `cad.measure.radius` and `cad.measure.angle`.
+- A **length** is the length of a path: a line is the distance between
+  its ends, a polyline is the sum of its segments, a circle is its
+  **circumference**, an arc is the piece of it that the arc is, and an
+  ellipse is sampled along its curve.
+- An **area** is the area **enclosed**: a circle is pi times the radius
+  squared, an ellipse is pi times the two half axes, and a polyline is
+  enclosed **only when it is closed**.
+- A **radius** is the radius of a circle or an arc, and the
+  **diameter** is twice it. An **angle** is the angle at a point
+  between two directions, in **degrees**, and never more than a
+  straight one.
+- Every number is **derived**: it is worked out from the geometry in
+  the payload every time it is asked for, and it is never stored. A
+  stored measurement would be a second copy of the geometry, and a
+  second copy is a copy that can be wrong.
+
+### What the port found
+
+- **The tree's measures are commands of their own, each answering about
+  a different kind of thing.** Here the same: a length, an area, a
+  radius and an angle are four commands and not one command with a
+  mode. A command that asks "what do you want measured?" has already
+  made the caller do the work the command should do.
+- **The tree's area of an open polyline is nothing, and the tree says
+  so.** Here the same, and the measure is **refused** rather than
+  answered with a zero: a zero is a number, and a number that means
+  "this was not asked properly" is a lie.
+- **The tree's angle is worked out from two lines and their
+  intersection.** Here the **vertex** is given: the angle is at a
+  point, between two directions. Working the vertex out means extending
+  two lines until they meet, and two parallel lines never meet — a
+  case the tree answers with an error and this one does not have.
+
+### What it cost
+
+- **Ten tests** in the cad battery (`tests/measurements.rs`): the
+  length of a line, of a circle and of a polyline, the area of a circle
+  and of a closed polyline, the radius of a circle, the angle at a
+  point, and the three refusals — the area of an open polyline, the
+  radius of a line, and an angle whose direction has no length.
+- **One new module** (`measurements`): the measure of a drawing is its
+  own. The cad battery now carries **31** commands and the MCP server
+  **576**.
+
+### What it does not settle
+
+- **The tree's arc is not here**: the kind exists and the measure knows
+  what an arc is, but no command makes one yet.
+- **The tree's volume is not here**: a solid may be measured for its
+  size, and this measures a drawing in two dimensions.
+- **The tree's perimeter of a region is not here**: the area is
+  measured, and the outline of an area that is not an entity is not.
