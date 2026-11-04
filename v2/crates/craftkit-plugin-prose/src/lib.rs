@@ -15,6 +15,9 @@
 //! - a **comment** — the **payload** of the document too, by the block
 //!   it is on: a comment is numerous and holds nothing (the module
 //!   `comments`);
+//! - a **list** — a **node**, and the blocks that are in it name it
+//!   with a **relation**: the **number** of a block is derived, and a
+//!   block that is moved is renumbered (the module `numbering`);
 //! - a **style** — a node, and the side vector is the document's
 //!   children;
 //! - a **paragraph's style** — a **relation**: an edge that says
@@ -79,11 +82,13 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem
 
 mod comments;
 mod editing;
+mod numbering;
 
 pub use comments::{DeleteComment, GetComment, SetComment};
 pub use editing::{
     MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
 };
+pub use numbering::{AddList, ReadNumber, SetNumbering};
 
 /// The prose layer.
 ///
@@ -183,6 +188,41 @@ impl StyleKind {
             "style_kind": node.data.get("style_kind").cloned().unwrap_or(Json::Null),
             "based_on": based_on_name(document, node.id),
             "chain": style_chain(document, node.id),
+        }))
+    }
+}
+
+/// A **list**: a kind of list, and the blocks that are in it.
+#[derive(NodeKind)]
+#[node_kind(kind = "prose.list", label = "List", layer = "prose", evaluates)]
+pub struct ListKind;
+
+impl ListKind {
+    /// Not drawn.
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Not hit.
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What a list **means**: its kind, and the blocks that are in it.
+    ///
+    /// The blocks are **derived**: they are the blocks of the document
+    /// that name the list.
+    fn evaluate(node: &Node, document: &Document) -> Option<Json> {
+        let blocks: Vec<u64> = document
+            .relations
+            .iter()
+            .filter(|relation| {
+                relation.kind == crate::numbering::NUMBERED_BY
+                    && relation.payload.get("list").and_then(|list| list.as_u64()) == Some(node.id)
+            })
+            .map(|relation| relation.from)
+            .collect();
+        Some(json!({
+            "kind": node.data.get("kind").cloned().unwrap_or(Json::Null),
+            "blocks": blocks,
         }))
     }
 }
