@@ -90,6 +90,10 @@
 //! eight and sixteen — or about the **bits** of a number (the module
 //! `engineering`).
 //!
+//! And a formula may ask about the **complex numbers**: a pair of
+//! numbers, written as text and read back from text, with the tree's
+//! twenty-five functions of them (the module `complex`).
+//!
 //! And a formula may ask how many ways there are to **choose**: the
 //! factorial, the combinations with and without repetition, the
 //! permutations and the multinomial (the module `combinations`).
@@ -321,6 +325,7 @@ mod cashflows;
 mod cellread;
 mod clearing;
 mod combinations;
+mod complex;
 mod conditional;
 mod criteria;
 mod database;

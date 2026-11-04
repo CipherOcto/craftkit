@@ -1498,6 +1498,9 @@ impl Book {
         if crate::textvalue::is_text_value_function(name) {
             return self.text_value(sheet, name, arguments, being);
         }
+        if crate::complex::is_complex_function(name) {
+            return self.complex(sheet, name, arguments, being);
+        }
         if name == "CONVERT" {
             return self.convert(sheet, arguments, being);
         }
@@ -2061,6 +2064,62 @@ impl Book {
         match number {
             Some(number) => Value::Number(number),
             None => Value::Error("#VALUE!".to_string()),
+        }
+    }
+
+    /// The tree's **complex numbers**: a pair of numbers, written as
+    /// text and read back from text.
+    fn complex(
+        &self,
+        sheet: &str,
+        name: &str,
+        arguments: &[Expr],
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Value {
+        if name == "COMPLEX" {
+            if arguments.len() < 2 || arguments.len() > 3 {
+                return Value::Error("#VALUE!".to_string());
+            }
+            let (real, imaginary) = match (
+                self.number_at(sheet, arguments, 0, being),
+                self.number_at(sheet, arguments, 1, being),
+            ) {
+                (Ok(real), Ok(imaginary)) => (real, imaginary),
+                (Err(message), _) | (_, Err(message)) => return Value::Error(message),
+            };
+            let suffix = match arguments.get(2) {
+                Some(argument) => {
+                    let value = self.evaluate(sheet, argument, being);
+                    if let Value::Error(message) = &value {
+                        return Value::Error(message.clone());
+                    }
+                    match crate::texts::value_text(&value) {
+                        Ok(text) => text,
+                        Err(message) => return Value::Error(message),
+                    }
+                }
+                None => "i".to_string(),
+            };
+            let suffix = match suffix.as_str() {
+                "i" | "" => 'i',
+                "j" => 'j',
+                _ => return Value::Error("#VALUE!".to_string()),
+            };
+            return match crate::complex::write(crate::complex::Cx::new(real, imaginary), suffix) {
+                Ok(value) => value,
+                Err(message) => Value::Error(message),
+            };
+        }
+        let mut values: Vec<Vec<Value>> = Vec::new();
+        for argument in arguments {
+            match self.values_of_cells(sheet, argument, being) {
+                Ok(cells) => values.push(cells),
+                Err(message) => return Value::Error(message),
+            }
+        }
+        match crate::complex::call(name, &values) {
+            Ok(value) => value,
+            Err(message) => Value::Error(message),
         }
     }
 }
