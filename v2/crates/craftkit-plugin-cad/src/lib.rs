@@ -21,6 +21,8 @@
 //!   weight (the module `layersettings`);
 //! - the **arc** — a piece of a circle, with its centre, its radius
 //!   and its two ends (the module `arcs`);
+//! - the **copy** of an entity — a second entity of the same kind,
+//!   with the same geometry and the same layer (the module `copies`);
 //! - the **curves** — the ellipse, with its centre, its major axis
 //!   and its ratio, and the polyline, with its points (the module
 //!   `curves`);
@@ -68,6 +70,7 @@
 #![forbid(unsafe_code)]
 
 mod arcs;
+mod copies;
 mod curves;
 mod layersettings;
 mod measurements;
@@ -75,6 +78,7 @@ mod modify;
 mod order;
 
 pub use arcs::AddArc;
+pub use copies::CopyEntity;
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
@@ -1084,6 +1088,7 @@ craftkit_sdk::plugin_anchor!(
     AddEllipse,
     AddPolyline,
     AddArc,
+    CopyEntity,
     ListEntities,
     MoveEntity,
     RotateEntity,

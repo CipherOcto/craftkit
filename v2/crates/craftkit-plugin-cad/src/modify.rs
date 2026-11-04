@@ -66,7 +66,7 @@ fn written(x: f64, y: f64) -> Json {
 }
 
 /// The **geometry** of an entity, moved by a vector.
-fn moved(kind: &str, geometry: &Json, dx: f64, dy: f64) -> Option<Json> {
+pub(crate) fn moved(kind: &str, geometry: &Json, dx: f64, dy: f64) -> Option<Json> {
     let mut out = geometry.clone();
     let shift = |value: &mut Json| {
         let x = value.get("x").and_then(|x| x.as_f64())? + dx;
