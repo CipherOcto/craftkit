@@ -160,6 +160,7 @@ mod enabling;
 mod gaps;
 mod hold;
 mod inserting;
+mod itemnaming;
 mod itemremoval;
 mod labels;
 mod lifting;
@@ -188,6 +189,7 @@ pub use enabling::EnableClip;
 pub use gaps::CloseGap;
 pub use hold::{DeleteHold, SetHold};
 pub use inserting::InsertClip;
+pub use itemnaming::{RenameBin, RenameItem};
 pub use itemremoval::RemoveItem;
 pub use labels::{DeleteItemLabel, DeleteLabel, ItemLabelGroup, LabelGroup, SetItemLabel, SetLabel};
 pub use lifting::LiftRange;
@@ -860,6 +862,8 @@ craftkit_sdk::plugin_anchor!(
     RemoveClip,
     ReadProject,
     RemoveItem,
+    RenameBin,
+    RenameItem,
     RippleClip,
     LiftRange,
     TransitionKind,
