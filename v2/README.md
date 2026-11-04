@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2992 tests.** The MCP server links **all fifteen batteries** in, so the
+**2998 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2992 tests
+cargo test          # 2998 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3833,6 +3833,7 @@ so.
 | the **bookmarks** of a document | **built.** A block may carry the name of a place, and a link to a place that is there may be opened (§396) | §396 |
 | the **statistics** of a formula | **built.** A formula may ask about the shape of a set of numbers: the middle, the mode, the spread, the order statistics and the rank (§397) | §397 |
 | the **arithmetic** of a formula | **built.** A formula may round a number, cut it, take the rest of a division, take its root and raise it to a power, with the tree's careful rules (§398) | §398 |
+| the **trigonometry** of a formula | **built.** A formula may ask about an angle: its sine and its cosine, its tangent and their inverses, and the turn of an angle from degrees to radians (§399) | §399 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26986,3 +26987,63 @@ own.
   neither are the precise ones: a rounding with a mode is not here.
 - **The tree's combinatorial functions are not here**: the factorial,
   the combinations and the permutations.
+
+## 399. The trigonometry of a formula
+
+A formula may ask about an angle.
+
+### What was built
+
+- The functions `SIN`, `COS`, `TAN`, `ASIN`, `ACOS`, `ATAN`, `ATAN2`,
+  `SINH`, `COSH`, `TANH`, `ASINH`, `ACOSH`, `ATANH`, `COT`, `COTH`,
+  `CSC`, `CSCH`, `SEC`, `SECH`, `ACOT`, `ACOTH`, `DEGREES` and
+  `RADIANS`.
+- The rules are the **tree's**: an angle of a trigonometric function is
+  bounded by the tree's bound of `2^27`, and an angle beyond it is
+  `#NUM!`.
+- The **inverses** have their own bounds: `ASIN` and `ACOS` are of a
+  number between minus one and one, `ACOSH` is of a number of one or
+  more, and `ATANH` is of a number between minus one and one.
+- The **reciprocals** — `COT`, `COTH`, `CSC`, `CSCH` — are the
+  reciprocals of the three, and a reciprocal of nothing is `#DIV/0!`.
+- `ATAN2` is the angle of a **point**, and the point `0,0` is no
+  point and is `#DIV/0!`.
+
+### What the port found
+
+- **The tree bounds the angle of a trigonometric function, and the
+  bound is Excel's.** The tree's limit is `2^27` — an angle of more
+  than a hundred and thirty-four million radians is `#NUM!` — because
+  the arithmetic of that size is where a double stops being a double.
+  Here the same bound and the same error.
+- **The tree's reciprocals are careful in different ways, and here
+  they are as they are.** The tree's `COT`, `COTH`, `CSC` and `CSCH`
+  divide by nothing with `#DIV/0!`, and the tree's `SEC` and `SECH`
+  do not: a secant of a right angle is a very large number and not an
+  error. Here the same, because the same is the tree's.
+- **The tree's `ATAN2` takes a point and not two angles**, and its
+  arguments are the other way round from what the name suggests: the
+  tree's `ATAN2(x, y)` is the angle of the point `(x, y)` from the
+  x-axis, and it computes the angle of `y` from `x`. Here the same.
+- **The tree's arc cotangent is a difference and its arc hyperbolic
+  cotangent is a logarithm.** The tree's `ACOT` is a quarter turn less
+  the arc tangent, and its `ACOTH` is half the logarithm of the ratio
+  — and a number of one or less has no arc hyperbolic cotangent.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/trigonometry.rs`): the sine
+  and the cosine, the tangent and its inverse and the angle of a
+  point, the hyperbolic functions and their inverses, the reciprocals,
+  an angle beyond the bound, and the turn from degrees into radians.
+- **One new module**: `trigonometry`. **No new command**: a function is
+  not a command, and the grid battery still carries **67** commands and
+  the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's series functions are not here**: the sum of a series
+  with its coefficients.
+- **The tree's angle limit is a limit and not a rule about precision**:
+  an angle just inside the bound is computed in the double it is, and
+  the tree does not say more about it either.
