@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3088 tests.** The MCP server links **all fifteen batteries** in, so the
+**3091 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3088 tests
+cargo test          # 3091 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3850,6 +3850,7 @@ so.
 | the **measure** of a thing | **built.** A formula may ask what a measurement is in another unit, with the tree's units and its prefixes (§413) | §413 |
 | the **odd coupon periods** of a bond | **built.** A formula may ask about a bond whose first or last coupon period is not a whole one: the price and the yield of it (§414) | §414 |
 | the **accrued interest** of a bond | **built.** A formula may ask what interest a bond has earned between two dates (§415) | §415 |
+| the **table of records** and the **table of criteria** | **built.** A formula may speak of a table: a database of records, a table of criteria and the field it aggregates (§416) | §416 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28114,4 +28115,66 @@ A formula may ask what interest a bond has earned between two dates.
 - **The tree's accrued interest of a bond with a frequency of a
   quarter is not proved here** by a test, though the code walks the
   periods the same way.
+
+## 416. The table of records and the table of criteria
+
+A formula may speak of a **table**: a database of records, a table of
+criteria, and the field it speaks about.
+
+### What was built
+
+- The functions `DSUM`, `DAVERAGE`, `DCOUNT`, `DCOUNTA`, `DGET`,
+  `DMAX`, `DMIN`, `DPRODUCT`, `DVAR`, `DVARP`, `DSTDEV` and
+  `DSTDEVP`.
+- A **database** is a range of cells whose first row holds the labels
+  of its columns; a **criteria** table is a range of cells whose first
+  row holds the labels of its columns and whose rows after it are
+  **conditions**. The **field** is a label of the database's first row
+  or a number that says which column it is, counting from one.
+- The **rules** are the tree's: the conditions of one row are **and**ed
+  and the rows are **or**ed, a criteria cell that is empty holds
+  always, a field that names no column is a value error, a field that
+  is past the last column is a value error, the mean of nothing is a
+  divide error, the spread of one number is a divide error, and the
+  maximum and the product of nothing are nothing.
+
+### What the port found
+
+- **The tree's criteria cell of plain text is a "begins with"
+  pattern** and not an equality: `P` matches `Pear` and `Peach`, and
+  `=P` matches neither. Here the same, and the wildcard matcher of
+  this crate is the one that does it — so there is one wildcard in
+  this crate and not two.
+- **The tree's criteria cell of a number is a number and not a
+  pattern**, and the empty cell of the criteria is a condition that
+  holds always rather than a condition that is the number zero. Here
+  the same, and the criteria module's own number parser is the one
+  that reads it.
+- **The tree's `DGET` counts the records that have a value** and not
+  the records that match: a record whose field is empty does not
+  count. Here the same.
+- **The tree's computed criteria are not here**: a formula under a
+  label that names no field is a condition the host evaluates for
+  every record. This tree refuses it instead of guessing — a label
+  that names no field is a condition that cannot hold, so the record
+  does not match that row.
+
+### What it cost
+
+- **Three tests** in the grid battery (`tests/database.rs`): the
+  records that meet the criteria are aggregated, the conditions of a
+  criteria table are met, and the value of the one record that
+  matches is found.
+- **One new module** (`database`): the tables, the fields, the
+  conditions and the aggregates are its own. **No new command**: a
+  function is not a command, and the grid battery still carries **67**
+  commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's computed criteria are not here**, and so a criteria
+  table whose label names no field matches nothing.
+- **The tree's `DGET` of a table with a field that holds an error is
+  not here**: the error is a value here and not an error of the
+  record.
 
