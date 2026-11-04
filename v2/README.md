@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2767 tests.** The MCP server links **all fifteen batteries** in, so the
+**2775 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2767 tests
+cargo test          # 2775 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3800,6 +3800,7 @@ so.
 | the **reading** of a range of cells | **built.** A range of cells is read: the values, row by row, and the value of a formula cell is derived (§363) | §363 |
 | the **choice** of a value | **built.** A formula may choose with IF, and only the branch that is taken is computed (§364) | §364 |
 | the **counting** of a condition | **built.** COUNTIF counts and SUMIF adds the cells that meet a condition, and the condition is a value (§365) | §365 |
+| the **finding** of a cell | **built.** A sheet is searched: the cells whose text holds what was looked for, with the tree's wildcards (§366) | §366 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24944,3 +24945,74 @@ cells that meet it and `SUMIF` adds them.
 - **The tree's lookup functions are not here.** `VLOOKUP`, `HLOOKUP`,
   `MATCH` and `INDEX` find a cell by a condition or by a place, and
   they are a different thing: they do not count, they find.
+
+## 366. The finding of a cell
+
+A sheet may be **searched**: the answer is the cells whose text holds
+what was looked for.
+
+### What was built
+
+- The command `grid.find` searches a sheet — or the whole workbook,
+  when no sheet is named — and gives the cells that hold what was
+  looked for, each with its address and its text.
+- The **case** does not matter unless the search says it does, and when
+  it does not matter both sides are folded.
+- A search that holds a **wildcard** is a wildcard search: `*` is any
+  run of characters and `?` is any one character, and the escape is
+  `~`. Such a search looks for the pattern **inside** the text unless
+  the search says the **whole cell** must match.
+- A search without a wildcard looks for the text **inside** the cell's
+  text, and for the whole text when the whole cell must match.
+- What is searched is the **text the cell shows**, unless the search
+  asks for the **formulas** — and then a cell that holds a formula is
+  searched by its formula and a cell that holds a value is searched by
+  its value.
+- The hits are in the order a reader reads them in: the rows first,
+  and the columns in a row.
+- Nothing to look for is **refused**, and what is **not found** is an
+  empty answer and not an error.
+
+### What the port found
+
+- **The tree's find moves the selection and this tree's does not.** The
+  tree's find puts the cursor on the first hit and changes the
+  selection, and its *find next* is a second command. Here there is no
+  selection — the sheet is a node and the cells are its cells — so the
+  hits are the answer and the next hit is the next hit in the list.
+- **The tree's find refuses when nothing is found and this tree's does
+  not.** The tree says *we couldn't find what you were looking for*;
+  here a search that finds nothing gives a count of zero and no hits,
+  because "nothing here" is an answer and not a failure.
+- **The tree's find looks in the active sheet and this tree's looks in
+  the whole workbook.** The tree has no sheet to name — it has the
+  active one — and it has a flag that widens the search to the
+  workbook. Here a sheet may be named, and a search without one looks
+  in every sheet of the workbook.
+- **The tree's find may look in the values or in the formulas, and the
+  choice is a flag.** The tree's flag is *look in values*, and the
+  default is the formulas — a cell that holds a formula is searched by
+  its formula unless the search asks for the values. Here the flag is
+  *formulas*, and the default is the values, because the values are
+  what a reader sees.
+
+### What it cost
+
+- **Eight tests** in the grid battery (`tests/finding.rs`): a text
+  being found, the case not mattering unless it is asked for, the
+  wildcards being the tree's, the whole cell being asked for, the
+  formulas being searched, the whole workbook being searched, what is
+  not found being an empty answer, and nothing to look for being
+  refused.
+- **One new command**: `grid.find`. The grid battery now carries **54**
+  commands and the MCP server **482**.
+
+### What it does not settle
+
+- **The tree's replacing is not here.** The tree's find and its
+  replacing are one pair, and the replacing writes what the find found;
+  here a search finds and says.
+- **The tree's hidden formulas are not here.** The tree hides the
+  formula of a cell when the sheet says the formulas are hidden, and
+  then the search finds the value and not the formula; here the
+  formulas of a sheet are always there and always searchable.
