@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2945 tests.** The MCP server links **all fifteen batteries** in, so the
+**2950 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2945 tests
+cargo test          # 2950 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3826,6 +3826,7 @@ so.
 | the **rate** of a sequence | **built.** A sequence may carry a rate — 25, or the tree's rational rates — and its length in seconds is derived (§389) | §389 |
 | the **comment** on a block | **built.** A block may carry a comment — who said it and what they said — and the comment goes with the block (§390) | §390 |
 | the **numbering** of a block | **built.** A list says what its items are numbered like, and the number of a block is derived and renumbers when it moves (§391) | §391 |
+| the **page** of a document | **built.** A document has a page: its size and its margins in points, and whether it is landscape is derived (§392) | §392 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26549,3 +26550,59 @@ the block is **derived**.
 - **The tree's restart rules are not all here**: a deeper level
   restarts when a shallower level is used again, and the tree's own
   `lvlRestart` is not here.
+
+## 392. The page of a document
+
+A document is printed on pages, and a page has a size and margins.
+
+### What was built
+
+- The command `prose.page.set` puts the **page** of a document, and the
+  command `prose.page.get` reads it.
+- The size and the margins are in **points** — a seventy-second of an
+  inch — because that is the tree's own unit.
+- A document that has no page has the **tree's default page**: US
+  Letter, 612 by 792 points, with an inch of margin on every side.
+- A margin that is not given keeps the one the page has.
+- Whether the page is a **landscape** one is **derived**: it is wider
+  than it is tall.
+- A page that is **not a page** is refused: a size of nothing, a
+  negative margin and a page too big are all refused. A document that
+  is not there is refused, and so is a node that is not a document.
+
+### What the port found
+
+- **The tree keeps a flag and a size that say the same thing.** The
+  tree's section carries a `landscape` flag **and** a width and a
+  height that are **already swapped** for it — two facts where one is
+  enough, and two that can disagree. Here the page carries the size
+  and the flag is derived.
+- **The tree's page belongs to a section and here it belongs to the
+  document.** The tree's document holds a body of blocks and the
+  properties of the **last** section, and a document may have many
+  sections. Here a document has one page.
+- **The tree's page carries much more than a size.** The tree's page
+  has the **header** and **footer** distances, the **gutter**, the
+  **columns**, the **headers** and **footers** themselves, the **title
+  page** flag, the **page numbering**, the **line numbers**, the
+  **borders** and the **direction** the text runs in. Here a page has
+  a size and four margins.
+
+### What it cost
+
+- **Five tests** in the prose battery (`tests/page.rs`): a document
+  having the tree's default page, the page being set, a landscape page
+  being derived, a page that is not a page being refused, and a
+  document that is not there and a node that is not a document being
+  refused.
+- **Two new commands**: `prose.page.set` and `prose.page.get`. The
+  prose battery now carries **23** commands and the MCP server **514**.
+
+### What it does not settle
+
+- **The tree's sections are not here**, and so a document with more
+  than one page setup is not here either.
+- **The tree's headers and footers are not here**, and neither are the
+  header and footer distances or the gutter.
+- **The tree's columns and its page borders are not here**, and neither
+  is the tree's page numbering.
