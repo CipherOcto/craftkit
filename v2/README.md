@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3102 tests.** The MCP server links **all fifteen batteries** in, so the
+**3104 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3102 tests
+cargo test          # 3104 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3855,6 +3855,7 @@ so.
 | the **sums of the squares** of two sets | **built.** A formula may ask about two sets of numbers at once: the sums of their squares, the difference of the squares and the squares of the differences (§418) | §418 |
 | the **whole numbers** of a number | **built.** A formula may ask for the whole number that is near a number: the next even one, the next odd one, and the root of pi (§419) | §419 |
 | the **value of a text** | **built.** A formula may ask for the value of a text: a text that holds a number, a date or a time (§420) | §420 |
+| the **week** of a day in its year | **built.** A formula may ask for the week of a day in the year it is in, with the tree's kinds of week and the ISO week (§421) | §421 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28374,4 +28375,47 @@ number, a date or a time.
   text such as `1/2/2020 3:00 PM` is neither a date nor a time here.
 - **The tree's fraction written as text is not proved here** by a
   test, though the code reads it.
+
+## 421. The week of a day in its year
+
+A formula may ask for the **week** of a day in the year it is in.
+
+### What was built
+
+- The functions `WEEKNUM` and `ISOWEEKNUM`.
+- `WEEKNUM` takes a day and a **kind**, and the kind says which day
+  the week begins on: one and seventeen begin on the **Sunday**, two
+  and eleven on the **Monday**, twelve to sixteen on the Tuesday to
+  the Saturday, and twenty-one is the **ISO** week. `ISOWEEKNUM` is
+  the ISO week and takes the day alone.
+- The **rules** are the tree's: a kind that is no kind is a number
+  error, and the week of a day is counted from the first day of its
+  year.
+
+### What the port found
+
+- **The tree's ISO week is the week of the Thursday**: the week of a
+  year is the week that holds its Thursday, and so the first days of
+  a year may belong to the week before and the last days of a year to
+  the week after — the 30th of December of 2024 is in the first week
+  of 2025. Here the same.
+- **The tree's week number reads the day of the week of the first of
+  January** and not the day of the week of the day asked about, and
+  so the weeks of a year are the weeks of one calendar. Here the same.
+- **The tree's weeks are counted in the calendar of the workbook**,
+  and so the day that never happened is a day of a week here too.
+
+### What it cost
+
+- **Two tests** in the grid battery (`tests/weeks.rs`): the week of a
+  day is found, and the ISO week of a day is found.
+- **No new module**: the dates module of §415 grows and the dispatch
+  of the dates grows with it. **No new command**: a function is not a
+  command, and the grid battery still carries **67** commands and the
+  MCP server **521**.
+
+### What it does not settle
+
+- **The tree's week of a day in the 1904 calendar is not proved here**
+  by a test, though the code reads the calendar of the workbook.
 
