@@ -26,6 +26,11 @@
 //! begin and end — and the playhead walks them, and the **razor** cuts
 //! the clip that is under the playhead (the module `edits`).
 //!
+//! And a track has **settings**: it may be enabled, muted or soloed,
+//! it may have a volume and a pan, and it may carry a label — and the
+//! pan outside its bounds is refused and not clamped (the module
+//! `tracks`).
+//!
 //! And a **media item** may carry a **label** as well: the tree's
 //! `edit.label` labels the items of the project and the clips of the
 //! sequence with one command and one list of colours, and here the
@@ -221,6 +226,7 @@ mod splitting;
 mod stretching;
 mod trackreading;
 mod trackremoval;
+mod tracks;
 mod transitions;
 mod trim;
 
@@ -258,6 +264,7 @@ pub use splitting::SplitClip;
 pub use stretching::StretchClip;
 pub use trackreading::ReadTrack;
 pub use trackremoval::RemoveTrack;
+pub use tracks::{EnableTrack, MuteTrack, RenameTrack, SetPan, SetTrackLabel, SetVolume, SoloTrack};
 pub use transitions::{AddTransition, RemoveTransition, SetTransition, TransitionKind};
 pub use trim::TrimClip;
 
@@ -939,6 +946,13 @@ craftkit_sdk::plugin_anchor!(
     ReverseClip,
     LockTrack,
     RemoveTrack,
+    EnableTrack,
+    MuteTrack,
+    SoloTrack,
+    SetVolume,
+    SetPan,
+    SetTrackLabel,
+    RenameTrack,
     EnableClip,
     RenameClip,
     SetItemLabel,

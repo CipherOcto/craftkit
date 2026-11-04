@@ -4,7 +4,9 @@
 //! and everything that is said about it.
 //!
 //! The facts of a track are its **name**, its **kind** — a video track
-//! or an audio one — and whether it is **locked**.
+//! or an audio one — and whether it is **locked**, **enabled**,
+//! **muted** or **solo**, its **volume** and its **pan**, and its
+//! **label**.
 //!
 //! Three of the facts of the answer are **derived**: the **clips** on
 //! the track are its children in the order they **start**, the
@@ -67,6 +69,12 @@ impl ReadTrack {
             "name": node.name,
             "kind": kind,
             "locked": locked,
+            "enabled": node.data.get("enabled").and_then(|enabled| enabled.as_bool()).unwrap_or(true),
+            "muted": node.data.get("muted").and_then(|muted| muted.as_bool()).unwrap_or(false),
+            "solo": node.data.get("solo").and_then(|solo| solo.as_bool()).unwrap_or(false),
+            "volume_db": node.data.get("volume_db").cloned().unwrap_or(Json::Null),
+            "pan": node.data.get("pan").cloned().unwrap_or(Json::Null),
+            "label": node.data.get("label").cloned().unwrap_or(Json::Null),
             "clips": ids,
             "length": length,
             "sequence": sequence,
