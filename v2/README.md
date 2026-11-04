@@ -28985,7 +28985,7 @@ A CAD layer is more than a name: it has **settings**.
 - **Four tests** in the cad battery (`tests/layers.rs`): the settings
   of a layer may be set, the flags of a layer may be set, a colour
   that is no colour is refused, and a layer that is off is not drawn.
-- **One new module** (`layers`): the settings of a layer are their
+- **One new module** (`layersettings`): the settings of a layer are their
   own. The cad battery now carries **16** commands and the MCP server
   **561**.
 
