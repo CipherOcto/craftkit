@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3128 tests.** The MCP server links **all fifteen batteries** in, so the
+**3131 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3128 tests
+cargo test          # 3131 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3864,6 +3864,7 @@ so.
 | the **shape** of a range | **built.** A formula may ask for the shape of a range: how many rows it has and how many columns (§427) | §427 |
 | the **words** of an amount in Thai | **built.** A formula may ask for an amount written in Thai words, with the baht and the satang (§428) | §428 |
 | the **masks** of a layer | **built.** A compositing layer may be masked: a path on the layer that says what of it is seen, with its mode and its settings (§429) | §429 |
+| the **time** of a composition | **built.** A compositing application has a time cursor: the place in the composition where it is looking, and a fact of the composition (§430) | §430 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28792,4 +28793,51 @@ what of it is seen.
   closed flag are here and the curve between the vertices is a line.
 - **The tree's feather, opacity and expansion are not proved here**
   by a test, though the mask carries them.
+
+## 430. The time of a composition
+
+A compositing application has a **time cursor**: the place in the
+composition where it is looking.
+
+### What was built
+
+- The commands `fx.time.set`, `fx.time.get`, `fx.time.start`,
+  `fx.time.end` and `fx.time.step`.
+- The time is a **frame** of the composition. `set` puts it at a
+  frame, `get` says where it is, `start` and `end` take it to the
+  beginning and the end, and `step` moves it by a number of frames —
+  a negative number steps back.
+- The **rules** are the tree's: the time is never before the start of
+  the composition, the **end** is the end of the composition, and a
+  step that would go before the start stops at the start.
+
+### What the port found
+
+- **The tree's time is measured in seconds and this tree's in
+  frames**: a composition here is a number of frames long, and a time
+  that is not a whole number of frames is refused. This is a
+  difference and not a mistake, and it is written down here.
+- **The tree keeps the time in its session**, one for each
+  composition, and so the time of a composition is not saved with it.
+  Here the time is a **fact of the composition** — its payload
+  carries the frame — and so it is saved with it and read back with
+  it.
+- **The tree's time may be set beyond the last frame** of a
+  composition and is not refused for it. Here the same.
+
+### What it cost
+
+- **Three tests** in the fx battery (`tests/time.rs`): the time may be
+  set and read, it may go to the start and to the end, and it may be
+  stepped.
+- **One new module** (`time`): the time of a composition is its own.
+  The fx battery now carries **41** commands and the MCP server
+  **547**.
+
+### What it does not settle
+
+- **The tree's ten frames back and ten frames on** are not here as
+  commands: a step of ten frames is a step of ten frames.
+- **The tree's time of the source of a layer** is not here: a
+  composition has one time and that is the one.
 
