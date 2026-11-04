@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2695 tests.** The MCP server links **all fifteen batteries** in, so the
+**2702 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2695 tests
+cargo test          # 2702 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3790,6 +3790,7 @@ so.
 | the **name** of a sheet | **built.** A name has rules, and a rename carries the formulas and the names that use it with it (§353) | §353 |
 | the **taking away** of a sheet | **built.** A workbook keeps one visible sheet, and a formula that named the sheet reads the error that says which sheet is missing (§354) | §354 |
 | the **taking away** of a track | **built.** A locked track may not be taken away, and the clips on it go with it (§355) | §355 |
+| the **enable** of a clip | **built.** A clip may be disabled: it is on the track and it does not play, and the timeline says how many play (§356) | §356 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24314,3 +24315,57 @@ with it.
 - **The tree's markers of a track are not here.** The tree's markers
   live on the sequence and not on a track, so nothing of theirs goes
   with the track — and here the same is true.
+
+## 356. The enable of a clip
+
+A clip may be **disabled**: it is on the track and it takes its place
+there, and it does not **play**.
+
+### What was built
+
+- The command `film.clip.enable` enables a clip or disables it. Without
+  the `on` the flag is **toggled** and the answer says which way it
+  went; with it the flag is **set** to what the caller asked for.
+- The flag is a **fact** of the clip, and what plays is **derived**: the
+  timeline says how many clips of a track play, and the clip's own
+  evaluation says whether it plays.
+- A clip that does not play is **still on the track**: it takes its
+  place, it is counted among the clips and it is not counted among the
+  ones that play.
+- A node that is **not a clip** is refused, and so is a node that is
+  not there at all.
+
+### What the port found
+
+- **The tree flips the flag and this tree sets it.** The tree's
+  `clip.enable` inverts the flag of every clip of the selection, so a
+  selection holding a mix of enabled and disabled clips ends up with
+  the mix **inverted** and not normalised. Here the command takes the
+  clip and says whether it plays, and a command that says nothing is a
+  command that says nothing — so the flag is set to what was asked for.
+- **The tree's track has an enable flag too, and here it does not.** The
+  tree's disabled track plays nothing at all. Here a track's kind is in
+  its payload and its clips are its children, and there is no flag on
+  the track: a clip that does not play is a clip that does not play, and
+  the track is not a thing that plays.
+
+### What it cost
+
+- **Seven tests** in the film battery (`tests/enabling.rs`): a clip
+  playing when it is made, a clip being disabled, a clip that does not
+  play still being on the track, the flag being toggled when the
+  command does not say, the flag being set when it does, a node that is
+  not a clip refused, and the flag being saved.
+- **One new command**: `film.clip.enable`. The film battery now
+  carries **37** commands and the MCP server **471**.
+
+### What it does not settle
+
+- **The tree's canvas is not here.** The tree's canvas skips a clip
+  that is not enabled — the clip is there and it is not drawn. Here the
+  film battery draws nothing at all, so the flag has no picture to
+  change; it has the timeline, which says how many clips play.
+- **The tree's selection is not here.** The tree's command works on the
+  **selection** and flips every clip in it; here the command takes one
+  clip, so there is no selection to flip and no mixed selection to
+  invert.
