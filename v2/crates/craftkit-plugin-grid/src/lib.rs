@@ -160,6 +160,7 @@ mod fractions;
 mod hiding;
 mod merges;
 mod names;
+mod reading;
 mod removal;
 mod sections;
 mod sheetnames;
@@ -184,6 +185,7 @@ use formula::{Book, CellRef, Cells, Value};
 pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
 pub use merges::{ClearMerge, SetMerge};
 pub use names::{DeleteName, SetName};
+pub use reading::ReadRange;
 pub use removal::RemoveSheet;
 pub use sheetnames::RenameSheet;
 pub use sizes::{SetColumnWidth, SetRowHeight};
@@ -1383,6 +1385,7 @@ craftkit_sdk::plugin_anchor!(
     MoveSheet,
     ClearContents,
     ClearFormat,
+    ReadRange,
     RemoveSheet,
     SetCell,
     SetFormula,
