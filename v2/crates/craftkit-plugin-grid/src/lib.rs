@@ -150,8 +150,9 @@
 //! so (the module `lookups`).
 //!
 //! And a formula may **make a date** and take it apart — `DATE`,
-//! `YEAR`, `MONTH` and `DAY` — in the date system of the workbook
-//! (the module `datetimes`).
+//! `YEAR`, `MONTH` and `DAY` — in the date system of the workbook,
+//! and may ask for the **week** of a day in its year (the module
+//! `datetimes`).
 //!
 //! And a range may be **sorted**: the rows of it are put in order by
 //! the values of one of its columns, and what a row holds travels

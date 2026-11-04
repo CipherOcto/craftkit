@@ -479,6 +479,53 @@ fn the_date(year: i64, month: i64, day: i64, system: System) -> Option<Date> {
 ///
 /// The Saturday is the sixth day and the Sunday is the zeroth, as the
 /// tree has them.
+/// The **week** of a day in its year.
+///
+/// The kind says which day the week begins on: one and seventeen
+/// begin on the Sunday, two and eleven on the Monday, twelve to
+/// sixteen on the Tuesday to the Saturday, and twenty-one is the
+/// **ISO** week. Any other kind is no week at all.
+pub fn week_number(serial: f64, kind: i64, system: System) -> Option<f64> {
+    let day = serial.floor() as i64;
+    let start = match kind {
+        1 | 17 => 0,
+        2 | 11 => 1,
+        12..=16 => kind - 10,
+        21 => return iso_week_number(serial, system),
+        _ => return None,
+    };
+    let date = from_serial(day as f64, system)?;
+    let january = to_serial(date.year, 1, 1, system)? as i64;
+    let weekday = i64::from(from_serial(january as f64, system)?.weekday);
+    let offset = (weekday + 7 - start).rem_euclid(7);
+    Some(((day - january + offset).div_euclid(7) + 1) as f64)
+}
+
+/// The **ISO week** of a day: the week of the Thursday of its week.
+///
+/// The week of a year is the week of the Thursday that is in it, and
+/// so the first days of a year may belong to the week before and the
+/// last days of a year to the week after.
+pub fn iso_week_number(serial: f64, system: System) -> Option<f64> {
+    let day = serial.floor() as i64;
+    let weekday = i64::from(from_serial(day as f64, system)?.weekday);
+    // The day of the week, from one, and one is the Monday.
+    let iso_day = (weekday + 6) % 7 + 1;
+    let thursday = day - iso_day + 4;
+    let first = match system {
+        System::Y1900 => 1,
+        System::Y1904 => 0,
+    };
+    let january = if thursday < first {
+        // The week belongs to the year before the calendar begins.
+        first - 365
+    } else {
+        let date = from_serial(thursday as f64, system)?;
+        to_serial(date.year, 1, 1, system)? as i64
+    };
+    Some(((thursday - january).div_euclid(7) + 1) as f64)
+}
+
 pub fn is_weekday(serial: f64, system: System) -> Option<bool> {
     from_serial(serial, system).map(|date| date.weekday != 0 && date.weekday != 6)
 }

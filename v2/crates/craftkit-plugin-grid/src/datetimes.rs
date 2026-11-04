@@ -47,6 +47,8 @@ pub fn is_date_function(name: &str) -> bool {
             | "EDATE"
             | "EOMONTH"
             | "DAYS"
+            | "WEEKNUM"
+            | "ISOWEEKNUM"
     )
 }
 
@@ -67,6 +69,7 @@ impl Book {
             "WEEKDAY" => self.weekday_call(sheet, arguments, being),
             "EDATE" | "EOMONTH" => self.month_call(sheet, name, arguments, being),
             "DAYS" => self.days_call(sheet, arguments, being),
+            "WEEKNUM" | "ISOWEEKNUM" => self.week_call(sheet, name, arguments, being),
             _ => Value::Error(format!("there is no function `{name}`")),
         }
     }
@@ -306,5 +309,45 @@ impl Book {
             serials.push(serial);
         }
         Value::Number(serials[0].floor() - serials[1].floor())
+    }
+
+    /// The tree's **week** of a day: the week of the year it is in.
+    fn week_call(
+        &self,
+        sheet: &str,
+        name: &str,
+        arguments: &[Expr],
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Value {
+        if arguments.is_empty() || arguments.len() > 2 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let value = self.evaluate(sheet, &arguments[0], being);
+        let Some(serial) = value.as_number() else {
+            return Value::Error("#VALUE!".to_string());
+        };
+        if !serial.is_finite() {
+            return Value::Error("#NUM!".to_string());
+        }
+        if name == "ISOWEEKNUM" {
+            return match crate::dates::iso_week_number(serial, self.system()) {
+                Some(week) => Value::Number(week),
+                None => Value::Error("#NUM!".to_string()),
+            };
+        }
+        let kind = match arguments.get(1) {
+            Some(argument) => {
+                let value = self.evaluate(sheet, argument, being);
+                match value.as_number() {
+                    Some(number) if number.is_finite() => number.trunc() as i64,
+                    _ => return Value::Error("#NUM!".to_string()),
+                }
+            }
+            None => 1,
+        };
+        match crate::dates::week_number(serial, kind, self.system()) {
+            Some(week) => Value::Number(week),
+            None => Value::Error("#NUM!".to_string()),
+        }
     }
 }
