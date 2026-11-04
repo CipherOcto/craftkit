@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2728 tests.** The MCP server links **all fifteen batteries** in, so the
+**2734 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2728 tests
+cargo test          # 2734 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3795,6 +3795,7 @@ so.
 | the **label** of an item | **built.** A media item may carry the tree's own sixteen colours, and the group of a label is derived (§358) | §358 |
 | the **order** of the sheets | **built.** A sheet may be moved in the order of the tabs, and a place that is not there is refused (§359) | §359 |
 | the **media** a clip plays | **built.** A clip may play another media, and a clip that would run past the end of it is refused (§360) | §360 |
+| the **gap** on a track | **built.** The gap that holds a place is closed: the clips after it move up and the time is free again (§361) | §361 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24615,3 +24616,61 @@ A clip plays a media, and it may play a **different** one.
   a clip whose track has no video or no audio in the replacement; here
   a track's kind is a word and the media of an item has no channels,
   so there is nothing to check.
+
+## 361. The gap on a track
+
+A track may have a **gap** in it, and the gap may be **closed**.
+
+### What was built
+
+- The command `film.timeline.closegap` closes the gap that holds a
+  place on a track. The gap runs from the end of the clip before it to
+  the start of the clip after it, and the clips that were after it
+  move **up** by the length of the gap. The answer says where the gap
+  was and how long it was.
+- A place that is **covered** by a clip is not a gap, and the refusal
+  says so. A track with **no clip after** the place has no gap there
+  either, and the refusal says that.
+- A **locked** track may not have its gap closed: the other tracks
+  would move while it stayed put — the tree's own reason.
+- A place that is **not a whole number** is refused, and so is a node
+  that is **not a track**.
+
+### What the port found
+
+- **The tree's gap is a selection and this tree's is a place.** The
+  tree's *close gap* with no parameters closes the **selected** gap,
+  and with none selected closes **every** gap of the sequence. Here the
+  command says the **track** and the **place**, so there is no
+  selection to read and no gap to guess: the gap is the one that holds
+  the place, and the answer says which gap it was.
+- **The tree's gap is measured in the track's own time and here it is
+  measured in frames.** The tree's gap runs from the end of the clip
+  before it to the start of the clip after it, and the clips that were
+  after it move up by the length of the gap — the same rule, and the
+  same result: the gap closes and nothing is cut.
+
+### What it cost
+
+- **Six tests** in the film battery (`tests/gaps.rs`): a gap being
+  closed, a place that is covered not being a gap, a track with no clip
+  after the place having no gap there, a locked track refusing, a place
+  that is not a whole number refused, and a node that is not a track
+  refused.
+- **One new command**: `film.timeline.closegap`. The film battery now
+  carries **43** commands and the MCP server **478**.
+
+### What it does not settle
+
+- **The tree's gap selection is not here.** The tree's timeline shows
+  the gap under the pointer and closes it with a shortcut; here a gap
+  is closed by naming the track and the place in it.
+- **The tree's sync-locked tracks are not here.** The tree's close gap
+  moves the tracks that are **sync-locked** with the track that lost
+  the clip, so that a group of tracks stays together — and it refuses
+  when a sync-locked track covers the gap. Here there is no sync lock
+  and the gap closes on the track that was named.
+- **The tree's sequence gaps are not here.** The tree can close every
+  gap of the sequence in one step, and the gaps are the stretches that
+  no track covers; here a gap is a gap on **one** track, and the
+  tracks are not compared with each other.
