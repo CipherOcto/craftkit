@@ -24,7 +24,7 @@
 //! number error, and a **basis** is a number from zero to four and no
 //! other.
 
-use crate::dates::{System, days_in_month, from_serial};
+use crate::dates::System;
 use crate::formula::{Book, CellRef, Expr, Value};
 
 /// Whether a name is one of the **security functions**.
@@ -35,77 +35,17 @@ pub fn is_security_function(name: &str) -> bool {
     )
 }
 
-/// The year, the month and the day of a **serial**.
-fn ymd(system: System, serial: f64) -> Option<(i32, u32, u32)> {
-    let date = from_serial(serial.trunc(), system)?;
-    Some((date.year, date.month, date.day.max(1)))
-}
-
-/// The **30/360** day count: the American one and the European one.
-fn days360(system: System, first: f64, second: f64, us: bool) -> Option<f64> {
-    let (y1, m1, mut d1) = ymd(system, first)?;
-    let (y2, m2, mut d2) = ymd(system, second)?;
-    if us {
-        let february_end_first = m1 == 2 && d1 >= days_in_month(y1, 2);
-        let february_end_second = m2 == 2 && d2 >= days_in_month(y2, 2);
-        if february_end_first && february_end_second {
-            d2 = 30;
-        }
-        if february_end_first {
-            d1 = 30;
-        }
-        if d2 == 31 && d1 >= 30 {
-            d2 = 30;
-        }
-        if d1 == 31 {
-            d1 = 30;
-        }
-    } else {
-        d1 = d1.min(30);
-        d2 = d2.min(30);
-    }
-    Some((y2 - y1) as f64 * 360.0 + (m2 as f64 - m1 as f64) * 30.0 + (d2 as f64 - d1 as f64))
-}
-
-/// The **days** between two dates under a basis.
-fn day_count(system: System, first: f64, second: f64, basis: u32) -> Option<f64> {
-    match basis {
-        0 => days360(system, first, second, true),
-        4 => days360(system, first, second, false),
-        _ => Some(second - first),
-    }
-}
-
-/// The **days in a year** for discount securities.
-fn year_basis(system: System, basis: u32, settlement: f64) -> Option<f64> {
-    Some(match basis {
-        0 | 2 | 4 => 360.0,
-        3 => 365.0,
-        _ => {
-            let (year, _, _) = ymd(system, settlement)?;
-            if crate::dates::is_leap(year) { 366.0 } else { 365.0 }
-        }
-    })
-}
-
 /// The **fraction of a year** between a settlement and a maturity.
 fn fraction(system: System, settlement: f64, maturity: f64, basis: u32) -> Option<f64> {
-    let days = day_count(system, settlement, maturity, basis)?;
-    Some(days / year_basis(system, basis, settlement)?)
+    let days = crate::daycounts::day_count(system, settlement, maturity, basis)?;
+    Some(days / crate::daycounts::year_basis(system, basis, settlement)?)
 }
 
 /// The date **twelve months** after a date, for the rule that a bill
 /// is at most a year long.
 fn a_year_after(system: System, settlement: f64) -> Option<f64> {
-    let (year, month, day) = ymd(system, settlement)?;
-    let total = i64::from(year) * 12 + i64::from(month) - 1 + 12;
-    let next_year = total.div_euclid(12);
-    let next_month = (total.rem_euclid(12) + 1) as u32;
-    if !(1900..=9999).contains(&next_year) {
-        return None;
-    }
-    let length = days_in_month(next_year as i32, next_month);
-    crate::dates::to_serial(next_year as i32, next_month, day.min(length), system)
+    let anchor = crate::daycounts::ymd(system, settlement)?;
+    crate::daycounts::shift_months(system, anchor, 12, false)
 }
 
 /// The **settlement**, the **maturity** and the two prices of a
@@ -195,14 +135,14 @@ impl Book {
                     }
                 };
                 let basis = match self.optional_number(sheet, arguments, 4, being) {
-                    Ok(Some(basis)) => basis.trunc(),
+                    Ok(Some(basis)) => basis,
                     Ok(None) => 0.0,
                     Err(message) => return Value::Error(message),
                 };
-                if !(0.0..=4.0).contains(&basis) {
-                    return Value::Error("#NUM!".to_string());
-                }
-                let basis = basis as u32;
+                let basis = match crate::daycounts::basis_of(Some(basis)) {
+                    Ok(basis) => basis,
+                    Err(message) => return Value::Error(message),
+                };
                 if let Err(message) = discount_terms(settlement, maturity, first, second) {
                     return Value::Error(message);
                 }

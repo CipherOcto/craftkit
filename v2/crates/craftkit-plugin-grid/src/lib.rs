@@ -40,6 +40,12 @@
 //! discount and redeemed at its value — the discount, the price, the
 //! yield, the interest and the bill (the module `securities`).
 //!
+//! And a formula may ask about a **bond**: the days around its coupon
+//! period, the price of it, the yield, the duration and the price of
+//! one that is paid out (the module `bonds`). The **days** between two
+//! dates — the tree's five bases — are the module `daycounts`, and the
+//! securities and the bonds share them.
+//!
 //! And a formula may **choose**: `IF` takes a condition and the two
 //! values it chooses between, and only the branch that is taken is
 //! computed (the module `formula`).
@@ -236,12 +242,14 @@
 #![forbid(unsafe_code)]
 
 mod arithmetic;
+mod bonds;
 mod cellread;
 mod clearing;
 mod conditional;
 mod criteria;
 mod dates;
 mod datetimes;
+mod daycounts;
 mod depreciation;
 mod fill;
 mod filters;
