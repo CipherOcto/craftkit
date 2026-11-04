@@ -114,7 +114,7 @@ fn degrees_of(number: f64) -> Result<f64, String> {
 }
 
 /// The **tail** of Student's t above a number.
-fn t_upper(t: f64, degrees: f64) -> f64 {
+pub(crate) fn t_upper(t: f64, degrees: f64) -> f64 {
     0.5 * crate::special::reg_inc_beta(degrees / (degrees + t * t), degrees / 2.0, 0.5)
 }
 
@@ -170,7 +170,7 @@ fn chi_inv_rt(probability: f64, degrees: f64) -> f64 {
 }
 
 /// The **cumulative** of the F distribution.
-fn f_cdf(x: f64, first: f64, second: f64) -> f64 {
+pub(crate) fn f_cdf(x: f64, first: f64, second: f64) -> f64 {
     if x <= 0.0 {
         return 0.0;
     }

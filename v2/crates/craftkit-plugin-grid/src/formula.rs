@@ -1492,6 +1492,9 @@ impl Book {
         if crate::database::is_database_function(name) {
             return self.database(sheet, name, arguments, being);
         }
+        if crate::hypotheses::is_hypothesis_function(name) {
+            return self.hypotheses(sheet, name, arguments, being);
+        }
         if name == "CONVERT" {
             return self.convert(sheet, arguments, being);
         }
@@ -1885,6 +1888,112 @@ impl Book {
             rows.push(cells);
         }
         Ok(rows)
+    }
+
+    /// The tree's **tests of a hypothesis**: a t-test, a chi-square
+    /// test, an F-test and a z-test.
+    fn hypotheses(
+        &self,
+        sheet: &str,
+        name: &str,
+        arguments: &[Expr],
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Value {
+        match name {
+            "T.TEST" | "TTEST" => {
+                if arguments.len() != 4 {
+                    return Value::Error("#VALUE!".to_string());
+                }
+                let (left, right) = match (
+                    self.values_of_cells(sheet, &arguments[0], being),
+                    self.values_of_cells(sheet, &arguments[1], being),
+                ) {
+                    (Ok(left), Ok(right)) => (left, right),
+                    (Err(message), _) | (_, Err(message)) => return Value::Error(message),
+                };
+                let (tails, kind) = match (
+                    self.number_at(sheet, arguments, 2, being),
+                    self.number_at(sheet, arguments, 3, being),
+                ) {
+                    (Ok(tails), Ok(kind)) => (tails, kind),
+                    (Err(message), _) | (_, Err(message)) => return Value::Error(message),
+                };
+                match crate::hypotheses::t_test(&left, &right, tails, kind) {
+                    Ok(value) => Value::Number(value),
+                    Err(message) => Value::Error(message),
+                }
+            }
+            "CHISQ.TEST" | "CHITEST" => {
+                if arguments.len() != 2 {
+                    return Value::Error("#VALUE!".to_string());
+                }
+                let (left, right) = match (
+                    self.values_of_cells(sheet, &arguments[0], being),
+                    self.values_of_cells(sheet, &arguments[1], being),
+                ) {
+                    (Ok(left), Ok(right)) => (left, right),
+                    (Err(message), _) | (_, Err(message)) => return Value::Error(message),
+                };
+                let (rows, columns) = self.shape_of(sheet, &arguments[0]);
+                let (other_rows, other_columns) = self.shape_of(sheet, &arguments[1]);
+                if rows != other_rows || columns != other_columns {
+                    return Value::Error("#N/A".to_string());
+                }
+                match crate::hypotheses::chisq_test(&left, &right, rows, columns) {
+                    Ok(value) => Value::Number(value),
+                    Err(message) => Value::Error(message),
+                }
+            }
+            "F.TEST" | "FTEST" => {
+                if arguments.len() != 2 {
+                    return Value::Error("#VALUE!".to_string());
+                }
+                let (left, right) = match (
+                    self.values_of_cells(sheet, &arguments[0], being),
+                    self.values_of_cells(sheet, &arguments[1], being),
+                ) {
+                    (Ok(left), Ok(right)) => (left, right),
+                    (Err(message), _) | (_, Err(message)) => return Value::Error(message),
+                };
+                match crate::hypotheses::f_test(&left, &right) {
+                    Ok(value) => Value::Number(value),
+                    Err(message) => Value::Error(message),
+                }
+            }
+            _ => {
+                // Z.TEST: the set, the number, and the deviation.
+                if arguments.len() < 2 || arguments.len() > 3 {
+                    return Value::Error("#VALUE!".to_string());
+                }
+                let values = match self.values_of_cells(sheet, &arguments[0], being) {
+                    Ok(values) => values,
+                    Err(message) => return Value::Error(message),
+                };
+                let number = match self.number_at(sheet, arguments, 1, being) {
+                    Ok(number) => number,
+                    Err(message) => return Value::Error(message),
+                };
+                let deviation = match self.optional_number(sheet, arguments, 2, being) {
+                    Ok(deviation) => deviation,
+                    Err(message) => return Value::Error(message),
+                };
+                match crate::hypotheses::z_test(&values, number, deviation) {
+                    Ok(value) => Value::Number(value),
+                    Err(message) => Value::Error(message),
+                }
+            }
+        }
+    }
+
+    /// The **shape** of a range: its rows and its columns.
+    fn shape_of(&self, sheet: &str, argument: &Expr) -> (usize, usize) {
+        match self.area_of(sheet, argument) {
+            Ok((_, area)) => (
+                usize::try_from(area.end.row - area.start.row + 1).unwrap_or(1),
+                usize::try_from(area.end.col - area.start.col + 1).unwrap_or(1),
+            ),
+            Err(_) => (1, 1),
+        }
     }
 }
 
