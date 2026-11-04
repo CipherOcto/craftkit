@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3212 tests.** The MCP server links **all fifteen batteries** in, so the
+**3221 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3212 tests
+cargo test          # 3221 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3879,6 +3879,7 @@ so.
 | what may be **edited** | **built.** A layer that is locked or frozen locks what is on it, and every command that changes an entity refuses (§442) | §442 |
 | the **resolution** of a revision | **built.** A revision may be accepted or rejected, and the block's text and runs are rewritten together (§443) | §443 |
 | the **ease** of a keyframe | **built.** The easy ease is a third of the segment and no speed, and the hold keeps the value still until the next keyframe (§444) | §444 |
+| the **cells** of a table | **built.** A table is a grid: a cell is found by its row and its column, and rows and columns go in and come out (§445) | §445 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29554,3 +29555,55 @@ for by name.
   tolerance, and that is a search and not a setting.
 - **The tree's keyframe assistant is not here**: it moves and deletes
   keyframes in bulk, and those are commands of their own.
+
+## 445. The cells of a table
+
+A table is a **grid**: rows of cells, and every row as long as every
+other row.
+
+### What was built
+
+- The commands `prose.table.cell.get`, `prose.table.cell.set`,
+  `prose.table.row.add`, `prose.table.row.remove`,
+  `prose.table.column.add` and `prose.table.column.remove`.
+- A **cell** is found by its **row and its column**, and it may be
+  read and written. A **row** that goes in pushes the rows below it
+  down, and a **column** that goes in pushes the columns beside it
+  right.
+- A table whose rows are **not the same length** is **refused** — by
+  the command that makes a table and by every command that works on
+  one. A table that is nearly a grid is a table whose cells cannot be
+  addressed.
+
+### What the port found
+
+- **The tree's table is a tree**: every cell holds paragraphs, and a
+  cell has an identity of its own that a row or a column insert moves
+  about. Here a cell is a **value in a row**, and a cell is found by
+  its **row and its column** — there is no cell identity to keep, and
+  a row that goes in pushes the rows below it down.
+- **The tree's table is a grid and says so**: a row of one length
+  beside a row of another is not a table. Here the same, and the check
+  is **refusal** rather than tidying up.
+
+### What it cost
+
+- **Nine tests** in the prose battery (`tests/tables.rs`): a cell may
+  be read and written, a row may be put in and taken out, a column may
+  be put in and taken out, a cell that is not there is refused, a
+  table whose rows are not the same length is refused, and a row that
+  is not a whole number is refused.
+- **One new module** (`tables`): the cells of a table are their own.
+  The prose battery now carries **39** commands and the MCP server
+  **592**.
+
+### What it does not settle
+
+- **The tree's cells hold paragraphs and here they hold values**: a
+  cell that holds blocks is a different thing, and this battery does
+  not pretend to have one.
+- **The tree's merged and split cells are not here**: a cell that
+  covers two cells is a shape the grid does not have.
+- **The tree's table formulas are not here**: `=SUM(ABOVE)` needs a
+  formula in a cell, and this arc is about the cells and not about
+  what a cell may say.
