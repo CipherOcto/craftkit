@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3204 tests.** The MCP server links **all fifteen batteries** in, so the
+**3212 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3204 tests
+cargo test          # 3212 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3878,6 +3878,7 @@ so.
 | the **audit** of a drawing | **built.** A drawing is a document, and a document can be wrong: the audit reads a drawing and reports what is wrong with it (§441) | §441 |
 | what may be **edited** | **built.** A layer that is locked or frozen locks what is on it, and every command that changes an entity refuses (§442) | §442 |
 | the **resolution** of a revision | **built.** A revision may be accepted or rejected, and the block's text and runs are rewritten together (§443) | §443 |
+| the **ease** of a keyframe | **built.** The easy ease is a third of the segment and no speed, and the hold keeps the value still until the next keyframe (§444) | §444 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29502,3 +29503,54 @@ and the change never happened.
 - **The tree's resolution of a revision may name the author**: here a
   revision is resolved by the number of its run, and the author is
   said by the revision itself.
+
+## 444. The ease of a keyframe
+
+Two eases are worth naming, because they are the ones a person asks
+for by name.
+
+### What was built
+
+- The command `fx.keyframe.easy`: the **easy ease**. The influence is
+  a **third** of the segment and the speed is nothing, and the
+  keyframe stops being an **auto bezier** — the ease is written down
+  instead of coming from its neighbours. It may be given to one side
+  (`in` or `out`) or to both.
+- The command `fx.keyframe.hold`: the **hold**. The value does not
+  move at all until the next keyframe, and turning the hold off again
+  gives back the **bezier** the keyframe had — when it eases — or a
+  **straight line** when it does not.
+
+### What the port found
+
+- **The tree's easy ease is a number, not a calculation**: the
+  influence is a third and the speed is nothing. Here the same — and
+  a survey of the tree said it was worked out from the neighbours, and
+  it is not: it is a third, and a third is a third.
+- **The tree's hold is turned off again by a rule**: the keyframe gets
+  its bezier back when it eases — when it is an auto bezier, when it
+  is continuous, when its in side is a bezier, or when it has an ease
+  of its own — and a straight line when it does not. Here the same,
+  and "it has an ease of its own" means "its ease is not the default
+  one": the tree's ease is a list and an empty list is how it says "no
+  ease", and here the ease is always there and the default one is how
+  it says the same thing.
+
+### What it cost
+
+- **Eight tests** in the fx battery (`tests/eases.rs`): the easy ease
+  is a third and no speed, it may be given to one side, it stops the
+  keyframe being an auto bezier, a hold keyframe does not move the
+  value, the hold turned off again gives a straight line back or a
+  bezier back, a side that is not a side is refused, and a keyframe
+  that is not there is refused.
+- **One new module** (`eases`): the ease of a keyframe is its own. The
+  fx battery now carries **46** commands and the MCP server **586**.
+
+### What it does not settle
+
+- **The tree's smooth is not here**: the tree can replace a run of
+  keyframes with the fewest auto beziers that stay within a
+  tolerance, and that is a search and not a setting.
+- **The tree's keyframe assistant is not here**: it moves and deletes
+  keyframes in bulk, and those are commands of their own.
