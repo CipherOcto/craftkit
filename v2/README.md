@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2690 tests.** The MCP server links **all fifteen batteries** in, so the
+**2695 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2690 tests
+cargo test          # 2695 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3789,6 +3789,7 @@ so.
 | the **marks** of a media | **built.** A media may carry a mark in and a mark out, and the material a clip plays is between them (§352) | §352 |
 | the **name** of a sheet | **built.** A name has rules, and a rename carries the formulas and the names that use it with it (§353) | §353 |
 | the **taking away** of a sheet | **built.** A workbook keeps one visible sheet, and a formula that named the sheet reads the error that says which sheet is missing (§354) | §354 |
+| the **taking away** of a track | **built.** A locked track may not be taken away, and the clips on it go with it (§355) | §355 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24259,3 +24260,57 @@ a sheet obeys too.
   tree's sheets are held in a list and their indices are moved when one
   is taken away; here a sheet is a node and taking it away takes it
   out of the tree, and the order of the rest is their own.
+
+## 355. The taking away of a track
+
+A track may be **taken away** from its sequence, and the clips on it go
+with it.
+
+### What was built
+
+- The command `film.track.remove` takes a track away, and the answer
+  says which clips went with it.
+- A **locked** track may not be taken away: a locked track is a track
+  that cannot be edited, and the taking away of the track is an edit.
+  A track that is unlocked again may be taken away.
+- A node that is **not a track** is refused, and so is a node that is
+  not there at all.
+
+### What the port found
+
+- **The tree's track is a lane and this tree's track is a node.** The
+  tree holds its tracks in two lists — the video tracks and the audio
+  tracks — and takes one away by dropping it from its list. Here a
+  track is a **node** under the sequence and the clips on it are its
+  **children**, so taking the track away takes the clips with it, and
+  the **tree of the document** says so by itself: no list is walked
+  and no child is counted.
+- **The tree's lock is checked by the tree's edit, and here by the
+  command.** The tree's `edit_sequence` asks for the track of every
+  edit and refuses a locked one. Here every command that edits a clip
+  asks for the track of the clip, and this command asks for the track
+  it is taking away.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/trackremoval.rs`): a
+  track being taken away, the clips on it going with it, a locked track
+  not being takeable, an unlocked track being takeable, and a node
+  that is not a track refused.
+- **One new command**: `film.track.remove`. The film battery now
+  carries **36** commands and the MCP server **470**.
+
+### What it does not settle
+
+- **The tree's tracks are two lists and here they are one.** The tree
+  keeps the video tracks and the audio tracks apart, and a track's
+  **kind** says which list it is in. Here a track's kind is in its
+  payload and the tree under the sequence holds them all, so taking one
+  away does not need to know which list it was in.
+- **The tree's sequence keeps a **selected** track and this tree does
+  not.** The tree's `deleteTrack` leaves the selection alone and the
+  tree's editor falls back to another track; here there is no
+  selection to fall back from.
+- **The tree's markers of a track are not here.** The tree's markers
+  live on the sequence and not on a track, so nothing of theirs goes
+  with the track — and here the same is true.
