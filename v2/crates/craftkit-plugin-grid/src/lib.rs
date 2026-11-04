@@ -72,6 +72,10 @@
 //! protection and the calendar it counts its dates in (the module
 //! `sheetreading`).
 //!
+//! And a **workbook** may be read whole: its sheets, its names, its
+//! styles, its lists of words and its calendar (the module
+//! `workbookreading`).
+//!
 //! And a sheet may carry **merges**: a range of cells that is one cell,
 //! whose value is the value of the cell at the top left (the module
 //! `merges`).
@@ -241,6 +245,7 @@ mod tabsorder;
 mod texts;
 mod validation;
 mod view;
+mod workbookreading;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
@@ -274,6 +279,7 @@ pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
 pub use tabsorder::MoveSheet;
 pub use validation::{CheckValidation, ClearValidation, SetValidation};
 pub use view::{FreezePanes, SetView, SetZoom, UnfreezePanes};
+pub use workbookreading::ReadWorkbook;
 
 /// The grid layer.
 ///
