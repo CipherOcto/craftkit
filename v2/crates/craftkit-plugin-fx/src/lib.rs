@@ -79,6 +79,11 @@
 //! refusal comes before the edit, so a refused parenting changes
 //! nothing (the module `parent`).
 //!
+//! And the **stack** of layers of a composition is here: the layers
+//! stand in an order, the front of the stack is drawn over the rest of
+//! it, and a layer may be moved in it — forward, backward, to the
+//! front or to the back (the module `stack`).
+//!
 //! And a composition has a **time**: the frame it is looked at, and
 //! the time is a fact of the composition and not of the window that
 //! happens to be open (the module `time`).
@@ -131,6 +136,7 @@ mod markers;
 mod masks;
 mod parent;
 mod spatial;
+mod stack;
 mod switches;
 mod time;
 
@@ -144,6 +150,7 @@ pub use keys::{RemoveKeyframe, SetAuto, SetContinuous, SetInterpolation, SetKeyf
 pub use markers::{AddMarker, MarkerKind, MarkersEvaluator, SetMarker};
 pub use masks::{AddMask, InvertMask, ListMasks, LockMask, MaskKind, RemoveMask, SetMaskMode};
 pub use parent::{DeleteParent, SetParent};
+pub use stack::{ArrangeLayer, ListLayers, RenameLayer};
 pub use switches::{SetCompSwitch, SetSwitch, SwitchesEvaluator};
 pub use time::{GetTime, GoToEnd, GoToStart, SetTime, StepTime};
 
@@ -740,6 +747,9 @@ craftkit_sdk::plugin_anchor!(
     GoToStart,
     GoToEnd,
     StepTime,
+    ListLayers,
+    ArrangeLayer,
+    RenameLayer,
     FxPanel
 );
 
