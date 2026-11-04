@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3058 tests.** The MCP server links **all fifteen batteries** in, so the
+**3064 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3058 tests
+cargo test          # 3064 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3844,6 +3844,7 @@ so.
 | the **logic** of a formula | **built.** A formula may ask about the truth of things and may choose between them: the truths, the first condition that is true, the fallback of an error, the match in a list and the choice by place (§407) | §407 |
 | the **line** through a set of numbers | **built.** A formula may ask how two sets of numbers move together: the correlation, the slope, the crossing, the error and the prediction (§408) | §408 |
 | the **shape** of a distribution | **built.** A formula may ask the shape of a distribution: the normal, the gamma, the error function, Student's t, the chi-square, the F, the counts and the beta (§409) | §409 |
+| the **cash flows** of a plan | **built.** A formula may ask about a series of payments: the rate at which they are worth nothing, what a sum grows to, and the interest and the principal of a run of payments (§410) | §410 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27737,4 +27738,70 @@ A formula may ask the shape of a distribution.
 - **The tree's hypergeometric distribution is not here**: it wants
   four numbers of a population, and the shape of it is a count of
   ways to choose.
+
+## 410. The cash flows of a plan
+
+A formula may ask about a series of payments.
+
+### What was built
+
+- The functions `IRR`, `MIRR`, `XIRR`, `XNPV`, `FVSCHEDULE`, `CUMIPMT`,
+  `CUMPRINC`, `DOLLARDE` and `DOLLARFR`.
+- `IRR` is the **rate** at which a series of payments is worth nothing,
+  and `MIRR` is the same rate with the payments **put out** at one rate
+  and **taken in** at another.
+- `XIRR` is the same rate with a **date** on every payment, and
+  `XNPV` is what such a series is worth today.
+- `FVSCHEDULE` is what a sum grows to through a **schedule** of
+  rates, `CUMIPMT` is the **interest** of a run of payments and
+  `CUMPRINC` its **principal**.
+- `DOLLARDE` is a price written as a **fraction** of a dollar, and
+  `DOLLARFR` writes it back.
+- The **rules** are the tree's: a series with a payment one way and no
+  payment the other way has no rate, a rate of minus one or less is no
+  rate, the two series of a dated rate must be of the **same length**
+  and every one of them a number, and the **type** of a run of payments
+  is the tree's own — any number that is not zero means the payment
+  comes at the beginning of the period.
+
+### What the port found
+
+- **The tree's dates are counted from the first of them and in
+  days.** The worth of a dated series is `value / (1 + rate)^((date −
+  first date) / 365)`, and the first date is the one the series starts
+  on — not the first of the year and not today. Here the same.
+- **The tree's two series must be of the same length and every cell
+  of them must be a number.** A series of five payments and a series
+  of six dates is `#NUM!`, and a cell of a series that holds a text is
+  `#VALUE!` — not a cell that is skipped. Here the same, and the
+  length is the count of **cells** and not the count of numbers.
+- **The tree's rate of a series is a search** — the same search the
+  rate of a loan uses (§400) — and a series with no rate is `#NUM!`.
+  Here the same, and the same search.
+- **The tree's `MIRR` of a series with no payment one way is a
+  division by nothing**, and a series of nothing but negative payments
+  is a rate of minus one — the tree says so, and so does Excel. Here
+  the same.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/cashflows.rs`): the
+  internal rate, the dated rate, the modified rate, the schedule and
+  the run of payments, the fraction of a dollar, and the errors.
+- **One new module**: `cashflows`. The **cells of an argument** are
+  now one helper — `Book::values_of_cells` in `formula.rs` — and the
+  regression module of §408 uses it too.
+- **No new command**: a function is not a command, and the grid battery
+  still carries **67** commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's odd first and odd last coupon periods are not here**
+  (§403): the price and the yield of a bond whose first or last
+  period is not a whole one.
+- **The tree's accrued interest is not here**: the interest of a bond
+  between two dates.
+- **The tree's `NPV` is not here**: it discounts a series at the ends
+  of the periods, and the tree's rule for it is a rule about a
+  convention that v2 has not settled.
 
