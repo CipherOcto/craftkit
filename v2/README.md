@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2998 tests.** The MCP server links **all fifteen batteries** in, so the
+**3004 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2998 tests
+cargo test          # 3004 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3834,6 +3834,7 @@ so.
 | the **statistics** of a formula | **built.** A formula may ask about the shape of a set of numbers: the middle, the mode, the spread, the order statistics and the rank (§397) | §397 |
 | the **arithmetic** of a formula | **built.** A formula may round a number, cut it, take the rest of a division, take its root and raise it to a power, with the tree's careful rules (§398) | §398 |
 | the **trigonometry** of a formula | **built.** A formula may ask about an angle: its sine and its cosine, its tangent and their inverses, and the turn of an angle from degrees to radians (§399) | §399 |
+| the **value** of money over time | **built.** A formula may ask what a sum of money is worth now and later: the payment of a loan, its present and future worth, the rate that makes it work out, and the interest of one payment (§400) | §400 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27047,3 +27048,77 @@ A formula may ask about an angle.
 - **The tree's angle limit is a limit and not a rule about precision**:
   an angle just inside the bound is computed in the double it is, and
   the tree does not say more about it either.
+
+## 400. The value of money over time
+
+A formula may ask what a sum of money is worth now and later.
+
+### What was built
+
+- The functions `PMT`, `PV`, `FV`, `NPER`, `RATE`, `IPMT`, `PPMT`,
+  `ISPMT`, `EFFECT`, `NOMINAL`, `PDURATION` and `RRI`.
+- `PMT` is the payment of a loan, `PV` is what a series of payments is
+  worth **now**, `FV` is what it is worth **later**, and `NPER` is how
+  many payments it takes.
+- The **type** — whether the payment comes at the beginning of the
+  period or at the end — is the tree's own rule: any number that is
+  not zero means the beginning. There is no second rule and no
+  complaint about a strange one.
+- `RATE` is the rate that makes the sum work out, and it is found the
+  tree's way: a **Newton** step from a guess, and when that fails a
+  **bisection** over a grid of rates.
+- `IPMT` and `PPMT` are the interest and the principal of **one**
+  payment, and `ISPMT` is the interest of a loan with even principal
+  payments.
+- `EFFECT` is a rate that is compounded and `NOMINAL` is the rate it
+  is made of; `PDURATION` is how long a sum takes to grow and `RRI`
+  is the rate it grows at.
+- The **errors** are the tree's: a payment of no periods is `#NUM!`,
+  a rate of minus one or less is no rate, a compounding period below
+  one is `#NUM!`, and a rate that cannot be found is `#NUM!`.
+
+### What the port found
+
+- **The tree's `type` argument is a number and not a flag.** The tree
+  reads it as "any number that is not zero means the beginning" — a
+  type of `2` is the beginning, a type of `-1` is the beginning, and a
+  type of `0.5` is the beginning. Here the same, and nothing here
+  second-guesses it.
+- **The tree's `RATE` is a search and not an inversion.** There is no
+  closed form for the rate a loan works out at, so the tree guesses,
+  steps, and — when the step will not settle — scans a grid of rates
+  for a change of sign and bisects it. Here the same, with the same
+  order of guesses: the caller's guess first, then a fixed list.
+- **The tree rounds money to fifteen digits like everything else, and
+  the rounding has to come before the answer.** `ROUND(PV(...), 2)` is
+  `772.17` and not `772.1699999`, and the tree gets that by writing
+  the number with fifteen significant digits, rounding those digits,
+  and reading them back. The port found this the hard way: the
+  arithmetic alone gave `772.1699999999999`, and the tree's rounding
+  is what makes it money.
+- **The tree's `EFFECT` and `NOMINAL` cut the number of periods.** A
+  period of `2.9` is two periods, and a period below one is `#NUM!`.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/finance.rs`): the payment
+  of a loan and its present and future worth, the rate that makes the
+  sum work out, the interest and the principal of one payment, the
+  compounded and the nominal rate, and the errors.
+- **One new module**: `finance`. **No new command**: a function is
+  not a command, and the grid battery still carries **67** commands and
+  the MCP server **521**.
+- The **shared argument helpers** — `Book::numbers_of` and
+  `Book::number_at` — moved into `formula.rs`, so that every family of
+  functions reads its numbers the same way.
+
+### What it does not settle
+
+- **The tree's depreciation functions are not here**: the straight
+  line, the sum of the years and the declining balances.
+- **The tree's securities functions are not here**: the coupon of a
+  note, the discount and the yield of a bill.
+- **The tree's `RATE` is a search, and a search is not a proof**: a
+  rate with no root in the grid it scans is `#NUM!` here and `#NUM!`
+  there, and the tree does not say more about the ones either.
+
