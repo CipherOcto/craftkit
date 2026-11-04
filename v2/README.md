@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2710 tests.** The MCP server links **all fifteen batteries** in, so the
+**2716 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2710 tests
+cargo test          # 2716 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3792,6 +3792,7 @@ so.
 | the **taking away** of a track | **built.** A locked track may not be taken away, and the clips on it go with it (§355) | §355 |
 | the **enable** of a clip | **built.** A clip may be disabled: it is on the track and it does not play, and the timeline says how many play (§356) | §356 |
 | the **name** of a clip | **built.** A clip may be named, and the name is its own: it survives the clip being moved (§357) | §357 |
+| the **label** of an item | **built.** A media item may carry the tree's own sixteen colours, and the group of a label is derived (§358) | §358 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24430,3 +24431,57 @@ A clip may be **named**, and the name is the clip's own.
   the timeline shows the places.** The timeline here is a list of
   starts and lengths, and the name of a clip is in the clip's own
   evaluation.
+
+## 358. The label of an item
+
+The tree labels the **items of the project** and the **clips of the
+sequence** with one command and one list of sixteen colours, and here
+only the clips carried a label.
+
+### What was built
+
+- The commands `film.item.label`, `film.item.label.delete` and
+  `film.item.label.group` do for a media item what the clip's own
+  commands do for a clip: a label is put on it, taken off it, and the
+  **group** of a label is derived from the labels and not written down.
+- The list of colours is the tree's own **sixteen**, and a name that is
+  not one of them is **refused** — the tree's list is closed, and a
+  colour the tree does not have is not a colour.
+- A node that is **not an item** is refused, and so is a node that is
+  not there at all.
+
+### What the port found
+
+- **The tree's label is one command for two kinds of thing, and here it
+  is two.** The tree's `edit.label` labels the items of the project and
+  the clips of the sequence with one command, and it works on the
+  **selection** — the items of the project and the clips of the
+  sequence are selected separately in the tree. Here a command names
+  the thing it acts on, so there is a command for an item and a
+  command for a clip, and the **list of colours is one list** that
+  both use.
+- **The tree's label group is of clips, and here there is a group of
+  items as well.** The tree's *select label group* takes every clip
+  that carries one of the labels of the clips that are selected; the
+  group of an item is the same derivation over the items, and it is
+  derived the same way — it changes when a label is put on an item and
+  not when it is written down.
+
+### What it cost
+
+- **Six tests** in the film battery (`tests/itemlabels.rs`): an item
+  being labelled, a label that is not one of the tree's being refused,
+  the label being taken away, the group of a label being derived, a
+  node that is not an item refused, and the label being saved.
+- **Three new commands**: `film.item.label`, `film.item.label.delete`
+  and `film.item.label.group`. The film battery now carries **41**
+  commands and the MCP server **475**.
+
+### What it does not settle
+
+- **The tree's one command is not here.** The tree's `edit.label` is
+  one command that labels the selection of items and the selection of
+  clips; here the two are two commands, because a command in this tree
+  says which thing it acts on.
+- **The tree's selection is not here**, so the tree's label group is
+  built from a selection and this one is built from one item.
