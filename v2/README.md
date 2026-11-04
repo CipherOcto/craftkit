@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2910 tests.** The MCP server links **all fifteen batteries** in, so the
+**2914 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2910 tests
+cargo test          # 2914 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3820,6 +3820,7 @@ so.
 | the **reading** of a name | **built.** A name may be read: the range it stands for and the values of the cells of it (§383) | §383 |
 | the **reading** of a sheet | **built.** A sheet may be read whole: its used range, its view, its zoom, its hidden rows and columns and its protection (§384) | §384 |
 | the **reading** of a clip | **built.** A clip may be read whole: its two clocks, its speed and its flags, and the track, the sequence and the item it belongs to (§385) | §385 |
+| the **reading** of a track | **built.** A track may be read whole: its kind, whether it is locked, and its clips in the order they start and its length (§386) | §386 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26199,3 +26200,54 @@ everything that is said about it.
 - **The tree's multi-camera and its time interpolation are not here.**
 - **The tree's negative speed is not here**: a clip that runs
   backwards says so with its own flag.
+
+## 386. The reading of a track
+
+A track may be read whole: the answer is everything the track holds and
+everything that is said about it.
+
+### What was built
+
+- The command `film.track.get` gives the **name** of a track, its
+  **kind** — a video track or an audio one — and whether it is
+  **locked**.
+- Three of the facts of the answer are **derived**: the **clips** on
+  the track are its children in the order they **start**, the
+  **length** of the track is the end of its last clip, and the
+  **sequence** the track is in is its place in the tree.
+- A track that holds **no clip** is not long, and its length is said
+  as zero because a track that holds nothing has no end.
+
+### What the port found
+
+- **The tree keeps two lists of tracks and here a track has a kind.**
+  The tree's sequence holds a list of video tracks and a list of audio
+  tracks, and the kind of a track is which list it is in. Here a track
+  is a node and it **says** what it is — `video` or `audio` — in its
+  payload, and the two kinds are one kind of thing with a name.
+- **The tree's track carries the mixer and this tree's does not.** The
+  tree's track has a **mute**, a **solo**, an **output toggle**, a
+  **sync lock**, the **channel format**, the **volume** and the
+  **pan**, and the track-level **effects** — the mixer's inserts. Here
+  a track has its name, its kind and whether it is locked.
+- **The tree's track holds its transitions and here it does not.** The
+  transitions between the clips of a track are the tree's own; here a
+  transition is a thing of its own and not a part of the track.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/trackreading.rs`): a
+  track being read whole, the clips of a track being in the order they
+  start, a locked track saying so, and a track that is not there and a
+  node that is not a track being refused.
+- **One new command**: `film.track.get`. The film battery now carries
+  **51** commands and the MCP server **502**.
+
+### What it does not settle
+
+- **The tree's mixer is not here**, and so a track's mute, solo,
+  volume, pan and channel format are not here.
+- **The tree's track-level effects are not here**, and neither are the
+  tree's transitions as parts of a track.
+- **The tree's two lists of tracks are not here**: a track says what
+  it is, and that is the whole of it.
