@@ -1252,7 +1252,12 @@ impl Book {
     }
 
     /// The value of a cell, with the cells being computed on the way.
-    fn value_of_guarded(&self, sheet: &str, cell: CellRef, being: &mut Vec<(String, CellRef)>) -> Value {
+    pub(crate) fn value_of_guarded(
+        &self,
+        sheet: &str,
+        cell: CellRef,
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Value {
         let Some(cells) = self.sheets.get(sheet) else {
             return Value::Error(format!("there is no sheet `{sheet}`"));
         };
@@ -1343,6 +1348,9 @@ impl Book {
         }
         if crate::texts::is_text_function(name) {
             return self.shaping(sheet, name, arguments, being);
+        }
+        if crate::lookups::is_lookup_function(name) {
+            return self.looking(sheet, name, arguments, being);
         }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
@@ -1457,7 +1465,7 @@ impl Book {
     ///
     /// A range names a sheet or is in the sheet the formula is in, and
     /// a name stands for a range of cells.
-    fn area_of(&self, sheet: &str, argument: &Expr) -> Result<(String, Area), String> {
+    pub(crate) fn area_of(&self, sheet: &str, argument: &Expr) -> Result<(String, Area), String> {
         match argument {
             Expr::Range { sheet: named, start, end } => {
                 let name = named.clone().unwrap_or_else(|| sheet.to_string());
@@ -1578,7 +1586,7 @@ impl Book {
 /// is not zero, a boolean is itself, and the text `TRUE` or `FALSE` is
 /// the boolean it names. Any other text is an error, and so is an
 /// error that is asked for its truth.
-fn truth_of(value: &Value) -> Result<bool, String> {
+pub(crate) fn truth_of(value: &Value) -> Result<bool, String> {
     match value {
         Value::Empty => Ok(false),
         Value::Number(number) => Ok(*number != 0.0),

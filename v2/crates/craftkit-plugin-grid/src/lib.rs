@@ -41,6 +41,11 @@
 //! fold it or clean it — `LEFT`, `RIGHT`, `MID`, `LEN`, `TRIM`,
 //! `UPPER`, `LOWER` and `PROPER` (the module `texts`).
 //!
+//! And a formula may **find** a value in a range — `MATCH`, `VLOOKUP`
+//! and `INDEX` — and the search is the **exact** one; the tree's
+//! approximate search is not here, and a lookup that asks for it says
+//! so (the module `lookups`).
+//!
 //! And a workbook may carry **names**: a word that stands for a range of
 //! cells, and a formula may use the word where it would use the range
 //! (the module `names`).
@@ -187,6 +192,7 @@ mod formula;
 mod fractions;
 mod hiding;
 mod links;
+mod lookups;
 mod merges;
 mod names;
 mod notes;
