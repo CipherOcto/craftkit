@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3115 tests.** The MCP server links **all fifteen batteries** in, so the
+**3120 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3115 tests
+cargo test          # 3120 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3860,6 +3860,7 @@ so.
 | the **complex numbers** | **built.** A formula may ask about the complex numbers: a pair of numbers, written as text and read back from text (§423) | §423 |
 | the **playhead** of a sequence | **built.** A video editor has a playhead: the place in the sequence where it is looking, and a fact of the sequence (§424) | §424 |
 | the **edit points** of a sequence | **built.** A sequence has edit points: the places where its clips begin and end, and the razor cuts at one (§425) | §425 |
+| the **settings** of a track | **built.** A track is more than a line of clips: it may be enabled, muted or soloed, it may have a volume and a pan, and it may carry a label (§426) | §426 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28613,4 +28614,52 @@ end.
   not walked on their own.
 - **The tree's razor of a locked track is not here**: the split says
   that the track is locked, and that is the refusal.
+
+## 426. The settings of a track
+
+A track is more than a line of clips: it has **settings**.
+
+### What was built
+
+- The commands `film.track.enable`, `film.track.mute`,
+  `film.track.solo`, `film.track.volume`, `film.track.pan`,
+  `film.track.label` and `film.track.rename`.
+- A track may be **enabled** or not, **muted** or not, **soloed** or
+  not; it may have a **volume** in decibels and a **pan**; and it may
+  carry a **label** — the tree's own sixteen colours, the list the
+  clips and the items carry.
+- The **rules** are the tree's: the **pan** is a number between minus
+  a hundred and a hundred, a **label** may be taken off with an empty
+  name and with the name `None`, and a name that is not on the tree's
+  list is refused.
+
+### What the port found
+
+- **The tree's pan outside its bounds is clamped and says nothing**,
+  and here it is **refused** and the refusal says which bound stopped
+  it: a pan that is not the pan that was asked for is not a pan.
+- **The tree's track settings are one command** that sets any of
+  them, and here they are **one command each** — the tree's rule is
+  that a command does one thing (§ the registry), and a command that
+  may set six things is a command that does six things.
+- **The tree's solo is a fact of the track and the playing of the
+  tracks is the host's business**, and here the same: the solo is
+  written down and nothing else reads it yet.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/tracks.rs`): the flags of
+  a track, its volume and its pan, a pan outside its bounds, its
+  label and its name.
+- **One new module** (`tracks`): the settings of a track are their
+  own, and the reading of a track grew to say them. The film battery
+  now carries **69** commands and the MCP server **536**.
+
+### What it does not settle
+
+- **The tree's sync lock is not here**: a track that is locked with
+  another is a fact this tree does not keep.
+- **The tree's track settings in one command are not here**, and that
+  is a difference and not an oversight: the tree's one command is six
+  commands here.
 
