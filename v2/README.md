@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3131 tests.** The MCP server links **all fifteen batteries** in, so the
+**3135 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3131 tests
+cargo test          # 3135 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3865,6 +3865,7 @@ so.
 | the **words** of an amount in Thai | **built.** A formula may ask for an amount written in Thai words, with the baht and the satang (§428) | §428 |
 | the **masks** of a layer | **built.** A compositing layer may be masked: a path on the layer that says what of it is seen, with its mode and its settings (§429) | §429 |
 | the **time** of a composition | **built.** A compositing application has a time cursor: the place in the composition where it is looking, and a fact of the composition (§430) | §430 |
+| the **stack of layers** of a composition | **built.** A compositing composition is a stack: the layers stand in an order, and a layer may be moved in it (§431) | §431 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28840,4 +28841,56 @@ composition where it is looking.
   commands: a step of ten frames is a step of ten frames.
 - **The tree's time of the source of a layer** is not here: a
   composition has one time and that is the one.
+
+## 431. The stack of layers of a composition
+
+A compositing composition is a **stack**: the layers stand in an
+order, and the front of the stack is drawn over the rest of it.
+
+### What was built
+
+- The commands `fx.layer.list`, `fx.layer.arrange` and
+  `fx.layer.rename`.
+- `fx.layer.list` reads the stack, **the front first**. `fx.layer.
+  arrange` moves a layer in it: `forward` is one step towards the
+  front, `backward` is one step towards the back, `front` is the front
+  of the stack and `back` is the back of it. `fx.layer.rename` gives
+  a layer a name.
+- The **rules** are the tree's: a layer that is already at the front
+  and is told to go forward stays there, a layer that is already at
+  the back and is told to go back stays there, a place that is not one
+  of the four is refused, and a layer with no name is refused.
+
+### What the port found
+
+- **The tree arranges a selection of layers at once**, and its rules
+  for a selection that is not contiguous are careful: each layer
+  moves one step and the layers keep their order among themselves.
+  Here a command arranges **one** layer — a command that takes a
+  selection is a command that does not say what it does, and the
+  tree's own rule is that a command does one thing (§ the registry).
+- **The tree's order is the front first** — the layer that was added
+  last is at the front — and here the children of the composition are
+  in the order they were added, and so the front is the last of them.
+  The test here says so.
+- **The tree's `front` and `back` keep the order of the layers that
+  are moved**, and here one layer is moved and there is no order to
+  keep.
+
+### What it cost
+
+- **Four tests** in the fx battery (`tests/stack.rs`): the stack may
+  be read, a layer may be moved in it, a place that is no place is
+  refused, and a layer may be renamed.
+- **One new module** (`stack`): the order of the layers is their own.
+  The fx battery now carries **44** commands and the MCP server
+  **550**.
+
+### What it does not settle
+
+- **The tree's arranging of a locked layer is not here**: a layer has
+  no lock in this tree, and the refusals of a locked layer are the
+  refusals of a track that is locked (§ §426).
+- **The tree's layer selection is not here**: a command names the
+  layer it acts on.
 
