@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3104 tests.** The MCP server links **all fifteen batteries** in, so the
+**3105 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3104 tests
+cargo test          # 3105 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3856,6 +3856,7 @@ so.
 | the **whole numbers** of a number | **built.** A formula may ask for the whole number that is near a number: the next even one, the next odd one, and the root of pi (§419) | §419 |
 | the **value of a text** | **built.** A formula may ask for the value of a text: a text that holds a number, a date or a time (§420) | §420 |
 | the **week** of a day in its year | **built.** A formula may ask for the week of a day in the year it is in, with the tree's kinds of week and the ISO week (§421) | §421 |
+| the **confidence** of a mean | **built.** A formula may ask how wide the confidence of a mean is, with the normal distribution and with Student's t (§422) | §422 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28418,4 +28419,46 @@ A formula may ask for the **week** of a day in the year it is in.
 
 - **The tree's week of a day in the 1904 calendar is not proved here**
   by a test, though the code reads the calendar of the workbook.
+
+## 422. The confidence of a mean
+
+A formula may ask how wide the **confidence** of a mean is.
+
+### What was built
+
+- The functions `CONFIDENCE`, `CONFIDENCE.NORM` and `CONFIDENCE.T`.
+- Each takes the **alpha** — the tail that is left out — the
+  **standard deviation** of the set and the **size** of it, and
+  answers how wide the mean's uncertainty is.
+- The **rules** are the tree's: an alpha that is not between nothing
+  and one is a number error, a deviation that is not positive is a
+  number error, a size that is not at least one is a number error,
+  and the confidence of Student's t of **one** number is a divide
+  error.
+
+### What the port found
+
+- **The tree's confidence of the normal distribution is the quantile
+  of the two tails and not of the one**: it is the quantile of
+  `1 - alpha/2`. Here the same, and the quantile of the normal is
+  the one the distributions module has.
+- **The tree's confidence of Student's t has the degrees of freedom
+  of the size less one**, and one number has no degrees of freedom
+  and so no confidence. Here the same.
+- **The tree's legacy name is the normal one**: `CONFIDENCE` and
+  `CONFIDENCE.NORM` are the same function. Here the same.
+
+### What it cost
+
+- **One test** in the grid battery (`tests/confidence.rs`): the
+  confidence of a mean is found.
+- **No new module**: the hypotheses module of §417 grows. **No new
+  command**: a function is not a command, and the grid battery still
+  carries **67** commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's confidence of a mean of a set that is written out in
+  the formula is not here**: this tree's formulas take ranges of
+  cells and not arrays.
 
