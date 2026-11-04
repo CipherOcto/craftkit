@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2914 tests.** The MCP server links **all fifteen batteries** in, so the
+**2917 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2914 tests
+cargo test          # 2917 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3821,6 +3821,7 @@ so.
 | the **reading** of a sheet | **built.** A sheet may be read whole: its used range, its view, its zoom, its hidden rows and columns and its protection (§384) | §384 |
 | the **reading** of a clip | **built.** A clip may be read whole: its two clocks, its speed and its flags, and the track, the sequence and the item it belongs to (§385) | §385 |
 | the **reading** of a track | **built.** A track may be read whole: its kind, whether it is locked, and its clips in the order they start and its length (§386) | §386 |
+| the **reading** of a bin | **built.** A bin may be read whole: the items in it, the bins in it, and the bin it is in (§387) | §387 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26251,3 +26252,52 @@ everything that is said about it.
   tree's transitions as parts of a track.
 - **The tree's two lists of tracks are not here**: a track says what
   it is, and that is the whole of it.
+
+## 387. The reading of a bin
+
+A bin may be read whole: the answer is everything the bin holds and
+everything that is said about it.
+
+### What was built
+
+- The command `film.bin.get` gives the **name** of a bin, the **items**
+  in it and the **bins** in it.
+- One fact of the answer is **derived**: the **parent** of a bin is the
+  bin that holds it.
+- A bin that is **not there** is refused, and so is a node that is not
+  a bin.
+
+### What the port found
+
+- **The tree's bin holds its items and its bins in one list, and here
+  the tree holds them apart.** The tree's bin has a vector of
+  children, and each child is either an item or a bin — the kind of
+  the child is in the child. Here a bin has **children**, and the kind
+  of each child says what it is: a bin is a node of the kind
+  `film.bin` and an item is a node of the kind `film.item`.
+- **The tree's bin has no parent and this tree's bin has none
+  either.** The tree's bin does not say which bin holds it — the parent
+  is found by walking the tree from the root — and so the parent here
+  is derived and not written down.
+- **The tree's bin is a value inside a value and here a bin is a
+  node.** The tree's project holds a root bin, and the root bin holds
+  the bins, and the whole of it is a value in the project's file. Here
+  a bin is a node of the tree, so it may be named, read and taken away
+  on its own.
+
+### What it cost
+
+- **Three tests** in the film battery (`tests/binreading.rs`): a bin
+  being read whole, a bin holding a bin and the bin in it knowing
+  where it is, and a bin that is not there and a node that is not a
+  bin being refused.
+- **One new command**: `film.bin.get`. The film battery now carries
+  **52** commands and the MCP server **503**.
+
+### What it does not settle
+
+- **The tree's project panel shows the bins as a tree and the project
+  read here lists them flat.** The bin read says what a bin holds and
+  where it is, and the project read lists every bin of the document.
+- **The tree's bin has no other facts and neither has this one**: the
+  tree's bins carry nothing but their name and their children.
