@@ -25,6 +25,9 @@
 //!   that target **may be opened** is derived: the tree's rule, that a
 //!   link the system follows is a web link or a mail link and nothing
 //!   else (the module `links`);
+//! - the **resolution** of a revision — it may be accepted or
+//!   rejected, and the block's text and runs are rewritten together
+//!   (the module `resolving`);
 //! - a **revision** in a run — that it was inserted, deleted or
 //!   reformatted, and by whom: the tree's three kinds, and the words
 //!   of a revision are derived (the module `revisions`);
@@ -103,6 +106,7 @@ mod footnotes;
 mod links;
 mod numbering;
 mod page;
+mod resolving;
 mod revisions;
 
 pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
@@ -114,6 +118,7 @@ pub use footnotes::{AddFootnote, ReadFootnotes};
 pub use links::ReadLinks;
 pub use numbering::{AddList, ReadNumber, SetNumbering};
 pub use page::{GetPage, SetPage};
+pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
 pub use revisions::ReadRevisions;
 
 /// The prose layer.
@@ -872,6 +877,10 @@ craftkit_sdk::plugin_anchor!(
     SetIndent,
     SetSpacing,
     SetLineSpacing,
+    AcceptRevision,
+    RejectRevision,
+    AcceptAllRevisions,
+    RejectAllRevisions,
     BlocksEvaluator,
     ProsePanel
 );
