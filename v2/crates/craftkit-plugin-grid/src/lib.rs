@@ -67,6 +67,11 @@
 //! of the cells of it, and the values are derived (the module
 //! `namereading`).
 //!
+//! And a **sheet** may be read whole: its name, its used range, its
+//! view, its zoom, the rows and columns that are hidden, its
+//! protection and the calendar it counts its dates in (the module
+//! `sheetreading`).
+//!
 //! And a sheet may carry **merges**: a range of cells that is one cell,
 //! whose value is the value of the cell at the top left (the module
 //! `merges`).
@@ -227,6 +232,7 @@ mod reading;
 mod removal;
 mod sections;
 mod sheetnames;
+mod sheetreading;
 mod sizes;
 mod sorting;
 mod styles;
@@ -260,6 +266,7 @@ pub use protection::{ProtectSheet, UnprotectSheet};
 pub use reading::ReadRange;
 pub use removal::RemoveSheet;
 pub use sheetnames::RenameSheet;
+pub use sheetreading::ReadSheet;
 pub use sizes::{SetColumnWidth, SetRowHeight};
 pub use sorting::SortRange;
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
