@@ -40,6 +40,10 @@
 //! discount and redeemed at its value — the discount, the price, the
 //! yield, the interest and the bill (the module `securities`).
 //!
+//! And a formula may ask how two sets of numbers **move together**:
+//! the correlation, the slope of the line, where it crosses the axis,
+//! its error and its prediction (the module `regression`).
+//!
 //! And a formula may ask about the **truth** of things and may choose
 //! between them: `AND`, `OR`, `XOR`, `NOT`, `IFS`, `IFERROR`, `IFNA`,
 //! `SWITCH` and `CHOOSE` (the module `logic`).
@@ -289,6 +293,7 @@ mod names;
 mod notes;
 mod protection;
 mod reading;
+mod regression;
 mod removal;
 mod sections;
 mod securities;

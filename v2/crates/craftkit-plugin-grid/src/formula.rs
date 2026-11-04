@@ -1442,6 +1442,9 @@ impl Book {
         if crate::logic::is_logical_function(name) {
             return self.logic(sheet, name, arguments, being);
         }
+        if crate::regression::is_regression_function(name) {
+            return self.regression(sheet, name, arguments, being);
+        }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();
