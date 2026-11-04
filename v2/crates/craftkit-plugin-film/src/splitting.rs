@@ -49,116 +49,119 @@ pub struct SplitClip {
 impl SplitClip {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = "film.clip.split".to_string();
-        let clip = self.clip.0;
-        let Some(node) = session.document().node(clip) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip}`"),
-            });
-        };
-        if node.kind != "film.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-            });
-        }
-        // A clip that is **linked** is split with its partners: the
-        // tree splits the group as one edit and the right-hand pieces
-        // keep a link to each other and not to the left-hand ones.
-        let members = crate::linking::group(session, clip);
-        let Some(start) = node.data.get("start").and_then(|start| start.as_u64()) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip}` does not say where it is"),
-            });
-        };
-        let Some(duration) = node.data.get("duration").and_then(|duration| duration.as_u64()) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip}` does not say how long it is"),
-            });
-        };
-        let at = self.at.0;
-        if !at.is_finite() || at.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a number of frames is a whole number".to_string(),
-            });
-        }
-        let at = at as u64;
-        if at <= start || at >= start + duration {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the frame {at} is not inside the clip, which runs from frame {start} to frame {}",
-                    start + duration
-                ),
-            });
-        }
-        // A **locked** track cannot be edited.
-        if let Some(track) = crate::track_of(session, clip)
-            && crate::is_locked(session, track)
-        {
-            return Err(crate::locked_error(&id, track));
-        }
-
-        // Every member of the group that **covers** the place is
-        // split: the tree splits the members of a group that are under
-        // the place, and the others are left alone.
-        let mut split: Vec<(u64, u64)> = Vec::new();
-        // The **transitions** that follow the cut: they now join the
-        // piece after it.
-        let mut moved: Vec<u64> = Vec::new();
-        for member in &members {
-            let Some(node) = session.document().node(*member) else {
-                continue;
-            };
-            let member_start = node.data.get("start").and_then(|start| start.as_u64());
-            let member_duration = node.data.get("duration").and_then(|duration| duration.as_u64());
-            let (Some(member_start), Some(member_duration)) = (member_start, member_duration) else {
-                continue;
-            };
-            if at <= member_start || at >= member_start + member_duration {
-                continue;
-            }
-            let (new, followed) = split_one(session, *member, at)?;
-            split.push((*member, new));
-            moved.extend(followed);
-        }
-        if split.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the frame {at} is not inside the clip, which runs from frame {start} to frame {}",
-                    start + duration
-                ),
-            });
-        }
-        // The **new group**: the right-hand pieces are linked to each
-        // other and not to the left-hand ones, as the tree's split
-        // does. The group's name is the smallest id in it.
-        let name = split.iter().map(|(_, new)| *new).min();
-        if let Some(name) = name {
-            for (_, new) in &split {
-                if let Some(node) = session.document_mut()?.node_mut(*new) {
-                    node.data["link"] = serde_json::json!(name);
-                }
-            }
-        }
-        let new = split.iter().find(|(member, _)| *member == clip).map(|(_, new)| *new);
-        Ok(Outcome::changed(format!("the clip `{clip}` is split at frame {at}")).with_data(
-            serde_json::json!({
-                "id": clip,
-                "new": new,
-                "at": at,
-                "duration": at - start,
-                "group": split.iter().map(|(member, _)| *member).collect::<Vec<u64>>(),
-                "new_group": split.iter().map(|(_, new)| *new).collect::<Vec<u64>>(),
-                "link": name,
-                "transitions": moved,
-            }),
-        ))
+        split_at(session, &id, self.clip.0, self.at.0)
     }
+}
+
+/// **Split** a clip at a place, and say what happened.
+///
+/// The command is the tree's split, and the tree's razor is this split
+/// on purpose: the razor cuts the clip that is under the playhead and
+/// the split cuts the clip that is named.
+pub(crate) fn split_at(session: &mut Session, id: &str, clip: u64, at: f64) -> Result<Outcome, EngineError> {
+    let id = id.to_string();
+    let Some(node) = session.document().node(clip) else {
+        return Err(EngineError::Failed { id: id.clone(), message: format!("there is no node `{clip}`") });
+    };
+    if node.kind != "film.clip" {
+        return Err(EngineError::Failed {
+            id: id.clone(),
+            message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+        });
+    }
+    // A clip that is **linked** is split with its partners: the
+    // tree splits the group as one edit and the right-hand pieces
+    // keep a link to each other and not to the left-hand ones.
+    let members = crate::linking::group(session, clip);
+    let Some(start) = node.data.get("start").and_then(|start| start.as_u64()) else {
+        return Err(EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip}` does not say where it is"),
+        });
+    };
+    let Some(duration) = node.data.get("duration").and_then(|duration| duration.as_u64()) else {
+        return Err(EngineError::Failed {
+            id: id.clone(),
+            message: format!("the clip `{clip}` does not say how long it is"),
+        });
+    };
+    if !at.is_finite() || at.fract() != 0.0 {
+        return Err(EngineError::Failed {
+            id: id.clone(),
+            message: "a number of frames is a whole number".to_string(),
+        });
+    }
+    let at = at as u64;
+    if at <= start || at >= start + duration {
+        return Err(EngineError::Failed {
+            id: id.clone(),
+            message: format!(
+                "the frame {at} is not inside the clip, which runs from frame {start} to frame {}",
+                start + duration
+            ),
+        });
+    }
+    // A **locked** track cannot be edited.
+    if let Some(track) = crate::track_of(session, clip)
+        && crate::is_locked(session, track)
+    {
+        return Err(crate::locked_error(&id, track));
+    }
+
+    // Every member of the group that **covers** the place is
+    // split: the tree splits the members of a group that are under
+    // the place, and the others are left alone.
+    let mut split: Vec<(u64, u64)> = Vec::new();
+    // The **transitions** that follow the cut: they now join the
+    // piece after it.
+    let mut moved: Vec<u64> = Vec::new();
+    for member in &members {
+        let Some(node) = session.document().node(*member) else {
+            continue;
+        };
+        let member_start = node.data.get("start").and_then(|start| start.as_u64());
+        let member_duration = node.data.get("duration").and_then(|duration| duration.as_u64());
+        let (Some(member_start), Some(member_duration)) = (member_start, member_duration) else {
+            continue;
+        };
+        if at <= member_start || at >= member_start + member_duration {
+            continue;
+        }
+        let (new, followed) = split_one(session, *member, at)?;
+        split.push((*member, new));
+        moved.extend(followed);
+    }
+    if split.is_empty() {
+        return Err(EngineError::Failed {
+            id: id.clone(),
+            message: format!(
+                "the frame {at} is not inside the clip, which runs from frame {start} to frame {}",
+                start + duration
+            ),
+        });
+    }
+    // The **new group**: the right-hand pieces are linked to each
+    // other and not to the left-hand ones, as the tree's split
+    // does. The group's name is the smallest id in it.
+    let name = split.iter().map(|(_, new)| *new).min();
+    if let Some(name) = name {
+        for (_, new) in &split {
+            if let Some(node) = session.document_mut()?.node_mut(*new) {
+                node.data["link"] = serde_json::json!(name);
+            }
+        }
+    }
+    let new = split.iter().find(|(member, _)| *member == clip).map(|(_, new)| *new);
+    Ok(Outcome::changed(format!("the clip `{clip}` is split at frame {at}")).with_data(serde_json::json!({
+        "id": clip,
+        "new": new,
+        "at": at,
+        "duration": at - start,
+        "group": split.iter().map(|(member, _)| *member).collect::<Vec<u64>>(),
+        "new_group": split.iter().map(|(_, new)| *new).collect::<Vec<u64>>(),
+        "link": name,
+        "transitions": moved,
+    })))
 }
 
 /// **Split** one clip at a place, and give back the **new clip** — the

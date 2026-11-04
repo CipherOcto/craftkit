@@ -22,6 +22,10 @@
 //! the playhead is a fact of the sequence and not of the window that
 //! happens to be open (the module `playhead`).
 //!
+//! And a sequence has **edit points** — the places where its clips
+//! begin and end — and the playhead walks them, and the **razor** cuts
+//! the clip that is under the playhead (the module `edits`).
+//!
 //! And a **media item** may carry a **label** as well: the tree's
 //! `edit.label` labels the items of the project and the clips of the
 //! sequence with one command and one list of colours, and here the
@@ -186,6 +190,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 mod binreading;
 mod binremoval;
 mod clipreading;
+mod edits;
 mod enabling;
 mod gaps;
 mod hold;
@@ -222,6 +227,7 @@ mod trim;
 pub use binreading::ReadBin;
 pub use binremoval::RemoveBin;
 pub use clipreading::ReadClip;
+pub use edits::{NextEdit, PrevEdit, Razor};
 pub use enabling::EnableClip;
 pub use gaps::CloseGap;
 pub use hold::{DeleteHold, SetHold};
@@ -899,6 +905,9 @@ craftkit_sdk::plugin_anchor!(
     TrimClip,
     SetPlayhead,
     GetPlayhead,
+    NextEdit,
+    PrevEdit,
+    Razor,
     GoToStart,
     GoToEnd,
     StepPlayhead,

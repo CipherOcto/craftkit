@@ -48,7 +48,7 @@ fn the_sequence<'a>(
 }
 
 /// The **playhead** of a sequence: the frame it is at.
-fn playhead_of(node: &craftkit_sdk::Node) -> u64 {
+pub(crate) fn playhead_of(node: &craftkit_sdk::Node) -> u64 {
     node.data.get("playhead").and_then(|frame| frame.as_u64()).unwrap_or(0)
 }
 
