@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2716 tests.** The MCP server links **all fifteen batteries** in, so the
+**2722 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2716 tests
+cargo test          # 2722 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3793,6 +3793,7 @@ so.
 | the **enable** of a clip | **built.** A clip may be disabled: it is on the track and it does not play, and the timeline says how many play (§356) | §356 |
 | the **name** of a clip | **built.** A clip may be named, and the name is its own: it survives the clip being moved (§357) | §357 |
 | the **label** of an item | **built.** A media item may carry the tree's own sixteen colours, and the group of a label is derived (§358) | §358 |
+| the **order** of the sheets | **built.** A sheet may be moved in the order of the tabs, and a place that is not there is refused (§359) | §359 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24485,3 +24486,63 @@ only the clips carried a label.
   says which thing it acts on.
 - **The tree's selection is not here**, so the tree's label group is
   built from a selection and this one is built from one item.
+
+## 359. The order of the sheets
+
+The sheets of a workbook are in an **order** — the tabs, left to right
+— and a sheet may be **moved** in it.
+
+### What was built
+
+- The command `grid.sheet.move` moves a sheet to a place, counted from
+  **one**, and the answer says the place it went to and the place it
+  came from.
+- A place that is **not there** is **refused** and the refusal says how
+  many sheets the workbook has: the tree puts the sheet at the end when
+  the place is past it, and here a place that is not there is refused.
+- A place that is **not a whole number** is refused, and so is a node
+  that is **not a sheet**.
+- The order is the order of the sheets under the workbook in the
+  **tree**, so it is saved with the document and no sheet is lost by a
+  move.
+
+### What the port found
+
+- **The tree's sheets are a list and this tree's sheets are children.**
+  The tree holds its sheets in a `Vec` and moves one by taking it out
+  and putting it back at another index; the index of a sheet is then
+  its position. Here a sheet is a **node** under the workbook, and the
+  order of the children is the order of the tabs — so moving a sheet
+  moves the child, and the tree of the document says which tab is
+  first.
+- **The tree clamps the place and this tree refuses it.** The tree's
+  `sheet.move` puts the sheet at `to.min(n - 1)`, so a place past the
+  end is the end and nothing is said. Here the place is refused and the
+  refusal says what the places are — the rule this tree follows
+  everywhere: refuse, and do not clamp.
+- **The tree's place is an index and this tree's is counted from one.**
+  The tree's `to` is a zero-based index into the list of sheets; here
+  the place is the position of the tab, and it is counted from one,
+  because every other count in this tree is counted from one.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/tabsorder.rs`): a sheet
+  being moved, a sheet being moved to the last place, a place that is
+  not there refused, a place that is not a whole number refused, a
+  node that is not a sheet refused, and the order being saved.
+- **One new command**: `grid.sheet.move`. The grid battery now
+  carries **50** commands and the MCP server **476**.
+
+### What it does not settle
+
+- **The tree's copy of a sheet is not here.** The tree's `sheet.move`
+  copies a sheet when the caller says `copy`, and the copy gets a name
+  of its own (`Ledger (2)`), its own copies of the names that referred
+  to it and no tables. Copying a sheet is copying its **cells** and
+  its formulas, and that is a command of its own.
+- **The tree's active sheet is not here.** The tree's move makes the
+  moved sheet the active one; here there is no active sheet.
+- **The tree's protection is not here.** The tree refuses to move a
+  sheet in a workbook whose structure is protected, and this tree has
+  no protection of a workbook yet.
