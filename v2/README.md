@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3085 tests.** The MCP server links **all fifteen batteries** in, so the
+**3088 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3085 tests
+cargo test          # 3088 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3849,6 +3849,7 @@ so.
 | the **deviations** of a set | **built.** A formula may ask the deviations of a set, its means, its skew, its ranks and its percentiles — the tree's two ways of each (§412) | §412 |
 | the **measure** of a thing | **built.** A formula may ask what a measurement is in another unit, with the tree's units and its prefixes (§413) | §413 |
 | the **odd coupon periods** of a bond | **built.** A formula may ask about a bond whose first or last coupon period is not a whole one: the price and the yield of it (§414) | §414 |
+| the **accrued interest** of a bond | **built.** A formula may ask what interest a bond has earned between two dates (§415) | §415 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28053,8 +28054,64 @@ not a whole one.
 
 ### What it does not settle
 
-- **The tree's accrued interest is not here**: the interest of a bond
-  between two dates, which is the same quasi-coupon machinery again.
+- **The tree's accrued interest was not here** when this section was
+  written: the interest of a bond between two dates. It is here now
+  (§415), and it is the same machinery again.
 - **The tree's `CONVERT` has no fourth argument here** (§413), and the
   odd periods have no fourth argument either.
+
+## 415. The accrued interest of a bond
+
+A formula may ask what interest a bond has earned between two dates.
+
+### What was built
+
+- The functions `ACCRINT` and `ACCRINTM`.
+- `ACCRINTM` is the accrued interest over a **year fraction**: the
+  issue date, the settlement date, the rate, an optional par and an
+  optional basis. `ACCRINT` is the accrued interest over the **coupon
+  periods** the bond has been through: the issue date, the first
+  coupon date, the settlement date, the rate, the par, the frequency,
+  an optional basis and an optional method.
+- The **rules** are the tree's: a rate that is not positive is a
+  number error, a par that is not positive is a number error, a
+  settlement that is not after the issue is a number error, a frequency
+  is one, two or four and no other, and a basis is a number from zero
+  to four and no other.
+
+### What the port found
+
+- **The tree's `ACCRINTM` counts a year fraction in the basis it is
+  given** and multiplies the par, the rate and that fraction. Here the
+  same, and the basis's own year length is the tree's.
+- **The tree's `ACCRINT` walks the coupon periods one at a time** and
+  adds, for each period, the days of the part of it that falls before
+  the settlement, over the length of the whole period — the length
+  being the days of the period for the actual/actual basis, 365 over
+  the frequency for the actual/365 basis and 360 over the frequency
+  for the two thirty-day bases. Here the same, and the same walk.
+- **The tree's method is a switch on where the interest starts**: the
+  first method starts at the issue and counts every period; the second
+  starts at the coupon the settlement falls in and counts from there.
+  Here the same, and the two methods give the two different answers
+  the tree gives.
+- **The tree's par defaults to a thousand** and its method defaults to
+  the first. Here the same.
+
+### What it cost
+
+- **Three tests** in the grid battery (`tests/accrued.rs`): the
+  interest over a year fraction, the interest over the coupon periods
+  with both methods, and the errors.
+- **No new module**: the bonds module of §403 grows. **No new
+  command**: a function is not a command, and the grid battery still
+  carries **67** commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's `ACCRINT` in the 1904 date system is not here**: this
+  tree's grid has one date system and not two.
+- **The tree's accrued interest of a bond with a frequency of a
+  quarter is not proved here** by a test, though the code walks the
+  periods the same way.
 
