@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3195 tests.** The MCP server links **all fifteen batteries** in, so the
+**3204 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3195 tests
+cargo test          # 3204 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3877,6 +3877,7 @@ so.
 | the **mirror** of an entity | **built.** The same entity, turned over a line: every point of it is turned over, and an ellipse takes its major axis with it (§440) | §440 |
 | the **audit** of a drawing | **built.** A drawing is a document, and a document can be wrong: the audit reads a drawing and reports what is wrong with it (§441) | §441 |
 | what may be **edited** | **built.** A layer that is locked or frozen locks what is on it, and every command that changes an entity refuses (§442) | §442 |
+| the **resolution** of a revision | **built.** A revision may be accepted or rejected, and the block's text and runs are rewritten together (§443) | §443 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29450,3 +29451,54 @@ about what may be changed.
 - **The tree's layer that is frozen may not be changed either**: here
   the settings of a frozen layer may still be set, and only what is on
   it is held still.
+
+## 443. The resolution of a revision
+
+A revision is a mark on a run. Resolving it is the decision about the
+mark: accept it, and the change becomes part of the text; reject it,
+and the change never happened.
+
+### What was built
+
+- The commands `prose.revision.accept`, `prose.revision.reject`,
+  `prose.revision.accept.all` and `prose.revision.reject.all`.
+- An **accepted insertion** is ordinary text: the words stay and the
+  mark goes. An **accepted deletion** is really deleted: the words go
+  and the run goes with them. A **rejected insertion** is taken away,
+  and a **rejected deletion** is restored.
+- The block's **text and runs are rewritten together**, because the
+  runs describe slices of the text: a text and a set of runs that
+  disagree are a block that says two things at once.
+- A **rejected format change is refused**: the format a run had before
+  the change is not kept, and so there is nothing to put back.
+
+### What the port found
+
+- **The tree resolves a revision by editing the text.** An accepted
+  deletion deletes the words; a rejected insertion deletes them
+  instead. Here the same — and the runs are rewritten with the text,
+  which is what makes the two agree.
+- **The tree keeps the format a run had before the change**, so it can
+  put it back. Here the old format is **not kept**, and so a rejected
+  format change is **refused**: there is no old format to put back,
+  and a resolution that guesses is a resolution that is wrong.
+
+### What it cost
+
+- **Nine tests** in the prose battery (`tests/resolving.rs`): an
+  accepted insertion is ordinary text, a rejected insertion is taken
+  away, an accepted deletion is really deleted, a rejected deletion is
+  restored, a rejected format is refused, every revision of a block
+  may be accepted at once and rejected at once, a run with no revision
+  is refused, and a block with no revisions has nothing to accept.
+- **One new module** (`resolving`): the resolution of a revision is
+  its own. The prose battery now carries **33** commands and the MCP
+  server **584**.
+
+### What it does not settle
+
+- **The tree's rejection of a format change is not here**: the old
+  format is not kept, so there is nothing to put back.
+- **The tree's resolution of a revision may name the author**: here a
+  revision is resolved by the number of its run, and the author is
+  said by the revision itself.
