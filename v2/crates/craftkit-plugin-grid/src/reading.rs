@@ -37,7 +37,7 @@ use crate::formula::{Area, CellRef, Cells, Value};
 ///
 /// A sheet with nothing in it has no used range, and that is the
 /// tree's own: there is nothing to read.
-fn used_range(cells: &Cells) -> Option<Area> {
+pub(crate) fn used_range(cells: &Cells) -> Option<Area> {
     let mut start: Option<CellRef> = None;
     let mut end: Option<CellRef> = None;
     for (cell, _) in cells.iter() {

@@ -50,6 +50,11 @@
 //! `YEAR`, `MONTH` and `DAY` — in the date system of the workbook
 //! (the module `datetimes`).
 //!
+//! And a range may be **sorted**: the rows of it are put in order by
+//! the values of one of its columns, and what a row holds travels
+//! with it — the format, the style, the formula with its relative
+//! references, the note and the link (the module `sorting`).
+//!
 //! And a workbook may carry **names**: a word that stands for a range of
 //! cells, and a formula may use the word where it would use the range
 //! (the module `names`).
@@ -206,6 +211,7 @@ mod removal;
 mod sections;
 mod sheetnames;
 mod sizes;
+mod sorting;
 mod styles;
 mod tabs;
 mod tabsorder;
@@ -235,6 +241,7 @@ pub use reading::ReadRange;
 pub use removal::RemoveSheet;
 pub use sheetnames::RenameSheet;
 pub use sizes::{SetColumnWidth, SetRowHeight};
+pub use sorting::SortRange;
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
 pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
 pub use tabsorder::MoveSheet;
@@ -1453,6 +1460,7 @@ craftkit_sdk::plugin_anchor!(
     ReadRange,
     SetLink,
     SetNote,
+    SortRange,
     RemoveSheet,
     SetCell,
     SetFormula,

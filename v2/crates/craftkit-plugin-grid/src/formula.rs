@@ -132,7 +132,23 @@ pub struct Anchor {
 }
 
 impl Anchor {
-    /// The address, as it is written: `$A$1`.
+    /// The address **moved**: the parts that are not anchored move.
+    ///
+    /// A reference that would leave the sheet is gone, and `None` says
+    /// so.
+    pub fn shifted(&self, row_delta: i64, col_delta: i64) -> Option<Anchor> {
+        let row = if self.row_abs { i64::from(self.cell.row) } else { i64::from(self.cell.row) + row_delta };
+        let col = if self.col_abs { i64::from(self.cell.col) } else { i64::from(self.cell.col) + col_delta };
+        if row < 0 || col < 0 || row as u64 >= MAX_ROWS || col as u64 >= MAX_COLS {
+            return None;
+        }
+        Some(Anchor {
+            cell: CellRef { col: col as u32, row: row as u32 },
+            row_abs: self.row_abs,
+            col_abs: self.col_abs,
+        })
+    }
+
     pub fn to_text(self) -> String {
         let mut text = String::new();
         if self.col_abs {
@@ -1044,6 +1060,16 @@ impl Cells {
         self.cells.remove(&cell).is_some()
     }
 
+    /// Put a **cell** as it is, with all that it holds.
+    pub fn set_entry(&mut self, cell: CellRef, entry: Cell) {
+        self.cells.insert(cell, entry);
+    }
+
+    /// Take a **cell** away, and give back what it held.
+    pub fn take(&mut self, cell: CellRef) -> Option<Cell> {
+        self.cells.remove(&cell)
+    }
+
     /// Empty the **contents** of a cell: its value and its formula.
     ///
     /// The cell keeps its **format** and its **style**: the contents
@@ -1913,6 +1939,41 @@ impl Expr {
         }
     }
 
+    /// The expression with its **relative references moved**.
+    ///
+    /// A reference that is **anchored** — the `$` before the letters or
+    /// before the number — does not move, and a reference that is not
+    /// anchored moves with the cell that holds it. A reference that
+    /// would leave the sheet is gone, and the expression is gone with
+    /// it: `None` says that the formula cannot be moved.
+    pub fn shifted(&self, row_delta: i64, col_delta: i64) -> Option<Expr> {
+        match self {
+            Expr::Cell { sheet, anchor } => {
+                Some(Expr::Cell { sheet: sheet.clone(), anchor: anchor.shifted(row_delta, col_delta)? })
+            }
+            Expr::Range { sheet, start, end } => Some(Expr::Range {
+                sheet: sheet.clone(),
+                start: start.shifted(row_delta, col_delta)?,
+                end: end.shifted(row_delta, col_delta)?,
+            }),
+            Expr::Name(name) => Some(Expr::Name(name.clone())),
+            Expr::Call(name, arguments) => Some(Expr::Call(
+                name.clone(),
+                arguments
+                    .iter()
+                    .map(|argument| argument.shifted(row_delta, col_delta))
+                    .collect::<Option<Vec<_>>>()?,
+            )),
+            Expr::Negate(inner) => Some(Expr::Negate(Box::new(inner.shifted(row_delta, col_delta)?))),
+            Expr::Binary(operator, left, right) => Some(Expr::Binary(
+                operator.clone(),
+                Box::new(left.shifted(row_delta, col_delta)?),
+                Box::new(right.shifted(row_delta, col_delta)?),
+            )),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => Some(self.clone()),
+        }
+    }
+
     /// The formula's **text**: the expression written out.
     ///
     /// The tree's printer writes an expression back out, and a copied
@@ -1939,6 +2000,18 @@ pub fn rename_in_formula(text: &str, old: &str, new: &str) -> Option<String> {
     // The `=` is the caller's, and it is kept: a formula that was
     // written with one keeps it, and one that was not does not get
     // one.
+    if text.trim_start().starts_with('=') { Some(format!("={printed}")) } else { Some(printed) }
+}
+
+/// A formula's **text** with its relative references moved.
+///
+/// The text is parsed, the references are moved and the expression is
+/// printed. A formula that does not parse, or a reference that would
+/// leave the sheet, is `None`: the formula cannot be moved.
+pub fn shift_in_formula(text: &str, row_delta: i64, col_delta: i64) -> Option<String> {
+    let expression = parse(text).ok()?;
+    let shifted = expression.shifted(row_delta, col_delta)?;
+    let printed = shifted.to_text();
     if text.trim_start().starts_with('=') { Some(format!("={printed}")) } else { Some(printed) }
 }
 
