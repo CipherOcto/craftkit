@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3120 tests.** The MCP server links **all fifteen batteries** in, so the
+**3122 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3120 tests
+cargo test          # 3122 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3861,6 +3861,7 @@ so.
 | the **playhead** of a sequence | **built.** A video editor has a playhead: the place in the sequence where it is looking, and a fact of the sequence (§424) | §424 |
 | the **edit points** of a sequence | **built.** A sequence has edit points: the places where its clips begin and end, and the razor cuts at one (§425) | §425 |
 | the **settings** of a track | **built.** A track is more than a line of clips: it may be enabled, muted or soloed, it may have a volume and a pan, and it may carry a label (§426) | §426 |
+| the **shape** of a range | **built.** A formula may ask for the shape of a range: how many rows it has and how many columns (§427) | §427 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28662,4 +28663,41 @@ A track is more than a line of clips: it has **settings**.
 - **The tree's track settings in one command are not here**, and that
   is a difference and not an oversight: the tree's one command is six
   commands here.
+
+## 427. The shape of a range
+
+A formula may ask for the **shape** of a range: how many rows it has
+and how many columns.
+
+### What was built
+
+- The functions `ROWS` and `COLUMNS`.
+- Each takes a **range of cells** and answers the number of its rows
+  or of its columns.
+- The **rules** are the tree's: an argument that is not a range is
+  **one cell**, and so it has one row and one column.
+
+### What the port found
+
+- **The tree's shape of a range is the shape of the cells and not of
+  the values in them**: a range of empty cells has rows and columns
+  all the same. Here the same, and the shape is read from the range
+  and not from what is in it.
+- **The tree's rows of a single cell are one** — `ROWS(5)` is one and
+  not an error. Here the same.
+
+### What it cost
+
+- **Two tests** in the grid battery (`tests/shape.rs`): the shape of a
+  range is found, and an argument that is not a range is one cell.
+- **No new module**: the lookups module of §404 grows. **No new
+  command**: a function is not a command, and the grid battery still
+  carries **67** commands and the MCP server **536**.
+
+### What it does not settle
+
+- **The tree's transpose is not here**: it swaps the rows and the
+  columns of an array, and this tree's formulas have no arrays.
+- **The tree's dynamic arrays are not here** — `SEQUENCE`, `UNIQUE`,
+  `HSTACK` and the rest — and they need them too.
 
