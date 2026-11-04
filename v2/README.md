@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2968 tests.** The MCP server links **all fifteen batteries** in, so the
+**2974 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2968 tests
+cargo test          # 2974 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3830,6 +3830,7 @@ so.
 | the **links** of a block | **built.** A run may carry a link, and whether the target may be opened is derived — the tree's rule, that a link the system follows is a web link or a mail link (§393) | §393 |
 | the **revisions** of a block | **built.** A run may be marked as inserted, deleted or reformatted, and by whom; the words of a revision are derived (§394) | §394 |
 | the **footnotes** of a document | **built.** A run may point at a footnote, and the number of the footnote is derived from where it is referenced (§395) | §395 |
+| the **bookmarks** of a document | **built.** A block may carry the name of a place, and a link to a place that is there may be opened (§396) | §396 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26784,3 +26785,67 @@ that points at it is a reference.
   tree's own and none of them is here.
 - **The tree's footnotes are counted in the word count and here they
   are not**: a footnote is a note and not words of the document.
+
+## 396. The bookmarks of a document
+
+A bookmark is a name for a place in a document, so that a link may
+point at it: `#the-name`.
+
+### What was built
+
+- The command `prose.block.bookmark` puts a **bookmark** on a block and
+  the command `prose.block.bookmark.delete` takes it away.
+- The command `prose.document.bookmarks` gives the **bookmarks** of a
+  document: they are **derived**, and they are the blocks that carry a
+  name.
+- A name has the rule Word has: it begins with a letter or an
+  underscore, the rest of it is letters, digits and underscores, and
+  it is at most forty characters long.
+- A name another block of the document already carries is **refused**:
+  two places with one name are one place, and a link to that name
+  would be a link to nothing in particular.
+- A link to a **place in this document** may be opened, and a link to
+  a place that is **not there** may not — and the refusal says which
+  place is missing.
+
+### What the port found
+
+- **The tree's bookmark is an inline object and here it is the
+  block's own name.** The tree's bookmark is a `BookmarkStart` object
+  in the paragraph, with a matching `BookmarkEnd`, and a paragraph may
+  carry many. Here a block carries at most one name, in its payload.
+- **The tree's bookmarks may be read in order and here they are
+  derived.** The tree walks the body and gives every bookmark's name
+  with the position it is at. Here the bookmarks are the blocks that
+  carry a name.
+- **The tree's rule for a link that leaves the document is not the
+  rule for a link that stays inside it.** The tree's rule for
+  **following** a link is web or mail; a bookmark is a link that stays
+  in the document and is not handed to the system at all. Here a link
+  to a place of this document may be opened when the place is there.
+
+### What it cost
+
+- **Six tests** in the prose battery (`tests/bookmarks.rs`): a block
+  carrying a bookmark, a name that is not one being refused, a name
+  that is already there being refused, a bookmark being taken away and
+  a block with no bookmark being refused, a link to a place being
+  opened and a link to a place that is not there not being opened, and
+  a block that is not there and a node that is not a block being
+  refused.
+- **Three new commands**: `prose.block.bookmark`,
+  `prose.block.bookmark.delete` and `prose.document.bookmarks`. The
+  prose battery now carries **30** commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's bookmark ranges are not here**: the tree's bookmark has
+  a beginning and an end and may cover a range of text, and here a
+  bookmark names a block.
+- **The tree keeps a bookmark name as it is and here a name has a
+  rule.** The tree writes the name into the file and leaves the
+  application's rules to the application; here a name that may not be
+  one is refused, and a name that is already in the document is
+  refused too.
+- **The tree's links to places are not followed here either**: a link
+  to a place of this document may be opened, and nothing follows it.
