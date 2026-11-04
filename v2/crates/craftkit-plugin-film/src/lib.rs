@@ -18,6 +18,12 @@
 //! That last part is the **two clocks**: a clip has a place on the
 //! timeline and a place in the media, and they are not the same place.
 //!
+//! And a **media item** may carry a **label** as well: the tree's
+//! `edit.label` labels the items of the project and the clips of the
+//! sequence with one command and one list of colours, and here the
+//! label of a thing is a thing of its own and the tree's list is
+//! shared by both (the module `labels`).
+//!
 //! And a clip may carry a **label**: one of the tree's own sixteen
 //! colours, and the clips that carry the same one are a **group** — the
 //! group is derived from the labels and not written down (the module
@@ -177,7 +183,7 @@ mod trim;
 pub use enabling::EnableClip;
 pub use hold::{DeleteHold, SetHold};
 pub use inserting::InsertClip;
-pub use labels::{DeleteLabel, LabelGroup, SetLabel};
+pub use labels::{DeleteItemLabel, DeleteLabel, ItemLabelGroup, LabelGroup, SetItemLabel, SetLabel};
 pub use lifting::LiftRange;
 pub use linking::{LinkClips, UnlinkClip};
 pub use locking::LockTrack;
@@ -865,6 +871,9 @@ craftkit_sdk::plugin_anchor!(
     RemoveTrack,
     EnableClip,
     RenameClip,
+    SetItemLabel,
+    DeleteItemLabel,
+    ItemLabelGroup,
     SlipClip,
     SlideClip,
     SetMarks,

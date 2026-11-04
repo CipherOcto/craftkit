@@ -138,6 +138,144 @@ impl DeleteLabel {
     }
 }
 
+/// Put a **label** on a media item.
+///
+/// The label is one of the tree's own sixteen — the same list the
+/// clips use — and a name that is not one of them is refused.
+#[derive(Command)]
+#[command(id = "film.item.label", area = "film", layer = "film", icon = "paint", mutates, undoable)]
+pub struct SetItemLabel {
+    /// The item.
+    pub item: NodeRef,
+    /// The label: `Violet`, `Iris`, …
+    pub label: Text,
+}
+
+impl SetItemLabel {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "film.item.label".to_string();
+        let item = self.item.0;
+        let wanted = self.label.0.clone();
+        let label = label_of(&wanted).ok_or_else(|| EngineError::Failed {
+            id: id.clone(),
+            message: format!("there is no label `{wanted}`: the labels are {}", LABELS.join(", ")),
+        })?;
+        let Some(node) = session.document().node(item) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no item `{item}`"),
+            });
+        };
+        if node.kind != "film.item" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{item}` is a `{}` and not an item", node.kind),
+            });
+        }
+        let mut data = node.data.clone();
+        data["label"] = serde_json::json!(label);
+        let Some(node) = session.document_mut()?.node_mut(item) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no item `{item}`"),
+            });
+        };
+        node.data = data;
+        Ok(Outcome::changed(format!("the item `{item}` is labelled `{label}`"))
+            .with_data(serde_json::json!({ "item": item, "label": label })))
+    }
+}
+
+/// Take the **label** off a media item.
+///
+/// An item with no label is in no group, and that is the tree's own.
+#[derive(Command)]
+#[command(id = "film.item.label.delete", area = "film", layer = "film", icon = "minus", mutates, undoable)]
+pub struct DeleteItemLabel {
+    /// The item.
+    pub item: NodeRef,
+}
+
+impl DeleteItemLabel {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "film.item.label.delete".to_string();
+        let item = self.item.0;
+        let Some(node) = session.document().node(item) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no item `{item}`"),
+            });
+        };
+        if node.kind != "film.item" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{item}` is a `{}` and not an item", node.kind),
+            });
+        }
+        let had = node.data.get("label").and_then(|label| label.as_str()).map(|label| label.to_string());
+        let mut data = node.data.clone();
+        data["label"] = serde_json::Value::Null;
+        let Some(node) = session.document_mut()?.node_mut(item) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no item `{item}`"),
+            });
+        };
+        node.data = data;
+        Ok(Outcome::changed(format!("the item `{item}` is in no group"))
+            .with_data(serde_json::json!({ "item": item, "label": had })))
+    }
+}
+
+/// The **group** of an item: every item that carries its label.
+///
+/// The group is **derived**, as the group of a clip is: it changes when
+/// a label is put on an item and not when it is written down.
+#[derive(Command)]
+#[command(id = "film.item.label.group", area = "film", layer = "film", icon = "list")]
+pub struct ItemLabelGroup {
+    /// The item whose label makes the group.
+    pub item: NodeRef,
+}
+
+impl ItemLabelGroup {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "film.item.label.group".to_string();
+        let item = self.item.0;
+        let Some(node) = session.document().node(item) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no item `{item}`"),
+            });
+        };
+        if node.kind != "film.item" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{item}` is a `{}` and not an item", node.kind),
+            });
+        }
+        let mut wanted: Vec<String> = Vec::new();
+        if let Some(label) = node.data.get("label").and_then(|label| label.as_str()) {
+            wanted.push(label.to_string());
+        }
+        let group: Vec<u64> = session
+            .document()
+            .walk()
+            .filter(|node| node.kind == "film.item")
+            .filter(|node| {
+                node.data
+                    .get("label")
+                    .and_then(|label| label.as_str())
+                    .map(|label| wanted.iter().any(|name| name == label))
+                    .unwrap_or(false)
+            })
+            .map(|node| node.id)
+            .collect();
+        Ok(Outcome::new(format!("the group has {} item(s)", group.len()))
+            .with_data(serde_json::json!({ "labels": wanted, "items": group })))
+    }
+}
+
 /// The **group** of a clip: every clip that carries its label.
 ///
 /// The group is **derived**: it changes when a label is put on a clip
