@@ -22,6 +22,9 @@
 //! - the **curves** — the ellipse, with its centre, its major axis
 //!   and its ratio, and the polyline, with its points (the module
 //!   `curves`);
+//! - the **modification** of an entity — it may be moved, turned,
+//!   scaled and taken away, and a change of the geometry is a change
+//!   of the geometry and of nothing else (the module `modify`);
 //! - the **order** the entities are drawn in — the children of a block
 //!   are drawn in the order they stand in, and an entity may be
 //!   brought to the front or sent to the back (the module `order`);
@@ -61,6 +64,7 @@
 
 mod curves;
 mod layers;
+mod modify;
 mod order;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
@@ -74,6 +78,7 @@ pub use layers::{
     FreezeLayer, ListLayers, LockLayer, SetLayerColor, SetLayerFill, SetLayerLinetype, SetLayerLineweight,
     SetLayerOn,
 };
+pub use modify::{MoveEntity, RemoveEntity, RotateEntity, ScaleEntity};
 pub use order::{BackwardEntity, BringToFront, ForwardEntity, ListEntities, SendToBack};
 
 /// The CAD layer.
@@ -1048,6 +1053,10 @@ craftkit_sdk::plugin_anchor!(
     AddEllipse,
     AddPolyline,
     ListEntities,
+    MoveEntity,
+    RotateEntity,
+    ScaleEntity,
+    RemoveEntity,
     BringToFront,
     SendToBack,
     ForwardEntity,
