@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2958 tests.** The MCP server links **all fifteen batteries** in, so the
+**2963 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2958 tests
+cargo test          # 2963 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3828,6 +3828,7 @@ so.
 | the **numbering** of a block | **built.** A list says what its items are numbered like, and the number of a block is derived and renumbers when it moves (§391) | §391 |
 | the **page** of a document | **built.** A document has a page: its size and its margins in points, and whether it is landscape is derived (§392) | §392 |
 | the **links** of a block | **built.** A run may carry a link, and whether the target may be opened is derived — the tree's rule, that a link the system follows is a web link or a mail link (§393) | §393 |
+| the **revisions** of a block | **built.** A run may be marked as inserted, deleted or reformatted, and by whom; the words of a revision are derived (§394) | §394 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26672,3 +26673,56 @@ may be **opened** is derived.
   link that is not a web link or a mail link may not be opened.
 - **The tree's anchor is not here**: the tree's hyperlink names a place
   in the document as well as a target, and here a link is a target.
+
+## 394. The revisions of a block
+
+A run may be marked as a revision: it was inserted, it was deleted, or
+its format was changed — and by whom.
+
+### What was built
+
+- A run may carry a **revision**, and the runs of a block say it.
+- The command `prose.block.revisions` gives every run that carries a
+  revision, with its **kind**, its **author**, its **date** and the
+  **words** it covers — the words are derived.
+- The kinds are the **tree's own**: an insertion, a deletion and a
+  format change.
+- A revision with **no author** is refused, and so is a revision of a
+  kind that is not one of the three, and a date that is not a text.
+- The date is the text the caller gives, because this tree has **no
+  clock of its own**.
+
+### What the port found
+
+- **The tree's revisions are of the document and this tree's are of
+  the run.** The tree keeps a list of revisions on the document and
+  the runs point into it by number, so a revision is a thing of the
+  document that a run refers to. Here a revision is **on the run**,
+  beside the link and the formatting — a run is an interval over the
+  text with the things that are true of it.
+- **The tree has three kinds and this tree has three kinds.** The
+  tree's are an insertion, a deletion and a format change, and they
+  are the three here.
+- **The tree's move is not here.** The tree's revision has a **move
+  name** that links a deletion to the insertion that replaced it — the
+  two ends of a move. Here a revision is one of the three kinds and
+  nothing else.
+
+### What it cost
+
+- **Five tests** in the prose battery (`tests/revisions.rs`): a run
+  being an insertion, the kinds being the tree's own, a revision
+  carrying a date, a revision with no author and a revision of a kind
+  that is not one being refused, and a block that is not there and a
+  node that is not a block being refused.
+- **One new command**: `prose.block.revisions`. The prose battery now
+  carries **25** commands and the MCP server **516**.
+
+### What it does not settle
+
+- **The tree's move is not here**: the two ends of a move are not
+  linked, and so a moved paragraph is a deletion and an insertion and
+  not a move.
+- **The tree's revisions live on the document and here they live on
+  the run**, and so a revision is not a thing the document keeps a
+  list of.
