@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2846 tests.** The MCP server links **all fifteen batteries** in, so the
+**2850 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2846 tests
+cargo test          # 2850 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3810,6 +3810,7 @@ so.
 | the **protection** of a sheet | **built.** A protected sheet locks its cells and says what may still be done to it (§373) | §373 |
 | the **time** and the **days** of a date | **built.** TIME makes a time, HOUR, MINUTE and SECOND take it apart, and EDATE, EOMONTH and DAYS work with the days (§374) | §374 |
 | the **taking away** of a media item | **built.** An item that no clip plays is taken away, and one that a clip plays is not (§375) | §375 |
+| the **reading** of a project | **built.** The bins, the items in them, and the clips that play them (§376) | §376 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25619,3 +25620,57 @@ A media item may be taken away.
   marked **offline** — made offline on purpose, with the media file
   not there — and a clip that plays an offline item is a clip that
   plays nothing; here the item is either there or not.
+
+## 376. The reading of a project
+
+A project may be **read**: the answer is the bins, the items in them,
+and the clips that play them.
+
+### What was built
+
+- The command `film.project` gives the **bins** of the project, the
+  **items** in them, and for every item what it is and what plays it.
+- For every item the answer says its **name**, its own id in the
+  editor, the **path** of the media, its **duration**, whether it is
+  **offline**, the **bin** it is in, the **tracks** it holds and the
+  **clips** that play it.
+- Everything in the answer is **derived**: the bins are the nodes of
+  the tree, the items are the nodes under them, and the clips that
+  play an item are the edges that name it.
+- A project with nothing in it is empty, and not an error.
+
+### What the port found
+
+- **The tree's project is a panel and this tree's project is a
+  command.** The tree's project is a window with the items in bins, a
+  **thumbnail** of every item, the **kind** of every item — a media, a
+  sequence, a graphic — and a **selection** that the mouse chooses.
+  Here the project is read by a command, and what it says is the
+  names, the ids, the durations and the relations.
+- **The tree's items may be of many kinds and this tree's items are
+  media and sequences.** The tree's item may be a media file, a
+  sequence, a graphic, an adjustment layer; here the item is a media
+  and a sequence is an item with tracks in it — which is the tree's own
+  shape, and the tree's kind is not said here.
+- **The tree's bins may be in bins and this tree's are not.** The
+  tree's bins are a tree of their own — a bin may be in a bin — and
+  the tree's panel shows that; here the bins are flat and the items
+  are under them.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/project.rs`): the bins
+  and the items being read, the clips that play an item being derived
+  and said, an item that no clip plays having no clips, and a project
+  with nothing in it being empty.
+- **One new command**: `film.project`. The film battery now carries
+  **45** commands and the MCP server **493**.
+
+### What it does not settle
+
+- **The tree's pictures are not here.** The tree's panel shows a
+  **thumbnail** of every item, and the tree's item carries one; here
+  an item carries a path and a duration and no picture.
+- **The tree's selection is not here.** The tree's project panel
+  holds a **selection** of items, and the tree's commands act on the
+  selection; here every command names what it acts on.
