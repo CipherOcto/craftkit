@@ -850,28 +850,43 @@ impl Parser {
         if word.is_empty() {
             return Err(self.error("there is nothing there"));
         }
-        // A **function's name** may hold a dot: `ERROR.TYPE`. The dot
-        // is only taken when a bracket follows, so that a name with a
-        // dot in it is still a name.
-        if self.characters.get(self.at) == Some(&'.')
-            && self.characters.get(self.at + 1).is_some_and(|character| character.is_ascii_alphabetic())
-        {
-            let save = self.at;
-            let mut at = self.at + 1;
-            while at < self.characters.len()
-                && (self.characters[at].is_ascii_alphanumeric() || self.characters[at] == '_')
+        // A **function's name** may hold dots: `ERROR.TYPE`,
+        // `NORM.S.DIST` and `T.DIST.2T`. The dots are only taken when
+        // a bracket follows, so that a name with a dot in it is still
+        // a name.
+        let mut at = self.at;
+        let mut furthest = self.at;
+        loop {
+            if self.characters.get(at) != Some(&'.')
+                || !self.characters.get(at + 1).is_some_and(|character| character.is_ascii_alphanumeric())
             {
-                at += 1;
+                break;
             }
-            let mut look = at;
+            let mut end = at + 1;
+            while end < self.characters.len()
+                && (self.characters[end].is_ascii_alphanumeric() || self.characters[end] == '_')
+            {
+                end += 1;
+            }
+            let mut look = end;
             while look < self.characters.len() && self.characters[look].is_whitespace() {
                 look += 1;
             }
             if self.characters.get(look) == Some(&'(') {
-                let tail: String = self.characters[save..at].iter().collect();
-                word.push_str(&tail);
-                self.at = at;
+                furthest = end;
+                at = end;
+                continue;
             }
+            if self.characters.get(look) == Some(&'.') {
+                at = look;
+                continue;
+            }
+            break;
+        }
+        if furthest > self.at {
+            let tail: String = self.characters[self.at..furthest].iter().collect();
+            word.push_str(&tail);
+            self.at = furthest;
         }
         if word.eq_ignore_ascii_case("TRUE") {
             return Ok(Expr::Bool(true));
@@ -1444,6 +1459,9 @@ impl Book {
         }
         if crate::regression::is_regression_function(name) {
             return self.regression(sheet, name, arguments, being);
+        }
+        if crate::distributions::is_distribution_function(name) {
+            return self.distributions(sheet, name, arguments, being);
         }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();

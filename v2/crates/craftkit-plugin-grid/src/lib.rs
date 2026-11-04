@@ -40,6 +40,12 @@
 //! discount and redeemed at its value — the discount, the price, the
 //! yield, the interest and the bill (the module `securities`).
 //!
+//! And a formula may ask the **shape** of a distribution: the normal,
+//! the gamma, the error function, Student's t, the chi-square, the F,
+//! the binomial, the Poisson, the exponential, the Weibull, the
+//! lognormal and the beta (the module `distributions`, and the
+//! maths of the module `special`).
+//!
 //! And a formula may ask how two sets of numbers **move together**:
 //! the correlation, the slope of the line, where it crosses the axis,
 //! its error and its prediction (the module `regression`).
@@ -272,6 +278,7 @@ mod dates;
 mod datetimes;
 mod daycounts;
 mod depreciation;
+mod distributions;
 mod engineering;
 mod fill;
 mod filters;
