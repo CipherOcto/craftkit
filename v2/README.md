@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3045 tests.** The MCP server links **all fifteen batteries** in, so the
+**3051 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3045 tests
+cargo test          # 3051 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3842,6 +3842,7 @@ so.
 | the **bases** and the **bits** | **built.** A formula may ask about a number written in another base — two, eight and sixteen — or about the bits of a number (§405) | §405 |
 | the **information** of a value | **built.** A formula may ask what a value is: whether it is a number or text or an error, whether it is even or odd, and what kind of a value it is (§406) | §406 |
 | the **logic** of a formula | **built.** A formula may ask about the truth of things and may choose between them: the truths, the first condition that is true, the fallback of an error, the match in a list and the choice by place (§407) | §407 |
+| the **line** through a set of numbers | **built.** A formula may ask how two sets of numbers move together: the correlation, the slope, the crossing, the error and the prediction (§408) | §408 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27600,4 +27601,63 @@ them.
   `ENCODEURL`, `WEBSERVICE` and `FILTERXML`.
 - **The tree's cube functions are not here**, and will not be: they
   want a connection to a cube, and a kit has none.
+
+## 408. The line through a set of numbers
+
+A formula may ask how two sets of numbers move together.
+
+### What was built
+
+- The functions `CORREL`, `PEARSON`, `RSQ`, `SLOPE`, `INTERCEPT`,
+  `STEYX`, `FORECAST`, `COVAR`, `COVARIANCE.P` and `COVARIANCE.S`.
+- `CORREL` and `PEARSON` are the **correlation**, `RSQ` is its
+  **square**, `SLOPE` is the **slope** of the line and `INTERCEPT` is
+  where the line crosses the axis.
+- `STEYX` is the **standard error** of the line and `FORECAST` is its
+  **prediction** at a given point.
+- `COVAR` and `COVARIANCE.P` are the covariance of the whole and
+  `COVARIANCE.S` the covariance of a sample.
+- The **rules** are the tree's: the two sets must be of the **same
+  length**, a pair that is not two numbers is skipped, a pair that
+  holds an error is that error, and a line that does not rise is a
+  division by nothing.
+
+### What the port found
+
+- **The tree's pairs are of the two sets and not of their numbers.**
+  The two sets must be of the same length — a shorter one and a longer
+  one are `#N/A` — and a pair that is not two numbers is skipped
+  **after** the pairing, so a text in the middle of a range does not
+  shift the pairs beside it. Here the same, and the same order: the
+  cells are paired first and the numbers are taken from the pairs.
+- **The tree's first argument of `SLOPE` is the ys and the second is
+  the xs**, and the line is of the xs: a set of xs that is all the
+  same number is a line that does not rise, and the slope of it is a
+  division by nothing. Here the same, and the same order — which is
+  the opposite of the order `CORREL` reads them in, and that is the
+  tree's own.
+- **The tree's `STEYX` wants three pairs and not two.** A line
+  through two points has no error to speak of, and the tree says
+  `#DIV/0!`. Here the same.
+- **The tree's covariance of the whole and of a sample divide by
+  different numbers** — by the number of pairs and by one less — and
+  a sample of one pair is a division by nothing. Here the same.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/regression.rs`): the
+  correlation, the line, the error and the prediction, the covariance,
+  a pair that is not two numbers, and the errors.
+- **One new module**: `regression`. **No new command**: a function is
+  not a command, and the grid battery still carries **67** commands and
+  the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's `LINEST` and `LOGEST` are not here**: they want a
+  matrix of predictors, and v2 has no arrays.
+- **The tree's `TREND` and `GROWTH` are not here**, for the same
+  reason.
+- **The tree's distributions are not here**: the normal, the
+  Student's, the chi-square, the binomial, the gamma and the Weibull.
 
