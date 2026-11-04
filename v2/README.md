@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2864 tests.** The MCP server links **all fifteen batteries** in, so the
+**2868 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2864 tests
+cargo test          # 2868 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3813,6 +3813,7 @@ so.
 | the **reading** of a project | **built.** The bins, the items in them, and the clips that play them (§376) | §376 |
 | the **joining** and the **finding** of texts | **built.** CONCATENATE, TEXTJOIN, FIND, SEARCH, SUBSTITUTE and REPLACE work on the texts of a formula (§377) | §377 |
 | the **name** of a thing in the project | **built.** A media item and a bin may be named, and the name is the thing's own (§378) | §378 |
+| the **taking away** of a bin | **built.** A bin goes with the items in it, and a bin that holds a played item is not taken away (§379) | §379 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25790,3 +25791,50 @@ A media item may be **named**, and a bin may be **named**.
   texts.** The tree's project has a name and a **label** for an item,
   and the tree's clip has a name that the timeline shows; here the
   name is the name.
+
+## 379. The taking away of a bin
+
+A bin may be taken away, and what is **in** it goes with it.
+
+### What was built
+
+- The command `film.bin.remove` takes a bin away, and the **items** of
+  the bin go with it: an item of a bin is the bin's child, and a child
+  goes with its parent.
+- A bin that holds an item that a clip **plays** is not taken away:
+  the answer says which item is played by which clip, so that the clip
+  may be taken away first.
+- A node that is **not a bin** is refused, and so is a node that is
+  not there.
+
+### What the port found
+
+- **The tree's bins are a tree and this tree's are not.** The tree's
+  `file.newBin` takes a **parent** — a bin may be in a bin — and the
+  tree's items live in the bins of that tree. Here a bin holds the
+  items and there is no bin in a bin, so the removal of a bin takes
+  the items of it and nothing else.
+- **The tree's clear of the project takes the items and the bins and
+  this tree's takes them apart.** The tree's `project.delete` takes
+  the **selection** — items and bins — and the tree's *remove
+  unused* takes the items no clip plays. Here a bin is taken away on
+  its own, and the rule is the same rule the removal of an item has:
+  an item that a clip plays may not be taken away.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/binremoval.rs`): a bin
+  being taken away with its items, a bin whose item is played not
+  being taken away, the bin being taken away when the clip is taken
+  away first, and a node that is not a bin being refused.
+- **One new command**: `film.bin.remove`. The film battery now
+  carries **48** commands and the MCP server **496**.
+
+### What it does not settle
+
+- **The tree's bins in bins are not here.** The tree's bins are a
+  tree of their own, and a bin may be in a bin; here a bin holds the
+  items and nothing else.
+- **The tree's moving of an item to a bin is not here.** The tree may
+  move an item from one bin to another; here an item is in the bin it
+  was added to.
