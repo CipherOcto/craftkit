@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3095 tests.** The MCP server links **all fifteen batteries** in, so the
+**3097 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3095 tests
+cargo test          # 3097 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3852,6 +3852,7 @@ so.
 | the **accrued interest** of a bond | **built.** A formula may ask what interest a bond has earned between two dates (§415) | §415 |
 | the **table of records** and the **table of criteria** | **built.** A formula may speak of a table: a database of records, a table of criteria and the field it aggregates (§416) | §416 |
 | the **tests of a hypothesis** | **built.** A formula may test a hypothesis: a t-test, a chi-square test, an F-test and a z-test (§417) | §417 |
+| the **sums of the squares** of two sets | **built.** A formula may ask about two sets of numbers at once: the sums of their squares, the difference of the squares and the squares of the differences (§418) | §418 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28236,4 +28237,48 @@ F-test and a z-test.
 - **The tree's confidence intervals are not here**: `CONFIDENCE`,
   `CONFIDENCE.NORM` and `CONFIDENCE.T` are the other side of the same
   question.
+
+## 418. The sums of the squares of two sets
+
+A formula may ask about **two sets** of numbers at once.
+
+### What was built
+
+- The functions `SUMX2MY2`, `SUMX2PY2` and `SUMXMY2`.
+- Each takes **two sets of numbers** — two ranges of cells of the
+  same size — and sums a quantity over the **pairs** of them: the
+  squares of the first less the squares of the second, the squares of
+  the first plus the squares of the second, and the squares of the
+  differences.
+- The **rules** are the tree's: two sets of different sizes have no
+  pairs and that is `#N/A`, a pair of two numbers is a pair, a pair
+  with a text in it is not a pair and is skipped, and a set of pairs
+  with no pair in it is a divide error.
+
+### What the port found
+
+- **The tree's sums of squares pair the two sets by place and not by
+  order**: the first cell of one range with the first cell of the
+  other, the second with the second, and so on. Here the same, and
+  the pairing is the pairing the t-test uses (§417) — so there is one
+  rule for pairs in this crate and not two.
+- **The tree's sums of squares skip a pair with a text in it** and do
+  not stop for it, and a pair with an error in it is that error.
+  Here the same.
+- **The tree's sums of squares of nothing are a divide error** and
+  not a zero: a sum over no pairs is not a sum. Here the same.
+
+### What it cost
+
+- **Two tests** in the grid battery (`tests/sumsquares.rs`): the sums
+  of the squares are found, and a pair of two numbers is a pair.
+- **No new module**: the statistics module of §412 grows. **No new
+  command**: a function is not a command, and the grid battery still
+  carries **67** commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's sums of squares of arrays written out in the formula
+  are not here**: this tree's formulas take ranges of cells and not
+  arrays.
 
