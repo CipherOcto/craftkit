@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2974 tests.** The MCP server links **all fifteen batteries** in, so the
+**2983 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2974 tests
+cargo test          # 2983 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3831,6 +3831,7 @@ so.
 | the **revisions** of a block | **built.** A run may be marked as inserted, deleted or reformatted, and by whom; the words of a revision are derived (§394) | §394 |
 | the **footnotes** of a document | **built.** A run may point at a footnote, and the number of the footnote is derived from where it is referenced (§395) | §395 |
 | the **bookmarks** of a document | **built.** A block may carry the name of a place, and a link to a place that is there may be opened (§396) | §396 |
+| the **statistics** of a formula | **built.** A formula may ask about the shape of a set of numbers: the middle, the mode, the spread, the order statistics and the rank (§397) | §397 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26849,3 +26850,71 @@ point at it: `#the-name`.
   refused too.
 - **The tree's links to places are not followed here either**: a link
   to a place of this document may be opened, and nothing follows it.
+
+## 397. The statistics of a formula
+
+A formula may ask about the **shape** of a set of numbers.
+
+### What was built
+
+- The functions `MEDIAN`, `MODE`, `STDEV`, `STDEVP`, `VAR`, `VARP`,
+  `LARGE`, `SMALL`, `RANK`, `PERCENTILE`, `QUARTILE` and `COUNTBLANK`.
+- The **middle** is the middle number, and the mean of the two middle
+  ones when the count is even; the **mode** is the number that occurs
+  most often; the **spread** is the deviation and the variance, the
+  sample one and the population one.
+- The **order statistics** are the k-th largest and the k-th smallest,
+  and the **place** of a number in a list is its rank, counting from
+  the largest unless the order says otherwise.
+- The **percentile** is the value at a fraction of the way through the
+  numbers, and the **quartile** is the quarter of it.
+- The errors are the **tree's**: a middle of no numbers is `#NUM!`, a
+  spread of fewer than two numbers is `#DIV/0!`, a k that is not in
+  the numbers is `#NUM!`, a number that is not in the list has no
+  place and is `#N/A`, and a set with no number twice has no mode and
+  is `#N/A`.
+
+### What the port found
+
+- **The tree's statistics are in three places and this tree's are in
+  one.** The tree has the **descriptive** statistics — the middle, the
+  mode, the spread, the order statistics — and the **distributions**
+  — the percentile and the quartile — and the **regression** — the
+  correlation, the slope and the intercept — as three modules of their
+  own. Here the first two are one module.
+- **The tree's percentile has an inclusive and an exclusive form and
+  here there is one.** The tree has `PERCENTILE.INC` and
+  `PERCENTILE.EXC`, and the two differ in where the fraction is
+  measured from. Here the **inclusive** one is the one that is
+  ported, and the name is `PERCENTILE` — the tree's own name for the
+  inclusive form.
+- **The tree's quartile is the percentile of a quarter.** The tree
+  reads the quarter, rounds it down, and asks for that fraction of
+  the numbers; here it is the same, and a quarter that is not one of
+  the four is `#NUM!`.
+- **The tree's mode may be many and here it is one.** The tree has
+  `MODE.SNGL` and `MODE.MULT`, and the second gives every value that
+  occurs most often. Here the mode is the first of them — the tree's
+  `MODE.SNGL` — and a set with no number twice has no mode.
+
+### What it cost
+
+- **Nine tests** in the grid battery (`tests/statistics.rs`): the
+  middle of the numbers, the most frequent of them, the spread, the
+  k-th largest and smallest, the place of a number in a list, the
+  value at a fraction of the numbers, the cells that hold nothing,
+  and the tree's errors — a middle of no numbers, a spread of fewer
+  than two numbers, a k that is not in the numbers, a number that is
+  not in the list and a set with no number twice.
+- **One new module**: `statistics`. **No new command**: a function is
+  not a command, and the grid battery still carries **67** commands and
+  the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's regression statistics are not here**: the correlation,
+  the slope and the intercept are not here.
+- **The tree's exclusive percentile is not here**, and neither is the
+  tree's `MODE.MULT` with every value that occurs most often.
+- **The tree's distributions are not here**: the normal, the binomial
+  and the Poisson distributions the tree has are not here.
