@@ -25,6 +25,9 @@
 //!   that target **may be opened** is derived: the tree's rule, that a
 //!   link the system follows is a web link or a mail link and nothing
 //!   else (the module `links`);
+//! - **finding** and **replacing** in a block — a find is a reading
+//!   and a replace rewrites the text and the runs together (the module
+//!   `finding`);
 //! - the **cells** of a table — a grid of values, read and written a
 //!   cell at a time, with rows and columns going in and coming out
 //!   (the module `tables`);
@@ -105,6 +108,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem
 mod bookmarks;
 mod comments;
 mod editing;
+mod finding;
 mod footnotes;
 mod links;
 mod numbering;
@@ -118,6 +122,7 @@ pub use comments::{DeleteComment, GetComment, SetComment};
 pub use editing::{
     MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
 };
+pub use finding::{Find, Replace};
 pub use footnotes::{AddFootnote, ReadFootnotes};
 pub use links::ReadLinks;
 pub use numbering::{AddList, ReadNumber, SetNumbering};
@@ -906,6 +911,8 @@ craftkit_sdk::plugin_anchor!(
     SetLineSpacing,
     AcceptRevision,
     RejectRevision,
+    Find,
+    Replace,
     GetCell,
     SetCell,
     AddRow,
