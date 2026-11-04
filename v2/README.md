@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3171 tests.** The MCP server links **all fifteen batteries** in, so the
+**3176 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3171 tests
+cargo test          # 3176 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3873,6 +3873,7 @@ so.
 | the **modification** of an entity | **built.** A drawing is not a picture: things in it may be moved, turned and scaled, and they may be taken away (§436) | §436 |
 | the **measure** of a drawing | **built.** A drawing is not only a picture: things in it may be measured — how long, how big, how wide and how far apart (§437) | §437 |
 | the **arc** of a drawing | **built.** The cad battery had a kind of entity it could not make: an arc is a centre, a radius and two angles, and it is drawn and hit like the rest (§438) | §438 |
+| the **copy** of an entity | **built.** A copy is a second entity of the same kind, with the same geometry and the same layer, put somewhere else (§439) | §439 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29140,8 +29141,9 @@ and **scaled**, and they may be **taken away**.
 
 - **The tree's mirror is not here**: an entity may be moved, turned and
   scaled, and not yet turned over a line.
-- **The tree's copy of an entity is not here**: an entity is made by
-  a command that makes one, and there is no copy of it yet.
+- **The tree's copy of an entity was not here when this section was
+  written**: an entity was made by a command that makes one, and there
+  was no copy of it. It is built now (§439).
 
 
 ## 437. The measure of a drawing
@@ -29255,3 +29257,47 @@ a kind, and nothing put one in a drawing.
 - **The tree's arc may be turned the other way round**, and here it may
   not: the sweep is the way round the arc goes, and it is worked out
   from the ends.
+
+## 439. The copy of an entity
+
+A copy is a second entity of the **same kind**, with the same geometry
+and the same layer, put somewhere else.
+
+### What was built
+
+- The command `cad.entity.copy`: it takes the entity, the **name** the
+  copy goes by, the **vector** it is copied **by**, and the block it
+  goes in — the block of the entity itself when it is not said.
+- The copy is on the **same layer** as the entity it copies, and the
+  layer is an **edge**: the edge is made again for the copy.
+- A copy of an **insert** refers to the same block: the reference is
+  an edge too, and the edge is made again.
+
+### What the port found
+
+- **The tree's copy is a command with a base point and a target, and
+  it copies a whole selection.** Here one entity is copied at a time,
+  and the **offset** is the vector it is copied by: a copy that is in
+  the same place as the thing it copies is a copy that cannot be told
+  from it, and the caller says where the copy goes.
+- **The tree's copy carries the layer with it**, and here the same —
+  and the layer being an edge is what makes the carrying possible:
+  there is no field to copy, only an edge to make again.
+
+### What it cost
+
+- **Five tests** in the cad battery (`tests/copies.rs`): an entity may
+  be copied, the copy is in the same block, it is on the same layer, it
+  may be put in another block, and a node that is not an entity is
+  refused.
+- **One new module** (`copies`): the copy of an entity is its own. The
+  cad battery now carries **33** commands and the MCP server **578**.
+
+### What it does not settle
+
+- **The tree's copy of a whole selection is not here**: one entity is
+  copied at a time, and a command that copies many things is a command
+  that says how many.
+- **The tree's copy keeps the name and adds a number is not here**: the
+  copy is given its name, so that two things in a block never share a
+  name by accident.
