@@ -12,6 +12,9 @@
 //!   and the parentheses;
 //! - five functions: `SUM`, `AVERAGE`, `MIN`, `MAX` and `COUNT`; and
 //!   the tree's `TEXT`, which writes a value with a format code.
+//! - a **choice**: `IF` takes a condition and the two values it
+//!   chooses between, and **only the branch that is taken is
+//!   computed**.
 //!
 //! # The two things that matter
 //!
@@ -1295,6 +1298,9 @@ impl Book {
         if name == "SUBTOTAL" {
             return self.subtotal(sheet, arguments, being);
         }
+        if name == "IF" {
+            return self.if_call(sheet, arguments, being);
+        }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();
@@ -1367,6 +1373,65 @@ impl Book {
             "COUNTA" => Value::Number((numbers.len() + plain.len()) as f64),
             other => Value::Error(format!("there is no function `{other}`")),
         }
+    }
+
+    /// The tree's `IF`: a **choice** between two values.
+    ///
+    /// The tree's rule, in the tree's own words:
+    ///
+    /// - the **condition** is a value, and its truth is asked of it: an
+    ///   empty value is false, a number is true when it is not zero, a
+    ///   boolean is itself, and the text `TRUE` or `FALSE` is the
+    ///   boolean it names. Any other text is an error, and so is an
+    ///   error that is the condition.
+    /// - **only the branch that is taken is computed.** The tree
+    ///   computes the condition, and then the branch it names and
+    ///   nothing else — so a formula like `IF(A1=0,"",1/A1)` does not
+    ///   divide by zero when the condition is false. So does this one.
+    /// - a formula of **one argument** is the truth of its condition:
+    ///   `IF(A1>2)` is `TRUE` when the condition holds and `FALSE`
+    ///   when it does not.
+    /// - a formula of **two arguments** has no false branch, and the
+    ///   false answer is `FALSE`.
+    /// - a formula of **more than three** arguments is an error.
+    fn if_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.is_empty() || arguments.len() > 3 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let condition = self.evaluate(sheet, &arguments[0], being);
+        let truth = match truth_of(&condition) {
+            Ok(truth) => truth,
+            Err(error) => return Value::Error(error),
+        };
+        let branch = if truth { arguments.get(1) } else { arguments.get(2) };
+        match branch {
+            Some(expression) => self.evaluate(sheet, expression, being),
+            None => Value::Bool(truth),
+        }
+    }
+}
+
+/// The **truth** of a value: whether it holds or not.
+///
+/// The tree's rule: an empty value is false, a number is true when it
+/// is not zero, a boolean is itself, and the text `TRUE` or `FALSE` is
+/// the boolean it names. Any other text is an error, and so is an
+/// error that is asked for its truth.
+fn truth_of(value: &Value) -> Result<bool, String> {
+    match value {
+        Value::Empty => Ok(false),
+        Value::Number(number) => Ok(*number != 0.0),
+        Value::Bool(flag) => Ok(*flag),
+        Value::Text(text) => {
+            if text.eq_ignore_ascii_case("TRUE") {
+                Ok(true)
+            } else if text.eq_ignore_ascii_case("FALSE") {
+                Ok(false)
+            } else {
+                Err("#VALUE!".to_string())
+            }
+        }
+        Value::Error(message) => Err(message.clone()),
     }
 }
 

@@ -15,6 +15,10 @@
 //! - the **functions** a formula may call: `SUM`, `AVERAGE`, `MIN`,
 //!   `MAX`, `COUNT`, `COUNTA`, `TEXT` and `SUBTOTAL`.
 //!
+//! And a formula may **choose**: `IF` takes a condition and the two
+//! values it chooses between, and only the branch that is taken is
+//! computed (the module `formula`).
+//!
 //! And a workbook may carry **names**: a word that stands for a range of
 //! cells, and a formula may use the word where it would use the range
 //! (the module `names`).
