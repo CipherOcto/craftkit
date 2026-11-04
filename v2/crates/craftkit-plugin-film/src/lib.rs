@@ -121,6 +121,10 @@
 //! and the track, the sequence and the item it belongs to, which are
 //! derived (the module `clipreading`).
 //!
+//! And a **track** may be read whole: its name, its kind and whether it
+//! is locked — and its clips in the order they start, its length and
+//! its sequence, which are derived (the module `trackreading`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -194,6 +198,7 @@ mod slipping;
 pub mod speed;
 mod splitting;
 mod stretching;
+mod trackreading;
 mod trackremoval;
 mod transitions;
 mod trim;
@@ -226,6 +231,7 @@ pub use slipping::SlipClip;
 pub use speed::SetSpeed;
 pub use splitting::SplitClip;
 pub use stretching::StretchClip;
+pub use trackreading::ReadTrack;
 pub use trackremoval::RemoveTrack;
 pub use transitions::{AddTransition, RemoveTransition, SetTransition, TransitionKind};
 pub use trim::TrimClip;
