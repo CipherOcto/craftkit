@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3122 tests.** The MCP server links **all fifteen batteries** in, so the
+**3123 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3122 tests
+cargo test          # 3123 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3862,6 +3862,7 @@ so.
 | the **edit points** of a sequence | **built.** A sequence has edit points: the places where its clips begin and end, and the razor cuts at one (§425) | §425 |
 | the **settings** of a track | **built.** A track is more than a line of clips: it may be enabled, muted or soloed, it may have a volume and a pan, and it may carry a label (§426) | §426 |
 | the **shape** of a range | **built.** A formula may ask for the shape of a range: how many rows it has and how many columns (§427) | §427 |
+| the **words** of an amount in Thai | **built.** A formula may ask for an amount written in Thai words, with the baht and the satang (§428) | §428 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28700,4 +28701,44 @@ and how many columns.
   columns of an array, and this tree's formulas have no arrays.
 - **The tree's dynamic arrays are not here** — `SEQUENCE`, `UNIQUE`,
   `HSTACK` and the rest — and they need them too.
+
+## 428. The words of an amount in Thai
+
+A formula may ask for an amount written in **Thai words**.
+
+### What was built
+
+- The function `BAHTTEXT`.
+- It takes a **number** and writes the amount in Thai words: the
+  baht, the satang, and the `ลบ` that a negative amount begins with.
+- The **rules** are the tree's: the amount is rounded to the
+  **satang**, a whole number of baht ends in `ถ้วน`, and a text that
+  holds no number is an error.
+
+### What the port found
+
+- **The tree's Thai number is in groups of six digits**, and every
+  group but the last is followed by `ล้าน` — so a million is
+  `หนึ่งล้าน` and a thousand million is `หนึ่งล้านล้าน`. Here the
+  same, and the same walk.
+- **The tree's final one is `เอ็ด` after higher digits**: a million
+  and one is `หนึ่งล้านเอ็ด` and not `หนึ่งล้านหนึ่ง`. Here the same,
+  and the test here says so.
+- **The tree's tens are `สิบ` and `ยี่สิบ`**: a one in the tens is
+  `สิบ` and a two in the tens is `ยี่สิบ`, and a three in the tens is
+  `สามสิบ`. Here the same.
+
+### What it cost
+
+- **One test** in the grid battery (`tests/baht.rs`): the amount is
+  written in Thai words.
+- **No new module**: the words module of §411 grows. **No new
+  command**: a function is not a command, and the grid battery still
+  carries **67** commands and the MCP server **536**.
+
+### What it does not settle
+
+- **The tree's Thai text of an amount with more than a hundred
+  million baht is not proved here** by a test, though the code counts
+  the groups the same way.
 
