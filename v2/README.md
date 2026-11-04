@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3146 tests.** The MCP server links **all fifteen batteries** in, so the
+**3150 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3146 tests
+cargo test          # 3150 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3869,6 +3869,7 @@ so.
 | the **selection** of layers | **built.** The selection is what a person has picked out, or what an agent has named, and it is the session's own state (§432) | §432 |
 | the **settings** of a layer | **built.** A CAD layer is more than a name: it may be on, frozen or locked, it may have a colour, a line type and a line weight (§433) | §433 |
 | the **curves** of a drawing | **built.** A CAD drawing has curves: the ellipse, with its centre, its major axis and its ratio, and the polyline, with its points (§434) | §434 |
+| the **order** the entities are drawn in | **built.** The entities of a block are drawn in an order, and an entity may be brought to the front or sent to the back (§435) | §435 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29043,4 +29044,50 @@ A CAD drawing has **curves**: the ellipse and the polyline.
   is straight between its vertices.
 - **The tree's bounds of an elliptical arc are not exact here**: they
   are sampled, and the test here does not claim otherwise.
+
+## 435. The order the entities are drawn in
+
+The entities of a block are drawn in an **order**, and an entity may
+be moved in it.
+
+### What was built
+
+- The commands `cad.entity.list`, `cad.entity.front`,
+  `cad.entity.back`, `cad.entity.forward` and `cad.entity.backward`.
+- `cad.entity.list` reads the entities of a block in the order they
+  are drawn. `front` and `back` move an entity to the front or to the
+  back, and `forward` and `backward` move it one step.
+- The **rules** are the tree's: the **front** is the top of the
+  drawing and the top is drawn **last**, the **back** is drawn
+  **first**, and an entity that is already at the front and is told
+  to go to the front stays there.
+
+### What the port found
+
+- **The tree's entities live in a flat store and their order is a
+  list**, and here the entities are the **children** of a block and
+  the children are drawn in the order they stand in. So the order is
+  the shape of the tree and not a field, and moving an entity is
+  moving a child.
+- **The tree's draw order moves a selection of entities at once** and
+  here a command moves **one**: a command that takes a selection is a
+  command that does not say what it does (§ the registry).
+
+### What it cost
+
+- **Four tests** in the cad battery (`tests/order.rs`): the order may
+  be read, an entity may be brought to the front and sent to the
+  back, an entity may be moved one step, and a node that is not an
+  entity is refused.
+- **One new module** (`order`): the order the entities are drawn in is
+  their own. The cad battery now carries **23** commands and the MCP
+  server **568**.
+
+### What it does not settle
+
+- **The tree's `above` and `under` are not here**: they move an entity
+  above or below another one that is named, and here the order is
+  moved by steps and not against a reference.
+- **The tree's text to front is not here**: a text and an entity are
+  the same thing here, and the order is the order.
 
