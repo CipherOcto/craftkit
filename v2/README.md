@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3142 tests.** The MCP server links **all fifteen batteries** in, so the
+**3146 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3142 tests
+cargo test          # 3146 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3868,6 +3868,7 @@ so.
 | the **stack of layers** of a composition | **built.** A compositing composition is a stack: the layers stand in an order, and a layer may be moved in it (§431) | §431 |
 | the **selection** of layers | **built.** The selection is what a person has picked out, or what an agent has named, and it is the session's own state (§432) | §432 |
 | the **settings** of a layer | **built.** A CAD layer is more than a name: it may be on, frozen or locked, it may have a colour, a line type and a line weight (§433) | §433 |
+| the **curves** of a drawing | **built.** A CAD drawing has curves: the ellipse, with its centre, its major axis and its ratio, and the polyline, with its points (§434) | §434 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28992,4 +28993,54 @@ A CAD layer is more than a name: it has **settings**.
   it is on, and there is no layer that everything goes on.
 - **The tree's plot flag and its transparency are not here**: what a
   drawing is plotted with is the host's business.
+
+## 434. The curves of a drawing
+
+A CAD drawing has **curves**: the ellipse and the polyline.
+
+### What was built
+
+- The commands `cad.entity.ellipse.add` and
+  `cad.entity.polyline.add`, and the entity kinds `cad.entity.ellipse`
+  and `cad.entity.polyline`.
+- An **ellipse** is the tree's own: its **centre**, its **major
+  axis** — a vector from the centre to the end of the major axis —,
+  the **ratio** of the minor axis to the major one, and the two
+  **angles** it runs from and to. A **polyline** is a list of
+  **points** and whether it is **closed**.
+- The **rules** are the tree's: the major axis is not of no length,
+  the ratio is above nothing and at most one, and a polyline is made
+  of at least two points.
+
+### What the port found
+
+- **The tree's ellipse is DXF-shaped**: the major axis is a **vector**
+  and not a length, so an ellipse may be turned — and here the same,
+  and the minor axis is the major one turned a quarter and made
+  shorter by the ratio.
+- **The tree's bounds of a whole ellipse are exact**, and here they
+  are: the box of an ellipse is the box of its centre and its two
+  half axes, and the test here says so.
+- **The tree's bounds of an elliptical arc are exact** and are worked
+  out from the derivative of the curve. Here the bounds of an **arc**
+  are **sampled** — a difference, and it is written down here.
+- **The tree's polyline may bulge** — a vertex may carry an arc — and
+  here a polyline is straight between its vertices.
+
+### What it cost
+
+- **Four tests** in the cad battery (`tests/curves.rs`): an ellipse
+  may be put in a block, an ellipse with a bad ratio is refused, a
+  polyline may be put in a block, and a polyline of no points is
+  refused.
+- **One new module** (`curves`): the curves of a drawing are their
+  own. The cad battery now carries **18** commands and the MCP server
+  **563**.
+
+### What it does not settle
+
+- **The tree's polyline with a bulge is not here**: a polyline here
+  is straight between its vertices.
+- **The tree's bounds of an elliptical arc are not exact here**: they
+  are sampled, and the test here does not claim otherwise.
 
