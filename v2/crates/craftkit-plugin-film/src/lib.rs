@@ -157,6 +157,7 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 mod enabling;
+mod gaps;
 mod hold;
 mod inserting;
 mod labels;
@@ -182,6 +183,7 @@ mod transitions;
 mod trim;
 
 pub use enabling::EnableClip;
+pub use gaps::CloseGap;
 pub use hold::{DeleteHold, SetHold};
 pub use inserting::InsertClip;
 pub use labels::{DeleteItemLabel, DeleteLabel, ItemLabelGroup, LabelGroup, SetItemLabel, SetLabel};
@@ -877,6 +879,7 @@ craftkit_sdk::plugin_anchor!(
     DeleteItemLabel,
     ItemLabelGroup,
     ReplaceMedia,
+    CloseGap,
     SlipClip,
     SlideClip,
     SetMarks,
