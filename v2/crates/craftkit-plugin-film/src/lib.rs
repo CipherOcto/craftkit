@@ -18,6 +18,10 @@
 //! That last part is the **two clocks**: a clip has a place on the
 //! timeline and a place in the media, and they are not the same place.
 //!
+//! And a sequence has a **playhead**: the frame it is looked at, and
+//! the playhead is a fact of the sequence and not of the window that
+//! happens to be open (the module `playhead`).
+//!
 //! And a **media item** may carry a **label** as well: the tree's
 //! `edit.label` labels the items of the project and the clips of the
 //! sequence with one command and one list of colours, and here the
@@ -197,6 +201,7 @@ mod markers;
 mod mediamarks;
 mod moving;
 mod naming;
+mod playhead;
 mod project;
 mod rates;
 mod removal;
@@ -232,6 +237,7 @@ pub use markers::{AddMarker, ClearMarkers, MarkerKind, RemoveMarker, SetMarker};
 pub use mediamarks::SetMarks;
 pub use moving::MoveClip;
 pub use naming::RenameClip;
+pub use playhead::{GetPlayhead, GoToEnd, GoToStart, SetPlayhead, StepPlayhead};
 pub use project::ReadProject;
 pub use rates::{GetRate, SetRate};
 pub use removal::RemoveClip;
@@ -891,6 +897,11 @@ craftkit_sdk::plugin_anchor!(
     AddClip,
     ReadTimeline,
     TrimClip,
+    SetPlayhead,
+    GetPlayhead,
+    GoToStart,
+    GoToEnd,
+    StepPlayhead,
     MoveClip,
     InsertClip,
     SplitClip,
