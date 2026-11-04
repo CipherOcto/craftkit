@@ -150,6 +150,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+mod enabling;
 mod hold;
 mod inserting;
 mod labels;
@@ -172,6 +173,7 @@ mod trackremoval;
 mod transitions;
 mod trim;
 
+pub use enabling::EnableClip;
 pub use hold::{DeleteHold, SetHold};
 pub use inserting::InsertClip;
 pub use labels::{DeleteLabel, LabelGroup, SetLabel};
@@ -299,6 +301,7 @@ impl ClipKind {
             "duration": node.data.get("duration").cloned().unwrap_or(serde_json::Value::Null),
             "source_in": node.data.get("source_in").cloned().unwrap_or(serde_json::Value::Null),
             "item": item,
+            "enabled": crate::enabling::is_enabled(&node.data),
         }))
     }
 }
@@ -523,6 +526,14 @@ impl ReadTimeline {
             // The order of a timeline is not the order of the tree.
             clips.sort_by_key(|(start, _)| *start);
             let end = clips.iter().map(|(start, duration)| start + duration).max().unwrap_or(0);
+            // A clip that does not **play** is on the track and it takes
+            // its place there, and it is not played: the count of the
+            // clips that play is **derived**.
+            let playing = track
+                .children
+                .iter()
+                .filter(|child| child.kind == "film.clip" && crate::enabling::is_enabled(&child.data))
+                .count();
             tracks.push(serde_json::json!({
                 "track": track.id,
                 "name": track.name,
@@ -531,6 +542,7 @@ impl ReadTimeline {
                     "duration": duration,
                 })).collect::<Vec<_>>(),
                 "end": end,
+                "playing": playing,
             }));
         }
         let count = tracks.len();
@@ -826,6 +838,7 @@ craftkit_sdk::plugin_anchor!(
     ReverseClip,
     LockTrack,
     RemoveTrack,
+    EnableClip,
     SlipClip,
     SlideClip,
     SetMarks,
