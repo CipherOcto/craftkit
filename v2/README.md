@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2791 tests.** The MCP server links **all fifteen batteries** in, so the
+**2801 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2791 tests
+cargo test          # 2801 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3803,6 +3803,7 @@ so.
 | the **finding** of a cell | **built.** A sheet is searched: the cells whose text holds what was looked for, with the tree's wildcards (§366) | §366 |
 | the **note** on a cell | **built.** A cell may carry a note, and the note belongs to the sheet and names the cell (§367) | §367 |
 | the **link** on a cell | **built.** A cell may carry a link, and whether the target is inside this workbook is derived (§368) | §368 |
+| the **shaping** of a text | **built.** A formula may shape a text: take a part of it, count it, fold it or clean it (§369) | §369 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25145,3 +25146,72 @@ A cell may carry a **link**: a target that something else may open.
 - **The tree's defined names are not here.** A target may name a
   defined name in the tree, and a bare name cannot be told from a file
   name; here a target names a sheet and a cell, or it is outside.
+
+## 369. The shaping of a text
+
+A formula may **shape** a text: take a part of it, count it, fold it
+or clean it.
+
+### What was built
+
+- `LEFT(text, [count])` — the **first** characters of the text, and
+  the first one when the count is not given.
+- `RIGHT(text, [count])` — the **last** characters of the text.
+- `MID(text, start, [count])` — the characters from the **start**, and
+  the start is counted from one. A start that is not one is an error.
+- `LEN(text)` — how many characters the text holds.
+- `TRIM(text)` — the text without the spaces that are not between
+  words.
+- `UPPER(text)` and `LOWER(text)` — the text in one case or the other.
+- `PROPER(text)` — the text with every **word** capitalised and the
+  rest of it in small letters.
+- The text of a value is the text it is **written** as: a number is
+  written as a number, a boolean as `TRUE` or `FALSE`, and an empty
+  value as nothing at all.
+- A count that is **negative** is an error, and a value that is an
+  **error** is that error: the shaping of an error is the error.
+
+### What the port found
+
+- **The tree's text is measured in characters and so is this tree's.**
+  The tree counts the characters and takes the characters, and a
+  character that is not a byte — an emoji, a letter outside the Latin
+  — is one character and not four; here the text is taken and counted
+  the same way.
+- **The tree's count that is not there is a count of one, and a count
+  that is there and holds nothing is a count of zero.** The tree's
+  `LEFT` takes one character when the count is not given, and the
+  tree's *an explicit empty is zero* rule applies to the count: an
+  argument that is there and holds nothing is zero. So does this one,
+  and `MID` without a count is an empty text.
+- **The tree's start is counted from one and a start below one is an
+  error.** The tree says `#VALUE!` for a start of zero and for a
+  negative one; so does this one.
+- **The tree's `TRIM` removes the spaces that are not between words.**
+  The tree's `TRIM` splits the text on spaces and joins the words with
+  one space, so a run of spaces is one space and the text is trimmed
+  at both ends; so does this one.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/texts.rs`): the first
+  characters being taken, the last characters being taken, the
+  characters from the start being taken, a start that is not one being
+  an error, the characters being counted, the text being trimmed, the
+  text being folded into a case, the text of a number being the text
+  it is written as, a count that is negative being an error, and a
+  value that is an error being that error.
+- **No new command**: the shaping is a function of the formula
+  language. The grid battery still carries **60** commands and the MCP
+  server **488**.
+
+### What it does not settle
+
+- **The tree's other text functions are not here.** The tree has
+  `CONCAT`, `CONCATENATE`, `TEXTJOIN`, `FIND`, `SEARCH`, `SUBSTITUTE`,
+  `REPLACE`, `T`, `CLEAN`, `TEXTBEFORE`, `TEXTAFTER` and `TEXTSPLIT`,
+  and each of them works on a text; here a text is taken apart, folded
+  and cleaned, and it is not put together again.
+- **The tree's bound on the length of a text is not here.** The tree
+  refuses a text that is longer than the limit of a cell, and it says
+  so; here a text is as long as it is.
