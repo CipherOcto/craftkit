@@ -168,6 +168,7 @@ mod slipping;
 pub mod speed;
 mod splitting;
 mod stretching;
+mod trackremoval;
 mod transitions;
 mod trim;
 
@@ -189,6 +190,7 @@ pub use slipping::SlipClip;
 pub use speed::SetSpeed;
 pub use splitting::SplitClip;
 pub use stretching::StretchClip;
+pub use trackremoval::RemoveTrack;
 pub use transitions::{AddTransition, RemoveTransition, SetTransition, TransitionKind};
 pub use trim::TrimClip;
 
@@ -823,6 +825,7 @@ craftkit_sdk::plugin_anchor!(
     RemoveTransition,
     ReverseClip,
     LockTrack,
+    RemoveTrack,
     SlipClip,
     SlideClip,
     SetMarks,
