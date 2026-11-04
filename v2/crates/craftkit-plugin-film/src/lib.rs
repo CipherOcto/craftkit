@@ -192,6 +192,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+mod anchors;
 mod binreading;
 mod binremoval;
 mod clipreading;
@@ -230,6 +231,7 @@ mod tracks;
 mod transitions;
 mod trim;
 
+pub use anchors::SynchroniseClip;
 pub use binreading::ReadBin;
 pub use binremoval::RemoveBin;
 pub use clipreading::ReadClip;
@@ -939,6 +941,7 @@ craftkit_sdk::plugin_anchor!(
     LinkClips,
     UnlinkClip,
     SetHold,
+    SynchroniseClip,
     DeleteHold,
     AddTransition,
     SetTransition,
