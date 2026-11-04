@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3135 tests.** The MCP server links **all fifteen batteries** in, so the
+**3138 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3135 tests
+cargo test          # 3138 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3866,6 +3866,7 @@ so.
 | the **masks** of a layer | **built.** A compositing layer may be masked: a path on the layer that says what of it is seen, with its mode and its settings (§429) | §429 |
 | the **time** of a composition | **built.** A compositing application has a time cursor: the place in the composition where it is looking, and a fact of the composition (§430) | §430 |
 | the **stack of layers** of a composition | **built.** A compositing composition is a stack: the layers stand in an order, and a layer may be moved in it (§431) | §431 |
+| the **selection** of layers | **built.** The selection is what a person has picked out, or what an agent has named, and it is the session's own state (§432) | §432 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28893,4 +28894,49 @@ order, and the front of the stack is drawn over the rest of it.
   refusals of a track that is locked (§ §426).
 - **The tree's layer selection is not here**: a command names the
   layer it acts on.
+
+## 432. The selection of layers
+
+The **selection** is what a person has picked out, or what an agent
+has named.
+
+### What was built
+
+- The commands `fx.layer.select`, `fx.layer.deselect` and
+  `fx.selection.get`.
+- `fx.layer.select` **selects** layers — it replaces the selection —
+  and `fx.layer.deselect` **takes layers out** of it and does not take
+  the selection away. `fx.selection.get` reads what is selected, and
+  may name it as well as count it.
+- The **rules** are the tree's: a layer that is not in the document is
+  not selected, and a node that is not a layer is refused.
+
+### What the port found
+
+- **The tree's selection is of the session and not of the document**,
+  and here the same: the selection lives in the session, and the
+  document is the truth and the selection is of the document. A
+  selection that is not in the document is not a selection.
+- **The tree's `selectNext` and `selectPrevious` walk the stack** —
+  the layer above and the layer below the one that is selected — and
+  here the stack is the stack of the composition (§ §431), but the
+  walk itself is not here: a command that says which layer it means
+  is a command that does one thing (§ the registry).
+
+### What it cost
+
+- **Three tests** in the fx battery (`tests/selection.rs`): layers may
+  be selected, they may be taken out of the selection, and a layer
+  that is not there is refused.
+- **One new module** (`selection`): the selection of layers is its
+  own. The fx battery now carries **47** commands and the MCP server
+  **553**.
+
+### What it does not settle
+
+- **The tree's selection of a property is not here**: a selection here
+  is of a node, and a property is a path in a node and not a node of
+  its own.
+- **The tree's walking of the stack with the selection is not here**:
+  a command names the layer it acts on.
 
