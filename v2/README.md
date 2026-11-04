@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2874 tests.** The MCP server links **all fifteen batteries** in, so the
+**2888 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2874 tests
+cargo test          # 2888 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3815,6 +3815,7 @@ so.
 | the **name** of a thing in the project | **built.** A media item and a bin may be named, and the name is the thing's own (§378) | §378 |
 | the **taking away** of a bin | **built.** A bin goes with the items in it, and a bin that holds a played item is not taken away (§379) | §379 |
 | the **reading** of a cell | **built.** A cell may be read whole: its value, its type, its formula, its text, its format, its note and its link (§380) | §380 |
+| the **shape** and the **name** of a format | **built.** A format may be coded or named, and the names this tree does not write are refused with the reason (§381) | §381 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25896,3 +25897,69 @@ everything that is said about it.
   the **input** of a cell — what was typed into it, which is the
   formula and not the value — and here the formula is said and the
   input is not a thing a cell holds apart from it.
+
+## 381. The shape and the name of a format
+
+A format says how a number is written. It may be given by its **code**
+— `0.00`, `"$"#,##0.00`, `yyyy-mm-dd` — or by its **name**, the way the
+tree's ribbon names its formats.
+
+### What was built
+
+- A format may be given by its **code** or by its **name**. The names
+  are `general`, `number`, `currency`, `percentage`, `fraction`,
+  `scientific`, `short date` and `time`.
+- A name says a **code**, and the **code is kept**: the name is a way
+  of saying the code, and the cell is written with the code.
+- The **scientific** format is here: `0.00E+00` — a mantissa and an
+  exponent, and the exponent moves one place at a time. A mantissa
+  that rounds up to ten moves the exponent one place on, and a zero
+  has no exponent to move.
+- The names this tree **does not write** — `accounting`, `comma`,
+  `long date` and `text` — are **refused with the reason**: the
+  tree's fills, the tree's long date and the tree's text.
+- Every door that takes a format takes a name: `grid.cell.format`,
+  `grid.style.add`, `grid.style.set`, `grid.conditional.set`, and the
+  `format` of `grid.cell.date` and `grid.cell.time`.
+
+### What the port found
+
+- **The tree's names are a ribbon over a mapping, and the mapping has
+  a fallback.** The tree's `format_code_for` maps a name to a code, and
+  a name that is not in its table is taken **as a code**. Here a name
+  that is not one of ours is refused: a format that is quietly ignored
+  is a format the user believes in and the program does not have.
+- **The tree's scientific code is a language and here it is a shape.**
+  The tree's step may be more than one place, and its `?` placeholders
+  pad with spaces — `#.#E+#` gives `0.E+0`. Here the whole part of the
+  mantissa is a single placeholder and the exponent moves one place at
+  a time.
+- **The tree's accounting and comma codes are fills.** They write
+  spaces where the number is not and put the symbol at the edge; this
+  tree has no fill and writes no spaces that are not there.
+- **The tree's text format keeps the text a number was written with**,
+  and this tree does not: a cell keeps its **value** and its **format**,
+  and the text of a number is written by the format.
+
+### What it cost
+
+- **Fourteen tests** in the grid battery (`tests/formatnames.rs`): a
+  name saying the code it names, the number, percentage, fraction and
+  scientific names, the short date and the time names, a name given to
+  a style and to a conditional format, the accounting and text names
+  refused with their reasons, a name that is not one refused, and a
+  code that is still a code.
+- **One new module**: `formatnames`. **No new command**: the grid
+  battery still carries **64** commands and the MCP server **497**.
+
+### What it does not settle
+
+- **The tree's fills, its long date and its text format are not here.**
+  Each of them is refused with the reason, and the reason is a
+  statement about this tree and not about the tree.
+- **The tree's scientific step is not here.** A code whose mantissa has
+  more than one whole placeholder is refused.
+- **The tree's locale tags are not here.** The tree's `Time` is
+  `[$-F400]h:mm:ss AM/PM`, and here the time is `h:mm:ss AM/PM`: the
+  clock of twelve is the clock, and the locale of it is a thing this
+  tree does not keep.
