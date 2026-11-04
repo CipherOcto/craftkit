@@ -40,6 +40,10 @@
 //! discount and redeemed at its value — the discount, the price, the
 //! yield, the interest and the bill (the module `securities`).
 //!
+//! And a formula may ask about the **truth** of things and may choose
+//! between them: `AND`, `OR`, `XOR`, `NOT`, `IFS`, `IFERROR`, `IFNA`,
+//! `SWITCH` and `CHOOSE` (the module `logic`).
+//!
 //! And a formula may ask what a **value** is: whether it is a number
 //! or text or an error, whether it is even or odd, and what kind of a
 //! value it is (the module `information`).
@@ -277,6 +281,7 @@ mod fractions;
 mod hiding;
 mod information;
 mod links;
+mod logic;
 mod lookups;
 mod merges;
 mod namereading;
