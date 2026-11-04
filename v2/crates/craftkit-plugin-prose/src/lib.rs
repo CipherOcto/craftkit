@@ -25,6 +25,9 @@
 //!   that target **may be opened** is derived: the tree's rule, that a
 //!   link the system follows is a web link or a mail link and nothing
 //!   else (the module `links`);
+//! - a **revision** in a run — that it was inserted, deleted or
+//!   reformatted, and by whom: the tree's three kinds, and the words
+//!   of a revision are derived (the module `revisions`);
 //! - a **style** — a node, and the side vector is the document's
 //!   children;
 //! - a **paragraph's style** — a **relation**: an edge that says
@@ -92,6 +95,7 @@ mod editing;
 mod links;
 mod numbering;
 mod page;
+mod revisions;
 
 pub use comments::{DeleteComment, GetComment, SetComment};
 pub use editing::{
@@ -100,6 +104,7 @@ pub use editing::{
 pub use links::ReadLinks;
 pub use numbering::{AddList, ReadNumber, SetNumbering};
 pub use page::{GetPage, SetPage};
+pub use revisions::ReadRevisions;
 
 /// The prose layer.
 ///
@@ -296,6 +301,7 @@ fn runs_with_text(node: &Node) -> Json {
             "bold": run.get("bold").cloned().unwrap_or(Json::Bool(false)),
             "italic": run.get("italic").cloned().unwrap_or(Json::Bool(false)),
             "link": run.get("link").cloned().unwrap_or(Json::Null),
+            "revision": run.get("revision").cloned().unwrap_or(Json::Null),
             "text": covered,
         }));
     }
@@ -701,6 +707,11 @@ impl SetRuns {
                     id: "prose.block.runs".to_string(),
                     message: "the runs cover more characters than the text has".to_string(),
                 });
+            }
+            // A run may carry a **revision**: it was inserted, it was
+            // deleted, or its format was changed — and by whom.
+            if let Some(revision) = run.get("revision") {
+                crate::revisions::check(revision, "prose.block.runs")?;
             }
             // A run may carry a **link**: the target it points at.
             // The target is a text and it is bounded; whether it may
