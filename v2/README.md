@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3188 tests.** The MCP server links **all fifteen batteries** in, so the
+**3195 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3188 tests
+cargo test          # 3195 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3876,6 +3876,7 @@ so.
 | the **copy** of an entity | **built.** A copy is a second entity of the same kind, with the same geometry and the same layer, put somewhere else (§439) | §439 |
 | the **mirror** of an entity | **built.** The same entity, turned over a line: every point of it is turned over, and an ellipse takes its major axis with it (§440) | §440 |
 | the **audit** of a drawing | **built.** A drawing is a document, and a document can be wrong: the audit reads a drawing and reports what is wrong with it (§441) | §441 |
+| what may be **edited** | **built.** A layer that is locked or frozen locks what is on it, and every command that changes an entity refuses (§442) | §442 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29396,3 +29397,56 @@ A drawing is a document, and a document can be wrong.
 - **The tree's audit of a file is not here**: this audit looks at the
   document, and a drawing that came from a file may hold faults that
   the commands cannot make.
+
+## 442. What may be edited
+
+A layer may be locked, and it may be frozen, and both of them are
+about what may be changed.
+
+### What was built
+
+- The **rule**: an entity on a layer that is **locked** or **frozen**
+  may not be **edited**. Every command that changes an entity — the
+  move, the turn, the scale, the removal, the copy and the mirror —
+  **refuses** it, and the refusal names the layer and says why.
+- The rule lives in one place (the module `editable`), so every
+  command that changes an entity asks the same question of the same
+  kind of answer.
+- An entity on **no layer** may be edited: there is no layer to lock
+  it.
+
+### What the port found
+
+- **The tree's locked objects are skipped, not refused.** Its cut
+  copies the objects that are not on locked layers and says how many
+  were left alone; its edits filter the locked ones out of the set
+  they work on. Here an edit of a locked entity is **refused**: a
+  command that silently does nothing to half of what it was given is a
+  command whose answer is a lie, and an entity that cannot be edited
+  should say so.
+- **The tree's layer is a name and the lock is a property of the
+  name.** Here the layer is a **node**, the lock is a fact in its
+  payload, and an entity is on a layer through an **edge** — so the
+  question is answered by following the edge, and the edge is the
+  only place the answer comes from.
+
+### What it cost
+
+- **Seven tests** in the cad battery (`tests/editable.rs`): an entity
+  on a locked layer may not be moved, taken away or copied, an entity
+  on a frozen layer may not be turned, an entity on a layer that is
+  not locked may be moved, an entity on no layer may be moved, and a
+  layer that is unlocked lets its entities be edited again.
+- **One new module** (`editable`): what may be edited is its own
+  question, and every command that changes an entity asks it. No new
+  command: the cad battery still carries **35** commands and the MCP
+  server **580**.
+
+### What it does not settle
+
+- **The tree's block reference may be locked too**: a block that is
+  being edited may not be inserted. Here the lock of a layer is the
+  lock of what is on it, and that is all.
+- **The tree's layer that is frozen may not be changed either**: here
+  the settings of a frozen layer may still be set, and only what is on
+  it is held still.
