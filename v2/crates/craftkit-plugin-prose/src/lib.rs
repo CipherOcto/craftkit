@@ -18,6 +18,9 @@
 //! - a **list** — a **node**, and the blocks that are in it name it
 //!   with a **relation**: the **number** of a block is derived, and a
 //!   block that is moved is renumbered (the module `numbering`);
+//! - the **page** of a document — a fact of the document: its size and
+//!   its margins, in points, and whether it is a **landscape** one is
+//!   derived (the module `page`);
 //! - a **style** — a node, and the side vector is the document's
 //!   children;
 //! - a **paragraph's style** — a **relation**: an edge that says
@@ -83,12 +86,14 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem
 mod comments;
 mod editing;
 mod numbering;
+mod page;
 
 pub use comments::{DeleteComment, GetComment, SetComment};
 pub use editing::{
     MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
 };
 pub use numbering::{AddList, ReadNumber, SetNumbering};
+pub use page::{GetPage, SetPage};
 
 /// The prose layer.
 ///
