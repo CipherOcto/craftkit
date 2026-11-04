@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3242 tests.** The MCP server links **all fifteen batteries** in, so the
+**3251 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3242 tests
+cargo test          # 3251 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3883,6 +3883,7 @@ so.
 | the **synchronisation** of a clip | **built.** Two clips are in step when their anchors agree, and the method says whether it is the in points or the out points (§446) | §446 |
 | **finding** and **replacing** | **built.** A find says where the pattern is and a replace rewrites the text and the runs together, and a tracked change is not replaced (§447) | §447 |
 | the **information** of a document | **built.** The trailer of a PDF file may name an information dictionary, and the document says which object it is (§448) | §448 |
+| the **stops** of a gradient | **built.** A gradient is a list of stops in order, and a stop may be added, changed or taken away — but a gradient has two stops or more (§449) | §449 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29764,3 +29765,55 @@ what it is called and when it was made.
   number tree in the page tree, and they are not written.
 - **The tree's document properties are named and here they are not**:
   the entries are the PDF's own names, and the PDF's names are open.
+
+## 449. The stops of a gradient
+
+A gradient is a list of **stops**, and a stop says where it is along
+the gradient — its **offset**, from zero to one — and what **colour**
+it is there, and how **solid** it is.
+
+### What was built
+
+- The commands `vector.gradient.read`, `vector.gradient.stop.add`,
+  `vector.gradient.stop.set` and `vector.gradient.stop.remove`.
+- The stops are a **list in order**: a stop at a smaller offset comes
+  before a stop at a bigger one, and that is the order the gradient
+  is read in.
+- A gradient has **two stops or more**: one colour is a fill and not a
+  gradient, and the last stop of a two-stop gradient may not be taken
+  away.
+- A path filled with **one colour** has no gradient, and the command
+  says so.
+
+### What the port found
+
+- **The tree's stops have a midpoint and a swatch of their own**: a
+  stop is a colour that may be shared with another stop, and the
+  colour it shows is at a place along it. Here a stop is an **offset,
+  a colour and an opacity**, and it is its own: there is no shared
+  swatch and no midpoint, so there is nothing to keep in step with
+  anything else.
+- **The tree edits a gradient in place**: the stops are picked and
+  moved and recoloured, and the gradient is the same gradient
+  afterwards. Here the same: a stop is added, changed or taken away
+  and the path keeps its gradient.
+
+### What it cost
+
+- **Nine tests** in the vector battery (`tests/gradients.rs`): the
+  gradient of a path may be read, a stop may be added and the stops
+  stay in order, a stop may be changed, a stop may be taken away, the
+  last stop of a two-stop gradient may not be taken away, a path
+  filled with one colour has no gradient, an offset that is not
+  between zero and one is refused, and a stop that is not there is
+  refused.
+- **One new module** (`gradients`): the stops of a gradient are their
+  own. The vector battery now carries **40** commands and the MCP
+  server **600**.
+
+### What it does not settle
+
+- **The tree's midpoints are not here**: the colour of a stop is shown
+  at the stop's own place and nowhere else.
+- **The tree's shared swatches are not here**: two stops with the same
+  colour are two stops, and changing one changes only that one.
