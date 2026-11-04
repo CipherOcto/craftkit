@@ -90,6 +90,14 @@
 //! holds the parameters at their defaults. A group under `effects`
 //! that no command made is not an effect (the module `effects`).
 //!
+//! And the **masks** of a layer are here: a mask is a **path** on the
+//! layer — its vertices, its tangents and whether it is closed — and
+//! around it the settings of the mask: its **mode**, whether it is
+//! **inverted**, whether it is **locked**, its feather, its opacity
+//! and its expansion. A mask is a **node** here and not a list in the
+//! layer's payload: a mask is a thing with a life of its own (the
+//! module `masks`).
+//!
 //! And the **spatial** property is here too: a property whose value is
 //! a **point** does not move along the straight line from one keyframe
 //! to the next, it follows a **path** in the plane, and the time maps
@@ -116,6 +124,7 @@ mod effects;
 mod expressions;
 mod keys;
 mod markers;
+mod masks;
 mod parent;
 mod spatial;
 mod switches;
@@ -128,6 +137,7 @@ pub use expressions::{DeleteExpression, SetExpression};
 use keys::keys_of;
 pub use keys::{RemoveKeyframe, SetAuto, SetContinuous, SetInterpolation, SetKeyframe, ValueAt};
 pub use markers::{AddMarker, MarkerKind, MarkersEvaluator, SetMarker};
+pub use masks::{AddMask, InvertMask, ListMasks, LockMask, MaskKind, RemoveMask, SetMaskMode};
 pub use parent::{DeleteParent, SetParent};
 pub use switches::{SetCompSwitch, SetSwitch, SwitchesEvaluator};
 
@@ -712,6 +722,13 @@ craftkit_sdk::plugin_anchor!(
     SetAuto,
     SetContinuous,
     ValueAt,
+    MaskKind,
+    AddMask,
+    RemoveMask,
+    SetMaskMode,
+    InvertMask,
+    LockMask,
+    ListMasks,
     FxPanel
 );
 
