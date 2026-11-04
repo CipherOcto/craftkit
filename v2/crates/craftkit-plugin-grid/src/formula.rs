@@ -1386,6 +1386,9 @@ impl Book {
         if crate::datetimes::is_date_function(name) {
             return self.dates(sheet, name, arguments, being);
         }
+        if crate::statistics::is_statistical_function(name) {
+            return self.statistics(sheet, name, arguments, being);
+        }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();

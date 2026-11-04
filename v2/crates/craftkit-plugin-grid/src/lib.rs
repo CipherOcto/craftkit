@@ -15,6 +15,10 @@
 //! - the **functions** a formula may call: `SUM`, `AVERAGE`, `MIN`,
 //!   `MAX`, `COUNT`, `COUNTA`, `TEXT` and `SUBTOTAL`.
 //!
+//! And a formula may ask about the **shape** of a set of numbers — the
+//! middle, the most frequent, the spread, the order statistics and the
+//! place of a number in a list (the module `statistics`).
+//!
 //! And a formula may **choose**: `IF` takes a condition and the two
 //! values it chooses between, and only the branch that is taken is
 //! computed (the module `formula`).
@@ -239,6 +243,7 @@ mod sheetnames;
 mod sheetreading;
 mod sizes;
 mod sorting;
+mod statistics;
 mod styles;
 mod tabs;
 mod tabsorder;

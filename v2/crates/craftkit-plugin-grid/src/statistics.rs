@@ -1,0 +1,362 @@
+//! The **statistics** of a formula.
+//!
+//! A formula may ask about the **shape** of a set of numbers:
+//!
+//! - `MEDIAN(numbers)` — the **middle** of the numbers, and the mean
+//!   of the two middle ones when there are an even number of them;
+//! - `MODE(numbers)` — the number that occurs most often, and
+//!   `#N/A` when no number occurs twice;
+//! - `STDEV(numbers)` and `STDEVP(numbers)` — the **spread**, the
+//!   sample one and the population one;
+//! - `VAR(numbers)` and `VARP(numbers)` — the **variance**, the
+//!   sample one and the population one;
+//! - `LARGE(numbers, k)` and `SMALL(numbers, k)` — the k-th largest
+//!   and the k-th smallest;
+//! - `RANK(number, numbers, [order])` — the **place** of a number in
+//!   a list, counting from the largest unless the order says
+//!   otherwise;
+//! - `PERCENTILE(numbers, k)` and `QUARTILE(numbers, q)` — the
+//!   value at a fraction of the way through the numbers, and the
+//!   quarter of it;
+//! - `COUNTBLANK(range)` — how many cells of the range hold
+//!   nothing.
+//!
+//! The rules are the **tree's**, and they are the tree's own rules
+//! about errors: a middle of no numbers is `#NUM!`, a spread of fewer
+//! than two numbers is `#DIV/0!`, and a k that is not in the numbers
+//! is `#NUM!`.
+
+use crate::formula::{Book, CellRef, Expr, Value};
+
+/// Whether a name is one of the **statistical functions**.
+pub fn is_statistical_function(name: &str) -> bool {
+    matches!(
+        name,
+        "MEDIAN"
+            | "MODE"
+            | "STDEV"
+            | "STDEVP"
+            | "VAR"
+            | "VARP"
+            | "LARGE"
+            | "SMALL"
+            | "RANK"
+            | "PERCENTILE"
+            | "QUARTILE"
+            | "COUNTBLANK"
+    )
+}
+
+/// The **numbers** of a set, in the order a reader reads them.
+fn sorted(mut numbers: Vec<f64>) -> Vec<f64> {
+    numbers.sort_by(f64::total_cmp);
+    numbers
+}
+
+/// The **sum of the squared deviations** from the mean.
+fn devsq(numbers: &[f64]) -> f64 {
+    if numbers.is_empty() {
+        return 0.0;
+    }
+    let mean = numbers.iter().sum::<f64>() / numbers.len() as f64;
+    numbers.iter().map(|number| (number - mean) * (number - mean)).sum()
+}
+
+/// The **middle** of the numbers.
+///
+/// The tree's rule: the middle one when the count is odd, and the
+/// mean of the two middle ones when it is even.
+fn median(numbers: Vec<f64>) -> Value {
+    if numbers.is_empty() {
+        return Value::Error("#NUM!".to_string());
+    }
+    let numbers = sorted(numbers);
+    let count = numbers.len();
+    let high = numbers.get(count / 2).copied().unwrap_or(0.0);
+    if count % 2 == 1 {
+        return Value::Number(high);
+    }
+    let low = numbers.get(count / 2 - 1).copied().unwrap_or(0.0);
+    Value::Number(low + (high - low) / 2.0)
+}
+
+/// The **modes** of the numbers: the values that occur at least twice,
+/// in the order they first occur.
+fn modes(numbers: &[f64]) -> Vec<f64> {
+    let mut counts: Vec<(f64, usize)> = Vec::new();
+    for number in numbers {
+        match counts.iter_mut().find(|entry| entry.0 == *number) {
+            Some(entry) => entry.1 += 1,
+            None => counts.push((*number, 1)),
+        }
+    }
+    let best = counts.iter().map(|entry| entry.1).max().unwrap_or(0);
+    if best < 2 {
+        return Vec::new();
+    }
+    counts.into_iter().filter(|entry| entry.1 == best).map(|entry| entry.0).collect()
+}
+
+/// The k-th **largest** or **smallest** of the numbers.
+///
+/// The tree's rule: the k is rounded up, and a k that is not in the
+/// numbers is `#NUM!`.
+fn kth(numbers: Vec<f64>, k: f64, largest: bool) -> Value {
+    let k = k.ceil();
+    if k.is_nan() || k < 1.0 || k > numbers.len() as f64 {
+        return Value::Error("#NUM!".to_string());
+    }
+    let numbers = sorted(numbers);
+    let k = k as usize;
+    let index = if largest { numbers.len() - k } else { k - 1 };
+    match numbers.get(index) {
+        Some(number) => Value::Number(*number),
+        None => Value::Error("#NUM!".to_string()),
+    }
+}
+
+/// The value at a **fraction** of the way through the numbers.
+///
+/// The tree's rule: the fraction is between zero and one, and the
+/// value is found by reading between the two numbers it falls
+/// between.
+fn percentile(numbers: Vec<f64>, k: f64) -> Value {
+    if numbers.is_empty() || !(0.0..=1.0).contains(&k) {
+        return Value::Error("#NUM!".to_string());
+    }
+    let numbers = sorted(numbers);
+    let position = k * (numbers.len() - 1) as f64;
+    let index = position.floor();
+    let fraction = position - index;
+    let index = index as usize;
+    let Some(low) = numbers.get(index) else {
+        return Value::Error("#NUM!".to_string());
+    };
+    match numbers.get(index + 1) {
+        Some(high) if fraction > 0.0 => Value::Number(low + fraction * (high - low)),
+        _ => Value::Number(*low),
+    }
+}
+
+impl Book {
+    /// The **statistical functions**.
+    pub(crate) fn statistics(
+        &self,
+        sheet: &str,
+        name: &str,
+        arguments: &[Expr],
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Value {
+        match name {
+            "COUNTBLANK" => self.countblank_call(sheet, arguments, being),
+            "RANK" => self.rank_call(sheet, arguments, being),
+            "LARGE" => match self.numbers_of(sheet, arguments, 0, being) {
+                Ok(numbers) => match self.number_at(sheet, arguments, 1, being) {
+                    Ok(k) => kth(numbers, k, true),
+                    Err(message) => Value::Error(message),
+                },
+                Err(message) => Value::Error(message),
+            },
+            "SMALL" => match self.numbers_of(sheet, arguments, 0, being) {
+                Ok(numbers) => match self.number_at(sheet, arguments, 1, being) {
+                    Ok(k) => kth(numbers, k, false),
+                    Err(message) => Value::Error(message),
+                },
+                Err(message) => Value::Error(message),
+            },
+            "PERCENTILE" => match self.numbers_of(sheet, arguments, 0, being) {
+                Ok(numbers) => match self.number_at(sheet, arguments, 1, being) {
+                    Ok(k) => percentile(numbers, k),
+                    Err(message) => Value::Error(message),
+                },
+                Err(message) => Value::Error(message),
+            },
+            "QUARTILE" => match self.numbers_of(sheet, arguments, 0, being) {
+                Ok(numbers) => match self.number_at(sheet, arguments, 1, being) {
+                    Ok(q) => {
+                        let q = q.trunc();
+                        if !(0.0..=4.0).contains(&q) {
+                            return Value::Error("#NUM!".to_string());
+                        }
+                        percentile(numbers, q / 4.0)
+                    }
+                    Err(message) => Value::Error(message),
+                },
+                Err(message) => Value::Error(message),
+            },
+            _ => {
+                let mut numbers: Vec<f64> = Vec::new();
+                for index in 0..arguments.len() {
+                    match self.numbers_of(sheet, arguments, index, being) {
+                        Ok(found) => numbers.extend(found),
+                        Err(message) => return Value::Error(message),
+                    }
+                }
+                match name {
+                    "MEDIAN" => median(numbers),
+                    "MODE" => match modes(&numbers).first() {
+                        Some(mode) => Value::Number(*mode),
+                        None => Value::Error("#N/A".to_string()),
+                    },
+                    "STDEV" => match variance(&numbers, true) {
+                        Ok(variance) => Value::Number(variance.sqrt()),
+                        Err(message) => Value::Error(message),
+                    },
+                    "STDEVP" => match variance(&numbers, false) {
+                        Ok(variance) => Value::Number(variance.sqrt()),
+                        Err(message) => Value::Error(message),
+                    },
+                    "VAR" => match variance(&numbers, true) {
+                        Ok(variance) => Value::Number(variance),
+                        Err(message) => Value::Error(message),
+                    },
+                    "VARP" => match variance(&numbers, false) {
+                        Ok(variance) => Value::Number(variance),
+                        Err(message) => Value::Error(message),
+                    },
+                    other => Value::Error(format!("there is no function `{other}`")),
+                }
+            }
+        }
+    }
+
+    /// The **numbers** of an argument: the numbers of every cell of a
+    /// range, and the number of a plain argument.
+    fn numbers_of(
+        &self,
+        sheet: &str,
+        arguments: &[Expr],
+        index: usize,
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Result<Vec<f64>, String> {
+        let Some(argument) = arguments.get(index) else { return Ok(Vec::new()) };
+        match argument {
+            Expr::Range { .. } | Expr::Name(_) => {
+                let (name, area) = self.area_of(sheet, argument)?;
+                let mut numbers = Vec::new();
+                for row in area.start.row..=area.end.row {
+                    for col in area.start.col..=area.end.col {
+                        let value = self.value_of_guarded(&name, CellRef { col, row }, being);
+                        if let Some(number) = value.as_number() {
+                            numbers.push(number);
+                        }
+                    }
+                }
+                Ok(numbers)
+            }
+            other => {
+                let value = self.evaluate(sheet, other, being);
+                if let Value::Error(message) = &value {
+                    return Err(message.clone());
+                }
+                Ok(value.as_number().map(|number| vec![number]).unwrap_or_default())
+            }
+        }
+    }
+
+    /// The **number** an argument says.
+    fn number_at(
+        &self,
+        sheet: &str,
+        arguments: &[Expr],
+        index: usize,
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Result<f64, String> {
+        let Some(argument) = arguments.get(index) else { return Err("#VALUE!".to_string()) };
+        let value = self.evaluate(sheet, argument, being);
+        if let Value::Error(message) = &value {
+            return Err(message.clone());
+        }
+        value.as_number().ok_or_else(|| "#VALUE!".to_string())
+    }
+
+    /// The tree's `COUNTBLANK`: how many cells of the range hold
+    /// **nothing** — an empty cell, or a cell whose text is empty.
+    fn countblank_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        let Some(argument) = arguments.first() else { return Value::Error("#VALUE!".to_string()) };
+        let blank = |value: &Value| match value {
+            Value::Empty => true,
+            Value::Text(text) => text.is_empty(),
+            _ => false,
+        };
+        match argument {
+            Expr::Range { .. } | Expr::Name(_) => {
+                let (name, area) = match self.area_of(sheet, argument) {
+                    Ok(area) => area,
+                    Err(message) => return Value::Error(message),
+                };
+                let mut count = 0usize;
+                for row in area.start.row..=area.end.row {
+                    for col in area.start.col..=area.end.col {
+                        let value = self.value_of_guarded(&name, CellRef { col, row }, being);
+                        if blank(&value) {
+                            count += 1;
+                        }
+                    }
+                }
+                Value::Number(count as f64)
+            }
+            other => {
+                let value = self.evaluate(sheet, other, being);
+                if let Value::Error(message) = &value {
+                    return Value::Error(message.clone());
+                }
+                Value::Number(if blank(&value) { 1.0 } else { 0.0 })
+            }
+        }
+    }
+
+    /// The tree's `RANK`: the **place** of a number in a list.
+    ///
+    /// The tree's rule: the order is the largest first unless the
+    /// order is not zero, and a number that is not in the list is
+    /// `#N/A`.
+    fn rank_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() < 2 || arguments.len() > 3 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let number = match self.number_at(sheet, arguments, 0, being) {
+            Ok(number) => number,
+            Err(message) => return Value::Error(message),
+        };
+        let numbers = match self.numbers_of(sheet, arguments, 1, being) {
+            Ok(numbers) => numbers,
+            Err(message) => return Value::Error(message),
+        };
+        let order = match arguments.get(2) {
+            Some(_) => match self.number_at(sheet, arguments, 2, being) {
+                Ok(order) => order,
+                Err(message) => return Value::Error(message),
+            },
+            None => 0.0,
+        };
+        let ascending = order != 0.0;
+        let equal = numbers.iter().filter(|other| **other == number).count();
+        if equal == 0 {
+            return Value::Error("#N/A".to_string());
+        }
+        let before = numbers
+            .iter()
+            .filter(|other| if ascending { **other < number } else { **other > number })
+            .count();
+        Value::Number((before + 1) as f64)
+    }
+}
+
+/// The **variance** of the numbers: the sample one or the population
+/// one.
+///
+/// The tree's rule: the sample variance needs two numbers and the
+/// population one needs one, and a set too small is `#DIV/0!`.
+fn variance(numbers: &[f64], sample: bool) -> Result<f64, String> {
+    if sample {
+        if numbers.len() < 2 {
+            return Err("#DIV/0!".to_string());
+        }
+        return Ok(devsq(numbers) / (numbers.len() - 1) as f64);
+    }
+    if numbers.is_empty() {
+        return Err("#DIV/0!".to_string());
+    }
+    Ok(devsq(numbers) / numbers.len() as f64)
+}
