@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3040 tests.** The MCP server links **all fifteen batteries** in, so the
+**3045 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3040 tests
+cargo test          # 3045 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3841,6 +3841,7 @@ so.
 | the **combinations** of things | **built.** A formula may ask how many ways there are to choose: the factorial, the combinations with and without repetition, the permutations and the multinomial (§404) | §404 |
 | the **bases** and the **bits** | **built.** A formula may ask about a number written in another base — two, eight and sixteen — or about the bits of a number (§405) | §405 |
 | the **information** of a value | **built.** A formula may ask what a value is: whether it is a number or text or an error, whether it is even or odd, and what kind of a value it is (§406) | §406 |
+| the **logic** of a formula | **built.** A formula may ask about the truth of things and may choose between them: the truths, the first condition that is true, the fallback of an error, the match in a list and the choice by place (§407) | §407 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27540,4 +27541,63 @@ A formula may ask what a value is.
   phone has no one answer to that.
 - **v2 refuses a number written as text** where the tree reads it, so
   `ISEVEN("2")` is `#VALUE!` here and true there.
+
+## 407. The logic of a formula
+
+A formula may ask about the truth of things and may choose between
+them.
+
+### What was built
+
+- The functions `AND`, `OR`, `XOR`, `NOT`, `IFS`, `IFERROR`, `IFNA`,
+  `SWITCH` and `CHOOSE`.
+- `AND` is true when every one of the truths is true, `OR` when at
+  least one is, and `XOR` when an **odd** number of them are.
+- `IFS` is the value paired with the **first** condition that is true,
+  `IFERROR` is the fallback when the value is an error, and `IFNA` is
+  the fallback when the value is `#N/A` and not another error.
+- `SWITCH` is the result paired with the **first** value that matches
+  the expression, and `CHOOSE` is the value at a given place.
+- The **rules** are the tree's: a **range** contributes its numbers
+  and its booleans and skips its texts and its empties, a value
+  written out is read as a truth, and a text that is not `TRUE` or
+  `FALSE` is a value error.
+
+### What the port found
+
+- **The tree's ranges and its written-out values are read by different
+  rules, and that is not an accident.** A range contributes its
+  numbers and its booleans and **skips** its texts and its empties,
+  so `AND` over a range of numbers is the truth of the numbers and
+  not of the texts beside them; a value written out is read as a
+  truth, so a text that is not `TRUE` or `FALSE` is `#VALUE!`. Here
+  the same, and the two rules are kept apart on purpose.
+- **The tree's `IFNA` is about one error and `IFERROR` is about all
+  of them.** An error that is not `#N/A` passes straight through
+  `IFNA` and is caught by `IFERROR`. Here the same.
+- **The tree's `SWITCH` compares the way the tree compares** — texts
+  without regard to their case, a nothing equal to a zero and to an
+  empty text — and its **default** is the last argument when it
+  stands alone. Here the same.
+- **The tree's `CHOOSE` counts from one** and refuses a place that is
+  not in the list. Here the same.
+
+### What it cost
+
+- **Five tests** in the grid battery (`tests/logic.rs`): the truths,
+  a range of truths, the first condition that is true, the match and
+  the choice, and the errors.
+- **One new module**: `logic`. **No new command**: a function is not a
+  command, and the grid battery still carries **67** commands and the
+  MCP server **521**.
+
+### What it does not settle
+
+- **The tree's `IF` was already here** (§ the formula module), and
+  the tree's `IF` takes an array as its condition and lifts; v2's
+  takes one truth and does not lift, because v2 has no arrays.
+- **The tree's web functions are not here**: `HYPERLINK`,
+  `ENCODEURL`, `WEBSERVICE` and `FILTERXML`.
+- **The tree's cube functions are not here**, and will not be: they
+  want a connection to a cube, and a kit has none.
 
