@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2775 tests.** The MCP server links **all fifteen batteries** in, so the
+**2784 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2775 tests
+cargo test          # 2784 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3801,6 +3801,7 @@ so.
 | the **choice** of a value | **built.** A formula may choose with IF, and only the branch that is taken is computed (§364) | §364 |
 | the **counting** of a condition | **built.** COUNTIF counts and SUMIF adds the cells that meet a condition, and the condition is a value (§365) | §365 |
 | the **finding** of a cell | **built.** A sheet is searched: the cells whose text holds what was looked for, with the tree's wildcards (§366) | §366 |
+| the **note** on a cell | **built.** A cell may carry a note, and the note belongs to the sheet and names the cell (§367) | §367 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25016,3 +25017,65 @@ what was looked for.
   formula of a cell when the sheet says the formulas are hidden, and
   then the search finds the value and not the formula; here the
   formulas of a sheet are always there and always searchable.
+
+## 367. The note on a cell
+
+A cell may carry a **note**: a piece of text that says something about
+the cell and is not the cell's value.
+
+### What was built
+
+- The command `grid.cell.note.set` writes a note on a cell: the text
+  of it, and — with the `author` parameter — who wrote it.
+- A note that is already on the cell is **edited**: the text is the
+  new text, and the author is kept unless a new one is given.
+- The command `grid.cell.note.get` gives the note of a cell, and the
+  command `grid.cell.note.delete` takes it away. A cell that holds no
+  note is not refused: there is nothing to take away.
+- A note with **no text** is refused, and so is a node that is not a
+  sheet and a sheet that is not there.
+- A note **survives** the cell being written to: the value of a cell
+  may change and the note stays.
+- The note goes with the **whole cell** being cleared — `grid.cell.clear`
+  takes it — and it stays when the **contents** are cleared.
+
+### What the port found
+
+- **The tree's comment is a thread and this tree's note is a text.** The
+  tree's comment carries an author, the replies of a thread, a flag
+  that says the thread is resolved, a flag that says the box is
+  shown, the dates and the place of the box. Here a note is a text and
+  an author, and the thread is not here.
+- **The note belongs to the sheet and not to the cell, and that is the
+  tree's own shape.** The tree keeps its comments in a map of the
+  sheet and not in the cell, because a cell in the tree is a value and
+  a formula and a style. Here the note is in the sheet's own map too,
+  and that is why a note survives the cell being written to.
+- **The tree's clear all takes the comment with it, and its clear
+  contents does not.** So does this one: `grid.cell.clear` takes the
+  note and `grid.cell.clear.contents` keeps it.
+- **The tree's author is the name in its preferences and this tree's
+  is what was given.** The tree has a user name and writes it on every
+  comment; here there are no preferences, and the author is the one the
+  note was written with — and the author of an edited note is kept.
+
+### What it cost
+
+- **Nine tests** in the grid battery (`tests/notes.rs`): a note being
+  written, a note being edited and the author kept, a note surviving
+  the cell being written to, the note going with the whole cell being
+  cleared, the note staying when the contents are cleared, a note being
+  taken away, a cell that holds no note not being refused, a note with
+  no text being refused, and a node that is not a sheet being refused.
+- **Three new commands**: `grid.cell.note.set`, `grid.cell.note.get`
+  and `grid.cell.note.delete`. The grid battery now carries **57**
+  commands and the MCP server **485**.
+
+### What it does not settle
+
+- **The tree's threads are not here.** A comment in the tree may have
+  replies, and a thread may be resolved; a note here is one text and
+  one author.
+- **The tree's note box is not here.** The tree remembers where the
+  box of a note sits and how big it is, and the dates of the thread;
+  here a note is text, and where it is shown is the panel's business.
