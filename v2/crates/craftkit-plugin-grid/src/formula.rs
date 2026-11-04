@@ -465,37 +465,60 @@ fn display_text(value: &Value) -> String {
     }
 }
 
-/// Whether a **text** matches a pattern with the tree's `*` wildcard.
+/// Whether a **text** matches a pattern with the tree's wildcards.
+///
+/// The wildcards are the tree's:
+///
+/// - `*` is any **run** of characters, and it may be nothing at all;
+/// - `?` is any **one** character;
+/// - `~` is the escape: `~*` is a star and `~?` is a question mark.
 ///
 /// The comparison is without case, as the tree's is.
-fn wildcard(pattern: &str, text: &str) -> bool {
-    let pattern = pattern.to_lowercase();
-    let text = text.to_lowercase();
-    let parts: Vec<&str> = pattern.split('*').collect();
-    let mut at = 0usize;
-    for (index, part) in parts.iter().enumerate() {
-        if part.is_empty() {
-            continue;
-        }
-        if index == 0 {
-            if !text[at..].starts_with(part) {
-                return false;
+pub fn wildcard(pattern: &str, text: &str) -> bool {
+    let text: Vec<char> = text.chars().flat_map(char::to_lowercase).collect();
+    let mut tokens: Vec<(char, bool)> = Vec::new();
+    let mut characters = pattern.chars();
+    while let Some(character) = characters.next() {
+        if character == '~' {
+            if let Some(next) = characters.next() {
+                tokens.push((lower(next), true));
             }
-            at += part.len();
-            continue;
-        }
-        match text[at..].find(part) {
-            Some(found) => at += found + part.len(),
-            None => return false,
+        } else {
+            tokens.push((lower(character), false));
         }
     }
-    if let Some(last) = parts.last()
-        && !last.is_empty()
-        && !text.ends_with(last)
-    {
-        return false;
+    let (mut in_text, mut in_pattern) = (0usize, 0usize);
+    // Where the last `*` was, and where the text was when it was
+    // found: a `*` that matched too little takes one more character.
+    let (mut star, mut mark) = (None, 0usize);
+    while in_text < text.len() {
+        if in_pattern < tokens.len()
+            && (tokens[in_pattern] == ('?', false)
+                || (tokens[in_pattern].0 == text[in_text] && tokens[in_pattern] != ('*', false)))
+        {
+            in_text += 1;
+            in_pattern += 1;
+        } else if in_pattern < tokens.len() && tokens[in_pattern] == ('*', false) {
+            star = Some(in_pattern);
+            mark = in_text;
+            in_pattern += 1;
+        } else if let Some(star_at) = star {
+            in_pattern = star_at + 1;
+            mark += 1;
+            in_text = mark;
+        } else {
+            return false;
+        }
     }
-    true
+    while in_pattern < tokens.len() && tokens[in_pattern] == ('*', false) {
+        in_pattern += 1;
+    }
+    in_pattern == tokens.len()
+}
+
+/// One character, lowercased to one character.
+fn lower(character: char) -> char {
+    character.to_lowercase().next().unwrap_or(character)
 }
 
 /// A formula that did not parse.
@@ -1301,6 +1324,12 @@ impl Book {
         if name == "IF" {
             return self.if_call(sheet, arguments, being);
         }
+        if name == "COUNTIF" {
+            return self.countif(sheet, arguments, being);
+        }
+        if name == "SUMIF" {
+            return self.sumif(sheet, arguments, being);
+        }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();
@@ -1375,8 +1404,7 @@ impl Book {
         }
     }
 
-    /// The tree's `IF`: a **choice** between two values.
-    ///
+    /// The tree's `IF`: a **choice** between two values.    ///
     /// The tree's rule, in the tree's own words:
     ///
     /// - the **condition** is a value, and its truth is asked of it: an
@@ -1408,6 +1436,125 @@ impl Book {
             Some(expression) => self.evaluate(sheet, expression, being),
             None => Value::Bool(truth),
         }
+    }
+
+    /// The **area** a range argument stands for: the sheet it is in
+    /// and the cells it covers.
+    ///
+    /// A range names a sheet or is in the sheet the formula is in, and
+    /// a name stands for a range of cells.
+    fn area_of(&self, sheet: &str, argument: &Expr) -> Result<(String, Area), String> {
+        match argument {
+            Expr::Range { sheet: named, start, end } => {
+                let name = named.clone().unwrap_or_else(|| sheet.to_string());
+                if !self.sheets.contains_key(&name) {
+                    return Err(format!("there is no sheet `{name}`"));
+                }
+                Ok((name, Area::new(start.cell, end.cell)))
+            }
+            Expr::Name(name) => {
+                let Some(name) = self.names.get(name) else {
+                    return Err(format!("there is no name `{name}`"));
+                };
+                Ok((name.sheet.clone(), name.area))
+            }
+            _ => Err("a counting function takes a range of cells".to_string()),
+        }
+    }
+
+    /// The tree's `COUNTIF`: the **count** of the cells that meet a
+    /// condition.
+    ///
+    /// The condition is the tree's condition (the module `criteria`),
+    /// and it is a **value**: a text criterion is a condition written
+    /// out, and a number or a boolean is the value itself.
+    ///
+    /// A cell that holds an **error** is counted when the error is the
+    /// one the condition names, and the condition that is an error does
+    /// not stop the count: it is the condition *that the cell holds
+    /// that error*.
+    fn countif(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() != 2 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let (name, area) = match self.area_of(sheet, &arguments[0]) {
+            Ok(area) => area,
+            Err(message) => return Value::Error(message),
+        };
+        let condition = self.evaluate(sheet, &arguments[1], being);
+        let condition = match crate::criteria::Condition::parse_argument(&condition) {
+            Ok(condition) => condition,
+            Err(message) => return Value::Error(message),
+        };
+        let mut count = 0.0;
+        for row in area.start.row..=area.end.row {
+            for col in area.start.col..=area.end.col {
+                let value = self.value_of_guarded(&name, CellRef { col, row }, being);
+                if condition.matches(&value) {
+                    count += 1.0;
+                }
+            }
+        }
+        Value::Number(count)
+    }
+
+    /// The tree's `SUMIF`: the **sum** of the cells that meet a
+    /// condition.
+    ///
+    /// The third argument is the **sum range**: the cells that are
+    /// added are the ones of the sum range that stand opposite the
+    /// cells of the first range. The sum range is sized like the first
+    /// range and is anchored at its own top left cell, as the tree's
+    /// is, so a sum range that is smaller than the range it is summed
+    /// over is read past its own end.
+    ///
+    /// A cell that holds an **error** and is added is that error: the
+    /// sum is not a sum that skips it.
+    fn sumif(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() < 2 || arguments.len() > 3 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let (name, area) = match self.area_of(sheet, &arguments[0]) {
+            Ok(area) => area,
+            Err(message) => return Value::Error(message),
+        };
+        let condition = self.evaluate(sheet, &arguments[1], being);
+        let condition = match crate::criteria::Condition::parse_argument(&condition) {
+            Ok(condition) => condition,
+            Err(message) => return Value::Error(message),
+        };
+        let sum_range = match arguments.get(2) {
+            Some(argument) => match self.area_of(sheet, argument) {
+                Ok(area) => Some(area),
+                Err(message) => return Value::Error(message),
+            },
+            None => None,
+        };
+        let mut total = 0.0;
+        for row in area.start.row..=area.end.row {
+            for col in area.start.col..=area.end.col {
+                let value = self.value_of_guarded(&name, CellRef { col, row }, being);
+                if !condition.matches(&value) {
+                    continue;
+                }
+                let target = match &sum_range {
+                    Some((sum_name, sum_area)) => {
+                        let cell = CellRef {
+                            col: sum_area.start.col + (col - area.start.col),
+                            row: sum_area.start.row + (row - area.start.row),
+                        };
+                        self.value_of_guarded(sum_name, cell, being)
+                    }
+                    None => value,
+                };
+                match target {
+                    Value::Number(number) => total += number,
+                    Value::Error(message) => return Value::Error(message),
+                    _ => {}
+                }
+            }
+        }
+        Value::Number(total)
     }
 }
 

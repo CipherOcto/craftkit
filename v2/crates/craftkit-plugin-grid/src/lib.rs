@@ -19,6 +19,11 @@
 //! values it chooses between, and only the branch that is taken is
 //! computed (the module `formula`).
 //!
+//! And a formula may **count** what meets a condition: `COUNTIF` and
+//! `SUMIF` take a range of cells and a condition, and the condition is
+//! a value — a text condition is a condition written out, with the
+//! tree's wildcards in it (the module `criteria`).
+//!
 //! And a workbook may carry **names**: a word that stands for a range of
 //! cells, and a formula may use the word where it would use the range
 //! (the module `names`).
@@ -154,6 +159,7 @@
 
 mod clearing;
 mod conditional;
+mod criteria;
 mod dates;
 mod fill;
 mod filters;
@@ -181,6 +187,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 pub use clearing::{ClearContents, ClearFormat};
 pub use conditional::{CheckConditional, ClearConditional, SetConditional};
+pub use criteria::Condition;
 use fill::FillRange;
 pub use filters::{ClearFilter, FilteredRows, SetFilter};
 use flash::FlashFill;
