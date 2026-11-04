@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2784 tests.** The MCP server links **all fifteen batteries** in, so the
+**2791 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2784 tests
+cargo test          # 2791 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3802,6 +3802,7 @@ so.
 | the **counting** of a condition | **built.** COUNTIF counts and SUMIF adds the cells that meet a condition, and the condition is a value (§365) | §365 |
 | the **finding** of a cell | **built.** A sheet is searched: the cells whose text holds what was looked for, with the tree's wildcards (§366) | §366 |
 | the **note** on a cell | **built.** A cell may carry a note, and the note belongs to the sheet and names the cell (§367) | §367 |
+| the **link** on a cell | **built.** A cell may carry a link, and whether the target is inside this workbook is derived (§368) | §368 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25079,3 +25080,68 @@ the cell and is not the cell's value.
 - **The tree's note box is not here.** The tree remembers where the
   box of a note sits and how big it is, and the dates of the thread;
   here a note is text, and where it is shown is the panel's business.
+
+## 368. The link on a cell
+
+A cell may carry a **link**: a target that something else may open.
+
+### What was built
+
+- The command `grid.cell.link.set` puts a link on a cell: where it
+  goes — a place in this workbook or a place outside it — and, with
+  the `tooltip` parameter, the text that is shown when the mouse
+  rests on it.
+- A link that is already on the cell is **edited**: the target is the
+  new target, and the tooltip is kept unless a new one is given.
+- The command `grid.cell.link.get` gives the link of a cell, and the
+  command `grid.cell.link.delete` takes it away. A cell that holds no
+  link is not refused: there is nothing to take away.
+- Whether the target is **inside this workbook** is **derived**: a
+  target that names a sheet of this workbook and a cell in it is
+  inside, and everything else — a web address, a `mailto:`, a file —
+  is outside.
+- A link **survives** the cell being written to, and it goes with the
+  **whole cell** being cleared.
+- A link that goes **nowhere** is refused, and so is a node that is
+  not a sheet and a sheet that is not there.
+
+### What the port found
+
+- **The tree's flag is read from a file and this tree's is derived.**
+  The tree's hyperlink carries a flag that says whether the target is
+  outside the workbook, and the tree reads it from the file the link
+  was written in — a relationship in the file, and not a `location`.
+  Here the flag is **derived**: this tree knows the sheets it has, so
+  a target that names one of them and a cell in it is inside.
+- **The tree cannot tell a bare file name from a defined name.** The
+  tree says so in its own note, and so does this one: a target with no
+  `!` in it is outside, whatever it is.
+- **The link belongs to the sheet and not to the cell, and that is the
+  tree's own shape.** The tree keeps its hyperlinks in a map of the
+  sheet, and so does this one — and that is why a link survives the
+  cell being written to and goes only when the whole cell is cleared.
+- **The tree's clear all takes the hyperlink with it.** So does this
+  one: `grid.cell.clear` takes the link and `grid.cell.clear.contents`
+  keeps it.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/links.rs`): a link being
+  written, a link being edited and the tooltip kept, a link that goes
+  to a place in this workbook being inside, a link surviving the cell
+  being written to and going with the whole cell being cleared, a link
+  being taken away, a link that goes nowhere being refused, and a node
+  that is not a sheet being refused.
+- **Three new commands**: `grid.cell.link.set`, `grid.cell.link.get`
+  and `grid.cell.link.delete`. The grid battery now carries **60**
+  commands and the MCP server **488**.
+
+### What it does not settle
+
+- **The tree's links are not opened here.** The tree's file carries a
+  relationship for every link that is outside the workbook, and a
+  target that is a file is a relationship and not a path; here the
+  target is the text that was given.
+- **The tree's defined names are not here.** A target may name a
+  defined name in the tree, and a bare name cannot be told from a file
+  name; here a target names a sheet and a cell, or it is outside.
