@@ -192,6 +192,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod cellread;
 mod clearing;
 mod conditional;
 mod criteria;
@@ -228,6 +229,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+pub use cellread::ReadCell;
 pub use clearing::{ClearContents, ClearFormat};
 pub use conditional::{CheckConditional, ClearConditional, SetConditional};
 pub use criteria::Condition;
@@ -1469,6 +1471,7 @@ craftkit_sdk::plugin_anchor!(
     FindCells,
     GetLink,
     GetNote,
+    ReadCell,
     ReadRange,
     ProtectSheet,
     SetLink,
