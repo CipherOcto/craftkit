@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3076 tests.** The MCP server links **all fifteen batteries** in, so the
+**3081 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3076 tests
+cargo test          # 3081 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3847,6 +3847,7 @@ so.
 | the **cash flows** of a plan | **built.** A formula may ask about a series of payments: the rate at which they are worth nothing, what a sum grows to, and the interest and the principal of a run of payments (§410) | §410 |
 | the **words** of a number and the **letters** of a text | **built.** A formula may ask the words of a number and the letters of a text: Roman numerals, another base, a character and its code, and a text for a URL (§411) | §411 |
 | the **deviations** of a set | **built.** A formula may ask the deviations of a set, its means, its skew, its ranks and its percentiles — the tree's two ways of each (§412) | §412 |
+| the **measure** of a thing | **built.** A formula may ask what a measurement is in another unit, with the tree's units and its prefixes (§413) | §413 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27941,4 +27942,65 @@ ranks and its percentiles.
 - **The tree's `GEOMEAN` of a number that is not positive is a number
   error**, and so is here; the tree does not say what the geometric
   mean of a set with a zero in it is.
+
+## 413. The measure of a thing
+
+A formula may ask what a measurement is in another unit.
+
+### What was built
+
+- The function `CONVERT(number, from_unit, to_unit)`.
+- The **units** are the tree's: the mass, the length, the time, the
+  pressure, the force, the energy, the power, the magnetism, the
+  temperature, the volume, the area, the information and the speed,
+  with the names each of them has.
+- The **prefixes** are the tree's: the SI ones — `da`, `Y`, `Z`, `E`,
+  `P`, `T`, `G`, `M`, `k`, `h`, `e`, `d`, `c`, `m`, `u`, `n`, `p`,
+  `f`, `a`, `z`, `y` — and the **binary** ones, `ki`, `Mi`, `Gi`, `Ti`,
+  `Pi`, `Ei`, `Zi` and `Yi`.
+- The **temperature** is turned through the **kelvin**, and the scales
+  are the tree's: the Celsius, the Fahrenheit, the Rankine and the
+  Réaumur.
+- The **errors** are the tree's: a unit that is not one is `#N/A`, and
+  a unit of one kind cannot be turned into a unit of another kind.
+
+### What the port found
+
+- **The tree's units are of a kind and the kinds do not mix.** A mass
+  is not a length, and the tree does not answer with a number when it
+  is asked to turn one into the other — it answers `#N/A`. Here the
+  same, and the kind is a thing of its own and not a name.
+- **The tree's prefixes are tried after the whole name.** The unit
+  `min` is the minute and not the milli-inch, because the exact name
+  wins over a prefixed one, and the prefixes are only tried on what
+  is left. Here the same.
+- **The tree's prefixes are not the same for every unit.** The binary
+  prefixes are for the **information** and the SI ones for most of the
+  rest, and a unit that takes no prefix at all — the mile, the pound,
+  the hour — takes none however it is written. Here the same.
+- **The tree's temperature is turned through the kelvin and not by a
+  formula of its own**, so a scale that is not linear — the Rankine,
+  the Réaumur — is in the same table as the ones that are, and a
+  temperature in the same scale is the number itself. Here the same.
+
+### What it cost
+
+- **Five tests** in the grid battery (`tests/units.rs`): a mass and a
+  length, a temperature, a volume and an area and a speed, the
+  prefixes, and the errors.
+- **One new module**: `units`. **No new command**: a function is not a
+  command, and the grid battery still carries **67** commands and the
+  MCP server **521**.
+
+### What it does not settle
+
+- **The tree's units are the tree's and not the whole world**: there
+  are no ounces of a fluid measure beyond the ones the table names, no
+  metric tons and no hundredweight of another country beyond the
+  tree's own.
+- **The tree's `CONVERT` has no fourth argument**, and the Excel one
+  has: a temperature that is cold or hot.
+- **The tree's units are not in v2's own system of measure**, and the
+  v2 document carries millimetres and radians in the numbers of its
+  own kinds — this is a spreadsheet's table and not the kit's.
 
