@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3100 tests.** The MCP server links **all fifteen batteries** in, so the
+**3102 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3100 tests
+cargo test          # 3102 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3854,6 +3854,7 @@ so.
 | the **tests of a hypothesis** | **built.** A formula may test a hypothesis: a t-test, a chi-square test, an F-test and a z-test (§417) | §417 |
 | the **sums of the squares** of two sets | **built.** A formula may ask about two sets of numbers at once: the sums of their squares, the difference of the squares and the squares of the differences (§418) | §418 |
 | the **whole numbers** of a number | **built.** A formula may ask for the whole number that is near a number: the next even one, the next odd one, and the root of pi (§419) | §419 |
+| the **value of a text** | **built.** A formula may ask for the value of a text: a text that holds a number, a date or a time (§420) | §420 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28326,4 +28327,51 @@ next even one, the next odd one.
 - **The tree's even and odd of a number with more than fifteen digits
   is not proved here** by a test, though the code cleans it the same
   way.
+
+## 420. The value of a text
+
+A formula may ask for the **value of a text**: a text that holds a
+number, a date or a time.
+
+### What was built
+
+- The functions `VALUE`, `DATEVALUE` and `TIMEVALUE`.
+- `VALUE` reads a text as a **number**; `DATEVALUE` reads a text as a
+  **date** — the number of the day — and `TIMEVALUE` reads a text as a
+  **time** — the fraction of the day.
+- The **rules** are the tree's: a **sign** may stand before the
+  number, a **currency sign** may stand before it, **thousands
+  separators** may stand in it in groups of three, a **percent sign**
+  may stand after it and the number is then a hundredth of itself, an
+  **exponent** may stand in it, and **parentheses** around it make it
+  negative — `(5)`, `$(5)` and `(5)%` included.
+
+### What the port found
+
+- **The tree's value of a blank cell is zero and the value of an empty
+  text is not**: `VALUE("")` is `#VALUE!`, as the tree's own note says
+  it observed. Here the same, and the two are not the same thing.
+- **The tree's currency sign and percent sign may not stand
+  together**: `$5%` is not a number. Here the same.
+- **The tree's thousands separators must be in groups of three**, and
+  `1,23` is not a number. Here the same.
+- **The tree's date is read in the calendar of the workbook**, and so
+  the day that never happened — the 29th of February of 1900 — is the
+  serial 60 here too.
+
+### What it cost
+
+- **Two tests** in the grid battery (`tests/textvalue.rs`): the
+  number of a text is found, and the date and the time of a text are
+  found.
+- **One new module** (`textvalue`): the reading of a text is its
+  own. **No new command**: a function is not a command, and the grid
+  battery still carries **67** commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's text of a date and a time together is not here**: a
+  text such as `1/2/2020 3:00 PM` is neither a date nor a time here.
+- **The tree's fraction written as text is not proved here** by a
+  test, though the code reads it.
 
