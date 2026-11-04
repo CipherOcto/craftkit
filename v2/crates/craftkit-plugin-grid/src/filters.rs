@@ -77,6 +77,7 @@ impl SetFilter {
                 message: format!("the node `{sheet}` is not a sheet"),
             });
         }
+        crate::protection::refuse_filter(node, &id)?;
         let column = self.column.0.trim().to_uppercase();
         let Some(index) = CellRef::column_index(&column) else {
             return Err(EngineError::Failed {
@@ -139,6 +140,7 @@ impl ClearFilter {
                 message: format!("the node `{sheet}` is not a sheet"),
             });
         }
+        crate::protection::refuse_filter(node, &id)?;
         if node.data.get("filter").is_none() {
             return Err(EngineError::Failed {
                 id: id.clone(),

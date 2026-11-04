@@ -113,6 +113,7 @@ impl FlashFill {
         if let Some(node) = session.document().node(sheet) {
             let cells: Vec<crate::formula::CellRef> = todo.iter().map(|(cell, _)| *cell).collect();
             crate::merges::refuse_covered(node, &cells, "grid.flash.fill")?;
+            crate::protection::refuse_locked(node, &cells, "grid.flash.fill")?;
         }
         let mut written: Vec<serde_json::Value> = Vec::new();
         if let Some(node) = session.document_mut()?.node_mut(sheet) {

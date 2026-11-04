@@ -55,6 +55,10 @@
 //! with it — the format, the style, the formula with its relative
 //! references, the note and the link (the module `sorting`).
 //!
+//! And a sheet may be **protected**: then its cells are locked and
+//! the sorting, the filtering and the formatting are the ones the
+//! protection says (the module `protection`).
+//!
 //! And a workbook may carry **names**: a word that stands for a range of
 //! cells, and a formula may use the word where it would use the range
 //! (the module `names`).
@@ -206,6 +210,7 @@ mod lookups;
 mod merges;
 mod names;
 mod notes;
+mod protection;
 mod reading;
 mod removal;
 mod sections;
@@ -237,6 +242,7 @@ pub use links::{DeleteLink, GetLink, SetLink};
 pub use merges::{ClearMerge, SetMerge};
 pub use names::{DeleteName, SetName};
 pub use notes::{DeleteNote, GetNote, SetNote};
+pub use protection::{ProtectSheet, UnprotectSheet};
 pub use reading::ReadRange;
 pub use removal::RemoveSheet;
 pub use sheetnames::RenameSheet;
@@ -831,6 +837,7 @@ impl SetCell {
             });
         }
         merges::refuse_covered(node, &[cell], "grid.cell.set")?;
+        crate::protection::refuse_locked(node, &[cell], "grid.cell.set")?;
         let mut cells = sheet_cells_mut(node);
         cells.set_value(cell, value.clone());
         node.data["cells"] = cells_into(&cells);
@@ -894,6 +901,7 @@ impl SetFormat {
                 message: format!("the node `{sheet}` is not a sheet"),
             });
         }
+        crate::protection::refuse_format(node, &id)?;
         let mut cells = sheet_cells_mut(node);
         cells.set_format(cell, Some(code.clone()));
         node.data["cells"] = cells_into(&cells);
@@ -971,6 +979,7 @@ impl SetDate {
             });
         }
         merges::refuse_covered(node, &[cell], &id)?;
+        crate::protection::refuse_locked(node, &[cell], &id)?;
         let mut cells = sheet_cells_mut(node);
         cells.set_value(cell, Value::Number(serial));
         cells.set_format(cell, Some(style.code().to_string()));
@@ -1048,6 +1057,7 @@ impl SetTime {
             });
         }
         merges::refuse_covered(node, &[cell], &id)?;
+        crate::protection::refuse_locked(node, &[cell], &id)?;
         let mut cells = sheet_cells_mut(node);
         cells.set_value(cell, Value::Number(serial));
         cells.set_format(cell, Some(style.code().to_string()));
@@ -1163,6 +1173,7 @@ impl SetFormula {
             });
         }
         merges::refuse_covered(node, &[cell], "grid.formula.set")?;
+        crate::protection::refuse_locked(node, &[cell], "grid.formula.set")?;
         let name = node.name.clone();
         let mut cells = cells_of(node);
         // The cycle check: with the new formula in place, does the cell
@@ -1218,6 +1229,7 @@ impl ClearCell {
                 message: format!("there is no sheet `{sheet}`"),
             });
         };
+        crate::protection::refuse_locked(node, &[cell], "grid.cell.clear")?;
         let mut cells = sheet_cells_mut(node);
         let was_there = cells.clear(cell);
         node.data["cells"] = cells_into(&cells);
@@ -1458,9 +1470,11 @@ craftkit_sdk::plugin_anchor!(
     GetLink,
     GetNote,
     ReadRange,
+    ProtectSheet,
     SetLink,
     SetNote,
     SortRange,
+    UnprotectSheet,
     RemoveSheet,
     SetCell,
     SetFormula,

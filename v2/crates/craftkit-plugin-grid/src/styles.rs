@@ -243,6 +243,7 @@ impl SetCellStyle {
                 message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
             });
         }
+        crate::protection::refuse_format(node, &id)?;
         let mut cells = crate::sheet_cells_mut(node);
         cells.set_style(cell, if name.is_empty() { None } else { Some(name.clone()) });
         node.data["cells"] = crate::cells_into(&cells);

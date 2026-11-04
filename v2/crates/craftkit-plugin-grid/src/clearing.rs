@@ -55,6 +55,7 @@ impl ClearContents {
             });
         }
         crate::merges::refuse_covered(node, &[cell], &id)?;
+        crate::protection::refuse_locked(node, &[cell], &id)?;
         let mut cells = crate::cells_of(node);
         let had = cells.clear_contents(cell);
         node.data["cells"] = crate::cells_into(&cells);
@@ -93,6 +94,7 @@ impl ClearFormat {
             });
         }
         crate::merges::refuse_covered(node, &[cell], &id)?;
+        crate::protection::refuse_format(node, &id)?;
         let mut cells = crate::cells_of(node);
         let had = cells.clear_format(cell);
         node.data["cells"] = crate::cells_into(&cells);

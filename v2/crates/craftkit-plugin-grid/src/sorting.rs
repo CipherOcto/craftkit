@@ -136,6 +136,7 @@ impl SortRange {
                 message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
             });
         }
+        crate::protection::refuse_sort(node, &id)?;
         let name = node.name.clone();
         let mut cells = crate::cells_of(node);
         // The **range**: the one that was named, or the used range.
