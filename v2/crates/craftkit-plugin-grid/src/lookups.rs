@@ -37,7 +37,7 @@ use crate::formula::{Book, CellRef, Expr, Value};
 
 /// Whether a name is one of the **lookup functions**.
 pub fn is_lookup_function(name: &str) -> bool {
-    matches!(name, "MATCH" | "VLOOKUP" | "INDEX")
+    matches!(name, "MATCH" | "VLOOKUP" | "INDEX" | "ROWS" | "COLUMNS")
 }
 
 /// The message of the search that is **not here**.
@@ -72,8 +72,37 @@ impl Book {
             "MATCH" => self.match_call(sheet, arguments, being),
             "VLOOKUP" => self.vlookup_call(sheet, arguments, being),
             "INDEX" => self.index_call(sheet, arguments, being),
+            "ROWS" | "COLUMNS" => self.shape_call(sheet, name, arguments, being),
             _ => Value::Error(format!("there is no function `{name}`")),
         }
+    }
+
+    /// The **shape** of a range: how many rows it has, or how many
+    /// columns.
+    ///
+    /// A range is a range and has a shape; an argument that is not a
+    /// range is one cell and has a shape of one row and one column —
+    /// the tree's rule, and the rule that makes `ROWS(5)` one.
+    fn shape_call(
+        &self,
+        sheet: &str,
+        name: &str,
+        arguments: &[Expr],
+        _being: &mut Vec<(String, CellRef)>,
+    ) -> Value {
+        let Some(argument) = arguments.first() else {
+            return Value::Error("#VALUE!".to_string());
+        };
+        let size = match self.area_of(sheet, argument) {
+            Ok((_, area)) => {
+                let rows = area.end.row - area.start.row + 1;
+                let columns = area.end.col - area.start.col + 1;
+                if name == "ROWS" { rows } else { columns }
+            }
+            // An argument that is not a range is one cell.
+            Err(_) => 1,
+        };
+        Value::Number(f64::from(size))
     }
 
     /// The **values** of a range, in the order a reader reads them.

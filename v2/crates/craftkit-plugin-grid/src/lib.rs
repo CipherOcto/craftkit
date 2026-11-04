@@ -152,7 +152,8 @@
 //! And a formula may **find** a value in a range — `MATCH`, `VLOOKUP`
 //! and `INDEX` — and the search is the **exact** one; the tree's
 //! approximate search is not here, and a lookup that asks for it says
-//! so (the module `lookups`).
+//! so. And it may ask for the **shape** of a range — how many rows it
+//! has and how many columns (the module `lookups`).
 //!
 //! And a formula may **make a date** and take it apart — `DATE`,
 //! `YEAR`, `MONTH` and `DAY` — in the date system of the workbook,
