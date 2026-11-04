@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2741 tests.** The MCP server links **all fifteen batteries** in, so the
+**2748 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2741 tests
+cargo test          # 2748 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3797,6 +3797,7 @@ so.
 | the **media** a clip plays | **built.** A clip may play another media, and a clip that would run past the end of it is refused (§360) | §360 |
 | the **gap** on a track | **built.** The gap that holds a place is closed: the clips after it move up and the time is free again (§361) | §361 |
 | the **clearing** of a cell | **built.** The contents and the format of a cell are cleared apart, and a formula is a content (§362) | §362 |
+| the **reading** of a range of cells | **built.** A range of cells is read: the values, row by row, and the value of a formula cell is derived (§363) | §363 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24734,3 +24735,65 @@ the cell **holds**, and how it is **shown**.
   unchecks a checkbox before it empties the cell, because the box is
   the cell's value there; here a cell holds a value and there is no
   box.
+
+## 363. The reading of a range of cells
+
+A range of cells may be **read**: the answer is the values of the cells,
+row by row.
+
+### What was built
+
+- The command `grid.range.read` reads a range of a sheet and gives the
+  values of the cells, row by row, and says which range it read.
+- A cell that holds a **formula** has the value its formula computes —
+  the value is **derived**, so it is computed every time the range is
+  read and it cannot be wrong.
+- Without a range, the **used range** is read: the stretch of the sheet
+  that holds something. A sheet that holds nothing has no used range,
+  and the answer is empty.
+- The **formulas** may be asked for instead of the values, and a cell
+  without a formula then shows its value.
+- A range that is **not a range of cells** is refused, and so is a node
+  that is **not a sheet**, and a sheet that is **not there**.
+
+### What the port found
+
+- **The tree's bound is a million cells and this tree's bound is the
+  sheet.** The tree refuses to read a range of more than a million
+  cells and says *read it in parts*; here the bound of the reading is
+  the **sheet** itself — a sheet is a million rows tall and sixteen
+  thousand columns wide — and a range may not leave the sheet.
+- **The tree's read may show the text the cells show, and here it does
+  not.** The tree's read takes a `formatted` flag and gives the text
+  the cells show, with the format and the conditional format and the
+  date system of the workbook in it. Here the **text** is what
+  `grid.cell.text` is for — one cell at a time — so the read gives the
+  **values**.
+- **The tree's read narrows a whole row or a whole column to the used
+  range, and this one does not.** The tree intersects a full-column
+  range with the used range, so `A:A` reads the cells that hold
+  something and no more; here the range is the range that was named.
+- **The tree's range may be the selection and this one may not.** The
+  tree's read takes the range from the selection when the parameter is
+  not given; here there is no selection, and the default is the used
+  range.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/reading.rs`): a range
+  being read, the value of a formula cell being computed, the formulas
+  being asked for instead, the used range being read when no range is
+  given, a sheet that holds nothing reading nothing, a range that is
+  not a range refused, and a node that is not a sheet refused.
+- **One new command**: `grid.range.read`. The grid battery now carries
+  **53** commands and the MCP server **481**.
+
+### What it does not settle
+
+- **The tree's spill and its arrays are not here.** The tree's read gives
+  the value of a spilled range and an array cell as the tree holds it;
+  here a cell holds a value, a formula, a format and a style, and a
+  spilled range is not a thing this tree has.
+- **The tree's read of a picture cell is not here.** A cell may hold a
+  picture in the tree and the read of it is the picture; here a picture
+  is not a cell value.
