@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3091 tests.** The MCP server links **all fifteen batteries** in, so the
+**3095 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3091 tests
+cargo test          # 3095 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3851,6 +3851,7 @@ so.
 | the **odd coupon periods** of a bond | **built.** A formula may ask about a bond whose first or last coupon period is not a whole one: the price and the yield of it (§414) | §414 |
 | the **accrued interest** of a bond | **built.** A formula may ask what interest a bond has earned between two dates (§415) | §415 |
 | the **table of records** and the **table of criteria** | **built.** A formula may speak of a table: a database of records, a table of criteria and the field it aggregates (§416) | §416 |
+| the **tests of a hypothesis** | **built.** A formula may test a hypothesis: a t-test, a chi-square test, an F-test and a z-test (§417) | §417 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28177,4 +28178,62 @@ criteria, and the field it speaks about.
 - **The tree's `DGET` of a table with a field that holds an error is
   not here**: the error is a value here and not an error of the
   record.
+
+## 417. The tests of a hypothesis
+
+A formula may **test a hypothesis**: a t-test, a chi-square test, an
+F-test and a z-test.
+
+### What was built
+
+- The functions `T.TEST` and `TTEST`, `CHISQ.TEST` and `CHITEST`,
+  `F.TEST` and `FTEST`, `Z.TEST` and `ZTEST`.
+- A **t-test** compares two sets of numbers: the same records
+  measured two ways, or two groups measured one way. It takes the two
+  sets, the **tails** (one or two) and the **kind** of the test (one,
+  two or three).
+- A **chi-square test** compares what was **observed** with what was
+  **expected**: two ranges of the same shape.
+- An **F-test** compares the **spreads** of two sets. A **z-test**
+  asks whether the **mean** of a set is a certain number, with an
+  optional deviation of its own.
+
+### What the port found
+
+- **The tree's t-test has three kinds** and the kind says how the two
+  sets are related: the first **pairs** them cell by cell and the
+  difference of each pair is the number that is tested; the second
+  compares two groups with a **pooled** variance; the third compares
+  two groups with **variances of their own** and a degree of freedom
+  that is not a whole number. Here the same, and the same arithmetic
+  for each.
+- **The tree's paired t-test refuses two sets of different sizes**
+  with `#N/A`: a pair is a pair of places, and there is no pair
+  without its other half. Here the same.
+- **The tree's chi-square test reads the shape of the ranges** and
+  not the number of their cells alone: the degrees of freedom are the
+  rows less one times the columns less one for a table, and the cells
+  less one for a row. Here the same, and the shape is read from the
+  range.
+- **The tree's F-test is two-tailed** and its answer is twice the
+  smaller tail and never more than one. Here the same.
+
+### What it cost
+
+- **Four tests** in the grid battery (`tests/hypotheses.rs`): the two
+  sets are compared, the observation and the expectation are
+  compared, the two spreads are compared and the mean is compared
+  with a number.
+- **One new module** (`hypotheses`): the tests are their own. **No
+  new command**: a function is not a command, and the grid battery
+  still carries **67** commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's t-test of two arrays written out in the formula is not
+  here**: this tree's formulas take ranges of cells and not arrays,
+  and a pair of sets is two ranges.
+- **The tree's confidence intervals are not here**: `CONFIDENCE`,
+  `CONFIDENCE.NORM` and `CONFIDENCE.T` are the other side of the same
+  question.
 
