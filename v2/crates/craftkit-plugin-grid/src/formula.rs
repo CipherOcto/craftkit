@@ -1489,6 +1489,9 @@ impl Book {
         if crate::words::is_word_function(name) {
             return self.words(sheet, name, arguments, being);
         }
+        if name == "CONVERT" {
+            return self.convert(sheet, arguments, being);
+        }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();

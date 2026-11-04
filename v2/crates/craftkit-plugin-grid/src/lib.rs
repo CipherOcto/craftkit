@@ -40,6 +40,10 @@
 //! discount and redeemed at its value — the discount, the price, the
 //! yield, the interest and the bill (the module `securities`).
 //!
+//! And a formula may ask the **measure** of a thing: a number in
+//! another unit, with the tree's units and its prefixes (the module
+//! `units`).
+//!
 //! And a formula may ask the **deviations** of a set, its **means**,
 //! its **skew**, its **ranks** and its **percentiles** — the tree's two
 //! ways of each (the module `statistics`).
@@ -330,6 +334,7 @@ mod tabs;
 mod tabsorder;
 mod texts;
 mod trigonometry;
+mod units;
 mod validation;
 mod view;
 mod words;
