@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2927 tests.** The MCP server links **all fifteen batteries** in, so the
+**2935 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2927 tests
+cargo test          # 2935 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3824,6 +3824,7 @@ so.
 | the **reading** of a bin | **built.** A bin may be read whole: the items in it, the bins in it, and the bin it is in (§387) | §387 |
 | the **reading** of a workbook | **built.** A workbook may be read whole: its sheets, its names, its styles, its lists of words and its calendar (§388) | §388 |
 | the **rate** of a sequence | **built.** A sequence may carry a rate — 25, or the tree's rational rates — and its length in seconds is derived (§389) | §389 |
+| the **comment** on a block | **built.** A block may carry a comment — who said it and what they said — and the comment goes with the block (§390) | §390 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26419,3 +26420,63 @@ frames there are in a second.
   — is not here.
 - **The tree's resolution and its pixel aspect ratio are not here**:
   the tree's sequence settings carry them beside the rate.
+
+## 390. The comment on a block
+
+A comment is something somebody said about a piece of a document: who
+said it and what they said.
+
+### What was built
+
+- The command `prose.comment.set` puts a **comment** on a block, the
+  command `prose.comment.get` reads it, and the command
+  `prose.comment.delete` takes it away.
+- A block has at most one comment, and a comment put on it again
+  **replaces** the one that was there.
+- The comment belongs to the **document** and names the **block** it is
+  on, so it lives in the **payload** of the document: comments are
+  numerous, and they hold nothing.
+- The comment goes with the **block**: a block that is taken away takes
+  its comment with it, and a comment on a block that is not there is a
+  comment on nothing.
+- A block with **no comment** has no comment, and that is said as
+  nothing and not as an error. A comment with **no author** is
+  refused, and so is a comment that is taken away that is not there.
+
+### What the port found
+
+- **The tree's comment anchors to a range of words and here it names a
+  block.** The tree's comment is a range in a story — the words it
+  covers are marked in the text — and a comment may be in the middle of
+  a sentence. Here a comment is on a **block**, and the block is the
+  smallest thing a comment may be on.
+- **The tree's comment carries more than this tree's.** The tree's
+  comment has the **initials** of its author, the **date** it was
+  made, the comment it is a **reply to**, whether it is **resolved**,
+  and the **durable id** Word keeps it by. Here a comment has who said
+  it and what they said.
+- **The tree's comment text lives in a part and here it lives in the
+  comment.** The tree's document holds its parts beside it and a
+  comment names the part its words are in; here the words are in the
+  comment itself, which is in the payload of the document.
+
+### What it cost
+
+- **Eight tests** in the prose battery (`tests/comments.rs`): a comment
+  being put and read, a block with no comment having none, a comment
+  put again replacing the one that was there, a comment being taken
+  away, a comment with no author being refused, a comment that is not
+  there not being taken away, the comment going with the block, and a
+  node that is not a block being refused.
+- **Three new commands**: `prose.comment.set`, `prose.comment.get` and
+  `prose.comment.delete`. The prose battery now carries **18** commands
+  and the MCP server **509**.
+
+### What it does not settle
+
+- **The tree's replies are not here**: a comment that answers another
+  comment is not a thing this tree has.
+- **The tree's resolved flag is not here**, and neither is the tree's
+  date.
+- **The tree's comment on a range of words is not here**: a comment
+  here is on a block and not on a range.
