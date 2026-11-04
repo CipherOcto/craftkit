@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3108 tests.** The MCP server links **all fifteen batteries** in, so the
+**3112 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3108 tests
+cargo test          # 3112 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3858,6 +3858,7 @@ so.
 | the **week** of a day in its year | **built.** A formula may ask for the week of a day in the year it is in, with the tree's kinds of week and the ISO week (§421) | §421 |
 | the **confidence** of a mean | **built.** A formula may ask how wide the confidence of a mean is, with the normal distribution and with Student's t (§422) | §422 |
 | the **complex numbers** | **built.** A formula may ask about the complex numbers: a pair of numbers, written as text and read back from text (§423) | §423 |
+| the **playhead** of a sequence | **built.** A video editor has a playhead: the place in the sequence where it is looking, and a fact of the sequence (§424) | §424 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28513,4 +28514,53 @@ real part and an imaginary one.
 - **The tree's sum of a range of complex numbers is not proved here**
   by a test, though the code folds the cells of a range the way the
   tree folds the elements of an array.
+
+## 424. The playhead of a sequence
+
+A video editor has a **playhead**: the place in the sequence where it
+is looking.
+
+### What was built
+
+- The commands `film.playhead.set`, `film.playhead.get`,
+  `film.playhead.start`, `film.playhead.end` and `film.playhead.step`.
+- The playhead is a **frame** of the sequence. `set` puts it at a
+  frame, `get` says where it is, `start` and `end` take it to the
+  beginning and the end, and `step` moves it by a number of frames —
+  a negative number steps back.
+- The **rules** are the tree's: the playhead is never before the
+  start of the sequence, the **end** is the end of the last clip, and
+  a step that would go before the start stops at the start.
+
+### What the port found
+
+- **The tree keeps the playhead in its session**, one for each
+  sequence, and so the playhead of a sequence is not saved with it.
+  Here the playhead is a **fact of the sequence** — its payload
+  carries the frame — and so it is saved with the sequence and is
+  read back with it. This is a difference and not a mistake, and it
+  is written down here.
+- **The tree's playhead is measured in ticks and is snapped to a
+  frame**; here it is measured in frames and is whole by
+  construction, because a frame that is not a whole number is
+  refused.
+- **The tree's end of a sequence is the end of its last clip**, and
+  so the playhead may be set past the last frame of a sequence and is
+  not refused for it. Here the same.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/playhead.rs`): the
+  playhead may be set and read, it may go to the start and to the
+  end, it may be stepped, and a sequence that is not a sequence is
+  refused.
+- **One new module** (`playhead`): the playhead is its own. The film
+  battery now carries **59** commands and the MCP server **526**.
+
+### What it does not settle
+
+- **The tree's playhead of the source monitor is not here**: there is
+  no source monitor in this tree.
+- **The tree's edit points are not here**: the playhead may be put
+  where it is put and not only at an edit point.
 
