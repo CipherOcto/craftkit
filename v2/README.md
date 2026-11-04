@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3097 tests.** The MCP server links **all fifteen batteries** in, so the
+**3100 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3097 tests
+cargo test          # 3100 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3853,6 +3853,7 @@ so.
 | the **table of records** and the **table of criteria** | **built.** A formula may speak of a table: a database of records, a table of criteria and the field it aggregates (§416) | §416 |
 | the **tests of a hypothesis** | **built.** A formula may test a hypothesis: a t-test, a chi-square test, an F-test and a z-test (§417) | §417 |
 | the **sums of the squares** of two sets | **built.** A formula may ask about two sets of numbers at once: the sums of their squares, the difference of the squares and the squares of the differences (§418) | §418 |
+| the **whole numbers** of a number | **built.** A formula may ask for the whole number that is near a number: the next even one, the next odd one, and the root of pi (§419) | §419 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28281,4 +28282,48 @@ A formula may ask about **two sets** of numbers at once.
 - **The tree's sums of squares of arrays written out in the formula
   are not here**: this tree's formulas take ranges of cells and not
   arrays.
+
+## 419. The whole numbers of a number
+
+A formula may ask for the **whole number** that is near a number: the
+next even one, the next odd one.
+
+### What was built
+
+- The functions `EVEN`, `ODD` and `SQRTPI`.
+- `EVEN` is the **next even whole number**, `ODD` the **next odd**
+  one, and `SQRTPI` the **root of pi times** the number.
+- The **rules** are the tree's: the whole number is the one **away
+  from nothing** — `EVEN(-1)` is `-2` and `ODD(-2)` is `-3` — a
+  whole number that is already even or odd is itself, `ODD(0)` is
+  one, and a negative number has no root of pi and is a number error.
+
+### What the port found
+
+- **The tree's even and odd round away from nothing and not towards
+  it**: the whole number of a negative number keeps its sign and is
+  the next one of its parity above it. Here the same, and the same
+  walk.
+- **The tree's root of pi takes the number times pi and takes the
+  root of that**, and not the root of the number times the root of
+  pi. Here the same.
+- **The tree's whole numbers are clean of the binary noise** before
+  they are rounded, so that a number that is whole to fifteen digits
+  is whole. Here the same, and the cleaner of the arithmetic module
+  is the one that does it.
+
+### What it cost
+
+- **Three tests** in the grid battery (`tests/wholenumbers.rs`): the
+  next even whole number, the next odd whole number and the root of
+  pi.
+- **No new module**: the arithmetic module of §398 grows. **No new
+  command**: a function is not a command, and the grid battery still
+  carries **67** commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's even and odd of a number with more than fifteen digits
+  is not proved here** by a test, though the code cleans it the same
+  way.
 
