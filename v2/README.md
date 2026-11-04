@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3022 tests.** The MCP server links **all fifteen batteries** in, so the
+**3028 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3022 tests
+cargo test          # 3028 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3838,6 +3838,7 @@ so.
 | the **wearing out** of an asset | **built.** A formula may ask what a thing that wears out is worth now, a period at a time: the straight line, the sum of the years, the declining balance and the double of it (§401) | §401 |
 | the **price** of a discount security | **built.** A formula may ask the price of a security that is sold at a discount and redeemed at its value: the discount, the price, the yield, the interest and the bill (§402) | §402 |
 | the **coupons** of a bond | **built.** A formula may ask about a bond: the days around its coupon period, the price of it, the yield, the duration and the price of one that is paid out (§403) | §403 |
+| the **combinations** of things | **built.** A formula may ask how many ways there are to choose: the factorial, the combinations with and without repetition, the permutations and the multinomial (§404) | §404 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27342,4 +27343,67 @@ a fixed day of the year and is redeemed at its value.
   subtraction**: the days from the beginning of the period are counted
   under the basis, and under the 30/360 the end of February is the
   thirtieth — so the number is not always what a subtraction says.
+
+## 404. The combinations of things
+
+A formula may ask how many ways there are to choose.
+
+### What was built
+
+- The functions `FACT`, `FACTDOUBLE`, `COMBIN`, `COMBINA`, `PERMUT`,
+  `PERMUTATIONA` and `MULTINOMIAL`.
+- `FACT` is the **factorial**, `FACTDOUBLE` is the **double
+  factorial** — every other number counted down — and `MULTINOMIAL` is
+  the ways of dividing a number of things between a number of people.
+- `COMBIN` is the **combinations** without repetition and `COMBINA` is
+  them with repetition; `PERMUT` is the **permutations** without
+  repetition — the same choices in a different order — and
+  `PERMUTATIONA` is them with repetition.
+- The **rules** are the tree's: the numbers are **whole** numbers, a
+  negative number is `#NUM!`, a choice of more than there is is
+  `#NUM!`, and a factorial of more than a hundred and seventy is
+  `#NUM!`, because the answer is beyond a double.
+
+### What the port found
+
+- **The tree's combinations are whole numbers and the fraction is
+  cut, not rounded.** `COMBIN(8.9, 2.9)` is the same as
+  `COMBIN(8, 2)`, and here the fraction is cut the same way.
+- **The tree's combinations are rounded when they are small and are
+  not rounded when they are not.** The product of a loop of divisions
+  leaves a little noise in the last digits, and the tree rounds the
+  answer when it is below nine times ten to the fifteenth — which is
+  why `COMBIN(60, 30)` is the whole number `118264581564861424` and
+  not a number with fifteen threes after the point. Here the same,
+  and the same bound.
+- **The tree's combinations have a second way of being computed, and
+  it is used only when the first would take too long.** A choice of
+  more than ten million is computed from the **gamma function** — the
+  Lanczos approximation — and not by a loop of ten million divisions.
+  Here the same, and the **special** module holds the gamma.
+- **The tree's double factorial is a loop of every other number and
+  not a factorial of half.** `FACTDOUBLE(7)` is `7 × 5 × 3 × 1` and
+  not `3.5 × 2.5 × 1.5 × 0.5`, and the answer is a whole number
+  because the tree's loop is in whole numbers. Here the same.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/combinations.rs`): the
+  factorial and the double factorial, the combinations with and
+  without repetition, the permutations with and without repetition,
+  the multinomial, and the errors.
+- **Two new modules**: `combinations` and `special` — and the special
+  one holds the tree's **gamma function**, which the engineering
+  family of the tree will want as well.
+- **No new command**: a function is not a command, and the grid battery
+  still carries **67** commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's matrix functions are not here**: the determinant, the
+  inverse and the product of matrices.
+- **The tree's engineering functions are not here**: the bases, the
+  error function, the Bessels and the complex numbers.
+- **The tree's information functions are not here**: whether a number
+  is a number, whether it is even, and what a name is.
 
