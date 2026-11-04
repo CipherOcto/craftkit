@@ -156,6 +156,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+mod binremoval;
 mod enabling;
 mod gaps;
 mod hold;
@@ -185,6 +186,7 @@ mod trackremoval;
 mod transitions;
 mod trim;
 
+pub use binremoval::RemoveBin;
 pub use enabling::EnableClip;
 pub use gaps::CloseGap;
 pub use hold::{DeleteHold, SetHold};
@@ -861,6 +863,7 @@ craftkit_sdk::plugin_anchor!(
     SplitClip,
     RemoveClip,
     ReadProject,
+    RemoveBin,
     RemoveItem,
     RenameBin,
     RenameItem,
