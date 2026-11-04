@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3028 tests.** The MCP server links **all fifteen batteries** in, so the
+**3034 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3028 tests
+cargo test          # 3034 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3839,6 +3839,7 @@ so.
 | the **price** of a discount security | **built.** A formula may ask the price of a security that is sold at a discount and redeemed at its value: the discount, the price, the yield, the interest and the bill (§402) | §402 |
 | the **coupons** of a bond | **built.** A formula may ask about a bond: the days around its coupon period, the price of it, the yield, the duration and the price of one that is paid out (§403) | §403 |
 | the **combinations** of things | **built.** A formula may ask how many ways there are to choose: the factorial, the combinations with and without repetition, the permutations and the multinomial (§404) | §404 |
+| the **bases** and the **bits** | **built.** A formula may ask about a number written in another base — two, eight and sixteen — or about the bits of a number (§405) | §405 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27406,4 +27407,69 @@ A formula may ask how many ways there are to choose.
   error function, the Bessels and the complex numbers.
 - **The tree's information functions are not here**: whether a number
   is a number, whether it is even, and what a name is.
+
+## 405. The bases and the bits
+
+A formula may ask about a number written in another base, or about the
+bits of a number.
+
+### What was built
+
+- The **bases**: `BIN2DEC`, `BIN2HEX`, `BIN2OCT`, `DEC2BIN`, `DEC2HEX`,
+  `DEC2OCT`, `HEX2BIN`, `HEX2DEC`, `HEX2OCT`, `OCT2BIN`, `OCT2DEC` and
+  `OCT2HEX`.
+- The **bits**: `BITAND`, `BITOR`, `BITXOR`, `BITLSHIFT` and
+  `BITRSHIFT`.
+- `DELTA` — whether two numbers are the same — and `GESTEP` — whether
+  a number has reached a step.
+- The **rules** are the tree's: a number written in a base is **ten
+  digits** long at most, a negative number is written in **two's
+  complement**, a number is **padded** with zeros to a number of
+  places and a number of places outside one to ten is `#NUM!`, and a
+  bit is **forty-eight** bits wide at most.
+
+### What the port found
+
+- **The tree's bases are two's complement and the width is the base's
+  own.** Ten digits of binary are thirty bits of two's complement, ten
+  digits of octal are thirty bits, and ten digits of hexadecimal are
+  forty — so a full binary number is `1111111111` and reads as minus
+  one, and a full hexadecimal number is `FFFFFFFF5B` and reads as
+  minus a hundred and sixty-five. Here the same, and the same
+  widths.
+- **The tree's negative numbers are written out and not padded.** A
+  number of minus a hundred in binary is `1110011100` and not
+  `01110011100`, because the padding is a place for a positive number
+  and a negative one is already full. Here the same.
+- **The tree's shift to the right by a negative number is a shift to
+  the left**, and that is not a slip in the tree: the sign of the
+  shift is the direction, and `BITRSHIFT(13, -2)` is fifty-two. Here
+  the same.
+- **The tree's bits are forty-eight bits wide and the width is
+  checked.** A bit that is a fraction is `#NUM!`, a bit that is
+  negative is `#NUM!`, and a shift that would take a number past the
+  width is `#NUM!`. Here the same.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/engineering.rs`): the
+  binary read in the other bases, the decimal written in the other
+  bases, the hexadecimal and the octal read, the bits of a number,
+  the delta and the step, and the errors.
+- **One new module**: `engineering`. **No new command**: a function is
+  not a command, and the grid battery still carries **67** commands and
+  the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's units are not here**: the `CONVERT` of a number from
+  one unit to another.
+- **The tree's error function is not here**: `ERF`, `ERF.PRECISE`,
+  `ERFC` and `ERFC.PRECISE`.
+- **The tree's complex numbers and its Bessels are not here**: the
+  arithmetic of complex numbers and the Bessel functions.
+- **The tree reads a number written as text** where v2 refuses it —
+  `DEC2BIN("12")` is twelve in the tree and `#VALUE!` here, because
+  v2's arguments are typed and a number is a number and not a text
+  that says a number.
 
