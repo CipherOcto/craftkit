@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3051 tests.** The MCP server links **all fifteen batteries** in, so the
+**3058 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3051 tests
+cargo test          # 3058 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3843,6 +3843,7 @@ so.
 | the **information** of a value | **built.** A formula may ask what a value is: whether it is a number or text or an error, whether it is even or odd, and what kind of a value it is (§406) | §406 |
 | the **logic** of a formula | **built.** A formula may ask about the truth of things and may choose between them: the truths, the first condition that is true, the fallback of an error, the match in a list and the choice by place (§407) | §407 |
 | the **line** through a set of numbers | **built.** A formula may ask how two sets of numbers move together: the correlation, the slope, the crossing, the error and the prediction (§408) | §408 |
+| the **shape** of a distribution | **built.** A formula may ask the shape of a distribution: the normal, the gamma, the error function, Student's t, the chi-square, the F, the counts and the beta (§409) | §409 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27660,4 +27661,80 @@ A formula may ask how two sets of numbers move together.
   reason.
 - **The tree's distributions are not here**: the normal, the
   Student's, the chi-square, the binomial, the gamma and the Weibull.
+
+## 409. The shape of a distribution
+
+A formula may ask the shape of a distribution.
+
+### What was built
+
+- The **normal** family: `NORM.DIST`, `NORMDIST`, `NORM.INV`,
+  `NORMINV`, `NORM.S.DIST`, `NORMSDIST`, `NORM.S.INV`, `NORMSINV`,
+  `GAUSS` and `PHI`.
+- The **gamma** family: `GAMMA`, `GAMMALN`, `GAMMALN.PRECISE`,
+  `GAMMA.DIST`, `GAMMADIST`, `GAMMA.INV` and `GAMMAINV`.
+- The **error function**: `ERF`, `ERF.PRECISE`, `ERFC` and
+  `ERFC.PRECISE`.
+- **Student's t**: `T.DIST`, `T.DIST.2T`, `T.DIST.RT`, `TDIST`,
+  `T.INV`, `T.INV.2T` and `TINV`.
+- The **chi-square**: `CHISQ.DIST`, `CHISQ.DIST.RT`, `CHIDIST`,
+  `CHISQ.INV` and `CHISQ.INV.RT`; and the **F**: `F.DIST`, `F.DIST.RT`,
+  `F.INV` and `FINV`.
+- The **counts**: `BINOM.DIST`, `BINOMDIST`, `BINOM.INV`, `POISSON`,
+  `POISSON.DIST`, `EXPON`, `EXPONDIST`, `EXPON.DIST`, `WEIBULL`,
+  `WEIBULL.DIST`, `LOGNORM.DIST`, `LOGNORMDIST`, `LOGNORM.INV`,
+  `LOGINV`, `BETA.DIST`, `BETADIST` and `BETA.INV`.
+- The **rules** are the tree's: a **deviation** of nothing is a number
+  error, a probability outside the open interval of zero and one is a
+  number error, **degrees of freedom** below one are a number error,
+  and a number of successes above the number of trials is a number
+  error.
+
+### What the port found
+
+- **The tree's names hold dots and v2's parser held one.** The tree
+  has `NORM.S.DIST`, `T.DIST.2T` and `CHISQ.INV.RT` — names with two
+  dots and with a name that **starts with a digit** after the dot. The
+  parser of §406 took one dot and refused the rest; it now takes a
+  run of dots, and takes them **only when a bracket follows**, so a
+  name with a dot in it is still a name and a sheet whose name has a
+  dot in it is still a sheet.
+- **The tree's inverses are searches and not closed forms.** The
+  inverse of the chi-square, of the F, of the gamma and of Student's
+  t are all found by **bisection** over a bracket that is widened
+  until the answer is inside it — and a probability with no answer is
+  `#NUM!` and not a guess. Here the same, and the same bracket.
+- **The tree's error function is careful near the middle and in the
+  tails.** Near the middle it is a **series**, and in the tails it is
+  the incomplete gamma, so that `ERFC(3)` is a number with fifteen
+  digits and not nothing at all. Here the same.
+- **The tree's legacy names are the same functions under other
+  names** — `TDIST`, `CHIDIST`, `FINV`, `BINOMDIST`, `EXPONDIST` and
+  the rest — and two of them are **not** the same: `TDIST` counts
+  tails and `T.DIST.RT` does not, and `FINV` inverts the **right**
+  tail where `F.INV` inverts the left one. Here the same, and the
+  difference is kept.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/distributions.rs`): the
+  normal, the gamma, the error function, Student's t, the chi-square
+  and the F, the counts, and the errors.
+- **Two new modules**: `distributions` and — the maths under it — the
+  tree's **special functions** in `special`: the gamma, the error
+  function, the incomplete gamma and beta and the normal, and the
+  bisection that inverts them.
+- **The parser** now reads a run of dots in a function's name.
+
+### What it does not settle
+
+- **The tree's `CHISQ.TEST` and `F.TEST` are not here**: they want
+  two ranges of the same shape, and v2's pairing is of cells and not
+  of shapes.
+- **The tree's `T.TEST` is not here**, for the same reason.
+- **The tree's `BINOM.DIST.RANGE` and `CRITBINOM` are not here**, and
+  neither is the negative binomial.
+- **The tree's hypergeometric distribution is not here**: it wants
+  four numbers of a population, and the shape of it is a count of
+  ways to choose.
 
