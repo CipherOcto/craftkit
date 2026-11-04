@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3123 tests.** The MCP server links **all fifteen batteries** in, so the
+**3128 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3123 tests
+cargo test          # 3128 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3863,6 +3863,7 @@ so.
 | the **settings** of a track | **built.** A track is more than a line of clips: it may be enabled, muted or soloed, it may have a volume and a pan, and it may carry a label (§426) | §426 |
 | the **shape** of a range | **built.** A formula may ask for the shape of a range: how many rows it has and how many columns (§427) | §427 |
 | the **words** of an amount in Thai | **built.** A formula may ask for an amount written in Thai words, with the baht and the satang (§428) | §428 |
+| the **masks** of a layer | **built.** A compositing layer may be masked: a path on the layer that says what of it is seen, with its mode and its settings (§429) | §429 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28741,4 +28742,54 @@ A formula may ask for an amount written in **Thai words**.
 - **The tree's Thai text of an amount with more than a hundred
   million baht is not proved here** by a test, though the code counts
   the groups the same way.
+
+## 429. The masks of a layer
+
+A compositing layer may be **masked**: a path on the layer that says
+what of it is seen.
+
+### What was built
+
+- The commands `fx.mask.add`, `fx.mask.remove`, `fx.mask.mode`,
+  `fx.mask.invert`, `fx.mask.lock` and `fx.mask.list`, and the node
+  kind `fx.mask`.
+- A mask is a **path**: its **vertices** — `[[x, y], …]` in the
+  layer's own space — and whether the path is **closed**. Around it
+  are the settings of the mask: its **mode** — `None`, `Add`,
+  `Subtract`, `Intersect`, `Lighten`, `Darken` or `Difference` —,
+  whether it is **inverted**, whether it is **locked**, its
+  **feather**, its **opacity** and its **expansion**.
+- The **rules** are the tree's: a mask with no vertices is refused, a
+  mode that is not one of the tree's seven is refused, and the case of
+  a mode does not matter.
+
+### What the port found
+
+- **The tree's mask is a group in the layer's property tree** and not
+  a thing of its own; here a mask is a **node** under the layer, and
+  so it is named, it is listed, and it can carry things of its own.
+  This is a difference and not a mistake, and it is written down
+  here.
+- **The tree's inverted mask and its locked mask are toggled when the
+  value is not said and set when it is**: here the same.
+- **The tree's mask of no vertices is refused** and here the same: the
+  tree's pen tool makes a mask of a path, and a path of nothing is
+  nothing.
+
+### What it cost
+
+- **Five tests** in the fx battery (`tests/masks.rs`): a mask may be
+  made on a layer, a mask with no vertices is refused, the mode of a
+  mask may be set, a mask may be inverted and locked, and a mask may
+  be taken away.
+- **One new module** (`masks`): the masks of a layer are their own.
+  The fx battery now carries **36** commands and the MCP server
+  **542**.
+
+### What it does not settle
+
+- **The tree's tangents of a mask are not here**: the vertices and the
+  closed flag are here and the curve between the vertices is a line.
+- **The tree's feather, opacity and expansion are not proved here**
+  by a test, though the mask carries them.
 
