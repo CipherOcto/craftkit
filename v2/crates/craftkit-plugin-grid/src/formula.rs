@@ -475,16 +475,30 @@ fn display_text(value: &Value) -> String {
 ///
 /// The comparison is without case, as the tree's is.
 pub fn wildcard(pattern: &str, text: &str) -> bool {
-    let text: Vec<char> = text.chars().flat_map(char::to_lowercase).collect();
+    wildcard_with_case(pattern, text, false)
+}
+
+/// Whether a **text** matches a pattern with the tree's wildcards, and
+/// whether the **case** matters.
+///
+/// When the case matters the two are compared as they are written;
+/// when it does not, both are folded.
+pub fn wildcard_with_case(pattern: &str, text: &str, case: bool) -> bool {
+    let (pattern, text) = if case {
+        (pattern.to_string(), text.to_string())
+    } else {
+        (pattern.to_lowercase(), text.to_lowercase())
+    };
+    let text: Vec<char> = text.chars().collect();
     let mut tokens: Vec<(char, bool)> = Vec::new();
     let mut characters = pattern.chars();
     while let Some(character) = characters.next() {
         if character == '~' {
             if let Some(next) = characters.next() {
-                tokens.push((lower(next), true));
+                tokens.push((next, true));
             }
         } else {
-            tokens.push((lower(character), false));
+            tokens.push((character, false));
         }
     }
     let (mut in_text, mut in_pattern) = (0usize, 0usize);
@@ -514,11 +528,6 @@ pub fn wildcard(pattern: &str, text: &str) -> bool {
         in_pattern += 1;
     }
     in_pattern == tokens.len()
-}
-
-/// One character, lowercased to one character.
-fn lower(character: char) -> char {
-    character.to_lowercase().next().unwrap_or(character)
 }
 
 /// A formula that did not parse.

@@ -24,6 +24,10 @@
 //! a value — a text condition is a condition written out, with the
 //! tree's wildcards in it (the module `criteria`).
 //!
+//! And a sheet may be **searched**: the cells whose text holds what
+//! was looked for, with the tree's wildcards and the tree's rule about
+//! the case (the module `finding`).
+//!
 //! And a workbook may carry **names**: a word that stands for a range of
 //! cells, and a formula may use the word where it would use the range
 //! (the module `names`).
@@ -163,6 +167,7 @@ mod criteria;
 mod dates;
 mod fill;
 mod filters;
+mod finding;
 mod flash;
 mod format;
 mod formula;
@@ -190,6 +195,7 @@ pub use conditional::{CheckConditional, ClearConditional, SetConditional};
 pub use criteria::Condition;
 use fill::FillRange;
 pub use filters::{ClearFilter, FilteredRows, SetFilter};
+pub use finding::FindCells;
 use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
@@ -1396,6 +1402,7 @@ craftkit_sdk::plugin_anchor!(
     MoveSheet,
     ClearContents,
     ClearFormat,
+    FindCells,
     ReadRange,
     RemoveSheet,
     SetCell,
