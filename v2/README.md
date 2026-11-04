@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2983 tests.** The MCP server links **all fifteen batteries** in, so the
+**2992 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2983 tests
+cargo test          # 2992 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3832,6 +3832,7 @@ so.
 | the **footnotes** of a document | **built.** A run may point at a footnote, and the number of the footnote is derived from where it is referenced (§395) | §395 |
 | the **bookmarks** of a document | **built.** A block may carry the name of a place, and a link to a place that is there may be opened (§396) | §396 |
 | the **statistics** of a formula | **built.** A formula may ask about the shape of a set of numbers: the middle, the mode, the spread, the order statistics and the rank (§397) | §397 |
+| the **arithmetic** of a formula | **built.** A formula may round a number, cut it, take the rest of a division, take its root and raise it to a power, with the tree's careful rules (§398) | §398 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26918,3 +26919,70 @@ A formula may ask about the **shape** of a set of numbers.
   tree's `MODE.MULT` with every value that occurs most often.
 - **The tree's distributions are not here**: the normal, the binomial
   and the Poisson distributions the tree has are not here.
+
+## 398. The arithmetic of a formula
+
+A formula may do arithmetic on a number, and the rules are the tree's
+own.
+
+### What was built
+
+- The functions `ROUND`, `ROUNDUP`, `ROUNDDOWN`, `TRUNC`, `INT`,
+  `MROUND`, `CEILING`, `FLOOR`, `MOD`, `QUOTIENT`, `ABS`, `SIGN`,
+  `SQRT`, `POWER`, `EXP`, `LN`, `LOG`, `LOG10`, `PI`, `PRODUCT`,
+  `SUMSQ`, `GCD` and `LCM`.
+- `ROUND` rounds **halves away from zero**, and it does so on the
+  number written with **fifteen significant digits** — so `2.675`
+  rounds to `2.68` and not to `2.67`.
+- `ROUNDUP` rounds away from zero, `ROUNDDOWN` toward zero, `TRUNC` is
+  the same as `ROUNDDOWN`, and `INT` is the floor.
+- `MOD` is the rest of a division and it keeps the **sign of the
+  divisor**, so `MOD(-3,2)` is `1`.
+- The errors are the **tree's**: zero to a negative power is
+  `#DIV/0!`, zero to the zeroth is `#NUM!`, a negative number to a
+  half power is `#NUM!`, the root of a negative number is `#NUM!`,
+  the logarithm of a number that is not positive is `#NUM!`, a base
+  of one is `#DIV/0!`, and `GCD` and `LCM` are the **whole** numbers
+  and a number that is not one is `#NUM!`.
+
+### What the port found
+
+- **The tree's rounding is careful and a naive rounding is not.** The
+  tree does not scale a number and round it — it writes the number
+  with fifteen significant digits, rounds those digits, and reads them
+  back. That is why `2.675` rounds to `2.68` and not to `2.67`, and
+  why `0.1 + 0.2` is `0.3`. Here the same fifteen digits are written
+  and the same rounding is done on them.
+- **The tree has a family of rounding functions and here the family is
+  the same.** The tree has `CEILING`, `CEILING.MATH`,
+  `CEILING.PRECISE`, `FLOOR`, `FLOOR.MATH` and `FLOOR.PRECISE`, and
+  the ones that differ are the ones that take a **mode** — how a
+  negative number rounds. Here `CEILING` and `FLOOR` are the
+  tree's own, and the ones with a mode are not here.
+- **The tree's remainder has a rule of its own.** The tree's `%` is
+  an exact remainder, and the tree adds the divisor back when the
+  signs differ — so the rest always keeps the sign of the divisor and
+  is never as big as the divisor. Here the same.
+- **The tree's `QUOTIENT` cuts and does not round**, and it divides
+  by nothing with `#DIV/0!`. Here it is the same.
+
+### What it cost
+
+- **Nine tests** in the grid battery (`tests/arithmetic.rs`): a half
+  rounding away from zero on the fifteen digits, the rounding up and
+  down and the cut and the floor, a number rounded to a multiple, the
+  rest of a division and the whole of it, the root and the power and
+  the sign, the logarithms, the product and the sum of the squares,
+  the divisor and the multiple, and the constant.
+- **One new module**: `arithmetic`. **No new command**: a function is
+  not a command, and the grid battery still carries **67** commands and
+  the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's trig functions are not here** — the sines and the
+  tangents and their inverses — and neither are its hyperbolic ones.
+- **The tree's `CEILING.MATH` and `FLOOR.MATH` are not here**, and
+  neither are the precise ones: a rounding with a mode is not here.
+- **The tree's combinatorial functions are not here**: the factorial,
+  the combinations and the permutations.
