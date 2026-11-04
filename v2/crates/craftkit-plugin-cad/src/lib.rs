@@ -28,6 +28,9 @@
 //! - the **order** the entities are drawn in — the children of a block
 //!   are drawn in the order they stand in, and an entity may be
 //!   brought to the front or sent to the back (the module `order`);
+//! - the **measure** of a drawing — how long, how big, how wide and
+//!   how far apart, and every one of them **derived** (the module
+//!   `measurements`);
 //! - the **geometry** — the entity's payload, in the world's units;
 //! - the **extents** — derived, every time, by the evaluator.
 //!
@@ -64,6 +67,7 @@
 
 mod curves;
 mod layersettings;
+mod measurements;
 mod modify;
 mod order;
 
@@ -78,6 +82,7 @@ pub use layersettings::{
     FreezeLayer, ListLayers, LockLayer, SetLayerColor, SetLayerFill, SetLayerLinetype, SetLayerLineweight,
     SetLayerOn,
 };
+pub use measurements::{MeasureAngle, MeasureArea, MeasureLength, MeasureRadius};
 pub use modify::{MoveEntity, RemoveEntity, RotateEntity, ScaleEntity};
 pub use order::{BackwardEntity, BringToFront, ForwardEntity, ListEntities, SendToBack};
 
@@ -1070,6 +1075,10 @@ craftkit_sdk::plugin_anchor!(
     SetLayerLinetype,
     SetLayerLineweight,
     ListLayers,
+    MeasureLength,
+    MeasureArea,
+    MeasureRadius,
+    MeasureAngle,
     ExtentsEvaluator,
     CadPanel
 );
