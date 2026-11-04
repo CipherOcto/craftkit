@@ -1495,6 +1495,9 @@ impl Book {
         if crate::hypotheses::is_hypothesis_function(name) {
             return self.hypotheses(sheet, name, arguments, being);
         }
+        if crate::textvalue::is_text_value_function(name) {
+            return self.text_value(sheet, name, arguments, being);
+        }
         if name == "CONVERT" {
             return self.convert(sheet, arguments, being);
         }
@@ -1993,6 +1996,47 @@ impl Book {
                 usize::try_from(area.end.col - area.start.col + 1).unwrap_or(1),
             ),
             Err(_) => (1, 1),
+        }
+    }
+
+    /// The tree's **value of a text**: a text that holds a number, a
+    /// date or a time.
+    fn text_value(
+        &self,
+        sheet: &str,
+        name: &str,
+        arguments: &[Expr],
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Value {
+        let Some(argument) = arguments.first() else {
+            return Value::Error("#VALUE!".to_string());
+        };
+        let value = self.evaluate(sheet, argument, being);
+        if name == "VALUE" {
+            return match value {
+                Value::Number(number) => Value::Number(number),
+                // A blank cell is nothing and nothing is a zero.
+                Value::Empty => Value::Number(0.0),
+                Value::Error(message) => Value::Error(message),
+                Value::Text(text) => match crate::textvalue::number_of(&text, self.system()) {
+                    Some(number) => Value::Number(number),
+                    None => Value::Error("#VALUE!".to_string()),
+                },
+                Value::Bool(_) => Value::Error("#VALUE!".to_string()),
+            };
+        }
+        let text = match crate::texts::value_text(&value) {
+            Ok(text) => text,
+            Err(message) => return Value::Error(message),
+        };
+        let number = if name == "DATEVALUE" {
+            crate::textvalue::date_of(&text, self.system())
+        } else {
+            crate::textvalue::time_of(&text, self.system())
+        };
+        match number {
+            Some(number) => Value::Number(number),
+            None => Value::Error("#VALUE!".to_string()),
         }
     }
 }

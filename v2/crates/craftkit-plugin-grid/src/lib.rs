@@ -57,6 +57,11 @@
 //! of a text: Roman numerals, another base, a character and its code,
 //! and a text written for a URL (the module `words`).
 //!
+//! And a formula may ask for the **value of a text**: a text that
+//! holds a number, a date or a time — with the tree's careful rules
+//! about signs, currencies, separators and parentheses (the module
+//! `textvalue`).
+//!
 //! And a formula may ask about the **cash flows** of a plan: the rate
 //! at which a series of payments is worth nothing, with dates or
 //! without them, what a sum grows to through a schedule, and the
@@ -358,6 +363,7 @@ mod styles;
 mod tabs;
 mod tabsorder;
 mod texts;
+mod textvalue;
 mod trigonometry;
 mod units;
 mod validation;
