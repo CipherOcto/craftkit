@@ -40,6 +40,10 @@
 //! discount and redeemed at its value — the discount, the price, the
 //! yield, the interest and the bill (the module `securities`).
 //!
+//! And a formula may ask the **deviations** of a set, its **means**,
+//! its **skew**, its **ranks** and its **percentiles** — the tree's two
+//! ways of each (the module `statistics`).
+//!
 //! And a formula may ask the **words** of a number and the **letters**
 //! of a text: Roman numerals, another base, a character and its code,
 //! and a text written for a URL (the module `words`).

@@ -44,6 +44,31 @@ pub fn is_statistical_function(name: &str) -> bool {
             | "PERCENTILE"
             | "QUARTILE"
             | "COUNTBLANK"
+            | "AVEDEV"
+            | "DEVSQ"
+            | "GEOMEAN"
+            | "HARMEAN"
+            | "TRIMMEAN"
+            | "KURT"
+            | "SKEW"
+            | "SKEW.P"
+            | "STANDARDIZE"
+            | "FISHER"
+            | "FISHERINV"
+            | "MODE.SNGL"
+            | "STDEV.S"
+            | "STDEV.P"
+            | "VAR.S"
+            | "VAR.P"
+            | "RANK.EQ"
+            | "RANK.AVG"
+            | "PERCENTILE.INC"
+            | "PERCENTILE.EXC"
+            | "QUARTILE.INC"
+            | "QUARTILE.EXC"
+            | "PERCENTRANK"
+            | "PERCENTRANK.INC"
+            | "PERCENTRANK.EXC"
     )
 }
 
@@ -51,6 +76,87 @@ pub fn is_statistical_function(name: &str) -> bool {
 fn sorted(mut numbers: Vec<f64>) -> Vec<f64> {
     numbers.sort_by(f64::total_cmp);
     numbers
+}
+
+/// The **mean** of a set of numbers.
+fn mean(numbers: &[f64]) -> Result<f64, String> {
+    if numbers.is_empty() {
+        return Err("#DIV/0!".to_string());
+    }
+    Ok(numbers.iter().sum::<f64>() / numbers.len() as f64)
+}
+
+/// The **variance** of a set of numbers: of a sample or of the whole.
+fn variance_of(numbers: &[f64], sample: bool) -> Result<f64, String> {
+    if sample {
+        if numbers.len() < 2 {
+            return Err("#DIV/0!".to_string());
+        }
+        return Ok(devsq(numbers) / (numbers.len() - 1) as f64);
+    }
+    if numbers.is_empty() {
+        return Err("#DIV/0!".to_string());
+    }
+    Ok(devsq(numbers) / numbers.len() as f64)
+}
+
+/// The **k-th percentile**, the tree's two ways.
+fn percentile_of(numbers: Vec<f64>, k: f64, exclusive: bool) -> Value {
+    if exclusive {
+        let count = numbers.len() as f64;
+        if numbers.is_empty() || !(k > 0.0 && k < 1.0) {
+            return Value::Error("#NUM!".to_string());
+        }
+        let position = k * (count + 1.0);
+        if position < 1.0 || position > count {
+            return Value::Error("#NUM!".to_string());
+        }
+        return match interpolate(&sorted(numbers), position - 1.0) {
+            Ok(value) => Value::Number(value),
+            Err(message) => Value::Error(message),
+        };
+    }
+    if numbers.is_empty() || !(0.0..=1.0).contains(&k) {
+        return Value::Error("#NUM!".to_string());
+    }
+    let numbers = sorted(numbers);
+    match interpolate(&numbers, k * (numbers.len() - 1) as f64) {
+        Ok(value) => Value::Number(value),
+        Err(message) => Value::Error(message),
+    }
+}
+
+/// The **interpolation** between two numbers of a sorted list.
+fn interpolate(numbers: &[f64], position: f64) -> Result<f64, String> {
+    let index = position.floor();
+    let fraction = position - index;
+    let index = index as usize;
+    let low = *numbers.get(index).ok_or_else(|| "#NUM!".to_string())?;
+    match numbers.get(index + 1) {
+        Some(high) if fraction > 0.0 => Ok(low + fraction * (high - low)),
+        _ => Ok(low),
+    }
+}
+
+/// A number cut to a number of **digits**.
+fn cut_digits(number: f64, digits: f64) -> f64 {
+    let factor = 10f64.powi(digits as i32);
+    if !factor.is_finite() {
+        return number;
+    }
+    ((number * factor) + 1e-9).floor() / factor
+}
+
+/// The **place** of a number in a list: the tree's rank.
+fn rank_of(numbers: &[f64], number: f64, ascending: bool, average: bool) -> Result<f64, String> {
+    let equal = numbers.iter().filter(|other| **other == number).count();
+    if equal == 0 {
+        return Err("#N/A".to_string());
+    }
+    let before =
+        numbers.iter().filter(|other| if ascending { **other < number } else { **other > number }).count();
+    let rank = before as f64 + 1.0;
+    Ok(if average { rank + (equal as f64 - 1.0) / 2.0 } else { rank })
 }
 
 /// The **sum of the squared deviations** from the mean.
@@ -164,13 +270,156 @@ impl Book {
                 },
                 Err(message) => Value::Error(message),
             },
-            "PERCENTILE" => match self.numbers_of(sheet, arguments, 0, being) {
+            "PERCENTILE" | "PERCENTILE.INC" => match self.numbers_of(sheet, arguments, 0, being) {
                 Ok(numbers) => match self.number_at(sheet, arguments, 1, being) {
-                    Ok(k) => percentile(numbers, k),
+                    Ok(k) => percentile_of(numbers, k, false),
                     Err(message) => Value::Error(message),
                 },
                 Err(message) => Value::Error(message),
             },
+            "PERCENTILE.EXC" => match self.numbers_of(sheet, arguments, 0, being) {
+                Ok(numbers) => match self.number_at(sheet, arguments, 1, being) {
+                    Ok(k) => percentile_of(numbers, k, true),
+                    Err(message) => Value::Error(message),
+                },
+                Err(message) => Value::Error(message),
+            },
+            "QUARTILE.INC" | "QUARTILE.EXC" => match self.numbers_of(sheet, arguments, 0, being) {
+                Ok(numbers) => match self.number_at(sheet, arguments, 1, being) {
+                    Ok(q) => {
+                        let q = q.trunc();
+                        if !(0.0..=4.0).contains(&q) {
+                            return Value::Error("#NUM!".to_string());
+                        }
+                        percentile_of(numbers, q / 4.0, name == "QUARTILE.EXC")
+                    }
+                    Err(message) => Value::Error(message),
+                },
+                Err(message) => Value::Error(message),
+            },
+            "PERCENTRANK" | "PERCENTRANK.INC" | "PERCENTRANK.EXC" => {
+                let numbers = match self.numbers_of(sheet, arguments, 0, being) {
+                    Ok(numbers) => numbers,
+                    Err(message) => return Value::Error(message),
+                };
+                let number = match self.number_at(sheet, arguments, 1, being) {
+                    Ok(number) => number,
+                    Err(message) => return Value::Error(message),
+                };
+                let digits = match self.optional_number(sheet, arguments, 2, being) {
+                    Ok(Some(digits)) => digits.trunc(),
+                    Ok(None) => 3.0,
+                    Err(message) => return Value::Error(message),
+                };
+                if digits < 1.0 || numbers.is_empty() {
+                    return Value::Error("#NUM!".to_string());
+                }
+                let numbers = sorted(numbers);
+                let first = numbers.first().copied().unwrap_or(0.0);
+                let last = numbers.last().copied().unwrap_or(0.0);
+                if number < first || number > last {
+                    return Value::Error("#N/A".to_string());
+                }
+                let count = numbers.len() as f64;
+                let exclusive = name == "PERCENTRANK.EXC";
+                let rank_of = |value: f64| -> f64 {
+                    let less = numbers.iter().filter(|other| **other < value).count() as f64;
+                    if exclusive {
+                        (less + 1.0) / (count + 1.0)
+                    } else if count <= 1.0 {
+                        1.0
+                    } else {
+                        less / (count - 1.0)
+                    }
+                };
+                let rank = if numbers.contains(&number) {
+                    rank_of(number)
+                } else {
+                    let low = numbers
+                        .iter()
+                        .copied()
+                        .filter(|other| *other < number)
+                        .fold(f64::NEG_INFINITY, f64::max);
+                    let high =
+                        numbers.iter().copied().filter(|other| *other > number).fold(f64::INFINITY, f64::min);
+                    let (low_rank, high_rank) = (rank_of(low), rank_of(high));
+                    low_rank + (number - low) / (high - low) * (high_rank - low_rank)
+                };
+                Value::Number(cut_digits(rank, digits))
+            }
+            "RANK.EQ" | "RANK.AVG" => {
+                let number = match self.number_at(sheet, arguments, 0, being) {
+                    Ok(number) => number,
+                    Err(message) => return Value::Error(message),
+                };
+                let numbers = match self.numbers_of(sheet, arguments, 1, being) {
+                    Ok(numbers) => numbers,
+                    Err(message) => return Value::Error(message),
+                };
+                let order = match self.optional_number(sheet, arguments, 2, being) {
+                    Ok(Some(order)) => order,
+                    Ok(None) => 0.0,
+                    Err(message) => return Value::Error(message),
+                };
+                match rank_of(&numbers, number, order != 0.0, name == "RANK.AVG") {
+                    Ok(rank) => Value::Number(rank),
+                    Err(message) => Value::Error(message),
+                }
+            }
+            "STANDARDIZE" => {
+                let (number, average, deviation) = match (
+                    self.number_at(sheet, arguments, 0, being),
+                    self.number_at(sheet, arguments, 1, being),
+                    self.number_at(sheet, arguments, 2, being),
+                ) {
+                    (Ok(number), Ok(average), Ok(deviation)) => (number, average, deviation),
+                    (Err(message), _, _) | (_, Err(message), _) | (_, _, Err(message)) => {
+                        return Value::Error(message);
+                    }
+                };
+                if deviation <= 0.0 {
+                    return Value::Error("#NUM!".to_string());
+                }
+                Value::Number((number - average) / deviation)
+            }
+            "FISHER" => {
+                let number = match self.number_at(sheet, arguments, 0, being) {
+                    Ok(number) => number,
+                    Err(message) => return Value::Error(message),
+                };
+                if number <= -1.0 || number >= 1.0 {
+                    return Value::Error("#NUM!".to_string());
+                }
+                Value::Number(0.5 * ((1.0 + number) / (1.0 - number)).ln())
+            }
+            "FISHERINV" => {
+                let number = match self.number_at(sheet, arguments, 0, being) {
+                    Ok(number) => number,
+                    Err(message) => return Value::Error(message),
+                };
+                Value::Number(number.tanh())
+            }
+            "TRIMMEAN" => {
+                let numbers = match self.numbers_of(sheet, arguments, 0, being) {
+                    Ok(numbers) => numbers,
+                    Err(message) => return Value::Error(message),
+                };
+                let percent = match self.number_at(sheet, arguments, 1, being) {
+                    Ok(percent) => percent,
+                    Err(message) => return Value::Error(message),
+                };
+                if !(0.0..1.0).contains(&percent) || numbers.is_empty() {
+                    return Value::Error("#NUM!".to_string());
+                }
+                let count = numbers.len();
+                let per_side = ((count as f64 * percent) / 2.0).floor() as usize;
+                let numbers = sorted(numbers);
+                let kept = numbers.get(per_side..count - per_side).unwrap_or(&[]);
+                match mean(kept) {
+                    Ok(mean) => Value::Number(mean),
+                    Err(message) => Value::Error(message),
+                }
+            }
             "QUARTILE" => match self.numbers_of(sheet, arguments, 0, being) {
                 Ok(numbers) => match self.number_at(sheet, arguments, 1, being) {
                     Ok(q) => {
@@ -206,14 +455,115 @@ impl Book {
                         Ok(variance) => Value::Number(variance.sqrt()),
                         Err(message) => Value::Error(message),
                     },
-                    "VAR" => match variance(&numbers, true) {
+                    "VAR" | "VAR.S" => match variance_of(&numbers, true) {
                         Ok(variance) => Value::Number(variance),
                         Err(message) => Value::Error(message),
                     },
-                    "VARP" => match variance(&numbers, false) {
+                    "VARP" | "VAR.P" => match variance_of(&numbers, false) {
                         Ok(variance) => Value::Number(variance),
                         Err(message) => Value::Error(message),
                     },
+                    "STDEV.S" => match variance_of(&numbers, true) {
+                        Ok(variance) => Value::Number(variance.sqrt()),
+                        Err(message) => Value::Error(message),
+                    },
+                    "STDEV.P" => match variance_of(&numbers, false) {
+                        Ok(variance) => Value::Number(variance.sqrt()),
+                        Err(message) => Value::Error(message),
+                    },
+                    "MODE.SNGL" => match modes(&numbers).first() {
+                        Some(mode) => Value::Number(*mode),
+                        None => Value::Error("#N/A".to_string()),
+                    },
+                    "DEVSQ" => {
+                        if numbers.is_empty() {
+                            return Value::Error("#NUM!".to_string());
+                        }
+                        Value::Number(devsq(&numbers))
+                    }
+                    "AVEDEV" => match mean(&numbers) {
+                        Ok(mean) => Value::Number(
+                            numbers.iter().map(|number| (number - mean).abs()).sum::<f64>()
+                                / numbers.len() as f64,
+                        ),
+                        Err(message) => Value::Error(message),
+                    },
+                    "GEOMEAN" => {
+                        if numbers.is_empty() || numbers.iter().any(|number| *number <= 0.0) {
+                            return Value::Error("#NUM!".to_string());
+                        }
+                        Value::Number(
+                            (numbers.iter().map(|number| number.ln()).sum::<f64>() / numbers.len() as f64)
+                                .exp(),
+                        )
+                    }
+                    "HARMEAN" => {
+                        if numbers.is_empty() || numbers.iter().any(|number| *number <= 0.0) {
+                            return Value::Error("#NUM!".to_string());
+                        }
+                        Value::Number(
+                            numbers.len() as f64 / numbers.iter().map(|number| 1.0 / number).sum::<f64>(),
+                        )
+                    }
+                    "KURT" => {
+                        let count = numbers.len() as f64;
+                        if numbers.len() < 4 {
+                            return Value::Error("#DIV/0!".to_string());
+                        }
+                        let mean = match mean(&numbers) {
+                            Ok(mean) => mean,
+                            Err(message) => return Value::Error(message),
+                        };
+                        let deviation = match variance_of(&numbers, true) {
+                            Ok(variance) => variance.sqrt(),
+                            Err(message) => return Value::Error(message),
+                        };
+                        if deviation == 0.0 {
+                            return Value::Error("#DIV/0!".to_string());
+                        }
+                        let sum =
+                            numbers.iter().map(|number| ((number - mean) / deviation).powi(4)).sum::<f64>();
+                        Value::Number(
+                            count * (count + 1.0) / ((count - 1.0) * (count - 2.0) * (count - 3.0)) * sum
+                                - 3.0 * (count - 1.0).powi(2) / ((count - 2.0) * (count - 3.0)),
+                        )
+                    }
+                    "SKEW" => {
+                        let count = numbers.len() as f64;
+                        if numbers.len() < 3 {
+                            return Value::Error("#DIV/0!".to_string());
+                        }
+                        let mean = match mean(&numbers) {
+                            Ok(mean) => mean,
+                            Err(message) => return Value::Error(message),
+                        };
+                        let deviation = match variance_of(&numbers, true) {
+                            Ok(variance) => variance.sqrt(),
+                            Err(message) => return Value::Error(message),
+                        };
+                        if deviation == 0.0 {
+                            return Value::Error("#DIV/0!".to_string());
+                        }
+                        let sum =
+                            numbers.iter().map(|number| ((number - mean) / deviation).powi(3)).sum::<f64>();
+                        Value::Number(count / ((count - 1.0) * (count - 2.0)) * sum)
+                    }
+                    "SKEW.P" => {
+                        let mean = match mean(&numbers) {
+                            Ok(mean) => mean,
+                            Err(message) => return Value::Error(message),
+                        };
+                        let deviation = match variance_of(&numbers, false) {
+                            Ok(variance) => variance.sqrt(),
+                            Err(message) => return Value::Error(message),
+                        };
+                        if deviation == 0.0 {
+                            return Value::Error("#DIV/0!".to_string());
+                        }
+                        let sum =
+                            numbers.iter().map(|number| ((number - mean) / deviation).powi(3)).sum::<f64>();
+                        Value::Number(sum / numbers.len() as f64)
+                    }
                     other => Value::Error(format!("there is no function `{other}`")),
                 }
             }
