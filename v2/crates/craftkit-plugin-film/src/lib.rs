@@ -160,6 +160,7 @@ mod locking;
 mod markers;
 mod mediamarks;
 mod moving;
+mod naming;
 mod removal;
 mod reversing;
 mod rippling;
@@ -183,6 +184,7 @@ pub use locking::LockTrack;
 pub use markers::{AddMarker, ClearMarkers, MarkerKind, RemoveMarker, SetMarker};
 pub use mediamarks::SetMarks;
 pub use moving::MoveClip;
+pub use naming::RenameClip;
 pub use removal::RemoveClip;
 pub use reversing::ReverseClip;
 pub use rippling::RippleClip;
@@ -302,6 +304,7 @@ impl ClipKind {
             "source_in": node.data.get("source_in").cloned().unwrap_or(serde_json::Value::Null),
             "item": item,
             "enabled": crate::enabling::is_enabled(&node.data),
+            "name": crate::naming::given_name(&node.data),
         }))
     }
 }
@@ -606,6 +609,28 @@ impl TimelineEvaluator {
 )]
 pub struct FilmPanel;
 
+/// The name a clip is shown by.
+///
+/// A clip that the caller has **named** keeps that name, and a clip
+/// that has not been named is shown by the place it is at — `clip at
+/// 120`. The name of a clip is therefore a **fact** once it is given
+/// and a **derivation** until then, and a clip that is moved keeps the
+/// name it was given.
+pub fn clip_name_of(data: &serde_json::Value, start: u64) -> String {
+    match data.get("name").and_then(|name| name.as_str()) {
+        Some(name) if !name.is_empty() => name.to_string(),
+        _ => format!("clip at {start}"),
+    }
+}
+
+/// Put the **name** of a clip on a node, and say which way it went.
+///
+/// The node's name is what the document shows, and it follows the
+/// clip's own name when there is one.
+pub fn set_clip_name(node: &mut craftkit_sdk::Node, start: u64) {
+    node.name = clip_name_of(&node.data, start);
+}
+
 /// The payload of a clip with its **clocks** set.
 ///
 /// The rest of the payload is kept: a clip may carry more than its
@@ -839,6 +864,7 @@ craftkit_sdk::plugin_anchor!(
     LockTrack,
     RemoveTrack,
     EnableClip,
+    RenameClip,
     SlipClip,
     SlideClip,
     SetMarks,

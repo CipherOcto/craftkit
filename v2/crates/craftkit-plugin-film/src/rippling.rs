@@ -103,7 +103,7 @@ impl RippleClip {
                 .unwrap_or(serde_json::Value::Null);
             if let Some(node) = session.document_mut()?.node_mut(other) {
                 node.data = crate::clocks_of(&node.data, new_start, other_duration, &source_in);
-                node.name = format!("clip at {new_start}");
+                crate::set_clip_name(node, new_start);
             }
             moved.push(serde_json::json!({ "id": other, "start": new_start }));
         }

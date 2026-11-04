@@ -146,7 +146,7 @@ impl StretchClip {
                 node.data =
                     crate::clocks_of(&node.data, plan.start, plan.duration, &node.data["source_in"].clone());
                 node.data["speed"] = serde_json::json!(plan.speed);
-                node.name = format!("clip at {}", plan.start);
+                crate::set_clip_name(node, plan.start);
             }
         }
         // The **transitions** that sit over a cut that moved follow the

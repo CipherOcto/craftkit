@@ -222,12 +222,17 @@ fn split_one(session: &mut Session, clip: u64, at: u64) -> Result<(u64, Vec<u64>
     let data = crate::clocks_of(&original, start, cut, &left_source_in);
     if let Some(node) = session.document_mut()?.node_mut(clip) {
         node.data = data;
-        node.name = format!("clip at {start}");
+        crate::set_clip_name(node, start);
     }
     // The piece after it: a **new clip**, and the media moves with
     // the cut.
+    //
+    // The name the caller gave belongs to the clip that kept its id:
+    // the new piece is a new clip and it is shown by the place it is
+    // at.
     let right_source_in = serde_json::json!(right_source_in);
-    let data = crate::clocks_of(&original, at, duration - cut, &right_source_in);
+    let mut data = crate::clocks_of(&original, at, duration - cut, &right_source_in);
+    data["name"] = serde_json::Value::Null;
     let name = format!("clip at {at}");
     let new = session.document_mut()?.add_node_with_under(Some(track), name.clone(), "film.clip", None, data);
     let relation = craftkit_sdk::Relation::with_payload(new, item, "clip", serde_json::json!({}));

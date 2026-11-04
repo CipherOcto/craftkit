@@ -168,7 +168,7 @@ impl RollCut {
                 if let Some(node) = session.document_mut()?.node_mut(clip) {
                     let source_in = serde_json::json!(clock.source_in);
                     node.data = crate::clocks_of(&node.data, clock.start, clock.duration, &source_in);
-                    node.name = format!("clip at {}", clock.start);
+                    crate::set_clip_name(node, clock.start);
                 }
             }
         }

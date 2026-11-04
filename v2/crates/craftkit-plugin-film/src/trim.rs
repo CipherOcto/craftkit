@@ -167,7 +167,7 @@ impl TrimClip {
             };
             let source_in = serde_json::json!(*source_in as u64);
             node.data = crate::clocks_of(&node.data, *start as u64, *duration as u64, &source_in);
-            node.name = format!("clip at {start}");
+            crate::set_clip_name(node, *start as u64);
         }
         // The **transitions** that join the trimmed clips stay within
         // the two clips they join: a trim that made a clip shorter

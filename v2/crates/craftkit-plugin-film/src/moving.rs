@@ -197,11 +197,10 @@ impl MoveClip {
         if crate::is_locked(session, track) {
             return Err(crate::locked_error(&id, track));
         }
-        let name = format!("clip at {start}");
         if from == Some(track) {
             if let Some(node) = session.document_mut()?.node_mut(clip) {
                 node.data = crate::clocks_of(&node.data, start, duration, &source_in);
-                node.name = name;
+                crate::set_clip_name(node, start);
             }
         } else {
             // The clip **changes track**: it is taken out of the tree
@@ -214,7 +213,7 @@ impl MoveClip {
                 });
             };
             node.data = crate::clocks_of(&node.data, start, duration, &source_in);
-            node.name = name;
+            crate::set_clip_name(&mut node, start);
             let Some(track_node) = session.document_mut()?.node_mut(track) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
@@ -228,7 +227,7 @@ impl MoveClip {
             if let Some(node) = session.document_mut()?.node_mut(*partner) {
                 let source_in = node.data.get("source_in").cloned().unwrap_or(serde_json::Value::Null);
                 node.data = crate::clocks_of(&node.data, *partner_start, *partner_duration, &source_in);
-                node.name = format!("clip at {partner_start}");
+                crate::set_clip_name(node, *partner_start);
             }
         }
         let partners: Vec<u64> = partner_moves.iter().map(|(partner, _, _)| *partner).collect();

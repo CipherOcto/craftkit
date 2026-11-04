@@ -140,12 +140,11 @@ impl InsertClip {
             let duration = duration_of(session, other);
             if let Some(node) = session.document_mut()?.node_mut(other) {
                 node.data = crate::clocks_of(&node.data, new_start, duration, &source_in);
-                node.name = format!("clip at {new_start}");
+                crate::set_clip_name(node, new_start);
             }
             moved.push(serde_json::json!({ "id": other, "start": new_start }));
         }
         // The clip itself: its place, and the track it is on.
-        let name = format!("clip at {start}");
         let from = session
             .document()
             .walk()
@@ -154,7 +153,7 @@ impl InsertClip {
         if from == Some(track) {
             if let Some(node) = session.document_mut()?.node_mut(clip) {
                 node.data = crate::clocks_of(&node.data, start, duration, &source_in);
-                node.name = name;
+                crate::set_clip_name(node, start);
             }
         } else {
             let Some(mut node) = session.document_mut()?.take_node(clip) else {
@@ -164,7 +163,7 @@ impl InsertClip {
                 });
             };
             node.data = crate::clocks_of(&node.data, start, duration, &source_in);
-            node.name = name;
+            crate::set_clip_name(&mut node, start);
             let Some(track_node) = session.document_mut()?.node_mut(track) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),

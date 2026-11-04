@@ -175,7 +175,7 @@ impl SetSpeed {
         data["speed"] = serde_json::json!(speed);
         if let Some(node) = session.document_mut()?.node_mut(clip) {
             node.data = data;
-            node.name = format!("clip at {start}");
+            crate::set_clip_name(node, start);
         }
         // The **ripple**: the clips that were after it move up by the
         // change in its length, and the transitions follow the cuts.
@@ -262,7 +262,7 @@ fn ripple_after(
         let duration = node.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
         let source_in = node.data.get("source_in").cloned().unwrap_or(serde_json::Value::Null);
         node.data = crate::clocks_of(&node.data, new_start as u64, duration, &source_in);
-        node.name = format!("clip at {}", new_start as u64);
+        crate::set_clip_name(node, new_start as u64);
     }
     // And the transitions follow the cuts.
     for transition in &transitions {
