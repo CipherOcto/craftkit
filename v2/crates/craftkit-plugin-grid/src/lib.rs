@@ -37,6 +37,10 @@
 //! open, and whether the target is inside this workbook is derived
 //! (the module `links`).
 //!
+//! And a formula may **shape** a text: take a part of it, count it,
+//! fold it or clean it — `LEFT`, `RIGHT`, `MID`, `LEN`, `TRIM`,
+//! `UPPER`, `LOWER` and `PROPER` (the module `texts`).
+//!
 //! And a workbook may carry **names**: a word that stands for a range of
 //! cells, and a formula may use the word where it would use the range
 //! (the module `names`).
@@ -194,6 +198,7 @@ mod sizes;
 mod styles;
 mod tabs;
 mod tabsorder;
+mod texts;
 mod validation;
 mod view;
 

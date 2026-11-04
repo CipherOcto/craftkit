@@ -10,8 +10,10 @@
 //! - **cell references** (`B3`) and **ranges** (`A1:B4`);
 //! - the arithmetic (`+ - * / ^`), the comparisons (`= <> < <= > >=`)
 //!   and the parentheses;
-//! - five functions: `SUM`, `AVERAGE`, `MIN`, `MAX` and `COUNT`; and
-//!   the tree's `TEXT`, which writes a value with a format code.
+//! - the functions: `SUM`, `AVERAGE`, `MIN`, `MAX`, `COUNT` and
+//!   `COUNTA`; the tree's `TEXT`, which writes a value with a format
+//!   code; the tree's `SUBTOTAL`; a **choice** with `IF`; and a
+//!   **counting** with `COUNTIF` and `SUMIF`.
 //! - a **choice**: `IF` takes a condition and the two values it
 //!   chooses between, and **only the branch that is taken is
 //!   computed**.
@@ -1338,6 +1340,9 @@ impl Book {
         }
         if name == "SUMIF" {
             return self.sumif(sheet, arguments, being);
+        }
+        if crate::texts::is_text_function(name) {
+            return self.shaping(sheet, name, arguments, being);
         }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
