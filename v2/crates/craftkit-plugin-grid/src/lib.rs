@@ -36,6 +36,10 @@
 //! period at a time: the straight line, the sum of the years, the
 //! declining balance and the double of it (the module `depreciation`).
 //!
+//! And a formula may ask the **price** of a security that is sold at a
+//! discount and redeemed at its value — the discount, the price, the
+//! yield, the interest and the bill (the module `securities`).
+//!
 //! And a formula may **choose**: `IF` takes a condition and the two
 //! values it chooses between, and only the branch that is taken is
 //! computed (the module `formula`).
@@ -259,6 +263,7 @@ mod protection;
 mod reading;
 mod removal;
 mod sections;
+mod securities;
 mod sheetnames;
 mod sheetreading;
 mod sizes;
