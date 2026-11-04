@@ -21,6 +21,8 @@
 //!   weight (the module `layersettings`);
 //! - the **arc** — a piece of a circle, with its centre, its radius
 //!   and its two ends (the module `arcs`);
+//! - the **audit** of a drawing — what is wrong with it, reported and
+//!   not repaired (the module `audits`);
 //! - the **mirror** of an entity — the same entity turned over a line
 //!   (the module `mirrors`);
 //! - the **copy** of an entity — a second entity of the same kind,
@@ -72,6 +74,7 @@
 #![forbid(unsafe_code)]
 
 mod arcs;
+mod audits;
 mod copies;
 mod curves;
 mod layersettings;
@@ -81,6 +84,7 @@ mod modify;
 mod order;
 
 pub use arcs::AddArc;
+pub use audits::AuditDrawing;
 pub use copies::CopyEntity;
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
@@ -1094,6 +1098,7 @@ craftkit_sdk::plugin_anchor!(
     AddArc,
     CopyEntity,
     MirrorEntity,
+    AuditDrawing,
     ListEntities,
     MoveEntity,
     RotateEntity,
