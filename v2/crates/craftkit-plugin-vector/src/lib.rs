@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **thirty-six commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **forty commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.unite`,
@@ -32,6 +32,9 @@
 //!   and
 //!   `vector.path.stroke` say what the path is painted with, and
 //!   `vector.path.gradient` says what the colours are, and
+//!   `vector.gradient.read`, `vector.gradient.stop.add`,
+//!   `vector.gradient.stop.set` and `vector.gradient.stop.remove` say
+//!   what the stops of a gradient are, and
 //!   `vector.path.blend` says how the path mixes with what is under
 //!   it; and `vector.path.grid`, `vector.path.mirror` and
 //!   `vector.path.radial` make the copies of a path — in a grid, over a
@@ -71,10 +74,12 @@
 )]
 #![forbid(unsafe_code)]
 
+mod gradients;
 mod opacity;
 mod reshape;
 mod shapes;
 
+pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
 pub use opacity::{SetOpacity, fill_at, stroke_at};
 pub use shapes::{AddLine, AddSpiral, AddStar};
 
@@ -2760,6 +2765,10 @@ craftkit_sdk::plugin_anchor!(
     VectorTool,
     AddRectangle,
     AddEllipse,
+    ReadGradient,
+    AddStop,
+    SetStop,
+    RemoveStop,
     AddPolygon,
     AddStar,
     AddLine,
