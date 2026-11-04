@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2818 tests.** The MCP server links **all fifteen batteries** in, so the
+**2828 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2818 tests
+cargo test          # 2828 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3806,6 +3806,7 @@ so.
 | the **shaping** of a text | **built.** A formula may shape a text: take a part of it, count it, fold it or clean it (§369) | §369 |
 | the **finding** of a value in a range | **built.** MATCH, VLOOKUP and INDEX find a value in a range, and the approximate search is not here (§370) | §370 |
 | the **parts** of a date | **built.** DATE makes a date and YEAR, MONTH and DAY take it apart, in the date system of the workbook (§371) | §371 |
+| the **sorting** of a range | **built.** The rows of a range are put in order, and what a row holds travels with it (§372) | §372 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25350,3 +25351,74 @@ A formula may **make a date** and take a date apart.
 - **The tree's now is not here.** The tree has `NOW` and `TODAY`, and
   a formula that asks for the day it is read on is a fact about when
   it was read; here a date is a date.
+
+## 372. The sorting of a range
+
+A range of cells may be **sorted**: the rows of it are put in order by
+the values of one of its columns.
+
+### What was built
+
+- The command `grid.sort` sorts a range — or the used range, when no
+  range is named — by the values of one of its columns, and the order
+  may be **descending**.
+- What a row holds travels with it: the **value**, the **formula**,
+  the **format** and the **style** of every cell of the row, and the
+  **note** and the **link** of a cell.
+- A formula's **relative** references move with the cell that holds
+  it, and its **anchored** references — the `$` — stay where they
+  are.
+- The **order** is the tree's: the numbers, then the text, then the
+  booleans, then the errors, and the **empty** cells last whatever the
+  order is. The text is compared without case.
+- The first row of the range is a **header** when it is guessed to be
+  one — a column whose first cell is text and whose second cell is
+  not votes for it — and the header stays where it is. The guess may
+  be said otherwise.
+- A **column that is not in the range** is refused, and so is a range
+  with a **merge** in it: a merged region is one cell, and a row of a
+  range is not.
+
+### What the port found
+
+- **The tree's sort moves whole lines and so does this one.** The
+  tree's sort takes the cells of a row and puts them where the row
+  goes, and a formula's relative references are **adjusted** for the
+  move, so that a formula still reads the row it is on; so does this
+  one, and the adjustment is done on the **text** of the formula —
+  parsed, moved and written out again.
+- **The tree's sort guesses the header with the boldness of the cells
+  as well as with their text.** The tree's guess votes for a header
+  when a column's first cell is text and its second is not, and when
+  the first row is in bold and the second is not. Here a cell has a
+  format and a style and no weight, so the guess is the **text** vote
+  alone.
+- **The tree's sort has many levels and this one has one.** The tree
+  sorts by up to sixty-four keys, and a key may be a list of the
+  tree's own words and a colour of a cell. Here there is one column
+  and its values.
+- **The tree's sort may sort by columns.** The tree's sort has an
+  *orientation*, and the columns of a range may be sorted instead of
+  its rows; here the rows of a range are sorted, and a column that is
+  not in the range is refused.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/sorting.rs`): the rows
+  being put in order, the order being descending, the empty cells
+  being last, the text being compared without case, a header being
+  guessed and staying where it is, a formula moving with its row, an
+  anchored reference not moving, the note and the link travelling with
+  the row, a column that is not in the range being refused, and a
+  range with a merge in it being refused.
+- **One new command**: `grid.sort`. The grid battery now carries **61**
+  commands and the MCP server **489**.
+
+### What it does not settle
+
+- **The tree's sort of a protected sheet is not here.** The tree
+  refuses to sort a sheet that is protected, and a sheet may be
+  protected in the tree; this tree has no protection yet.
+- **The tree's sort by a custom list is not here.** The tree may sort
+  by a list of words of its own, so that the months come out in the
+  order of the year; here the values are the values.
