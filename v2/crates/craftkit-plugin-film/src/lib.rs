@@ -168,6 +168,7 @@ mod mediamarks;
 mod moving;
 mod naming;
 mod removal;
+mod replacing;
 mod reversing;
 mod rippling;
 mod rolling;
@@ -192,6 +193,7 @@ pub use mediamarks::SetMarks;
 pub use moving::MoveClip;
 pub use naming::RenameClip;
 pub use removal::RemoveClip;
+pub use replacing::ReplaceMedia;
 pub use reversing::ReverseClip;
 pub use rippling::RippleClip;
 pub use rolling::RollCut;
@@ -874,6 +876,7 @@ craftkit_sdk::plugin_anchor!(
     SetItemLabel,
     DeleteItemLabel,
     ItemLabelGroup,
+    ReplaceMedia,
     SlipClip,
     SlideClip,
     SetMarks,
