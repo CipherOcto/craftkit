@@ -15,6 +15,8 @@
 //!   `"$"#,##0.00` or `#,##0.00" kr"`;
 //! - the **fractions**: `# ?/?`, `# ??/??`, `?/?` and `# ?/4` — a
 //!   number written as the nearest fraction (the module `fractions`);
+//! - the **scientific**: `0.00E+00` — a mantissa and an exponent, and
+//!   the exponent moves one place at a time;
 //! - the **sections**: a code with a semicolon in it has a different
 //!   code for the positive numbers, the negative ones and the zero
 //!   (the module `sections`);
@@ -61,11 +63,20 @@
 //!   and nothing else, because a format is the only thing this tree
 //!   writes on a cell — and the format of a cell is still the cell's
 //!   own (the module `styles`).
-//! - **The tree's scientific formats are not here**. The tree's
-//!   **currency** is here: a number with a symbol on it, and the symbol
-//!   is a literal in quotes. The tree's **times** are here: a time is
-//!   a fraction of a day and a format, and the tree's clock shapes and
-//!   its elapsed shapes are both here.
+//! - **The tree's scientific formats are a language, and here they are
+//!   a shape.** The tree's scientific code may have a step of more than
+//!   one place and may pad its parts with spaces; here the whole part
+//!   of the mantissa is a single placeholder and the exponent moves
+//!   one place at a time.
+//! - **The tree's currency is here**: a number with a symbol on it, and
+//!   the symbol is a literal in quotes. The tree's **times** are here:
+//!   a time is a fraction of a day and a format, and the tree's clock
+//!   shapes and its elapsed shapes are both here.
+//! - **A format may be named** as well as coded: the tree's ribbon
+//!   names its formats, and here a name says a code of this tree
+//!   (the module `formatnames`). The names this tree does not write —
+//!   the accounting and comma fills, the long date and the text — are
+//!   refused with the reason.
 //! - **The tree's date formats are a language, and here they are a
 //!   list**: the nine shapes above are the ones this tree has, and a
 //!   date format that is not one of them is refused.
@@ -88,6 +99,9 @@ pub const MAX_FORMAT_CHARS: usize = 255;
 
 /// The most decimals a format may ask for.
 const MAX_DECIMALS: usize = 15;
+
+/// The most digits an exponent may be written with.
+const MAX_EXPONENT_DIGITS: usize = 3;
 
 /// A number format this tree understands.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,6 +142,18 @@ pub enum Format {
     },
     /// A **fraction**: a number written as a fraction.
     Fraction(fractions::Fraction),
+    /// A **scientific** format: a number written as a mantissa and an
+    /// exponent.
+    Scientific {
+        /// How many decimals the mantissa is written with.
+        decimals: usize,
+        /// How many digits the exponent is written with, at least one.
+        exponent_digits: usize,
+        /// Whether a **positive** exponent carries a `+`.
+        plus: bool,
+        /// Whether the exponent's head is an `E` or an `e`.
+        upper: bool,
+    },
     /// A format with **sections**: a different code for the positive
     /// numbers, the negative ones and the zero.
     Sections {
@@ -389,6 +415,11 @@ impl Format {
         if let Some(fraction) = fractions::parse(code) {
             return Some(Format::Fraction(fraction));
         }
+        // A **scientific** format is a shape of its own: a mantissa, an
+        // exponent head and the exponent's digits.
+        if let Some((decimals, exponent_digits, plus, upper)) = scientific_shape(code) {
+            return Some(Format::Scientific { decimals, exponent_digits, plus, upper });
+        }
         // A **currency** is a number with a **symbol**: the symbol is a
         // literal in quotes, and the tree writes it that way.
         for (symbol, before, rest) in symbols(code) {
@@ -428,6 +459,11 @@ impl Format {
                 }
                 // A fraction is a **number** written as a fraction.
                 Format::Fraction(fraction) => fractions::text(*number, fraction),
+                // A **scientific** format is a **number** written as a
+                // mantissa and an exponent.
+                Format::Scientific { decimals, exponent_digits, plus, upper } => {
+                    scientific(*number, *decimals, *exponent_digits, *plus, *upper)
+                }
                 // A format with **sections**: the section that the
                 // number belongs to is the one that writes it.
                 Format::Sections { positive, negative, zero } => {
@@ -510,6 +546,105 @@ fn number_shape(code: &str) -> Option<(usize, bool)> {
         return None;
     }
     Some((decimals, thousands))
+}
+
+/// The **shape** of a scientific format: the decimals of the mantissa,
+/// the digits of the exponent, whether a positive exponent carries a
+/// `+`, and whether the head is an `E` or an `e`.
+///
+/// The tree's scientific format is a whole language of its own, with a
+/// step of one or more places. Here the step is **one**: the whole
+/// part of the mantissa is a single placeholder, so the exponent moves
+/// one place at a time.
+fn scientific_shape(code: &str) -> Option<(usize, usize, bool, bool)> {
+    let index = code.find(['E', 'e'])?;
+    let (left, rest) = code.split_at(index);
+    let upper = code.as_bytes()[index] == b'E';
+    let right = &rest[1..];
+    let (plus, digits) = match right.strip_prefix('+') {
+        Some(digits) => (true, digits),
+        None => (false, right.strip_prefix('-').unwrap_or(right)),
+    };
+    if digits.is_empty() || !digits.chars().all(|digit| digit.is_ascii_digit()) {
+        return None;
+    }
+    let exponent_digits = digits.len();
+    if exponent_digits > MAX_EXPONENT_DIGITS {
+        return None;
+    }
+    let (whole, decimals) = match left.split_once('.') {
+        Some((whole, decimals)) => {
+            if decimals.is_empty() || !decimals.chars().all(|digit| digit.is_ascii_digit()) {
+                return None;
+            }
+            (whole, decimals.len())
+        }
+        None => (left, 0),
+    };
+    if decimals > MAX_DECIMALS {
+        return None;
+    }
+    if whole != "0" && whole != "#" {
+        return None;
+    }
+    Some((decimals, exponent_digits, plus, upper))
+}
+
+/// A number, as a **mantissa and an exponent**.
+///
+/// The exponent is the power of ten the number is written with, and it
+/// moves one place at a time. A number that is **zero** has no
+/// exponent to move: it is written as a zero with an exponent of zero.
+fn scientific(number: f64, decimals: usize, exponent_digits: usize, plus: bool, upper: bool) -> String {
+    if !number.is_finite() {
+        return general(number);
+    }
+    let sign = if number < 0.0 { "-" } else { "" };
+    let head = if upper { "E" } else { "e" };
+    if number == 0.0 {
+        return format!(
+            "{sign}{}{head}{}",
+            fixed(0.0, decimals, false, false),
+            exponent(0, exponent_digits, plus)
+        );
+    }
+    let magnitude = number.abs();
+    let mut power = magnitude.log10().floor() as i32;
+    let mut mantissa = magnitude / 10f64.powi(power);
+    // The mantissa is **rounded** to its decimals, and a mantissa that
+    // rounds up to ten moves the exponent one place on.
+    let factor = 10f64.powi(decimals as i32);
+    let rounded = (mantissa * factor).round() / factor;
+    if rounded >= 10.0 {
+        power += 1;
+        mantissa = rounded / 10.0;
+    } else {
+        mantissa = rounded;
+    }
+    format!(
+        "{sign}{}{head}{}",
+        fixed(mantissa, decimals, false, false),
+        exponent(power, exponent_digits, plus)
+    )
+}
+
+/// An **exponent**, written with its digits.
+///
+/// A negative exponent carries a `-`, a positive one carries a `+`
+/// when the format says so, and the digits are padded with zeros to
+/// the number the format asks for.
+fn exponent(power: i32, digits: usize, plus: bool) -> String {
+    let sign = if power < 0 {
+        "-"
+    } else if plus {
+        "+"
+    } else {
+        ""
+    };
+    let body = power.unsigned_abs().to_string();
+    let padded =
+        if body.len() < digits { format!("{}{body}", "0".repeat(digits - body.len())) } else { body };
+    format!("{sign}{padded}")
 }
 
 /// A number with a **symbol** in front of it.

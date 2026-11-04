@@ -106,6 +106,11 @@
 //! own, where the tree's format is a style and a style is shared (the
 //! module `format`).
 //!
+//! And a format may be given by its **code** or by its **name**: the
+//! tree's ribbon names its formats, and a name here says a code of
+//! this tree — the names this tree does not write are refused with the
+//! reason (the module `formatnames`).
+//!
 //! And a **style** is a named format of the workbook, and it is
 //! **shared**: a cell may name a style, and a hundred cells that name
 //! one style carry one format — and changing the style changes every
@@ -203,6 +208,7 @@ mod filters;
 mod finding;
 mod flash;
 mod format;
+mod formatnames;
 mod formula;
 mod fractions;
 mod hiding;
@@ -867,7 +873,8 @@ pub struct SetFormat {
     /// The cell's address.
     pub cell: Text,
     /// The format: `general`, `0`, `0.00`, `#,##0`, `#,##0.00`, `0%` or
-    /// `0.00%`.
+    /// `0.00%` — or the **name** of a format, such as `currency` or
+    /// `scientific`.
     pub format: Text,
 }
 
@@ -876,21 +883,24 @@ impl SetFormat {
         let id = "grid.cell.format".to_string();
         let sheet = self.sheet.0;
         let cell = cell_at(&self.cell.0, &id)?;
-        let code = self.format.0.trim().to_string();
-        if code.chars().count() > MAX_FORMAT_CHARS {
+        let given = self.format.0.trim().to_string();
+        if given.chars().count() > MAX_FORMAT_CHARS {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!("a format is at most {MAX_FORMAT_CHARS} characters long"),
             });
         }
-        if Format::parse(&code).is_none() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "`{code}` is not a format this tree has: a number format is `general`, a whole part of `0` and `#`, up to fifteen decimals and a `%`, or a number with a symbol in quotes; a fraction is `# ?/?`, `# ??/??`, `?/?` or `# ?/4`; and a format may have sections, separated by a semicolon; and a date format is `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` or `yyyy`; and a time format is `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`, `h AM/PM`, `h:mm AM/PM`, `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`, `[h]:mm`, `[h]:mm:ss` or `[mm]:ss`"
-                ),
-            });
-        }
+        // A format is given by its **code** or by its **name**, and the
+        // code is kept: the name is a way of saying the code.
+        let code = match formatnames::resolve(&given) {
+            Ok(code) => code,
+            Err(refusal) => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: formatnames::message(&given, &refusal),
+                });
+            }
+        };
         let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed {
                 id: id.clone(),
@@ -956,13 +966,26 @@ impl SetDate {
             EngineError::Failed { id: id.clone(), message: format!("`{}` is not a date", self.date.0.trim()) }
         })?;
         let style = match &self.format {
-            Some(code) => DateStyle::parse(&code.0).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "`{}` is not a date format: the date formats are `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`",
-                    code.0.trim()
-                ),
-            })?,
+            Some(code) => {
+                // A date format is given by its **code** or by its
+                // **name**, and the name says a date shape.
+                let given = code.0.trim().to_string();
+                let said = match crate::formatnames::resolve(&given) {
+                    Ok(code) => code,
+                    Err(refusal) => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: crate::formatnames::message(&given, &refusal),
+                        });
+                    }
+                };
+                DateStyle::parse(&said).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "`{said}` is not a date format: the date formats are `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`"
+                    ),
+                })?
+            }
             // The **shape** the date was written in is the format it is
             // written with, as the tree has it: a date written as
             // `10/26/2026` is written as `10/26/2026`.
@@ -1033,13 +1056,26 @@ impl SetTime {
             ),
         })?;
         let style = match &self.format {
-            Some(code) => TimeStyle::parse(&code.0).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "`{}` is not a time format: the time formats are `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`, `h AM/PM`, `h:mm AM/PM`, `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`, `[h]:mm`, `[h]:mm:ss` and `[mm]:ss`",
-                    code.0.trim()
-                ),
-            })?,
+            Some(code) => {
+                // A time format is given by its **code** or by its
+                // **name**, and the name says a clock shape.
+                let given = code.0.trim().to_string();
+                let said = match crate::formatnames::resolve(&given) {
+                    Ok(code) => code,
+                    Err(refusal) => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: crate::formatnames::message(&given, &refusal),
+                        });
+                    }
+                };
+                TimeStyle::parse(&said).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "`{said}` is not a time format: the time formats are `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`, `h AM/PM`, `h:mm AM/PM`, `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`, `[h]:mm`, `[h]:mm:ss` and `[mm]:ss`"
+                    ),
+                })?
+            }
             // The **shape** the time was written in is the format it is
             // written with, as the tree has it: a time written as
             // `1:45 pm` is written as `1:45 pm`.

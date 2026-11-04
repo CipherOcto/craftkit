@@ -157,19 +157,22 @@ impl SetConditional {
                 message: format!("the operation `{op}` compares numbers, and `{value}` is not one"),
             });
         }
-        let format = self.format.0.trim().to_string();
-        if format.chars().count() > crate::format::MAX_FORMAT_CHARS {
+        let given = self.format.0.trim().to_string();
+        if given.chars().count() > crate::format::MAX_FORMAT_CHARS {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!("a format is at most {} characters long", crate::format::MAX_FORMAT_CHARS),
             });
         }
-        if crate::format::Format::parse(&format).is_none() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{format}` is not a format this tree has"),
-            });
-        }
+        let format = match crate::formatnames::resolve(&given) {
+            Ok(code) => code,
+            Err(refusal) => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: crate::formatnames::message(&given, &refusal),
+                });
+            }
+        };
         let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
         let mut list = conditionals_of(node)
             .into_iter()

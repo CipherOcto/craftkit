@@ -20,8 +20,6 @@ use craftkit_derive::Command;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
 
-use crate::format::Format;
-
 /// The **styles** of a workbook, from its payload.
 fn styles_of_book(node: &craftkit_sdk::Node) -> Vec<(String, String)> {
     node.data
@@ -83,13 +81,16 @@ impl AddStyle {
         if name.is_empty() {
             return Err(EngineError::Failed { id, message: "a style has a name".to_string() });
         }
-        let code = self.format.0.trim().to_string();
-        if Format::parse(&code).is_none() {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("`{code}` is not a format this tree has"),
-            });
-        }
+        let given = self.format.0.trim().to_string();
+        let code = match crate::formatnames::resolve(&given) {
+            Ok(code) => code,
+            Err(refusal) => {
+                return Err(EngineError::Failed {
+                    id,
+                    message: crate::formatnames::message(&given, &refusal),
+                });
+            }
+        };
         let styles = session.document().node(workbook).map(styles_of_book).unwrap_or_default();
         if styles.iter().any(|(style, _)| style.eq_ignore_ascii_case(&name)) {
             return Err(EngineError::Failed {
@@ -131,13 +132,16 @@ impl SetStyle {
         let id = "grid.style.set".to_string();
         let workbook = the_workbook(session, self.workbook.0, &id)?;
         let name = self.name.0.trim().to_string();
-        let code = self.format.0.trim().to_string();
-        if Format::parse(&code).is_none() {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("`{code}` is not a format this tree has"),
-            });
-        }
+        let given = self.format.0.trim().to_string();
+        let code = match crate::formatnames::resolve(&given) {
+            Ok(code) => code,
+            Err(refusal) => {
+                return Err(EngineError::Failed {
+                    id,
+                    message: crate::formatnames::message(&given, &refusal),
+                });
+            }
+        };
         let styles = session.document().node(workbook).map(styles_of_book).unwrap_or_default();
         if !styles.iter().any(|(style, _)| style.eq_ignore_ascii_case(&name)) {
             return Err(EngineError::Failed {
