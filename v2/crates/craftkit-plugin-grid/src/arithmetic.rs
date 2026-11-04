@@ -91,26 +91,32 @@ fn round_half_away(number: f64, digits: i32) -> f64 {
     let mut power = exponent + 1;
     if round_up {
         let mut index = keep;
-        let mut carried = true;
-        while carried {
+        loop {
             if index == 0 {
                 // The carry runs off the front: the number becomes one
                 // and the zeroes, and it is one place larger.
-                digits_of = vec![1];
-                digits_of.extend(std::iter::repeat_n(0, keep.saturating_sub(1)));
+                digits_of.insert(0, 1);
                 power += 1;
                 break;
             }
             index -= 1;
-            digits_of[index] += 1;
-            carried = digits_of[index] > 9;
-            if carried {
+            if digits_of[index] == 9 {
                 digits_of[index] = 0;
+            } else {
+                digits_of[index] += 1;
+                break;
             }
         }
     }
-    let integer: u64 = digits_of.iter().fold(0u64, |acc, digit| acc * 10 + *digit as u64);
-    let value = integer as f64 * 10f64.powi((power - keep as i64) as i32);
+    if digits_of.is_empty() {
+        return 0.0;
+    }
+    // The number is **written** again and read back, so that the
+    // answer is the nearest double to the decimal number and not the
+    // product of two doubles.
+    let written: String = digits_of.iter().map(|digit| char::from(b'0' + digit)).collect();
+    let text = format!("0.{written}e{power}");
+    let value: f64 = text.parse().unwrap_or(number);
     if number < 0.0 { -value } else { value }
 }
 

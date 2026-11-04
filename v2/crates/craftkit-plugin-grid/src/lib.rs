@@ -27,6 +27,11 @@
 //! its tangent and their inverses, the hyperbolic ones and the turn of
 //! an angle from degrees to radians (the module `trigonometry`).
 //!
+//! And a formula may ask what a sum of money is worth now and later:
+//! the payment of a loan, its present and future worth, the rate that
+//! makes it work out, the interest of one payment and the rate a sum
+//! grows at — with the tree's own rules (the module `finance`).
+//!
 //! And a formula may **choose**: `IF` takes a condition and the two
 //! values it chooses between, and only the branch that is taken is
 //! computed (the module `formula`).
@@ -231,6 +236,7 @@ mod dates;
 mod datetimes;
 mod fill;
 mod filters;
+mod finance;
 mod finding;
 mod flash;
 mod format;
