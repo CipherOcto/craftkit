@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2811 tests.** The MCP server links **all fifteen batteries** in, so the
+**2818 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2811 tests
+cargo test          # 2818 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3805,6 +3805,7 @@ so.
 | the **link** on a cell | **built.** A cell may carry a link, and whether the target is inside this workbook is derived (§368) | §368 |
 | the **shaping** of a text | **built.** A formula may shape a text: take a part of it, count it, fold it or clean it (§369) | §369 |
 | the **finding** of a value in a range | **built.** MATCH, VLOOKUP and INDEX find a value in a range, and the approximate search is not here (§370) | §370 |
+| the **parts** of a date | **built.** DATE makes a date and YEAR, MONTH and DAY take it apart, in the date system of the workbook (§371) | §371 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25284,3 +25285,68 @@ Three functions look for something in a range of cells: `MATCH`,
   negative match type looks for the smallest value that is not less
   than the needle, in a range that is sorted the other way; that is
   the approximate search again, and it is not here.
+
+## 371. The parts of a date
+
+A formula may **make a date** and take a date apart.
+
+### What was built
+
+- The function `DATE(year, month, day)` gives the **serial** of the
+  date — the days since the beginning of the calendar of the
+  workbook.
+- The functions `YEAR(serial)`, `MONTH(serial)` and `DAY(serial)` give
+  the **parts** of the date the serial is, and the parts may be put
+  together again.
+- The month and the day **roll over**: the 13th month is the January
+  of the next year, and the 32nd day of January is the 1st of
+  February.
+- A year **below 1900** is a year after 1900: the year 24 is the year
+  1924.
+- The **date system** is the workbook's: the 1900 system counts from
+  the 1st of January 1900 and the 1904 system from the 1st of January
+  1904, where the serial 0 is that day.
+- A date outside the calendar is an **error**, and so is a serial that
+  is not one.
+
+### What the port found
+
+- **The tree's `DATE` rolls over and a cell that holds a date does
+  not.** The tree's `DATE(2026,2,30)` is the 1st of March, and this
+  tree's `DATE` rolls the same way; but a **cell** that holds a date
+  holds a date that *happened* — the 30th of February is refused when
+  it is put in a cell, because a cell is a fact and a formula is a
+  rule. That is the tree's own distinction too, and it is in this
+  tree's `grid.cell.date` and in this formula.
+- **The serial is the tree's serial, and it is not the count of the
+  days.** In the 1900 system the serial 0 is the day *before* the 1st
+  of January 1900, and the **fictitious** 29th of February 1900 — a
+  leap day that never happened — is the serial 60, because the tree's
+  calendar has it in it.
+- **The tree's date system belongs to the workbook and so does this
+  one's.** The tree's `DATE` reads the calendar of the workbook the
+  formula is in; here the calendar is the workbook's too, and a
+  workbook in the 1904 system counts the 1st of January 1904 as the
+  zeroth day.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/datetimes.rs`): a date
+  being made, the month and the day rolling over, a year below 1900
+  being a year after 1900, a date being taken apart, the parts being
+  put together again, a date outside the calendar being an error, and
+  the 1904 system counting from another day.
+- **No new command**: the dates are a function of the formula
+  language. The grid battery still carries **60** commands and the MCP
+  server **488**.
+
+### What it does not settle
+
+- **The tree's other date functions are not here.** The tree has
+  `TIME`, `HOUR`, `MINUTE`, `SECOND`, `WEEKDAY`, `WEEKNUM`,
+  `EDATE`, `EOMONTH`, `DATEVALUE`, `TIMEVALUE` and `DAYS`, and each of
+  them works with a date or a time; here a date is made and taken
+  apart, and the times are not here.
+- **The tree's now is not here.** The tree has `NOW` and `TODAY`, and
+  a formula that asks for the day it is read on is a fact about when
+  it was read; here a date is a date.
