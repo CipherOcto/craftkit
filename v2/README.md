@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2920 tests.** The MCP server links **all fifteen batteries** in, so the
+**2927 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2920 tests
+cargo test          # 2927 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3823,6 +3823,7 @@ so.
 | the **reading** of a track | **built.** A track may be read whole: its kind, whether it is locked, and its clips in the order they start and its length (§386) | §386 |
 | the **reading** of a bin | **built.** A bin may be read whole: the items in it, the bins in it, and the bin it is in (§387) | §387 |
 | the **reading** of a workbook | **built.** A workbook may be read whole: its sheets, its names, its styles, its lists of words and its calendar (§388) | §388 |
+| the **rate** of a sequence | **built.** A sequence may carry a rate — 25, or the tree's rational rates — and its length in seconds is derived (§389) | §389 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26358,3 +26359,63 @@ holds and everything that is said about it.
   password.
 - **The tree's document properties and its calculation settings are
   not here.**
+
+## 389. The rate of a sequence
+
+A frame is a number, and the **rate** of a sequence says how many
+frames there are in a second.
+
+### What was built
+
+- The command `film.sequence.rate.set` puts a **rate** on a sequence:
+  the tree's own name — `25`, `23.976`, `29.97` — or the fraction
+  behind it, `30000/1001`.
+- The command `film.sequence.rate.get` reads it, and gives the length
+  of the sequence in **frames** and in **seconds**.
+- The length in seconds is **derived**: it is the frames and the rate.
+- A sequence with **no rate** has no length in seconds, and that is
+  said as nothing and not as a zero.
+- A rate that is **not a rate** is refused, and so is a rate that is
+  not positive, a sequence that is not there, and a node that is not
+  an item.
+
+### What the port found
+
+- **The tree's rate is a fraction and this tree's is too.** The tree's
+  frame rate is a numerator over a denominator, and the rates it
+  offers are `24000/1001`, `24`, `25`, `30000/1001`, `30`, `48`, `50`,
+  `60000/1001`, `60`, `120000/1001` and `120`. Here a rate is the same
+  fraction, and it may be written with the name the tree shows or with
+  the fraction behind it.
+- **The tree has a rate in two places and this tree has it in one.**
+  The tree's **sequence** carries a rate in its settings, and the
+  tree's **media item** carries an **interpretation** with a rate of
+  its own — the rate of the file, which may be different from the rate
+  of the timeline it is cut into. Here a rate belongs to the sequence
+  and to the timeline that hangs on it.
+- **The tree's drop frame is not a rate and it is not here.** The
+  tree's sequence may count 29.97 frames a second and **drop** the
+  numbers of the frames it skips, so that the timecode keeps pace with
+  the clock. A rate here is a rate and nothing else.
+
+### What it cost
+
+- **Seven tests** in the film battery (`tests/rates.rs`): a rate being
+  set and read, the tree's rational rates being written two ways, the
+  length in seconds being derived, a sequence with no rate having no
+  length in seconds, a rate that is not a rate and a rate that is not
+  positive being refused, and a sequence that is not there and a node
+  that is not an item being refused.
+- **Two new commands**: `film.sequence.rate.set` and
+  `film.sequence.rate.get`. The film battery now carries **54** commands
+  and the MCP server **506**.
+
+### What it does not settle
+
+- **The tree's timecode is not here**, and so the start timecode of a
+  sequence and the drop frame are not here.
+- **The tree's interpretation is not here**, and so the rate of a
+  **media** file — as against the rate of the timeline it is cut into
+  — is not here.
+- **The tree's resolution and its pixel aspect ratio are not here**:
+  the tree's sequence settings carry them beside the rate.
