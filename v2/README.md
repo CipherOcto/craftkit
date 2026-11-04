@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3081 tests.** The MCP server links **all fifteen batteries** in, so the
+**3085 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3081 tests
+cargo test          # 3085 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3848,6 +3848,7 @@ so.
 | the **words** of a number and the **letters** of a text | **built.** A formula may ask the words of a number and the letters of a text: Roman numerals, another base, a character and its code, and a text for a URL (§411) | §411 |
 | the **deviations** of a set | **built.** A formula may ask the deviations of a set, its means, its skew, its ranks and its percentiles — the tree's two ways of each (§412) | §412 |
 | the **measure** of a thing | **built.** A formula may ask what a measurement is in another unit, with the tree's units and its prefixes (§413) | §413 |
+| the **odd coupon periods** of a bond | **built.** A formula may ask about a bond whose first or last coupon period is not a whole one: the price and the yield of it (§414) | §414 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28003,4 +28004,57 @@ A formula may ask what a measurement is in another unit.
 - **The tree's units are not in v2's own system of measure**, and the
   v2 document carries millimetres and radians in the numbers of its
   own kinds — this is a spreadsheet's table and not the kit's.
+
+## 414. The odd coupon periods of a bond
+
+A formula may ask about a bond whose first or last coupon period is
+not a whole one.
+
+### What was built
+
+- The functions `ODDFPRICE`, `ODDFYIELD`, `ODDLPRICE` and `ODDLYIELD`.
+- `ODDFPRICE` and `ODDFYIELD` are the **price** and the **yield** of a
+  bond whose **first** coupon period is not a whole one; `ODDLPRICE`
+  and `ODDLYIELD` are the same for a bond whose **last** period is
+  not.
+- The **rules** are the tree's: a **frequency** is one, two or four and
+  no other, a **basis** is a number from zero to four and no other, a
+  price that is not positive is a number error, a yield that is
+  negative is a number error, and the dates must be in their order —
+  the settlement after the issue and before the first coupon, the
+  maturity after the first coupon.
+
+### What the port found
+
+- **The tree's odd period is a count of quasi-coupon periods.** The
+  first period is split into the whole periods the security *would*
+  have had, counted back from the first coupon, and each of them
+  carries its own length, its own days and its own accrued days; the
+  sum of the days over the length of each is what the price uses.
+  Here the same, and the same walk.
+- **The tree's odd last period is counted forward** from the last
+  interest date, and it is the other way round: the days of the
+  periods, the accrued days and the days from the settlement. Here the
+  same.
+- **The tree's yield of an odd period is a search and not a formula**,
+  and it is the same search as the yield of an ordinary bond (§403) —
+  a bracket that is widened until the answer is inside it, and then a
+  bisection. Here the same, and the price and the yield agree: a price
+  made from a yield gives the yield back, and the test here says so.
+
+### What it cost
+
+- **Four tests** in the grid battery (`tests/oddperiods.rs`): the
+  price of an odd first period, the price of an odd last one, the
+  price and the yield agreeing, and the errors.
+- **No new module**: the bonds module of §403 grows. **No new
+  command**: a function is not a command, and the grid battery still
+  carries **67** commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's accrued interest is not here**: the interest of a bond
+  between two dates, which is the same quasi-coupon machinery again.
+- **The tree's `CONVERT` has no fourth argument here** (§413), and the
+  odd periods have no fourth argument either.
 
