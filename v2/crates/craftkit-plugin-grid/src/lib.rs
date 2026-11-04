@@ -40,6 +40,10 @@
 //! discount and redeemed at its value — the discount, the price, the
 //! yield, the interest and the bill (the module `securities`).
 //!
+//! And a formula may ask what a **value** is: whether it is a number
+//! or text or an error, whether it is even or odd, and what kind of a
+//! value it is (the module `information`).
+//!
 //! And a formula may ask about a number in another **base** — two,
 //! eight and sixteen — or about the **bits** of a number (the module
 //! `engineering`).
@@ -271,6 +275,7 @@ mod formatnames;
 mod formula;
 mod fractions;
 mod hiding;
+mod information;
 mod links;
 mod lookups;
 mod merges;

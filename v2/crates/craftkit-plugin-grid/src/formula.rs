@@ -846,9 +846,32 @@ impl Parser {
         {
             self.at += 1;
         }
-        let word: String = self.characters[start..self.at].iter().collect();
+        let mut word: String = self.characters[start..self.at].iter().collect();
         if word.is_empty() {
             return Err(self.error("there is nothing there"));
+        }
+        // A **function's name** may hold a dot: `ERROR.TYPE`. The dot
+        // is only taken when a bracket follows, so that a name with a
+        // dot in it is still a name.
+        if self.characters.get(self.at) == Some(&'.')
+            && self.characters.get(self.at + 1).is_some_and(|character| character.is_ascii_alphabetic())
+        {
+            let save = self.at;
+            let mut at = self.at + 1;
+            while at < self.characters.len()
+                && (self.characters[at].is_ascii_alphanumeric() || self.characters[at] == '_')
+            {
+                at += 1;
+            }
+            let mut look = at;
+            while look < self.characters.len() && self.characters[look].is_whitespace() {
+                look += 1;
+            }
+            if self.characters.get(look) == Some(&'(') {
+                let tail: String = self.characters[save..at].iter().collect();
+                word.push_str(&tail);
+                self.at = at;
+            }
         }
         if word.eq_ignore_ascii_case("TRUE") {
             return Ok(Expr::Bool(true));
@@ -1412,6 +1435,9 @@ impl Book {
         }
         if crate::engineering::is_engineering_function(name) {
             return self.engineering(sheet, name, arguments, being);
+        }
+        if crate::information::is_information_function(name) {
+            return self.information(sheet, name, arguments, being);
         }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
