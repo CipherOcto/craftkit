@@ -43,6 +43,7 @@ pub fn is_word_function(name: &str) -> bool {
             | "DBCS"
             | "JIS"
             | "PHONETIC"
+            | "BAHTTEXT"
     )
 }
 
@@ -183,6 +184,104 @@ fn decimal_of(text: &str, radix: f64) -> Result<f64, String> {
     Ok(total)
 }
 
+/// The Thai **digits**, in the tree's own order.
+const THAI_DIGITS: [&str; 10] = ["ศูนย์", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"];
+
+/// The Thai **places**: the units, the tens, the hundreds, the
+/// thousands, the ten thousands and the hundred thousands.
+const THAI_PLACES: [&str; 6] = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน"];
+
+/// The Thai words of a **group** of up to six digits.
+///
+/// A one in the tens is `สิบ` and a two in the tens is `ยี่สิบ`, and a
+/// final one after higher digits is `เอ็ด`. The `after` says that the
+/// number already has a digit in a higher group.
+fn thai_group(digits: &[u8], after: bool) -> String {
+    let count = digits.len();
+    let higher = after || digits.iter().take(count.saturating_sub(1)).any(|digit| *digit != 0);
+    let mut out = String::new();
+    for (index, digit) in digits.iter().enumerate() {
+        let place = count - 1 - index;
+        match (place, digit) {
+            (_, 0) => {}
+            (0, 1) if higher => out.push_str("เอ็ด"),
+            (1, 1) => out.push_str("สิบ"),
+            (1, 2) => out.push_str("ยี่สิบ"),
+            _ => {
+                out.push_str(THAI_DIGITS.get(usize::from(*digit)).copied().unwrap_or_default());
+                out.push_str(THAI_PLACES.get(place).copied().unwrap_or_default());
+            }
+        }
+    }
+    out
+}
+
+/// The Thai words of a whole number written in decimal digits.
+///
+/// The digits are in groups of six, and every group but the last is
+/// followed by `ล้าน` — so a million is `หนึ่งล้าน` and a thousand
+/// million is `หนึ่งล้านล้าน`.
+fn thai_number(digits: &str) -> String {
+    let digits: Vec<u8> = digits
+        .bytes()
+        .filter(u8::is_ascii_digit)
+        .map(|byte| byte - b'0')
+        .skip_while(|digit| *digit == 0)
+        .collect();
+    if digits.is_empty() {
+        return "ศูนย์".to_string();
+    }
+    let first = match digits.len() % 6 {
+        0 => 6,
+        rest => rest,
+    };
+    let mut out = String::new();
+    let mut start = 0;
+    let mut length = first;
+    while let Some(group) = digits.get(start..start + length) {
+        out.push_str(&thai_group(group, start > 0));
+        start += length;
+        length = 6;
+        if start < digits.len() {
+            out.push_str("ล้าน");
+        }
+    }
+    out
+}
+
+/// The amount in **Thai words** with baht.
+///
+/// The amount is rounded to the satang, a whole number of baht ends in
+/// `ถ้วน` and a negative amount begins with `ลบ`.
+pub(crate) fn baht_text(amount: f64) -> Result<String, String> {
+    if !amount.is_finite() {
+        return Err("#NUM!".to_string());
+    }
+    let rounded = crate::arithmetic::round_half_away(amount, 2);
+    if !rounded.is_finite() {
+        return Err("#NUM!".to_string());
+    }
+    let fixed = format!("{:.2}", rounded.abs());
+    let (whole, fraction) = fixed.split_once('.').unwrap_or((fixed.as_str(), "00"));
+    let baht = whole.bytes().any(|byte| byte != b'0');
+    let satang = fraction.bytes().any(|byte| byte != b'0');
+    let mut out = String::new();
+    if rounded < 0.0 && (baht || satang) {
+        out.push_str("ลบ");
+    }
+    if baht || !satang {
+        out.push_str(&thai_number(whole));
+        out.push_str("บาท");
+    }
+    if satang {
+        out.push_str(&thai_number(fraction));
+        out.push_str("สตางค์");
+    } else {
+        out.push_str("ถ้วน");
+    }
+    Ok(out)
+}
+
 impl Book {
     /// The **word functions**.
     pub(crate) fn words(
@@ -193,6 +292,16 @@ impl Book {
         being: &mut Vec<(String, CellRef)>,
     ) -> Value {
         match name {
+            "BAHTTEXT" => {
+                let amount = match self.number_at(sheet, arguments, 0, being) {
+                    Ok(amount) => amount,
+                    Err(message) => return Value::Error(message),
+                };
+                match baht_text(amount) {
+                    Ok(text) => Value::Text(text),
+                    Err(message) => Value::Error(message),
+                }
+            }
             "REPT" => {
                 let text = match self.text_at(sheet, arguments, 0, being) {
                     Ok(text) => text,

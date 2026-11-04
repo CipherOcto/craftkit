@@ -55,7 +55,8 @@
 //!
 //! And a formula may ask the **words** of a number and the **letters**
 //! of a text: Roman numerals, another base, a character and its code,
-//! and a text written for a URL (the module `words`).
+//! a text written for a URL, and an amount written in Thai words (the
+//! module `words`).
 //!
 //! And a formula may ask for the **value of a text**: a text that
 //! holds a number, a date or a time — with the tree's careful rules
