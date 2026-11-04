@@ -31,6 +31,9 @@
 //! - a **footnote** — a **node**, and the run that points at it names
 //!   it: the **number** of a footnote is derived, and it is where the
 //!   footnote is referenced (the module `footnotes`);
+//! - a **bookmark** — a name for a place in a document, on a block:
+//!   the **bookmarks of a document** are derived, and a link to a
+//!   place that is there may be opened (the module `bookmarks`);
 //! - a **style** — a node, and the side vector is the document's
 //!   children;
 //! - a **paragraph's style** — a **relation**: an edge that says
@@ -93,6 +96,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Relation, Session, Text};
 
+mod bookmarks;
 mod comments;
 mod editing;
 mod footnotes;
@@ -101,6 +105,7 @@ mod numbering;
 mod page;
 mod revisions;
 
+pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
 pub use comments::{DeleteComment, GetComment, SetComment};
 pub use editing::{
     MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
