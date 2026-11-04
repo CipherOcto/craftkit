@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3064 tests.** The MCP server links **all fifteen batteries** in, so the
+**3070 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3064 tests
+cargo test          # 3070 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3845,6 +3845,7 @@ so.
 | the **line** through a set of numbers | **built.** A formula may ask how two sets of numbers move together: the correlation, the slope, the crossing, the error and the prediction (§408) | §408 |
 | the **shape** of a distribution | **built.** A formula may ask the shape of a distribution: the normal, the gamma, the error function, Student's t, the chi-square, the F, the counts and the beta (§409) | §409 |
 | the **cash flows** of a plan | **built.** A formula may ask about a series of payments: the rate at which they are worth nothing, what a sum grows to, and the interest and the principal of a run of payments (§410) | §410 |
+| the **words** of a number and the **letters** of a text | **built.** A formula may ask the words of a number and the letters of a text: Roman numerals, another base, a character and its code, and a text for a URL (§411) | §411 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27804,4 +27805,78 @@ A formula may ask about a series of payments.
 - **The tree's `NPV` is not here**: it discounts a series at the ends
   of the periods, and the tree's rule for it is a rule about a
   convention that v2 has not settled.
+
+## 411. The words of a number and the letters of a text
+
+A formula may ask the words of a number and the letters of a text.
+
+### What was built
+
+- The functions `REPT`, `EXACT`, `BASE`, `DECIMAL`, `ROMAN`, `ARABIC`,
+  `CHAR`, `CODE`, `UNICHAR`, `UNICODE`, `ENCODEURL`, `DBCS`, `JIS` and
+  `PHONETIC`.
+- `ROMAN` writes a number in **Roman numerals** and `ARABIC` reads
+  them back; `BASE` writes a number in **another base** and `DECIMAL`
+  reads it back.
+- `CHAR` and `CODE` are the character of a code in the **Windows-1252**
+  set and the code of a character; `UNICHAR` and `UNICODE` are the same
+  for **Unicode**.
+- `ENCODEURL` writes a text for a **URL**, and `DBCS`, `JIS` and
+  `PHONETIC` are the text itself — this tree has no half-width
+  characters and no furigana.
+- The **byte** versions of the text functions — `LEFTB`, `RIGHTB`,
+  `MIDB`, `LENB`, `FINDB`, `SEARCHB` and `REPLACEB` — are the same
+  functions, because this tree's text is of single bytes.
+- The **rules** are the tree's: a number in a base is **whole** and
+  the base is from two to thirty-six, a Roman number is from zero to
+  three thousand nine hundred and ninety-nine, and a text longer than
+  the tree's bound is a value error.
+
+### What the port found
+
+- **The tree's Roman numerals have five forms and they are not one
+  form with a flag.** The classic form is `CDXCIX` for four hundred
+  and ninety-nine; the second is `LDVLIV`, the third `XDIX`, the
+  fourth `VDIV` and the fifth `ID` — each form widens one of two
+  limits on how large the subtracted numeral may be beside the larger
+  one. Here the same, and the same tokens.
+- **The tree's Roman numerals can be read back in any case, and can
+  be negative.** `ARABIC("mcmxii")` is 1912 and `ARABIC("-XIV")` is
+  minus fourteen. Here the same.
+- **The tree's search finds the pattern and not only the whole text.**
+  v2's `SEARCH` matched a pattern against the **whole** of the rest of
+  the text, so `SEARCH("b", "abc")` found nothing while the tree
+  finds it at the second place. The matcher now has a second rule — a
+  pattern that matches the **beginning** of a text — and the search
+  uses it while the conditions of `COUNTIF` and `SUMIF` keep the whole
+  one. That is a bug of an earlier arc, found by this one, and the
+  test here is the proof of it.
+- **The tree's `CODE` is not the Unicode code.** A character outside
+  the Windows-1252 set is `63` — a question mark — and the codes of
+  one hundred and twenty-eight to one hundred and fifty-nine are the
+  tree's own table of the characters Windows-1252 puts there. Here the
+  same, table and all.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/words.rs`): the Roman
+  numerals, the number in another base, the repeated text and the same
+  texts, the characters and the codes, the byte versions, and the
+  errors.
+- **One new module**: `words`. **No new command**: a function is not a
+  command, and the grid battery still carries **67** commands and the
+  MCP server **521**.
+- **The matcher** of a pattern with wildcards has a second rule now:
+  a pattern that matches the beginning of a text.
+
+### What it does not settle
+
+- **The tree's `VALUE` is not here**: a text that looks like a number,
+  a date or a time read as a number, and v2 has not settled what a
+  date written as a text means.
+- **The tree's `PHONETIC` is the text itself here**, and the tree says
+  the same — but the tree has a furigana and this tree has not.
+- **The tree's `WEBSERVICE` and `FILTERXML` are not here**: they want
+  the network and an XML parser, and a kit that runs in a browser may
+  have neither.
 
