@@ -40,6 +40,10 @@
 //! discount and redeemed at its value — the discount, the price, the
 //! yield, the interest and the bill (the module `securities`).
 //!
+//! And a formula may ask how many ways there are to **choose**: the
+//! factorial, the combinations with and without repetition, the
+//! permutations and the multinomial (the module `combinations`).
+//!
 //! And a formula may ask about a **bond**: the days around its coupon
 //! period, the price of it, the yield, the duration and the price of
 //! one that is paid out (the module `bonds`). The **days** between two
@@ -245,6 +249,7 @@ mod arithmetic;
 mod bonds;
 mod cellread;
 mod clearing;
+mod combinations;
 mod conditional;
 mod criteria;
 mod dates;
@@ -276,6 +281,7 @@ mod sheetnames;
 mod sheetreading;
 mod sizes;
 mod sorting;
+mod special;
 mod statistics;
 mod styles;
 mod tabs;
