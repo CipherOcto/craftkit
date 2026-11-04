@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3164 tests.** The MCP server links **all fifteen batteries** in, so the
+**3171 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3164 tests
+cargo test          # 3171 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3872,6 +3872,7 @@ so.
 | the **order** the entities are drawn in | **built.** The entities of a block are drawn in an order, and an entity may be brought to the front or sent to the back (§435) | §435 |
 | the **modification** of an entity | **built.** A drawing is not a picture: things in it may be moved, turned and scaled, and they may be taken away (§436) | §436 |
 | the **measure** of a drawing | **built.** A drawing is not only a picture: things in it may be measured — how long, how big, how wide and how far apart (§437) | §437 |
+| the **arc** of a drawing | **built.** The cad battery had a kind of entity it could not make: an arc is a centre, a radius and two angles, and it is drawn and hit like the rest (§438) | §438 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29198,9 +29199,59 @@ A drawing is not only a picture of things: it is a set of things whose
 
 ### What it does not settle
 
-- **The tree's arc is not here**: the kind exists and the measure knows
-  what an arc is, but no command makes one yet.
+- **The tree's arc was not here when this section was written**: the
+  kind existed and the measure knew what an arc is, but no command
+  made one. It is built now (§438), and the measure answers for it.
 - **The tree's volume is not here**: a solid may be measured for its
   size, and this measures a drawing in two dimensions.
 - **The tree's perimeter of a region is not here**: the area is
   measured, and the outline of an area that is not an entity is not.
+
+## 438. The arc of a drawing
+
+The cad battery had a kind of entity it could not make: an **arc** was
+a kind, and nothing put one in a drawing.
+
+### What was built
+
+- The command `cad.entity.arc.add`: an arc is a **centre**, a **radius
+  above nothing** and **two angles in radians**, and it runs from one
+  to the other the way a circle does — counter-clockwise, and never
+  more than a whole turn.
+- The arc **carries its two ends**: the points where it begins and
+  ends. The sweep of an arc is worked out from them every time, and it
+  is never written down where it could go stale.
+- An arc is **drawn** — as a curve, sampled — and a point on it is
+  **on** it.
+- The **box** of an arc is the box of the curve and not the box of its
+  two ends: the bulge is in the box.
+- The **length** of an arc is the radius times the sweep, and the
+  measure of §437 answers it.
+
+### What the port found
+
+- **The tree's arc is two angles and a radius.** Here the arc is made
+  with two angles too, and it carries its ends: the angles are worked
+  out from them, and they are worked out every time.
+- **The tree's arc is a variant of its own**, with its own fields, its
+  own file mapping and its own transform. Here an arc is a node of an
+  **open kind**, and a new kind of curve is a new kind and nothing
+  else.
+
+### What it cost
+
+- **Seven tests** in the cad battery (`tests/arcs.rs`): an arc may be
+  put in a block, its box includes the bulge, it is drawn, a point on
+  it is on it, its length is the radius times the sweep, and the two
+  refusals — a radius of nothing and an arc of no sweep.
+- **One new module** (`arcs`): the arc of a drawing is its own. The cad
+  battery now carries **32** commands and the MCP server **577**.
+
+### What it does not settle
+
+- **The tree's arc is measured in degrees and here it is in radians**:
+  the angles of an ellipse in this battery are in radians too, and one
+  convention is worth more than two.
+- **The tree's arc may be turned the other way round**, and here it may
+  not: the sweep is the way round the arc goes, and it is worked out
+  from the ends.
