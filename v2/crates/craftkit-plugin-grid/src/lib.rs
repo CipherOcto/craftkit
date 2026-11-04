@@ -40,6 +40,10 @@
 //! discount and redeemed at its value — the discount, the price, the
 //! yield, the interest and the bill (the module `securities`).
 //!
+//! And a formula may ask the **words** of a number and the **letters**
+//! of a text: Roman numerals, another base, a character and its code,
+//! and a text written for a URL (the module `words`).
+//!
 //! And a formula may ask about the **cash flows** of a plan: the rate
 //! at which a series of payments is worth nothing, with dates or
 //! without them, what a sum grows to through a schedule, and the
@@ -324,6 +328,7 @@ mod texts;
 mod trigonometry;
 mod validation;
 mod view;
+mod words;
 mod workbookreading;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};

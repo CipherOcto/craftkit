@@ -43,6 +43,13 @@ pub fn is_text_function(name: &str) -> bool {
             | "REPLACE"
             | "T"
             | "CLEAN"
+            | "LEFTB"
+            | "RIGHTB"
+            | "MIDB"
+            | "LENB"
+            | "FINDB"
+            | "SEARCHB"
+            | "REPLACEB"
     )
 }
 
@@ -145,6 +152,18 @@ impl Book {
         if arguments.is_empty() {
             return Value::Error("#VALUE!".to_string());
         }
+        // The **byte** versions are the same functions: this tree's
+        // text is of single bytes.
+        let name = match name {
+            "LEFTB" => "LEFT",
+            "RIGHTB" => "RIGHT",
+            "MIDB" => "MID",
+            "LENB" => "LEN",
+            "FINDB" => "FIND",
+            "SEARCHB" => "SEARCH",
+            "REPLACEB" => "REPLACE",
+            other => other,
+        };
         let first = self.evaluate(sheet, &arguments[0], being);
         let text = match value_text(&first) {
             Ok(text) => text,
@@ -336,7 +355,7 @@ impl Book {
             let pattern: String = needle.chars().flat_map(char::to_lowercase).collect();
             let mut at = start;
             while at <= folded.chars().count() {
-                if crate::formula::wildcard(&pattern, &folded.chars().skip(at).collect::<String>()) {
+                if crate::formula::wildcard_at(&pattern, &folded.chars().skip(at).collect::<String>()) {
                     // The wildcards may be shorter than the rest of
                     // the text, and the place is where the pattern
                     // begins — so the search is done on the tail and

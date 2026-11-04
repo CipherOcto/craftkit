@@ -496,12 +496,27 @@ pub fn wildcard(pattern: &str, text: &str) -> bool {
     wildcard_with_case(pattern, text, false)
 }
 
+/// Whether a pattern matches the **beginning** of a text, and the text
+/// may be longer than the pattern.
+///
+/// This is the tree's rule for a **search**: the pattern is found
+/// somewhere in the text and not only when it is the whole of it.
+pub fn wildcard_at(pattern: &str, text: &str) -> bool {
+    matched(pattern, text, false, false)
+}
+
 /// Whether a **text** matches a pattern with the tree's wildcards, and
 /// whether the **case** matters.
 ///
 /// When the case matters the two are compared as they are written;
 /// when it does not, both are folded.
 pub fn wildcard_with_case(pattern: &str, text: &str, case: bool) -> bool {
+    matched(pattern, text, case, true)
+}
+
+/// Whether a pattern matches a text, and whether the text must be
+/// matched whole.
+fn matched(pattern: &str, text: &str, case: bool, whole: bool) -> bool {
     let (pattern, text) = if case {
         (pattern.to_string(), text.to_string())
     } else {
@@ -524,6 +539,11 @@ pub fn wildcard_with_case(pattern: &str, text: &str, case: bool) -> bool {
     // found: a `*` that matched too little takes one more character.
     let (mut star, mut mark) = (None, 0usize);
     while in_text < text.len() {
+        if !whole && in_pattern == tokens.len() {
+            // The pattern is done and the text is longer: the pattern
+            // matches the beginning of it.
+            return true;
+        }
         if in_pattern < tokens.len()
             && (tokens[in_pattern] == ('?', false)
                 || (tokens[in_pattern].0 == text[in_text] && tokens[in_pattern] != ('*', false)))
@@ -1466,6 +1486,9 @@ impl Book {
         if crate::cashflows::is_cash_flow_function(name) {
             return self.cash_flows(sheet, name, arguments, being);
         }
+        if crate::words::is_word_function(name) {
+            return self.words(sheet, name, arguments, being);
+        }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();
@@ -1617,6 +1640,19 @@ impl Book {
     }
 
     /// The **number** an argument says.
+    /// The **text** an argument says, if it says one.
+    pub(crate) fn text_at(
+        &self,
+        sheet: &str,
+        arguments: &[Expr],
+        index: usize,
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Result<String, String> {
+        let Some(argument) = arguments.get(index) else { return Err("#VALUE!".to_string()) };
+        let value = self.evaluate(sheet, argument, being);
+        crate::texts::value_text(&value)
+    }
+
     /// The **values** an argument holds: the cells of a range, and the
     /// value of a plain argument.
     pub(crate) fn values_of_cells(
