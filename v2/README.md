@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2835 tests.** The MCP server links **all fifteen batteries** in, so the
+**2842 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2835 tests
+cargo test          # 2842 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3808,6 +3808,7 @@ so.
 | the **parts** of a date | **built.** DATE makes a date and YEAR, MONTH and DAY take it apart, in the date system of the workbook (§371) | §371 |
 | the **sorting** of a range | **built.** The rows of a range are put in order, and what a row holds travels with it (§372) | §372 |
 | the **protection** of a sheet | **built.** A protected sheet locks its cells and says what may still be done to it (§373) | §373 |
+| the **time** and the **days** of a date | **built.** TIME makes a time, HOUR, MINUTE and SECOND take it apart, and EDATE, EOMONTH and DAYS work with the days (§374) | §374 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25493,3 +25494,75 @@ A sheet may be **protected**.
   tree's *Allow Edit Ranges* lets a part of a protected sheet be
   changed, with or without a password of its own; here the whole
   sheet is locked.
+
+## 374. The time and the days of a date
+
+A formula may work with the **time** of a day and with the **days**
+between two dates.
+
+### What was built
+
+- The function `TIME(hour, minute, second)` gives the **fraction of a
+  day** a time is: the half of the day is noon, and the quarter is six
+  in the morning.
+- The functions `HOUR(serial)`, `MINUTE(serial)` and `SECOND(serial)`
+  give the parts of the time of a day.
+- The function `WEEKDAY(serial, [kind])` gives the **day of the week**
+  as a number, and the number says where the week begins: one is a
+  week that begins on the Sunday, two is a week that begins on the
+  Monday, three is a week that begins on the Monday and counts from
+  zero, and the eleven to seventeen are the weeks that begin on a day
+  and count from one. A kind that is not one of those is an error.
+- The functions `EDATE(start, months)` and `EOMONTH(start, months)`
+  give a date a number of **months** away, and the day of the month is
+  **clamped** to the length of the month it lands in — the 31st of
+  January plus a month is the 28th of February — and the months are
+  always counted from the **original** date, so a series does not
+  drift.
+- The function `DAYS(end, start)` gives the number of **days** between
+  two dates.
+- A time that is **before the midnight** is an error, and so is a
+  number over thirty-two thousand seven hundred and sixty-seven.
+
+### What the port found
+
+- **The tree's `EDATE` drops the time of the day and so does this
+  one.** The tree's `EDATE` is a **date** and not a moment: the time
+  of the day is not carried over, and only the day of the month is.
+- **The tree's February 1900 has its real twenty-eight days in `EDATE`
+  and in `EOMONTH`, and this tree's calendar has the fictitious
+  twenty-ninth.** The tree says so in its own note: it gives
+  February 1900 its real twenty-eight days, though the sheet's
+  calendar has a 29 February 1900 in it — the serial 60. Here the
+  **calendar** is the one that counts, so the last day of February
+  1900 is the fictitious twenty-ninth here, and the two rules are not
+  two rules.
+- **The tree's `WEEKDAY` has ten kinds and so does this one.** The
+  kinds are the ones, the two, the three and the eleven to seventeen,
+  and a kind that is not one of them is an error; the tree's error is
+  a `#NUM!` and so is this one's.
+- **The tree's `TIME` cuts the numbers to whole ones and so does this
+  one.** The tree's rule: the hour, the minute and the second are cut
+  to whole seconds, a number over thirty-two thousand seven hundred
+  and sixty-seven is an error, and a time before the midnight is an
+  error — and a time that is more than a day is a day and a bit.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/timesofday.rs`): a time
+  being a fraction of a day, the parts of a time being taken, the
+  day of the week being a number, a date a number of months away
+  being found, the number of days between two dates, a kind that is
+  not one of the tree's being an error, and a time that is not a time
+  being an error.
+- **No new command**: the times are a function of the formula
+  language. The grid battery still carries **63** commands and the MCP
+  server **491**.
+
+### What it does not settle
+
+- **The tree's other date functions are not here.** The tree has
+  `WEEKNUM`, `ISOWEEKNUM`, `DATEVALUE`, `TIMEVALUE`, `DAYS360`,
+  `DATEDIF`, `NOW` and `TODAY`, and each of them works with a date or
+  a time; here a date is made and taken apart, a time is made and
+  taken apart, and the days between two dates are counted.
