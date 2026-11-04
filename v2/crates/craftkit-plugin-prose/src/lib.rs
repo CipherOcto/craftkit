@@ -12,6 +12,9 @@
 //! - a **paragraph's text** — the block's **payload**;
 //! - a **paragraph's runs** — the **payload** too: a run is an
 //!   **interval over the text**, and the text it covers is **derived**;
+//! - a **comment** — the **payload** of the document too, by the block
+//!   it is on: a comment is numerous and holds nothing (the module
+//!   `comments`);
 //! - a **style** — a node, and the side vector is the document's
 //!   children;
 //! - a **paragraph's style** — a **relation**: an edge that says
@@ -74,8 +77,10 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Relation, Session, Text};
 
+mod comments;
 mod editing;
 
+pub use comments::{DeleteComment, GetComment, SetComment};
 pub use editing::{
     MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
 };

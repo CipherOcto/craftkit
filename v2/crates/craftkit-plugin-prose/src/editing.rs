@@ -114,18 +114,21 @@ impl RemoveBlock {
                 message: format!("the node `{block}` is a `{}` and not a block", node.kind),
             });
         }
-        if parent_of(session, block).is_none() {
+        let Some(document) = parent_of(session, block) else {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!("the block `{block}` is in no document"),
             });
-        }
+        };
         if !session.document_mut()?.remove_node(block) {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!("there is no node `{block}`"),
             });
         }
+        // The **comment** goes with the block: a comment on a block
+        // that is not there is a comment on nothing.
+        crate::comments::drop_comment(session, document, block);
         Ok(Outcome::changed(format!("the block `{block}` is taken away")).with_data(json!({ "id": block })))
     }
 }
