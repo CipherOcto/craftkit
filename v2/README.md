@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3150 tests.** The MCP server links **all fifteen batteries** in, so the
+**3154 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3150 tests
+cargo test          # 3154 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3870,6 +3870,7 @@ so.
 | the **settings** of a layer | **built.** A CAD layer is more than a name: it may be on, frozen or locked, it may have a colour, a line type and a line weight (§433) | §433 |
 | the **curves** of a drawing | **built.** A CAD drawing has curves: the ellipse, with its centre, its major axis and its ratio, and the polyline, with its points (§434) | §434 |
 | the **order** the entities are drawn in | **built.** The entities of a block are drawn in an order, and an entity may be brought to the front or sent to the back (§435) | §435 |
+| the **modification** of an entity | **built.** A drawing is not a picture: things in it may be moved, turned and scaled, and they may be taken away (§436) | §436 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29090,4 +29091,53 @@ be moved in it.
   moved by steps and not against a reference.
 - **The tree's text to front is not here**: a text and an entity are
   the same thing here, and the order is the order.
+
+## 436. The modification of an entity
+
+A drawing is not a picture: things in it may be **moved**, **turned**
+and **scaled**, and they may be **taken away**.
+
+### What was built
+
+- The commands `cad.entity.move`, `cad.entity.rotate`,
+  `cad.entity.scale` and `cad.entity.remove`.
+- A **move** takes a **vector**; a **turn** takes a **point** and an
+  **angle in degrees**; a **scale** takes a **point** and a **factor**
+  above nothing. A change of the geometry is a change of the geometry
+  and of nothing else: the name of the entity stays, and the layer it
+  is on stays.
+- The **rules** are the tree's: a circle that is scaled gets a bigger
+  radius and a circle that is turned keeps its radius, an ellipse
+  that is scaled keeps its **ratio** and an ellipse that is turned has
+  its **major axis** turned with it, a text that is scaled is a bigger
+  text, and a factor of nothing is refused.
+
+### What the port found
+
+- **The tree's entities are a closed union and their modification is a
+  change of the variant's fields.** Here an entity is a node of an
+  **open kind**, and its modification is a change of the **geometry in
+  its payload** — so a new kind of entity is modified by writing one
+  more case and not by touching four places at once (§ the header).
+- **The tree's turn of a text turns the text's own angle** and here
+  the same: a text carries its angle and the turn adds to it.
+- **The tree's turn is in degrees** and here the same, and the answer
+  is **near** the number and not the number — a turn is a sine and a
+  cosine, and the test here says so.
+
+### What it cost
+
+- **Four tests** in the cad battery (`tests/modify.rs`): an entity may
+  be moved, it may be turned, it may be scaled, and it may be taken
+  away.
+- **One new module** (`modify`): the modification of an entity is its
+  own. The cad battery now carries **27** commands and the MCP server
+  **572**.
+
+### What it does not settle
+
+- **The tree's mirror is not here**: an entity may be moved, turned and
+  scaled, and not yet turned over a line.
+- **The tree's copy of an entity is not here**: an entity is made by
+  a command that makes one, and there is no copy of it yet.
 
