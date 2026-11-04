@@ -10,8 +10,8 @@
 //! - a **layer** — a node, and a table row;
 //! - a **block** — a node, and a table row that **contains** entities;
 //! - an **entity** — a node of an **open kind**: `cad.entity.line`,
-//!   `cad.entity.circle`, `cad.entity.arc`, `cad.entity.text` and
-//!   `cad.entity.insert`;
+//!   `cad.entity.circle`, `cad.entity.arc`, `cad.entity.ellipse`,
+//!   `cad.entity.polyline`, `cad.entity.text` and `cad.entity.insert`;
 //! - an entity's **layer** — a **relation**: an edge that says something,
 //!   not a parent;
 //! - a **block insert** — a node that **references** a block: an edge
@@ -19,6 +19,9 @@
 //! - a **layer's settings** — whether it is on, frozen or locked, its
 //!   colour, the colour it is drawn in, its line type and its line
 //!   weight (the module `layers`);
+//! - the **curves** — the ellipse, with its centre, its major axis
+//!   and its ratio, and the polyline, with its points (the module
+//!   `curves`);
 //! - the **geometry** — the entity's payload, in the world's units;
 //! - the **extents** — derived, every time, by the evaluator.
 //!
@@ -53,6 +56,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod curves;
 mod layers;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
@@ -61,6 +65,7 @@ use craftkit_sdk::{
     Appearance, BlendMode, Canvas, Colour, Document, EngineError, Fill, Node, NodeRef, Number, Outcome, Path,
     Plan, PlanItem, Point, Relation, Session, Stroke, Text,
 };
+pub use curves::{AddEllipse, AddPolyline};
 pub use layers::{
     FreezeLayer, ListLayers, LockLayer, SetLayerColor, SetLayerFill, SetLayerLinetype, SetLayerLineweight,
     SetLayerOn,
@@ -203,6 +208,8 @@ entity_kind!(CircleKind, "cad.entity.circle", "Circle");
 entity_kind!(ArcKind, "cad.entity.arc", "Arc");
 entity_kind!(TextKind, "cad.entity.text", "Text");
 entity_kind!(InsertKind, "cad.entity.insert", "Insert");
+entity_kind!(EllipseKind, "cad.entity.ellipse", "Ellipse");
+entity_kind!(PolylineKind, "cad.entity.polyline", "Polyline");
 
 /// The colour an entity is drawn in.
 ///
@@ -353,6 +360,32 @@ fn draw_geometry(kind: &str, geometry: &Json, colour: Colour, canvas: &mut dyn C
                 Some(Stroke { colour, width: 1.0, ..Default::default() }),
             );
         }
+        "cad.entity.ellipse" => {
+            let points = curves::ellipse_points(geometry);
+            if points.len() < 2 {
+                return;
+            }
+            let path = Path::polygon(&points.iter().map(|(x, y)| Point::new(*x, *y)).collect::<Vec<_>>());
+            canvas.path(
+                &path,
+                Fill::Solid(Colour::NONE),
+                BlendMode::Normal,
+                Some(Stroke { colour, width: 1.0, ..Default::default() }),
+            );
+        }
+        "cad.entity.polyline" => {
+            let points = curves::polyline_points(geometry);
+            if points.len() < 2 {
+                return;
+            }
+            let path = Path::polygon(&points.iter().map(|(x, y)| Point::new(*x, *y)).collect::<Vec<_>>());
+            canvas.path(
+                &path,
+                Fill::Solid(Colour::NONE),
+                BlendMode::Normal,
+                Some(Stroke { colour, width: 1.0, ..Default::default() }),
+            );
+        }
         "cad.entity.text" => {
             let Some(at) = point_in(geometry, "at") else { return };
             let Some(text) = geometry.get("text").and_then(|text| text.as_str()) else { return };
@@ -390,6 +423,13 @@ fn hit_geometry(kind: &str, geometry: &Json, point: Point) -> bool {
             let away = ((point.x - center.x).powi(2) + (point.y - center.y).powi(2)).sqrt();
             (away - radius).abs() <= TOLERANCE
         }
+        "cad.entity.ellipse" => {
+            // The curve is sampled and the point is near one of its
+            // segments: the tree's bound is exact and this one is
+            // sampled.
+            near_a_curve(&curves::ellipse_points(geometry), point)
+        }
+        "cad.entity.polyline" => near_a_curve(&curves::polyline_points(geometry), point),
         _ => false,
     }
 }
@@ -399,6 +439,18 @@ fn hit_geometry(kind: &str, geometry: &Json, point: Point) -> bool {
 /// It is this program's number: a drawing is in millimetres and a
 /// millimetre is a fine thing to hit.
 const TOLERANCE: f64 = 1.0;
+
+/// Whether a point is **on** a curve: near one of its segments.
+fn near_a_curve(points: &[(f64, f64)], point: Point) -> bool {
+    if points.len() < 2 {
+        return false;
+    }
+    points.windows(2).any(|pair| {
+        let from = Point::new(pair[0].0, pair[0].1);
+        let to = Point::new(pair[1].0, pair[1].1);
+        distance_to_segment(point, from, to) <= TOLERANCE
+    })
+}
 
 /// The distance from a point to a segment.
 fn distance_to_segment(point: Point, from: Point, to: Point) -> f64 {
@@ -483,6 +535,20 @@ fn points_of(geometry: &Json) -> Vec<(f64, f64)> {
             }
         }
         Json::Object(map) => {
+            // A polyline is a list of points.
+            if let Some(list) = map.get("points").and_then(|points| points.as_array()) {
+                for value in list {
+                    read(value, &mut points);
+                }
+            }
+            // An ellipse is a curve, and its box is worked out from its
+            // two half axes.
+            if map.contains_key("major") {
+                for (x, y) in curves::ellipse_points(geometry) {
+                    points.push((x, y));
+                }
+                return points;
+            }
             for key in ["from", "to", "center", "start", "end", "at"] {
                 if let Some(value) = map.get(key) {
                     read(value, &mut points);
@@ -858,7 +924,7 @@ impl PutOnLayer {
 }
 
 /// Put an entity in a block, with its geometry, and give back its id.
-fn add_entity(
+pub(crate) fn add_entity(
     session: &mut Session,
     block: u64,
     name: &str,
@@ -965,6 +1031,8 @@ craftkit_sdk::plugin_anchor!(
     ArcKind,
     TextKind,
     InsertKind,
+    EllipseKind,
+    PolylineKind,
     AddDrawing,
     AddLayer,
     AddBlock,
@@ -972,6 +1040,8 @@ craftkit_sdk::plugin_anchor!(
     AddCircle,
     AddText,
     AddInsert,
+    AddEllipse,
+    AddPolyline,
     PutOnLayer,
     SetLayerOn,
     FreezeLayer,
