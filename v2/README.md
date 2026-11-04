@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2868 tests.** The MCP server links **all fifteen batteries** in, so the
+**2874 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2868 tests
+cargo test          # 2874 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3814,6 +3814,7 @@ so.
 | the **joining** and the **finding** of texts | **built.** CONCATENATE, TEXTJOIN, FIND, SEARCH, SUBSTITUTE and REPLACE work on the texts of a formula (§377) | §377 |
 | the **name** of a thing in the project | **built.** A media item and a bin may be named, and the name is the thing's own (§378) | §378 |
 | the **taking away** of a bin | **built.** A bin goes with the items in it, and a bin that holds a played item is not taken away (§379) | §379 |
+| the **reading** of a cell | **built.** A cell may be read whole: its value, its type, its formula, its text, its format, its note and its link (§380) | §380 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25838,3 +25839,60 @@ A bin may be taken away, and what is **in** it goes with it.
 - **The tree's moving of an item to a bin is not here.** The tree may
   move an item from one bin to another; here an item is in the bin it
   was added to.
+
+## 380. The reading of a cell
+
+A cell may be read whole: the answer is everything the cell holds and
+everything that is said about it.
+
+### What was built
+
+- The command `grid.cell.get` gives the **value** of a cell and its
+  **type**, the **formula** it holds, the **text** it shows, the
+  **format** and the **style** it carries, the **note** and the
+  **link** that are on it, and the **merge** that covers it.
+- A cell that holds a formula has the value its formula **computes**,
+  because the value is derived.
+- The **text** is the value written with the format of the cell: the
+  conditional format that matches it, and the format of the style it
+  names, and its own format otherwise.
+- A cell that is **not there** is empty, and not an error.
+- A node that is **not a sheet** is refused, and so is a sheet that is
+  not there.
+
+### What the port found
+
+- **The tree's cell may hold a picture and this tree's cell does
+  not.** The tree's `cell.get` says whether the cell holds a picture
+  and gives the picture; here a cell holds a value, a formula, a
+  format and a style, and the picture is not one of them.
+- **The tree's cell may be part of a spilled range and this tree's
+  cell does not.** The tree's `cell.get` says where a spilled range
+  began and which range a cell belongs to; here a formula that spills
+  is not a thing this tree has.
+- **The tree's merge covers every cell of the region and this tree's
+  covers the ones that are not the top left.** The tree's merged
+  region is one cell and every cell of it is in it; here the **value**
+  of a merged region is the value of its top left cell, and so the
+  other cells of it are the ones that are covered.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/cellread.rs`): a cell that
+  holds a value being read, a cell that holds a formula having the
+  value the formula computes, the format, the style, the note and the
+  link being said, a cell that is covered by a merge saying so, a cell
+  that is not there being empty, and a node that is not a sheet being
+  refused.
+- **One new command**: `grid.cell.get`. The grid battery now carries
+  **64** commands and the MCP server **497**.
+
+### What it does not settle
+
+- **The tree's pictures and its spilled ranges are not here.** A cell
+  may hold a picture in the tree and a formula may spill over the
+  cells below it, and the tree's `cell.get` says both.
+- **The tree's input text is not here.** The tree's `cell.get` says
+  the **input** of a cell — what was typed into it, which is the
+  formula and not the value — and here the formula is said and the
+  input is not a thing a cell holds apart from it.
