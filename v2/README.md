@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2859 tests.** The MCP server links **all fifteen batteries** in, so the
+**2864 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2859 tests
+cargo test          # 2864 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3812,6 +3812,7 @@ so.
 | the **taking away** of a media item | **built.** An item that no clip plays is taken away, and one that a clip plays is not (§375) | §375 |
 | the **reading** of a project | **built.** The bins, the items in them, and the clips that play them (§376) | §376 |
 | the **joining** and the **finding** of texts | **built.** CONCATENATE, TEXTJOIN, FIND, SEARCH, SUBSTITUTE and REPLACE work on the texts of a formula (§377) | §377 |
+| the **name** of a thing in the project | **built.** A media item and a bin may be named, and the name is the thing's own (§378) | §378 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25741,3 +25742,51 @@ A formula may **join** texts and **find** one text in another.
 - **The tree's `TEXTSPLIT` gives an array and this tree has no
   arrays.** A text that is split into its parts is a list of texts,
   and a list is not a thing this tree has.
+
+## 378. The name of a thing in the project
+
+A media item may be **named**, and a bin may be **named**.
+
+### What was built
+
+- The command `film.item.rename` names a media item, and the command
+  `film.bin.rename` names a bin.
+- The name is the thing's **own**: it does not follow the thing, and
+  it is not derived from it. The name of an item is what the project
+  says.
+- A name that is **nothing** is refused, and the thing keeps the name
+  it had.
+- A node that is **not an item** and a node that is **not a bin** are
+  refused, and so is a node that is not there.
+
+### What the port found
+
+- **The tree's rename renames an item or a clip and this tree's are
+  two commands.** The tree's `clip.rename` takes an item or a clip,
+  and one command does both. Here a command is one thing: the clip is
+  named by `film.clip.rename` and the item by `film.item.rename` — and
+  the rule they share is the tree's: a name that is nothing is
+  refused.
+- **The tree's rename of a bin is not a command and this tree's is.**
+  The tree's bins are renamed in the **panel**, and the tree has no
+  command for it; here the bin is a node like any other and it is
+  named by a command.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/itemnaming.rs`): a media
+  item being named, a bin being named, the name of an item being said
+  by the project, a name that is nothing being refused, and a node
+  that is not an item being refused.
+- **Two new commands**: `film.item.rename` and `film.bin.rename`. The
+  film battery now carries **47** commands and the MCP server **495**.
+
+### What it does not settle
+
+- **The tree's selection is not here.** The tree's rename renames the
+  **selected** clip when no clip is named, and the tree's panel
+  renames what is selected; here every command names what it acts on.
+- **The tree's names may be of many kinds and this tree's are plain
+  texts.** The tree's project has a name and a **label** for an item,
+  and the tree's clip has a name that the timeline shows; here the
+  name is the name.
