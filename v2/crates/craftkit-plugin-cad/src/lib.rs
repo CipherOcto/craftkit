@@ -22,6 +22,9 @@
 //! - the **curves** — the ellipse, with its centre, its major axis
 //!   and its ratio, and the polyline, with its points (the module
 //!   `curves`);
+//! - the **order** the entities are drawn in — the children of a block
+//!   are drawn in the order they stand in, and an entity may be
+//!   brought to the front or sent to the back (the module `order`);
 //! - the **geometry** — the entity's payload, in the world's units;
 //! - the **extents** — derived, every time, by the evaluator.
 //!
@@ -58,6 +61,7 @@
 
 mod curves;
 mod layers;
+mod order;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
@@ -70,6 +74,7 @@ pub use layers::{
     FreezeLayer, ListLayers, LockLayer, SetLayerColor, SetLayerFill, SetLayerLinetype, SetLayerLineweight,
     SetLayerOn,
 };
+pub use order::{BackwardEntity, BringToFront, ForwardEntity, ListEntities, SendToBack};
 
 /// The CAD layer.
 ///
@@ -1042,6 +1047,11 @@ craftkit_sdk::plugin_anchor!(
     AddInsert,
     AddEllipse,
     AddPolyline,
+    ListEntities,
+    BringToFront,
+    SendToBack,
+    ForwardEntity,
+    BackwardEntity,
     PutOnLayer,
     SetLayerOn,
     FreezeLayer,
