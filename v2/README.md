@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3105 tests.** The MCP server links **all fifteen batteries** in, so the
+**3108 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3105 tests
+cargo test          # 3108 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3857,6 +3857,7 @@ so.
 | the **value of a text** | **built.** A formula may ask for the value of a text: a text that holds a number, a date or a time (§420) | §420 |
 | the **week** of a day in its year | **built.** A formula may ask for the week of a day in the year it is in, with the tree's kinds of week and the ISO week (§421) | §421 |
 | the **confidence** of a mean | **built.** A formula may ask how wide the confidence of a mean is, with the normal distribution and with Student's t (§422) | §422 |
+| the **complex numbers** | **built.** A formula may ask about the complex numbers: a pair of numbers, written as text and read back from text (§423) | §423 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28461,4 +28462,55 @@ A formula may ask how wide the **confidence** of a mean is.
 - **The tree's confidence of a mean of a set that is written out in
   the formula is not here**: this tree's formulas take ranges of
   cells and not arrays.
+
+## 423. The complex numbers
+
+A formula may ask about the **complex numbers**: a pair of numbers, a
+real part and an imaginary one.
+
+### What was built
+
+- The functions `COMPLEX`, `IMABS`, `IMAGINARY`, `IMARGUMENT`,
+  `IMCONJUGATE`, `IMCOS`, `IMCOSH`, `IMCOT`, `IMCSC`, `IMCSCH`,
+  `IMDIV`, `IMEXP`, `IMLN`, `IMLOG10`, `IMLOG2`, `IMPOWER`,
+  `IMPRODUCT`, `IMREAL`, `IMSEC`, `IMSECH`, `IMSIN`, `IMSINH`,
+  `IMSQRT`, `IMSUB`, `IMSUM` and `IMTAN`.
+- A complex number is written as **text** — `3+4i` — and it is read
+  back from text by the same rules. `COMPLEX` writes one; the rest
+  are the functions of one.
+- The **rules** are the tree's: a text that holds no number is a
+  number error, a boolean is a value error, two numbers with
+  different suffixes may not be put together, nothing divides nothing,
+  the logarithm of nothing is a number error, the angle of nothing is
+  a divide error, and the cosecant of nothing is a number error.
+
+### What the port found
+
+- **The tree's complex number keeps the suffix it was written with**:
+  a number read from `3+4j` is written back with a `j`. Here the
+  same, and two numbers with different suffixes may not be put
+  together.
+- **The tree's whole powers are computed by repeated multiplication**
+  when the power is a whole number that is not large, so that a
+  Gaussian integer raised to a power is the answer and not the answer
+  with noise in it. Here the same, and the test here says so.
+- **The tree's complex number is written with fifteen significant
+  digits**, so that a value that is one to fifteen digits is written
+  as one. Here the same.
+
+### What it cost
+
+- **Three tests** in the grid battery (`tests/complex.rs`): the
+  complex numbers are written and read, they are added and divided,
+  and their functions are found.
+- **One new module** (`complex`): the pair of numbers and its
+  twenty-five functions are their own. **No new command**: a
+  function is not a command, and the grid battery still carries
+  **67** commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's sum of a range of complex numbers is not proved here**
+  by a test, though the code folds the cells of a range the way the
+  tree folds the elements of an array.
 
