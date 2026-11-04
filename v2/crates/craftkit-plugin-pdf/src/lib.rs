@@ -129,6 +129,7 @@ mod boxes;
 mod content;
 mod filters;
 mod free;
+mod information;
 mod loader;
 mod number;
 mod objects;
@@ -145,6 +146,7 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 pub use boxes::{PageBoxes, SetPageBox};
+pub use information::SetInformation;
 pub use number::SetNumber;
 pub use outline::{AddOutline, ReadOutline};
 pub use pages::RemovePage;
@@ -207,6 +209,28 @@ impl StreamKind {
             "object": payload.object,
             "keys": payload.keys(),
             "bytes": node.stream.is_some(),
+        }))
+    }
+}
+
+/// The **information** of a document: the object the trailer names.
+#[derive(NodeKind)]
+#[node_kind(kind = "pdf.info", label = "PDF information", layer = "pdf", evaluates)]
+pub struct InformationKind;
+
+impl InformationKind {
+    /// The information is not drawn.
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Whether a point is inside it: never.
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What the information **means**: the object it names.
+    fn evaluate(node: &Node, _document: &Document) -> Option<serde_json::Value> {
+        Some(serde_json::json!({
+            "object": node.data.get("object").cloned().unwrap_or(serde_json::Value::Null),
         }))
     }
 }
@@ -1661,8 +1685,17 @@ impl WriteFile {
                     message: "the document holds no catalog to be the root of the file".to_string(),
                 })?,
         };
+        // The **information** of the file: the object the trailer
+        // names, when the document has one.
+        let info = session
+            .document()
+            .walk()
+            .find(|node| node.kind == "pdf.info")
+            .and_then(|node| node.data.get("object").and_then(|object| object.as_u64()))
+            .and_then(|object| session.document().node(object))
+            .and_then(|node| node.data.get("object").and_then(|number| number.as_u64()));
         let free = free::the_free(session.document());
-        let file = writer::write(&objects, &free, root).map_err(|error| EngineError::Failed {
+        let file = writer::write(&objects, &free, root, info).map_err(|error| EngineError::Failed {
             id: "pdf.file.write".to_string(),
             message: format!("the file cannot be written: {error:?}"),
         })?;
@@ -1937,8 +1970,10 @@ craftkit_sdk::plugin_anchor!(
     PdfLayer,
     ObjectKind,
     StreamKind,
+    InformationKind,
     AddObject,
     AddStream,
+    SetInformation,
     RemoveObject,
     SetNumber,
     SetEntry,

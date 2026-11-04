@@ -53,7 +53,7 @@ pub struct Object {
 /// has a row for each of them, and the row says the number is free and
 /// the generation it gets if it is used again. The number zero is free
 /// as well, and the table says so in its first row.
-pub fn write(objects: &[Object], free: &[Free], root: u64) -> Result<Vec<u8>, Error> {
+pub fn write(objects: &[Object], free: &[Free], root: u64, info: Option<u64>) -> Result<Vec<u8>, Error> {
     if objects.iter().all(|object| object.number != root) {
         return Err(Error::Malformed(format!("the file has no object {root} to be its root")));
     }
@@ -110,7 +110,15 @@ pub fn write(objects: &[Object], free: &[Free], root: u64) -> Result<Vec<u8>, Er
             file.extend_from_slice(format!("{:010} {:05} {kind}\r\n", row.offset, row.generation).as_bytes());
         }
     }
-    file.extend_from_slice(format!("trailer\n<< /Size {size} /Root {root} 0 R >>\nstartxref\n").as_bytes());
+    // The **information** of the file: the object the trailer names,
+    // when there is one.
+    let info = match info {
+        Some(info) => format!("/Info {info} 0 R "),
+        None => String::new(),
+    };
+    file.extend_from_slice(
+        format!("trailer\n<< /Size {size} /Root {root} 0 R {info}>>\nstartxref\n").as_bytes(),
+    );
     file.extend_from_slice(table_at.to_string().as_bytes());
     file.extend_from_slice(b"\n%%EOF\n");
     Ok(file)
