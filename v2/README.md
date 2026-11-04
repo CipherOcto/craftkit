@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2842 tests.** The MCP server links **all fifteen batteries** in, so the
+**2846 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2842 tests
+cargo test          # 2846 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3809,6 +3809,7 @@ so.
 | the **sorting** of a range | **built.** The rows of a range are put in order, and what a row holds travels with it (§372) | §372 |
 | the **protection** of a sheet | **built.** A protected sheet locks its cells and says what may still be done to it (§373) | §373 |
 | the **time** and the **days** of a date | **built.** TIME makes a time, HOUR, MINUTE and SECOND take it apart, and EDATE, EOMONTH and DAYS work with the days (§374) | §374 |
+| the **taking away** of a media item | **built.** An item that no clip plays is taken away, and one that a clip plays is not (§375) | §375 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25566,3 +25567,55 @@ between two dates.
   `DATEDIF`, `NOW` and `TODAY`, and each of them works with a date or
   a time; here a date is made and taken apart, a time is made and
   taken apart, and the days between two dates are counted.
+
+## 375. The taking away of a media item
+
+A media item may be taken away.
+
+### What was built
+
+- The command `film.item.remove` takes a media item away.
+- An item that **no clip plays** is taken away, and it goes out of its
+  bin with it.
+- An item that a clip **plays** is not taken away: the answer says how
+  many clips are in the way and which ones they are, so that they may
+  be taken away first.
+- A node that is **not an item** is refused, and so is a node that is
+  not there.
+
+### What the port found
+
+- **The tree removes an item that a clip plays and this tree refuses.**
+  The tree's *clear* takes the item out of the project and the clip
+  that played it is left behind, and the tree has an **offline** flag
+  for a media file that is not there. Here the removal is refused,
+  because a **clip that plays nothing is not a clip** — and the
+  refusal names the clips, so the order of the work is plain.
+- **The tree's clear takes many items at once and this one's takes
+  one.** The tree's clear takes the selection, and it may take the
+  items to a **bin** instead of away. Here a bin is where the items
+  are, and one item is taken away at a time.
+- **The tree's *remove unused* is not here.** The tree may remove
+  every item that no clip plays, in one step. Here the refusal says
+  which clips are in the way of **this** item, and the items are taken
+  away one by one.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/itemremoval.rs`): an
+  item that no clip plays being taken away, an item that a clip plays
+  not being taken away, the item being taken away when the clip is
+  taken away first, and a node that is not an item being refused.
+- **One new command**: `film.item.remove`. The film battery now
+  carries **44** commands and the MCP server **492**.
+
+### What it does not settle
+
+- **The tree's project is not here.** The tree's project holds the
+  items in **bins**, and its clear may take them to a bin and its
+  *remove unused* may empty a bin; here the items are in bins and a
+  bin is where they are.
+- **The tree's offline item is not here.** The tree's item may be
+  marked **offline** — made offline on purpose, with the media file
+  not there — and a clip that plays an offline item is a clip that
+  plays nothing; here the item is either there or not.
