@@ -40,6 +40,10 @@
 //! discount and redeemed at its value — the discount, the price, the
 //! yield, the interest and the bill (the module `securities`).
 //!
+//! And a formula may ask about a number in another **base** — two,
+//! eight and sixteen — or about the **bits** of a number (the module
+//! `engineering`).
+//!
 //! And a formula may ask how many ways there are to **choose**: the
 //! factorial, the combinations with and without repetition, the
 //! permutations and the multinomial (the module `combinations`).
@@ -256,6 +260,7 @@ mod dates;
 mod datetimes;
 mod daycounts;
 mod depreciation;
+mod engineering;
 mod fill;
 mod filters;
 mod finance;
