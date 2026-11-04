@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3228 tests.** The MCP server links **all fifteen batteries** in, so the
+**3237 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3228 tests
+cargo test          # 3237 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3881,6 +3881,7 @@ so.
 | the **ease** of a keyframe | **built.** The easy ease is a third of the segment and no speed, and the hold keeps the value still until the next keyframe (§444) | §444 |
 | the **cells** of a table | **built.** A table is a grid: a cell is found by its row and its column, and rows and columns go in and come out (§445) | §445 |
 | the **synchronisation** of a clip | **built.** Two clips are in step when their anchors agree, and the method says whether it is the in points or the out points (§446) | §446 |
+| **finding** and **replacing** | **built.** A find says where the pattern is and a replace rewrites the text and the runs together, and a tracked change is not replaced (§447) | §447 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29662,3 +29663,57 @@ is its **anchor**.
 - **The tree's common time is not here**: the clips are not moved in
   the timeline to line up, and the synchronisation is a change of the
   media and not of the place.
+
+## 447. Finding and replacing in a block
+
+A find is a **reading**: it says where the text is that matches a
+pattern, and it changes nothing. A replace is a **change**.
+
+### What was built
+
+- The commands `prose.find` and `prose.replace`.
+- The pattern may hold **wildcards**: a `*` for any text at all and a
+  `?` for one character, and a `~` in front of one of them says that
+  it is the character itself. The **case** does not matter unless it is
+  asked for.
+- A **replace** rewrites the text and the **runs** together, because
+  the runs describe slices of the text and the two must agree. The
+  replaced words carry the formatting of the run the match **begins**
+  in.
+- A **tracked change** is not replaced: a match that lies inside a run
+  with a revision is **refused**, and the block is left as it was.
+
+### What the port found
+
+- **The tree's find has a language of its own** — `^p` for a paragraph
+  mark, `^&` for the text that was found, the groups `\1` to `\9` —
+  and it turns it into a **regular expression** so that a pattern
+  cannot match for ever. Here the language is the wildcards and
+  nothing else, and the matcher is **its own**: a pattern is matched by
+  walking the text and the pattern together, and a `*` that matched
+  too little takes one more character.
+- **The tree's replace refuses to touch a tracked change**, and here
+  the same.
+- **The tree's find is a search and not a whole match**: the pattern
+  is found somewhere in the text and not only when it is the whole of
+  it, and here the same — a pattern that is done while the text goes
+  on has matched the beginning of it.
+
+### What it cost
+
+- **Eight tests** in the prose battery (`tests/finding.rs`): a find
+  says where the pattern is, a find does not mind the case unless it
+  is told to, a wildcard stands for any text, a replace rewrites the
+  text and the runs, the replaced words carry the formatting of the
+  run, a tracked change is not replaced, a pattern that is nothing is
+  refused, and a replace that finds nothing changes nothing.
+- **One new module** (`finding`): finding and replacing are their own.
+  The prose battery now carries **41** commands and the MCP server
+  **595**.
+
+### What it does not settle
+
+- **The tree's pattern language is not here**: `^p`, `^&` and the
+  groups `\1` to `\9` are not, and the wildcards are all there is.
+- **The tree's find goes on through the blocks and the documents**: it
+  finds in a document and this finds in a block.
