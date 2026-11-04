@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2757 tests.** The MCP server links **all fifteen batteries** in, so the
+**2767 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2757 tests
+cargo test          # 2767 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3799,6 +3799,7 @@ so.
 | the **clearing** of a cell | **built.** The contents and the format of a cell are cleared apart, and a formula is a content (§362) | §362 |
 | the **reading** of a range of cells | **built.** A range of cells is read: the values, row by row, and the value of a formula cell is derived (§363) | §363 |
 | the **choice** of a value | **built.** A formula may choose with IF, and only the branch that is taken is computed (§364) | §364 |
+| the **counting** of a condition | **built.** COUNTIF counts and SUMIF adds the cells that meet a condition, and the condition is a value (§365) | §365 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24863,3 +24864,83 @@ chooses between, and only the branch that is taken is computed.
 - **The tree's array formulas are not here.** A condition that is a
   range of cells is a spilled formula in the tree and is not a thing
   this tree has.
+
+## 365. The counting of a condition
+
+A formula may **count** what meets a condition: `COUNTIF` counts the
+cells that meet it and `SUMIF` adds them.
+
+### What was built
+
+- The function `COUNTIF` takes a range of cells and a condition, and
+  counts the cells that meet it.
+- The function `SUMIF` takes a range of cells, a condition and — with
+  the third argument — the **sum range**: the cells that are added are
+  the ones of the sum range that stand opposite the cells of the
+  first range.
+- The **condition** is a value:
+  - a **number** is the number, and so is a **boolean** and so is an
+    **error**: the cell that holds it matches;
+  - an **empty** value is the number zero;
+  - **text** is a condition written out, and it may begin with an
+    operator — `=`, `<>`, `<`, `<=`, `>`, `>=` — and what follows it is
+    what the cell is compared with. So `">2"` is *greater than two* and
+    `"<>apple"` is *anything that is not the text apple*.
+- The **wildcards** are the tree's: `*` is any run of characters, `?`
+  is any one character, and `~` is the escape. The comparison of text
+  is without case.
+- A number **written as text** matches **only for equality**:
+  `COUNTIF(range,1)` counts the cell that holds the text `1`, and
+  `COUNTIF(range,">1")` does not.
+- An **empty cell** is not counted by a number condition, and the
+  **bare empty** condition — `""` — counts the empty cells and the
+  empty texts.
+- The **sum range** is sized like the range it is summed over and is
+  anchored at its own top left cell, so a sum range that is smaller
+  than the range is read past its own end.
+
+### What the port found
+
+- **The tree has two wildcards and this tree had one.** The tree's
+  matcher takes `*`, `?` and the escape `~`, and the tree uses it for
+  the finding, the filtering and the criteria alike. This tree's
+  **filter** had a matcher that knew only `*` — so a question mark in
+  a filter was a question mark and not any one character. There is
+  **one wildcard in this crate now**, and it is the tree's.
+- **The tree's criterion has a length bound and this tree's has it
+  too.** The tree refuses a text criterion of more than two hundred
+  and fifty-five characters, and says it checked it on two versions of
+  its own application; here the bound is the same, and a criterion
+  over it is an error and not a truncated criterion.
+- **The tree's criterion may be a date and this tree's is not.** The
+  tree reads a criterion that looks like a date as the number of that
+  date; here a criterion is a number, a boolean or text, and a date is
+  not one of them.
+- **The tree's condition that is an error is not raised.** An error
+  criterion is the condition *that the cell holds that error*, and a
+  cell that holds it matches; so does this one.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/counting.rs`): the cells
+  that meet a number condition being counted, the cells that meet a
+  text condition being counted without case, the wildcards being the
+  tree's, a number written as text matching only for equality, an
+  empty cell not being counted by a number condition and the bare
+  empty condition counting it, the cells that meet the condition being
+  added, the sum reading another range, the sum range being sized
+  like the range, a criterion over the bound being an error, and a
+  range that is not there being an error.
+- **No new command**: the counting is a function of the formula
+  language. The grid battery still carries **53** commands and the MCP
+  server **481**.
+
+### What it does not settle
+
+- **The tree's other counting functions are not here.** The tree has
+  `COUNTIFS`, `SUMIFS`, `AVERAGEIF`, `AVERAGEIFS`, `MAXIFS` and
+  `MINIFS`, and each of them counts with a condition or with two; here
+  there is one condition and one counting pair.
+- **The tree's lookup functions are not here.** `VLOOKUP`, `HLOOKUP`,
+  `MATCH` and `INDEX` find a cell by a condition or by a place, and
+  they are a different thing: they do not count, they find.
