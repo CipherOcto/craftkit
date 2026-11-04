@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2899 tests.** The MCP server links **all fifteen batteries** in, so the
+**2905 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2899 tests
+cargo test          # 2905 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3818,6 +3818,7 @@ so.
 | the **shape** and the **name** of a format | **built.** A format may be coded or named, and the names this tree does not write are refused with the reason (§381) | §381 |
 | the **reading** of a media item | **built.** A media item may be read whole: its facts, and the bin it is in and the clips that play it (§382) | §382 |
 | the **reading** of a name | **built.** A name may be read: the range it stands for and the values of the cells of it (§383) | §383 |
+| the **reading** of a sheet | **built.** A sheet may be read whole: its used range, its view, its zoom, its hidden rows and columns and its protection (§384) | §384 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26047,8 +26048,8 @@ of that range.
 
 - **The tree's name may be more than a range.** The tree's name holds
   a **formula** and not only a range of cells, so a name may be a
-  constant or an expression, and the tree's name manager edits the
-  formula. Here a name stands for a range of cells and nothing else:
+  constant — the tree's own macro names hold constants — or an
+  expression. Here a name stands for a range of cells and nothing else:
   the range names its sheet, so a name is never a name for "the sheet
   it was written on".
 - **The tree's name has a scope and this tree's does not.** The tree's
@@ -26076,3 +26077,64 @@ of that range.
 - **The tree's sheet-scoped names are not here**: a name here belongs
   to the workbook and to every sheet of it.
 - **The tree's hidden names and its comments on names are not here.**
+
+## 384. The reading of a sheet
+
+A sheet may be read whole: the answer is everything the sheet holds
+and everything that is said about it.
+
+### What was built
+
+- The command `grid.sheet.get` gives the **name** of a sheet, the
+  **workbook** it is in, its **used range**, how many **cells** hold
+  something, its **view** — the gridlines, the headings, the zeros,
+  the direction it runs in and the **frozen panes** — its **zoom**, the
+  **rows** and **columns** that are hidden, its **protection**, and the
+  **calendar** its dates are counted in.
+- The **used range** and the number of cells are **derived**: the used
+  range is the stretch of the sheet that holds something, and it is
+  computed every time the sheet is read.
+- A sheet that holds **nothing** has no used range, and that is said
+  as nothing and not as an empty range.
+- A sheet that is **not there** is refused, and so is a node that is
+  not a sheet.
+
+### What the port found
+
+- **The tree's sheet is a whole struct and here it is a node with a
+  payload.** The tree's sheet carries the cells, the columns and the
+  rows, the merges, the freeze, the zoom, the conditional formats, the
+  validations, the tables, the autofilter, the comments, the
+  hyperlinks, the charts, the images, the shapes, the sparklines, the
+  slicers, the pivot tables and the protection — a great deal that is
+  here a fact of another kind, or is not here at all.
+- **The tree's view has more flags than this tree's.** The tree's
+  sheet may show the formulas, may show the outline symbols, may put
+  the summary rows below and the summary columns to the right, and it
+  has a **view mode** — normal, page layout, page break preview. Here
+  a view is the gridlines, the headings, the zeros, the direction the
+  sheet runs in and the frozen panes.
+- **The tree's protection names the ranges that may still be edited,
+  and a cell's locked flag comes from its style.** Here a protected
+  sheet is locked as a whole, and the protection says what may still
+  be done to it — the sorting, the filtering and the formatting.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/sheetreading.rs`): a sheet
+  being read whole, a sheet that holds nothing having no used range,
+  the view being said, the hidden rows and columns being said, the
+  protection being said, and a sheet that is not there and a node that
+  is not a sheet being refused.
+- **One new command**: `grid.sheet.get`. The grid battery now carries
+  **66** commands and the MCP server **500**.
+
+### What it does not settle
+
+- **The tree's edit ranges are not here**, and so the locked flag of a
+  cell's style is not here either: a sheet here is locked as a whole.
+- **The tree's charts, images, shapes, sparklines, slicers and pivot
+  tables are not here**, and neither are its tables and its autofilter
+  as things a sheet carries.
+- **The tree's page layout and its page break preview are not here**:
+  the view here is the view of the grid.
