@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2722 tests.** The MCP server links **all fifteen batteries** in, so the
+**2728 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2722 tests
+cargo test          # 2728 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3794,6 +3794,7 @@ so.
 | the **name** of a clip | **built.** A clip may be named, and the name is its own: it survives the clip being moved (§357) | §357 |
 | the **label** of an item | **built.** A media item may carry the tree's own sixteen colours, and the group of a label is derived (§358) | §358 |
 | the **order** of the sheets | **built.** A sheet may be moved in the order of the tabs, and a place that is not there is refused (§359) | §359 |
+| the **media** a clip plays | **built.** A clip may play another media, and a clip that would run past the end of it is refused (§360) | §360 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24546,3 +24547,71 @@ The sheets of a workbook are in an **order** — the tabs, left to right
 - **The tree's protection is not here.** The tree refuses to move a
   sheet in a workbook whose structure is protected, and this tree has
   no protection of a workbook yet.
+
+## 360. The media a clip plays
+
+A clip plays a media, and it may play a **different** one.
+
+### What was built
+
+- The command `film.clip.replace` points a clip at another media. The
+  clip keeps its id and its place, and the **edge** that says which
+  media it plays is replaced: the old edge dies and the new one is
+  made. The answer says the new media and the old one.
+- The clip plays the new media from its **beginning**, and its speed
+  goes back to one: the clip plays the new media as it is.
+- A clip that would run **past the end** of the new media is
+  **refused** and the refusal says where it would run to and how long
+  the new media is. The clip is not shortened and the replace does not
+  happen.
+- A media with **no frames** is refused, a **locked** track may not
+  have its media replaced, and a node that is **not a clip** — or that
+  is not an **item** — is refused.
+
+### What the port found
+
+- **The tree's replace is three commands and here it is one.** The
+  tree has *replace from source*, *replace from source, match frame*
+  and *replace from bin*, and the three differ in where the new in
+  point comes from: the source monitor, the frame under the playhead,
+  or the beginning of the new media. Here the new in point is the
+  **beginning of the new media** — the tree's *from bin* — because this
+  tree has no source monitor and no playhead.
+- **The tree clamps and this tree refuses.** The tree's replace keeps
+  a clip's own in point when the caller says `keepSourceIn`, and clamps
+  it to the nearest frame of a subclip that restricts its trims — and
+  it says which clips were clamped. Here the in point is the beginning
+  of the new media and a clip that would run past the end of it is
+  **refused** and the clip is named: refuse, and do not clamp.
+- **The tree's replace also changes the clip's name and label, and here
+  it does not.** The tree's replace takes the new item's name and
+  label for the clip; here a clip's **name** is the clip's own
+  (§357) and its label is a colour the caller put on it, so neither is
+  taken from the media.
+
+### What it cost
+
+- **Six tests** in the film battery (`tests/replacing.rs`): a clip
+  playing a different media, the clip playing it from its beginning, a
+  clip that would run past the end refused, a media with no frames
+  refused, a locked track refusing, and a node that is not a clip
+  refused.
+- **One new command**: `film.clip.replace`. The film battery now
+  carries **42** commands and the MCP server **477**.
+
+### What it does not settle
+
+- **The tree's source monitor is not here.** The tree's *replace from
+  source* points a clip at the media in the source monitor and lines
+  the source monitor's playhead up with the sequence's; here there is
+  no source monitor and no playhead, so the media of the project is
+  the only thing a clip may be pointed at.
+- **The tree's subclip is not here.** The tree's replace keeps a
+  clip's own in point inside a subclip that restricts its trims, and
+  the media of a clip here is the media of an item with its own marks
+  — so the in point of the new media is its beginning and not a frame
+  near the old one.
+- **The tree's video and audio are not checked here.** The tree skips
+  a clip whose track has no video or no audio in the replacement; here
+  a track's kind is a word and the media of an item has no channels,
+  so there is nothing to check.
