@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2917 tests.** The MCP server links **all fifteen batteries** in, so the
+**2920 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2917 tests
+cargo test          # 2920 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3822,6 +3822,7 @@ so.
 | the **reading** of a clip | **built.** A clip may be read whole: its two clocks, its speed and its flags, and the track, the sequence and the item it belongs to (§385) | §385 |
 | the **reading** of a track | **built.** A track may be read whole: its kind, whether it is locked, and its clips in the order they start and its length (§386) | §386 |
 | the **reading** of a bin | **built.** A bin may be read whole: the items in it, the bins in it, and the bin it is in (§387) | §387 |
+| the **reading** of a workbook | **built.** A workbook may be read whole: its sheets, its names, its styles, its lists of words and its calendar (§388) | §388 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26301,3 +26302,59 @@ everything that is said about it.
   where it is, and the project read lists every bin of the document.
 - **The tree's bin has no other facts and neither has this one**: the
   tree's bins carry nothing but their name and their children.
+
+## 388. The reading of a workbook
+
+A workbook may be read whole: the answer is everything the workbook
+holds and everything that is said about it.
+
+### What was built
+
+- The command `grid.workbook.get` gives the **name** of a workbook, its
+  **sheets** — each with its name, its used range and how many cells
+  hold something — the **names** it defines, the **styles** it carries,
+  the **lists of words** of its own, and the **calendar** its serials
+  are counted in.
+- The sheets and their used ranges are **derived**: the sheets of a
+  workbook are its children, and the used range of a sheet is the
+  stretch of it that holds something.
+- A workbook that is **not there** is refused, and so is a node that
+  is not a workbook.
+
+### What the port found
+
+- **The tree's workbook carries much more than this tree's.** The
+  tree's workbook carries a **theme**, the **calculation settings**,
+  the **active sheet**, the **document properties**, the **structure
+  protection** and its password, the **named cell styles** of the
+  gallery, the **phonetic** readings of the shared strings, the **VBA
+  project** carried through untouched, and the **separator** of the CSV
+  it was read from. Here a workbook carries its sheets, its names, its
+  styles, its lists of words and its calendar.
+- **The tree's named style is a whole style and this tree's is a
+  format.** The tree's style carries the font, the colour, the
+  alignment and the number format; here a style carries a **number
+  format** and nothing else, because the format is the only thing
+  this tree writes on a cell.
+- **The tree's sheets are a list and here they are children.** The
+  tree's workbook holds a vector of sheets and the sheets hold their
+  cells; here a workbook holds its sheets as children of the tree, and
+  the order of the tabs is a fact of its own.
+
+### What it cost
+
+- **Three tests** in the grid battery (`tests/workbookreading.rs`): a
+  workbook being read whole, its names and its styles being said, and
+  a workbook that is not there and a node that is not a workbook being
+  refused.
+- **One new command**: `grid.workbook.get`. The grid battery now
+  carries **67** commands and the MCP server **504**.
+
+### What it does not settle
+
+- **The tree's theme is not here**, and so the colours a workbook
+  gives by name are not here.
+- **The tree's structure protection is not here**, and neither is its
+  password.
+- **The tree's document properties and its calculation settings are
+  not here.**
