@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3181 tests.** The MCP server links **all fifteen batteries** in, so the
+**3188 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3181 tests
+cargo test          # 3188 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3875,6 +3875,7 @@ so.
 | the **arc** of a drawing | **built.** The cad battery had a kind of entity it could not make: an arc is a centre, a radius and two angles, and it is drawn and hit like the rest (§438) | §438 |
 | the **copy** of an entity | **built.** A copy is a second entity of the same kind, with the same geometry and the same layer, put somewhere else (§439) | §439 |
 | the **mirror** of an entity | **built.** The same entity, turned over a line: every point of it is turned over, and an ellipse takes its major axis with it (§440) | §440 |
+| the **audit** of a drawing | **built.** A drawing is a document, and a document can be wrong: the audit reads a drawing and reports what is wrong with it (§441) | §441 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29346,3 +29347,52 @@ The same entity, turned over a line.
 - **The tree's mirror over a line at an angle is not tested here**:
   the line here is the vertical one and the horizontal one, and a
   line at any angle is the same sum.
+
+## 441. The audit of a drawing
+
+A drawing is a document, and a document can be wrong.
+
+### What was built
+
+- The command `cad.audit`: it reads a drawing and **reports** what is
+  wrong with it. It changes nothing.
+- The issues it finds are the ones a drawing can reach: **two layers
+  with the same name**, an entity on a **locked** layer, an entity on a
+  **frozen** layer, an **insert of a block of another drawing**, and an
+  **insert of the block it is in**.
+
+### What the port found
+
+- **The tree's audit repairs as well as reports**, and it repairs by
+  changing the drawing — a missing table row is recreated, a bad
+  handle is given a new one, a broken reference is removed. Here the
+  audit **reports and does not repair**: repairing is a change, and a
+  change is a command that changes, and there is one command per
+  thing.
+- **The tree's audit is about a file**: it reads a drawing from disk
+  and checks the tables it holds. Here a drawing is in the document,
+  and the audit looks at the document — the same idea with the file
+  taken out of it.
+- **The tree's audit finds a block that refers to itself** and removes
+  the reference. Here it is **reported**: the drawing is left as it
+  is, and a person says what should happen to it.
+
+### What it cost
+
+- **Seven tests** in the cad battery (`tests/audits.rs`): a drawing
+  with nothing wrong with it has no issues, two layers with the same
+  name are an issue, an entity on a locked layer is an issue, an
+  entity on a frozen layer is an issue, an insert of a block of
+  another drawing is an issue, an insert of the block it is in is an
+  issue, and a node that is not a drawing is refused.
+- **One new module** (`audits`): the audit of a drawing is its own. The
+  cad battery now carries **35** commands and the MCP server **580**.
+
+### What it does not settle
+
+- **The tree's repairs are not here**: the audit says what is wrong
+  and nothing more. A command that repairs a drawing is a command
+  that changes one, and it is not written yet.
+- **The tree's audit of a file is not here**: this audit looks at the
+  document, and a drawing that came from a file may hold faults that
+  the commands cannot make.
