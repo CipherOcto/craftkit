@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2734 tests.** The MCP server links **all fifteen batteries** in, so the
+**2741 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2734 tests
+cargo test          # 2741 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3796,6 +3796,7 @@ so.
 | the **order** of the sheets | **built.** A sheet may be moved in the order of the tabs, and a place that is not there is refused (§359) | §359 |
 | the **media** a clip plays | **built.** A clip may play another media, and a clip that would run past the end of it is refused (§360) | §360 |
 | the **gap** on a track | **built.** The gap that holds a place is closed: the clips after it move up and the time is free again (§361) | §361 |
+| the **clearing** of a cell | **built.** The contents and the format of a cell are cleared apart, and a formula is a content (§362) | §362 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24674,3 +24675,62 @@ A track may have a **gap** in it, and the gap may be **closed**.
   gap of the sequence in one step, and the gaps are the stretches that
   no track covers; here a gap is a gap on **one** track, and the
   tracks are not compared with each other.
+
+## 362. The clearing of a cell
+
+There are two things in a cell and they are cleared **apart**: what
+the cell **holds**, and how it is **shown**.
+
+### What was built
+
+- The command `grid.cell.clear.contents` empties the cell of its value
+  and its formula and keeps its format and its style.
+- The command `grid.cell.clear.format` takes the number format and the
+  style away and keeps what the cell holds.
+- A **formula is a content**: it goes when the contents go, and it
+  stays when the format goes.
+- The clearing of the **whole cell** — `grid.cell.clear` — is still
+  here and still takes everything.
+- A cell that is **not there** is not refused: there is nothing to
+  clear, and the answer says so. A cell that is **not a cell** is
+  refused, and so is a **sheet** that is not there.
+
+### What the port found
+
+- **The tree's format is a style and this tree's format is the cell's
+  own.** The tree's style is shared between the cells that name it, so
+  the tree's *clear formats* clears the style of the cell — and the
+  cells that share it keep theirs, because the tree's style is a
+  reference and not a copy. Here the format is the cell's **own**, so
+  clearing it is that cell's business alone; a **style** is still
+  shared, and a cell that names one keeps the name and loses the
+  format it had.
+- **The tree's one command with a checkbox is two commands here.** The
+  tree's *clear all* clears everything and the tree's *clear contents*
+  and *clear formats* clear one thing each, and the tree's menu offers
+  them as three items. Here the tree's *clear all* is already a
+  command, so the other two are two commands — and a command in this
+  tree says what it does.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/clearing.rs`): the
+  contents being cleared and the format kept, the format being cleared
+  and the contents kept, a formula being a content, the style being
+  cleared with the format, the clearing of the whole cell still being
+  here, a cell that is not there not being refused, and a cell that is
+  not a cell refused.
+- **Two new commands**: `grid.cell.clear.contents` and
+  `grid.cell.clear.format`. The grid battery now carries **52**
+  commands and the MCP server **480**.
+
+### What it does not settle
+
+- **The tree's comments and hyperlinks are not here.** The tree's
+  *clear comments* and *clear hyperlinks* clear two more things that a
+  cell may hold, and a cell here holds a value, a formula, a format
+  and a style.
+- **The tree's checkboxes are not here.** The tree's *clear contents*
+  unchecks a checkbox before it empties the cell, because the box is
+  the cell's value there; here a cell holds a value and there is no
+  box.
