@@ -116,6 +116,11 @@
 //! offline on purpose and its label — and the bin it is in and the
 //! clips that play it, which are derived (the module `itemreading`).
 //!
+//! And a **clip** may be read whole: where it starts, how long it is,
+//! where in the media it begins, how fast it plays and what it plays —
+//! and the track, the sequence and the item it belongs to, which are
+//! derived (the module `clipreading`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -162,6 +167,7 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 mod binremoval;
+mod clipreading;
 mod enabling;
 mod gaps;
 mod hold;
@@ -193,6 +199,7 @@ mod transitions;
 mod trim;
 
 pub use binremoval::RemoveBin;
+pub use clipreading::ReadClip;
 pub use enabling::EnableClip;
 pub use gaps::CloseGap;
 pub use hold::{DeleteHold, SetHold};
