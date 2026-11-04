@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2828 tests.** The MCP server links **all fifteen batteries** in, so the
+**2835 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2828 tests
+cargo test          # 2835 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3807,6 +3807,7 @@ so.
 | the **finding** of a value in a range | **built.** MATCH, VLOOKUP and INDEX find a value in a range, and the approximate search is not here (§370) | §370 |
 | the **parts** of a date | **built.** DATE makes a date and YEAR, MONTH and DAY take it apart, in the date system of the workbook (§371) | §371 |
 | the **sorting** of a range | **built.** The rows of a range are put in order, and what a row holds travels with it (§372) | §372 |
+| the **protection** of a sheet | **built.** A protected sheet locks its cells and says what may still be done to it (§373) | §373 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25422,3 +25423,73 @@ the values of one of its columns.
 - **The tree's sort by a custom list is not here.** The tree may sort
   by a list of words of its own, so that the months come out in the
   order of the year; here the values are the values.
+
+## 373. The protection of a sheet
+
+A sheet may be **protected**.
+
+### What was built
+
+- The command `grid.sheet.protect` protects a sheet, and the
+  protection says what may still be done to it: the **sorting**, the
+  **filtering** and the **formatting**. What is not said is not
+  allowed.
+- The command `grid.sheet.unprotect` takes the protection away.
+- The **cells** of a protected sheet are **locked**: a command that
+  changes what a cell holds — its value or its formula — refuses, and
+  so does the clearing of the contents of a cell and the filling of a
+  range.
+- A command that is not allowed says so and does nothing: *sorting is
+  not allowed on this protected sheet: unprotect it with
+  grid.sheet.unprotect*.
+- A node that is **not a sheet** is refused, and so is a sheet that is
+  not there.
+
+### What the port found
+
+- **The tree's cells are locked by their own style and this tree's are
+  locked by the sheet.** The tree's style carries a *locked* flag and
+  a *hidden* one, and a cell of a protected sheet may not be changed
+  when its style is locked — and the tree has *Allow Edit Ranges*, a
+  set of ranges of a protected sheet that may still be changed. Here
+  the protection of the sheet locks the **cells of the sheet**, and
+  there is no range that is let through: the whole sheet is locked.
+- **The tree's protection may carry a password and this one's may
+  not.** The tree stores the **hash** of the password and never the
+  password, and the tree's *unprotect* asks for it. Here a sheet may
+  be unprotected by anyone who may change it — which is what the
+  tree's protection is when it has no password.
+- **The tree's protection says more than this one.** The tree's
+  protection carries a flag for the selecting, the inserting, the
+  deleting, the formatting of the rows and of the columns, beside the
+  sorting and the filtering. Here there are three, and they are the
+  three that the commands of this tree do.
+- **The tree's refusal names the menu and this one's names the
+  command.** The tree says *sorting isn't allowed on this protected
+  sheet (Review › Unprotect Sheet)*; here the refusal says which
+  command undoes it, because an agent drives commands and not menus.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/protection.rs`): the
+  cells of a protected sheet being locked, a formula not being put in
+  a locked cell, the sorting being allowed and not being allowed, the
+  filtering being allowed and not being allowed, the formatting being
+  allowed and not being allowed, a sheet being unprotected and its
+  cells being changed again, and a node that is not a sheet being
+  refused.
+- **Two new commands**: `grid.sheet.protect` and
+  `grid.sheet.unprotect`. The grid battery now carries **63** commands
+  and the MCP server **491**.
+
+### What it does not settle
+
+- **The tree's locked style is not here.** The tree's style says
+  whether a cell is locked and whether its formula is hidden, and a
+  cell of a protected sheet may be changed when its style says it is
+  not locked; here the lock is the sheet's and there is no style that
+  says otherwise.
+- **The tree's ranges that may still be changed are not here.** The
+  tree's *Allow Edit Ranges* lets a part of a protected sheet be
+  changed, with or without a password of its own; here the whole
+  sheet is locked.
