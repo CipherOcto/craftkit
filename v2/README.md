@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2801 tests.** The MCP server links **all fifteen batteries** in, so the
+**2811 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2801 tests
+cargo test          # 2811 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3804,6 +3804,7 @@ so.
 | the **note** on a cell | **built.** A cell may carry a note, and the note belongs to the sheet and names the cell (§367) | §367 |
 | the **link** on a cell | **built.** A cell may carry a link, and whether the target is inside this workbook is derived (§368) | §368 |
 | the **shaping** of a text | **built.** A formula may shape a text: take a part of it, count it, fold it or clean it (§369) | §369 |
+| the **finding** of a value in a range | **built.** MATCH, VLOOKUP and INDEX find a value in a range, and the approximate search is not here (§370) | §370 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25215,3 +25216,71 @@ or clean it.
 - **The tree's bound on the length of a text is not here.** The tree
   refuses a text that is longer than the limit of a cell, and it says
   so; here a text is as long as it is.
+
+## 370. The finding of a value in a range
+
+Three functions look for something in a range of cells: `MATCH`,
+`VLOOKUP` and `INDEX`.
+
+### What was built
+
+- `MATCH(needle, range)` gives the **place** of the needle in the
+  range, counted from one.
+- `VLOOKUP(needle, table, column, [exact])` gives the value of the
+  **column** of the row whose first column holds the needle.
+- `INDEX(range, row, [column])` gives the value at a **place**.
+- The search is the tree's: two numbers are equal when they are the
+  same number, two texts are equal when they are the same text
+  **without case**, a **text** needle may hold the tree's wildcards,
+  a needle of one kind does not match a value of another kind, and the
+  **first** match is the match.
+- A value that is **not found** is `#N/A`, and a place or a column
+  that is **not there** is `#REF!`.
+
+### What the port found
+
+- **The tree's default is the approximate search and this tree's
+  default is the exact one.** The tree's `MATCH` and the tree's
+  `VLOOKUP` look for the largest value that is not greater than the
+  needle when nothing else is said, and so a lookup must **say** that
+  it is exact here — `VLOOKUP(2,A1:B3,2,FALSE)` — and a lookup that
+  does not say is refused with *not supported yet: an approximate
+  search*. The tree's `MATCH` has no such default here: it looks for
+  the exact match when no match type is given.
+- **The tree's approximate search is a bisection and not a rule.** The
+  tree says so in its own words: it probes the middle of what is left
+  and answers what the tree's own application answers on data that is
+  not sorted, and it skips the entries of other kinds. That is not a
+  rule that can be written down in a sentence, and so it is not here.
+- **The tree's needle may hold the wildcards and so does this one's.**
+  The tree's exact search matches a text needle with the wildcards,
+  and `B*` matches `banana`; so does this one, and the text is
+  compared without case in both.
+- **The tree's `INDEX` may give a whole row or a whole column, and
+  that is an array.** The tree's `INDEX` with a zero gives the array
+  of the row or the column; this tree has no arrays, so it says *not
+  supported yet: an array*.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/lookups.rs`): the place of
+  a value being found, the wildcards being the tree's, a value that is
+  not there being not found, the approximate search being refused, the
+  value of a column being found, a lookup that does not say that it is
+  exact being refused, a column that is not there being an error, the
+  value at a place being taken, a place that is not there being an
+  error, and a needle that is an error being that error.
+- **No new command**: the finding is a function of the formula
+  language. The grid battery still carries **60** commands and the MCP
+  server **488**.
+
+### What it does not settle
+
+- **The tree's other lookups are not here.** The tree has `HLOOKUP`,
+  `LOOKUP`, `XLOOKUP`, `XMATCH`, `ROWS`, `COLUMNS`, `TRANSPOSE` and
+  `ADDRESS`, and each of them finds something in a range; here three
+  do.
+- **The tree's search may go backwards.** The tree's `MATCH` with a
+  negative match type looks for the smallest value that is not less
+  than the needle, in a range that is sorted the other way; that is
+  the approximate search again, and it is not here.
