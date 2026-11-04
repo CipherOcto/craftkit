@@ -111,6 +111,11 @@
 //! And a **media** may carry **marks**: a mark in and a mark out, and
 //! the material a clip plays is between them (the module `mediamarks`).
 //!
+//! And a **media item** may be **read**: its name, its own id, the
+//! path of the media, its length in frames, whether it was made
+//! offline on purpose and its label — and the bin it is in and the
+//! clips that play it, which are derived (the module `itemreading`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -162,6 +167,7 @@ mod gaps;
 mod hold;
 mod inserting;
 mod itemnaming;
+mod itemreading;
 mod itemremoval;
 mod labels;
 mod lifting;
@@ -192,6 +198,7 @@ pub use gaps::CloseGap;
 pub use hold::{DeleteHold, SetHold};
 pub use inserting::InsertClip;
 pub use itemnaming::{RenameBin, RenameItem};
+pub use itemreading::ReadItem;
 pub use itemremoval::RemoveItem;
 pub use labels::{DeleteItemLabel, DeleteLabel, ItemLabelGroup, LabelGroup, SetItemLabel, SetLabel};
 pub use lifting::LiftRange;
