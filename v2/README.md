@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2905 tests.** The MCP server links **all fifteen batteries** in, so the
+**2910 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2905 tests
+cargo test          # 2910 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3819,6 +3819,7 @@ so.
 | the **reading** of a media item | **built.** A media item may be read whole: its facts, and the bin it is in and the clips that play it (§382) | §382 |
 | the **reading** of a name | **built.** A name may be read: the range it stands for and the values of the cells of it (§383) | §383 |
 | the **reading** of a sheet | **built.** A sheet may be read whole: its used range, its view, its zoom, its hidden rows and columns and its protection (§384) | §384 |
+| the **reading** of a clip | **built.** A clip may be read whole: its two clocks, its speed and its flags, and the track, the sequence and the item it belongs to (§385) | §385 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26138,3 +26139,63 @@ and everything that is said about it.
   as things a sheet carries.
 - **The tree's page layout and its page break preview are not here**:
   the view here is the view of the grid.
+
+## 385. The reading of a clip
+
+A clip may be read whole: the answer is everything the clip holds and
+everything that is said about it.
+
+### What was built
+
+- The command `film.clip.get` gives the **name** a clip is shown by,
+  where it **starts**, how long it is, where in the media it
+  **begins**, how fast it **plays**, whether it **plays** at all, its
+  **label**, its **link** to the clip beside it, the **frame hold** in
+  it, and whether it runs **backwards**.
+- Three of the facts of the answer are **derived**: where the clip
+  **ends** is its start and its length, the **material** it plays is
+  its length times its speed, and the **track**, the **sequence** and
+  the **item** it belongs to are its place in the tree and the edges
+  that name it.
+- A fact that is **not there** is said as nothing: a clip with no
+  label has no label, and a clip with no frame hold holds no frame.
+- A clip that is **not there** is refused, and so is a node that is
+  not a clip.
+
+### What the port found
+
+- **The tree's clip is a value in a list and here a clip is a node.**
+  The tree's track holds a vector of clips, and a clip is a value with
+  an id of the editor's own. Here a clip is a **node** of the kind
+  `film.clip`, so that a clip may be named, labelled and read on its
+  own, and the order of the timeline is derived rather than the order
+  of the tree.
+- **The tree's clip carries more than this tree's clip.** The tree's
+  clip carries its **effects**, its **markers**, its **group**, the
+  **gain** of an audio clip in decibels, the **scale to frame size**
+  flag, the **essential sound** settings of an audio clip, the
+  **multi-camera** selection and the **time interpolation** — how the
+  frames are made when the speed is changed. Here a clip carries the
+  timing and the flags and nothing else.
+- **The tree's speed may be negative and this tree's is not.** In the
+  tree a negative speed is the reverse and the clip has a `reverse`
+  flag beside it; here the speed is a positive number and the reverse
+  is its own flag.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/clipreading.rs`): a clip
+  being read whole, the track, the sequence and the item being
+  derived, a label and a frame hold being said, a clip that does not
+  play saying so, and a clip that is not there and a node that is not
+  a clip being refused.
+- **One new command**: `film.clip.get`. The film battery now carries
+  **50** commands and the MCP server **501**.
+
+### What it does not settle
+
+- **The tree's effects on a clip are not here**, and neither are its
+  markers, its group or its gain.
+- **The tree's multi-camera and its time interpolation are not here.**
+- **The tree's negative speed is not here**: a clip that runs
+  backwards says so with its own flag.
