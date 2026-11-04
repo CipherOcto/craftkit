@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2950 tests.** The MCP server links **all fifteen batteries** in, so the
+**2958 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2950 tests
+cargo test          # 2958 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3827,6 +3827,7 @@ so.
 | the **comment** on a block | **built.** A block may carry a comment — who said it and what they said — and the comment goes with the block (§390) | §390 |
 | the **numbering** of a block | **built.** A list says what its items are numbered like, and the number of a block is derived and renumbers when it moves (§391) | §391 |
 | the **page** of a document | **built.** A document has a page: its size and its margins in points, and whether it is landscape is derived (§392) | §392 |
+| the **links** of a block | **built.** A run may carry a link, and whether the target may be opened is derived — the tree's rule, that a link the system follows is a web link or a mail link (§393) | §393 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26606,3 +26607,68 @@ A document is printed on pages, and a page has a size and margins.
   header and footer distances or the gutter.
 - **The tree's columns and its page borders are not here**, and neither
   is the tree's page numbering.
+
+## 393. The links of a block
+
+A run may carry a link: the target it points at. Whether that target
+may be **opened** is derived.
+
+### What was built
+
+- A run may carry a **link**, and the runs of a block say it.
+- The command `prose.block.links` gives every run that carries a link,
+  with the **words** it covers — derived — the **target** it points at,
+  and whether the target **may be opened**.
+- The rule is the **tree's own**: a link the system may follow is a
+  **web link** or a **mail link** — `http`, `https` and `mailto` — and
+  nothing else.
+- Each kind of target is refused for its own **reason**: a script, a
+  `data:` link, a `file:` link, a link to **another machine** and a
+  relative link each say why they may not be opened.
+- The rule is **exact**: a leading space or a control character makes
+  the target not a link at all.
+- A target that is not a text is refused, and so is a target too long
+  to be a target.
+
+### What the port found
+
+- **The tree has two rules and this tree has one.** The tree has a
+  rule for a link the system may **follow** — a web link or a mail
+  link — and another for a link that may be **written out** as an
+  `href`: that one allows a bookmark and a relative path as well. The
+  tree's two rules serve two purposes, and a kit that opens links has
+  the first of them.
+- **The tree's target is read the way a browser reads a URL, and the
+  rule is exact.** The tree drops ASCII control characters and spaces
+  before it reads the scheme, so `java\nscript:` is a script; and the
+  rule it uses for following does not drop them, so ` https://…` is
+  not a link at all. Here the exact rule is the one that is ported,
+  and a target with a space in front of it is not a link.
+- **The tree's link to another machine is refused for the reason it
+  is refused.** A protocol-relative `//host` and a UNC `\\host` name
+  another machine, and following one on Windows would send the user's
+  own credentials with it. Here the refusal says that.
+- **The tree keeps the link in the run's own properties and this tree
+  keeps it in the run's payload.** The tree's hyperlink is a character
+  property with a target and an anchor; here a run is an interval over
+  the text with the formatting on it, and the link is one of the
+  things a run carries.
+
+### What it cost
+
+- **Eight tests** in the prose battery (`tests/links.rs`): a web link
+  being opened, a mail link being opened, a script and a link to
+  another machine and a relative link not being opened, the rule being
+  exact, a run with no link not being a link and a link that is not a
+  text being refused, and a block that is not there and a node that is
+  not a block being refused.
+- **One new command**: `prose.block.links`. The prose battery now
+  carries **24** commands and the MCP server **515**.
+
+### What it does not settle
+
+- **The tree's export rule is not here**: a bookmark and a relative
+  path may be written into an exported file in the tree, and here a
+  link that is not a web link or a mail link may not be opened.
+- **The tree's anchor is not here**: the tree's hyperlink names a place
+  in the document as well as a target, and here a link is a target.
