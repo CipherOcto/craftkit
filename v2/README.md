@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2963 tests.** The MCP server links **all fifteen batteries** in, so the
+**2968 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2963 tests
+cargo test          # 2968 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3829,6 +3829,7 @@ so.
 | the **page** of a document | **built.** A document has a page: its size and its margins in points, and whether it is landscape is derived (§392) | §392 |
 | the **links** of a block | **built.** A run may carry a link, and whether the target may be opened is derived — the tree's rule, that a link the system follows is a web link or a mail link (§393) | §393 |
 | the **revisions** of a block | **built.** A run may be marked as inserted, deleted or reformatted, and by whom; the words of a revision are derived (§394) | §394 |
+| the **footnotes** of a document | **built.** A run may point at a footnote, and the number of the footnote is derived from where it is referenced (§395) | §395 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26726,3 +26727,60 @@ its format was changed — and by whom.
 - **The tree's revisions live on the document and here they live on
   the run**, and so a revision is not a thing the document keeps a
   list of.
+
+## 395. The footnotes of a document
+
+A footnote is a note that belongs to the foot of the page, and the text
+that points at it is a reference.
+
+### What was built
+
+- The command `prose.footnote.add` puts a **footnote** in a document,
+  and a **run** may point at one.
+- The command `prose.block.footnotes` gives every run that points at a
+  footnote, with the **number** of the footnote, what it **says**, and
+  the **words** that point at it — the words are derived.
+- The **number** is **derived**: it is where the footnote is referenced
+  in the document, and the first reference gives the footnote its
+  number. A footnote that is referenced again is not renumbered, and a
+  footnote that is not referenced has no number at all.
+- A reference to a footnote that is **not there** is refused, and so
+  is a reference to a node that is not a footnote.
+
+### What the port found
+
+- **The tree's footnote is a part of the file and here it is a node.**
+  The tree keeps the footnotes of a document in a **part** beside it —
+  the file's own `footnotes.xml` — and the paragraph points at it by
+  an inline object that carries the footnote's number. Here a footnote
+  is a **node** of the tree, and a run names it.
+- **The tree's number is a fact of the section and here it is
+  derived.** The tree's note options say where the notes go — the
+  bottom of the page or the end of the document — and how they are
+  numbered: the **format**, the **start** and the **restart**. Here
+  the number is worked out from where the footnote is referenced.
+- **The tree has footnotes and endnotes and this tree has footnotes.**
+  The tree's endnote is the same kind of note at the end of the
+  document, and the two have their own options each.
+
+### What it cost
+
+- **Five tests** in the prose battery (`tests/footnotes.rs`): a
+  paragraph pointing at a footnote, the number of a footnote being
+  derived, a footnote that is not referenced having no number, a
+  reference to a footnote that is not there and a reference to a node
+  that is not a footnote being refused, and a block that is not there
+  and a node that is not a block being refused.
+- **Two new commands**: `prose.footnote.add` and `prose.block.footnotes`.
+  The prose battery now carries **27** commands and the MCP server
+  **518**.
+
+### What it does not settle
+
+- **The tree's endnotes are not here**, and so the two kinds of note
+  are one kind here.
+- **The tree's note options are not here**: the format of the number,
+  the number it starts at, and the rule that restarts it are all the
+  tree's own and none of them is here.
+- **The tree's footnotes are counted in the word count and here they
+  are not**: a footnote is a note and not words of the document.
