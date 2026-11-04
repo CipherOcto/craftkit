@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2935 tests.** The MCP server links **all fifteen batteries** in, so the
+**2945 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2935 tests
+cargo test          # 2945 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3825,6 +3825,7 @@ so.
 | the **reading** of a workbook | **built.** A workbook may be read whole: its sheets, its names, its styles, its lists of words and its calendar (§388) | §388 |
 | the **rate** of a sequence | **built.** A sequence may carry a rate — 25, or the tree's rational rates — and its length in seconds is derived (§389) | §389 |
 | the **comment** on a block | **built.** A block may carry a comment — who said it and what they said — and the comment goes with the block (§390) | §390 |
+| the **numbering** of a block | **built.** A list says what its items are numbered like, and the number of a block is derived and renumbers when it moves (§391) | §391 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26480,3 +26481,71 @@ said it and what they said.
   date.
 - **The tree's comment on a range of words is not here**: a comment
   here is on a block and not on a range.
+
+## 391. The numbering of a block
+
+A list says what its items are numbered like — `1.`, `a)`, `i.` or a
+bullet — and a block is in a list at a level. The number shown beside
+the block is **derived**.
+
+### What was built
+
+- The command `prose.list.add` puts a **list** in a document, of one
+  of the tree's nine kinds — or of a **single character**, which is a
+  bullet of its own.
+- The command `prose.block.numbering` puts a **block** in a list at a
+  **level**, and the command `prose.block.number` reads the number.
+- The number is **derived**: it is the count of the blocks of the list
+  before it and the format of the level. So a block that is moved is
+  renumbered, and nothing is written down that could be wrong.
+- The **levels** are the tree's: a list kind says what each of its
+  nine levels looks like, and the kinds that cycle — `1. a. i.` —
+  cycle every three.
+- A block that is in **no list** has no number, and that is said as
+  nothing. A kind that is **not a kind** is refused, and so is a level
+  beyond the ninth, a list that is not there and a node that is not a
+  block.
+
+### What the port found
+
+- **The tree has two lists where this tree has one.** The tree keeps
+  an **abstract** list — the definition with its levels — and the
+  **lists** that use it, each with its own overrides. Here a list is
+  one thing: its kind, and the blocks that are in it.
+- **The tree's list is on the paragraph's properties and this tree's
+  is on an edge.** The tree's paragraph carries the number of its list
+  and its level in its properties; here the block names the list with
+  a **relation**, the way it names a style — the third time an edge
+  has answered "what is this relationship?".
+- **The tree counts in sixty-two formats and this tree counts in
+  six.** The tree's number formats include the Japanese, the Chinese,
+  the Korean, the Hebrew, the Hindi and the Thai; the ones a list
+  needs are decimal, upper and lower roman, upper and lower letters,
+  and the bullet.
+- **The tree's letters repeat and do not count in twenty-sixes.** The
+  tree writes `a` to `z` and then `aa` to `zz` and then `aaa` — the
+  twenty-seventh item is `aa`, not `ba`. Here the letters are the
+  tree's.
+
+### What it cost
+
+- **Ten tests** in the prose battery (`tests/numbering.rs`): a block
+  in a list being numbered, the number counting the blocks before it,
+  the number being derived when a block is moved, a level counting in
+  its own format, a bullet list showing a bullet, a list being a
+  bullet of its own, a block in no list having no number, and a kind
+  that is not a kind, a level that is not a level, a list that is not
+  there and a node that is not a block being refused.
+- **Three new commands**: `prose.list.add`, `prose.block.numbering`
+  and `prose.block.number`. The prose battery now carries **21**
+  commands and the MCP server **512**.
+
+### What it does not settle
+
+- **The tree's abstract lists are not here**, and so a list's own
+  override of a level is not here either.
+- **The tree's sixty-two number formats are not here**: the six that
+  a list needs are here and the rest are not.
+- **The tree's restart rules are not all here**: a deeper level
+  restarts when a shallower level is used again, and the tree's own
+  `lvlRestart` is not here.
