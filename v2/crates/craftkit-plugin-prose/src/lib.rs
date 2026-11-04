@@ -21,6 +21,10 @@
 //! - the **page** of a document — a fact of the document: its size and
 //!   its margins, in points, and whether it is a **landscape** one is
 //!   derived (the module `page`);
+//! - a **link** in a run — the target the run points at, and whether
+//!   that target **may be opened** is derived: the tree's rule, that a
+//!   link the system follows is a web link or a mail link and nothing
+//!   else (the module `links`);
 //! - a **style** — a node, and the side vector is the document's
 //!   children;
 //! - a **paragraph's style** — a **relation**: an edge that says
@@ -85,6 +89,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem
 
 mod comments;
 mod editing;
+mod links;
 mod numbering;
 mod page;
 
@@ -92,6 +97,7 @@ pub use comments::{DeleteComment, GetComment, SetComment};
 pub use editing::{
     MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
 };
+pub use links::ReadLinks;
 pub use numbering::{AddList, ReadNumber, SetNumbering};
 pub use page::{GetPage, SetPage};
 
@@ -289,6 +295,7 @@ fn runs_with_text(node: &Node) -> Json {
             "len": length,
             "bold": run.get("bold").cloned().unwrap_or(Json::Bool(false)),
             "italic": run.get("italic").cloned().unwrap_or(Json::Bool(false)),
+            "link": run.get("link").cloned().unwrap_or(Json::Null),
             "text": covered,
         }));
     }
@@ -694,6 +701,23 @@ impl SetRuns {
                     id: "prose.block.runs".to_string(),
                     message: "the runs cover more characters than the text has".to_string(),
                 });
+            }
+            // A run may carry a **link**: the target it points at.
+            // The target is a text and it is bounded; whether it may
+            // be opened is said by the reading of the links.
+            if let Some(link) = run.get("link") {
+                let Some(target) = link.as_str() else {
+                    return Err(EngineError::Failed {
+                        id: "prose.block.runs".to_string(),
+                        message: "a link is a target".to_string(),
+                    });
+                };
+                if target.chars().count() > crate::links::MAX_TARGET {
+                    return Err(EngineError::Failed {
+                        id: "prose.block.runs".to_string(),
+                        message: format!("a target is at most {} characters long", crate::links::MAX_TARGET),
+                    });
+                }
             }
         }
         let Some(node) = session.document_mut()?.node_mut(block) else {
