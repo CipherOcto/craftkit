@@ -161,30 +161,6 @@ fn angle_of(from: (f64, f64), to: (f64, f64)) -> f64 {
     (to.1 - from.1).atan2(to.0 - from.0)
 }
 
-/// The **radius** of an arc: the distance from its centre to one of its
-/// ends.
-///
-/// An arc carries a centre and two ends, and its radius is the distance
-/// from the centre to an end. The radius in the payload is used when it
-/// is there, and the distance is used when it is not.
-fn arc_radius(geometry: &Json) -> Option<f64> {
-    if let Some(radius) = radius_of(geometry) {
-        return Some(radius);
-    }
-    let center = point_in(geometry, "center")?;
-    let start = point_in(geometry, "start")?;
-    let radius = distance(center, start);
-    (radius.is_finite() && radius > 0.0).then_some(radius)
-}
-
-/// The **sweep** of an arc, in radians.
-fn arc_sweep(geometry: &Json) -> Option<f64> {
-    let center = point_in(geometry, "center")?;
-    let start = point_in(geometry, "start")?;
-    let end = point_in(geometry, "end")?;
-    Some(sweep_between(angle_of(center, start), angle_of(center, end)))
-}
-
 /// The **points** of an ellipse: the curve itself, sampled.
 ///
 /// A whole ellipse is a whole turn of the curve, and a part of one is
@@ -227,7 +203,7 @@ fn length_of(kind: &str, geometry: &Json) -> Option<f64> {
             Some(total)
         }
         "cad.entity.circle" => Some(std::f64::consts::TAU * radius_of(geometry)?),
-        "cad.entity.arc" => Some(arc_radius(geometry)? * arc_sweep(geometry)?),
+        "cad.entity.arc" => Some(crate::arcs::arc_radius(geometry)? * crate::arcs::arc_sweep(geometry)?),
         "cad.entity.ellipse" => {
             let points = ellipse_curve_points(geometry);
             if points.len() < 2 {
@@ -280,7 +256,7 @@ fn area_of(kind: &str, geometry: &Json) -> Option<f64> {
 fn radius_of_kind(kind: &str, geometry: &Json) -> Option<f64> {
     match kind {
         "cad.entity.circle" => radius_of(geometry),
-        "cad.entity.arc" => arc_radius(geometry),
+        "cad.entity.arc" => crate::arcs::arc_radius(geometry),
         _ => None,
     }
 }

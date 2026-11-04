@@ -19,6 +19,8 @@
 //! - a **layer's settings** — whether it is on, frozen or locked, its
 //!   colour, the colour it is drawn in, its line type and its line
 //!   weight (the module `layersettings`);
+//! - the **arc** — a piece of a circle, with its centre, its radius
+//!   and its two ends (the module `arcs`);
 //! - the **curves** — the ellipse, with its centre, its major axis
 //!   and its ratio, and the polyline, with its points (the module
 //!   `curves`);
@@ -65,12 +67,14 @@
 )]
 #![forbid(unsafe_code)]
 
+mod arcs;
 mod curves;
 mod layersettings;
 mod measurements;
 mod modify;
 mod order;
 
+pub use arcs::AddArc;
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
@@ -375,6 +379,19 @@ fn draw_geometry(kind: &str, geometry: &Json, colour: Colour, canvas: &mut dyn C
                 Some(Stroke { colour, width: 1.0, ..Default::default() }),
             );
         }
+        "cad.entity.arc" => {
+            let points = arcs::arc_points(geometry);
+            if points.len() < 2 {
+                return;
+            }
+            let path = Path::polygon(&points.iter().map(|(x, y)| Point::new(*x, *y)).collect::<Vec<_>>());
+            canvas.path(
+                &path,
+                Fill::Solid(Colour::NONE),
+                BlendMode::Normal,
+                Some(Stroke { colour, width: 1.0, ..Default::default() }),
+            );
+        }
         "cad.entity.ellipse" => {
             let points = curves::ellipse_points(geometry);
             if points.len() < 2 {
@@ -438,6 +455,7 @@ fn hit_geometry(kind: &str, geometry: &Json, point: Point) -> bool {
             let away = ((point.x - center.x).powi(2) + (point.y - center.y).powi(2)).sqrt();
             (away - radius).abs() <= TOLERANCE
         }
+        "cad.entity.arc" => near_a_curve(&arcs::arc_points(geometry), point),
         "cad.entity.ellipse" => {
             // The curve is sampled and the point is near one of its
             // segments: the tree's bound is exact and this one is
@@ -555,6 +573,14 @@ fn points_of(geometry: &Json) -> Vec<(f64, f64)> {
                 for value in list {
                     read(value, &mut points);
                 }
+            }
+            // An arc is a curve, and its box is the box of the curve
+            // and not the box of its two ends: the bulge is in the box.
+            if map.contains_key("radius") && map.contains_key("start") && map.contains_key("end") {
+                for (x, y) in arcs::arc_points(geometry) {
+                    points.push((x, y));
+                }
+                return points;
             }
             // An ellipse is a curve, and its box is worked out from its
             // two half axes.
@@ -1057,6 +1083,7 @@ craftkit_sdk::plugin_anchor!(
     AddInsert,
     AddEllipse,
     AddPolyline,
+    AddArc,
     ListEntities,
     MoveEntity,
     RotateEntity,
