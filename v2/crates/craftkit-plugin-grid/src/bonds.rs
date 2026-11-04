@@ -50,6 +50,8 @@ pub fn is_bond_function(name: &str) -> bool {
             | "ODDFYIELD"
             | "ODDLPRICE"
             | "ODDLYIELD"
+            | "ACCRINT"
+            | "ACCRINTM"
     )
 }
 
@@ -316,6 +318,37 @@ fn odd_last(
     Some((days, accrued, remaining))
 }
 
+/// The **coupon dates** of a bond that pays on the day of its first
+/// coupon, counted from that day.
+fn coupon_dates(system: System, first: f64, frequency: f64, index: i64) -> Option<f64> {
+    let anchor = ymd(system, first)?;
+    let end_of_month = anchor.2 == crate::dates::days_in_month(anchor.0, anchor.1);
+    let step = (12.0 / frequency) as i64;
+    shift_months(system, anchor, index * step, end_of_month)
+}
+
+/// The **coupon period** a date falls in: the date `j` is the coupon
+/// date at or before it, and `j + 1` the one after.
+fn coupon_index(system: System, first: f64, settlement: f64, frequency: f64) -> Option<i64> {
+    let mut index = (((settlement - first) / 365.25 * frequency).floor() as i64).clamp(-200_000, 200_000);
+    let mut guard = 0;
+    while coupon_dates(system, first, frequency, index)? > settlement {
+        index -= 1;
+        guard += 1;
+        if guard > 400_000 {
+            return None;
+        }
+    }
+    while coupon_dates(system, first, frequency, index + 1)? <= settlement {
+        index += 1;
+        guard += 1;
+        if guard > 400_000 {
+            return None;
+        }
+    }
+    Some(index)
+}
+
 impl Book {
     /// The **bond functions**.
     pub(crate) fn bonds(
@@ -431,6 +464,136 @@ impl Book {
                 } else {
                     Value::Number(duration / (1.0 + yield_ / frequency))
                 }
+            }
+            "ACCRINTM" => {
+                // issue, settlement, rate, [par], [basis].
+                let (issue, settlement, rate) = match (
+                    self.number_at(sheet, arguments, 0, being),
+                    self.number_at(sheet, arguments, 1, being),
+                    self.number_at(sheet, arguments, 2, being),
+                ) {
+                    (Ok(issue), Ok(settlement), Ok(rate)) => (issue, settlement, rate),
+                    (Err(message), _, _) | (_, Err(message), _) | (_, _, Err(message)) => {
+                        return Value::Error(message);
+                    }
+                };
+                let par = match self.optional_number(sheet, arguments, 3, being) {
+                    Ok(Some(par)) => par,
+                    Ok(None) => 1000.0,
+                    Err(message) => return Value::Error(message),
+                };
+                let basis = match self.optional_number(sheet, arguments, 4, being) {
+                    Ok(Some(basis)) => basis,
+                    Ok(None) => 0.0,
+                    Err(message) => return Value::Error(message),
+                };
+                let basis = match basis_of(Some(basis)) {
+                    Ok(basis) => basis,
+                    Err(message) => return Value::Error(message),
+                };
+                if issue >= settlement || rate <= 0.0 || par <= 0.0 {
+                    return Value::Error("#NUM!".to_string());
+                }
+                let Some(fraction) = year_frac(system, issue, settlement, basis) else {
+                    return Value::Error("#NUM!".to_string());
+                };
+                Value::Number(par * rate * fraction)
+            }
+            "ACCRINT" => {
+                // The accrued interest of a bond between two dates.
+                let (issue, first, settlement, rate) = match (
+                    self.number_at(sheet, arguments, 0, being),
+                    self.number_at(sheet, arguments, 1, being),
+                    self.number_at(sheet, arguments, 2, being),
+                    self.number_at(sheet, arguments, 3, being),
+                ) {
+                    (Ok(issue), Ok(first), Ok(settlement), Ok(rate)) => (issue, first, settlement, rate),
+                    (Err(message), _, _, _)
+                    | (_, Err(message), _, _)
+                    | (_, _, Err(message), _)
+                    | (_, _, _, Err(message)) => {
+                        return Value::Error(message);
+                    }
+                };
+                let par = match self.optional_number(sheet, arguments, 4, being) {
+                    Ok(Some(par)) => par,
+                    Ok(None) => 1000.0,
+                    Err(message) => return Value::Error(message),
+                };
+                if rate <= 0.0 || par <= 0.0 {
+                    return Value::Error("#NUM!".to_string());
+                }
+                let frequency = match self.number_at(sheet, arguments, 5, being) {
+                    Ok(frequency) => match frequency_of(frequency) {
+                        Ok(frequency) => frequency,
+                        Err(message) => return Value::Error(message),
+                    },
+                    Err(message) => return Value::Error(message),
+                };
+                let basis = match self.optional_number(sheet, arguments, 6, being) {
+                    Ok(Some(basis)) => basis,
+                    Ok(None) => 0.0,
+                    Err(message) => return Value::Error(message),
+                };
+                let basis = match basis_of(Some(basis)) {
+                    Ok(basis) => basis,
+                    Err(message) => return Value::Error(message),
+                };
+                let method = match self.optional_number(sheet, arguments, 7, being) {
+                    Ok(Some(method)) => method != 0.0,
+                    Ok(None) => true,
+                    Err(message) => return Value::Error(message),
+                };
+                if issue >= settlement {
+                    return Value::Error("#NUM!".to_string());
+                }
+                let Some(mut index) = coupon_index(system, first, settlement, frequency) else {
+                    return Value::Error("#NUM!".to_string());
+                };
+                let start = if method || settlement <= first {
+                    issue
+                } else {
+                    match coupon_dates(system, first, frequency, index) {
+                        Some(date) => date,
+                        None => return Value::Error("#NUM!".to_string()),
+                    }
+                };
+                index = match coupon_index(system, first, start, frequency) {
+                    Some(index) => index,
+                    None => return Value::Error("#NUM!".to_string()),
+                };
+                let mut sum = 0.0;
+                let mut guard = 0;
+                loop {
+                    let (Some(period_start), Some(period_end)) = (
+                        coupon_dates(system, first, frequency, index),
+                        coupon_dates(system, first, frequency, index + 1),
+                    ) else {
+                        return Value::Error("#NUM!".to_string());
+                    };
+                    if period_start >= settlement {
+                        break;
+                    }
+                    let from = period_start.max(start);
+                    let to = period_end.min(settlement);
+                    if to > from {
+                        let length = match basis {
+                            1 => period_end - period_start,
+                            3 => 365.0 / frequency,
+                            _ => 360.0 / frequency,
+                        };
+                        let Some(days) = day_count(system, from, to, basis) else {
+                            return Value::Error("#NUM!".to_string());
+                        };
+                        sum += days / length;
+                    }
+                    index += 1;
+                    guard += 1;
+                    if guard > 100_000 {
+                        return Value::Error("#NUM!".to_string());
+                    }
+                }
+                Value::Number(par * rate / frequency * sum)
             }
             "ODDFPRICE" | "ODDFYIELD" => {
                 // settlement, maturity, issue, first coupon, rate,
