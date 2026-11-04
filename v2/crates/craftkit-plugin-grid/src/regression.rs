@@ -64,29 +64,6 @@ fn moments(x: &[f64], y: &[f64]) -> Result<(f64, f64, f64, f64, f64), String> {
 }
 
 impl Book {
-    /// The **values** an argument holds: the cells of a range, and the
-    /// value of a plain argument.
-    fn regression_values(
-        &self,
-        sheet: &str,
-        argument: &Expr,
-        being: &mut Vec<(String, CellRef)>,
-    ) -> Result<Vec<Value>, String> {
-        match argument {
-            Expr::Range { .. } | Expr::Name(_) => {
-                let (name, area) = self.area_of(sheet, argument)?;
-                let mut values = Vec::new();
-                for row in area.start.row..=area.end.row {
-                    for col in area.start.col..=area.end.col {
-                        values.push(self.value_of_guarded(&name, CellRef { col, row }, being));
-                    }
-                }
-                Ok(values)
-            }
-            other => Ok(vec![self.evaluate(sheet, other, being)]),
-        }
-    }
-
     /// The **pairs** of numbers two arguments hold.
     ///
     /// The two must be of the same length, a pair that is not two
@@ -99,8 +76,8 @@ impl Book {
         second: &Expr,
         being: &mut Vec<(String, CellRef)>,
     ) -> Result<(Vec<f64>, Vec<f64>), String> {
-        let first = self.regression_values(sheet, first, being)?;
-        let second = self.regression_values(sheet, second, being)?;
+        let first = self.values_of_cells(sheet, first, being)?;
+        let second = self.values_of_cells(sheet, second, being)?;
         if first.len() != second.len() {
             return Err("#N/A".to_string());
         }

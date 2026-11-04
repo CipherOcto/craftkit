@@ -56,7 +56,7 @@ fn type_of(number: Option<f64>) -> f64 {
 }
 
 /// The **payment** of a loan.
-fn pmt_of(rate: f64, nper: f64, pv: f64, fv: f64, typ: f64) -> f64 {
+pub(crate) fn pmt_of(rate: f64, nper: f64, pv: f64, fv: f64, typ: f64) -> f64 {
     if rate == 0.0 {
         return -(pv + fv) / nper;
     }
@@ -76,7 +76,7 @@ fn pmt_of(rate: f64, nper: f64, pv: f64, fv: f64, typ: f64) -> f64 {
 }
 
 /// The **future value** of a series of payments.
-fn fv_of(rate: f64, nper: f64, pmt: f64, pv: f64, typ: f64) -> f64 {
+pub(crate) fn fv_of(rate: f64, nper: f64, pmt: f64, pv: f64, typ: f64) -> f64 {
     if rate == 0.0 {
         return -(pv + pmt * nper);
     }
@@ -85,7 +85,7 @@ fn fv_of(rate: f64, nper: f64, pmt: f64, pv: f64, typ: f64) -> f64 {
 }
 
 /// The **present value** of a series of payments.
-fn pv_of(rate: f64, nper: f64, pmt: f64, fv: f64, typ: f64) -> f64 {
+pub(crate) fn pv_of(rate: f64, nper: f64, pmt: f64, fv: f64, typ: f64) -> f64 {
     if rate == 0.0 {
         return -(fv + pmt * nper);
     }
@@ -94,7 +94,7 @@ fn pv_of(rate: f64, nper: f64, pmt: f64, fv: f64, typ: f64) -> f64 {
 }
 
 /// The **interest** of one payment of a loan.
-fn ipmt_of(rate: f64, per: f64, nper: f64, pv: f64, fv: f64, typ: f64) -> f64 {
+pub(crate) fn ipmt_of(rate: f64, per: f64, nper: f64, pv: f64, fv: f64, typ: f64) -> f64 {
     let payment = pmt_of(rate, nper, pv, fv, typ);
     if typ == 1.0 && per == 1.0 {
         return 0.0;
@@ -108,7 +108,7 @@ fn ipmt_of(rate: f64, per: f64, nper: f64, pv: f64, fv: f64, typ: f64) -> f64 {
 ///
 /// The tree's rule: a **Newton** step from a guess, and when that
 /// fails a **bisection** over a grid of rates.
-fn solve_rate(function: impl Fn(f64) -> f64, guess: f64) -> Result<f64, String> {
+pub(crate) fn solve_rate(function: impl Fn(f64) -> f64, guess: f64) -> Result<f64, String> {
     let check = |rate: f64| {
         function(rate).is_finite() && function(rate).abs() < 1e-7 * (1.0 + function(guess).abs().min(1e12))
     };
@@ -148,7 +148,7 @@ fn solve_rate(function: impl Fn(f64) -> f64, guess: f64) -> Result<f64, String> 
 }
 
 /// The **Newton** step: the rate that makes the sum work out.
-fn newton(function: &impl Fn(f64) -> f64, guess: f64) -> Option<f64> {
+pub(crate) fn newton(function: &impl Fn(f64) -> f64, guess: f64) -> Option<f64> {
     let mut x = guess;
     for _ in 0..200 {
         let y = function(x);

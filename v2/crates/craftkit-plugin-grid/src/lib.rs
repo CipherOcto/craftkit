@@ -40,6 +40,12 @@
 //! discount and redeemed at its value — the discount, the price, the
 //! yield, the interest and the bill (the module `securities`).
 //!
+//! And a formula may ask about the **cash flows** of a plan: the rate
+//! at which a series of payments is worth nothing, with dates or
+//! without them, what a sum grows to through a schedule, and the
+//! interest and the principal of a run of payments (the module
+//! `cashflows`).
+//!
 //! And a formula may ask the **shape** of a distribution: the normal,
 //! the gamma, the error function, Student's t, the chi-square, the F,
 //! the binomial, the Poisson, the exponential, the Weibull, the
@@ -269,6 +275,7 @@
 
 mod arithmetic;
 mod bonds;
+mod cashflows;
 mod cellread;
 mod clearing;
 mod combinations;
