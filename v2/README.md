@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2850 tests.** The MCP server links **all fifteen batteries** in, so the
+**2859 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2850 tests
+cargo test          # 2859 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3811,6 +3811,7 @@ so.
 | the **time** and the **days** of a date | **built.** TIME makes a time, HOUR, MINUTE and SECOND take it apart, and EDATE, EOMONTH and DAYS work with the days (§374) | §374 |
 | the **taking away** of a media item | **built.** An item that no clip plays is taken away, and one that a clip plays is not (§375) | §375 |
 | the **reading** of a project | **built.** The bins, the items in them, and the clips that play them (§376) | §376 |
+| the **joining** and the **finding** of texts | **built.** CONCATENATE, TEXTJOIN, FIND, SEARCH, SUBSTITUTE and REPLACE work on the texts of a formula (§377) | §377 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25674,3 +25675,69 @@ and the clips that play them.
 - **The tree's selection is not here.** The tree's project panel
   holds a **selection** of items, and the tree's commands act on the
   selection; here every command names what it acts on.
+
+## 377. The joining and the finding of texts
+
+A formula may **join** texts and **find** one text in another.
+
+### What was built
+
+- The functions `CONCATENATE` and `CONCAT` join the texts of their
+  arguments.
+- The function `TEXTJOIN(delimiter, ignore_empty, …)` joins the texts
+  with a **delimiter**, and the empty texts may be left out.
+- The functions `FIND(needle, text, [start])` and `SEARCH` give the
+  **place** of a text in another, counted from one, and the search may
+  begin later. `FIND` is exact; `SEARCH` folds the case and takes the
+  tree's **wildcards**.
+- The function `SUBSTITUTE(text, old, new, [instance])` changes a part
+  of a text — and with the instance the change is made to the *second*
+  change and not to the first.
+- The function `REPLACE(text, start, count, new)` changes the part of
+  a text that is counted from one.
+- The function `T(value)` gives the text of a value when it is a
+  text, and nothing at all when it is not: a number is a number and
+  not a text.
+- The function `CLEAN(text)` takes the **control characters** away.
+- A text that is not found is an error, and a text that is longer
+  than the tree's bound is an error too.
+
+### What the port found
+
+- **The tree's `CONCAT` takes the arrays apart and the tree's
+  `CONCATENATE` does not.** Here there are no arrays, so the two are
+  the same thing: both join the texts of their arguments.
+- **The tree's `SEARCH` is a different search from the tree's `FIND`,
+  and the two are here.** The tree's `FIND` is exact — the case
+  matters — and the tree's `SEARCH` folds the case and takes the
+  tree's wildcards; so does this one.
+- **The tree's texts have a bound and so do these.** The tree refuses
+  a text of more than thirty-two thousand seven hundred and sixty-seven
+  characters; so does this one, and the bound is in the characters and
+  not in the bytes.
+- **The tree's `T` gives a number as nothing and so does this one.**
+  The tree's `T` is the text of a value when the value is a text, and
+  nothing at all when it is not — and an **error** is still an error.
+
+### What it cost
+
+- **Nine tests** in the grid battery (`tests/joining.rs`): the texts
+  being joined, the texts being joined with a delimiter, a text being
+  found in another, the search folding the case and taking the
+  wildcards, a text that is not there not being found, a part of a
+  text being changed, a part of a text being replaced, the text of a
+  value that is not a text being nothing, and the control characters
+  being cleaned away.
+- **No new command**: the joining and the finding of texts are
+  functions of the formula language. The grid battery still carries
+  **63** commands and the MCP server **493**.
+
+### What it does not settle
+
+- **The tree's other text functions are not here.** The tree has
+  `REPT`, `EXACT`, `CHAR`, `CODE`, `UNICHAR`, `TEXTSPLIT`,
+  `TEXTBEFORE`, `TEXTAFTER`, `TEXTBEFOREAFTER` and `FIXED`, and each
+  of them works on a text; here a text is joined, found and changed.
+- **The tree's `TEXTSPLIT` gives an array and this tree has no
+  arrays.** A text that is split into its parts is a list of texts,
+  and a list is not a thing this tree has.
