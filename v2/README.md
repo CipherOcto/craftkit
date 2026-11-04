@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3221 tests.** The MCP server links **all fifteen batteries** in, so the
+**3228 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3221 tests
+cargo test          # 3228 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3880,6 +3880,7 @@ so.
 | the **resolution** of a revision | **built.** A revision may be accepted or rejected, and the block's text and runs are rewritten together (§443) | §443 |
 | the **ease** of a keyframe | **built.** The easy ease is a third of the segment and no speed, and the hold keeps the value still until the next keyframe (§444) | §444 |
 | the **cells** of a table | **built.** A table is a grid: a cell is found by its row and its column, and rows and columns go in and come out (§445) | §445 |
+| the **synchronisation** of a clip | **built.** Two clips are in step when their anchors agree, and the method says whether it is the in points or the out points (§446) | §446 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29607,3 +29608,57 @@ other row.
 - **The tree's table formulas are not here**: `=SUM(ABOVE)` needs a
   formula in a cell, and this arc is about the cells and not about
   what a cell may say.
+
+## 446. The synchronisation of a clip by its anchor
+
+A clip has two clocks: where it starts on the **timeline** and where
+it begins in the **media**. The frame of the media the clip begins at
+is its **anchor**.
+
+### What was built
+
+- The command `film.clip.synchronise`: it takes the clip and the
+  **reference** it lines up with, and the **method** — `in` for the
+  **in points** and `out` for the **out points**.
+- Two clips are **in step** when their anchors agree: each of them
+  begins at the same moment of its own media. The **timeline** is left
+  alone.
+- The **link** is honoured: the tree moves the linked clips together,
+  so that the picture and the sound stay in step, and this tree does
+  the same.
+- The **bounds** are the media's: a clip may not begin before the
+  media and may not run past the end of it.
+
+### What the port found
+
+- **The tree's synchronisation is a common time**: every clip is
+  reduced to an anchor, and the clips are moved in the timeline until
+  their common times line up. Here the **media** lines up and the
+  timeline is left alone: a clip that is in step shows the same thing
+  as the clip it is in step with, and a synchronisation that moved
+  clips about would be a second edit wearing the synchronisation's
+  coat.
+- **The tree has five methods and here there are two.** The tree's
+  timecode and marker methods need a clock and a marker, and its audio
+  method needs the waveforms; this tree has the frames of the media
+  and nothing else.
+
+### What it cost
+
+- **Seven tests** in the film battery (`tests/anchors.rs`): a clip is
+  put in step by its in points, it may be put in step by its out
+  points, a clip longer than the reference cannot be in step by its
+  out points, a clip that is already in step is refused, a method that
+  is not a method is refused, a clip cannot be in step with itself,
+  and a clip that would play past the end of the media is refused.
+- **One new module** (`anchors`): the synchronisation of a clip is its
+  own. The film battery now carries **70** commands and the MCP server
+  **593**.
+
+### What it does not settle
+
+- **The tree's timecode, marker and audio methods are not here**: this
+  tree has the frames of the media and nothing else.
+- **The tree's common time is not here**: the clips are not moved in
+  the timeline to line up, and the synchronisation is a change of the
+  media and not of the place.
