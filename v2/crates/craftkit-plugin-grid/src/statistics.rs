@@ -69,6 +69,9 @@ pub fn is_statistical_function(name: &str) -> bool {
             | "PERCENTRANK"
             | "PERCENTRANK.INC"
             | "PERCENTRANK.EXC"
+            | "SUMX2MY2"
+            | "SUMX2PY2"
+            | "SUMXMY2"
     )
 }
 
@@ -244,6 +247,50 @@ fn percentile(numbers: Vec<f64>, k: f64) -> Value {
     }
 }
 
+/// The **pairs** of two sets at the same places.
+///
+/// Two sets of different sizes have no pairs: that is `#N/A`. A pair
+/// of two numbers is a pair; a pair with a text in it is not a pair,
+/// and an error is the error.
+pub(crate) fn pairs_of(left: &[Value], right: &[Value]) -> Result<(Vec<f64>, Vec<f64>), String> {
+    if left.len() != right.len() {
+        return Err("#N/A".to_string());
+    }
+    let mut first = Vec::new();
+    let mut second = Vec::new();
+    for (one, other) in left.iter().zip(right) {
+        match (one, other) {
+            (Value::Error(message), _) | (_, Value::Error(message)) => return Err(message.clone()),
+            (Value::Number(one), Value::Number(other)) => {
+                first.push(*one);
+                second.push(*other);
+            }
+            _ => {}
+        }
+    }
+    Ok((first, second))
+}
+
+/// The **sum of the squares** of two sets: the tree's three sums.
+fn sum_of_squares(left: &[Value], right: &[Value], kind: &str) -> Result<Value, String> {
+    let (first, second) = pairs_of(left, right)?;
+    let mut total = 0.0;
+    let mut any = false;
+    for (one, other) in first.iter().zip(&second) {
+        let term = match kind {
+            "SUMX2MY2" => one * one - other * other,
+            "SUMX2PY2" => one * one + other * other,
+            _ => (one - other) * (one - other),
+        };
+        total += term;
+        any = true;
+    }
+    if !any {
+        return Err("#DIV/0!".to_string());
+    }
+    Ok(Value::Number(total))
+}
+
 impl Book {
     /// The **statistical functions**.
     pub(crate) fn statistics(
@@ -254,6 +301,22 @@ impl Book {
         being: &mut Vec<(String, CellRef)>,
     ) -> Value {
         match name {
+            "SUMX2MY2" | "SUMX2PY2" | "SUMXMY2" => {
+                if arguments.len() != 2 {
+                    return Value::Error("#VALUE!".to_string());
+                }
+                let (left, right) = match (
+                    self.values_of_cells(sheet, &arguments[0], being),
+                    self.values_of_cells(sheet, &arguments[1], being),
+                ) {
+                    (Ok(left), Ok(right)) => (left, right),
+                    (Err(message), _) | (_, Err(message)) => return Value::Error(message),
+                };
+                match sum_of_squares(&left, &right, name) {
+                    Ok(value) => value,
+                    Err(message) => Value::Error(message),
+                }
+            }
             "COUNTBLANK" => self.countblank_call(sheet, arguments, being),
             "RANK" => self.rank_call(sheet, arguments, being),
             "LARGE" => match self.numbers_of(sheet, arguments, 0, being) {

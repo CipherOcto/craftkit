@@ -51,30 +51,6 @@ fn numbers_of(values: &[Value]) -> Result<Vec<f64>, String> {
     Ok(numbers)
 }
 
-/// The **pairs** of two sets at the same places.
-///
-/// Two sets of different sizes have no pairs: that is `#N/A`. A pair
-/// of two numbers is a pair; a pair with a text in it is not a pair,
-/// and an error is the error.
-fn pairs_of(left: &[Value], right: &[Value]) -> Result<(Vec<f64>, Vec<f64>), String> {
-    if left.len() != right.len() {
-        return Err("#N/A".to_string());
-    }
-    let mut first = Vec::new();
-    let mut second = Vec::new();
-    for (one, other) in left.iter().zip(right) {
-        match (one, other) {
-            (Value::Error(message), _) | (_, Value::Error(message)) => return Err(message.clone()),
-            (Value::Number(one), Value::Number(other)) => {
-                first.push(*one);
-                second.push(*other);
-            }
-            _ => {}
-        }
-    }
-    Ok((first, second))
-}
-
 /// The **mean** of a set of numbers.
 fn mean(numbers: &[f64]) -> Result<f64, String> {
     if numbers.is_empty() {
@@ -101,7 +77,7 @@ pub(crate) fn t_test(left: &[Value], right: &[Value], tails: f64, kind: f64) -> 
         return Err("#NUM!".to_string());
     }
     let (t, degrees) = if kind == 1.0 {
-        let (first, second) = pairs_of(left, right)?;
+        let (first, second) = crate::statistics::pairs_of(left, right)?;
         let differences: Vec<f64> = first.iter().zip(&second).map(|(one, other)| one - other).collect();
         let count = differences.len() as f64;
         let deviation = variance_of(&differences)?.sqrt();

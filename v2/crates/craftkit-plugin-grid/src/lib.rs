@@ -48,6 +48,10 @@
 //! its **skew**, its **ranks** and its **percentiles** — the tree's two
 //! ways of each (the module `statistics`).
 //!
+//! And a formula may ask about **two sets** of numbers at once: the
+//! sums of their squares, the difference of the squares and the
+//! squares of the differences (the module `statistics`).
+//!
 //! And a formula may ask the **words** of a number and the **letters**
 //! of a text: Roman numerals, another base, a character and its code,
 //! and a text written for a URL (the module `words`).
