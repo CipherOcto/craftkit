@@ -79,6 +79,10 @@
 //! refusal comes before the edit, so a refused parenting changes
 //! nothing (the module `parent`).
 //!
+//! And the **selection** of layers is here: what a person has picked
+//! out, or what an agent has named — and it is the session's own state
+//! and not a part of the document (the module `selection`).
+//!
 //! And the **stack** of layers of a composition is here: the layers
 //! stand in an order, the front of the stack is drawn over the rest of
 //! it, and a layer may be moved in it — forward, backward, to the
@@ -135,6 +139,7 @@ mod keys;
 mod markers;
 mod masks;
 mod parent;
+mod selection;
 mod spatial;
 mod stack;
 mod switches;
@@ -150,6 +155,7 @@ pub use keys::{RemoveKeyframe, SetAuto, SetContinuous, SetInterpolation, SetKeyf
 pub use markers::{AddMarker, MarkerKind, MarkersEvaluator, SetMarker};
 pub use masks::{AddMask, InvertMask, ListMasks, LockMask, MaskKind, RemoveMask, SetMaskMode};
 pub use parent::{DeleteParent, SetParent};
+pub use selection::{DeselectLayers, GetSelection, SelectLayers};
 pub use stack::{ArrangeLayer, ListLayers, RenameLayer};
 pub use switches::{SetCompSwitch, SetSwitch, SwitchesEvaluator};
 pub use time::{GetTime, GoToEnd, GoToStart, SetTime, StepTime};
@@ -750,6 +756,9 @@ craftkit_sdk::plugin_anchor!(
     ListLayers,
     ArrangeLayer,
     RenameLayer,
+    SelectLayers,
+    DeselectLayers,
+    GetSelection,
     FxPanel
 );
 
