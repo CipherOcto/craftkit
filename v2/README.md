@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2894 tests.** The MCP server links **all fifteen batteries** in, so the
+**2899 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2894 tests
+cargo test          # 2899 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3817,6 +3817,7 @@ so.
 | the **reading** of a cell | **built.** A cell may be read whole: its value, its type, its formula, its text, its format, its note and its link (§380) | §380 |
 | the **shape** and the **name** of a format | **built.** A format may be coded or named, and the names this tree does not write are refused with the reason (§381) | §381 |
 | the **reading** of a media item | **built.** A media item may be read whole: its facts, and the bin it is in and the clips that play it (§382) | §382 |
+| the **reading** of a name | **built.** A name may be read: the range it stands for and the values of the cells of it (§383) | §383 |
 
 ### The list of things that are honestly not there: empty
 
@@ -26024,3 +26025,54 @@ holds and everything that is said about it.
 - **The tree's relinking is not here**, and so the fingerprint that
   would tell a moved original from another file of the same name is
   not here either.
+
+## 383. The reading of a name
+
+A name is a word that stands for a range of cells, and a name may be
+read: the answer is the range it stands for and the values of the cells
+of that range.
+
+### What was built
+
+- The command `grid.name.get` gives the **range** a name stands for,
+  the **sheet** it is in, and the **values** of the cells of the range,
+  row by row.
+- The values are **derived**: the book computes them, so a cell that
+  holds a formula has the value the formula computes.
+- A name that is **not there** is refused, and so is a workbook that
+  is not there, a node that is not a workbook, and a name whose **sheet
+  is gone** — the name stands for a range of a sheet that is not there.
+
+### What the port found
+
+- **The tree's name may be more than a range.** The tree's name holds
+  a **formula** and not only a range of cells, so a name may be a
+  constant or an expression, and the tree's name manager edits the
+  formula. Here a name stands for a range of cells and nothing else:
+  the range names its sheet, so a name is never a name for "the sheet
+  it was written on".
+- **The tree's name has a scope and this tree's does not.** The tree's
+  name may belong to a sheet or to the workbook, and the sheet's own
+  name wins. Here a name is **workbook** wide, and every sheet of the
+  workbook may use it.
+- **The tree's name may be hidden and may carry a comment, and this
+  tree's does not.** The tree keeps a hidden flag and a comment on a
+  name; here a name is a word and the range it stands for.
+
+### What it cost
+
+- **Five tests** in the grid battery (`tests/namereading.rs`): a name
+  being read, the values of a name being derived, a name that is not
+  there being refused, a workbook that is not there and a node that is
+  not a workbook being refused, and a name whose sheet is gone being
+  refused.
+- **One new command**: `grid.name.get`. The grid battery now carries
+  **65** commands and the MCP server **499**.
+
+### What it does not settle
+
+- **The tree's formulas in names are not here**, and so a name that is
+  a constant is not here either.
+- **The tree's sheet-scoped names are not here**: a name here belongs
+  to the workbook and to every sheet of it.
+- **The tree's hidden names and its comments on names are not here.**
