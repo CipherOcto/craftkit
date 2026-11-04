@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3004 tests.** The MCP server links **all fifteen batteries** in, so the
+**3010 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3004 tests
+cargo test          # 3010 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3835,6 +3835,7 @@ so.
 | the **arithmetic** of a formula | **built.** A formula may round a number, cut it, take the rest of a division, take its root and raise it to a power, with the tree's careful rules (§398) | §398 |
 | the **trigonometry** of a formula | **built.** A formula may ask about an angle: its sine and its cosine, its tangent and their inverses, and the turn of an angle from degrees to radians (§399) | §399 |
 | the **value** of money over time | **built.** A formula may ask what a sum of money is worth now and later: the payment of a loan, its present and future worth, the rate that makes it work out, and the interest of one payment (§400) | §400 |
+| the **wearing out** of an asset | **built.** A formula may ask what a thing that wears out is worth now, a period at a time: the straight line, the sum of the years, the declining balance and the double of it (§401) | §401 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27121,4 +27122,79 @@ A formula may ask what a sum of money is worth now and later.
 - **The tree's `RATE` is a search, and a search is not a proof**: a
   rate with no root in the grid it scans is `#NUM!` here and `#NUM!`
   there, and the tree does not say more about the ones either.
+
+## 401. The wearing out of an asset
+
+A formula may ask what a thing that wears out is worth now, a period at
+a time.
+
+### What was built
+
+- The functions `SLN`, `SYD`, `DB`, `DDB` and `VDB`.
+- `SLN` is the **straight line**: the same every period, and a life of
+  no periods is `#DIV/0!`.
+- `SYD` is the **sum of the years**: the years are added up and each
+  one takes its share, so the wear is less and less.
+- `DB` is the **declining balance**, and it takes the **month** the
+  thing was bought in: the first period is a part of a year and the
+  last is the rest of one.
+- `DDB` is the **double declining balance**, and it takes the
+  **factor** — the rate it falls at — and the tree's default of two.
+- `VDB` is the declining balance over a **span** of periods, and it
+  leaves the switch to the straight line in: when the straight line
+  would be the larger of the two, the balance switches to it.
+- The **errors** are the tree's: a period beyond the life is `#NUM!`,
+  a span that ends before it starts is `#NUM!`, a life of no periods
+  is a division by nothing, and a rate of the declining balance that
+  cannot be had is `#NUM!`.
+
+### What the port found
+
+- **The tree's rate of the declining balance is rounded before it is
+  used, and it is rounded the careful way.** The tree rounds it to
+  three digits with the fifteen-significant-digit rule of §398, so
+  the rate is a number a person can read and not a number the binary
+  arithmetic happened to produce. Here the same rate, the same three
+  digits and the same rule.
+- **The tree's `DB` has a month and the month is not decoration.** It
+  decides how much of the first year is worn and how much of the last
+  year is left, and it decides how many periods there are: a month of
+  twelve gives one period per year of life, and any other month gives
+  one more. Here the same, and the same refusal of a month outside
+  the twelve.
+- **The tree's `VDB` is the `DDB` with the switch left in, and the
+  switch is the tree's own rule.** The straight line is taken when it
+  would be the larger of the two — not when it is equal to it — and
+  the schedule then follows the straight line to the end. Here the
+  same.
+- **The tree's numbers are not tidy and the tree does not pretend
+  they are.** `DDB(2400,300,10,2,1.5)` is `306.0000000000002` in the
+  tree, and the tree's own test says so with a tolerance rather than
+  with an equality. Here the number is the same number, and the test
+  here rounds it to ten digits for the same reason the tree's test
+  tolerates it: the honest comparison is a close one.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/depreciation.rs`): the
+  straight line and the whole of the wear, the sum of the years and
+  its first and last year, the declining balance over four periods,
+  the double declining balance over five, the span and the switch,
+  and the errors.
+- **One new module**: `depreciation`. **No new command**: a function
+  is not a command, and the grid battery still carries **67** commands
+  and the MCP server **521**.
+- The **default of an argument** is now one helper — `Book::optional_number`
+  in `formula.rs` — and the financial family uses it too: an argument
+  that is not there is **none** and not a zero.
+
+### What it does not settle
+
+- **The tree's `AMORLINC` and `AMORDEGRC` are not here**: the French
+  depreciation, which wants dates and a year fraction and a basis.
+- **The tree's securities are not here**: the coupon of a note, the
+  discount, the yield of a bill.
+- **The tree's `DB` and `DDB` do not say what a life of a fraction of
+  a year means** — the tree truncates the period and says nothing
+  more, and here the same.
 
