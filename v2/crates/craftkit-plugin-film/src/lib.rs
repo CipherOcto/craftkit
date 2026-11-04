@@ -125,6 +125,10 @@
 //! is locked — and its clips in the order they start, its length and
 //! its sequence, which are derived (the module `trackreading`).
 //!
+//! And a **bin** may be read whole: its name, the items in it, the
+//! bins in it, and the bin it is in, which is derived (the module
+//! `binreading`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -170,6 +174,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+mod binreading;
 mod binremoval;
 mod clipreading;
 mod enabling;
@@ -203,6 +208,7 @@ mod trackremoval;
 mod transitions;
 mod trim;
 
+pub use binreading::ReadBin;
 pub use binremoval::RemoveBin;
 pub use clipreading::ReadClip;
 pub use enabling::EnableClip;
