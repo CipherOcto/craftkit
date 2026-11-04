@@ -148,6 +148,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod clearing;
 mod conditional;
 mod dates;
 mod fill;
@@ -173,6 +174,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+pub use clearing::{ClearContents, ClearFormat};
 pub use conditional::{CheckConditional, ClearConditional, SetConditional};
 use fill::FillRange;
 pub use filters::{ClearFilter, FilteredRows, SetFilter};
@@ -1379,6 +1381,8 @@ craftkit_sdk::plugin_anchor!(
     AddSheet,
     RenameSheet,
     MoveSheet,
+    ClearContents,
+    ClearFormat,
     RemoveSheet,
     SetCell,
     SetFormula,

@@ -1007,6 +1007,31 @@ impl Cells {
         self.cells.remove(&cell).is_some()
     }
 
+    /// Empty the **contents** of a cell: its value and its formula.
+    ///
+    /// The cell keeps its **format** and its **style**: the contents
+    /// are what the cell holds and the format is how it is shown.
+    pub fn clear_contents(&mut self, cell: CellRef) -> bool {
+        let Some(entry) = self.cells.get_mut(&cell) else { return false };
+        let had = entry.value.is_some() || entry.formula.is_some();
+        entry.value = None;
+        entry.formula = None;
+        had
+    }
+
+    /// Clear the **format** of a cell: its number format and its
+    /// style.
+    ///
+    /// The cell keeps its **contents**: what it holds is not changed by
+    /// how it is shown.
+    pub fn clear_format(&mut self, cell: CellRef) -> bool {
+        let Some(entry) = self.cells.get_mut(&cell) else { return false };
+        let had = entry.format.is_some() || entry.style.is_some();
+        entry.format = None;
+        entry.style = None;
+        had
+    }
+
     /// Every cell, in order.
     pub fn iter(&self) -> impl Iterator<Item = (CellRef, &Cell)> {
         self.cells.iter().map(|(cell, value)| (*cell, value))
