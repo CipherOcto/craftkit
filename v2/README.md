@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2888 tests.** The MCP server links **all fifteen batteries** in, so the
+**2894 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2888 tests
+cargo test          # 2894 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3816,6 +3816,7 @@ so.
 | the **taking away** of a bin | **built.** A bin goes with the items in it, and a bin that holds a played item is not taken away (§379) | §379 |
 | the **reading** of a cell | **built.** A cell may be read whole: its value, its type, its formula, its text, its format, its note and its link (§380) | §380 |
 | the **shape** and the **name** of a format | **built.** A format may be coded or named, and the names this tree does not write are refused with the reason (§381) | §381 |
+| the **reading** of a media item | **built.** A media item may be read whole: its facts, and the bin it is in and the clips that play it (§382) | §382 |
 
 ### The list of things that are honestly not there: empty
 
@@ -25963,3 +25964,63 @@ tree's ribbon names its formats.
   `[$-F400]h:mm:ss AM/PM`, and here the time is `h:mm:ss AM/PM`: the
   clock of twelve is the clock, and the locale of it is a thing this
   tree does not keep.
+
+## 382. The reading of a media item
+
+A media item may be read whole: the answer is everything the item
+holds and everything that is said about it.
+
+### What was built
+
+- The command `film.item.get` gives the **name** of an item, the **id**
+  it has in the editor, the **path** of the media, how long it is in
+  **frames**, whether it was made **offline** on purpose, and the
+  **label** it carries.
+- The **bin** the item is in is derived: it is the item's place in the
+  tree.
+- The **clips** that play the item are derived: they are the edges
+  that name it.
+- A fact that is **not there** is said as nothing: an item with no
+  path has no path, and an item with no label is in no group — the
+  tree's own rule.
+- A node that is **not there** is refused, and so is a node that is
+  not an item.
+
+### What the port found
+
+- **The tree's item carries much more than this tree's item.** The
+  tree's item holds the **media** it points at, an **interpretation**,
+  the **marks** in and out, the **markers** on it, a **proxy**, and the
+  **identity** of the file — its size and a fingerprint, so that a
+  relinking may tell a moved original from another file of the same
+  name. Here an item holds four facts and a label: the id it has in
+  the editor, the path, the length and the offline flag.
+- **The tree's offline is two things and this tree's is one.** The
+  tree's item may be made offline **on purpose**, and a file that is
+  merely missing is found out at run time by the media pool. Here the
+  flag says that the item was made offline on purpose and says
+  nothing about whether the file is there.
+- **The tree's marks are not here.** A mark in and a mark out belong to
+  the media, and a clip plays the material between them; here the
+  material a clip plays is the clip's own **source in**.
+
+### What it cost
+
+- **Six tests** in the film battery (`tests/itemreading.rs`): an item
+  being read whole, the bin of an item being derived, the clips that
+  play an item being derived, a label being said, a node that is not
+  there being refused, and a node that is not an item being refused.
+- **One new command**: `film.item.get`. The film battery now carries
+  **49** commands and the MCP server **498**.
+
+### What it does not settle
+
+- **The tree's media, its proxies and its identity are not here.** An
+  item here says where the media is and how long it is, and the tree
+  says much more about the file itself.
+- **The tree's media pool is not here.** The tree's pool lists the
+  media of a project with the columns it chooses, and it finds the
+  media that is missing; here the project is read node by node.
+- **The tree's relinking is not here**, and so the fingerprint that
+  would tell a moved original from another file of the same name is
+  not here either.
