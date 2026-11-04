@@ -28982,7 +28982,7 @@ A CAD layer is more than a name: it has **settings**.
 
 ### What it cost
 
-- **Four tests** in the cad battery (`tests/layers.rs`): the settings
+- **Four tests** in the cad battery (`tests/layersettings.rs`): the settings
   of a layer may be set, the flags of a layer may be set, a colour
   that is no colour is refused, and a layer that is off is not drawn.
 - **One new module** (`layersettings`): the settings of a layer are their
