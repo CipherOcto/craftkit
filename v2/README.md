@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3070 tests.** The MCP server links **all fifteen batteries** in, so the
+**3076 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3070 tests
+cargo test          # 3076 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3846,6 +3846,7 @@ so.
 | the **shape** of a distribution | **built.** A formula may ask the shape of a distribution: the normal, the gamma, the error function, Student's t, the chi-square, the F, the counts and the beta (§409) | §409 |
 | the **cash flows** of a plan | **built.** A formula may ask about a series of payments: the rate at which they are worth nothing, what a sum grows to, and the interest and the principal of a run of payments (§410) | §410 |
 | the **words** of a number and the **letters** of a text | **built.** A formula may ask the words of a number and the letters of a text: Roman numerals, another base, a character and its code, and a text for a URL (§411) | §411 |
+| the **deviations** of a set | **built.** A formula may ask the deviations of a set, its means, its skew, its ranks and its percentiles — the tree's two ways of each (§412) | §412 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27879,4 +27880,65 @@ A formula may ask the words of a number and the letters of a text.
 - **The tree's `WEBSERVICE` and `FILTERXML` are not here**: they want
   the network and an XML parser, and a kit that runs in a browser may
   have neither.
+
+## 412. The deviations of a set
+
+A formula may ask the deviations of a set, its means, its skew, its
+ranks and its percentiles.
+
+### What was built
+
+- The functions `AVEDEV`, `DEVSQ`, `GEOMEAN`, `HARMEAN`, `TRIMMEAN`,
+  `KURT`, `SKEW`, `SKEW.P`, `STANDARDIZE`, `FISHER` and `FISHERINV`.
+- The **two ways** of the tree's order statistics: `PERCENTILE.INC`
+  and `PERCENTILE.EXC`, `QUARTILE.INC` and `QUARTILE.EXC`, and
+  `PERCENTRANK`, `PERCENTRANK.INC` and `PERCENTRANK.EXC`.
+- The **two ways** of the tree's place: `RANK.EQ` and `RANK.AVG`, and
+  the **two ways** of the spread: `STDEV.S`, `STDEV.P`, `VAR.S` and
+  `VAR.P`, and `MODE.SNGL`.
+- The **rules** are the tree's: a set of fewer than four numbers has
+  no kurtosis and a set of fewer than three has no skew, a geometric
+  and a harmonic mean want every number **positive**, a trimmed mean
+  wants a fraction between zero and one and not either end, and a
+  number that is not in the list has no place in it.
+
+### What the port found
+
+- **The tree's percentiles are two rules and not one with a flag.**
+  The **inclusive** percentile of thirty per cent of four numbers is
+  1.9 — the fraction of the way between the first and the last — and
+  the **exclusive** one of a ninth of nine numbers is 2.5, because it
+  counts the numbers on both sides. Here the same, and the same two
+  rules.
+- **The tree's percent rank is cut to a number of digits and not
+  rounded.** `PERCENTRANK` of five in ten numbers is 0.583 and not
+  0.5833 — the tree cuts it to three digits by default, and the
+  number of digits is an argument. Here the same, and the same cut.
+- **The tree's place of a number is two numbers when the number is
+  tied.** `RANK.EQ` of three and a half among five is three, and
+  `RANK.AVG` is three and a half — the average of the places the tied
+  numbers take. Here the same.
+- **The tree's skew and its kurtosis are of a sample, and there is
+  another skew for the whole.** `SKEW` wants three numbers and
+  `KURT` wants four, and `SKEW.P` is the skew of the whole set. Here
+  the same.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/descriptive.rs`): the
+  deviations and the means, the trimmed mean and the skew, the place
+  of a number, the percentiles, the percentage place, and the errors.
+- **No new module**: the statistics module of §397 grows. **No new
+  command**: a function is not a command, and the grid battery still
+  carries **67** commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's `MODE.MULT` is not here**: it returns every mode, and
+  v2 has no arrays.
+- **The tree's `FREQUENCY` is not here**, for the same reason: it
+  counts into bins and answers with a column.
+- **The tree's `GEOMEAN` of a number that is not positive is a number
+  error**, and so is here; the tree does not say what the geometric
+  mean of a set with a zero in it is.
 
