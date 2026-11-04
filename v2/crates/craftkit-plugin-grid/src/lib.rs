@@ -19,6 +19,10 @@
 //! middle, the most frequent, the spread, the order statistics and the
 //! place of a number in a list (the module `statistics`).
 //!
+//! And a formula may do **arithmetic**: round a number, cut it, take
+//! the rest of a division, take its root, raise it to a power — with
+//! the tree's own careful rules (the module `arithmetic`).
+//!
 //! And a formula may **choose**: `IF` takes a condition and the two
 //! values it chooses between, and only the branch that is taken is
 //! computed (the module `formula`).
@@ -214,6 +218,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod arithmetic;
 mod cellread;
 mod clearing;
 mod conditional;

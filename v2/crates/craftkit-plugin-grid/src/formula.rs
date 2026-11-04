@@ -1389,6 +1389,9 @@ impl Book {
         if crate::statistics::is_statistical_function(name) {
             return self.statistics(sheet, name, arguments, being);
         }
+        if crate::arithmetic::is_arithmetic_function(name) {
+            return self.arithmetic(sheet, name, arguments, being);
+        }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();
@@ -1502,6 +1505,59 @@ impl Book {
     ///
     /// A range names a sheet or is in the sheet the formula is in, and
     /// a name stands for a range of cells.
+    /// The **numbers** of an argument: the numbers of every cell of a
+    /// range, and the number of a plain argument.
+    ///
+    /// The text of a range and of a plain argument does not count, and
+    /// a plain argument that is an error is the error.
+    pub(crate) fn numbers_of(
+        &self,
+        sheet: &str,
+        arguments: &[Expr],
+        index: usize,
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Result<Vec<f64>, String> {
+        let Some(argument) = arguments.get(index) else { return Ok(Vec::new()) };
+        match argument {
+            Expr::Range { .. } | Expr::Name(_) => {
+                let (name, area) = self.area_of(sheet, argument)?;
+                let mut numbers = Vec::new();
+                for row in area.start.row..=area.end.row {
+                    for col in area.start.col..=area.end.col {
+                        let value = self.value_of_guarded(&name, CellRef { col, row }, being);
+                        if let Some(number) = value.as_number() {
+                            numbers.push(number);
+                        }
+                    }
+                }
+                Ok(numbers)
+            }
+            other => {
+                let value = self.evaluate(sheet, other, being);
+                if let Value::Error(message) = &value {
+                    return Err(message.clone());
+                }
+                Ok(value.as_number().map(|number| vec![number]).unwrap_or_default())
+            }
+        }
+    }
+
+    /// The **number** an argument says.
+    pub(crate) fn number_at(
+        &self,
+        sheet: &str,
+        arguments: &[Expr],
+        index: usize,
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Result<f64, String> {
+        let Some(argument) = arguments.get(index) else { return Err("#VALUE!".to_string()) };
+        let value = self.evaluate(sheet, argument, being);
+        if let Value::Error(message) = &value {
+            return Err(message.clone());
+        }
+        value.as_number().ok_or_else(|| "#VALUE!".to_string())
+    }
+
     pub(crate) fn area_of(&self, sheet: &str, argument: &Expr) -> Result<(String, Area), String> {
         match argument {
             Expr::Range { sheet: named, start, end } => {
