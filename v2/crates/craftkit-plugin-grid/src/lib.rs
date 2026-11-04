@@ -20,8 +20,9 @@
 //! place of a number in a list (the module `statistics`).
 //!
 //! And a formula may do **arithmetic**: round a number, cut it, take
-//! the rest of a division, take its root, raise it to a power — with
-//! the tree's own careful rules (the module `arithmetic`).
+//! the rest of a division, take its root, raise it to a power, and
+//! find the next whole number that is even or odd — with the tree's
+//! own careful rules (the module `arithmetic`).
 //!
 //! And a formula may ask about an **angle**: its sine and its cosine,
 //! its tangent and their inverses, the hyperbolic ones and the turn of

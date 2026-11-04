@@ -49,6 +49,9 @@ pub fn is_arithmetic_function(name: &str) -> bool {
             | "SUMSQ"
             | "GCD"
             | "LCM"
+            | "EVEN"
+            | "ODD"
+            | "SQRTPI"
     )
 }
 
@@ -154,6 +157,22 @@ fn round_dir(number: f64, digits: i32, up: bool) -> f64 {
 }
 
 /// The rest of a division, with the **sign of the divisor**.
+/// The **next even** or the **next odd** whole number, away from
+/// nothing.
+fn even_or_odd(number: f64, odd: bool) -> f64 {
+    let sign = if number < 0.0 { -1.0 } else { 1.0 };
+    let magnitude = clean(number.abs());
+    let mut whole = magnitude.ceil();
+    if odd {
+        if whole % 2.0 == 0.0 {
+            whole += 1.0;
+        }
+    } else if whole % 2.0 != 0.0 {
+        whole += 1.0;
+    }
+    sign * whole
+}
+
 fn modulo(number: f64, divisor: f64) -> Result<f64, String> {
     if divisor == 0.0 {
         return Err("#DIV/0!".to_string());
@@ -219,12 +238,28 @@ impl Book {
         being: &mut Vec<(String, CellRef)>,
     ) -> Value {
         // The functions of one number.
-        if matches!(name, "ABS" | "SIGN" | "SQRT" | "EXP" | "LN" | "LOG10" | "INT") {
+        if matches!(
+            name,
+            "ABS" | "SIGN" | "SQRT" | "EXP" | "LN" | "LOG10" | "INT" | "EVEN" | "ODD" | "SQRTPI"
+        ) {
             let number = match self.number_at(sheet, arguments, 0, being) {
                 Ok(number) => number,
                 Err(message) => return Value::Error(message),
             };
             return match name {
+                "EVEN" | "ODD" | "SQRTPI" => {
+                    if name == "SQRTPI" {
+                        if number < 0.0 {
+                            Value::Error("#NUM!".to_string())
+                        } else {
+                            Value::Number((number * std::f64::consts::PI).sqrt())
+                        }
+                    } else if name == "EVEN" {
+                        Value::Number(even_or_odd(number, false))
+                    } else {
+                        Value::Number(even_or_odd(number, true))
+                    }
+                }
                 "ABS" => Value::Number(number.abs()),
                 "SIGN" => Value::Number(if number > 0.0 {
                     1.0
