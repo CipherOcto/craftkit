@@ -1392,6 +1392,9 @@ impl Book {
         if crate::arithmetic::is_arithmetic_function(name) {
             return self.arithmetic(sheet, name, arguments, being);
         }
+        if crate::trigonometry::is_trigonometric_function(name) {
+            return self.trigonometry(sheet, name, arguments, being);
+        }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();

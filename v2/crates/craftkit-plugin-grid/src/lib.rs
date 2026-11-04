@@ -23,6 +23,10 @@
 //! the rest of a division, take its root, raise it to a power — with
 //! the tree's own careful rules (the module `arithmetic`).
 //!
+//! And a formula may ask about an **angle**: its sine and its cosine,
+//! its tangent and their inverses, the hyperbolic ones and the turn of
+//! an angle from degrees to radians (the module `trigonometry`).
+//!
 //! And a formula may **choose**: `IF` takes a condition and the two
 //! values it chooses between, and only the branch that is taken is
 //! computed (the module `formula`).
@@ -253,6 +257,7 @@ mod styles;
 mod tabs;
 mod tabsorder;
 mod texts;
+mod trigonometry;
 mod validation;
 mod view;
 mod workbookreading;
