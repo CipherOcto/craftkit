@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3176 tests.** The MCP server links **all fifteen batteries** in, so the
+**3181 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3176 tests
+cargo test          # 3181 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3874,6 +3874,7 @@ so.
 | the **measure** of a drawing | **built.** A drawing is not only a picture: things in it may be measured — how long, how big, how wide and how far apart (§437) | §437 |
 | the **arc** of a drawing | **built.** The cad battery had a kind of entity it could not make: an arc is a centre, a radius and two angles, and it is drawn and hit like the rest (§438) | §438 |
 | the **copy** of an entity | **built.** A copy is a second entity of the same kind, with the same geometry and the same layer, put somewhere else (§439) | §439 |
+| the **mirror** of an entity | **built.** The same entity, turned over a line: every point of it is turned over, and an ellipse takes its major axis with it (§440) | §440 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29139,8 +29140,9 @@ and **scaled**, and they may be **taken away**.
 
 ### What it does not settle
 
-- **The tree's mirror is not here**: an entity may be moved, turned and
-  scaled, and not yet turned over a line.
+- **The tree's mirror was not here when this section was written**: an
+  entity could be moved, turned and scaled, and not yet turned over a
+  line. It is built now (§440).
 - **The tree's copy of an entity was not here when this section was
   written**: an entity was made by a command that makes one, and there
   was no copy of it. It is built now (§439).
@@ -29301,3 +29303,46 @@ and the same layer, put somewhere else.
 - **The tree's copy keeps the name and adds a number is not here**: the
   copy is given its name, so that two things in a block never share a
   name by accident.
+
+## 440. The mirror of an entity
+
+The same entity, turned over a line.
+
+### What was built
+
+- The command `cad.entity.mirror`: it takes the entity and **two
+  points**, and the two points say where the line runs.
+- Every point of the entity is turned over the line: the ends of a
+  line, the centre of a circle, the centre and the two ends of an
+  arc, the points of a polyline, the place of a text and of an insert.
+- An ellipse is turned over with its **major axis turned over too**:
+  the axis is a **vector**, and a vector turned over a line is not a
+  point turned over a line. The **ratio** stays the ratio.
+
+### What the port found
+
+- **The tree's mirror is a line and a selection.** Here the line is
+  **two points** and one entity is mirrored at a time: a line that
+  runs through two points is a line, and a line that is a pair of
+  directions is a line that has to be worked out first.
+- **The tree's mirror turns the entity's own angle**, and here the
+  same — and the reason it has to is the ellipse: its centre is a
+  point and its axis is a vector, and the mirror knows which is which.
+
+### What it cost
+
+- **Five tests** in the cad battery (`tests/mirrors.rs`): a line may
+  be turned over a line, an ellipse has its major axis turned over, a
+  circle keeps its radius, and the two refusals — a line of no length
+  and a node that is not an entity.
+- **One new module** (`mirrors`): the mirror of an entity is its own.
+  The cad battery now carries **34** commands and the MCP server
+  **579**.
+
+### What it does not settle
+
+- **The tree's mirror of a whole selection is not here**: one entity is
+  mirrored at a time.
+- **The tree's mirror over a line at an angle is not tested here**:
+  the line here is the vertical one and the horizontal one, and a
+  line at any angle is the same sum.
