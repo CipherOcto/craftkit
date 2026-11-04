@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2748 tests.** The MCP server links **all fifteen batteries** in, so the
+**2757 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2748 tests
+cargo test          # 2757 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3798,6 +3798,7 @@ so.
 | the **gap** on a track | **built.** The gap that holds a place is closed: the clips after it move up and the time is free again (§361) | §361 |
 | the **clearing** of a cell | **built.** The contents and the format of a cell are cleared apart, and a formula is a content (§362) | §362 |
 | the **reading** of a range of cells | **built.** A range of cells is read: the values, row by row, and the value of a formula cell is derived (§363) | §363 |
+| the **choice** of a value | **built.** A formula may choose with IF, and only the branch that is taken is computed (§364) | §364 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24797,3 +24798,68 @@ row by row.
 - **The tree's read of a picture cell is not here.** A cell may hold a
   picture in the tree and the read of it is the picture; here a picture
   is not a cell value.
+
+## 364. The choice of a value
+
+A formula may **choose**: `IF` takes a condition and the values it
+chooses between, and only the branch that is taken is computed.
+
+### What was built
+
+- The function `IF` takes a condition and the two values it chooses
+  between: `IF(A1>2,"big","small")`.
+- **Only the branch that is taken is computed.** So a formula like
+  `IF(A1=0,"",1/A1)` does not divide by zero when the condition is
+  false — the false branch is never worked out.
+- The **truth** of the condition is the tree's: an empty cell is false,
+  a number is true when it is not zero, a boolean is itself, and the
+  text `TRUE` or `FALSE` is the boolean it names. Any other text is an
+  error, and so is an error that is the condition.
+- A formula of **one argument** is the truth of its condition, and a
+  formula of **two arguments** has `FALSE` for the false branch. A
+  formula of **more than three** arguments is an error.
+
+### What the port found
+
+- **The tree's choice is lazy and so is this one — and here it costs
+  nothing.** The tree computes a formula's value and writes it beside
+  the formula, so a lazy branch is a branch the tree must remember not
+  to compute; here a formula's value is **derived** and is worked out
+  every time it is asked for, so the branch that is not taken is never
+  worked out because it is never reached.
+- **The tree has an argument that is not there and this tree does
+  not.** The tree's formula language has a *missing* argument, and the
+  tree's `IF` gives a missing argument the value zero; here an argument
+  that is not written is an argument that is not there, so `IF(A1,1)`
+  is `FALSE` when the condition does not hold and never zero.
+- **The tree's condition may be an array and this tree's may not.** The
+  tree's `IF` over a range of conditions is an **array formula** that
+  spills; here a range is a range of cells and a condition is one
+  value, so a spilled `IF` is not a thing this tree has.
+- **The tree's text is `TRUE` or `FALSE` and nothing else.** The tree's
+  truth of a text is the text `TRUE` or `FALSE`, in any case, and any
+  other text is a `#VALUE!`; so is this one.
+
+### What it cost
+
+- **Nine tests** in the grid battery (`tests/choice.rs`): a condition
+  that holds taking the first branch, a condition that does not hold
+  taking the second, the branch that is not taken not being computed,
+  a formula of one argument being the truth of its condition, a
+  formula of two arguments having `FALSE` for the false branch, a
+  formula of more than three arguments being an error, a condition
+  that is text being an error, a condition that is an error being that
+  error, and an empty cell as the condition being false.
+- **No new command**: the choice is a function of the formula
+  language. The grid battery still carries **53** commands and the MCP
+  server **481**.
+
+### What it does not settle
+
+- **The tree's other choices are not here.** The tree has `IFS`,
+  `IFERROR`, `IFNA`, `SWITCH` and `CHOOSE`, and each of them chooses
+  too; here there is one choice, and the others would be the same
+  choice written again.
+- **The tree's array formulas are not here.** A condition that is a
+  range of cells is a spilled formula in the tree and is not a thing
+  this tree has.
