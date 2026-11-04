@@ -32,6 +32,10 @@
 //! makes it work out, the interest of one payment and the rate a sum
 //! grows at — with the tree's own rules (the module `finance`).
 //!
+//! And a formula may ask what a thing that wears out is worth now, a
+//! period at a time: the straight line, the sum of the years, the
+//! declining balance and the double of it (the module `depreciation`).
+//!
 //! And a formula may **choose**: `IF` takes a condition and the two
 //! values it chooses between, and only the branch that is taken is
 //! computed (the module `formula`).
@@ -234,6 +238,7 @@ mod conditional;
 mod criteria;
 mod dates;
 mod datetimes;
+mod depreciation;
 mod fill;
 mod filters;
 mod finance;

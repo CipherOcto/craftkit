@@ -176,20 +176,6 @@ fn newton(function: &impl Fn(f64) -> f64, guess: f64) -> Option<f64> {
 }
 
 impl Book {
-    /// The **number** an argument says, if the argument is there.
-    fn optional_number(
-        &self,
-        sheet: &str,
-        arguments: &[Expr],
-        index: usize,
-        being: &mut Vec<(String, CellRef)>,
-    ) -> Result<Option<f64>, String> {
-        match arguments.get(index) {
-            Some(_) => Ok(Some(self.number_at(sheet, arguments, index, being)?)),
-            None => Ok(None),
-        }
-    }
-
     /// The **financial functions**.
     pub(crate) fn finance(
         &self,

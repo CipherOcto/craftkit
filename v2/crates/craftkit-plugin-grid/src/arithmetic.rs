@@ -66,7 +66,7 @@ fn clean(number: f64) -> f64 {
 /// The tree's rule: the number is written with fifteen significant
 /// digits first, and the rounding is done on those digits, so that
 /// `2.675` rounds to `2.68` and not to `2.67`.
-fn round_half_away(number: f64, digits: i32) -> f64 {
+pub(crate) fn round_half_away(number: f64, digits: i32) -> f64 {
     if !number.is_finite() || number == 0.0 {
         return number;
     }

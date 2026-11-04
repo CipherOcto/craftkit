@@ -1398,6 +1398,9 @@ impl Book {
         if crate::finance::is_financial_function(name) {
             return self.finance(sheet, name, arguments, being);
         }
+        if crate::depreciation::is_depreciation_function(name) {
+            return self.depreciation(sheet, name, arguments, being);
+        }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
         let mut plain: Vec<Value> = Vec::new();
@@ -1549,6 +1552,23 @@ impl Book {
     }
 
     /// The **number** an argument says.
+    /// The **number** an argument says, if the argument is there.
+    ///
+    /// An argument that is not there is **none** and not a zero: a
+    /// function with a default says what the default is.
+    pub(crate) fn optional_number(
+        &self,
+        sheet: &str,
+        arguments: &[Expr],
+        index: usize,
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Result<Option<f64>, String> {
+        match arguments.get(index) {
+            Some(_) => Ok(Some(self.number_at(sheet, arguments, index, being)?)),
+            None => Ok(None),
+        }
+    }
+
     pub(crate) fn number_at(
         &self,
         sheet: &str,
