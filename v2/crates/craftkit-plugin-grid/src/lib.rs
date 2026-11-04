@@ -28,6 +28,11 @@
 //! was looked for, with the tree's wildcards and the tree's rule about
 //! the case (the module `finding`).
 //!
+//! And a cell may carry a **note**: a piece of text that says
+//! something about the cell and is not the cell's value. The note
+//! belongs to the sheet and names the cell, as the tree's comment
+//! does (the module `notes`).
+//!
 //! And a workbook may carry **names**: a word that stands for a range of
 //! cells, and a formula may use the word where it would use the range
 //! (the module `names`).
@@ -175,6 +180,7 @@ mod fractions;
 mod hiding;
 mod merges;
 mod names;
+mod notes;
 mod reading;
 mod removal;
 mod sections;
@@ -202,6 +208,7 @@ use formula::{Book, CellRef, Cells, Value};
 pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
 pub use merges::{ClearMerge, SetMerge};
 pub use names::{DeleteName, SetName};
+pub use notes::{DeleteNote, GetNote, SetNote};
 pub use reading::ReadRange;
 pub use removal::RemoveSheet;
 pub use sheetnames::RenameSheet;
@@ -1185,8 +1192,17 @@ impl ClearCell {
         let mut cells = sheet_cells_mut(node);
         let was_there = cells.clear(cell);
         node.data["cells"] = cells_into(&cells);
-        Ok(Outcome::changed(format!("emptied the cell {}", cell.to_text()))
-            .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "was_there": was_there })))
+        // The **note** goes with the cell: the tree's *clear all*
+        // takes the comment of the cell with it.
+        let mut notes = notes::notes_of(node);
+        let had_note = notes.remove(&cell.to_text()).is_some();
+        node.data["notes"] = notes::notes_into(&notes);
+        Ok(Outcome::changed(format!("emptied the cell {}", cell.to_text())).with_data(json!({
+            "sheet": sheet,
+            "cell": cell.to_text(),
+            "was_there": was_there,
+            "had_note": had_note,
+        })))
     }
 }
 
@@ -1402,8 +1418,11 @@ craftkit_sdk::plugin_anchor!(
     MoveSheet,
     ClearContents,
     ClearFormat,
+    DeleteNote,
     FindCells,
+    GetNote,
     ReadRange,
+    SetNote,
     RemoveSheet,
     SetCell,
     SetFormula,
