@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3010 tests.** The MCP server links **all fifteen batteries** in, so the
+**3016 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3010 tests
+cargo test          # 3016 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3836,6 +3836,7 @@ so.
 | the **trigonometry** of a formula | **built.** A formula may ask about an angle: its sine and its cosine, its tangent and their inverses, and the turn of an angle from degrees to radians (§399) | §399 |
 | the **value** of money over time | **built.** A formula may ask what a sum of money is worth now and later: the payment of a loan, its present and future worth, the rate that makes it work out, and the interest of one payment (§400) | §400 |
 | the **wearing out** of an asset | **built.** A formula may ask what a thing that wears out is worth now, a period at a time: the straight line, the sum of the years, the declining balance and the double of it (§401) | §401 |
+| the **price** of a discount security | **built.** A formula may ask the price of a security that is sold at a discount and redeemed at its value: the discount, the price, the yield, the interest and the bill (§402) | §402 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27197,4 +27198,74 @@ a time.
 - **The tree's `DB` and `DDB` do not say what a life of a fraction of
   a year means** — the tree truncates the period and says nothing
   more, and here the same.
+
+## 402. The price of a discount security
+
+A formula may ask about a security that is sold at a discount and
+redeemed at its value.
+
+### What was built
+
+- The functions `DISC`, `PRICEDISC`, `YIELDDISC`, `INTRATE`,
+  `RECEIVED`, `TBILLPRICE`, `TBILLYIELD` and `TBILLEQ`.
+- `DISC` is the **discount** of such a security, `PRICEDISC` is the
+  **price** of one from its discount, `YIELDDISC` is the **yield**,
+  `INTRATE` is the **rate of interest**, and `RECEIVED` is the amount
+  **received** at the end.
+- `TBILLPRICE` is the price of a **bill**, `TBILLYIELD` is its yield,
+  and `TBILLEQ` is the **equivalent yield** — the yield on the same
+  footing as a bond's, which is a different number.
+- The **basis** is the tree's: a number from zero to four, and no
+  other. It says how the days of a year are counted — the 30/360 of
+  the basis zero, the actual days of the basis one, the 360 of the
+  basis two, the 365 of the basis three, and the European 30/360 of
+  the basis four.
+- The **errors** are the tree's: a settlement that is not before the
+  maturity is `#NUM!`, a price or a redemption of nothing is `#NUM!`,
+  a basis outside the five is `#NUM!`, and a bill of more than a year
+  is `#NUM!`.
+
+### What the port found
+
+- **The tree's 30/360 has two of them and the difference is the
+  end of February.** The American one — the basis zero — treats the
+  last day of February as the thirtieth, and the European one — the
+  basis four — simply cuts every day to the thirtieth. Here both, and
+  the difference is visible in the numbers.
+- **The tree's year of a security depends on the basis and not only on
+  the calendar.** The basis zero, two and four count a year of three
+  hundred and sixty days, the basis three counts three hundred and
+  sixty-five, and the basis one — the actual over actual — counts
+  three hundred and sixty-five or three hundred and sixty-six, by
+  the year the **settlement** is in. Here the same.
+- **The tree's bill is at most a year long and it says so.** A bill
+  that matures more than twelve months after its settlement is
+  `#NUM!`, and the twelve months are counted by the month, with the
+  day cut to the length of the month it lands in. Here the same.
+- **The tree's equivalent yield changes its rule halfway through the
+  year.** A bill of a hundred and eighty-two days or less is a simple
+  formula; a longer one is solved from the price, and a price that
+  admits no answer is `#NUM!`. Here the same, and the two rules are
+  the tree's.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/securities.rs`): the
+  discount and the yield of a security, the price of one, the interest
+  and the amount received, the price and the yield of a bill, the
+  equivalent yield, and the errors.
+- **One new module**: `securities`. **No new command**: a function is
+  not a command, and the grid battery still carries **67** commands and
+  the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's coupon functions are not here**: the days of a coupon
+  period, the number of coupons and the dates around them.
+- **The tree's bonds are not here**: the price and the yield of a
+  bond, its duration, and the two families of odd first and odd last
+  periods.
+- **The tree's accrued interest is not here**: the interest of a bond
+  between two dates, and the tree's French depreciation that wants
+  dates and a basis.
 
