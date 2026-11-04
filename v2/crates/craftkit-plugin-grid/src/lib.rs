@@ -165,6 +165,7 @@ mod sheetnames;
 mod sizes;
 mod styles;
 mod tabs;
+mod tabsorder;
 mod validation;
 mod view;
 
@@ -186,6 +187,7 @@ pub use sheetnames::RenameSheet;
 pub use sizes::{SetColumnWidth, SetRowHeight};
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
 pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
+pub use tabsorder::MoveSheet;
 pub use validation::{CheckValidation, ClearValidation, SetValidation};
 pub use view::{FreezePanes, SetView, SetZoom, UnfreezePanes};
 
@@ -1376,6 +1378,7 @@ craftkit_sdk::plugin_anchor!(
     AddWorkbook,
     AddSheet,
     RenameSheet,
+    MoveSheet,
     RemoveSheet,
     SetCell,
     SetFormula,
