@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3034 tests.** The MCP server links **all fifteen batteries** in, so the
+**3040 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3034 tests
+cargo test          # 3040 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3840,6 +3840,7 @@ so.
 | the **coupons** of a bond | **built.** A formula may ask about a bond: the days around its coupon period, the price of it, the yield, the duration and the price of one that is paid out (§403) | §403 |
 | the **combinations** of things | **built.** A formula may ask how many ways there are to choose: the factorial, the combinations with and without repetition, the permutations and the multinomial (§404) | §404 |
 | the **bases** and the **bits** | **built.** A formula may ask about a number written in another base — two, eight and sixteen — or about the bits of a number (§405) | §405 |
+| the **information** of a value | **built.** A formula may ask what a value is: whether it is a number or text or an error, whether it is even or odd, and what kind of a value it is (§406) | §406 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27472,4 +27473,71 @@ bits of a number.
   `DEC2BIN("12")` is twelve in the tree and `#VALUE!` here, because
   v2's arguments are typed and a number is a number and not a text
   that says a number.
+
+## 406. The information of a value
+
+A formula may ask what a value is.
+
+### What was built
+
+- The functions `ISBLANK`, `ISERR`, `ISERROR`, `ISNA`, `ISNUMBER`,
+  `ISTEXT`, `ISNONTEXT`, `ISLOGICAL`, `ISEVEN`, `ISODD`, `TYPE`,
+  `ERROR.TYPE`, `NA` and `N`.
+- `TYPE` says the **kind** of a value: one for a number, two for text,
+  four for a boolean and sixteen for an error.
+- `ERROR.TYPE` says the **number** that names an error — two for
+  `#DIV/0!`, three for `#VALUE!`, six for `#NUM!` and seven for
+  `#N/A` — and `NA()` is the error `#N/A` itself.
+- `N` is a value as a **number**: a number stays, a boolean becomes
+  one or nothing, and anything else becomes nothing.
+- The **rules** are the tree's: a value that is **nothing** is not
+  text and not an error, a range reads its **first** cell, and a value
+  that is not a number cannot be even or odd.
+
+### What the port found
+
+- **The tree's `ISNA` is about one error and `ISERR` is about the
+  others.** `ISNA` is true for `#N/A` and `ISERR` is true for every
+  other error and false for `#N/A` — the two are complements of each
+  other and not of `ISERROR`, which is true of all of them. Here the
+  same.
+- **The tree's parity is of the **whole** number and not of the
+  number.** `ISEVEN(-2.5)` is true, because the fraction is cut
+  before the parity is taken, and the sign is of no matter: a number
+  of minus three is odd. Here the same.
+- **The tree's `N` reads a range's first cell**, and a text becomes
+  nothing and not a number — `N("7")` is nothing, not seven. Here the
+  same.
+- **The tree has a function whose name holds a dot, and v2's parser
+  did not.** `ERROR.TYPE` is one of a family of names with dots in
+  them — the distributions of the tree are named `NORM.S.DIST` and
+  `T.DIST.2T` — and v2's parser stopped at the dot and said there was
+  something after the formula. The parser now takes a dot **only when
+  a bracket follows**, so a name with a dot in it is still a name and
+  a sheet whose name has a dot in it is still a sheet. That is a
+  change to the parser and not to the registry, and it is the first
+  thing this arc found that was not a function.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/information.rs`): what a
+  value is, what an error is, the kind of a value, whether a number
+  is even or odd, a value as a number, and the errors.
+- **One new module**: `information`. **No new command**: a function is
+  not a command, and the grid battery still carries **67** commands and
+  the MCP server **521**.
+- **The parser** now reads a function's name with a dot in it, and
+  only when a bracket follows.
+
+### What it does not settle
+
+- **The tree's logical functions are not here**: `AND`, `OR`, `XOR`
+  and `NOT`.
+- **The tree's conditionals are not here**: `IFS`, `IFERROR`,
+  `IFNA`, `SWITCH` and `CHOOSE`.
+- **The tree's `INFO` is not here**: it says things about the machine
+  the formula runs on, and a kit that runs in a browser and on a
+  phone has no one answer to that.
+- **v2 refuses a number written as text** where the tree reads it, so
+  `ISEVEN("2")` is `#VALUE!` here and true there.
 
