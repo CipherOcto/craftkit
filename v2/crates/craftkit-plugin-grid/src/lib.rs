@@ -107,6 +107,12 @@
 //! a value — a text condition is a condition written out, with the
 //! tree's wildcards in it (the module `criteria`).
 //!
+//! And a formula may speak of a **table**: a database of records and a
+//! table of criteria, and the field it aggregates — `DSUM`,
+//! `DAVERAGE`, `DCOUNT`, `DCOUNTA`, `DGET`, `DMAX`, `DMIN`,
+//! `DPRODUCT`, `DVAR`, `DVARP`, `DSTDEV` and `DSTDEVP` (the module
+//! `database`).
+//!
 //! And a sheet may be **searched**: the cells whose text holds what
 //! was looked for, with the tree's wildcards and the tree's rule about
 //! the case (the module `finding`).
@@ -301,6 +307,7 @@ mod clearing;
 mod combinations;
 mod conditional;
 mod criteria;
+mod database;
 mod dates;
 mod datetimes;
 mod daycounts;

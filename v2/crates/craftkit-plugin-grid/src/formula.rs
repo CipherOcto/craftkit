@@ -1489,6 +1489,9 @@ impl Book {
         if crate::words::is_word_function(name) {
             return self.words(sheet, name, arguments, being);
         }
+        if crate::database::is_database_function(name) {
+            return self.database(sheet, name, arguments, being);
+        }
         if name == "CONVERT" {
             return self.convert(sheet, arguments, being);
         }
@@ -1823,6 +1826,65 @@ impl Book {
             }
         }
         Value::Number(total)
+    }
+
+    /// The tree's **database functions**: a table of records, a table
+    /// of criteria and a field.
+    ///
+    /// The database and the criteria are ranges of cells, and the
+    /// field is a label of the database's first row or a number that
+    /// says which column it is.
+    fn database(
+        &self,
+        sheet: &str,
+        name: &str,
+        arguments: &[Expr],
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Value {
+        if arguments.len() < 2 || arguments.len() > 3 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let database = match self.table_of(sheet, &arguments[0], being) {
+            Ok(table) => table,
+            Err(message) => return Value::Error(message),
+        };
+        let criteria = match self.table_of(sheet, &arguments[2], being) {
+            Ok(table) => table,
+            Err(message) => return Value::Error(message),
+        };
+        let field = match arguments.get(1) {
+            Some(argument) => {
+                let value = self.evaluate(sheet, argument, being);
+                if let Value::Error(message) = &value {
+                    return Value::Error(message.clone());
+                }
+                Some(value)
+            }
+            None => None,
+        };
+        match crate::database::call(name, &database, &criteria, field.as_ref()) {
+            Ok(value) => value,
+            Err(message) => Value::Error(message),
+        }
+    }
+
+    /// A **table** of values: the cells of a range, row by row.
+    fn table_of(
+        &self,
+        sheet: &str,
+        argument: &Expr,
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Result<crate::database::Table, String> {
+        let (name, area) = self.area_of(sheet, argument)?;
+        let mut rows = Vec::new();
+        for row in area.start.row..=area.end.row {
+            let mut cells = Vec::new();
+            for col in area.start.col..=area.end.col {
+                cells.push(self.value_of_guarded(&name, CellRef { col, row }, being));
+            }
+            rows.push(cells);
+        }
+        Ok(rows)
     }
 }
 

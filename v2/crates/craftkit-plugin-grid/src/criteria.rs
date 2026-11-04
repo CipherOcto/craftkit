@@ -304,7 +304,7 @@ pub fn compare_text(left: &str, right: &str) -> Ordering {
 /// A number is a number, and a percentage is the number it is a
 /// percentage of. A date is not a number here — see the module's
 /// note.
-fn number_text(text: &str) -> Option<f64> {
+pub(crate) fn number_text(text: &str) -> Option<f64> {
     let text = text.trim();
     if let Some(rest) = text.strip_suffix('%') {
         return number_text(rest).map(|number| number / 100.0);
