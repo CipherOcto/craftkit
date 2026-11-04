@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3112 tests.** The MCP server links **all fifteen batteries** in, so the
+**3115 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3112 tests
+cargo test          # 3115 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3859,6 +3859,7 @@ so.
 | the **confidence** of a mean | **built.** A formula may ask how wide the confidence of a mean is, with the normal distribution and with Student's t (§422) | §422 |
 | the **complex numbers** | **built.** A formula may ask about the complex numbers: a pair of numbers, written as text and read back from text (§423) | §423 |
 | the **playhead** of a sequence | **built.** A video editor has a playhead: the place in the sequence where it is looking, and a fact of the sequence (§424) | §424 |
+| the **edit points** of a sequence | **built.** A sequence has edit points: the places where its clips begin and end, and the razor cuts at one (§425) | §425 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28563,4 +28564,53 @@ is looking.
   no source monitor in this tree.
 - **The tree's edit points are not here**: the playhead may be put
   where it is put and not only at an edit point.
+
+## 425. The edit points of a sequence
+
+A sequence has **edit points**: the places where its clips begin and
+end.
+
+### What was built
+
+- The commands `film.playhead.nextedit`, `film.playhead.prevedit` and
+  `film.timeline.razor`.
+- The two playhead commands walk the **edit points**: the next one
+  after the playhead and the one before it. The **razor** cuts the
+  clip that is under the playhead, at the playhead or at a frame that
+  is named.
+- The **rules** are the tree's: the edit points are the starts and the
+  ends of the clips of every track, a place that is both is one
+  place, and a playhead with no edit point to go to **stays** where it
+  is.
+
+### What the port found
+
+- **The tree's razor cuts the group of the clip and not the clip
+  alone**: a clip that is linked to others is cut with them, and the
+  pieces keep their links. Here the same, and the razor is the split
+  of the clip under the playhead — the same command and the same edit
+  (§266), so that there is one split in this crate and not two.
+- **The tree's edit points are of the clips of the tracks and not of
+  the tracks**: a clip that begins in the middle of another clip's
+  time is an edit point of its own. Here the same.
+- **The tree's playhead walks the edit points of the targeted tracks**
+  and of every track when none is targeted. This tree has no
+  targeting, so every track is walked — and that difference is
+  written down.
+
+### What it cost
+
+- **Three tests** in the film battery (`tests/edits.rs`): the
+  playhead walks the edit points, the razor cuts the clip under the
+  playhead, and the razor refuses a place where there is no clip.
+- **One new module** (`edits`): the edit points and the razor are
+  their own. The film battery now carries **62** commands and the MCP
+  server **529**.
+
+### What it does not settle
+
+- **The tree's targeting is not here**: the edit points of a track are
+  not walked on their own.
+- **The tree's razor of a locked track is not here**: the split says
+  that the track is locked, and that is the refusal.
 
