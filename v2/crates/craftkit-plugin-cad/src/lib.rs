@@ -21,6 +21,8 @@
 //!   weight (the module `layersettings`);
 //! - the **arc** — a piece of a circle, with its centre, its radius
 //!   and its two ends (the module `arcs`);
+//! - the **mirror** of an entity — the same entity turned over a line
+//!   (the module `mirrors`);
 //! - the **copy** of an entity — a second entity of the same kind,
 //!   with the same geometry and the same layer (the module `copies`);
 //! - the **curves** — the ellipse, with its centre, its major axis
@@ -74,6 +76,7 @@ mod copies;
 mod curves;
 mod layersettings;
 mod measurements;
+mod mirrors;
 mod modify;
 mod order;
 
@@ -91,6 +94,7 @@ pub use layersettings::{
     SetLayerOn,
 };
 pub use measurements::{MeasureAngle, MeasureArea, MeasureLength, MeasureRadius};
+pub use mirrors::MirrorEntity;
 pub use modify::{MoveEntity, RemoveEntity, RotateEntity, ScaleEntity};
 pub use order::{BackwardEntity, BringToFront, ForwardEntity, ListEntities, SendToBack};
 
@@ -1089,6 +1093,7 @@ craftkit_sdk::plugin_anchor!(
     AddPolyline,
     AddArc,
     CopyEntity,
+    MirrorEntity,
     ListEntities,
     MoveEntity,
     RotateEntity,
