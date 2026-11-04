@@ -133,6 +133,7 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 mod blend;
+mod eases;
 mod effects;
 mod expressions;
 mod keys;
@@ -146,6 +147,7 @@ mod switches;
 mod time;
 
 pub use blend::SetBlend;
+pub use eases::{EasyEase, ToggleHold};
 pub use effects::{
     AddEffect, DuplicateEffect, ListEffects, RemoveEffect, ReorderEffect, ResetEffect, ToggleEffect,
 };
@@ -740,6 +742,8 @@ craftkit_sdk::plugin_anchor!(
     RemoveKeyframe,
     SetAuto,
     SetContinuous,
+    EasyEase,
+    ToggleHold,
     ValueAt,
     MaskKind,
     AddMask,

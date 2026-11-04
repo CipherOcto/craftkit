@@ -166,23 +166,23 @@ impl Default for Ease {
 #[derive(Debug, Clone)]
 pub(crate) struct Key {
     /// The frame the keyframe is on.
-    frame: u64,
+    pub(crate) frame: u64,
     /// The value of the property at that frame.
     pub(crate) value: serde_json::Value,
     /// The interpolation of the side the keyframe leaves on.
-    interp: Interp,
+    pub(crate) interp: Interp,
     /// The ease of a bezier.
-    ease: Ease,
+    pub(crate) ease: Ease,
     /// The interpolation of the side the keyframe is **entered** on.
-    in_interp: Interp,
+    pub(crate) in_interp: Interp,
     /// The ease of the side the keyframe is entered on.
-    in_ease: Ease,
+    pub(crate) in_ease: Ease,
     /// Whether the keyframe is an **auto** bezier: its ease is not
     /// written down but comes from its neighbours.
-    auto: bool,
+    pub(crate) auto: bool,
     /// Whether the keyframe is **continuous**: its two sides are
     /// locked to each other.
-    continuous: bool,
+    pub(crate) continuous: bool,
 }
 
 impl Key {
@@ -224,7 +224,7 @@ impl Key {
     }
 
     /// The keyframe, as the payload holds it.
-    fn to_json(&self) -> serde_json::Value {
+    pub(crate) fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
             "frame": self.frame,
             "value": self.value,
@@ -253,7 +253,7 @@ pub(crate) fn keys_of(value: &serde_json::Value) -> Option<Vec<Key>> {
 /// The rest of the value is kept: a property may carry more than its
 /// keyframes, and taking it away would be taking away something the
 /// caller did not ask about.
-fn with_keys(value: &serde_json::Value, keys: &[Key]) -> serde_json::Value {
+pub(crate) fn with_keys(value: &serde_json::Value, keys: &[Key]) -> serde_json::Value {
     let list: Vec<serde_json::Value> = keys.iter().map(|key| key.to_json()).collect();
     let mut new = value.clone();
     if !new.is_object() {
