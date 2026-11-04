@@ -25,6 +25,9 @@
 //!   that target **may be opened** is derived: the tree's rule, that a
 //!   link the system follows is a web link or a mail link and nothing
 //!   else (the module `links`);
+//! - the **cells** of a table — a grid of values, read and written a
+//!   cell at a time, with rows and columns going in and coming out
+//!   (the module `tables`);
 //! - the **resolution** of a revision — it may be accepted or
 //!   rejected, and the block's text and runs are rewritten together
 //!   (the module `resolving`);
@@ -108,6 +111,7 @@ mod numbering;
 mod page;
 mod resolving;
 mod revisions;
+mod tables;
 
 pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
 pub use comments::{DeleteComment, GetComment, SetComment};
@@ -120,6 +124,7 @@ pub use numbering::{AddList, ReadNumber, SetNumbering};
 pub use page::{GetPage, SetPage};
 pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
 pub use revisions::ReadRevisions;
+pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell};
 
 /// The prose layer.
 ///
@@ -605,6 +610,28 @@ impl AddTable {
                 message: "the rows are a list".to_string(),
             });
         }
+        // A table is a **grid**: every row as long as every other row.
+        {
+            let mut width: Option<usize> = None;
+            for row in rows.as_array().unwrap_or(&Vec::new()) {
+                let Some(cells) = row.as_array() else {
+                    return Err(EngineError::Failed {
+                        id: "prose.block.table.add".to_string(),
+                        message: "a row of a table is a list of cells".to_string(),
+                    });
+                };
+                match width {
+                    None => width = Some(cells.len()),
+                    Some(width) if width != cells.len() => {
+                        return Err(EngineError::Failed {
+                            id: "prose.block.table.add".to_string(),
+                            message: "the rows of a table are the same length".to_string(),
+                        });
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
         add_block(
             session,
             self.document.0,
@@ -879,6 +906,12 @@ craftkit_sdk::plugin_anchor!(
     SetLineSpacing,
     AcceptRevision,
     RejectRevision,
+    GetCell,
+    SetCell,
+    AddRow,
+    RemoveRow,
+    AddColumn,
+    RemoveColumn,
     AcceptAllRevisions,
     RejectAllRevisions,
     BlocksEvaluator,
