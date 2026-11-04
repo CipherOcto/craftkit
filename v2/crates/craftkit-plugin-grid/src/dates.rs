@@ -320,6 +320,41 @@ pub fn to_serial(year: i32, month: u32, day: u32, system: System) -> Option<f64>
     Some(serial as f64)
 }
 
+/// The **serial** of a date that is written with a **rollover**.
+///
+/// The tree's `DATE`: the month may be outside the year and the day
+/// outside the month, and both roll over — the 13th month is the
+/// January of the next year, and the 32nd day of January is the 1st
+/// of February. And a year below 1900 is a year **after** 1900: the
+/// year 24 is the year 1924.
+///
+/// A date that is outside the calendar of the system is refused.
+pub fn to_serial_rolled(year: i64, month: i64, day: i64, system: System) -> Option<f64> {
+    let year = if (0..1900).contains(&year) { year + 1900 } else { year };
+    let months = month.checked_sub(1)?;
+    let year = year.checked_add(months.div_euclid(12))?;
+    let month = months.rem_euclid(12) + 1;
+    let first_year = match system {
+        System::Y1900 => 1900,
+        System::Y1904 => 1904,
+    };
+    if !(first_year..=9999).contains(&year) {
+        return None;
+    }
+    let month = u32::try_from(month).ok()?;
+    let year = i32::try_from(year).ok()?;
+    let first = days_from_civil(year, month, 1);
+    let first = match system {
+        System::Y1900 => first - UNIX_1899_12_30 - i64::from(year == 1900 && month <= 2),
+        System::Y1904 => first - UNIX_1904_01_01,
+    };
+    let serial = first.checked_add(day)?.checked_sub(1)?;
+    if !(0..=system.max_serial()).contains(&serial) {
+        return None;
+    }
+    Some(serial as f64)
+}
+
 /// How many days a month has.
 ///
 /// February 1900 has **29** days here, because the tree's calendar has

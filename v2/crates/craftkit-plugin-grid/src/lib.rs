@@ -46,6 +46,10 @@
 //! approximate search is not here, and a lookup that asks for it says
 //! so (the module `lookups`).
 //!
+//! And a formula may **make a date** and take it apart — `DATE`,
+//! `YEAR`, `MONTH` and `DAY` — in the date system of the workbook
+//! (the module `datetimes`).
+//!
 //! And a workbook may carry **names**: a word that stands for a range of
 //! cells, and a formula may use the word where it would use the range
 //! (the module `names`).
@@ -183,6 +187,7 @@ mod clearing;
 mod conditional;
 mod criteria;
 mod dates;
+mod datetimes;
 mod fill;
 mod filters;
 mod finding;

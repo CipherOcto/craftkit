@@ -1134,6 +1134,11 @@ impl Book {
         }
     }
 
+    /// The **date system** of the workbook.
+    pub fn system(&self) -> crate::dates::System {
+        self.system
+    }
+
     /// Say which of a sheet's **rows** are hidden.
     pub fn hide_rows(&mut self, sheet: &str, rows: Vec<u64>) {
         self.hidden.insert(sheet.to_string(), rows);
@@ -1351,6 +1356,9 @@ impl Book {
         }
         if crate::lookups::is_lookup_function(name) {
             return self.looking(sheet, name, arguments, being);
+        }
+        if crate::datetimes::is_date_function(name) {
+            return self.dates(sheet, name, arguments, being);
         }
         // A range argument is the numbers of every cell it covers.
         let mut numbers: Vec<f64> = Vec::new();
