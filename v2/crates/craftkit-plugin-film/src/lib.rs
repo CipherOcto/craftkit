@@ -129,6 +129,11 @@
 //! bins in it, and the bin it is in, which is derived (the module
 //! `binreading`).
 //!
+//! And a **sequence** may carry a **rate**: how many frames there are
+//! in a second — 25, or the tree's own rational rates — and the length
+//! of a sequence in seconds is derived from the frames and the rate
+//! (the module `rates`).
+//!
 //! # The mapping
 //!
 //! | the editor | v2 |
@@ -193,6 +198,7 @@ mod mediamarks;
 mod moving;
 mod naming;
 mod project;
+mod rates;
 mod removal;
 mod replacing;
 mod reversing;
@@ -227,6 +233,7 @@ pub use mediamarks::SetMarks;
 pub use moving::MoveClip;
 pub use naming::RenameClip;
 pub use project::ReadProject;
+pub use rates::{GetRate, SetRate};
 pub use removal::RemoveClip;
 pub use replacing::ReplaceMedia;
 pub use reversing::ReverseClip;
