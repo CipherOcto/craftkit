@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**2702 tests.** The MCP server links **all fifteen batteries** in, so the
+**2710 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 2702 tests
+cargo test          # 2710 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3791,6 +3791,7 @@ so.
 | the **taking away** of a sheet | **built.** A workbook keeps one visible sheet, and a formula that named the sheet reads the error that says which sheet is missing (§354) | §354 |
 | the **taking away** of a track | **built.** A locked track may not be taken away, and the clips on it go with it (§355) | §355 |
 | the **enable** of a clip | **built.** A clip may be disabled: it is on the track and it does not play, and the timeline says how many play (§356) | §356 |
+| the **name** of a clip | **built.** A clip may be named, and the name is its own: it survives the clip being moved (§357) | §357 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24369,3 +24370,63 @@ there, and it does not **play**.
   **selection** and flips every clip in it; here the command takes one
   clip, so there is no selection to flip and no mixed selection to
   invert.
+
+## 357. The name of a clip
+
+A clip may be **named**, and the name is the clip's own.
+
+### What was built
+
+- The command `film.clip.rename` names a clip. The name is trimmed, a
+  name that is **blank** is refused, and a node that is **not a clip**
+  is refused.
+- The name **survives a move**: a clip that has been named is still
+  called that when it is moved, trimmed, split at the head or slowed.
+- A clip that has **not** been named is still shown by the place it is
+  at — `clip at 120` — and that name **follows** the clip, exactly as
+  before.
+- The **split** of a named clip: the piece that keeps the clip's id
+  keeps the name, and the piece that is new is a new clip and is shown
+  by its own place.
+
+### What the port found
+
+- **The tree's clip has a name and this tree's had none.** The tree's
+  clip is an item of a track and it has a name, and the name is what
+  the timeline shows. Here a clip was named by the place it was at,
+  and every edit that moved it wrote the name again — so a name was
+  never a **fact** here, only a spelling of a place.
+- **So the name of a clip is now a fact and a derivation, and the
+  payload says which one it is.** A clip with a `name` in its payload
+  has been given one and it keeps it; a clip without has not, and it is
+  shown by where it is. The two are told apart by the payload and not
+  by a flag that could drift.
+- **The tree's rename takes an item or a clip, and here it takes a
+  clip.** The tree's `clip.rename` renames the item when the caller
+  names one and the clip otherwise; here the items of the project are
+  named when they are added (`film.item.add`) and the clips are named
+  by this command, and the two are two things with two commands.
+
+### What it cost
+
+- **Eight tests** in the film battery (`tests/naming.rs`): a clip that
+  has not been named being shown by its place, a clip being named, the
+  name surviving a move, an unnamed clip following its place, a blank
+  name refused, the split of a named clip, a node that is not a clip
+  refused, and the name being saved.
+- **One new command**: `film.clip.rename`. The film battery now
+  carries **38** commands and the MCP server **472**.
+
+### What it does not settle
+
+- **The tree's items are renamed by the same command and here they are
+  not.** The tree's `clip.rename` renames an item of the project as
+  well, and here `film.item.add` names an item and nothing renames it
+  afterwards.
+- **The tree's clip names are unique and here they are not.** The tree
+  does not say so either, and here two clips may carry the same name —
+  a name is a label and not a key.
+- **The tree's timeline shows a clip's name in its own column and here
+  the timeline shows the places.** The timeline here is a list of
+  starts and lengths, and the name of a clip is in the clip's own
+  evaluation.
