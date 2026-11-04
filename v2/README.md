@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3138 tests.** The MCP server links **all fifteen batteries** in, so the
+**3142 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3138 tests
+cargo test          # 3142 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3867,6 +3867,7 @@ so.
 | the **time** of a composition | **built.** A compositing application has a time cursor: the place in the composition where it is looking, and a fact of the composition (§430) | §430 |
 | the **stack of layers** of a composition | **built.** A compositing composition is a stack: the layers stand in an order, and a layer may be moved in it (§431) | §431 |
 | the **selection** of layers | **built.** The selection is what a person has picked out, or what an agent has named, and it is the session's own state (§432) | §432 |
+| the **settings** of a layer | **built.** A CAD layer is more than a name: it may be on, frozen or locked, it may have a colour, a line type and a line weight (§433) | §433 |
 
 ### The list of things that are honestly not there: empty
 
@@ -28939,4 +28940,56 @@ has named.
   its own.
 - **The tree's walking of the stack with the selection is not here**:
   a command names the layer it acts on.
+
+## 433. The settings of a layer
+
+A CAD layer is more than a name: it has **settings**.
+
+### What was built
+
+- The commands `cad.layer.on`, `cad.layer.freeze`, `cad.layer.lock`,
+  `cad.layer.color`, `cad.layer.fill`, `cad.layer.linetype`,
+  `cad.layer.lineweight` and `cad.layer.list`.
+- A layer may be **on** or off, **frozen** or not, **locked** or not;
+  it may have a **colour** — an index or a name — the colour it is
+  **drawn in** as `#rrggbb`, a **line type** and a **line weight** in
+  millimetres. `cad.layer.list` reads the layers of a drawing and
+  their settings.
+- The **rules** are the tree's: a layer that is off or frozen is **not
+  drawn**, a layer that is locked is drawn and may not be edited, a
+  colour index of nothing is refused, and the words `ByLayer` and
+  `ByBlock` are refused — a layer's colour is its own.
+
+### What the port found
+
+- **The tree's off layer and its frozen layer are not drawn, and so
+  they are not in the extents**: the extents of a drawing are the box
+  that holds what is drawn. Here the same, and the evaluator skips
+  the entities of a layer that is off or frozen — so the extents
+  change when a layer is turned off, which is the tree's rule and not
+  a thing this tree decided.
+- **The tree's `layer.set` is one command that sets any of the
+  settings**, and here they are **one command each**: the tree's own
+  rule is that a command does one thing (§ the registry), and a
+  command that may set eight things is a command that does eight
+  things.
+- **The tree's colour of a layer may be an index or a name, and never
+  `ByLayer` or `ByBlock`**: here the same, and the refusal says which
+  colour was refused.
+
+### What it cost
+
+- **Four tests** in the cad battery (`tests/layers.rs`): the settings
+  of a layer may be set, the flags of a layer may be set, a colour
+  that is no colour is refused, and a layer that is off is not drawn.
+- **One new module** (`layers`): the settings of a layer are their
+  own. The cad battery now carries **16** commands and the MCP server
+  **561**.
+
+### What it does not settle
+
+- **The tree's current layer is not here**: an entity names the layer
+  it is on, and there is no layer that everything goes on.
+- **The tree's plot flag and its transparency are not here**: what a
+  drawing is plotted with is the host's business.
 
