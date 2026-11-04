@@ -84,6 +84,10 @@
 //! factorial, the combinations with and without repetition, the
 //! permutations and the multinomial (the module `combinations`).
 //!
+//! And a formula may ask about a bond whose first or last coupon
+//! period is **not a whole one** — the price and the yield of it (the
+//! module `bonds`).
+//!
 //! And a formula may ask about a **bond**: the days around its coupon
 //! period, the price of it, the yield, the duration and the price of
 //! one that is paid out (the module `bonds`). The **days** between two

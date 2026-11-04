@@ -46,6 +46,10 @@ pub fn is_bond_function(name: &str) -> bool {
             | "MDURATION"
             | "PRICEMAT"
             | "YIELDMAT"
+            | "ODDFPRICE"
+            | "ODDFYIELD"
+            | "ODDLPRICE"
+            | "ODDLYIELD"
     )
 }
 
@@ -163,6 +167,155 @@ fn bond_price(bond: &Bond, rate: f64, yield_: f64, redemption: f64) -> f64 {
     sum - accrued
 }
 
+/// Most **quasi-coupon** periods an odd period may span.
+const MAX_QUASI: i64 = 40_000;
+
+/// The **normal length** of a coupon period under a basis.
+fn normal_length(start: f64, end: f64, frequency: f64, basis: u32) -> f64 {
+    match basis {
+        1 => end - start,
+        3 => 365.0 / frequency,
+        _ => 360.0 / frequency,
+    }
+}
+
+/// The **days** of a span under a basis, or nothing when the span is
+/// empty.
+fn span(system: System, from: f64, to: f64, basis: u32) -> Option<f64> {
+    if to > from { day_count(system, from, to, basis) } else { Some(0.0) }
+}
+
+/// The odd **first** period of a bond.
+struct OddFirst {
+    /// The coupons after the first one up to the maturity.
+    count: f64,
+    /// The whole quasi-coupon periods between the settlement and the
+    /// first coupon.
+    whole: f64,
+    /// The fraction of the quasi-period that holds the settlement.
+    fraction: f64,
+    /// The sum of the days of the quasi-periods over the odd period,
+    /// each over its own length.
+    days: f64,
+    /// The sum of the accrued days of the quasi-periods.
+    accrued: f64,
+    /// How many times a year the bond pays.
+    frequency: f64,
+}
+
+/// The odd **first** period: the quasi-coupon periods counted back
+/// from the first coupon.
+fn odd_first(
+    system: System,
+    settlement: f64,
+    maturity: f64,
+    issue: f64,
+    first: f64,
+    frequency: f64,
+    basis: u32,
+) -> Option<OddFirst> {
+    if !(maturity > first && first > settlement && settlement > issue) {
+        return None;
+    }
+    let anchor = ymd(system, first)?;
+    let end_of_month = anchor.2 == crate::dates::days_in_month(anchor.0, anchor.1);
+    let step = (12.0 / frequency) as i64;
+    let mut days = 0.0;
+    let mut accrued = 0.0;
+    let mut whole: Option<f64> = None;
+    let mut fraction = 0.0;
+    // Walk back from the first coupon: the period k runs from the
+    // quasi-period k + 1 to the quasi-period k.
+    let mut k = 0i64;
+    loop {
+        if k >= MAX_QUASI {
+            return None;
+        }
+        let end = shift_months(system, anchor, -(k * step), end_of_month)?;
+        let start = shift_months(system, anchor, -((k + 1) * step), end_of_month)?;
+        let length = normal_length(start, end, frequency, basis);
+        if length <= 0.0 {
+            return None;
+        }
+        let from = start.max(issue);
+        days += span(system, from, end, basis)? / length;
+        accrued += span(system, from, settle_min(settlement, end), basis)? / length;
+        if start <= settlement && settlement < end {
+            whole = Some(k as f64);
+            fraction = span(system, settlement, end, basis)? / length;
+        }
+        if start <= issue {
+            break;
+        }
+        k += 1;
+    }
+    let whole = whole?;
+    let count = coupons(system, first, maturity, frequency)?.num;
+    Some(OddFirst { count, whole, fraction, days, accrued, frequency })
+}
+
+/// The smaller of two numbers.
+fn settle_min(left: f64, right: f64) -> f64 {
+    if left < right { left } else { right }
+}
+
+/// The **price** of a bond with an odd first period.
+fn odd_first_price(terms: &OddFirst, rate: f64, yield_: f64, redemption: f64) -> f64 {
+    let coupon = 100.0 * rate / terms.frequency;
+    let base = 1.0 + yield_ / terms.frequency;
+    let lead = terms.whole + terms.fraction;
+    let mut price = redemption / base.powf(terms.count + lead) + coupon * terms.days / base.powf(lead);
+    let mut step = 1.0;
+    while step <= terms.count {
+        price += coupon / base.powf(step + lead);
+        step += 1.0;
+    }
+    price - coupon * terms.accrued
+}
+
+/// The odd **last** period: the quasi-coupon periods counted forward
+/// from the last interest date.
+fn odd_last(
+    system: System,
+    settlement: f64,
+    maturity: f64,
+    last: f64,
+    frequency: f64,
+    basis: u32,
+) -> Option<(f64, f64, f64)> {
+    if !(maturity > settlement && settlement > last) {
+        return None;
+    }
+    let anchor = ymd(system, last)?;
+    let end_of_month = anchor.2 == crate::dates::days_in_month(anchor.0, anchor.1);
+    let step = (12.0 / frequency) as i64;
+    let (mut days, mut accrued, mut remaining) = (0.0, 0.0, 0.0);
+    // Walk forward from the last interest date: the period k runs from
+    // the quasi-period k - 1 to the quasi-period k.
+    let mut start = last;
+    let mut k = 1i64;
+    loop {
+        if k > MAX_QUASI {
+            return None;
+        }
+        let end = shift_months(system, anchor, k * step, end_of_month)?;
+        let length = normal_length(start, end, frequency, basis);
+        if length <= 0.0 {
+            return None;
+        }
+        let stop = end.min(maturity);
+        days += span(system, start, stop, basis)? / length;
+        accrued += span(system, start, settle_min(settlement, stop), basis)? / length;
+        remaining += span(system, settlement.max(start), stop, basis)? / length;
+        if end >= maturity {
+            break;
+        }
+        start = end;
+        k += 1;
+    }
+    Some((days, accrued, remaining))
+}
+
 impl Book {
     /// The **bond functions**.
     pub(crate) fn bonds(
@@ -278,6 +431,163 @@ impl Book {
                 } else {
                     Value::Number(duration / (1.0 + yield_ / frequency))
                 }
+            }
+            "ODDFPRICE" | "ODDFYIELD" => {
+                // settlement, maturity, issue, first coupon, rate,
+                // yield or price, redemption, frequency, [basis].
+                let (settlement, maturity, issue, first_coupon, rate, fifth, redemption) = match (
+                    self.number_at(sheet, arguments, 0, being),
+                    self.number_at(sheet, arguments, 1, being),
+                    self.number_at(sheet, arguments, 2, being),
+                    self.number_at(sheet, arguments, 3, being),
+                    self.number_at(sheet, arguments, 4, being),
+                    self.number_at(sheet, arguments, 5, being),
+                    self.number_at(sheet, arguments, 6, being),
+                ) {
+                    (
+                        Ok(settlement),
+                        Ok(maturity),
+                        Ok(issue),
+                        Ok(first_coupon),
+                        Ok(rate),
+                        Ok(fifth),
+                        Ok(redemption),
+                    ) => (settlement, maturity, issue, first_coupon, rate, fifth, redemption),
+                    (Err(message), _, _, _, _, _, _)
+                    | (_, Err(message), _, _, _, _, _)
+                    | (_, _, Err(message), _, _, _, _)
+                    | (_, _, _, Err(message), _, _, _)
+                    | (_, _, _, _, Err(message), _, _)
+                    | (_, _, _, _, _, Err(message), _)
+                    | (_, _, _, _, _, _, Err(message)) => {
+                        return Value::Error(message);
+                    }
+                };
+                let frequency = match self.number_at(sheet, arguments, 7, being) {
+                    Ok(frequency) => match frequency_of(frequency) {
+                        Ok(frequency) => frequency,
+                        Err(message) => return Value::Error(message),
+                    },
+                    Err(message) => return Value::Error(message),
+                };
+                let basis = match self.optional_number(sheet, arguments, 8, being) {
+                    Ok(Some(basis)) => basis,
+                    Ok(None) => 0.0,
+                    Err(message) => return Value::Error(message),
+                };
+                let basis = match basis_of(Some(basis)) {
+                    Ok(basis) => basis,
+                    Err(message) => return Value::Error(message),
+                };
+                if rate < 0.0 || redemption <= 0.0 {
+                    return Value::Error("#NUM!".to_string());
+                }
+                if name == "ODDFPRICE" && fifth < 0.0 {
+                    return Value::Error("#NUM!".to_string());
+                }
+                if name == "ODDFYIELD" && fifth <= 0.0 {
+                    return Value::Error("#NUM!".to_string());
+                }
+                let Some(terms) =
+                    odd_first(system, settlement, maturity, issue, first_coupon, frequency, basis)
+                else {
+                    return Value::Error("#NUM!".to_string());
+                };
+                if name == "ODDFPRICE" {
+                    return Value::Number(odd_first_price(&terms, rate, fifth, redemption));
+                }
+                // The price falls as the yield rises: bracket the
+                // root, then bisect it.
+                let difference = |yield_: f64| odd_first_price(&terms, rate, yield_, redemption) - fifth;
+                let (mut low, mut high) = (-0.999_999 * frequency, 1.0);
+                let mut guard = 0;
+                while difference(high) > 0.0 && guard < 60 {
+                    high *= 2.0;
+                    guard += 1;
+                }
+                if !(difference(low) >= 0.0 && difference(high) <= 0.0) {
+                    return Value::Error("#NUM!".to_string());
+                }
+                for _ in 0..200 {
+                    let middle = 0.5 * (low + high);
+                    if difference(middle) > 0.0 {
+                        low = middle;
+                    } else {
+                        high = middle;
+                    }
+                }
+                Value::Number(0.5 * (low + high))
+            }
+            "ODDLPRICE" | "ODDLYIELD" => {
+                // settlement, maturity, last interest, rate, yield or
+                // price, redemption, frequency, [basis].
+                let (settlement, maturity, last_interest, rate, fifth, redemption) = match (
+                    self.number_at(sheet, arguments, 0, being),
+                    self.number_at(sheet, arguments, 1, being),
+                    self.number_at(sheet, arguments, 2, being),
+                    self.number_at(sheet, arguments, 3, being),
+                    self.number_at(sheet, arguments, 4, being),
+                    self.number_at(sheet, arguments, 5, being),
+                ) {
+                    (
+                        Ok(settlement),
+                        Ok(maturity),
+                        Ok(last_interest),
+                        Ok(rate),
+                        Ok(fifth),
+                        Ok(redemption),
+                    ) => (settlement, maturity, last_interest, rate, fifth, redemption),
+                    (Err(message), _, _, _, _, _)
+                    | (_, Err(message), _, _, _, _)
+                    | (_, _, Err(message), _, _, _)
+                    | (_, _, _, Err(message), _, _)
+                    | (_, _, _, _, Err(message), _)
+                    | (_, _, _, _, _, Err(message)) => {
+                        return Value::Error(message);
+                    }
+                };
+                let frequency = match self.number_at(sheet, arguments, 6, being) {
+                    Ok(frequency) => match frequency_of(frequency) {
+                        Ok(frequency) => frequency,
+                        Err(message) => return Value::Error(message),
+                    },
+                    Err(message) => return Value::Error(message),
+                };
+                let basis = match self.optional_number(sheet, arguments, 7, being) {
+                    Ok(Some(basis)) => basis,
+                    Ok(None) => 0.0,
+                    Err(message) => return Value::Error(message),
+                };
+                let basis = match basis_of(Some(basis)) {
+                    Ok(basis) => basis,
+                    Err(message) => return Value::Error(message),
+                };
+                if rate < 0.0 || redemption <= 0.0 {
+                    return Value::Error("#NUM!".to_string());
+                }
+                if name == "ODDLPRICE" && fifth < 0.0 {
+                    return Value::Error("#NUM!".to_string());
+                }
+                if name == "ODDLYIELD" && fifth <= 0.0 {
+                    return Value::Error("#NUM!".to_string());
+                }
+                let Some((days, accrued, remaining)) =
+                    odd_last(system, settlement, maturity, last_interest, frequency, basis)
+                else {
+                    return Value::Error("#NUM!".to_string());
+                };
+                let coupon = 100.0 * rate / frequency;
+                if name == "ODDLPRICE" {
+                    return Value::Number(
+                        (redemption + days * coupon) / (1.0 + remaining * fifth / frequency)
+                            - accrued * coupon,
+                    );
+                }
+                let paid = fifth + accrued * coupon;
+                if paid <= 0.0 || remaining <= 0.0 {
+                    return Value::Error("#NUM!".to_string());
+                }
+                Value::Number((redemption + days * coupon - paid) / paid * frequency / remaining)
             }
             "PRICEMAT" | "YIELDMAT" => {
                 // A bond that is paid out: the price of it, and the
