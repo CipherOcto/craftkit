@@ -28,6 +28,9 @@
 //! - a **revision** in a run — that it was inserted, deleted or
 //!   reformatted, and by whom: the tree's three kinds, and the words
 //!   of a revision are derived (the module `revisions`);
+//! - a **footnote** — a **node**, and the run that points at it names
+//!   it: the **number** of a footnote is derived, and it is where the
+//!   footnote is referenced (the module `footnotes`);
 //! - a **style** — a node, and the side vector is the document's
 //!   children;
 //! - a **paragraph's style** — a **relation**: an edge that says
@@ -92,6 +95,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem
 
 mod comments;
 mod editing;
+mod footnotes;
 mod links;
 mod numbering;
 mod page;
@@ -101,6 +105,7 @@ pub use comments::{DeleteComment, GetComment, SetComment};
 pub use editing::{
     MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
 };
+pub use footnotes::{AddFootnote, ReadFootnotes};
 pub use links::ReadLinks;
 pub use numbering::{AddList, ReadNumber, SetNumbering};
 pub use page::{GetPage, SetPage};
@@ -208,6 +213,28 @@ impl StyleKind {
     }
 }
 
+/// A **footnote**: a note that belongs to the foot of the page.
+#[derive(NodeKind)]
+#[node_kind(kind = "prose.footnote", label = "Footnote", layer = "prose", evaluates)]
+pub struct FootnoteKind;
+
+impl FootnoteKind {
+    /// Not drawn.
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Not hit.
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What a footnote **means**: what it says.
+    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        Some(json!({
+            "text": node.data.get("text").cloned().unwrap_or(Json::Null),
+        }))
+    }
+}
+
 /// A **list**: a kind of list, and the blocks that are in it.
 #[derive(NodeKind)]
 #[node_kind(kind = "prose.list", label = "List", layer = "prose", evaluates)]
@@ -302,6 +329,7 @@ fn runs_with_text(node: &Node) -> Json {
             "italic": run.get("italic").cloned().unwrap_or(Json::Bool(false)),
             "link": run.get("link").cloned().unwrap_or(Json::Null),
             "revision": run.get("revision").cloned().unwrap_or(Json::Null),
+            "footnote": run.get("footnote").cloned().unwrap_or(Json::Null),
             "text": covered,
         }));
     }
@@ -712,6 +740,31 @@ impl SetRuns {
             // deleted, or its format was changed — and by whom.
             if let Some(revision) = run.get("revision") {
                 crate::revisions::check(revision, "prose.block.runs")?;
+            }
+            // A run may carry a **footnote**: the note it points at.
+            if let Some(footnote) = run.get("footnote") {
+                let Some(footnote) = footnote.as_u64() else {
+                    return Err(EngineError::Failed {
+                        id: "prose.block.runs".to_string(),
+                        message: "a footnote is a note".to_string(),
+                    });
+                };
+                let found = session.document().node(footnote);
+                match found {
+                    Some(node) if node.kind == "prose.footnote" => {}
+                    Some(node) => {
+                        return Err(EngineError::Failed {
+                            id: "prose.block.runs".to_string(),
+                            message: format!("the node `{footnote}` is a `{}` and not a footnote", node.kind),
+                        });
+                    }
+                    None => {
+                        return Err(EngineError::Failed {
+                            id: "prose.block.runs".to_string(),
+                            message: format!("there is no footnote `{footnote}`"),
+                        });
+                    }
+                }
             }
             // A run may carry a **link**: the target it points at.
             // The target is a text and it is bounded; whether it may
