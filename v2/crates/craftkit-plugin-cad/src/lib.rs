@@ -16,6 +16,9 @@
 //!   not a parent;
 //! - a **block insert** — a node that **references** a block: an edge
 //!   from the instance to the definition;
+//! - a **layer's settings** — whether it is on, frozen or locked, its
+//!   colour, the colour it is drawn in, its line type and its line
+//!   weight (the module `layers`);
 //! - the **geometry** — the entity's payload, in the world's units;
 //! - the **extents** — derived, every time, by the evaluator.
 //!
@@ -50,11 +53,17 @@
 )]
 #![forbid(unsafe_code)]
 
+mod layers;
+
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
     Appearance, BlendMode, Canvas, Colour, Document, EngineError, Fill, Node, NodeRef, Number, Outcome, Path,
     Plan, PlanItem, Point, Relation, Session, Stroke, Text,
+};
+pub use layers::{
+    FreezeLayer, ListLayers, LockLayer, SetLayerColor, SetLayerFill, SetLayerLinetype, SetLayerLineweight,
+    SetLayerOn,
 };
 
 /// The CAD layer.
@@ -901,6 +910,16 @@ impl ExtentsEvaluator {
             let mut any = false;
             for block in drawing.children.iter().filter(|child| child.kind == "cad.block") {
                 for entity in block.children.iter().filter(|child| child.kind.starts_with("cad.entity.")) {
+                    // A layer that is off or frozen is not drawn, and
+                    // what is not drawn is not in the extents.
+                    let hidden = document
+                        .relations_from(entity.id, Some(craftkit_sdk::layer::ON_LAYER))
+                        .iter()
+                        .filter_map(|relation| document.node(relation.to))
+                        .any(|layer| !layers::is_drawn(layer));
+                    if hidden {
+                        continue;
+                    }
                     let Some(geometry) = entity.data.get("geometry") else { continue };
                     for (x, y) in points_of(geometry) {
                         any = true;
@@ -954,6 +973,14 @@ craftkit_sdk::plugin_anchor!(
     AddText,
     AddInsert,
     PutOnLayer,
+    SetLayerOn,
+    FreezeLayer,
+    LockLayer,
+    SetLayerColor,
+    SetLayerFill,
+    SetLayerLinetype,
+    SetLayerLineweight,
+    ListLayers,
     ExtentsEvaluator,
     CadPanel
 );
