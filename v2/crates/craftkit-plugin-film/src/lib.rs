@@ -169,6 +169,7 @@ mod markers;
 mod mediamarks;
 mod moving;
 mod naming;
+mod project;
 mod removal;
 mod replacing;
 mod reversing;
@@ -196,6 +197,7 @@ pub use markers::{AddMarker, ClearMarkers, MarkerKind, RemoveMarker, SetMarker};
 pub use mediamarks::SetMarks;
 pub use moving::MoveClip;
 pub use naming::RenameClip;
+pub use project::ReadProject;
 pub use removal::RemoveClip;
 pub use replacing::ReplaceMedia;
 pub use reversing::ReverseClip;
@@ -856,6 +858,7 @@ craftkit_sdk::plugin_anchor!(
     InsertClip,
     SplitClip,
     RemoveClip,
+    ReadProject,
     RemoveItem,
     RippleClip,
     LiftRange,
