@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3016 tests.** The MCP server links **all fifteen batteries** in, so the
+**3022 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3016 tests
+cargo test          # 3022 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3837,6 +3837,7 @@ so.
 | the **value** of money over time | **built.** A formula may ask what a sum of money is worth now and later: the payment of a loan, its present and future worth, the rate that makes it work out, and the interest of one payment (§400) | §400 |
 | the **wearing out** of an asset | **built.** A formula may ask what a thing that wears out is worth now, a period at a time: the straight line, the sum of the years, the declining balance and the double of it (§401) | §401 |
 | the **price** of a discount security | **built.** A formula may ask the price of a security that is sold at a discount and redeemed at its value: the discount, the price, the yield, the interest and the bill (§402) | §402 |
+| the **coupons** of a bond | **built.** A formula may ask about a bond: the days around its coupon period, the price of it, the yield, the duration and the price of one that is paid out (§403) | §403 |
 
 ### The list of things that are honestly not there: empty
 
@@ -27268,4 +27269,77 @@ redeemed at its value.
 - **The tree's accrued interest is not here**: the interest of a bond
   between two dates, and the tree's French depreciation that wants
   dates and a basis.
+
+## 403. The coupons of a bond
+
+A formula may ask about a bond — a security that pays its interest on
+a fixed day of the year and is redeemed at its value.
+
+### What was built
+
+- The functions `COUPDAYBS`, `COUPDAYS`, `COUPDAYSNC`, `COUPNUM`,
+  `COUPNCD`, `COUPPCD`, `PRICE`, `YIELD`, `DURATION`, `MDURATION`,
+  `PRICEMAT` and `YIELDMAT`.
+- The **coupon period** is the period the settlement falls in: the
+  days from the beginning of it to the settlement, the days of it, the
+  days from the settlement to the next coupon, the number of coupons
+  there are, and the dates of the previous and the next coupon.
+- `PRICE` is the **price** of a bond, `YIELD` is the yield that makes
+  that price, and `DURATION` and `MDURATION` are how long the money is
+  tied up — the first in years and the second in a year of the yield.
+- `PRICEMAT` and `YIELDMAT` are a bond that is **paid out**: the price
+  of it and the yield that makes it.
+- The **rules** are the tree's: a **frequency** — how many times a year
+  the bond pays — is one, two or four and no other, a **basis** is a
+  number from zero to four and no other, a settlement that is not
+  before the maturity is `#NUM!`, and a yield that no price can make
+  is `#NUM!`.
+
+### What the port found
+
+- **The tree's coupons are counted from the maturity and not from the
+  settlement.** The bond's dates run backwards from the day it is
+  redeemed, and the period a settlement falls in is the one that
+  contains it — and the count is first **estimated** from the span and
+  then walked into place. Here the same, and the same walk, because an
+  estimate that is not walked is an estimate that can be wrong.
+- **The tree keeps the end of the month when the maturity is at the
+  end of the month.** A bond that is redeemed on the thirtieth of a
+  month pays on the ends of months, and the days of its periods follow.
+  Here the same, and the test here shows it: the coupons of a bond
+  redeemed on the 30th of November fall on the 31st of May and the
+  30th of November, and not on the 15th of May.
+- **The tree's days of a coupon period depend on the basis and not
+  only on the calendar.** The basis one counts the actual days, the
+  basis three counts three hundred and sixty-five days over the number
+  of coupons, and every other basis counts three hundred and sixty.
+  Here the same.
+- **The tree's yield is a search over a price that falls as the yield
+  rises**, and the bracket is doubled until the answer is inside it.
+  Here the same, and the same refusal: a bond whose price no yield
+  makes is `#NUM!`, and the tree does not pretend otherwise.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/bonds.rs`): the days
+  around a coupon period on three bases, the coupons and their dates,
+  the price of a bond, the yield and the two durations, the bond that
+  is paid out, and the errors.
+- **Two new modules**: `bonds` and `daycounts`. The **day counts** —
+  the tree's five bases, the shift of months and the fraction of a
+  year — are now one module, and the securities of §402 use them too.
+- **No new command**: a function is not a command, and the grid battery
+  still carries **67** commands and the MCP server **521**.
+
+### What it does not settle
+
+- **The tree's odd first and odd last coupon periods are not here**:
+  the price and the yield of a bond whose first or last period is not
+  a whole one.
+- **The tree's accrued interest is not here**: the interest of a bond
+  between two dates.
+- **The tree's `COUPDAYBS` is the tree's own and not a plain
+  subtraction**: the days from the beginning of the period are counted
+  under the basis, and under the 30/360 the end of February is the
+  thirtieth — so the number is not always what a subtraction says.
 
