@@ -59,6 +59,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod bleed;
 mod items;
 mod links;
 mod order;
@@ -72,6 +73,7 @@ use craftkit_sdk::{
     Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Relation, Session, Text,
 };
 
+pub use bleed::SetBleed;
 pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem};
 pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
 pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
@@ -107,6 +109,7 @@ impl DocumentKind {
             "layers": node.children.iter().filter(|child| child.kind == "layout.layer").count(),
             "stories": node.children.iter().filter(|child| child.kind == "layout.story").count(),
             "assets": node.children.iter().filter(|child| child.kind == "layout.asset").count(),
+            "bleed": crate::bleed::bleed_of(node).to_json(),
         }))
     }
 }
@@ -181,10 +184,15 @@ impl PageKind {
     }
 
     /// What a page **means**: its size.
-    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+    fn evaluate(node: &Node, document: &Document) -> Option<Json> {
+        let bleed = match crate::bleed::bleed_box_of(document, node) {
+            Some((x, y, width, height)) => json!({ "x": x, "y": y, "width": width, "height": height }),
+            None => Json::Null,
+        };
         Some(json!({
             "width": node.data.get("width").cloned().unwrap_or(Json::Null),
             "height": node.data.get("height").cloned().unwrap_or(Json::Null),
+            "bleed": bleed,
         }))
     }
 }
@@ -857,6 +865,7 @@ craftkit_sdk::plugin_anchor!(
     GraphicKind,
     GroupKind,
     AddDocument,
+    SetBleed,
     AddSpread,
     AddPage,
     AddLayer,
