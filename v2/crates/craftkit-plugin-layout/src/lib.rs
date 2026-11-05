@@ -63,6 +63,7 @@ mod items;
 mod links;
 mod order;
 mod paint;
+mod rotation;
 mod styles;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
@@ -75,6 +76,7 @@ pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem}
 pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
 pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
 pub use paint::{SetFill, SetStroke};
+pub use rotation::RotateItem;
 pub use styles::{AddStyle, SetItemStyle, SetStyleFill, SetStyleStroke};
 
 /// The layout layer.
@@ -291,6 +293,9 @@ macro_rules! item_kind {
                     "layer": edge_name(document, node.id, "layout.on_layer"),
                     "story": edge_name(document, node.id, "layout.text"),
                     "opacity": crate::items::opacity_of(node),
+                    "rotation": crate::rotation::rotation_of(node),
+                    "radians": crate::rotation::radians_of(node),
+                    "turned": crate::rotation::turned_json(node),
                     "fill": crate::styles::effective_paint(document, node).0,
                     "stroke": crate::styles::effective_paint(document, node).1,
                     "own_fill": crate::paint::fill_of(node),
@@ -864,6 +869,7 @@ craftkit_sdk::plugin_anchor!(
     LockItem,
     UnlockItem,
     ScaleItem,
+    RotateItem,
     ListItems,
     BringToFront,
     SendToBack,
