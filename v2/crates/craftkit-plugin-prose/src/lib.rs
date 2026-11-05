@@ -116,6 +116,7 @@ mod links;
 mod numbering;
 mod page;
 mod paragraph;
+mod references;
 mod resolving;
 mod revisions;
 mod styles;
@@ -134,6 +135,7 @@ pub use links::ReadLinks;
 pub use numbering::{AddList, ReadNumber, SetNumbering};
 pub use page::{GetPage, SetPage};
 pub use paragraph::{ReadBlockParagraph, ReadStyleParagraph, SetStyleParagraph};
+pub use references::{AddReference, ReadReference, SetReference};
 pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
 pub use revisions::ReadRevisions;
 pub use styles::{ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
@@ -234,6 +236,40 @@ impl EquationKind {
         Some(json!({
             "text": node.data.get("text").cloned().unwrap_or(Json::Null),
             "parts": node.data.get("parts").cloned().unwrap_or(Json::Null),
+        }))
+    }
+}
+
+/// A **cross-reference**: a block that stands for the text of a
+/// block that carries a bookmark.
+///
+/// The text is **derived** — worked out from the block it points at —
+/// and it is never written down, so a reference cannot be out of
+/// date.
+#[derive(NodeKind)]
+#[node_kind(kind = "prose.block.reference", label = "Reference", layer = "prose", evaluates)]
+pub struct ReferenceKind;
+
+impl ReferenceKind {
+    /// Not drawn.
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Not hit.
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What a reference **means**: the text it shows and the block it
+    /// points at.
+    fn evaluate(node: &Node, document: &Document) -> Option<Json> {
+        let text = crate::references::text_of(document, node);
+        let target = crate::references::target_of(document, node.id);
+        Some(json!({
+            "text": text,
+            "target": match target {
+                Some(target) => json!(target),
+                None => Json::Null,
+            },
         }))
     }
 }
@@ -901,7 +937,7 @@ impl BlocksEvaluator {
                 blocks.push(json!({
                     "block": block.id,
                     "kind": block.kind,
-                    "text": block.data.get("text").cloned().unwrap_or(Json::Null),
+                    "text": crate::references::text_of(document, block),
                     "runs": runs_with_text(block),
                     "style": style,
                 }));
@@ -933,6 +969,7 @@ craftkit_sdk::plugin_anchor!(
     ParagraphKind,
     TableKind,
     EquationKind,
+    ReferenceKind,
     StyleKind,
     MediaKind,
     AddDocument,
@@ -946,6 +983,9 @@ craftkit_sdk::plugin_anchor!(
     SetRuns,
     SetStyleCharacter,
     SetStyleParagraph,
+    AddReference,
+    SetReference,
+    ReadReference,
     ReadStyleParagraph,
     ReadBlockParagraph,
     ReadStyleCharacter,
