@@ -328,6 +328,7 @@ mod cashflows;
 mod cellread;
 mod charts;
 mod clearing;
+mod columninserting;
 mod combinations;
 mod complex;
 mod conditional;
@@ -404,6 +405,7 @@ pub use borders::{ClearBorder, GetBorder, SetBorder};
 pub use cellread::ReadCell;
 pub use charts::{AddChart, ReadChart, RemoveChart, SetChart};
 pub use clearing::{ClearContents, ClearFormat};
+pub use columninserting::InsertColumn;
 pub use conditional::{CheckConditional, ClearConditional, SetConditional};
 pub use criteria::Condition;
 pub use deleting::DeleteRow;
@@ -1773,6 +1775,7 @@ craftkit_sdk::plugin_anchor!(
     ClearBorder,
     InsertRow,
     DeleteRow,
+    InsertColumn,
     GroupRows,
     UngroupRows,
     ReadGroups,

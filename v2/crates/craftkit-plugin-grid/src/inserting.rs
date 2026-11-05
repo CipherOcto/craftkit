@@ -56,8 +56,10 @@ pub(crate) const MOVED: [&str; 12] = [
 
 /// The keys of a sheet that name **no row**, and so are left as they
 /// are.
-pub(crate) const UNMOVED: [&str; 13] = [
+pub(crate) const UNMOVED: [&str; 16] = [
     "print",
+    "print_gridlines",
+    "print_headings",
     "columns",
     "column_outline",
     "column_breaks",
@@ -70,6 +72,7 @@ pub(crate) const UNMOVED: [&str; 13] = [
     "summary_below",
     "summary_right",
     "hidden",
+    "title_columns",
 ];
 
 /// The **address** of a cell, moved down by the rows inserted.

@@ -194,6 +194,28 @@ impl Anchor {
         Some(*self)
     }
 
+    /// The anchor with **columns inserted** at `at`.
+    ///
+    /// A reference whose column is **anchored** — the `$` before the
+    /// letters — does not move, and a reference to the left of the
+    /// column the columns are inserted at does not move either. A
+    /// reference at or to the right of it moves right by the number of
+    /// columns inserted.
+    pub fn inserted_column(&self, at: u64, count: u64) -> Anchor {
+        if self.col_abs {
+            return *self;
+        }
+        let col = self.cell.col as u64 + 1;
+        if col < at {
+            return *self;
+        }
+        Anchor {
+            cell: CellRef { col: self.cell.col + count as u32, row: self.cell.row },
+            row_abs: self.row_abs,
+            col_abs: self.col_abs,
+        }
+    }
+
     pub fn to_text(self) -> String {
         let mut text = String::new();
         if self.col_abs {
@@ -2652,6 +2674,52 @@ impl Expr {
         }
     }
 
+    /// The expression with **columns inserted** at `at`.
+    ///
+    /// A reference that names **another sheet** does not move: the
+    /// columns of that sheet are not the columns that were inserted. A
+    /// reference that names this sheet — or names none — moves when it
+    /// is at or to the right of the column the columns are inserted at,
+    /// and when its column is not anchored.
+    pub fn inserted_column(&self, sheet: &str, at: u64, count: u64) -> Expr {
+        let names_this_sheet = |named: &Option<String>| match named {
+            None => true,
+            Some(name) => name.eq_ignore_ascii_case(sheet),
+        };
+        match self {
+            Expr::Cell { sheet: named, anchor } => {
+                if names_this_sheet(named) {
+                    Expr::Cell { sheet: named.clone(), anchor: anchor.inserted_column(at, count) }
+                } else {
+                    self.clone()
+                }
+            }
+            Expr::Range { sheet: named, start, end } => {
+                if names_this_sheet(named) {
+                    Expr::Range {
+                        sheet: named.clone(),
+                        start: start.inserted_column(at, count),
+                        end: end.inserted_column(at, count),
+                    }
+                } else {
+                    self.clone()
+                }
+            }
+            Expr::Name(name) => Expr::Name(name.clone()),
+            Expr::Call(name, arguments) => Expr::Call(
+                name.clone(),
+                arguments.iter().map(|argument| argument.inserted_column(sheet, at, count)).collect(),
+            ),
+            Expr::Negate(inner) => Expr::Negate(Box::new(inner.inserted_column(sheet, at, count))),
+            Expr::Binary(operator, left, right) => Expr::Binary(
+                operator.clone(),
+                Box::new(left.inserted_column(sheet, at, count)),
+                Box::new(right.inserted_column(sheet, at, count)),
+            ),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => self.clone(),
+        }
+    }
+
     /// The formula's **text**: the expression written out.
     ///
     /// The tree's printer writes an expression back out, and a copied
@@ -2718,6 +2786,18 @@ pub fn delete_in_formula(text: &str, sheet: &str, at: u64, count: u64) -> Result
         .ok_or_else(|| "a formula names a cell in the rows that are deleted".to_string())?;
     let printed = deleted.to_text();
     Ok(if text.trim_start().starts_with('=') { format!("={printed}") } else { printed })
+}
+
+/// The formula's **text** with **columns inserted** at `at`.
+///
+/// The text is parsed, the columns are inserted and the expression is
+/// printed. A formula that does not parse is `None`: a formula that
+/// cannot be read is not changed.
+pub fn insert_column_in_formula(text: &str, sheet: &str, at: u64, count: u64) -> Option<String> {
+    let expression = parse(text).ok()?;
+    let inserted = expression.inserted_column(sheet, at, count);
+    let printed = inserted.to_text();
+    if text.trim_start().starts_with('=') { Some(format!("={printed}")) } else { Some(printed) }
 }
 
 /// The precedence of an expression.
