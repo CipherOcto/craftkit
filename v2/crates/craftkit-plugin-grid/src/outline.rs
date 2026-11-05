@@ -1,0 +1,396 @@
+//! The **outline** of a sheet: the groups of its rows.
+//!
+//! A row may be **in a group**: the rows of a group are gathered
+//! under a **summary row**, and the summary row may be before the
+//! group or after it. The tree's outline is a **level** on every row
+//! — from one to seven — and the groups are worked out from the
+//! levels: the runs of rows at or above a level are the groups, and a
+//! gap between two rows ends every group.
+//!
+//! So the **levels** are the fact and the **groups** are derived: a
+//! row that is moved is regrouped, and nothing is written down that
+//! could be wrong.
+//!
+//! The rules:
+//!
+//! - the deepest level a group may have is **seven**, the tree's own,
+//!   and a group that would go deeper is **refused**;
+//! - a row that is **not** in a group has the level **zero**, and
+//!   taking a group off a row that has none is **refused**;
+//! - the **summary row** of a group is the row after it — or the row
+//!   before it, when the sheet says its summaries sit before their
+//!   detail — and a group that has no such row has no summary;
+//! - a group whose rows are **all hidden** is a **collapsed** group:
+//!   it is said, and it is derived from the rows that are hidden.
+//!
+//! # What the port found
+//!
+//! - **The tree's outline is a flag on every row of the sheet** — the
+//!   tree keeps a line of information for every row, hidden or not,
+//!   and the outline level is on that line. Here a sheet carries the
+//!   **levels of the rows that are in a group**, and a row that is not
+//!   on the list is in no group.
+//! - **The tree's outline is of rows and of columns**, and the tree's
+//!   summary may sit above or below the rows and left or right of the
+//!   columns. Here the outline is of the **rows**, and the summary of
+//!   a group is below it unless the sheet says otherwise.
+//! - **The tree's group takes a whole block of rows** — `5:8` — and
+//!   the tree's ungroup takes one back. Here so does this one.
+
+use std::collections::BTreeMap;
+
+use craftkit_derive::Command;
+
+use craftkit_sdk::serde_json::{Value as Json, json};
+use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session, Text};
+
+/// The **deepest** level a group may have: the tree's own.
+const MAX_LEVEL: u8 = 7;
+
+/// A **group** of rows: a run of rows at or above a level, and the
+/// summary row that gathers them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Group {
+    /// The level of the group.
+    pub level: u8,
+    /// The first row of the group.
+    pub start: u64,
+    /// The last row of the group.
+    pub end: u64,
+    /// The summary row of the group.
+    pub summary: u64,
+    /// Whether the group has a summary row.
+    pub has_summary: bool,
+    /// Whether every row of the group is hidden.
+    pub collapsed: bool,
+}
+
+/// The **levels** of the rows of a sheet: by the number of the row.
+pub fn levels_of(node: &Node) -> BTreeMap<u64, u8> {
+    let mut levels = BTreeMap::new();
+    let Some(map) = node.data.get("row_outline").and_then(|levels| levels.as_object()) else {
+        return levels;
+    };
+    for (row, level) in map {
+        let Some(row) = row.parse::<u64>().ok() else { continue };
+        let Some(level) = level.as_u64() else { continue };
+        if level == 0 || level > MAX_LEVEL as u64 {
+            continue;
+        }
+        levels.insert(row, level as u8);
+    }
+    levels
+}
+
+/// The levels of a sheet, as they are kept.
+pub fn levels_into(levels: &BTreeMap<u64, u8>) -> Json {
+    let mut map = craftkit_sdk::serde_json::Map::new();
+    for (row, level) in levels {
+        map.insert(row.to_string(), json!(level));
+    }
+    Json::Object(map)
+}
+
+/// Whether the sheet's **summary rows** sit before their detail.
+pub fn summary_below(node: &Node) -> bool {
+    node.data.get("summary_below").and_then(|below| below.as_bool()).unwrap_or(true)
+}
+
+/// The **rows** of a sheet that are hidden.
+fn hidden_rows(node: &Node) -> Vec<u64> {
+    node.data
+        .get("hidden_rows")
+        .and_then(|rows| rows.as_array())
+        .map(|rows| rows.iter().filter_map(|row| row.as_u64()).collect())
+        .unwrap_or_default()
+}
+
+/// The **groups** of the rows of a sheet, worked out from the levels.
+///
+/// The groups are the runs of rows at or above a level, and a gap
+/// between two rows ends every group.
+pub fn groups_of(node: &Node) -> Vec<Group> {
+    let levels = levels_of(node);
+    let hidden = hidden_rows(node);
+    let is_hidden = |row: u64| hidden.contains(&row);
+    groups_from(&levels, &is_hidden, !summary_below(node))
+}
+
+/// The **groups** of a list of levels, worked out the tree's way.
+///
+/// `summary_before` says whether the summary of a group sits before
+/// the group rather than after it.
+fn groups_from(
+    levels: &BTreeMap<u64, u8>,
+    is_hidden: &dyn Fn(u64) -> bool,
+    summary_before: bool,
+) -> Vec<Group> {
+    let mut groups: Vec<Group> = Vec::new();
+    // The open group of every level: where it starts, and whether
+    // every row of it is hidden.
+    let mut open: [Option<(u64, bool)>; MAX_LEVEL as usize] = [None; MAX_LEVEL as usize];
+    let mut previous: Option<u64> = None;
+    for (row, level) in levels {
+        let level = (*level).min(MAX_LEVEL);
+        if let Some(previous) = previous {
+            // A **gap** ends every group, and a row that is shallower
+            // than the one before it ends the groups below its own
+            // level.
+            if previous.checked_add(1) != Some(*row) {
+                close(&mut open, &mut groups, 1, previous, summary_before);
+            } else if level < MAX_LEVEL {
+                close(&mut open, &mut groups, level + 1, previous, summary_before);
+            }
+        }
+        for slot in open.iter_mut().take(level as usize) {
+            match slot {
+                Some((_, hidden)) => *hidden &= is_hidden(*row),
+                None => *slot = Some((*row, is_hidden(*row))),
+            }
+        }
+        previous = Some(*row);
+    }
+    if let Some(previous) = previous {
+        close(&mut open, &mut groups, 1, previous, summary_before);
+    }
+    groups.sort_by_key(|group| (group.end, group.level));
+    groups
+}
+
+/// **Close** the groups of the levels from `from` up, at the row
+/// `end`.
+fn close(
+    open: &mut [Option<(u64, bool)>; MAX_LEVEL as usize],
+    groups: &mut Vec<Group>,
+    from: u8,
+    end: u64,
+    summary_before: bool,
+) {
+    for level in (from..=MAX_LEVEL).rev() {
+        let Some((start, collapsed)) = open.get_mut(level as usize - 1).and_then(|slot| slot.take()) else {
+            continue;
+        };
+        let summary = if summary_before { start.saturating_sub(1) } else { end + 1 };
+        let has_summary = summary >= 1 && !(start..=end).contains(&summary);
+        groups.push(Group { level, start, end, summary, has_summary, collapsed });
+    }
+}
+
+/// A **group** of rows, as it is reported.
+pub fn group_json(group: &Group) -> Json {
+    group_json_with(group, |row| json!(row))
+}
+
+/// A **group**, as it is reported, with the names of its lines.
+fn group_json_with(group: &Group, name: impl Fn(u64) -> Json) -> Json {
+    json!({
+        "level": group.level,
+        "start": name(group.start),
+        "end": name(group.end),
+        "summary": name(group.summary),
+        "has_summary": group.has_summary,
+        "collapsed": group.collapsed,
+    })
+}
+
+/// The **rows** a range names: `5:8` or `5`.
+fn rows_of(text: &str, id: &str) -> Result<(u64, u64), EngineError> {
+    let trimmed = text.trim();
+    let (first, last) = match trimmed.split_once(':') {
+        Some((first, last)) => (first.trim(), last.trim()),
+        None => (trimmed, trimmed),
+    };
+    let row = |text: &str| -> Result<u64, EngineError> {
+        text.parse::<u64>().map_err(|_| EngineError::Failed {
+            id: id.to_string(),
+            message: format!("`{text}` is not a row: a row is counted from one"),
+        })
+    };
+    let first = row(first)?;
+    let last = row(last)?;
+    if first == 0 || last == 0 {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "a row is counted from one".to_string(),
+        });
+    }
+    if first > last {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("`{trimmed}` is not a range of rows: it runs backwards"),
+        });
+    }
+    Ok((first, last))
+}
+
+/// The **sheet** a command is about, or the error that says there is
+/// no such sheet.
+fn sheet_of(session: &Session, sheet: u64, id: &str) -> Result<u64, EngineError> {
+    let Some(node) = session.document().node(sheet) else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("there is no sheet `{sheet}`"),
+        });
+    };
+    if node.kind != "grid.sheet" {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the node `{sheet}` is not a sheet"),
+        });
+    }
+    Ok(sheet)
+}
+
+/// **Group** a range of rows.
+///
+/// Every row of the range goes one level deeper, and a group that
+/// would go deeper than the tree's seven levels is refused.
+#[derive(Command)]
+#[command(id = "grid.row.group", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct GroupRows {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The rows that are grouped: `5:8`.
+    pub rows: Text,
+}
+
+impl GroupRows {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.row.group".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, sheet, &id)?;
+        let (first, last) = rows_of(&self.rows.0, &id)?;
+        let Some(node) = session.document().node(sheet).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let mut levels = levels_of(&node);
+        for row in first..=last {
+            let level = levels.get(&row).copied().unwrap_or(0);
+            if level + 1 > MAX_LEVEL {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the row {row} is already in a group of the deepest level, which is {MAX_LEVEL}"
+                    ),
+                });
+            }
+        }
+        for row in first..=last {
+            let level = levels.get(&row).copied().unwrap_or(0);
+            levels.insert(row, level + 1);
+        }
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["row_outline"] = levels_into(&levels);
+        }
+        Ok(Outcome::changed(format!("the rows {first}:{last} are grouped"))
+            .with_data(json!({ "sheet": sheet, "first": first, "last": last })))
+    }
+}
+
+/// **Ungroup** a range of rows.
+///
+/// Every row of the range comes one level up, and a row that is in no
+/// group at all is refused: there is nothing to undo on it.
+#[derive(Command)]
+#[command(id = "grid.row.ungroup", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct UngroupRows {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The rows that are ungrouped: `5:8`.
+    pub rows: Text,
+}
+
+impl UngroupRows {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.row.ungroup".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, sheet, &id)?;
+        let (first, last) = rows_of(&self.rows.0, &id)?;
+        let Some(node) = session.document().node(sheet).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let mut levels = levels_of(&node);
+        for row in first..=last {
+            if levels.get(&row).copied().unwrap_or(0) == 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the row {row} is in no group, and there is nothing to undo on it"),
+                });
+            }
+        }
+        for row in first..=last {
+            let level = levels.get(&row).copied().unwrap_or(0);
+            if level == 1 {
+                levels.remove(&row);
+            } else {
+                levels.insert(row, level - 1);
+            }
+        }
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["row_outline"] = levels_into(&levels);
+        }
+        Ok(Outcome::changed(format!("the rows {first}:{last} are ungrouped"))
+            .with_data(json!({ "sheet": sheet, "first": first, "last": last })))
+    }
+}
+
+/// **Read** the groups of a sheet.
+#[derive(Command)]
+#[command(id = "grid.row.groups", area = "grid", layer = "grid", icon = "list")]
+pub struct ReadGroups {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+}
+
+impl ReadGroups {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.row.groups".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, sheet, &id)?;
+        let Some(node) = session.document().node(sheet) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let groups: Vec<Json> = groups_of(node).iter().map(group_json).collect();
+        Ok(Outcome::new(format!("the sheet `{sheet}` has {} group(s)", groups.len()))
+            .with_data(json!({ "sheet": sheet, "groups": groups })))
+    }
+}
+
+/// **Say** where the summary rows of a sheet sit.
+///
+/// The tree's own setting: the summaries sit below their detail, or
+/// above it.
+#[derive(Command)]
+#[command(id = "grid.sheet.summary", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct SetSummary {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// Whether the summary rows sit **below** their detail.
+    pub below: Bool,
+}
+
+impl SetSummary {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.sheet.summary".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, sheet, &id)?;
+        let below = self.below.0;
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["summary_below"] = json!(below);
+        }
+        Ok(Outcome::changed(format!(
+            "the summary rows of the sheet `{sheet}` sit {} their detail",
+            if below { "below" } else { "above" }
+        ))
+        .with_data(json!({ "sheet": sheet, "below": below })))
+    }
+}
