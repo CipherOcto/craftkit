@@ -59,11 +59,15 @@
 )]
 #![forbid(unsafe_code)]
 
+mod items;
+
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
     Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Relation, Session, Text,
 };
+
+pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem};
 
 /// The layout layer.
 ///
@@ -246,6 +250,9 @@ macro_rules! item_kind {
                     "rect": node.data.get("rect").cloned().unwrap_or(Json::Null),
                     "layer": edge_name(document, node.id, "layout.on_layer"),
                     "story": edge_name(document, node.id, "layout.text"),
+                    "opacity": crate::items::opacity_of(node),
+                    "locked": crate::items::is_locked(node),
+                    "hidden": node.muted,
                 }))
             }
         }
@@ -609,6 +616,14 @@ impl PutOnLayer {
                 message: format!("the node `{layer}` is not a layer"),
             });
         }
+        // A **locked** item may not be edited, and a layer is an edit.
+        let Some(item_node) = session.document().node(item).cloned() else {
+            return Err(EngineError::Failed {
+                id: "layout.item.layer".to_string(),
+                message: format!("there is no item `{item}`"),
+            });
+        };
+        crate::items::may_edit(&item_node, "layout.item.layer")?;
         let name = node.name.clone();
         let added = session.document_mut()?.add_relation(Relation::with_payload(
             item,
@@ -657,6 +672,14 @@ impl PutStory {
                 message: format!("the node `{story}` is not a story"),
             });
         }
+        // A **locked** item may not be edited, and a story is an edit.
+        let Some(item_node) = session.document().node(item).cloned() else {
+            return Err(EngineError::Failed {
+                id: "layout.item.story".to_string(),
+                message: format!("there is no item `{item}`"),
+            });
+        };
+        crate::items::may_edit(&item_node, "layout.item.story")?;
         let name = node.name.clone();
         let added = session.document_mut()?.add_relation(Relation::with_payload(
             item,
@@ -789,6 +812,12 @@ craftkit_sdk::plugin_anchor!(
     AddStory,
     AddAsset,
     AddItem,
+    SetOpacity,
+    HideItem,
+    ShowItem,
+    LockItem,
+    UnlockItem,
+    ScaleItem,
     PutOnLayer,
     PutStory,
     PagesEvaluator,
