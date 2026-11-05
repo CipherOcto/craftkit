@@ -233,6 +233,17 @@ impl SetLayerLinetype {
         if linetype.is_empty() {
             return Err(EngineError::Failed { id, message: "a layer has a line type".to_string() });
         }
+        // A layer names a line type that **is** one: a name that is
+        // not in the table is a name nothing defines.
+        let Some(line_type) = crate::linetypes::of(&linetype) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "`{linetype}` is not a line type of this tree: a line type is one of {}",
+                    crate::linetypes::names()
+                ),
+            });
+        };
         let Some(node) = session.document_mut()?.node_mut(layer) else {
             return Err(EngineError::Failed {
                 id: "cad.layer.linetype".to_string(),
@@ -240,8 +251,11 @@ impl SetLayerLinetype {
             });
         };
         node.data["linetype"] = json!(linetype);
-        Ok(Outcome::changed(format!("the layer `{layer}` is `{linetype}`"))
-            .with_data(json!({ "layer": layer, "linetype": linetype })))
+        Ok(Outcome::changed(format!("the layer `{layer}` is `{linetype}`")).with_data(json!({
+            "layer": layer,
+            "linetype": line_type.name,
+            "pattern": line_type.pattern.to_vec(),
+        })))
     }
 }
 

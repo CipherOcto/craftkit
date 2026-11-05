@@ -82,6 +82,7 @@ mod curves;
 mod dimensions;
 mod editable;
 mod layersettings;
+mod linetypes;
 mod measurements;
 mod mirrors;
 mod modify;
@@ -102,6 +103,7 @@ pub use layersettings::{
     FreezeLayer, ListLayers, LockLayer, SetLayerColor, SetLayerFill, SetLayerLinetype, SetLayerLineweight,
     SetLayerOn,
 };
+pub use linetypes::ListLineTypes;
 pub use measurements::{MeasureAngle, MeasureArea, MeasureLength, MeasureRadius};
 pub use mirrors::MirrorEntity;
 pub use modify::{MoveEntity, RemoveEntity, RotateEntity, ScaleEntity};
@@ -153,9 +155,15 @@ impl LayerKind {
 
     /// What a layer **means**: its name and its colour.
     fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        let linetype = node.data.get("linetype").and_then(|linetype| linetype.as_str());
         Some(json!({
             "name": node.name,
             "color": node.data.get("color").cloned().unwrap_or(Json::Null),
+            "linetype": linetype.map(|linetype| json!(linetype)).unwrap_or(Json::Null),
+            "pattern": linetype
+                .and_then(crate::linetypes::of)
+                .map(|line_type| json!(line_type.pattern.to_vec()))
+                .unwrap_or(Json::Null),
         }))
     }
 }
@@ -1123,6 +1131,7 @@ craftkit_sdk::plugin_anchor!(
     SetLayerLinetype,
     SetLayerLineweight,
     ListLayers,
+    ListLineTypes,
     MeasureLength,
     MeasureArea,
     MeasureRadius,
