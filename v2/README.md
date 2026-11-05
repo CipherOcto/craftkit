@@ -3930,6 +3930,7 @@ so.
 | the **columns** of a page | **built.** A page may be set in columns — the text is set in columns side by side — and the column boxes are derived from the margin box (§493) | §493 |
 | the **radius** of an item | **built.** An item may have a radius, and the corners of its rectangle are derived from it, so a radius beyond half the shorter side is refused rather than clamped (§494) | §494 |
 | the **shadow** of an item | **built.** An item may have a shadow — the light, the distance, the blur, the colour and the opacity — and the offset and the box of the shadow are derived (§495) | §495 |
+| the **row** that is inserted | **built.** A row may be inserted into a sheet, and everything that named a row is moved with it — the cells, the formulas, the merges, the notes — and what cannot be moved refuses the insert (§496) | §496 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32507,3 +32508,79 @@ behind it, moved away from it.
   item.
 - **The shadow is not drawn**: it is a fact of the item, and this
   tree has no canvas for a spread.
+
+## 496. The row that is inserted
+
+A row may be **inserted** into a sheet: the rows at and below it move
+down, and everything that named a row is moved with them.
+
+### What was built
+
+- **One command** in the grid battery: `grid.row.insert`, and the
+  machinery it needs: a formula's **references** are inserted with the
+  rows, and an expression is **written out** again with them.
+- A row is inserted by **moving** the facts that name rows:
+  - the **cells** of the sheet move down, and the **formulas** in them
+    are rewritten: a reference to a cell that moved now names the cell
+    it moved to — and that is true of the formula of a cell that
+    **stayed** as well, because the cell it names moved;
+  - a reference that names **another sheet** is left alone, because
+    the rows of that sheet are not the rows that were inserted, and an
+    **anchored** reference is left alone too — the `$` before the
+    number is what says it does not move;
+  - the **borders**, the **notes**, the **links** and the **pictures**
+    of a cell move with the cell;
+  - the **merges**, the **print area** and the **title rows** move
+    with the rows they cover;
+  - the **hidden rows**, the **row heights**, the **outline levels**
+    and the **row breaks** move with the rows they name.
+- The **rules**: a row is **counted from one**, and the number of rows
+  inserted is a whole number above zero; the rows may not run **past
+  the last row of the sheet**; a sheet that is **protected** refuses,
+  because its cells are locked; and a sheet that holds something this
+  tree **cannot move** refuses and says what it holds — a conditional
+  format, a validation, a sparkline, a table, a pivot or a chart — or
+  a **name** of the workbook that points at it.
+
+### What the port found
+
+- **The tree's insert moves everything**, because the tree's sheet is
+  one thing and a row is part of it: the tree's cells, the tree's
+  formulas, the tree's merges, the tree's charts, the tree's
+  conditional formats and the tree's names all move together. Here
+  the moving is a list of the facts this tree knows how to move, and
+  a fact it does not know how to move **refuses** the insert rather
+  than being left behind.
+- **The tree's formula keeps its text** when a row is inserted — the
+  tree rewrites the reference and leaves the rest of the formula as it
+  was written. Here the formula is **parsed and written out again**,
+  so a formula of `=A1+0.50` is written as `=A1+0.5`: the same
+  meaning in another spelling.
+
+### What it cost
+
+- **Twelve tests** in the grid battery (`tests/inserting.rs`): a row
+  being inserted and the cells moving down, more than one row being
+  inserted, the formula of a cell that moves being written again, the
+  formula of a cell that stays being written again too, a reference
+  that names another sheet not being moved, an anchored reference not
+  being moved, a merge moving with the rows it covers, a note moving
+  with its cell, a hidden row moving with the rows, a sheet that holds
+  something this tree cannot move being refused, a protected sheet
+  refusing, and a row that is not a row being refused.
+- **One new module** (`inserting`) and the insert in the formula
+  module. The grid battery now carries **117** commands and the MCP
+  server **699**.
+
+### What it does not settle
+
+- **The conditional formats, the validations, the sparklines, the
+  tables, the pivots and the charts are not moved**, and a sheet that
+  holds one of them refuses the insert and says which. The tree moves
+  them all.
+- **A name of the workbook that points at the sheet is not moved**,
+  and a sheet with such a name refuses the insert.
+- **The formula is written out again**, so its text may be another
+  spelling of the same meaning.
+- **The row that is deleted is not here**: a deletion moves the rows
+  up and takes the last row away, and it is its own work.
