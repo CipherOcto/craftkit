@@ -1,4 +1,5 @@
-//! The **outline** of a sheet: the groups of its rows.
+//! The **outline** of a sheet: the groups of its rows and of its
+//! columns.
 //!
 //! A row may be **in a group**: the rows of a group are gathered
 //! under a **summary row**, and the summary row may be before the
@@ -94,6 +95,63 @@ pub fn levels_into(levels: &BTreeMap<u64, u8>) -> Json {
 /// Whether the sheet's **summary rows** sit before their detail.
 pub fn summary_below(node: &Node) -> bool {
     node.data.get("summary_below").and_then(|below| below.as_bool()).unwrap_or(true)
+}
+
+/// Whether the sheet's **summary columns** sit before their detail.
+pub fn summary_right(node: &Node) -> bool {
+    node.data.get("summary_right").and_then(|right| right.as_bool()).unwrap_or(true)
+}
+
+/// The **levels** of the columns of a sheet: by the letters of the
+/// column.
+pub fn column_levels_of(node: &Node) -> BTreeMap<u32, u8> {
+    let mut levels = BTreeMap::new();
+    let Some(map) = node.data.get("column_outline").and_then(|levels| levels.as_object()) else {
+        return levels;
+    };
+    for (column, level) in map {
+        let Some(index) = crate::formula::CellRef::column_index(column.trim()) else { continue };
+        let Some(level) = level.as_u64() else { continue };
+        if level == 0 || level > MAX_LEVEL as u64 {
+            continue;
+        }
+        levels.insert(index, level as u8);
+    }
+    levels
+}
+
+/// The levels of the columns of a sheet, as they are kept.
+pub fn column_levels_into(levels: &BTreeMap<u32, u8>) -> Json {
+    let mut map = craftkit_sdk::serde_json::Map::new();
+    for (column, level) in levels {
+        map.insert(crate::formula::CellRef::column_text(*column), json!(level));
+    }
+    Json::Object(map)
+}
+
+/// The **columns** of a sheet that are hidden.
+fn hidden_columns(node: &Node) -> Vec<u32> {
+    node.data
+        .get("hidden_columns")
+        .and_then(|columns| columns.as_array())
+        .map(|columns| {
+            columns
+                .iter()
+                .filter_map(|column| column.as_str())
+                .filter_map(|column| crate::formula::CellRef::column_index(column.trim()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The **groups** of the columns of a sheet, worked out from the
+/// levels.
+pub fn column_groups_of(node: &Node) -> Vec<Group> {
+    let levels: BTreeMap<u64, u8> =
+        column_levels_of(node).into_iter().map(|(column, level)| (column as u64, level)).collect();
+    let hidden = hidden_columns(node);
+    let is_hidden = |column: u64| hidden.contains(&(column as u32));
+    groups_from(&levels, &is_hidden, !summary_right(node))
 }
 
 /// The **rows** of a sheet that are hidden.
@@ -218,6 +276,30 @@ fn rows_of(text: &str, id: &str) -> Result<(u64, u64), EngineError> {
         return Err(EngineError::Failed {
             id: id.to_string(),
             message: format!("`{trimmed}` is not a range of rows: it runs backwards"),
+        });
+    }
+    Ok((first, last))
+}
+
+/// The **columns** a range names: `C:E` or `C`.
+fn columns_of(text: &str, id: &str) -> Result<(u32, u32), EngineError> {
+    let trimmed = text.trim();
+    let (first, last) = match trimmed.split_once(':') {
+        Some((first, last)) => (first.trim(), last.trim()),
+        None => (trimmed, trimmed),
+    };
+    let column = |text: &str| -> Result<u32, EngineError> {
+        crate::formula::CellRef::column_index(text).ok_or_else(|| EngineError::Failed {
+            id: id.to_string(),
+            message: format!("`{text}` is not a column: a column is `A`, `B` or `AA`"),
+        })
+    };
+    let first = column(first)?;
+    let last = column(last)?;
+    if first > last {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("`{trimmed}` is not a range of columns: it runs backwards"),
         });
     }
     Ok((first, last))
@@ -368,14 +450,17 @@ impl ReadGroups {
 /// **Say** where the summary rows of a sheet sit.
 ///
 /// The tree's own setting: the summaries sit below their detail, or
-/// above it.
+/// above it; and the summaries of the columns sit right of their
+/// detail, or left of it.
 #[derive(Command)]
 #[command(id = "grid.sheet.summary", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
 pub struct SetSummary {
     /// The sheet it is in.
     pub sheet: NodeRef,
     /// Whether the summary rows sit **below** their detail.
-    pub below: Bool,
+    pub below: Option<Bool>,
+    /// Whether the summary columns sit **right** of their detail.
+    pub right: Option<Bool>,
 }
 
 impl SetSummary {
@@ -383,14 +468,166 @@ impl SetSummary {
         let id = "grid.sheet.summary".to_string();
         let sheet = self.sheet.0;
         sheet_of(session, sheet, &id)?;
-        let below = self.below.0;
+        let below = self.below.map(|below| below.0);
+        let right = self.right.map(|right| right.0);
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["summary_below"] = json!(below);
+            if let Some(below) = below {
+                node.data["summary_below"] = json!(below);
+            }
+            if let Some(right) = right {
+                node.data["summary_right"] = json!(right);
+            }
+        }
+        Ok(Outcome::changed(format!("the summaries of the sheet `{sheet}` are placed"))
+            .with_data(json!({ "sheet": sheet, "below": below, "right": right })))
+    }
+}
+
+/// **Group** a range of columns.
+///
+/// Every column of the range goes one level deeper, and a group that
+/// would go deeper than the tree's seven levels is refused.
+#[derive(Command)]
+#[command(id = "grid.column.group", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct GroupColumns {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The columns that are grouped: `C:E`.
+    pub columns: Text,
+}
+
+impl GroupColumns {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.column.group".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, sheet, &id)?;
+        let (first, last) = columns_of(&self.columns.0, &id)?;
+        let Some(node) = session.document().node(sheet).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let mut levels = column_levels_of(&node);
+        for column in first..=last {
+            let level = levels.get(&column).copied().unwrap_or(0);
+            if level + 1 > MAX_LEVEL {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the column {} is already in a group of the deepest level, which is {MAX_LEVEL}",
+                        crate::formula::CellRef::column_text(column)
+                    ),
+                });
+            }
+        }
+        for column in first..=last {
+            let level = levels.get(&column).copied().unwrap_or(0);
+            levels.insert(column, level + 1);
+        }
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["column_outline"] = column_levels_into(&levels);
         }
         Ok(Outcome::changed(format!(
-            "the summary rows of the sheet `{sheet}` sit {} their detail",
-            if below { "below" } else { "above" }
+            "the columns {}:{} are grouped",
+            crate::formula::CellRef::column_text(first),
+            crate::formula::CellRef::column_text(last)
         ))
-        .with_data(json!({ "sheet": sheet, "below": below })))
+        .with_data(json!({
+            "sheet": sheet,
+            "first": crate::formula::CellRef::column_text(first),
+            "last": crate::formula::CellRef::column_text(last),
+        })))
+    }
+}
+
+/// **Ungroup** a range of columns.
+///
+/// Every column of the range comes one level up, and a column that is
+/// in no group at all is refused: there is nothing to undo on it.
+#[derive(Command)]
+#[command(id = "grid.column.ungroup", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct UngroupColumns {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The columns that are ungrouped: `C:E`.
+    pub columns: Text,
+}
+
+impl UngroupColumns {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.column.ungroup".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, sheet, &id)?;
+        let (first, last) = columns_of(&self.columns.0, &id)?;
+        let Some(node) = session.document().node(sheet).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let mut levels = column_levels_of(&node);
+        for column in first..=last {
+            if levels.get(&column).copied().unwrap_or(0) == 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the column {} is in no group, and there is nothing to undo on it",
+                        crate::formula::CellRef::column_text(column)
+                    ),
+                });
+            }
+        }
+        for column in first..=last {
+            let level = levels.get(&column).copied().unwrap_or(0);
+            if level == 1 {
+                levels.remove(&column);
+            } else {
+                levels.insert(column, level - 1);
+            }
+        }
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["column_outline"] = column_levels_into(&levels);
+        }
+        Ok(Outcome::changed(format!(
+            "the columns {}:{} are ungrouped",
+            crate::formula::CellRef::column_text(first),
+            crate::formula::CellRef::column_text(last)
+        ))
+        .with_data(json!({
+            "sheet": sheet,
+            "first": crate::formula::CellRef::column_text(first),
+            "last": crate::formula::CellRef::column_text(last),
+        })))
+    }
+}
+
+/// **Read** the groups of the columns of a sheet.
+#[derive(Command)]
+#[command(id = "grid.column.groups", area = "grid", layer = "grid", icon = "list")]
+pub struct ReadColumnGroups {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+}
+
+impl ReadColumnGroups {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.column.groups".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, sheet, &id)?;
+        let Some(node) = session.document().node(sheet) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let groups: Vec<Json> = column_groups_of(node)
+            .iter()
+            .map(|group| {
+                group_json_with(group, |column| json!(crate::formula::CellRef::column_text(column as u32)))
+            })
+            .collect();
+        Ok(Outcome::new(format!("the sheet `{sheet}` has {} column group(s)", groups.len()))
+            .with_data(json!({ "sheet": sheet, "groups": groups })))
     }
 }

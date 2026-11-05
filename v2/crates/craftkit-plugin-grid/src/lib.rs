@@ -420,7 +420,9 @@ pub use merges::{ClearMerge, SetMerge};
 pub use namereading::ReadName;
 pub use names::{DeleteName, SetName};
 pub use notes::{DeleteNote, GetNote, SetNote};
-pub use outline::{GroupRows, ReadGroups, SetSummary, UngroupRows};
+pub use outline::{
+    GroupColumns, GroupRows, ReadColumnGroups, ReadGroups, SetSummary, UngroupColumns, UngroupRows,
+};
 pub use pictures::{ReadPicture, RemovePicture, SetPicture};
 pub use pivots::{CreatePivot, ReadPivot, RemovePivot};
 pub use printing::{
@@ -1768,6 +1770,9 @@ craftkit_sdk::plugin_anchor!(
     GroupRows,
     UngroupRows,
     ReadGroups,
+    GroupColumns,
+    UngroupColumns,
+    ReadColumnGroups,
     SetSummary,
     SetPicture,
     ReadPicture,
