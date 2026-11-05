@@ -355,6 +355,7 @@ mod information;
 mod links;
 mod logic;
 mod lookups;
+mod marks;
 mod merges;
 mod namereading;
 mod names;
@@ -407,6 +408,7 @@ pub use headers::{SetFooter, SetHeader};
 pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
 pub use importing::{ImportCsv, ImportJson};
 pub use links::{DeleteLink, GetLink, SetLink};
+pub use marks::{SetPrintGridlines, SetPrintHeadings};
 pub use merges::{ClearMerge, SetMerge};
 pub use namereading::ReadName;
 pub use names::{DeleteName, SetName};
@@ -1757,6 +1759,8 @@ craftkit_sdk::plugin_anchor!(
     SetFit,
     SetHeader,
     SetFooter,
+    SetPrintGridlines,
+    SetPrintHeadings,
     GoalScan,
     FilteredRows,
     SetConditional,

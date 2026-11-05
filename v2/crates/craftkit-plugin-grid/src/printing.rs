@@ -91,7 +91,7 @@ pub const MAX_MARGIN: f64 = 20.0;
 const MAX_PAGES: usize = 4096;
 
 /// A row's **height**, when it has not been set: in points.
-const DEFAULT_ROW_HEIGHT: f64 = 15.0;
+pub(crate) const DEFAULT_ROW_HEIGHT: f64 = 15.0;
 
 /// A column's **width**, when it has not been set: in characters.
 const DEFAULT_COLUMN_WIDTH: f64 = 8.5;
@@ -516,6 +516,8 @@ impl ReadSetup {
             "fit_scale": (fit_scale.0 * 10_000.0).round() / 100.0,
             "header": crate::headers::to_json(&node)["header"].clone(),
             "footer": crate::headers::to_json(&node)["footer"].clone(),
+            "gridlines": crate::marks::gridlines_of(&node),
+            "headings": crate::marks::headings_of(&node),
             "page": { "width": page_width, "height": page_height },
             "printable": { "width": printable_width, "height": printable_height },
             "area": area_of(&node).map(|area| json!(area.to_text())).unwrap_or(Json::Null),
@@ -581,11 +583,20 @@ impl ReadPages {
         // hand: the fit is the way the pages are chosen.
         let (row_breaks, column_breaks) =
             if setup.fit.is_some() { (Vec::new(), Vec::new()) } else { (row_breaks, column_breaks) };
-        let rows = bands(&content.rows, |row| row_height(&node, row), printable_height / scale, &row_breaks);
+        // The **headings** take room from the page: the rows are one
+        // heading shorter and the columns one heading narrower.
+        let digits = (area.end.row + 1).to_string().len() as u32;
+        let (heading_width, heading_height) = crate::marks::room_of(&node, digits);
+        let rows = bands(
+            &content.rows,
+            |row| row_height(&node, row),
+            (printable_height / scale - heading_height).max(1.0),
+            &row_breaks,
+        );
         let columns = bands(
             &content.columns,
             |column| column_width(&node, column),
-            printable_width / scale,
+            (printable_width / scale - heading_width).max(1.0),
             &column_breaks,
         );
         let mut bands_of_pages: Vec<((u32, u32), (u32, u32))> = Vec::new();
@@ -624,6 +635,8 @@ impl ReadPages {
                     .collect::<Vec<String>>(),
                 "header": header.to_json(),
                 "footer": footer.to_json(),
+                "gridlines": crate::marks::gridlines_of(&node),
+                "headings": crate::marks::headings_of(&node),
             }));
         }
         Ok(Outcome::new(format!("the sheet is {} page(s)", pages.len())).with_data(json!({
