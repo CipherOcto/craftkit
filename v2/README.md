@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3251 tests.** The MCP server links **all fifteen batteries** in, so the
+**3259 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3251 tests
+cargo test          # 3259 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3884,6 +3884,7 @@ so.
 | **finding** and **replacing** | **built.** A find says where the pattern is and a replace rewrites the text and the runs together, and a tracked change is not replaced (§447) | §447 |
 | the **information** of a document | **built.** The trailer of a PDF file may name an information dictionary, and the document says which object it is (§448) | §448 |
 | the **stops** of a gradient | **built.** A gradient is a list of stops in order, and a stop may be added, changed or taken away — but a gradient has two stops or more (§449) | §449 |
+| the **groups** of a filter | **built.** The columns of a group are judged together and the groups are judged one by one, so a row is hidden when it matches none of them (§450) | §450 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29817,3 +29818,59 @@ it is there, and how **solid** it is.
   at the stop's own place and nowhere else.
 - **The tree's shared swatches are not here**: two stops with the same
   colour are two stops, and changing one changes only that one.
+
+## 450. The groups of a filter
+
+A filter may be **groups** of criteria: the columns of a group are
+judged together, and the groups are judged one by one.
+
+### What was built
+
+- The command `grid.filter.groups.set`: the **groups** of criteria, each
+  criterion saying which **column** it judges, the **operation** and
+  the **value**.
+- The columns of a group are judged **together** — a row matches the
+  group when it matches every criterion of it — and the groups are
+  judged one by one: a row is **hidden** when it matches **none** of
+  them.
+- A **column filter** is one group of one criterion: the two filters
+  hide the same rows, and the tree says so in one sentence.
+- The rows a filter hides are still **derived**: they are worked out
+  from the cells each time they are asked for.
+
+### What the port found
+
+- **The tree's filter is over a range and this one's is over a
+  column.** The tree's filter has a range and a criterion for each
+  column of it. Here a sheet has **one** filter, and it is either over
+  one column (`grid.filter.set`) or over **groups** of criteria
+  (`grid.filter.groups.set`) — and the rows it hides are the rows of
+  the sheet either way.
+- **The tree's criteria range is a range of cells and here it is a
+  list.** The tree's criteria are written in cells above the data, and
+  a row of them is a row of the sheet; here they are a **list** of
+  groups, so the criteria are not part of the sheet and cannot be
+  summed by accident.
+
+### What it cost
+
+- **Eight tests** in the grid battery (`tests/filtergroups.rs`): the
+  columns of a group are judged together, the groups are judged one by
+  one, a group of no criteria is refused, a filter with no group is
+  refused, an operation that is not an operation is refused, a column
+  that is not a column is refused, a comparison that needs a number and
+  is given a word is refused, and a column filter is one group of one
+  criterion.
+- **One new module**: the filter of a sheet keeps its own module
+  (`filters`), and the **filter** of the workbook is now **two kinds**
+  of thing — a column or groups — so that both are one filter and not
+  two filters that could both be there. The grid battery now carries
+  **68** commands and the MCP server **601**.
+
+### What it does not settle
+
+- **The tree's criteria are written in cells and here they are a
+  list**: a sheet cannot hold its own criteria and read them back.
+- **The tree's filter copies the rows it keeps to another place**: it
+  can take the rows that match and put them in another sheet. That is
+  a change and not a filter, and it is not written yet.
