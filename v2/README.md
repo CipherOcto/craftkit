@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3500 tests.** The MCP server links **all fifteen batteries** in, so the
+**3510 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3500 tests
+cargo test          # 3510 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3913,6 +3913,7 @@ so.
 | the **OTIO** of a sequence | **built.** The timeline of an interchange format is derived from the sequence — its tracks, its clips, its gaps, its transitions and its markers — and it is a text of the document (§476) | §476 |
 | the **cross-reference** of a document | **built.** A block may reference another — it stands for the text of a bookmarked block — and the text it shows is derived, so it cannot be out of date (§477) | §477 |
 | the **chart** of a sheet | **built.** A chart reads a range — the first row names the series, the first column holds the categories — and the data it shows is derived, so it cannot be out of date (§478) | §478 |
+| the **sparkline** of a cell | **built.** A cell may hold a little picture of a range — a line, columns, or wins and losses — and the values it shows are derived, so it cannot be out of date (§479) | §479 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31495,3 +31496,56 @@ shows it as bars, as a line or as a pie.
   nothing is drawn.
 - **The tree's chart switches its rows and its columns**, and the
   chart here always reads the first row as the names.
+
+## 479. The sparkline of a cell
+
+A **sparkline** is a little picture of a range, drawn in a cell.
+
+### What was built
+
+- **Three commands** in the grid battery: `grid.sparkline.set` to set
+  the sparkline of a cell, `grid.sparkline.read` to read it — every
+  sparkline of the sheet without a cell — and `grid.sparkline.remove`
+  to take it away.
+- The range is the fact and the values are **derived**: they are
+  worked out from the cells of the sheet every time they are asked
+  for, so a sparkline cannot be out of date with the sheet it reads.
+- The kinds are the tree's: `line`, `column` and `win_loss` — and a
+  **win** is a number above zero and a **loss** a number below zero,
+  and how big the number is does not matter.
+- The **rules**: a kind that is not one of the three is refused; a
+  range of one cell is refused; a colour that is not `#rrggbb` is
+  refused; and a cell that holds **no number** shows **nothing**,
+  which is not a zero.
+- A cell may hold a value **and** a sparkline: they are two facts,
+  and the tree keeps them apart as well.
+
+### What the port found
+
+- **The tree's sparkline has a theme colour** — the fourth colour of
+  the theme, with a tint — and the tree's themes are palettes a
+  document may choose. Here a sparkline takes a colour the way a
+  person writes one, `#rrggbb`, and there is no theme here.
+- **The tree keeps its sparklines in a list beside the sheet**, and so
+  does this one: a value set over a cell that holds a sparkline does
+  not take the sparkline away.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/sparklines.rs`): a
+  sparkline being set and read back, the values following the sheet, a
+  cell that holds no number showing nothing, a win and a loss being
+  about the sign, a kind that is not one being refused, a range of one
+  cell being refused, a colour that is not a colour being refused, a
+  cell holding a value and a sparkline, a sparkline being taken away,
+  and every sparkline of the sheet being read at once.
+- **One new module** (`sparklines`). The grid battery now carries
+  **103** commands and the MCP server **666**.
+
+### What it does not settle
+
+- **The tree's sparkline is drawn** — the line, the columns, the bars
+  and the markers — and here a sparkline is a fact of a sheet and a
+  reading of it; nothing is drawn.
+- **The tree's sparkline may be a group of them**, one range for many
+  cells, and here a sparkline is one range in one cell.
