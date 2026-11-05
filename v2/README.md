@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3461 tests.** The MCP server links **all fifteen batteries** in, so the
+**3474 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3461 tests
+cargo test          # 3474 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3909,6 +3909,7 @@ so.
 | the **marks** of a print | **built.** A printed page may carry the gridlines and the headings, and the headings take room from the page — the tree's own room (§472) | §472 |
 | the **paragraph** of a style | **built.** A style carries the paragraph of the text it applies to — its alignment, its spacing and its indents — and a style based on another has the paragraph of its base under it (§473) | §473 |
 | the **link** of an item | **built.** An item may point at a target outside the document — a web link or a mail link — or at a page inside it, and a target that may not be opened is refused for its own reason (§474) | §474 |
+| the **FCPXML** of a sequence | **built.** The text of an interchange format is derived from the sequence — the spine, the connected clips, the gaps, the transitions and the markers — and what is left out is said (§475) | §475 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31261,3 +31262,70 @@ An item may carry a **link**: a target it points at.
   story here is a string.
 - **The tree's link may name a page that does not exist yet**, and
   here the page is a node that is there.
+
+## 475. The FCPXML of a sequence
+
+FCPXML is the interchange format of a non-linear editor: an XML text
+that says what is on the timeline, what it came from and how long it
+is.
+
+### What was built
+
+- **One command** in the film battery: `film.export.fcpxml`, given the
+  sequence and the **size** of the sequence — the document does not
+  say it, so the caller does. The text is **derived** and returned as
+  a text.
+- The text has the **resources** (the format and the assets), the
+  library, the event, the project and the sequence, and the **spine**.
+- The **spine** is the first video track of the sequence, and the
+  other tracks are **connected clips** on a **lane** — the video
+  tracks count up from one and the audio tracks count down from minus
+  one — and each sits inside the element of the spine it lies over.
+- The **holes** between the clips are **gaps**, the **transitions** of
+  the spine are `transition` elements, and the **markers** of the
+  sequence are written inside the element they lie on.
+- A clip that is **retimed** — sped up or reversed — carries a
+  `timeMap`, which says where its source goes.
+- The **rules**: a clip with no item is refused, because the text
+  would name a source that is not there; and what is **left out** is
+  **said** — a transition on a track that is not the spine, a
+  connected clip that lies over nothing, and a marker that is not on
+  the timeline.
+
+### What the port found
+
+- **The tree's export writes a file and probes the media**: its asset
+  says whether it has video and audio, and it writes the keyframes,
+  the transforms, the blend modes and the pan of a clip. Here the
+  item knows its name, its path and its length, and the asset says
+  what it knows and does not say what it does not.
+- **The tree's export reports what it drops** in a report of its own.
+  Here the answer carries the list of what was left out, because a
+  dropping that is not said is a silent loss.
+- **The tree's times are rational and counted in frames**, and so are
+  these — and a time of zero is `0s`, the tree's spelling.
+
+### What it cost
+
+- **Thirteen tests** in the film battery (`tests/fcpxml.rs`): the text
+  being a document of the format, the format being the rate and the
+  size, the spine being the first video track, the times being counted
+  in frames, the hole between two clips being a gap, a clip on another
+  track being a connected clip, an audio track being on a lane below
+  zero, a retimed clip saying where its source goes, a transition of
+  the spine being written, a transition of another track being left
+  out and said, a marker being written inside its element, a clip with
+  no item not being on the timeline, and a size that is not a size
+  being refused.
+- **One new module** (`fcpxml`). The film battery now carries **72**
+  commands and the MCP server **655**.
+
+### What it does not settle
+
+- **The tree's export writes the keyframes, the transforms, the
+  opacity and the pan of a clip**, and here a clip is its place on the
+  timeline, its source and its length.
+- **The tree's size is a fact of the sequence**, and here the caller
+  says it — a sequence has no resolution in this tree yet.
+- **The tree's export writes nested sequences**, and here a sequence
+  is a sequence.
