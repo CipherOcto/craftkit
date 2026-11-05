@@ -197,6 +197,7 @@ mod binreading;
 mod binremoval;
 mod clipreading;
 mod edits;
+mod edl;
 mod enabling;
 mod gaps;
 mod hold;
@@ -236,6 +237,7 @@ pub use binreading::ReadBin;
 pub use binremoval::RemoveBin;
 pub use clipreading::ReadClip;
 pub use edits::{NextEdit, PrevEdit, Razor};
+pub use edl::ExportEdl;
 pub use enabling::EnableClip;
 pub use gaps::CloseGap;
 pub use hold::{DeleteHold, SetHold};
@@ -910,6 +912,7 @@ craftkit_sdk::plugin_anchor!(
     AddItem,
     AddTrack,
     AddClip,
+    ExportEdl,
     ReadTimeline,
     TrimClip,
     SetPlayhead,
