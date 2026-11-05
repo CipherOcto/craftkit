@@ -3932,6 +3932,7 @@ so.
 | the **shadow** of an item | **built.** An item may have a shadow — the light, the distance, the blur, the colour and the opacity — and the offset and the box of the shadow are derived (§495) | §495 |
 | the **row** that is inserted | **built.** A row may be inserted into a sheet, and everything that named a row is moved with it — the cells, the formulas, the merges, the notes — and what cannot be moved refuses the insert (§496) | §496 |
 | the **row** that is deleted | **built.** A row may be deleted from a sheet, and the rows below it move up — and a formula that names a cell in the deleted rows refuses the delete, because this tree has no #REF! yet (§497) | §497 |
+| the **column** that is inserted | **built.** A column may be inserted into a sheet, and everything that named a column is moved with it — the cells, the formulas, the merges, the notes, the widths — and what cannot be moved refuses the insert (§498) | §498 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32658,3 +32659,93 @@ the cells of the deleted rows are taken away with them.
   is left exactly as it was — which is also true of the insert (§496),
   and a formula this tree cannot read is a formula the engine cannot
   work out either.
+
+## 498. The column that is inserted
+
+A column may be **inserted** into a sheet: the columns at and to the
+right of it move right, and everything that named a column is moved
+with them.
+
+### What was built
+
+- **One command** in the grid battery: `grid.column.insert`, and the
+  machinery it needs: a formula's **references** are inserted with the
+  columns, and an expression is **written out** again with them.
+- A column is inserted by **moving** the facts that name columns:
+  - the **cells** of the sheet move right, and the **formulas** in them
+    are rewritten: a reference to a cell that moved now names the cell
+    it moved to — and that is true of the formula of a cell that
+    **stayed** as well, because the cell it names moved;
+  - a reference that names **another sheet** is left alone, because the
+    columns of that sheet are not the columns that were inserted, and an
+    **anchored** reference is left alone too — the `$` before the
+    letters is what says it does not move;
+  - the **borders**, the **notes**, the **links** and the **pictures**
+    of a cell move with the cell;
+  - the **merges** and the **area** the sheet prints move with the
+    columns they cover;
+  - the **widths** of the columns, the **hidden columns**, the
+    **outline levels**, the **title columns** and the **breaks** of the
+    print move with the columns they name;
+  - the **filter** of the sheet moves with the column it filters.
+- The **rules**: a column is named by its **letters** — `A`, `B`, `AA` —
+  and the number of columns inserted is a whole number above zero; the
+  columns may not run **past the last column of the sheet**, because a
+  sheet is sixteen thousand columns wide; a sheet that is **protected**
+  refuses, because its cells are locked; and a sheet that holds
+  something this tree **cannot move** refuses and says what it holds —
+  a conditional format, a validation, a sparkline, a table, a pivot or
+  a chart — or a **name** of the workbook that points at it.
+
+### What the port found
+
+- **The tree's insert moves everything**, because the tree's sheet is
+  one thing and a column is part of it: the tree's cells, the tree's
+  formulas, the tree's merges, the tree's charts, the tree's
+  conditional formats and the tree's names all move together. Here the
+  moving is a list of the facts this tree knows how to move, and a fact
+  it does not know how to move **refuses** the insert rather than being
+  left behind.
+- **The tree's sheet has no columns of its own to move** — the tree
+  keeps the widths of the columns in a table beside the sheet and the
+  sheet holds a pointer to it, so the tree's insert does not have to
+  move them. Here the widths are a fact of the sheet, and they move
+  with the columns they are the widths of.
+- **A sheet that prints its gridlines or its headings, or names the
+  columns that are printed on every page, was refused a row** by this
+  tree's row insert (§496): the list of what a row insert does not move
+  did not hold those three, and a fact this tree does not know how to
+  move **refuses**. They name columns and a row insert does not move
+  columns, so the list holds them now and the refusal is honest.
+
+### What it cost
+
+- **Seventeen tests** in the grid battery (`tests/columninserting.rs`):
+  a column being inserted and the cells moving right, more than one
+  column being inserted, the formula of a cell that moves being written
+  again, the formula of a cell that stays being written again too, a
+  reference that names another sheet not being moved, an anchored
+  column not being moved, a merge moving with the columns it covers, a
+  note moving with its cell, the width of a column moving with the
+  column, a hidden column moving with the columns, the outline of a
+  column moving with the column, the filter moving with the column it
+  filters, the area a sheet prints moving with the columns, the titles
+  of a print moving with the columns, a sheet that holds something this
+  tree cannot move being refused, a protected sheet refusing, and a
+  column that is not a column being refused.
+- **One new module** (`columninserting`) and the insert of a column in
+  the formula module. The grid battery now carries **119**
+  commands and the MCP server **701**.
+
+### What it does not settle
+
+- **The conditional formats, the validations, the sparklines, the
+  tables, the pivots and the charts are not moved**, and a sheet that
+  holds one of them refuses the insert and says which. The tree moves
+  them all.
+- **A name of the workbook that points at the sheet is not moved**,
+  and a sheet with such a name refuses the insert.
+- **The formula is written out again**, so its text may be another
+  spelling of the same meaning.
+- **The column that is deleted is not here**: a deletion moves the
+  columns left and takes the last one away, and it is its own work.
