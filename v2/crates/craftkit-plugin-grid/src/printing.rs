@@ -115,6 +115,11 @@ pub struct Setup {
     pub orientation: String,
     /// The margins, in points: left, right, top and bottom.
     pub margins: [f64; 4],
+    /// The **scale** of the print, in percent: from ten to four hundred.
+    pub scale: f64,
+    /// The **fit**: the number of pages wide and the number of pages
+    /// tall, when the sheet is printed to fit rather than at a scale.
+    pub fit: Option<(u16, u16)>,
 }
 
 impl Default for Setup {
@@ -130,6 +135,8 @@ impl Default for Setup {
                 DEFAULT_MARGINS[2] * 72.0,
                 DEFAULT_MARGINS[3] * 72.0,
             ],
+            scale: 100.0,
+            fit: None,
         }
     }
 }
@@ -163,6 +170,22 @@ impl Setup {
                 setup.margins[index] = margin;
             }
         }
+        if let Some(scale) = stored.get("scale").and_then(|scale| scale.as_f64())
+            && scale.is_finite()
+            && (crate::scaling::MIN_SCALE..=crate::scaling::MAX_SCALE).contains(&scale)
+        {
+            setup.scale = scale;
+        }
+        if let Some(fit) = stored.get("fit")
+            && let (Some(wide), Some(tall)) = (
+                fit.get("wide").and_then(|wide| wide.as_u64()),
+                fit.get("tall").and_then(|tall| tall.as_u64()),
+            )
+            && wide <= u64::from(u16::MAX)
+            && tall <= u64::from(u16::MAX)
+        {
+            setup.fit = Some((wide as u16, tall as u16));
+        }
         setup
     }
 
@@ -176,6 +199,11 @@ impl Setup {
                 "right": self.margins[1],
                 "top": self.margins[2],
                 "bottom": self.margins[3],
+            },
+            "scale": self.scale,
+            "fit": match self.fit {
+                Some((wide, tall)) => json!({ "wide": wide, "tall": tall }),
+                None => Json::Null,
             },
         })
     }
@@ -214,7 +242,7 @@ pub fn paper_of(name: &str) -> Option<(&'static str, f64, f64)> {
 }
 
 /// The **sheet** a command is about, and whether it is a sheet.
-fn sheet_of(session: &Session, id: &str, sheet: u64) -> Result<Node, EngineError> {
+pub(crate) fn sheet_of(session: &Session, id: &str, sheet: u64) -> Result<Node, EngineError> {
     let Some(node) = session.document().node(sheet) else {
         return Err(EngineError::Failed {
             id: id.to_string(),
@@ -231,7 +259,7 @@ fn sheet_of(session: &Session, id: &str, sheet: u64) -> Result<Node, EngineError
 }
 
 /// The **height of a row**, in points.
-fn row_height(node: &Node, row: u32) -> f64 {
+pub(crate) fn row_height(node: &Node, row: u32) -> f64 {
     node.data
         .get("rows")
         .and_then(|rows| rows.get(row.to_string()))
@@ -241,7 +269,7 @@ fn row_height(node: &Node, row: u32) -> f64 {
 }
 
 /// The **width of a column**, in points.
-fn column_width(node: &Node, column: u32) -> f64 {
+pub(crate) fn column_width(node: &Node, column: u32) -> f64 {
     node.data
         .get("columns")
         .and_then(|columns| columns.get(crate::formula::CellRef::column_text(column)))
@@ -288,7 +316,7 @@ pub fn area_of(node: &Node) -> Option<Area> {
 ///
 /// A line that is wider than the page is on a page of its own, and a
 /// **break** put in by hand starts a page there.
-fn bands(lines: &[u32], size: impl Fn(u32) -> f64, room: f64, breaks: &[u32]) -> Vec<(u32, u32)> {
+pub(crate) fn bands(lines: &[u32], size: impl Fn(u32) -> f64, room: f64, breaks: &[u32]) -> Vec<(u32, u32)> {
     let mut out: Vec<(u32, u32)> = Vec::new();
     let mut index = 0usize;
     while index < lines.len() {
@@ -473,11 +501,19 @@ impl ReadSetup {
         let title_rows: Vec<u32> = title_rows.iter().map(|row| row + 1).collect();
         let title_columns: Vec<String> =
             title_columns.iter().map(|column| crate::formula::CellRef::column_text(*column)).collect();
+        // The **scale** a fit works out to, when a fit is set.
+        let fit_scale = crate::scaling::effective_scale(&setup, &node, &crate::scaling::Content::of(&node));
         Ok(Outcome::new(format!("the sheet is printed on `{}`", setup.paper)).with_data(json!({
             "sheet": sheet,
             "paper": setup.paper,
             "orientation": setup.orientation,
             "margins": setup.to_json()["margins"].clone(),
+            "scale": setup.scale,
+            "fit": match setup.fit {
+                Some((wide, tall)) => json!({ "wide": wide, "tall": tall }),
+                None => Json::Null,
+            },
+            "fit_scale": (fit_scale.0 * 10_000.0).round() / 100.0,
             "page": { "width": page_width, "height": page_height },
             "printable": { "width": printable_width, "height": printable_height },
             "area": area_of(&node).map(|area| json!(area.to_text())).unwrap_or(Json::Null),
@@ -535,9 +571,21 @@ impl ReadPages {
             (area.start.row..=area.end.row).filter(|row| !title_rows.contains(row)).collect();
         let content_columns: Vec<u32> =
             (area.start.col..=area.end.col).filter(|column| !title_columns.contains(column)).collect();
-        let rows = bands(&content_rows, |row| row_height(&node, row), printable_height, &row_breaks);
-        let columns =
-            bands(&content_columns, |column| column_width(&node, column), printable_width, &column_breaks);
+        // The **scale** the sheet prints at: the scale of the setup, or
+        // the scale that fits it into the pages it was told to fit.
+        let content = crate::scaling::Content { rows: content_rows, columns: content_columns };
+        let (scale, fit_met) = crate::scaling::effective_scale(&setup, &node, &content);
+        // A sheet that is **fitted** is broken by the fit and not by
+        // hand: the fit is the way the pages are chosen.
+        let (row_breaks, column_breaks) =
+            if setup.fit.is_some() { (Vec::new(), Vec::new()) } else { (row_breaks, column_breaks) };
+        let rows = bands(&content.rows, |row| row_height(&node, row), printable_height / scale, &row_breaks);
+        let columns = bands(
+            &content.columns,
+            |column| column_width(&node, column),
+            printable_width / scale,
+            &column_breaks,
+        );
         let mut pages: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
         for (first_row, last_row) in &rows {
             for (first_column, last_column) in &columns {
@@ -567,6 +615,8 @@ impl ReadPages {
         Ok(Outcome::new(format!("the sheet is {} page(s)", pages.len())).with_data(json!({
             "sheet": sheet,
             "area": area.to_text(),
+            "scale": (scale * 10_000.0).round() / 100.0,
+            "fit_met": fit_met,
             "pages": pages,
             "count": pages.len(),
         })))

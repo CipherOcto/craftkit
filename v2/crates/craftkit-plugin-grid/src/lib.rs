@@ -364,6 +364,7 @@ mod protection;
 mod reading;
 mod regression;
 mod removal;
+mod scaling;
 mod sections;
 mod securities;
 mod sheetnames;
@@ -415,6 +416,7 @@ pub use printing::{
 pub use protection::{ProtectSheet, UnprotectSheet};
 pub use reading::ReadRange;
 pub use removal::RemoveSheet;
+pub use scaling::{SetFit, SetScale};
 pub use sheetnames::RenameSheet;
 pub use sheetreading::ReadSheet;
 pub use sizes::{SetColumnWidth, SetRowHeight};
@@ -1749,6 +1751,8 @@ craftkit_sdk::plugin_anchor!(
     SetPrintArea,
     SetPrintBreak,
     SetPrintTitles,
+    SetScale,
+    SetFit,
     GoalScan,
     FilteredRows,
     SetConditional,
