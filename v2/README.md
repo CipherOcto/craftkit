@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3363 tests.** The MCP server links **all fifteen batteries** in, so the
+**3374 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3363 tests
+cargo test          # 3374 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3898,6 +3898,7 @@ so.
 | the **dissolve** of a transition | **built.** The list writes a dissolve as the cut of the outgoing clip and the incoming clip with the length of it, and a dissolve that is not at the cut is refused (§461) | §461 |
 | the **printing** of a sheet | **built.** A sheet is printed on a paper with margins, and the pages it breaks into are derived from the paper and the sizes of the rows and the columns (§462) | §462 |
 | the **equation** of a document | **built.** An equation is a block whose parts are the equation, and its text is derived from them — five kinds of part and one line of text (§463) | §463 |
+| the **import** of a text | **built.** A text of values becomes a sheet of cells, and the rows of the text are the same length or the text is refused (§464) | §464 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30647,3 +30648,62 @@ An **equation** is a block whose text is not written down: it is
   from a file; here it is a block of a document.
 - **The tree lays its equation out and draws it**; here the equation
   is a structure and a line of text.
+
+## 464. The import of a text into a sheet
+
+A text of values separated by a delimiter — a **CSV** — is a table in
+writing, and it may be brought into a workbook as a sheet.
+
+### What was built
+
+- **One command** in the grid battery: `grid.import.csv`, given a
+  workbook, the text, and optionally the name of the sheet and the
+  delimiter.
+- The **delimiter** is one character, and the tree's is a comma; a
+  **quoted** field is a field with the delimiter in it, and a quote
+  inside it is written twice.
+- A field is a **value** and not a formula: a field that reads `=1+1`
+  is the text `=1+1`, because a text is a text. A field that is a
+  number is a number; a field that holds nothing is nothing.
+- The **rules**: the **rows** of the text are the same length, and a
+  text whose rows are not is refused — a table with rows of different
+  lengths is a table with holes in it, and this tree refuses those
+  too (§454); a quoted field that is **never closed** is refused; and
+  the text is **bounded** — ten thousand rows and two hundred and
+  fifty-six columns — because a text is from outside.
+
+### What the port found
+
+- **The tree's import makes a table of the text and asks about it.**
+  Its `data.fromTextCsv` imports a text as a table and its
+  `data.getData` does the same with a JSON array of objects. Here the
+  import makes a **sheet** — a sheet is what a spreadsheet has — and
+  the text of the file is **not** kept beside it: the cells are the
+  file, and a second copy of the file is a copy that can be wrong.
+- **The tree is lenient about the rows.** A short row is padded and a
+  long one is cut. Here the rows are the same length or the text is
+  refused, because a sheet with a hole in a row is a sheet whose
+  cells say nothing about where the hole is.
+
+### What it cost
+
+- **Eleven tests** in the grid battery (`tests/importing.rs`): a text
+  becoming a sheet, a number being a number and the rest being text,
+  an empty field being nothing, a quoted field holding the delimiter,
+  rows of different lengths being refused, a quoted field that is
+  never closed being refused, a delimiter that is not one character
+  being refused, the delimiter being another character, the sheet
+  being named, a field that reads like a formula being text, and a
+  text that holds nothing being refused.
+- **One new module** (`importing`): the import of a text is its own.
+  The grid battery now carries **86** commands and the MCP server
+  **635**.
+
+### What it does not settle
+
+- **The tree's import of a JSON array of objects is not here**, and
+  neither is the tree's import of a file from disk — the text comes
+  in the command.
+- **The tree's import asks about the text and may change how it is
+  read** — the delimiter, the encoding, the date and the number
+  formats. Here the text is read as it is, and a number is a number.
