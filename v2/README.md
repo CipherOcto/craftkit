@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3339 tests.** The MCP server links **all fifteen batteries** in, so the
+**3342 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3339 tests
+cargo test          # 3342 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3895,6 +3895,7 @@ so.
 | the **item** of a spread | **built.** An item has facts of its own: its opacity, whether it is hidden, whether it is locked and how big it is (§458) | §458 |
 | the **order** of the items | **built.** The items of a spread are drawn in the order they stand in, and one item may be brought forward or sent back (§459) | §459 |
 | the **crossings** of a sheet | **built.** The scan walks the range and reports every place the result goes past the target, and a sheet that turns around is found (§460) | §460 |
+| the **dissolve** of a transition | **built.** The list writes a dissolve as the cut of the outgoing clip and the incoming clip with the length of it, and a dissolve that is not at the cut is refused (§461) | §461 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30467,3 +30468,56 @@ and the places where the result crosses the target are reported.
 - **The tree's scan may be told to stop at a tolerance**, and here a
   crossing is found by the **sign** of the difference between the
   result and the target, and a tolerance is not a thing.
+
+## 461. The dissolve of a transition
+
+A **transition** over a cut is a **dissolve**, and the edit decision
+list writes it.
+
+### What was built
+
+- The list writes a dissolve **the way the tree writes it**: the event
+  that goes into the clip carries **two lines** — the **cut** of the
+  outgoing clip, a line of no length at the point the dissolve
+  begins, and the incoming clip with the **length** of the dissolve
+  beside it (`D 005`).
+- The outgoing clip's own event **ends at the cut**, because that is
+  where it ends.
+- The **rule**: a dissolve that sits **before the cut** — a transition
+  centred on the cut, or ending at it — would need source media that
+  the incoming clip does not have. The tree clamps that source to the
+  start of the media and warns about it; here the list is
+  **refused**, because a list that names a source that is not there is
+  a list that is wrong.
+
+### What the port found
+
+- **The tree writes the same two lines**, the cut and the dissolve,
+  and the tree's own convention is that the outgoing event ends at the
+  cut. Here it is the same, and the tree's rule that an entity that
+  is already where it was told to go stays is the same rule.
+- **The tree clamps and this tree refuses.** The tree's export writes
+  the source of a centred dissolve as the start of the media and says
+  in its report that it had to. Here the list is refused instead: the
+  tree's clamp is a way of writing a list that is not the edit, and
+  the kit's rule is that a command that quietly does something else
+  is a command whose answer is a lie.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/dissolves.rs`): the
+  dissolve being written with its cut and its length, the outgoing
+  clip's event ending at the cut, a dissolve centred on the cut being
+  refused, and a dissolve that ends at the cut being refused too.
+- **One test gone**: the refusal of a transition, which no longer
+  holds — a transition at the cut is now written.
+- **No new command**: the dissolve is part of the list. The film
+  battery still carries **71** commands and the MCP server **627**.
+
+### What it does not settle
+
+- **A dissolve that is centred on the cut is not written.** The tree
+  writes it with the source clamped, and here it is refused — the
+  list of a sequence with a centred transition cannot be written.
+- **The tree's dissolve may carry the name of the effect** as a
+  comment, and here it does not.
