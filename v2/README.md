@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3334 tests.** The MCP server links **all fifteen batteries** in, so the
+**3339 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3334 tests
+cargo test          # 3339 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3894,6 +3894,7 @@ so.
 | the **edit decision list** | **built.** The list of the cuts of a sequence is worked out from it and returned as a text, and a sequence with a transition is refused (§457) | §457 |
 | the **item** of a spread | **built.** An item has facts of its own: its opacity, whether it is hidden, whether it is locked and how big it is (§458) | §458 |
 | the **order** of the items | **built.** The items of a spread are drawn in the order they stand in, and one item may be brought forward or sent back (§459) | §459 |
+| the **crossings** of a sheet | **built.** The scan walks the range and reports every place the result goes past the target, and a sheet that turns around is found (§460) | §460 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30414,3 +30415,55 @@ last and so it is **at the front**.
 - **The tree arranges a selection and here a command moves one item.**
 - **The tree's groups are arranged too**, and here an item has no
   group of its own.
+
+## 460. The crossings of a sheet
+
+The goal seek finds **one** answer and it assumes the sheet moves one
+way. The **scan** asks **every** place: the range is walked in steps
+and the places where the result crosses the target are reported.
+
+### What was built
+
+- **One command** in the grid battery: `grid.goal.scan` — the sheet,
+  the cell that is varied, the cell that is read, the target, the two
+  ends of the range and the step.
+- The scan walks the range and reports the **crossings**: the two
+  places the result went past the target, and what it said on each
+  side of the crossing. A trial that reaches the target exactly is a
+  **hit**, and the hits are reported beside the crossings.
+- The sheet is **not changed**: the scan is made in a copy of the
+  workbook, as the goal seek is.
+- The **rules**: a step is a number above zero, and the scan asks the
+  sheet at most **four thousand and ninety-six** times — a scan that
+  would ask it more is refused; and the range has two ends.
+
+### What the port found
+
+- **The tree's goal seek may scan the range in steps or bisect it**,
+  and it stops when the answer is close enough. Here the scan is a
+  command **of its own** and the bisection is another (§452), because
+  they answer different questions: one finds **one** answer and the
+  other finds **every** crossing.
+- **The tree's goal seek assumes the sheet moves one way and says so
+  when it does not.** The scan assumes nothing: a sheet that goes
+  down and then up is found, because every crossing is reported and
+  not only the first.
+
+### What it cost
+
+- **Five tests** in the grid battery (`tests/scans.rs`): the scan
+  finding the crossing, a sheet that turns around being found, a scan
+  that would ask the sheet too many times being refused, a step that
+  is not a number being refused, and the sheet not being changed.
+- **One new command** in the module of the goal (`goals`): the
+  crossings of a sheet are the other half of the goal. The grid
+  battery now carries **80** commands and the MCP server **627**.
+
+### What it does not settle
+
+- **The tree narrows each crossing it finds**, and here the crossing
+  is the two places the scan stepped between: it is not narrowed
+  further.
+- **The tree's scan may be told to stop at a tolerance**, and here a
+  crossing is found by the **sign** of the difference between the
+  result and the target, and a tolerance is not a thing.
