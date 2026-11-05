@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3491 tests.** The MCP server links **all fifteen batteries** in, so the
+**3500 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3491 tests
+cargo test          # 3500 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3912,6 +3912,7 @@ so.
 | the **FCPXML** of a sequence | **built.** The text of an interchange format is derived from the sequence — the spine, the connected clips, the gaps, the transitions and the markers — and what is left out is said (§475) | §475 |
 | the **OTIO** of a sequence | **built.** The timeline of an interchange format is derived from the sequence — its tracks, its clips, its gaps, its transitions and its markers — and it is a text of the document (§476) | §476 |
 | the **cross-reference** of a document | **built.** A block may reference another — it stands for the text of a bookmarked block — and the text it shows is derived, so it cannot be out of date (§477) | §477 |
+| the **chart** of a sheet | **built.** A chart reads a range — the first row names the series, the first column holds the categories — and the data it shows is derived, so it cannot be out of date (§478) | §478 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31440,3 +31441,57 @@ that carries a **bookmark**.
 - **The tree's cross-reference may be a number and a word** ("above",
   "below", "on page 4"), and here the text of the block is the whole
   of it.
+
+## 478. The chart of a sheet
+
+A chart is a **picture of a range**: it reads the range of a sheet and
+shows it as bars, as a line or as a pie.
+
+### What was built
+
+- **Four commands** in the grid battery: `grid.chart.add` to add a
+  chart, `grid.chart.read` to read it, `grid.chart.set` to change it
+  and `grid.chart.remove` to take it away — and **one new kind** of
+  node, `grid.chart`.
+- The **range** is the fact and the **data is derived**: the
+  categories, the series and the values are worked out from the cells
+  every time they are asked for, so a chart cannot be out of date with
+  the sheet it reads.
+- The **shape** is the tree's shape: the first row names the series,
+  the first column holds the categories, and the rest are the values.
+- The **rules**: a range of one row or one column is refused, for a
+  chart needs a name and something to show; a kind that is not one of
+  `column`, `bar`, `line` and `pie` is refused; and a cell that holds
+  text is **not a number**, so its value is **nothing** and not a
+  zero.
+
+### What the port found
+
+- **The tree's chart holds its own numbers**: its series carry a range
+  and a name and a value, and the chart is a drawing that is placed
+  on the sheet. Here the chart holds **only the range**, and
+  everything it shows is derived — the same bargain as the pivot
+  (§455) and the table (§454): a thing that reads a range does not
+  keep a copy of it.
+- **The tree's chart has many properties** — a subtype, a legend, the
+  data labels, the gridlines, the quartiles, a size and a place — and
+  here a chart is its range, its kind and its title.
+
+### What it cost
+
+- **Nine tests** in the grid battery (`tests/charts.rs`): a chart being
+  added, the data being the shape of the range, the data following the
+  sheet, a value that is not a number being nothing, a range of one row
+  or one column being refused, a kind that is not one being refused,
+  the chart being changed, a chart being taken away, and a node that
+  is not a chart being refused.
+- **One new module** (`charts`) and **one new kind** of node. The grid
+  battery now carries **100** commands and the MCP server **663**.
+
+### What it does not settle
+
+- **The tree's chart is drawn** — it has a size, a place and a
+  picture — and here a chart is a fact of a sheet and a reading of it;
+  nothing is drawn.
+- **The tree's chart switches its rows and its columns**, and the
+  chart here always reads the first row as the names.
