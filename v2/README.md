@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3434 tests.** The MCP server links **all fifteen batteries** in, so the
+**3440 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3434 tests
+cargo test          # 3440 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3906,6 +3906,7 @@ so.
 | the **column beyond Z** | **built.** The letters of a column are a base of twenty-six, and `AA` is the column after `Z` — a cell set there is read there, and a sheet may be sorted by it (§469) | §469 |
 | the **scale** of a print | **built.** A sheet prints at a scale or to fit, and the scale a fit works out is the largest at which the pages fit — and a fit that cannot be met is refused (§470) | §470 |
 | the **header** of a print | **built.** A printed page may carry a header and a footer, and their codes — the page number, the number of pages and the name of the sheet — are worked out for the page they are on (§471) | §471 |
+| the **marks** of a print | **built.** A printed page may carry the gridlines and the headings, and the headings take room from the page — the tree's own room (§472) | §472 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31092,3 +31093,54 @@ of pages and the name of the sheet.
   margins, and a header is written above it.
 - **The tree prints a picture in a header** (`&G`), and it scales the
   header with the document or does not; neither is here.
+
+## 472. The marks of a print
+
+A printed page may carry the **gridlines** and the **headings** — the
+row numbers and the column letters beside the cells.
+
+### What was built
+
+- **Two commands** in the grid battery: `grid.print.gridlines` and
+  `grid.print.headings`, given whether the mark is printed. The tree
+  prints neither by default, and neither is printed here by default.
+- The **headings take room from the page**: the rows are one heading
+  shorter and the columns one heading narrower, so a sheet printed
+  with its headings is not the sheet printed without them. The room is
+  the tree's own — ten points beside the page and seven for every
+  digit of the last row, and a heading as high as a row.
+- The **gridlines take no room**: they are drawn between the cells.
+- The **pages** say which marks they carry, and the **setup** says
+  which marks the sheet prints.
+- The **marks of a print are not the marks of the view**: a sheet may
+  be drawn without its gridlines and printed with them, and the two
+  facts are two facts.
+
+### What the port found
+
+- **The tree keeps the two flags in its print settings**, beside the
+  paper and the margins, and the sheet has its own pair of flags for
+  the view. Here the print has its own facts as well, and the view
+  keeps its own.
+- **The tree's headings are drawn only when the flag is on**, and the
+  room they take is worked out from the number of digits in the last
+  row — the same rule here.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/marks.rs`): the gridlines
+  being printed and not printed, the headings being printed, the
+  pages saying their marks, the headings taking the room of a row,
+  the gridlines taking no room, and the marks of a print not being the
+  marks of the view.
+- **One new module** (`marks`). The grid battery now carries **96**
+  commands and the MCP server **648**.
+
+### What it does not settle
+
+- **The tree's printed gridlines are the borders of the cells**, and
+  the border of a cell is a style of the cell. Here the gridlines are
+  a fact of the print and the borders of a cell are not here.
+- **The tree's headings are the headings of the tree's own view**, and
+  it may print a sheet that is not the sheet on the screen; here the
+  print is the document and the screen is the document too.
