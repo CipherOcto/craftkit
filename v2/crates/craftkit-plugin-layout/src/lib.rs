@@ -66,6 +66,7 @@ mod links;
 mod margins;
 mod order;
 mod paint;
+mod radii;
 mod rotation;
 mod styles;
 
@@ -82,6 +83,7 @@ pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
 pub use margins::SetMargin;
 pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
 pub use paint::{SetFill, SetStroke};
+pub use radii::SetRadius;
 pub use rotation::RotateItem;
 pub use styles::{AddStyle, SetItemStyle, SetStyleFill, SetStyleStroke};
 
@@ -326,6 +328,10 @@ macro_rules! item_kind {
                     "own_fill": crate::paint::fill_of(node),
                     "own_stroke": crate::paint::stroke_of(node),
                     "style": edge_name(document, node.id, "layout.styled_by"),
+                    "radius": crate::radii::radius_of(node)
+                        .map(|radius| json!(radius))
+                        .unwrap_or(Json::Null),
+                    "corners": crate::radii::corners_json(node),
                     "locked": crate::items::is_locked(node),
                     "hidden": node.muted,
                 }))
@@ -898,6 +904,7 @@ craftkit_sdk::plugin_anchor!(
     UnlockItem,
     ScaleItem,
     RotateItem,
+    SetRadius,
     ListItems,
     BringToFront,
     SendToBack,
