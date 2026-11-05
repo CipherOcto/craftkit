@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3424 tests.** The MCP server links **all fifteen batteries** in, so the
+**3434 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3424 tests
+cargo test          # 3434 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3905,6 +3905,7 @@ so.
 | the **character** of a style | **built.** A style carries the character of the text it applies to, and a style based on another has the character of its base under it (§468) | §468 |
 | the **column beyond Z** | **built.** The letters of a column are a base of twenty-six, and `AA` is the column after `Z` — a cell set there is read there, and a sheet may be sorted by it (§469) | §469 |
 | the **scale** of a print | **built.** A sheet prints at a scale or to fit, and the scale a fit works out is the largest at which the pages fit — and a fit that cannot be met is refused (§470) | §470 |
+| the **header** of a print | **built.** A printed page may carry a header and a footer, and their codes — the page number, the number of pages and the name of the sheet — are worked out for the page they are on (§471) | §471 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31026,3 +31027,68 @@ or printed to **fit**: so many pages wide and so many pages tall.
   printing of the gridlines and the headings.
 - **The tree scales the header and the footer with the document** (or
   does not), and here there is no header to scale.
+
+## 471. The header and the footer of a print
+
+A printed page may carry a **header** above it and a **footer** below
+it, and each of them may hold **codes**: the page number, the number
+of pages and the name of the sheet.
+
+### What was built
+
+- **Two commands** in the grid battery: `grid.print.header` and
+  `grid.print.footer`, given the text and — optionally — the kind of
+  page it is for: `odd`, `even` or `first`. An empty text takes the
+  header away.
+- The **codes** of a header are the tree's: `&P` is the page number,
+  `&N` the number of pages, `&A` the name of the sheet, `&L`, `&C`
+  and `&R` are the three sections the text stands in, `&B` makes a
+  section bold, `&I` makes it italic, and `&&` is an ampersand.
+- The codes are **worked out for the page they are on**: the pages of
+  a sheet say their own header and footer, and the page number and
+  the number of pages are the ones of that page.
+- The **kind of a page** is derived: a page that has a header of its
+  own is that kind of page, and a kind that has none falls back on
+  the header of the odd pages.
+- The **rules**: a code this tree does not print is refused — `&D` is
+  the date of the machine and `&F` the name of the file it was
+  printed from; a text that is too long is refused; and a kind of page
+  that is not one of the three is refused.
+
+### What the port found
+
+- **The tree keeps two flags** — different first page, different odd
+  and even pages — beside the six texts, so an even header that is
+  set but not switched on is a header that is never printed. Here the
+  texts are the facts and the flags are gone: a header of its own
+  **is** the flag.
+- **The tree's header and footer carry a font and a size**
+  (`&"Arial,Bold"`) and the drawing honours them. Here a section says
+  whether it is bold and whether it is italic, and a font is not a
+  fact a printed sheet has here.
+- **The tree's date and time are the clock of the machine.** Here they
+  are refused: a printed sheet is about the document, and the date on
+  it is the date of the machine that printed it, which is not a fact
+  of the document.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/headers.rs`): the header
+  being set and read back, the header standing in its three sections,
+  the codes being worked out for the page they are on, a section being
+  bold, the first page having a header of its own, an even page
+  having one of its own, a header being taken away, a code about the
+  machine being refused, a kind of page that is not one being refused,
+  and a header that is too long being refused.
+- **One new module** (`headers`): the header and the footer of a
+  print are their own. The grid battery now carries **94** commands and
+  the MCP server **646**.
+
+### What it does not settle
+
+- **The tree's header and footer have a margin of their own**, and the
+  text stands in it. Here the header and the footer do not take room
+  from the page: the printable area is the paper less the four
+  margins, and a header is written above it.
+- **The tree prints a picture in a header** (`&G`), and it scales the
+  header with the document or does not; neither is here.
