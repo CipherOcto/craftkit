@@ -3926,6 +3926,7 @@ so.
 | the **dash** of a path | **built.** A line may be dashed — a pattern of lengths and an offset — and the pattern that is run is derived, so an odd pattern keeps its dash and its gap (§489) | §489 |
 | the **bleed** of a document | **built.** A document may have a bleed — the room the paper has beyond the page — and the bleed box of a page is derived from it (§490) | §490 |
 | the **line type** of a layer | **built.** A layer names a line type of the tree's own table, and the pattern of it is derived, so a layer may not name a line type that nothing defines (§491) | §491 |
+| the **margin** of a page | **built.** A page may have margins — the room between its edge and the text — and the margin box is derived, so it cannot be out of date (§492) | §492 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32285,3 +32286,65 @@ A layer names a **line type**: the pattern its lines are drawn with.
   and here the patterns are millimetres and are never scaled.
 - **The line is not drawn**: the pattern is a fact of the layer, and
   this tree has no canvas for a drawing.
+
+## 492. The margin of a page
+
+A page may have **margins**: the room between the edge of the page and
+the text that is set on it.
+
+### What was built
+
+- **One command** in the layout battery: `layout.page.margin`.
+- The margin is a fact of the **page** — four numbers, the room at the
+  **top**, at the **bottom**, at the **left** and at the **right** —
+  and the **margin box** of the page is **derived**: it is the box
+  inside the margins, and it is the box the text is set in. So the box
+  cannot be out of date, and the margin box of a page with no margins
+  is the box of the page.
+- The **rules**: a number that is not a number, or that is negative,
+  is refused — the margin is room, and there is no room that is less
+  than nothing; margins that leave **no room** for the page are
+  refused, because a margin box that is not a box is not a box; a side
+  that is **not said** keeps the room it had; and a node that is not a
+  page may not have margins.
+
+### What the port found
+
+- **The tree's margins are inside and outside** — the tree's page has
+  a top, a bottom and an inside and an outside margin, and the inside
+  and the outside are mirrored on the facing page. Here the margins
+  are the top, the bottom, the left and the right, because a page
+  here has no side: it does not know whether it is the left page of
+  its spread.
+- **The tree's margins are inherited**: a page without margins of its
+  own takes them from its parent page, and the tree's parent pages
+  carry margins and columns of their own. Here a page's margins are
+  its own.
+- **The tree's columns divide the margin box**, and the tree's margin
+  box is the box the text is set in. Here the margin box is derived
+  and the text is not set in it yet.
+
+### What it cost
+
+- **Seven tests** in the layout battery (`tests/margins.rs`): a page
+  having margins, the margin box of a page being derived, a side that
+  is not said keeping the room it had, a page with no margins having
+  the page's box as its margin box, the room of a margin that is
+  negative being refused, margins that leave no room being refused,
+  and a node that is not a page being refused margins.
+- **One new module** (`margins`). The layout battery now carries
+  **34** commands and the MCP server **695**.
+
+### What it does not settle
+
+- **The tree's margins are inside and outside** and are mirrored on
+  the facing page. Here the margins are left and right, and a page
+  has no side.
+- **The tree's margins are inherited** from a parent page, and the
+  tree's document may have master pages. Here a page's margins are
+  its own and nothing is inherited.
+- **The tree's columns divide the margin box** and the tree's margin
+  box is where the text is set. Here the margin box is derived and
+  nothing is set in it.
+- **The margins are not drawn**: they are a fact of the page, and
+  this tree has no canvas for a spread.
