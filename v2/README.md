@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3510 tests.** The MCP server links **all fifteen batteries** in, so the
+**3518 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3510 tests
+cargo test          # 3518 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3914,6 +3914,7 @@ so.
 | the **cross-reference** of a document | **built.** A block may reference another — it stands for the text of a bookmarked block — and the text it shows is derived, so it cannot be out of date (§477) | §477 |
 | the **chart** of a sheet | **built.** A chart reads a range — the first row names the series, the first column holds the categories — and the data it shows is derived, so it cannot be out of date (§478) | §478 |
 | the **sparkline** of a cell | **built.** A cell may hold a little picture of a range — a line, columns, or wins and losses — and the values it shows are derived, so it cannot be out of date (§479) | §479 |
+| the **picture** of a cell | **built.** A cell may hold a picture — a file beside the document and a size inside it — and the size is measured from the head of the file (§480) | §480 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31549,3 +31550,58 @@ A **sparkline** is a little picture of a range, drawn in a cell.
   reading of it; nothing is drawn.
 - **The tree's sparkline may be a group of them**, one range for many
   cells, and here a sparkline is one range in one cell.
+
+## 480. The picture of a cell
+
+A cell may hold a **picture**: a small image drawn in the cell.
+
+### What was built
+
+- **Three commands** in the grid battery: `grid.picture.set` to set
+  the picture of a cell, `grid.picture.read` to read it — every picture
+  of the sheet without a cell — and `grid.picture.remove` to take it
+  away.
+- A picture is a **file beside the document** and a **size** inside it
+  (§25): the bytes are never in the document, and the cell says where
+  they are.
+- The size is **measured** from the head of the file and never from
+  the pixels: a picture of forty megabytes is measured by reading a
+  little of it, and the rest of it is never in memory.
+- The **pixels** and the **aspect ratio** are derived.
+- The **rules**: a file that is not a picture is refused, and so is a
+  file that is not there; a cell that is **covered by a merge** is
+  refused, for the picture would be drawn under another cell's; and
+  the **alt text** is what a reader says when it cannot show the
+  picture.
+
+### What the port found
+
+- **The tree keeps the picture's bytes in the cell** — the data, the
+  mime and the alt — and the cell is the picture's home. Here the
+  bytes stay in the file and the cell says where they are, which is
+  the tree's own bargain about assets (§25) applied to a cell.
+- **The tree's cell picture knows its mime type**, because the bytes
+  are there to be read. Here the format is **derived** from the head
+  of the file, and a file that is not a picture is not a picture
+  whatever it is called.
+
+### What it cost
+
+- **Eight tests** in the grid battery (`tests/pictures.rs`): a picture
+  being set and read back, the size being measured from the head, the
+  bytes being in the file, a file that is not a picture being refused,
+  a file that is not there being refused, a cell covered by a merge
+  being refused, a picture being taken away, and every picture of the
+  sheet being read at once.
+- **One new module** (`pictures`) and one more dependency — the
+  **size reader** (`craftkit-image`), which is the tree's own and
+  reads nothing but the head. The grid battery now carries **106**
+  commands and the MCP server **669**.
+
+### What it does not settle
+
+- **The tree's picture in a cell is drawn and scaled to the cell**,
+  and here a picture is a fact of a sheet and a reading of it;
+  nothing is drawn.
+- **The tree's cell picture may be moved and cropped**, and here a
+  picture is the file, the size and the alt text.
