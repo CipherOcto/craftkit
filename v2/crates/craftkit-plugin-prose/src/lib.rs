@@ -114,6 +114,7 @@ mod finding;
 mod footnotes;
 mod links;
 mod numbering;
+mod outline;
 mod page;
 mod paragraph;
 mod references;
@@ -133,6 +134,7 @@ pub use finding::{Find, Replace};
 pub use footnotes::{AddFootnote, ReadFootnotes};
 pub use links::ReadLinks;
 pub use numbering::{AddList, ReadNumber, SetNumbering};
+pub use outline::{ReadOutline, ReadStyleLevel, SetStyleLevel};
 pub use page::{GetPage, SetPage};
 pub use paragraph::{ReadBlockParagraph, ReadStyleParagraph, SetStyleParagraph};
 pub use references::{AddReference, ReadReference, SetReference};
@@ -983,6 +985,9 @@ craftkit_sdk::plugin_anchor!(
     SetRuns,
     SetStyleCharacter,
     SetStyleParagraph,
+    SetStyleLevel,
+    ReadStyleLevel,
+    ReadOutline,
     AddReference,
     SetReference,
     ReadReference,
