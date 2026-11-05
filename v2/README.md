@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3451 tests.** The MCP server links **all fifteen batteries** in, so the
+**3461 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3451 tests
+cargo test          # 3461 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3908,6 +3908,7 @@ so.
 | the **header** of a print | **built.** A printed page may carry a header and a footer, and their codes — the page number, the number of pages and the name of the sheet — are worked out for the page they are on (§471) | §471 |
 | the **marks** of a print | **built.** A printed page may carry the gridlines and the headings, and the headings take room from the page — the tree's own room (§472) | §472 |
 | the **paragraph** of a style | **built.** A style carries the paragraph of the text it applies to — its alignment, its spacing and its indents — and a style based on another has the paragraph of its base under it (§473) | §473 |
+| the **link** of an item | **built.** An item may point at a target outside the document — a web link or a mail link — or at a page inside it, and a target that may not be opened is refused for its own reason (§474) | §474 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31205,3 +31206,58 @@ page.
 - **The tree's automatic spacing, its indents in characters and its
   widow and orphan control are not here**, and a paragraph that keeps
   with the next one is not here either.
+
+## 474. The link of an item
+
+An item may carry a **link**: a target it points at.
+
+### What was built
+
+- **Three commands** in the layout battery: `layout.item.link` for a
+  target outside the document, `layout.item.page.link` for a page
+  inside it, and `layout.links` to read the links of a document.
+- The **target** outside the document must be one that may be opened:
+  a **web link** (`http`, `https`) or a **mail link** (`mailto`). Each
+  kind that may not is refused for its own reason — a script, a
+  `data:` link, a `file:` path, a link to **another machine**, and a
+  relative link.
+- The **page** inside the document must be a page of the **same
+  document**: a page of another document is a link to a document that
+  is not here.
+- The link of an item is **one thing**, so setting a target takes the
+  page away and setting a page takes the target away — and a link may
+  be **taken away** either way.
+- Whether the target **may be opened** is **derived**, and the links of
+  a document say it.
+
+### What the port found
+
+- **The tree's link has a source and a destination**, and the source
+  is a **selection** — a piece of text or a set of frames. Here the
+  source is the **item**, and the destination is one of two kinds.
+- **The tree's link to a page is a page number**, and a page number
+  is a fact of the file that was made. Here a page is a **node** and
+  the link to it is an **edge** — the same bargain as the item's layer
+  and the item's story.
+- **The tree's rule about what may be followed is exact** — a leading
+  space or a control character makes the target not a link at all —
+  and the rule here is the tree's, word for word.
+
+### What it cost
+
+- **Ten tests** in the layout battery (`tests/links.rs`): a link being
+  put on an item and read back, a mail link, the five targets that may
+  not be opened, a link being taken away, an item pointing at a page,
+  a page of another document being refused, the link of an item being
+  one thing, a link to a page being taken away, a locked item not
+  being given a link, and an item with no link not being in the list.
+- **One new module** (`links`). The layout battery now carries **25**
+  commands and the MCP server **654**.
+
+### What it does not settle
+
+- **The tree's link may be on a piece of text**, and here it is on an
+  item: a link in the words of a story is a link of the words, and a
+  story here is a string.
+- **The tree's link may name a page that does not exist yet**, and
+  here the page is a node that is there.
