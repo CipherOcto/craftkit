@@ -349,6 +349,7 @@ mod fractions;
 mod goals;
 mod hiding;
 mod hypotheses;
+mod importing;
 mod information;
 mod links;
 mod logic;
@@ -401,6 +402,7 @@ use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
 pub use goals::{GoalScan, GoalSeek};
 pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
+pub use importing::ImportCsv;
 pub use links::{DeleteLink, GetLink, SetLink};
 pub use merges::{ClearMerge, SetMerge};
 pub use namereading::ReadName;
@@ -1735,6 +1737,7 @@ craftkit_sdk::plugin_anchor!(
     ClearFilter,
     WhatIf,
     GoalSeek,
+    ImportCsv,
     SetPaper,
     SetOrientation,
     SetMargins,
