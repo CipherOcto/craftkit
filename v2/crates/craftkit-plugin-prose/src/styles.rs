@@ -33,7 +33,7 @@ pub fn character_of(style: &Node) -> Json {
 }
 
 /// The **style** a block is on, if it is on one.
-fn style_of(document: &craftkit_sdk::Document, block: u64) -> Option<Node> {
+pub fn style_of_block(document: &craftkit_sdk::Document, block: u64) -> Option<Node> {
     let relation = document
         .relations
         .iter()
@@ -46,7 +46,7 @@ fn style_of(document: &craftkit_sdk::Document, block: u64) -> Option<Node> {
 ///
 /// The walk is **bounded** and it stops at a style it has already
 /// seen, so a cycle ends the chain instead of hanging the program.
-fn chain_of(document: &craftkit_sdk::Document, style: u64) -> Vec<u64> {
+pub(crate) fn chain_of(document: &craftkit_sdk::Document, style: u64) -> Vec<u64> {
     let mut chain: Vec<u64> = Vec::new();
     let mut seen: Vec<u64> = vec![style];
     let mut current = style;
@@ -242,7 +242,7 @@ impl ReadBlockCharacter {
                 message: format!("the node `{block}` is a `{}` and not a block", node.kind),
             });
         }
-        let Some(style) = style_of(session.document(), block) else {
+        let Some(style) = style_of_block(session.document(), block) else {
             return Ok(Outcome::new(format!("the block `{block}` is on no style")).with_data(json!({
                 "block": block,
                 "style": Json::Null,

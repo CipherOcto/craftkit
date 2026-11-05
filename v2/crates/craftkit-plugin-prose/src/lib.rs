@@ -115,6 +115,7 @@ mod footnotes;
 mod links;
 mod numbering;
 mod page;
+mod paragraph;
 mod resolving;
 mod revisions;
 mod styles;
@@ -132,6 +133,7 @@ pub use footnotes::{AddFootnote, ReadFootnotes};
 pub use links::ReadLinks;
 pub use numbering::{AddList, ReadNumber, SetNumbering};
 pub use page::{GetPage, SetPage};
+pub use paragraph::{ReadBlockParagraph, ReadStyleParagraph, SetStyleParagraph};
 pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
 pub use revisions::ReadRevisions;
 pub use styles::{ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
@@ -943,6 +945,9 @@ craftkit_sdk::plugin_anchor!(
     PutOnStyle,
     SetRuns,
     SetStyleCharacter,
+    SetStyleParagraph,
+    ReadStyleParagraph,
+    ReadBlockParagraph,
     ReadStyleCharacter,
     ReadBlockCharacter,
     FormatRun,
