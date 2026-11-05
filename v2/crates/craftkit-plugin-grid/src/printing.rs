@@ -41,8 +41,11 @@
 
 use craftkit_derive::Command;
 
+use craftkit_sdk::serde_json::Value as Json;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
+
+use crate::formula::Area;
 
 /// The **paper** the tree prints on: its name and its size in points.
 ///
@@ -248,17 +251,39 @@ fn column_width(node: &Node, column: u32) -> f64 {
         .unwrap_or(DEFAULT_COLUMN_WIDTH * CHARACTER + PADDING)
 }
 
+/// The **breaks** of a sheet: the rows and the columns a page begins
+/// at, put there by hand.
+pub fn breaks_of(node: &Node) -> (Vec<u32>, Vec<u32>) {
+    let list = |name: &str| -> Vec<u32> {
+        node.data
+            .get(name)
+            .and_then(|breaks| breaks.as_array())
+            .map(|breaks| breaks.iter().filter_map(|line| line.as_u64()).map(|line| line as u32).collect())
+            .unwrap_or_default()
+    };
+    (list("row_breaks"), list("column_breaks"))
+}
+
+/// The **area** a sheet prints: the area that was set, or nothing.
+pub fn area_of(node: &Node) -> Option<Area> {
+    let text = node.data.get("print_area").and_then(|area| area.as_str())?;
+    let (_, area) = crate::merges::parse_area(text)?;
+    Some(area)
+}
+
 /// The **bands** of a run of lines: the lines that go on one page.
 ///
-/// A line that is wider than the page is on a page of its own.
-fn bands(start: u32, end: u32, size: impl Fn(u32) -> f64, room: f64) -> Vec<(u32, u32)> {
+/// A line that is wider than the page is on a page of its own, and a
+/// **break** put in by hand starts a page there.
+fn bands(start: u32, end: u32, size: impl Fn(u32) -> f64, room: f64, breaks: &[u32]) -> Vec<(u32, u32)> {
     let mut out: Vec<(u32, u32)> = Vec::new();
     let mut current = start;
     let mut used = 0.0;
     let mut line = start;
     loop {
         let length = size(line);
-        if line > current && used + length > room + 0.01 {
+        let manual = line > current && breaks.contains(&line);
+        if line > current && (manual || used + length > room + 0.01) {
             out.push((current, line - 1));
             current = line;
             used = 0.0;
@@ -428,6 +453,7 @@ impl ReadSetup {
         let setup = Setup::of(&node);
         let (page_width, page_height) = setup.page();
         let (printable_width, printable_height) = setup.printable();
+        let (row_breaks, column_breaks) = breaks_of(&node);
         Ok(Outcome::new(format!("the sheet is printed on `{}`", setup.paper)).with_data(json!({
             "sheet": sheet,
             "paper": setup.paper,
@@ -435,6 +461,12 @@ impl ReadSetup {
             "margins": setup.to_json()["margins"].clone(),
             "page": { "width": page_width, "height": page_height },
             "printable": { "width": printable_width, "height": printable_height },
+            "area": area_of(&node).map(|area| json!(area.to_text())).unwrap_or(Json::Null),
+            "row_breaks": row_breaks.iter().map(|row| row + 1).collect::<Vec<u32>>(),
+            "column_breaks": column_breaks
+                .iter()
+                .map(|column| crate::formula::CellRef::column_text(*column))
+                .collect::<Vec<String>>(),
         })))
     }
 }
@@ -457,17 +489,32 @@ impl ReadPages {
         let node = sheet_of(session, &id, sheet)?;
         let setup = Setup::of(&node);
         let cells = crate::cells_of(&node);
-        let Some(area) = crate::reading::used_range(&cells) else {
-            return Ok(Outcome::new("the sheet holds nothing to print").with_data(json!({
-                "sheet": sheet,
-                "pages": Vec::<craftkit_sdk::serde_json::Value>::new(),
-                "count": 0,
-            })));
+        // The **area** that is printed: the one that was set, or the
+        // used range of the sheet.
+        let area = match area_of(&node) {
+            Some(area) => area,
+            None => match crate::reading::used_range(&cells) {
+                Some(area) => area,
+                None => {
+                    return Ok(Outcome::new("the sheet holds nothing to print").with_data(json!({
+                        "sheet": sheet,
+                        "pages": Vec::<craftkit_sdk::serde_json::Value>::new(),
+                        "count": 0,
+                    })));
+                }
+            },
         };
         let (printable_width, printable_height) = setup.printable();
-        let rows = bands(area.start.row, area.end.row, |row| row_height(&node, row), printable_height);
-        let columns =
-            bands(area.start.col, area.end.col, |column| column_width(&node, column), printable_width);
+        let (row_breaks, column_breaks) = breaks_of(&node);
+        let rows =
+            bands(area.start.row, area.end.row, |row| row_height(&node, row), printable_height, &row_breaks);
+        let columns = bands(
+            area.start.col,
+            area.end.col,
+            |column| column_width(&node, column),
+            printable_width,
+            &column_breaks,
+        );
         let mut pages: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
         for (first_row, last_row) in &rows {
             for (first_column, last_column) in &columns {
@@ -494,5 +541,126 @@ impl ReadPages {
             "pages": pages,
             "count": pages.len(),
         })))
+    }
+}
+
+/// **Set** the area a sheet prints.
+///
+/// Without a range the area is taken away, and the sheet prints the
+/// range it uses.
+#[derive(Command)]
+#[command(id = "grid.print.area", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
+pub struct SetPrintArea {
+    /// The sheet.
+    pub sheet: NodeRef,
+    /// The range that is printed: `A1:F50`. Without it, the sheet
+    /// prints the range it uses.
+    pub range: Option<Text>,
+}
+
+impl SetPrintArea {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.print.area".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, &id, sheet)?;
+        let area = match &self.range {
+            Some(range) => {
+                let text = range.0.trim().to_string();
+                let area = crate::fill::area_at(&text, &id)?;
+                if area.start == area.end {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the range {text} is one cell, and an area of one cell is a cell"),
+                    });
+                }
+                Some(area)
+            }
+            None => None,
+        };
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["print_area"] = match area {
+                Some(area) => json!(area.to_text()),
+                None => Json::Null,
+            };
+        }
+        let text = area.map(|area| area.to_text()).unwrap_or_else(|| "the used range".to_string());
+        Ok(Outcome::changed(format!("the sheet prints {text}")).with_data(json!({
+            "sheet": sheet,
+            "area": area.map(|area| json!(area.to_text())).unwrap_or(Json::Null),
+        })))
+    }
+}
+
+/// **Put** a break in a sheet, or take it away.
+///
+/// A break is a place where a page **begins**, put there by hand. The
+/// row break is the row the page begins at and the column break is
+/// the column it begins at.
+#[derive(Command)]
+#[command(id = "grid.print.break", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
+pub struct SetPrintBreak {
+    /// The sheet.
+    pub sheet: NodeRef,
+    /// The row the page begins at. Without it, the column is meant.
+    pub row: Option<Number>,
+    /// The column the page begins at, as `A`.
+    pub column: Option<Text>,
+    /// Whether the break is **taken away**.
+    pub clear: Option<craftkit_sdk::Bool>,
+}
+
+impl SetPrintBreak {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.print.break".to_string();
+        let sheet = self.sheet.0;
+        let node = sheet_of(session, &id, sheet)?;
+        let clear = self.clear.map(|clear| clear.0).unwrap_or(false);
+        match (&self.row, &self.column) {
+            (Some(_), Some(_)) => {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a break is a row or a column and not both".to_string(),
+                });
+            }
+            (None, None) => {
+                return Err(EngineError::Failed { id, message: "a break is a row or a column".to_string() });
+            }
+            _ => {}
+        }
+        let (name, line_at) = if let Some(row) = &self.row {
+            let row = row.0;
+            if !row.is_finite() || row < 1.0 || row.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a row is counted from one: {row} is not one"),
+                });
+            }
+            ("row_breaks", row as u32 - 1)
+        } else {
+            let column = self.column.as_ref().map(|column| column.0.trim().to_string()).unwrap_or_default();
+            let Some(index) = crate::formula::CellRef::column_index(&column.to_ascii_uppercase()) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{column}` is not a column: a column is `A`, `B` or `AA`"),
+                });
+            };
+            ("column_breaks", index)
+        };
+        let breaks = node.data.get(name).and_then(|breaks| breaks.as_array()).cloned().unwrap_or_default();
+        let mut lines: Vec<u64> =
+            breaks.iter().filter_map(|line| line.as_u64()).filter(|line| *line != line_at as u64).collect();
+        if !clear {
+            lines.push(line_at as u64);
+            lines.sort_unstable();
+        }
+        let list: Vec<craftkit_sdk::serde_json::Value> = lines.into_iter().map(|line| json!(line)).collect();
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data[name] = craftkit_sdk::serde_json::Value::Array(list.clone());
+        }
+        Ok(Outcome::changed(format!(
+            "the break is {} in the sheet `{sheet}`",
+            if clear { "taken away" } else { "set" }
+        ))
+        .with_data(json!({ "sheet": sheet, "break": list, "kind": name })))
     }
 }
