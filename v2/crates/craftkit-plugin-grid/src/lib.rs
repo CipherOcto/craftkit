@@ -336,6 +336,7 @@ mod database;
 mod dates;
 mod datetimes;
 mod daycounts;
+mod deleting;
 mod depreciation;
 mod distributions;
 mod engineering;
@@ -405,6 +406,7 @@ pub use charts::{AddChart, ReadChart, RemoveChart, SetChart};
 pub use clearing::{ClearContents, ClearFormat};
 pub use conditional::{CheckConditional, ClearConditional, SetConditional};
 pub use criteria::Condition;
+pub use deleting::DeleteRow;
 use fill::FillRange;
 pub use filters::{ClearFilter, FilteredRows, SetFilter, SetFilterGroups};
 pub use finding::FindCells;
@@ -1770,6 +1772,7 @@ craftkit_sdk::plugin_anchor!(
     GetBorder,
     ClearBorder,
     InsertRow,
+    DeleteRow,
     GroupRows,
     UngroupRows,
     ReadGroups,

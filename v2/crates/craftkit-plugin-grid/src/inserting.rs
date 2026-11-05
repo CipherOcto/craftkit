@@ -39,7 +39,7 @@ use crate::formula::{Anchor, CellRef, MAX_ROWS};
 
 /// The keys of a sheet that this tree **moves** when rows are
 /// inserted.
-const MOVED: [&str; 12] = [
+pub(crate) const MOVED: [&str; 12] = [
     "cells",
     "borders",
     "notes",
@@ -56,7 +56,7 @@ const MOVED: [&str; 12] = [
 
 /// The keys of a sheet that name **no row**, and so are left as they
 /// are.
-const UNMOVED: [&str; 13] = [
+pub(crate) const UNMOVED: [&str; 13] = [
     "print",
     "columns",
     "column_outline",
@@ -238,7 +238,7 @@ pub fn insert_rows(sheet: &mut Node, name: &str, at: u64, count: u64) -> Result<
 }
 
 /// The **names** of the workbook a sheet is in that point at it.
-fn names_of_the_workbook(session: &Session, sheet: u64) -> Vec<String> {
+pub(crate) fn names_of_the_workbook(session: &Session, sheet: u64) -> Vec<String> {
     let Some(workbook) = session
         .document()
         .walk()

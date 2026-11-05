@@ -170,6 +170,30 @@ impl Anchor {
         }
     }
 
+    /// The anchor with the rows **deleted** at `at`.
+    ///
+    /// A reference whose row is **anchored** does not move. A
+    /// reference below the rows that are deleted moves up by the
+    /// number of rows deleted, and a reference **in** them cannot be
+    /// written: `None` says the reference names a row that is gone.
+    pub fn deleted(&self, at: u64, count: u64) -> Option<Anchor> {
+        if self.row_abs {
+            return Some(*self);
+        }
+        let row = self.cell.row as u64 + 1;
+        if row >= at && row < at + count {
+            return None;
+        }
+        if row >= at + count {
+            return Some(Anchor {
+                cell: CellRef { col: self.cell.col, row: self.cell.row - count as u32 },
+                row_abs: self.row_abs,
+                col_abs: self.col_abs,
+            });
+        }
+        Some(*self)
+    }
+
     pub fn to_text(self) -> String {
         let mut text = String::new();
         if self.col_abs {
@@ -2581,6 +2605,53 @@ impl Expr {
         }
     }
 
+    /// The expression with the rows **deleted** at `at`.
+    ///
+    /// A reference that names **another sheet** does not move: the
+    /// rows of that sheet are not the rows that are deleted. A
+    /// reference that names this sheet — or names none — moves up when
+    /// it is below the rows that are deleted, and `None` says that a
+    /// reference names a row that is gone.
+    pub fn deleted(&self, sheet: &str, at: u64, count: u64) -> Option<Expr> {
+        let names_this_sheet = |named: &Option<String>| match named {
+            None => true,
+            Some(name) => name.eq_ignore_ascii_case(sheet),
+        };
+        match self {
+            Expr::Cell { sheet: named, anchor } => {
+                if !names_this_sheet(named) {
+                    return Some(self.clone());
+                }
+                Some(Expr::Cell { sheet: named.clone(), anchor: anchor.deleted(at, count)? })
+            }
+            Expr::Range { sheet: named, start, end } => {
+                if !names_this_sheet(named) {
+                    return Some(self.clone());
+                }
+                Some(Expr::Range {
+                    sheet: named.clone(),
+                    start: start.deleted(at, count)?,
+                    end: end.deleted(at, count)?,
+                })
+            }
+            Expr::Name(name) => Some(Expr::Name(name.clone())),
+            Expr::Call(name, arguments) => Some(Expr::Call(
+                name.clone(),
+                arguments
+                    .iter()
+                    .map(|argument| argument.deleted(sheet, at, count))
+                    .collect::<Option<Vec<_>>>()?,
+            )),
+            Expr::Negate(inner) => Some(Expr::Negate(Box::new(inner.deleted(sheet, at, count)?))),
+            Expr::Binary(operator, left, right) => Some(Expr::Binary(
+                operator.clone(),
+                Box::new(left.deleted(sheet, at, count)?),
+                Box::new(right.deleted(sheet, at, count)?),
+            )),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => Some(self.clone()),
+        }
+    }
+
     /// The formula's **text**: the expression written out.
     ///
     /// The tree's printer writes an expression back out, and a copied
@@ -2632,6 +2703,21 @@ pub fn insert_in_formula(text: &str, sheet: &str, at: u64, count: u64) -> Option
     let inserted = expression.inserted(sheet, at, count);
     let printed = inserted.to_text();
     if text.trim_start().starts_with('=') { Some(format!("={printed}")) } else { Some(printed) }
+}
+
+/// The formula's **text** with the rows **deleted** at `at`.
+///
+/// The text is parsed, the rows are deleted and the expression is
+/// printed. The answer is `Err` when a reference names a row that is
+/// gone: this tree has no `#REF!` yet, and a formula that names
+/// nothing is refused rather than written.
+pub fn delete_in_formula(text: &str, sheet: &str, at: u64, count: u64) -> Result<String, String> {
+    let expression = parse(text).map_err(|_| "the formula cannot be read".to_string())?;
+    let deleted = expression
+        .deleted(sheet, at, count)
+        .ok_or_else(|| "a formula names a cell in the rows that are deleted".to_string())?;
+    let printed = deleted.to_text();
+    Ok(if text.trim_start().starts_with('=') { format!("={printed}") } else { printed })
 }
 
 /// The precedence of an expression.
