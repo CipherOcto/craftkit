@@ -409,13 +409,27 @@ pub struct Criterion {
     pub value: String,
 }
 
-/// A **filter**: a column of a sheet and a criterion.
+/// A **filter**: what a sheet's rows are judged by.
+///
+/// There are two kinds, and they are the same kind of thing at two
+/// sizes:
+///
+/// - a **column** and a **criterion** — the rows whose cell in that
+///   column does not match are hidden;
+/// - **groups** of criteria — the columns of a group are judged
+///   together, and the groups are judged one by one. A row is hidden
+///   when it matches **none** of the groups.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Filter {
-    /// The column it filters, counted from zero.
-    pub column: u32,
-    /// The criterion the column's cells are judged by.
-    pub criterion: Criterion,
+pub enum Filter {
+    /// One column and one criterion.
+    Column {
+        /// The column it filters, counted from zero.
+        column: u32,
+        /// The criterion the column's cells are judged by.
+        criterion: Criterion,
+    },
+    /// Groups of criteria: the columns of a group are judged together.
+    Groups(Vec<Vec<(u32, Criterion)>>),
 }
 
 /// The **operations** a filter may have.
@@ -1240,9 +1254,9 @@ impl Book {
 
     /// The **rows** a sheet's filter hides, counted from one.
     ///
-    /// The rows are **derived**: they are the rows whose cell in the
-    /// filtered column does not match, and they are worked out from the
-    /// cells each time they are asked for.
+    /// The rows are **derived**: they are the rows whose cells do not
+    /// match, and they are worked out from the cells each time they
+    /// are asked for.
     pub fn filtered_rows(&self, sheet: &str) -> Vec<u64> {
         let Some(filter) = self.filters.get(sheet) else {
             return Vec::new();
@@ -1250,17 +1264,29 @@ impl Book {
         let Some(cells) = self.sheets.get(sheet) else {
             return Vec::new();
         };
+        // The **value** of a cell, or nothing when it is empty.
+        let value_at = |column: u32, row: u32| -> Value {
+            cells
+                .get(CellRef { col: column, row })
+                .and_then(|cell| cell.value.clone())
+                .unwrap_or(Value::Empty)
+        };
         let mut rows: Vec<u64> = Vec::new();
         for (cell, _) in cells.iter() {
             let row = cell.row as u64 + 1;
             if rows.contains(&row) {
                 continue;
             }
-            let value = cells
-                .get(CellRef { col: filter.column, row: cell.row })
-                .and_then(|cell| cell.value.clone())
-                .unwrap_or(Value::Empty);
-            if !filter.criterion.matches(&value) {
+            // A row is hidden when it does not match: a column filter
+            // judges one cell, and groups judge the groups one by one —
+            // a row that matches **any** group is kept.
+            let hidden = match filter {
+                Filter::Column { column, criterion } => !criterion.matches(&value_at(*column, cell.row)),
+                Filter::Groups(groups) => !groups.iter().any(|group| {
+                    group.iter().all(|(column, criterion)| criterion.matches(&value_at(*column, cell.row)))
+                }),
+            };
+            if hidden {
                 rows.push(row);
             }
         }

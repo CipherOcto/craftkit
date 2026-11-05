@@ -389,7 +389,7 @@ pub use clearing::{ClearContents, ClearFormat};
 pub use conditional::{CheckConditional, ClearConditional, SetConditional};
 pub use criteria::Condition;
 use fill::FillRange;
-pub use filters::{ClearFilter, FilteredRows, SetFilter};
+pub use filters::{ClearFilter, FilteredRows, SetFilter, SetFilterGroups};
 pub use finding::FindCells;
 use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
@@ -498,15 +498,47 @@ fn book_of(document: &Document) -> Book {
         // The **filter** of the sheet: the rows it hides are derived
         // from it.
         if let Some(filter) = node.data.get("filter") {
-            let column =
-                filter.get("column").and_then(|column| column.as_str()).and_then(CellRef::column_index);
-            let op = filter.get("op").and_then(|op| op.as_str()).unwrap_or("=").to_string();
-            let value = filter.get("value").and_then(|value| value.as_str()).unwrap_or("").to_string();
-            if let Some(column) = column {
-                book.set_filter(
-                    &node.name,
-                    formula::Filter { column, criterion: formula::Criterion { op, value } },
-                );
+            // The filter is either **one column** and one criterion, or
+            // **groups** of criteria.
+            if let Some(groups) = filter.get("groups").and_then(|groups| groups.as_array()) {
+                let groups: Vec<Vec<(u32, formula::Criterion)>> = groups
+                    .iter()
+                    .filter_map(|group| {
+                        let group = group.as_array()?;
+                        let criteria: Vec<(u32, formula::Criterion)> = group
+                            .iter()
+                            .filter_map(|criterion| {
+                                let column = criterion
+                                    .get("column")
+                                    .and_then(|column| column.as_str())
+                                    .and_then(CellRef::column_index)?;
+                                let op =
+                                    criterion.get("op").and_then(|op| op.as_str()).unwrap_or("=").to_string();
+                                let value = criterion
+                                    .get("value")
+                                    .and_then(|value| value.as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                Some((column, formula::Criterion { op, value }))
+                            })
+                            .collect();
+                        (!criteria.is_empty()).then_some(criteria)
+                    })
+                    .collect();
+                if !groups.is_empty() {
+                    book.set_filter(&node.name, formula::Filter::Groups(groups));
+                }
+            } else {
+                let column =
+                    filter.get("column").and_then(|column| column.as_str()).and_then(CellRef::column_index);
+                let op = filter.get("op").and_then(|op| op.as_str()).unwrap_or("=").to_string();
+                let value = filter.get("value").and_then(|value| value.as_str()).unwrap_or("").to_string();
+                if let Some(column) = column {
+                    book.set_filter(
+                        &node.name,
+                        formula::Filter::Column { column, criterion: formula::Criterion { op, value } },
+                    );
+                }
             }
         }
     }
@@ -1680,6 +1712,7 @@ craftkit_sdk::plugin_anchor!(
     HideColumn,
     ShowColumn,
     SetFilter,
+    SetFilterGroups,
     ClearFilter,
     FilteredRows,
     SetConditional,
