@@ -398,7 +398,7 @@ pub use finding::FindCells;
 use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
-pub use goals::GoalSeek;
+pub use goals::{GoalScan, GoalSeek};
 pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
 pub use links::{DeleteLink, GetLink, SetLink};
 pub use merges::{ClearMerge, SetMerge};
@@ -1733,6 +1733,7 @@ craftkit_sdk::plugin_anchor!(
     ClearFilter,
     WhatIf,
     GoalSeek,
+    GoalScan,
     FilteredRows,
     SetConditional,
     ClearConditional,

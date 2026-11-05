@@ -181,3 +181,131 @@ fn number_of(value: &Value, id: &str, at: f64) -> Result<f64, EngineError> {
         }),
     }
 }
+
+/// How many times a **scan** may ask the sheet.
+const MAX_TRIALS: usize = 4096;
+
+/// The **crossings** of a sheet: every place the result goes past the
+/// target.
+///
+/// The goal seek finds **one** answer and it assumes the sheet moves
+/// one way. The scan asks **every** place: the range is walked in
+/// steps and the places where the result crosses the target are
+/// reported, and a sheet that moves one way and then the other is
+/// found.
+#[derive(Command)]
+#[command(id = "grid.goal.scan", area = "grid", layer = "grid", icon = "list")]
+pub struct GoalScan {
+    /// The sheet.
+    pub sheet: NodeRef,
+    /// The cell whose value is **varied**.
+    pub input: Text,
+    /// The cell whose value is **read**.
+    pub result: Text,
+    /// The result to reach.
+    pub target: Number,
+    /// Where the scan **starts**.
+    pub from: Number,
+    /// Where the scan **ends**.
+    pub to: Number,
+    /// How far the scan steps. The default is one.
+    pub step: Option<Number>,
+}
+
+impl GoalScan {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.goal.scan".to_string();
+        let sheet = self.sheet.0;
+        let Some(node) = session.document().node(sheet) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+            });
+        }
+        let input = crate::whatifs::cell_of(&self.input.0, &id, "input")?;
+        let result = crate::whatifs::cell_of(&self.result.0, &id, "result")?;
+        if input == result {
+            return Err(EngineError::Failed {
+                id,
+                message: "the input and the result are the same cell".to_string(),
+            });
+        }
+        let target = self.target.0;
+        let from = self.from.0;
+        let to = self.to.0;
+        for number in [target, from, to] {
+            if !number.is_finite() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the target and the ends of the range are numbers".to_string(),
+                });
+            }
+        }
+        if from == to {
+            return Err(EngineError::Failed { id, message: "the range of a scan has two ends".to_string() });
+        }
+        let step = self.step.map(|step| step.0).unwrap_or(1.0);
+        if !step.is_finite() || step <= 0.0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("{step} is not a step: a step is a number above zero"),
+            });
+        }
+        let low = from.min(to);
+        let high = from.max(to);
+        let trials = ((high - low) / step).floor() as usize + 1;
+        if trials > MAX_TRIALS {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the scan would ask the sheet {trials} times, and a scan asks it at most {MAX_TRIALS} times"
+                ),
+            });
+        }
+        // The **copy** of the workbook: the scan is made in it and the
+        // sheet itself is not touched.
+        let mut book = crate::book_of(session.document());
+        let name = node.name.clone();
+        let reaches = |value: f64| (value - target).abs() <= f64::EPSILON * target.abs().max(1.0) * 1e6;
+        let mut crossings: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
+        let mut hits: Vec<f64> = Vec::new();
+        let mut previous: Option<(f64, f64)> = None;
+        for step_index in 0..trials {
+            let value = (low + step_index as f64 * step).min(high);
+            let at_value = crate::whatifs::trial(&mut book, &name, input, result, value, &id)?;
+            let result_value = number_of(&at_value, &id, value)?;
+            if reaches(result_value) {
+                hits.push(value);
+            }
+            if let Some((before_value, before_result)) = previous {
+                let before = (before_result - target).signum();
+                let now = (result_value - target).signum();
+                if before != 0.0 && now != 0.0 && before != now {
+                    crossings.push(json!({
+                        "from": before_value,
+                        "to": value,
+                        "result_from": before_result,
+                        "result_to": result_value,
+                    }));
+                }
+            }
+            previous = Some((value, result_value));
+        }
+        Ok(Outcome::new(format!("the sheet crosses {target} in {} place(s)", crossings.len())).with_data(
+            json!({
+                "sheet": sheet,
+                "target": target,
+                "step": step,
+                "trials": trials,
+                "hits": hits,
+                "crossings": crossings,
+            }),
+        ))
+    }
+}
