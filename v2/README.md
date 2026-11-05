@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3408 tests.** The MCP server links **all fifteen batteries** in, so the
+**3414 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3408 tests
+cargo test          # 3414 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3903,6 +3903,7 @@ so.
 | the **titles** of a sheet | **built.** The rows and the columns that are printed on every page are the titles, and they are not part of the pages themselves (§466) | §466 |
 | the **import of a list of objects** | **built.** The keys of the objects are the columns of a sheet and the first row holds them, and a value that is a structure is refused (§467) | §467 |
 | the **character** of a style | **built.** A style carries the character of the text it applies to, and a style based on another has the character of its base under it (§468) | §468 |
+| the **column beyond Z** | **built.** The letters of a column are a base of twenty-six, and `AA` is the column after `Z` — a cell set there is read there, and a sheet may be sorted by it (§469) | §469 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30915,3 +30916,53 @@ A style is a name and what it applies to — and it carries the
   list's numbering — and here the character is six things.
 - **The tree's style may be applied to a selection and not only to a
   block**, and a style of a run is not here.
+
+## 469. The column beyond Z
+
+The letters of a column are a **base of twenty-six**, and the first of
+them counts from one: `A` is 0, `Z` is 25 and `AA` is 26.
+
+### What was built
+
+- A **repair** in the grid battery. The **address parser** and the
+  **sort** both counted the first letter from zero, so every column
+  beyond `Z` landed in a column before it: `AA` was read as `W`, and
+  `AB` as `X`. A cell set at `AA1` was a cell at `W1`.
+- Both are fixed, and the columns beyond `Z` are **their own columns**:
+  a cell set at `AA1` is read at `AA1`, a formula may sum a range of
+  them, a sheet may be sorted by one, and the used range reaches them.
+- The **width** of a column was already right — `grid.column.width`
+  takes `AA` and the sheet keeps it under that name — so the parser
+  and the width were two answers to one question, and they disagreed.
+
+### What the port found
+
+- **The tree counts its columns in base twenty-six**, and its parser
+  and its writer agree. Here the writer was right and the parser was
+  wrong, and nothing noticed: every test of the battery used columns
+  inside the first letter.
+- **A column's name is a fact of the document**, and a battery that
+  reads addresses has to be able to write them. The two are one
+  question asked twice, and the repair is to ask it once — which is
+  what the tree does, and what this tree now does as well.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/columns.rs`): a cell
+  beyond Z being set and read, the used range reaching it, a formula
+  reading a range of them, a range of them holding its values, a sheet
+  sorted by one, and the column beyond Z being the one **after** Z.
+- **Two lines** of arithmetic, in two places: the address parser and
+  the sort. The grid battery still carries **90** commands and the MCP
+  server **639**.
+
+### What it does not settle
+
+- **The tree's sheet has sixteen thousand columns and a thousand and
+  forty-eight thousand rows**, and its parser refuses an address beyond
+  them. Here the arithmetic is checked, so an address that overflows is
+  refused — but nothing refuses an address that is merely beyond the
+  sheet's own size, because there is no sheet of a fixed size.
+- **The tree's own names — a sheet's name, a name of the workbook — are
+  checked for their shape and not for their collisions**, and here they
+  are checked for their shape only.
