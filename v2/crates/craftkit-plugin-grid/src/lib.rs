@@ -409,7 +409,9 @@ pub use namereading::ReadName;
 pub use names::{DeleteName, SetName};
 pub use notes::{DeleteNote, GetNote, SetNote};
 pub use pivots::{CreatePivot, ReadPivot, RemovePivot};
-pub use printing::{ReadPages, ReadSetup, SetMargins, SetOrientation, SetPaper, SetPrintArea, SetPrintBreak};
+pub use printing::{
+    ReadPages, ReadSetup, SetMargins, SetOrientation, SetPaper, SetPrintArea, SetPrintBreak, SetPrintTitles,
+};
 pub use protection::{ProtectSheet, UnprotectSheet};
 pub use reading::ReadRange;
 pub use removal::RemoveSheet;
@@ -1745,6 +1747,7 @@ craftkit_sdk::plugin_anchor!(
     ReadPages,
     SetPrintArea,
     SetPrintBreak,
+    SetPrintTitles,
     GoalScan,
     FilteredRows,
     SetConditional,

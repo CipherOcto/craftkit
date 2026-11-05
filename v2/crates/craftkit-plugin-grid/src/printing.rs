@@ -264,6 +264,19 @@ pub fn breaks_of(node: &Node) -> (Vec<u32>, Vec<u32>) {
     (list("row_breaks"), list("column_breaks"))
 }
 
+/// The **titles** of a sheet: the rows and the columns that are
+/// printed on every page.
+pub fn titles_of(node: &Node) -> (Vec<u32>, Vec<u32>) {
+    let list = |name: &str| -> Vec<u32> {
+        node.data
+            .get(name)
+            .and_then(|titles| titles.as_array())
+            .map(|titles| titles.iter().filter_map(|line| line.as_u64()).map(|line| line as u32).collect())
+            .unwrap_or_default()
+    };
+    (list("title_rows"), list("title_columns"))
+}
+
 /// The **area** a sheet prints: the area that was set, or nothing.
 pub fn area_of(node: &Node) -> Option<Area> {
     let text = node.data.get("print_area").and_then(|area| area.as_str())?;
@@ -271,30 +284,32 @@ pub fn area_of(node: &Node) -> Option<Area> {
     Some(area)
 }
 
-/// The **bands** of a run of lines: the lines that go on one page.
+/// The **bands** of a set of lines: the lines that go on one page.
 ///
 /// A line that is wider than the page is on a page of its own, and a
 /// **break** put in by hand starts a page there.
-fn bands(start: u32, end: u32, size: impl Fn(u32) -> f64, room: f64, breaks: &[u32]) -> Vec<(u32, u32)> {
+fn bands(lines: &[u32], size: impl Fn(u32) -> f64, room: f64, breaks: &[u32]) -> Vec<(u32, u32)> {
     let mut out: Vec<(u32, u32)> = Vec::new();
-    let mut current = start;
-    let mut used = 0.0;
-    let mut line = start;
-    loop {
-        let length = size(line);
-        let manual = line > current && breaks.contains(&line);
-        if line > current && (manual || used + length > room + 0.01) {
-            out.push((current, line - 1));
-            current = line;
-            used = 0.0;
+    let mut index = 0usize;
+    while index < lines.len() {
+        let start = lines[index];
+        let mut used = 0.0;
+        let mut last = start;
+        let mut taken = 0usize;
+        while index + taken < lines.len() {
+            let line = lines[index + taken];
+            let length = size(line);
+            let manual = taken > 0 && breaks.contains(&line);
+            if taken > 0 && (manual || used + length > room + 0.01) {
+                break;
+            }
+            used += length;
+            last = line;
+            taken += 1;
         }
-        used += length;
-        if line >= end {
-            break;
-        }
-        line += 1;
+        out.push((start, last));
+        index += taken.max(1);
     }
-    out.push((current, end));
     out
 }
 
@@ -454,6 +469,10 @@ impl ReadSetup {
         let (page_width, page_height) = setup.page();
         let (printable_width, printable_height) = setup.printable();
         let (row_breaks, column_breaks) = breaks_of(&node);
+        let (title_rows, title_columns) = titles_of(&node);
+        let title_rows: Vec<u32> = title_rows.iter().map(|row| row + 1).collect();
+        let title_columns: Vec<String> =
+            title_columns.iter().map(|column| crate::formula::CellRef::column_text(*column)).collect();
         Ok(Outcome::new(format!("the sheet is printed on `{}`", setup.paper)).with_data(json!({
             "sheet": sheet,
             "paper": setup.paper,
@@ -462,6 +481,8 @@ impl ReadSetup {
             "page": { "width": page_width, "height": page_height },
             "printable": { "width": printable_width, "height": printable_height },
             "area": area_of(&node).map(|area| json!(area.to_text())).unwrap_or(Json::Null),
+            "title_rows": title_rows,
+            "title_columns": title_columns,
             "row_breaks": row_breaks.iter().map(|row| row + 1).collect::<Vec<u32>>(),
             "column_breaks": column_breaks
                 .iter()
@@ -506,15 +527,17 @@ impl ReadPages {
         };
         let (printable_width, printable_height) = setup.printable();
         let (row_breaks, column_breaks) = breaks_of(&node);
-        let rows =
-            bands(area.start.row, area.end.row, |row| row_height(&node, row), printable_height, &row_breaks);
-        let columns = bands(
-            area.start.col,
-            area.end.col,
-            |column| column_width(&node, column),
-            printable_width,
-            &column_breaks,
-        );
+        // The **titles**: the rows and the columns that are printed on
+        // every page. They are not part of the pages themselves, so
+        // they are left out of the bands.
+        let (title_rows, title_columns) = titles_of(&node);
+        let content_rows: Vec<u32> =
+            (area.start.row..=area.end.row).filter(|row| !title_rows.contains(row)).collect();
+        let content_columns: Vec<u32> =
+            (area.start.col..=area.end.col).filter(|column| !title_columns.contains(column)).collect();
+        let rows = bands(&content_rows, |row| row_height(&node, row), printable_height, &row_breaks);
+        let columns =
+            bands(&content_columns, |column| column_width(&node, column), printable_width, &column_breaks);
         let mut pages: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
         for (first_row, last_row) in &rows {
             for (first_column, last_column) in &columns {
@@ -532,6 +555,12 @@ impl ReadPages {
                         crate::formula::CellRef::column_text(*first_column),
                         crate::formula::CellRef::column_text(*last_column),
                     ],
+                    "title_rows": title_rows.iter().map(|row| row + 1).collect::<Vec<u32>>(),
+                    "title_columns": title_columns
+                        .iter()
+                        .map(|column| crate::formula::CellRef::column_text(*column))
+                        .collect::<Vec<String>>(),
+
                 }));
             }
         }
@@ -662,5 +691,114 @@ impl SetPrintBreak {
             if clear { "taken away" } else { "set" }
         ))
         .with_data(json!({ "sheet": sheet, "break": list, "kind": name })))
+    }
+}
+
+/// **Set** the titles of a sheet: the rows and the columns that are
+/// printed on **every** page.
+///
+/// The titles are not part of the pages: they are printed above them,
+/// again and again.
+#[derive(Command)]
+#[command(id = "grid.print.titles", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
+pub struct SetPrintTitles {
+    /// The sheet.
+    pub sheet: NodeRef,
+    /// The rows that are printed on every page, counted from one. The
+    /// first row is the first title.
+    pub rows: Option<Text>,
+    /// The columns that are printed on every page, as `A`. The first
+    /// column is the first title.
+    pub columns: Option<Text>,
+}
+
+impl SetPrintTitles {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.print.titles".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, &id, sheet)?;
+        let mut rows: Vec<u32> = Vec::new();
+        if let Some(text) = &self.rows {
+            let text = text.0.trim().to_string();
+            if !text.is_empty() {
+                for part in text.split(',') {
+                    let part = part.trim();
+                    let Some((first, last)) = part.split_once(':') else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("`{part}` is not a range of rows"),
+                        });
+                    };
+                    let number = |text: &str| -> Result<u32, EngineError> {
+                        let row = text.trim().parse::<u64>().map_err(|_| EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("`{text}` is not a row"),
+                        })?;
+                        if row == 0 {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: "a row is counted from one: 0 is not one".to_string(),
+                            });
+                        }
+                        Ok(row as u32 - 1)
+                    };
+                    let first = number(first)?;
+                    let last = number(last)?;
+                    let (low, high) = (first.min(last), first.max(last));
+                    for row in low..=high {
+                        if !rows.contains(&row) {
+                            rows.push(row);
+                        }
+                    }
+                }
+                rows.sort_unstable();
+            }
+        }
+        let mut columns: Vec<u32> = Vec::new();
+        if let Some(text) = &self.columns {
+            let text = text.0.trim().to_string();
+            if !text.is_empty() {
+                for part in text.split(',') {
+                    let part = part.trim().to_ascii_uppercase();
+                    let Some((first, last)) = part.split_once(':') else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("`{part}` is not a range of columns"),
+                        });
+                    };
+                    let Some(first) = crate::formula::CellRef::column_index(first.trim()) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("`{first}` is not a column"),
+                        });
+                    };
+                    let Some(last) = crate::formula::CellRef::column_index(last.trim()) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("`{last}` is not a column"),
+                        });
+                    };
+                    let (low, high) = (first.min(last), first.max(last));
+                    for column in low..=high {
+                        if !columns.contains(&column) {
+                            columns.push(column);
+                        }
+                    }
+                }
+                columns.sort_unstable();
+            }
+        }
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["title_rows"] = json!(rows.clone());
+            node.data["title_columns"] = json!(columns.clone());
+        }
+        Ok(Outcome::changed("the titles of the sheet are set".to_string()).with_data(json!({
+            "sheet": sheet,
+            "rows": rows.iter().map(|row| row + 1).collect::<Vec<u32>>(),
+            "columns": columns
+                .iter()
+                .map(|column| crate::formula::CellRef::column_text(*column))
+                .collect::<Vec<String>>(),
+        })))
     }
 }
