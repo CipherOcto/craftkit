@@ -370,6 +370,7 @@ mod sorting;
 mod special;
 mod statistics;
 mod styles;
+mod tables;
 mod tabs;
 mod tabsorder;
 mod texts;
@@ -411,6 +412,7 @@ pub use sheetreading::ReadSheet;
 pub use sizes::{SetColumnWidth, SetRowHeight};
 pub use sorting::SortRange;
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
+pub use tables::{CreateTable, ReadTableFields, ReadTables, RemoveTable, RenameTable, ResizeTable};
 pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
 pub use tabsorder::MoveSheet;
 pub use validation::{CheckValidation, ClearValidation, SetValidation};
@@ -1701,6 +1703,12 @@ craftkit_sdk::plugin_anchor!(
     SetLink,
     SetNote,
     SortRange,
+    CreateTable,
+    ReadTables,
+    ReadTableFields,
+    RenameTable,
+    ResizeTable,
+    RemoveTable,
     UnprotectSheet,
     RemoveSheet,
     SetCell,
