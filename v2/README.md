@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3383 tests.** The MCP server links **all fifteen batteries** in, so the
+**3390 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3383 tests
+cargo test          # 3390 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3900,6 +3900,7 @@ so.
 | the **equation** of a document | **built.** An equation is a block whose parts are the equation, and its text is derived from them — five kinds of part and one line of text (§463) | §463 |
 | the **import** of a text | **built.** A text of values becomes a sheet of cells, and the rows of the text are the same length or the text is refused (§464) | §464 |
 | the **area** a sheet prints | **built.** The area that is printed may be set and the pages are of it, and a page may be broken by hand where the paper does not break it (§465) | §465 |
+| the **titles** of a sheet | **built.** The rows and the columns that are printed on every page are the titles, and they are not part of the pages themselves (§466) | §466 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30758,3 +30759,47 @@ page may be **broken** by hand where the paper does not break it.
   that are printed on every page — and neither is its scaling to fit.
 - **The tree's header and footer are not here**, and neither is its
   printing of the gridlines and the headings.
+
+## 466. The titles of a sheet
+
+The **titles** of a sheet are the rows and the columns that are
+printed on **every** page.
+
+### What was built
+
+- **One command** in the grid battery: `grid.print.titles`, given the
+  rows (`1:2`) and the columns (`A:B`) that are the titles.
+- The titles are **not part of the pages**: they are printed above
+  them, again and again, and they are left out of the pages
+  themselves — so a page says the rows that are its own and the rows
+  that are the titles.
+- The setup of a sheet says the titles, and the **pages** say them too.
+- The **rules**: a range that is not a range of rows is refused, and a
+  row that is not a row is refused; and a column that is not a column
+  is refused.
+
+### What the port found
+
+- **The tree's titles are one command for both**: its
+  `pageLayout.printTitles` takes `rows: "1:2"` and `cols: "A:A"` in
+  one call. Here they are one command as well, and the rows and the
+  columns are said separately, because they are two things.
+- **The tree's titles are not part of the printed pages either** — the
+  tree repeats them above each page and counts them apart. Here the
+  pages are of the area less the titles, and each page says which
+  rows and columns are the titles.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/printtitles.rs`): the
+  titles being set and read back, the titles being printed on every
+  page, the titles not being part of the pages, the title columns
+  being left out too, and the three refusals.
+- **One new command** in the module of the printing (`printing`). The
+  grid battery now carries **89** commands and the MCP server **638**.
+
+### What it does not settle
+
+- **The tree's scaling to fit is not here**, and neither is its
+  header and footer, its printing of the gridlines and the headings,
+  and its print area when the sheet is fitted.
