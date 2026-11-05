@@ -357,6 +357,7 @@ mod merges;
 mod namereading;
 mod names;
 mod notes;
+mod pivots;
 mod protection;
 mod reading;
 mod regression;
@@ -404,6 +405,7 @@ pub use merges::{ClearMerge, SetMerge};
 pub use namereading::ReadName;
 pub use names::{DeleteName, SetName};
 pub use notes::{DeleteNote, GetNote, SetNote};
+pub use pivots::{CreatePivot, ReadPivot, RemovePivot};
 pub use protection::{ProtectSheet, UnprotectSheet};
 pub use reading::ReadRange;
 pub use removal::RemoveSheet;
@@ -1703,6 +1705,9 @@ craftkit_sdk::plugin_anchor!(
     SetLink,
     SetNote,
     SortRange,
+    CreatePivot,
+    ReadPivot,
+    RemovePivot,
     CreateTable,
     ReadTables,
     ReadTableFields,
