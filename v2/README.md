@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3353 tests.** The MCP server links **all fifteen batteries** in, so the
+**3363 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3353 tests
+cargo test          # 3363 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3897,6 +3897,7 @@ so.
 | the **crossings** of a sheet | **built.** The scan walks the range and reports every place the result goes past the target, and a sheet that turns around is found (§460) | §460 |
 | the **dissolve** of a transition | **built.** The list writes a dissolve as the cut of the outgoing clip and the incoming clip with the length of it, and a dissolve that is not at the cut is refused (§461) | §461 |
 | the **printing** of a sheet | **built.** A sheet is printed on a paper with margins, and the pages it breaks into are derived from the paper and the sizes of the rows and the columns (§462) | §462 |
+| the **equation** of a document | **built.** An equation is a block whose parts are the equation, and its text is derived from them — five kinds of part and one line of text (§463) | §463 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30587,3 +30588,62 @@ one page and the columns that go on it.
 - **The tree's column width is a width in pixels with a font behind
   it.** Here it is characters, and the turn into points is the tree's
   own conversion.
+
+## 463. The equation of a document
+
+An **equation** is a block whose text is not written down: it is
+**derived** from the **parts** the equation is made of.
+
+### What was built
+
+- **A new kind of block** — `prose.block.equation` — and **two
+  commands**: `prose.block.equation.add` to put an equation in a
+  document and `prose.equation.set` to set its parts again.
+- The **parts** are the equation, and there are **five** of them: a
+  **text**, a **fraction**, a **superscript**, a **subscript** and a
+  **radical**.
+- The **linear form** — the text of the equation, written on one line
+  — is derived from them: `x`, `a/b`, `x^2`, `x_1`, `√x`. A part that
+  is put inside another is written in **brackets**, so that the form
+  says what it means: `(x^2)/y`.
+- The **rules**: a part that is **not one of the five** is refused, and
+  so is a part that is **missing a piece** — a fraction with no
+  bottom, a text that holds no text; the **depth** of an equation and
+  the **length** of its text are bounded, because both come from
+  outside; and the text of an equation is **not replaced**, because a
+  replace would make the parts and the text disagree.
+
+### What the port found
+
+- **The tree's equation is a file of its own** — an Office Math
+  Markup document, with its own parts, its own attributes and its own
+  vocabulary of what an equation may hold. Here the equation is a
+  **block** whose parts are a small tree of five kinds, and the text
+  that comes with it is **derived**: the parts are the equation, and
+  the text is what they are written as on one line.
+- **The tree's equation may be edited as a document and the tree
+  shows it as one.** Here the parts are the payload of a block, the
+  text is derived from them, and the two are written together — the
+  same bargain the runs and the text of a paragraph keep.
+
+### What it cost
+
+- **Ten tests** in the prose battery (`tests/equations.rs`): the text
+  being derived, every part being written on one line, a nested part
+  being written in brackets, a part that is not one of the five being
+  refused, a part that is missing a piece being refused, a text that
+  holds no text being refused, the parts being set again, a block that
+  is not an equation being refused, the text of an equation not being
+  replaced, and the parts being read back with the text.
+- **One new module** (`equations`) and **one new kind**
+  (`prose.block.equation`). The prose battery now carries **45**
+  commands and the MCP server **634**.
+
+### What it does not settle
+
+- **The tree's equation holds many more parts** — integrals, matrices,
+  accents, limits, functions and the rest — and here there are five.
+- **The tree's equation is a document of its own** and may be read
+  from a file; here it is a block of a document.
+- **The tree lays its equation out and draws it**; here the equation
+  is a structure and a line of text.
