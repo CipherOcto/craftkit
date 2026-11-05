@@ -402,7 +402,7 @@ use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
 pub use goals::{GoalScan, GoalSeek};
 pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
-pub use importing::ImportCsv;
+pub use importing::{ImportCsv, ImportJson};
 pub use links::{DeleteLink, GetLink, SetLink};
 pub use merges::{ClearMerge, SetMerge};
 pub use namereading::ReadName;
@@ -1740,6 +1740,7 @@ craftkit_sdk::plugin_anchor!(
     WhatIf,
     GoalSeek,
     ImportCsv,
+    ImportJson,
     SetPaper,
     SetOrientation,
     SetMargins,

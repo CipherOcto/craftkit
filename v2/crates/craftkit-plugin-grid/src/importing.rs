@@ -18,6 +18,17 @@
 //! - the text is **bounded**: a text of ten thousand rows is refused,
 //!   because a text is from outside.
 //!
+//! And a **list of objects** — the tree's JSON — is a table as well: the
+//! **keys** of the objects are the columns of the sheet, in the order
+//! they first appear, and the first row of the sheet holds them.
+//!
+//! - a thing that is **not an object** is refused: a list of objects is
+//!   a table and a list of numbers is not;
+//! - a value that is an **object or a list** is refused: a cell holds a
+//!   value and not a structure;
+//! - a key that an object does not have is **nothing** in that row,
+//!   and a null is nothing as well.
+//!
 //! # What the port found
 //!
 //! - **The tree's import makes a table of the text and asks about it.**
@@ -34,6 +45,7 @@
 
 use craftkit_derive::Command;
 
+use craftkit_sdk::serde_json::Value as Json;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
 
@@ -248,6 +260,168 @@ impl ImportCsv {
             "name": name,
             "rows": rows.len(),
             "columns": width,
+            "cells": filled,
+        })))
+    }
+}
+
+/// The **value** of a JSON value, if it is one a cell may hold.
+fn json_value(value: &craftkit_sdk::serde_json::Value) -> Result<Option<Value>, String> {
+    Ok(match value {
+        craftkit_sdk::serde_json::Value::Null => None,
+        craftkit_sdk::serde_json::Value::Bool(flag) => Some(Value::Bool(*flag)),
+        craftkit_sdk::serde_json::Value::Number(number) => {
+            let number = number.as_f64().unwrap_or(0.0);
+            if number.is_finite() { Some(Value::Number(number)) } else { None }
+        }
+        craftkit_sdk::serde_json::Value::String(text) => Some(Value::Text(text.clone())),
+        craftkit_sdk::serde_json::Value::Object(_) | craftkit_sdk::serde_json::Value::Array(_) => {
+            return Err("a cell holds a value and not a structure".to_string());
+        }
+    })
+}
+
+/// **Import** a list of objects into a workbook, as a sheet.
+///
+/// The **keys** of the objects are the columns of the sheet, in the
+/// order they first appear, and the first row of the sheet holds
+/// them.
+#[derive(Command)]
+#[command(id = "grid.import.json", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
+pub struct ImportJson {
+    /// The workbook the sheet goes in.
+    pub workbook: NodeRef,
+    /// The **list of objects**: `[{ "who": "ann", "amount": 3 }]`.
+    pub data: Json,
+    /// What to call the sheet. Without it, the sheet is called
+    /// `imported`.
+    pub name: Option<Text>,
+}
+
+impl ImportJson {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.import.json".to_string();
+        let workbook = self.workbook.0;
+        let Some(node) = session.document().node(workbook) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no workbook `{workbook}`"),
+            });
+        };
+        if node.kind != "grid.workbook" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+            });
+        }
+        let Some(list) = self.data.as_array() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "the data is a list of objects".to_string(),
+            });
+        };
+        if list.is_empty() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "the data holds nothing to import".to_string(),
+            });
+        }
+        if list.len() > MAX_ROWS {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the data holds {} rows, and a text holds at most {MAX_ROWS}", list.len()),
+            });
+        }
+        // The **keys**: the columns, in the order they first appear.
+        let mut keys: Vec<String> = Vec::new();
+        for entry in list {
+            let Some(object) = entry.as_object() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the data is a list of objects, and a thing in it is not one".to_string(),
+                });
+            };
+            for key in object.keys() {
+                if !keys.contains(key) {
+                    keys.push(key.clone());
+                }
+            }
+        }
+        if keys.is_empty() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "the data holds nothing to import".to_string(),
+            });
+        }
+        if keys.len() > MAX_COLUMNS {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the data holds {} columns, and a text holds at most {MAX_COLUMNS}",
+                    keys.len()
+                ),
+            });
+        }
+        // The **cells**: the keys are the first row and the values are
+        // the rest.
+        let mut cells = craftkit_sdk::serde_json::Map::new();
+        for (index, key) in keys.iter().enumerate() {
+            let address = CellRef { col: index as u32, row: 0 }.to_text();
+            cells.insert(address, json!({ "value": key }));
+        }
+        let mut filled = keys.len() as u64;
+        for (row, entry) in list.iter().enumerate() {
+            let Some(object) = entry.as_object() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the data is a list of objects, and a thing in it is not one".to_string(),
+                });
+            };
+            for (index, key) in keys.iter().enumerate() {
+                let Some(value) = object.get(key) else { continue };
+                let Some(value) =
+                    json_value(value).map_err(|message| EngineError::Failed { id: id.clone(), message })?
+                else {
+                    continue;
+                };
+                let address = CellRef { col: index as u32, row: row as u32 + 1 }.to_text();
+                cells.insert(address, json!({ "value": value.to_json() }));
+                filled += 1;
+            }
+        }
+        // The **name** of the sheet: the tree's rules for a name.
+        let name = match &self.name {
+            Some(name) => name.0.trim().to_string(),
+            None => "imported".to_string(),
+        };
+        let taken: Vec<String> = node
+            .children
+            .iter()
+            .filter(|child| child.kind == "grid.sheet")
+            .map(|child| child.name.clone())
+            .collect();
+        let taken = taken.iter().find(|other| other.eq_ignore_ascii_case(&name)).cloned();
+        if let Some(reason) = crate::sheetnames::why_not(&name, taken.as_deref()) {
+            return Err(EngineError::Failed { id: id.clone(), message: reason });
+        }
+        let data = json!({
+            "cells": craftkit_sdk::serde_json::Value::Object(cells),
+            "view": crate::view::SheetView::default().to_json(),
+            "zoom": 100,
+        });
+        let sheet = session.document_mut()?.add_node_with_under(
+            Some(workbook),
+            name.clone(),
+            "grid.sheet",
+            None,
+            data,
+        );
+        Ok(Outcome::changed(format!("imported {filled} cell(s) into the sheet `{name}`")).with_data(json!({
+            "workbook": workbook,
+            "id": sheet,
+            "name": name,
+            "rows": list.len() + 1,
+            "columns": keys.len(),
             "cells": filled,
         })))
     }
