@@ -158,27 +158,6 @@ fn an_audio_track_is_on_an_audio_channel() {
     assert!(event.contains(" A "), "the channel is the audio one: {event}");
 }
 
-/// **A transition is a dissolve, and this list does not write
-/// dissolves.**
-#[test]
-fn a_transition_is_refused() {
-    let mut session = session();
-    let (sequence, track) = a_timeline(&mut session, "the media");
-    let first = a_clip(&mut session, track, sequence, 0, 25, 0);
-    let second = a_clip(&mut session, track, sequence, 25, 25, 25);
-    session
-        .execute(
-            "film.transition.add",
-            &json!({ "track": track, "from": first, "to": second, "duration": 5 }),
-        )
-        .expect("the transition is added");
-    let failure = session
-        .execute("film.export.edl", &json!({ "sequence": sequence }))
-        .expect_err("the list is refused");
-    let message = failure.to_string();
-    assert!(message.contains("does not write dissolves"), "the refusal says why: {message}");
-}
-
 /// **A node that is not a sequence is refused.**
 #[test]
 fn a_node_that_is_not_a_sequence_is_refused() {

@@ -28,9 +28,15 @@
 //!
 //! The rules:
 //!
-//! - a **transition** is a dissolve, and a dissolve is a line this
-//!   tree does not write: a sequence with a transition is **refused**,
-//!   and the refusal says that the list would be wrong;
+//! - a **transition** is a **dissolve**, and a dissolve is written as
+//!   the tree writes it: the event that goes into the clip carries the
+//!   cut of the outgoing clip and the **duration** of the dissolve,
+//!   and the outgoing clip's own event ends at the cut;
+//! - a dissolve that sits **before the cut** — a transition centred on
+//!   the cut, or ending at it — would need source media that the
+//!   incoming clip does not have, and the tree clamps it to the start
+//!   of the media and warns. Here it is **refused**: a list that
+//!   names a source that is not there is a list that is wrong;
 //! - a clip with **no item** has no reel and no source, and the list
 //!   is refused;
 //! - the **reel** is the name of the item, in **eight characters** —
@@ -112,6 +118,47 @@ fn item_of(document: &craftkit_sdk::Document, clip: u64) -> Option<Node> {
     document.node(item).cloned()
 }
 
+/// A **transition** of a track: a dissolve over a cut.
+struct Transition {
+    /// The outgoing clip.
+    from: u64,
+    /// The incoming clip.
+    to: u64,
+    /// Where it sits on the timeline.
+    start: u64,
+    /// How long it is.
+    duration: u64,
+    /// Where it sits on the cut: `center`, `start` or `end`.
+    align: String,
+}
+
+/// The **transitions** of a track.
+fn transitions_of(track: &Node) -> Vec<Transition> {
+    let mut transitions = Vec::new();
+    for child in track.children.iter().filter(|child| child.kind == "film.transition") {
+        let number = |name: &str| child.data.get(name).and_then(|value| value.as_u64());
+        let (Some(from), Some(to)) = (number("from"), number("to")) else { continue };
+        transitions.push(Transition {
+            from,
+            to,
+            start: number("start").unwrap_or(0),
+            duration: number("duration").unwrap_or(0),
+            align: child.data.get("align").and_then(|align| align.as_str()).unwrap_or("center").to_string(),
+        });
+    }
+    transitions
+}
+
+/// The **start** of a clip on the timeline.
+fn start_of(clip: &Node) -> u64 {
+    clip.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0)
+}
+
+/// The **source** a clip begins at.
+fn source_of(clip: &Node) -> u64 {
+    clip.data.get("source_in").and_then(|source| source.as_u64()).unwrap_or(0)
+}
+
 /// **Write** the edit decision list of a sequence.
 ///
 /// The list is derived from the sequence as it is now, and it is
@@ -166,32 +213,88 @@ impl ExportEdl {
             if is_audio(track.as_ref()) {
                 audio += 1;
             }
-            // A **transition** is a dissolve, and this list does not
-            // write dissolves: the list would be wrong.
-            if track.children.iter().any(|child| child.kind == "film.transition") {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "the track `{}` has a transition, and a transition is a dissolve, and this list does not write dissolves",
-                        track.name
-                    ),
-                });
-            }
             let channel = channel_of(track.as_ref(), audio.saturating_sub(1));
+            let transitions = transitions_of(track.as_ref());
             let mut clips: Vec<&std::sync::Arc<Node>> =
                 track.children.iter().filter(|child| child.kind == "film.clip").collect();
-            clips.sort_by_key(|clip| clip.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0));
-            for clip in clips {
+            clips.sort_by_key(|clip| start_of(clip));
+            for clip in &clips {
                 let Some(item) = item_of(document, clip.id) else {
                     return Err(EngineError::Failed {
                         id: id.clone(),
                         message: format!("the clip `{}` has no item, and it has no reel", clip.name),
                     });
                 };
-                let start = clip.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
+                let start = start_of(clip);
                 let duration = clip.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
-                let source_in =
-                    clip.data.get("source_in").and_then(|source_in| source_in.as_u64()).unwrap_or(0);
+                let source_in = source_of(clip);
+                // The **dissolve** that comes into this clip, and the
+                // one that goes out of it.
+                let into = transitions.iter().find(|transition| transition.to == clip.id);
+                let out = transitions.iter().find(|transition| transition.from == clip.id);
+                // The **end** of the clip on the timeline: a clip that
+                // dissolves into the next one ends at the cut.
+                let end = match out {
+                    Some(out) => (start + duration).min(out.start).max(start),
+                    None => start + duration,
+                };
+                if let Some(into) = into {
+                    // A dissolve that sits **before the cut** would
+                    // need source media the clip does not have.
+                    if into.align != "start" {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "the transition `{}` is `{}` and not at the cut, and the list would need source media that the clip does not have",
+                                into.from, into.align
+                            ),
+                        });
+                    }
+                    let Some(outgoing) = clips.iter().find(|other| other.id == into.from) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the clip `{}` has no item, and it has no reel", clip.name),
+                        });
+                    };
+                    let Some(outgoing_item) = item_of(document, outgoing.id) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the clip `{}` has no item, and it has no reel", outgoing.name),
+                        });
+                    };
+                    // The **cut**: the source of the outgoing clip at
+                    // the cut, and the source of the incoming one.
+                    let cut_source = source_of(outgoing) + into.start.saturating_sub(start_of(outgoing));
+                    let in_source = source_in + into.start.saturating_sub(start);
+                    number += 1;
+                    // The **first line** is the cut itself: the
+                    // outgoing clip, a cut of no length at the point
+                    // the dissolve begins.
+                    lines.push(format!(
+                        "{number:03}  {:<MAX_REEL$} {:<4} {:<8} {} {} {} {}",
+                        reel_of(&outgoing_item.name),
+                        channel,
+                        "C",
+                        timecode(cut_source, per_second),
+                        timecode(cut_source, per_second),
+                        timecode(into.start, per_second),
+                        timecode(into.start, per_second),
+                    ));
+                    // The **second line** is the dissolve: the
+                    // incoming clip, and how long the dissolve is.
+                    lines.push(format!(
+                        "{number:03}  {:<MAX_REEL$} {:<4} {:<4} {:<3} {} {} {} {}",
+                        reel_of(&item.name),
+                        channel,
+                        "D",
+                        format!("{:03}", into.duration),
+                        timecode(in_source, per_second),
+                        timecode(in_source + (end - into.start), per_second),
+                        timecode(into.start, per_second),
+                        timecode(end, per_second),
+                    ));
+                    continue;
+                }
                 number += 1;
                 lines.push(format!(
                     "{number:03}  {:<MAX_REEL$} {:<4} {:<8} {} {} {} {}",
@@ -201,7 +304,7 @@ impl ExportEdl {
                     timecode(source_in, per_second),
                     timecode(source_in + duration, per_second),
                     timecode(start, per_second),
-                    timecode(start + duration, per_second),
+                    timecode(end, per_second),
                 ));
             }
         }
