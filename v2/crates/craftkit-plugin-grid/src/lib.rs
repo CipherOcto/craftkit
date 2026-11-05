@@ -377,6 +377,7 @@ mod trigonometry;
 mod units;
 mod validation;
 mod view;
+mod whatifs;
 mod words;
 mod workbookreading;
 
@@ -412,6 +413,7 @@ pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
 pub use tabsorder::MoveSheet;
 pub use validation::{CheckValidation, ClearValidation, SetValidation};
 pub use view::{FreezePanes, SetView, SetZoom, UnfreezePanes};
+pub use whatifs::WhatIf;
 pub use workbookreading::ReadWorkbook;
 
 /// The grid layer.
@@ -1714,6 +1716,7 @@ craftkit_sdk::plugin_anchor!(
     SetFilter,
     SetFilterGroups,
     ClearFilter,
+    WhatIf,
     FilteredRows,
     SetConditional,
     ClearConditional,
