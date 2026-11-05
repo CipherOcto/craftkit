@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3273 tests.** The MCP server links **all fifteen batteries** in, so the
+**3279 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3273 tests
+cargo test          # 3279 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3887,6 +3887,7 @@ so.
 | the **groups** of a filter | **built.** The columns of a group are judged together and the groups are judged one by one, so a row is hidden when it matches none of them (§450) | §450 |
 | the **what-if** of a sheet | **built.** The input cell takes a value and the result cell says what the sheet says then — and the sheet is not changed (§451) | §451 |
 | the **goal** of a sheet | **built.** The other question: what input gives this result? It is found by narrowing the range until the answer is close (§452) | §452 |
+| the **labels** of the pages | **built.** A PDF file may give its pages the names a reader sees beside them, and the labels are written as the format's own page-label tree (§453) | §453 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29981,3 +29982,56 @@ is a coincidence.
 - **The tree's goal seek may be told to stop at a tolerance and here
   the tolerance is the width of the range**: the number of halvings is
   bounded, and the width that is left is reported.
+
+## 453. The labels of the pages
+
+A PDF file may give its pages **labels** — the names a reader sees
+beside them: `i`, `ii`, `iii` for the front matter and `1`, `2`, `3`
+for the rest.
+
+### What was built
+
+- The command `pdf.page.labels`: the **pages** that are given labels
+  and the **runs** of labels, each run saying which page it begins at,
+  how the numbers are written (`D`, `R`, `r`, `A` or `a`), the
+  **prefix** before the number and the number it **starts** at.
+- The labels are written as the PDF's own **`/PageLabels`**: a number
+  tree hanging from the page tree, and the pages name it.
+- The runs are **in order** — the first is the page they begin at and
+  the next is later — because a number tree is sorted and a tree that
+  is not sorted is not a tree.
+- The writer learned one **pair**: the two things of a number tree's
+  entry are written one after the other and not in brackets, and the
+  payload says so — `{"pair": […]}`, the way it already says what a
+  reference and a text string are.
+
+### What the port found
+
+- **The tree's labels are a thing of their own** — a list of entries,
+  each with a style, a prefix and the number it starts at, and the
+  tree's own file format has a section for them. Here the labels are
+  the **PDF's own** `/PageLabels`: a number tree with the entries the
+  format says.
+- **The tree's labels may be read back and the file's may not**,
+  here: the labels are written into the file and the file is the place
+  they live. A command that reads them back would be a second copy of
+  them, and a second copy is a copy that can be wrong.
+
+### What it cost
+
+- **Six tests** in the pdf battery (`tests/labels.rs`): the pages may
+  be given their labels and the file says so, the prefix of a label is
+  written as text, a style that is not a style is refused, the labels
+  must be in order, a label that does not say which page is refused,
+  and a node that is not the pages is refused.
+- **One new module** (`labels`): the labels of the pages are their
+  own. The pdf battery now carries **28** commands and the MCP server
+  **604**.
+
+### What it does not settle
+
+- **The tree's labels are read back and here they are not**: the file
+  is the place they live, and a command that read them back would be
+  a second copy of them.
+- **The tree's labels may be any of its own kinds and here there are
+  the PDF's five**: `D`, `R`, `r`, `A` and `a`.
