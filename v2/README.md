@@ -3927,6 +3927,7 @@ so.
 | the **bleed** of a document | **built.** A document may have a bleed — the room the paper has beyond the page — and the bleed box of a page is derived from it (§490) | §490 |
 | the **line type** of a layer | **built.** A layer names a line type of the tree's own table, and the pattern of it is derived, so a layer may not name a line type that nothing defines (§491) | §491 |
 | the **margin** of a page | **built.** A page may have margins — the room between its edge and the text — and the margin box is derived, so it cannot be out of date (§492) | §492 |
+| the **columns** of a page | **built.** A page may be set in columns — the text is set in columns side by side — and the column boxes are derived from the margin box (§493) | §493 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32347,4 +32348,59 @@ the text that is set on it.
   box is where the text is set. Here the margin box is derived and
   nothing is set in it.
 - **The margins are not drawn**: they are a fact of the page, and
+  this tree has no canvas for a spread.
+
+## 493. The columns of a page
+
+A page may be set in **columns**: the text is set in two or more
+columns side by side, with a gutter of room between them.
+
+### What was built
+
+- **One command** in the layout battery: `layout.page.columns`.
+- The columns are a fact of the **page** — how many there are and the
+  width of the **gutter** — and the **column boxes** are **derived**:
+  the margin box of the page divided into equal columns with the
+  gutter between them. So the boxes cannot be out of date, and they
+  follow the margins when the margins change.
+- The **rules**: a number of columns that is not a whole number above
+  one is refused, and so is a number beyond the tree's own **two
+  hundred and sixteen**; a gutter that is not a number, or that is
+  negative, is refused; and a gutter so wide that the columns **do not
+  fit** in the margin box is refused, because there is no column left
+  to set text in.
+
+### What the port found
+
+- **The tree's columns divide the margin box**, and the tree's margin
+  box is the box the text is set in. Here the columns divide the
+  margin box too, and the margin box is derived (§492).
+- **The tree's columns may be placed by hand** — the tree's column
+  guides may be dragged, and a set of positions that cannot mean
+  anything falls back to the even columns. Here the columns are
+  always even, and the guides are not built.
+- **The tree's columns are inherited** from a parent page, like the
+  tree's margins. Here a page's columns are its own.
+
+### What it cost
+
+- **Seven tests** in the layout battery (`tests/columns.rs`): a page
+  being set in columns, the column boxes being derived, the columns
+  following the margins when they change, a page with one column
+  having the page's box as its column box, a number of columns that is
+  not a whole number being refused, a number of columns beyond the
+  tree's own bound being refused, and a gutter so wide that the
+  columns do not fit being refused.
+- **One new module** (`columns`). The layout battery now carries
+  **35** commands and the MCP server **696**.
+
+### What it does not settle
+
+- **The tree's columns may be placed by hand** and the tree's guides
+  are draggable. Here the columns are always even.
+- **The tree's columns are inherited** from a parent page. Here a
+  page's columns are its own.
+- **The text is not set in the columns**: the boxes are derived, and
+  this tree has no engine that puts a text in a column.
+- **The columns are not drawn**: they are a fact of the page, and
   this tree has no canvas for a spread.
