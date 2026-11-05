@@ -3918,6 +3918,7 @@ so.
 | the **outline** of a document | **built.** A style carries the level of a heading, and the outline of a document is the headings it has, derived, in the order they stand (§481) | §481 |
 | the **paint** of an item | **built.** An item may be filled with a colour and may have a stroke — a colour and a weight — and both may be nothing (§482) | §482 |
 | the **style** of an item | **built.** A style is a named set of paint facts that items may use, and the paint an item is drawn with is derived from its own paint or its style's (§483) | §483 |
+| the **border** of a cell | **built.** A cell may carry a border — a line on one of its four edges, of one of the tree's styles, in a colour — and it is taken away with the formatting that it is part of (§484) | §484 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31767,3 +31768,77 @@ an item may be put **on** a style.
   the paragraph style**, and here a style is a fill and a stroke.
 - **The tree's styles are named by a name and not by a node**, and the
   tree's style list is beside the document; here the style is in it.
+
+## 484. The border of a cell
+
+A cell may carry a **border**: a line on one of its edges, of a style,
+in a colour.
+
+### What was built
+
+- **Three commands** in the grid battery: `grid.cell.border.set`,
+  `grid.cell.border.get` and `grid.cell.border.clear`.
+- A border is **one edge** of **one cell**: the edges are `top`,
+  `right`, `bottom` and `left`, and an edge that is not one of them
+  is refused, and so is a style that is not one of the tree's
+  thirteen — `thin`, `medium`, `thick`, `dashed`, `dotted`, `double`,
+  `hair`, `mediumDashed`, `dashDot`, `mediumDashDot`, `dashDotDot`,
+  `mediumDashDotDot` and `slantDashDot`.
+- The **colour** is a colour of this tree: `#rrggbb`, and nothing
+  else. A border with no colour said has the **black** one, and that
+  is said here rather than left to a reader.
+- A border of the style **none** takes the border away — the tree's
+  own: a line of no style is no line — and an edge that has no border
+  is not kept.
+- The **rules**: a cell that is **covered by a merge** is refused,
+  because the border would be drawn under another cell's; and the
+  **formatting** of a protected sheet that does not allow the
+  formatting is refused, because a border is the formatting.
+- The border is **taken away with the formatting it is**: the tree's
+  *clear formats* clears the style, and the border is part of it —
+  and so the tree's *clear all* clears it too.
+
+### What the port found
+
+- **The tree's border is part of the cell's style** — a font, a fill,
+  a border, an alignment and a number format — and the tree's border
+  is set over a **range** with a **preset** (`all`, `outside`,
+  `inside`, `none`) and a style and a colour. Here a border is a fact
+  of the sheet, kept beside the cells for the same reason the notes
+  are: a cell here is a value, a formula, a format and a style, and a
+  border is none of those four.
+- **The tree's border colour may be `auto`** — the line takes the
+  colour of the text — and this tree has no auto: a colour is
+  `#rrggbb` or it is refused.
+- **The tree's cells are locked by their own style**, and a style is
+  locked unless the style says otherwise; here a protected sheet locks
+  its cells wholesale, and the border follows the sheet's own
+  protection of the **formatting**.
+
+### What it cost
+
+- **Eleven tests** in the grid battery (`tests/borders.rs`): a border
+  being set on an edge, the colour of a border being said, a colour
+  that is not a colour being refused, a style that is not a border
+  style being refused, an edge that is not an edge being refused, a
+  border of the style none taking the border away, a border being
+  taken away while the other edges stay, a covered cell being refused,
+  a protected sheet refusing the formatting, the border going with
+  the format, and the border going with the whole cell.
+- **One new module** (`borders`). The grid battery now carries
+  **109** commands and the MCP server **681**.
+
+### What it does not settle
+
+- **The tree's border is set over a range with a preset**, and here
+  it is one edge of one cell: the presets — `all`, `outside`,
+  `inside` — are not built, and neither is a range of borders.
+- **The tree's border has diagonals** (`diag_up` and `diag_down`),
+  and this tree has the four edges and no diagonals.
+- **The tree's border may be `auto`** — the colour of the text — and
+  here a border is black or it is a colour.
+- **The border of a merged region** is the region's own, and here a
+  merged region has no border of its own: only the cell at its top
+  left may be given one.
+- **The border is not drawn**: it is a fact of the document, and
+  this tree has no canvas for a sheet.
