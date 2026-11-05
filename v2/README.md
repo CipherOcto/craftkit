@@ -3931,6 +3931,7 @@ so.
 | the **radius** of an item | **built.** An item may have a radius, and the corners of its rectangle are derived from it, so a radius beyond half the shorter side is refused rather than clamped (§494) | §494 |
 | the **shadow** of an item | **built.** An item may have a shadow — the light, the distance, the blur, the colour and the opacity — and the offset and the box of the shadow are derived (§495) | §495 |
 | the **row** that is inserted | **built.** A row may be inserted into a sheet, and everything that named a row is moved with it — the cells, the formulas, the merges, the notes — and what cannot be moved refuses the insert (§496) | §496 |
+| the **row** that is deleted | **built.** A row may be deleted from a sheet, and the rows below it move up — and a formula that names a cell in the deleted rows refuses the delete, because this tree has no #REF! yet (§497) | §497 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32584,3 +32585,76 @@ down, and everything that named a row is moved with them.
   spelling of the same meaning.
 - **The row that is deleted is not here**: a deletion moves the rows
   up and takes the last row away, and it is its own work.
+
+## 497. The row that is deleted
+
+A row may be **deleted** from a sheet: the rows below it move up, and
+the cells of the deleted rows are taken away with them.
+
+### What was built
+
+- **One command** in the grid battery: `grid.row.delete`, and the
+  machinery it needs: a formula's **references** are deleted with the
+  rows, and an expression is written out again with them.
+- A row is deleted by **moving** the facts that name rows, exactly as
+  a row is inserted — the other way:
+  - the **cells** below the deleted rows move up, and the **formulas**
+    are rewritten: a reference to a cell that moved now names the cell
+    it moved to;
+  - the **borders**, the **notes**, the **links** and the **pictures**
+    move with their cell, and the ones of the deleted cells go with
+    the cells;
+  - the **merges**, the **print area** and the **title rows** move
+    up;
+  - the **hidden rows**, the **row heights**, the **outline levels**
+    and the **row breaks** move up, and the ones of the deleted rows
+    go with the rows.
+- The **rules**: a row is **counted from one**, and the number of rows
+  deleted is a whole number above zero; a **formula that names a cell
+  in the deleted rows** refuses the delete, because this tree has no
+  `#REF!` yet and a formula that names nothing is refused rather than
+  written; a **merge** that covers one of the deleted rows refuses it,
+  and so does a **print area** that names one; a sheet that is
+  **protected** refuses, because its cells are locked; and a sheet that
+  holds something this tree **cannot move** refuses and says what it
+  holds, as it does when a row is inserted (§496).
+
+### What the port found
+
+- **The tree's delete writes `#REF!`** where a formula named a cell
+  that is gone, and the tree's engine knows that value. This tree has
+  no `#REF!` yet, so the delete is **refused** instead: a formula that
+  names nothing is not written.
+- **The tree's delete moves everything** — the tree's cells, the
+  tree's formulas, the tree's merges, the tree's charts and the
+  tree's names — and here the moving is a list of the facts this tree
+  knows how to move, and a fact it does not know how to move
+  **refuses** the delete rather than being left behind.
+
+### What it cost
+
+- **Nine tests** in the grid battery (`tests/deleting.rs`): a row
+  being deleted and the cells below moving up, more than one row being
+  deleted, the formula of a cell that moves being written again, a
+  formula that names a deleted row being refused, a note of a deleted
+  cell going with the cell, a note of a cell below moving up, a merge
+  that covers a deleted row being refused, a protected sheet refusing,
+  and a row that is not a row being refused.
+- **One new module** (`deleting`) and the delete in the formula
+  module. The grid battery now carries **118** commands and the MCP
+  server **700**.
+
+### What it does not settle
+
+- **There is no `#REF!`**: a formula that names a cell in the deleted
+  rows refuses the delete, where the tree writes the error.
+- **The conditional formats, the validations, the sparklines, the
+  tables, the pivots and the charts are not moved**, and a sheet that
+  holds one of them refuses the delete and says which.
+- **A name of the workbook that points at the sheet is not moved**,
+  and a sheet with such a name refuses the delete.
+- **The formula is written out again**, so its text may be another
+  spelling of the same meaning, and a formula this tree cannot read
+  is left exactly as it was — which is also true of the insert (§496),
+  and a formula this tree cannot read is a formula the engine cannot
+  work out either.
