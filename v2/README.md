@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3474 tests.** The MCP server links **all fifteen batteries** in, so the
+**3483 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3474 tests
+cargo test          # 3483 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3910,6 +3910,7 @@ so.
 | the **paragraph** of a style | **built.** A style carries the paragraph of the text it applies to — its alignment, its spacing and its indents — and a style based on another has the paragraph of its base under it (§473) | §473 |
 | the **link** of an item | **built.** An item may point at a target outside the document — a web link or a mail link — or at a page inside it, and a target that may not be opened is refused for its own reason (§474) | §474 |
 | the **FCPXML** of a sequence | **built.** The text of an interchange format is derived from the sequence — the spine, the connected clips, the gaps, the transitions and the markers — and what is left out is said (§475) | §475 |
+| the **OTIO** of a sequence | **built.** The timeline of an interchange format is derived from the sequence — its tracks, its clips, its gaps, its transitions and its markers — and it is a text of the document (§476) | §476 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31327,5 +31328,58 @@ is.
   timeline, its source and its length.
 - **The tree's size is a fact of the sequence**, and here the caller
   says it — a sequence has no resolution in this tree yet.
+- **The tree's export writes nested sequences**, and here a sequence
+  is a sequence.
+
+## 476. The OTIO of a sequence
+
+OTIO is the interchange format of a non-linear editor that is a
+**JSON** text: a timeline, the tracks of it, and the clips on them.
+
+### What was built
+
+- **One command** in the film battery: `film.export.otio`, given the
+  sequence. The text is **derived** and returned as a text.
+- The text is a **timeline**: the tracks of the sequence — the video
+  ones first, then the audio ones — and the **markers** of the
+  sequence on the stack of the tracks.
+- The **children** of a track are its clips, with a **gap** for every
+  hole between them and a **transition** for every dissolve, with the
+  offsets it sits at.
+- A **clip** says where in its source it begins and how long it is,
+  and it points at the media it plays: an item with a path is an
+  **external reference** and an item without one is a **missing
+  reference**.
+- A clip that is **retimed** carries a `LinearTimeWarp`, and a clip
+  that is **held** carries a `FreezeFrame`.
+- The **rule**: a clip with no item is refused, because the text would
+  point at a source that is not there.
+
+### What the port found
+
+- **The tree's OTIO carries the tree's own metadata** beside every
+  object — the item, the settings, the track's lock and its pan — and
+  its reference knows whether the media is a generator and what its
+  own range is. Here the text says what the document says: the name,
+  the time, the media's path and its length, and nothing else.
+- **The tree's export writes a file and this one writes a text** — the
+  same bargain as the EDL (§457) and the FCPXML (§475).
+
+### What it cost
+
+- **Nine tests** in the film battery (`tests/otio.rs`): the text being
+  a timeline of the format, the tracks saying which kind they are, a
+  clip saying where it begins and how long it is, an item with a path
+  being a reference to it, the hole between two clips being a gap, a
+  transition saying its offsets, the markers being on the stack, a
+  retimed clip carrying a time warp, and the text being the text of
+  the timeline.
+- **One new module** (`otio`). The film battery now carries **73**
+  commands and the MCP server **656**.
+
+### What it does not settle
+
+- **The tree's OTIO writes the tree's metadata and its media
+  information**, and here the text is the document and nothing else.
 - **The tree's export writes nested sequences**, and here a sequence
   is a sequence.
