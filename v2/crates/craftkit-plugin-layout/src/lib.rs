@@ -63,6 +63,7 @@ mod items;
 mod links;
 mod order;
 mod paint;
+mod styles;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
@@ -74,6 +75,7 @@ pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem}
 pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
 pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
 pub use paint::{SetFill, SetStroke};
+pub use styles::{AddStyle, SetItemStyle, SetStyleFill, SetStyleStroke};
 
 /// The layout layer.
 ///
@@ -103,6 +105,38 @@ impl DocumentKind {
             "layers": node.children.iter().filter(|child| child.kind == "layout.layer").count(),
             "stories": node.children.iter().filter(|child| child.kind == "layout.story").count(),
             "assets": node.children.iter().filter(|child| child.kind == "layout.asset").count(),
+        }))
+    }
+}
+
+/// A **style**: a named set of paint facts that items may use.
+///
+/// A style may be **based on** another, and the base's paint sits
+/// under the style's own.
+#[derive(NodeKind)]
+#[node_kind(kind = "layout.style", label = "Style", layer = "layout", evaluates)]
+pub struct StyleKind;
+
+impl StyleKind {
+    /// Not drawn.
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Not hit.
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What a style **means**: its paint, and the paint of its base
+    /// under it.
+    fn evaluate(node: &Node, document: &Document) -> Option<Json> {
+        Some(json!({
+            "fill": crate::styles::effective_fill(document, node.id),
+            "stroke": crate::styles::effective_stroke(document, node.id),
+            "base": crate::styles::chain_of(document, node.id)
+                .first()
+                .filter(|base| **base != node.id)
+                .map(|base| json!(base))
+                .unwrap_or(Json::Null),
         }))
     }
 }
@@ -257,8 +291,11 @@ macro_rules! item_kind {
                     "layer": edge_name(document, node.id, "layout.on_layer"),
                     "story": edge_name(document, node.id, "layout.text"),
                     "opacity": crate::items::opacity_of(node),
-                    "fill": crate::paint::fill_of(node),
-                    "stroke": crate::paint::stroke_of(node),
+                    "fill": crate::styles::effective_paint(document, node).0,
+                    "stroke": crate::styles::effective_paint(document, node).1,
+                    "own_fill": crate::paint::fill_of(node),
+                    "own_stroke": crate::paint::stroke_of(node),
+                    "style": edge_name(document, node.id, "layout.styled_by"),
                     "locked": crate::items::is_locked(node),
                     "hidden": node.muted,
                 }))
@@ -808,6 +845,7 @@ craftkit_sdk::plugin_anchor!(
     SpreadKind,
     PageKind,
     LayerKind,
+    StyleKind,
     StoryKind,
     AssetKind,
     FrameKind,
@@ -836,6 +874,10 @@ craftkit_sdk::plugin_anchor!(
     SetItemLink,
     SetFill,
     SetStroke,
+    AddStyle,
+    SetStyleFill,
+    SetStyleStroke,
+    SetItemStyle,
     SetItemPageLink,
     ReadLinks,
     PagesEvaluator,
