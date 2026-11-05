@@ -3922,6 +3922,7 @@ so.
 | the **turn** of an item | **built.** An item may be turned about the middle of its shape, and the box it takes when it is turned is derived, so it cannot be out of date (§485) | §485 |
 | the **group** of a row | **built.** Rows may be grouped under a summary row, and the groups are worked out from the levels of the rows, so a row that is moved is regrouped (§486) | §486 |
 | the **group** of a column | **built.** Columns may be grouped under a summary column, and the groups are worked out from the levels of the columns (§487) | §487 |
+| the **dimension** of a drawing | **built.** A dimension measures an entity and the measurement is derived, so a dimension cannot be out of date (§488) | §488 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32027,3 +32028,74 @@ Columns may be **grouped**: the columns of a group are gathered under a
   each. Here the rows and the columns are hidden one by one, and the
   group is **collapsed** when they all are — the collapse is said, and
   it is not a command of its own.
+
+## 488. The dimension of a drawing
+
+A **dimension** measures an entity: it says how long the entity is,
+and it says it where the reader can see it.
+
+### What was built
+
+- **Two commands** in the cad battery: `cad.dimension.add` and
+  `cad.dimension.text`, and **one new kind** of entity,
+  `cad.entity.dimension`.
+- The **measurement** is derived: it is worked out from the geometry
+  of the entity every time, so a dimension cannot be out of date — a
+  line that is scaled afterwards is measured again.
+- The **text** is derived from the measurement — written with three
+  decimals, the tree's own — unless the dimension carries a **text of
+  its own**, which is the tree's own bargain: a dimension may say
+  something other than what it measures, and an **empty** text takes
+  it away, so the measurement shows again.
+- The reference to the measured entity is an **edge** — a dimension
+  and the entity it measures are two things, and the edge between them
+  says which — the same bargain as the insert and the block it
+  inserts.
+- The **rules**: a dimension measures the **length** of an entity, and
+  an entity that has no length — a text, an insert — is refused; a
+  node that is not an entity at all is refused; and a node that is not
+  a dimension may not be given a text.
+
+### What the port found
+
+- **The tree's dimension is an annotation** with a witness line, an
+  arrowhead, a style and a precision of its own, and the tree's
+  dimension text is written from the measurement unless the dimension
+  carries a text of its own. Here the dimension is an entity with a
+  measurement and a text, and the drawing of it — the line, the
+  arrowheads and the style — is not built.
+- **The tree's dimension measures points, entities and angles**, and
+  the tree's distance is between two points that may be in different
+  blocks. Here the dimension measures the **length** of an entity.
+- **The tree's precision is a setting of the dimension style**, and
+  the tree writes the measurement with it. Here the measurement is
+  written with three decimals, and that is said here rather than left
+  to a reader.
+
+### What it cost
+
+- **Eight tests** in the cad battery (`tests/dimensions.rs`): a
+  dimension measuring the length of an entity, the text of a dimension
+  being the measurement, a dimension saying something of its own, an
+  empty text taking the text away, the measurement being derived, an
+  entity that has no length being refused, a node that is not an
+  entity being refused, and a node that is not a dimension being
+  refused a text.
+- **One new module** (`dimensions`) and **one new kind** of entity.
+  The cad battery now carries **38** commands and the MCP server
+  **691**. The count of §1175 said **35** and was one short — the
+  battery had 36 commands then — and the correction is here.
+
+### What it does not settle
+
+- **The tree's dimension is drawn** — the witness line, the
+  arrowheads, the dimension line and the place of the text — and here
+  the dimension is a fact of the drawing and nothing is drawn.
+- **The tree's dimension measures more than a length**: a distance
+  between two points, an angle, a radius and a diameter, and a
+  dimension of an arc or of an ellipse. Here a dimension measures the
+  length of an entity.
+- **The tree's dimension style** carries the precision, the arrowheads
+  and the text height, and the tree's dimension may be annotative —
+  scaled with the drawing. Here the dimension carries a measurement
+  and a text.
