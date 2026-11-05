@@ -113,9 +113,7 @@ fn formatted(runs: &[Json], text_length: usize, start: usize, end: usize, charac
         };
         if let Some(map) = run.as_object_mut() {
             map.insert("len".to_string(), Json::from(piece.len() as u64));
-            if inside
-                && let Some(character) = character.as_object()
-            {
+            if inside && let Some(character) = character.as_object() {
                 for (key, value) in character {
                     if value.is_null() {
                         map.remove(key);
