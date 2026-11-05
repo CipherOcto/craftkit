@@ -21,6 +21,11 @@
 //! - **A name and a string are told apart by the payload.** A name is
 //!   a plain string and a **text** string is `{"string": …}`, so that
 //!   the writer knows which is which.
+//! - **A pair is told apart by the payload too.** The two things of a
+//!   number tree's entry are written one after the other and not in
+//!   brackets, and that is not what a list is: a **pair** is
+//!   `{"pair": […]}`. A list is a list and a pair is a pair, and the
+//!   payload says which is which.
 
 use craftkit_sdk::serde_json::Value as Json;
 
@@ -186,6 +191,12 @@ fn value_of(value: &Json) -> String {
             if let Some(Json::String(text)) = map.get("string") {
                 // A **text** string: the payload says so.
                 return format!("({})", escape_text(text));
+            }
+            if let Some(Json::Array(pair)) = map.get("pair") {
+                // A **pair**: the two things of a number tree's entry,
+                // written one after the other and not in brackets.
+                let parts: Vec<String> = pair.iter().map(value_of).collect();
+                return parts.join(" ");
             }
             if let Some(Json::Array(pair)) = map.get("ref") {
                 let number = pair.first().and_then(|number| number.as_f64()).unwrap_or(0.0);

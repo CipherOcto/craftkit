@@ -130,6 +130,7 @@ mod content;
 mod filters;
 mod free;
 mod information;
+mod labels;
 mod loader;
 mod number;
 mod objects;
@@ -147,6 +148,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 pub use boxes::{PageBoxes, SetPageBox};
 pub use information::SetInformation;
+pub use labels::SetPageLabels;
 pub use number::SetNumber;
 pub use outline::{AddOutline, ReadOutline};
 pub use pages::RemovePage;
@@ -1974,6 +1976,7 @@ craftkit_sdk::plugin_anchor!(
     AddObject,
     AddStream,
     SetInformation,
+    SetPageLabels,
     RemoveObject,
     SetNumber,
     SetEntry,
