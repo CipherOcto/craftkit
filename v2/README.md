@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3342 tests.** The MCP server links **all fifteen batteries** in, so the
+**3353 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3342 tests
+cargo test          # 3353 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3896,6 +3896,7 @@ so.
 | the **order** of the items | **built.** The items of a spread are drawn in the order they stand in, and one item may be brought forward or sent back (§459) | §459 |
 | the **crossings** of a sheet | **built.** The scan walks the range and reports every place the result goes past the target, and a sheet that turns around is found (§460) | §460 |
 | the **dissolve** of a transition | **built.** The list writes a dissolve as the cut of the outgoing clip and the incoming clip with the length of it, and a dissolve that is not at the cut is refused (§461) | §461 |
+| the **printing** of a sheet | **built.** A sheet is printed on a paper with margins, and the pages it breaks into are derived from the paper and the sizes of the rows and the columns (§462) | §462 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30521,3 +30522,68 @@ list writes it.
   list of a sequence with a centred transition cannot be written.
 - **The tree's dissolve may carry the name of the effect** as a
   comment, and here it does not.
+
+## 462. The printing of a sheet
+
+A sheet is printed on **paper**: a size, an orientation and four
+margins. And the sheet is broken into **pages** — the rows that go on
+one page and the columns that go on it.
+
+### What was built
+
+- **Five commands** in the grid battery: `grid.print.paper`,
+  `grid.print.orientation`, `grid.print.margins`, `grid.print.read` and
+  `grid.print.pages`.
+- The paper is named by the **tree's names** — `Letter`, `Legal`,
+  `A4`, `A3`, `Tabloid`, the B sizes, the Japanese postcards and
+  envelopes — and its size is in **points**, a seventy-second of an
+  inch.
+- The margins are in **inches**, because that is what the tree's
+  dialogue asks for, and the **presets** are the tree's own: `normal`,
+  `wide` and `narrow`.
+- The **pages** are derived: the rows that go on one page and the
+  columns that go on it are worked out from the paper, the margins
+  and the sizes of the rows and the columns, and they are never
+  written down.
+- The **rules**: a paper that is **not one of the tree's papers** is
+  refused — the tree falls back on Letter, and a list that says
+  Letter when it was told A4 is a list that is wrong; a margin that
+  is **not a number between zero and twenty inches** is refused —
+  the tree clamps it, and a margin of thirty inches is not a margin;
+  and a sheet with **nothing in it** has **no pages**.
+
+### What the port found
+
+- **The tree's paper is a name and its size is a table.** The tree
+  falls back on Letter for a name it does not know. Here the names
+  are the tree's names, the sizes are the tree's sizes, and a name
+  that is not one of them is refused.
+- **The tree's margins are clamped and here they are refused.** The
+  tree's dialogue cannot say a margin of thirty inches, so the tree
+  clamps it to twenty; here a margin outside the range is refused,
+  because a margin that is not the one that was asked for is a margin
+  that is wrong.
+
+### What it cost
+
+- **Eleven tests** in the grid battery (`tests/printing.rs`): the
+  default setup being the tree's, the paper being set, a paper that is
+  not one being refused, the orientation turning the page, an
+  orientation that is not one being refused, the margins by preset and
+  by inches, a margin that is not a margin being refused, the pages
+  being derived, a tall sheet being two pages down, a sheet with
+  nothing in it having no pages, and the size of a column being in the
+  pages.
+- **One new module** (`printing`): the printing of a sheet is its
+  own. The grid battery now carries **85** commands and the MCP server
+  **632**.
+
+### What it does not settle
+
+- **The tree's print area, its print titles, its scaling to fit, its
+  manual page breaks, its header and footer and its printing of the
+  gridlines and the headings are not here.** Here the printed area is
+  the used range of the sheet and the breaks are the paper's.
+- **The tree's column width is a width in pixels with a font behind
+  it.** Here it is characters, and the turn into points is the tree's
+  own conversion.
