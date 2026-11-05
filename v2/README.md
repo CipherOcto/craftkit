@@ -3920,6 +3920,7 @@ so.
 | the **style** of an item | **built.** A style is a named set of paint facts that items may use, and the paint an item is drawn with is derived from its own paint or its style's (§483) | §483 |
 | the **border** of a cell | **built.** A cell may carry a border — a line on one of its four edges, of one of the tree's styles, in a colour — and it is taken away with the formatting that it is part of (§484) | §484 |
 | the **turn** of an item | **built.** An item may be turned about the middle of its shape, and the box it takes when it is turned is derived, so it cannot be out of date (§485) | §485 |
+| the **group** of a row | **built.** Rows may be grouped under a summary row, and the groups are worked out from the levels of the rows, so a row that is moved is regrouped (§486) | §486 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31901,3 +31902,69 @@ shape.
 - **The item is not drawn**: the turn is a fact of the document, and
   the turned box is the box the item would take — this tree has no
   canvas for a spread.
+
+## 486. The group of a row
+
+Rows may be **grouped**: the rows of a group are gathered under a
+**summary row**.
+
+### What was built
+
+- **Four commands** in the grid battery: `grid.row.group`,
+  `grid.row.ungroup`, `grid.row.groups` and `grid.sheet.summary`.
+- The **levels** are the fact and the **groups** are derived: a row
+  carries a level from one to seven, and the groups are the runs of
+  rows at or above a level, so a row that is moved is regrouped and
+  nothing is written down that could be wrong.
+- A **gap** between two rows ends every group, and a row that is
+  shallower than the one before it ends the groups below its own
+  level — the tree's own rule, worked out the same way.
+- The **summary row** of a group is the row after it, or the row
+  before it when the sheet says its summaries sit before their
+  detail, and a group that has no such row has no summary.
+- A group whose rows are **all hidden** is a **collapsed** group: it
+  is said, and it is derived from the rows that are hidden.
+- The **rules**: a group that would go deeper than the tree's **seven**
+  levels is refused; a row that is in **no group** may not be
+  ungrouped, because there is nothing to undo on it; and a range of
+  rows that runs **backwards** is refused.
+
+### What the port found
+
+- **The tree's outline is a flag on every row of the sheet** — the
+  tree keeps a line of information for every row, hidden or not, and
+  the outline level is on that line. Here a sheet carries the
+  **levels of the rows that are in a group**, and a row that is not
+  on the list is in no group.
+- **The tree's outline is of rows and of columns**, and the tree's
+  summary may sit above or below the rows and left or right of the
+  columns. Here the outline is of the **rows**, and the summary of a
+  group is below it unless the sheet says otherwise.
+- **The tree's group takes a whole block of rows** — `5:8` — and the
+  tree's ungroup takes one back. Here so does this one.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/outline.rs`): rows being
+  grouped, the summary row of a group being the row after it, the
+  summary row sitting before the group, a gap ending a group, rows
+  being nested in a group of their own, a group being taken apart,
+  taking a group off a row that has none being refused, a group that
+  is deeper than seven being refused, a group whose rows are all
+  hidden being collapsed, and a range that runs backwards being
+  refused.
+- **One new module** (`outline`). The grid battery now carries
+  **113** commands and the MCP server **686**.
+
+### What it does not settle
+
+- **The tree's outline is of the columns as well as the rows**, and
+  the tree's summary of a column group may sit left of the group or
+  right of it. Here the outline is of the rows alone.
+- **The tree's outline is a flag on every row**, and a row of no
+  outline still carries a line of information in the tree. Here a row
+  that is in no group carries nothing.
+- **The tree's show and hide detail** collapse a group by hiding its
+  rows and expanding it by showing them again. Here the rows are
+  hidden one by one, and the group is **collapsed** when they all
+  are — the collapse is said, and it is not a command of its own.
