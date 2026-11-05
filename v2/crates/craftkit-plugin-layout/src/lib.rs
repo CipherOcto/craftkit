@@ -60,6 +60,7 @@
 #![forbid(unsafe_code)]
 
 mod items;
+mod order;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
@@ -68,6 +69,7 @@ use craftkit_sdk::{
 };
 
 pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem};
+pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
 
 /// The layout layer.
 ///
@@ -818,6 +820,11 @@ craftkit_sdk::plugin_anchor!(
     LockItem,
     UnlockItem,
     ScaleItem,
+    ListItems,
+    BringToFront,
+    SendToBack,
+    ForwardItem,
+    BackwardItem,
     PutOnLayer,
     PutStory,
     PagesEvaluator,
