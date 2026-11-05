@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3440 tests.** The MCP server links **all fifteen batteries** in, so the
+**3451 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3440 tests
+cargo test          # 3451 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3907,6 +3907,7 @@ so.
 | the **scale** of a print | **built.** A sheet prints at a scale or to fit, and the scale a fit works out is the largest at which the pages fit — and a fit that cannot be met is refused (§470) | §470 |
 | the **header** of a print | **built.** A printed page may carry a header and a footer, and their codes — the page number, the number of pages and the name of the sheet — are worked out for the page they are on (§471) | §471 |
 | the **marks** of a print | **built.** A printed page may carry the gridlines and the headings, and the headings take room from the page — the tree's own room (§472) | §472 |
+| the **paragraph** of a style | **built.** A style carries the paragraph of the text it applies to — its alignment, its spacing and its indents — and a style based on another has the paragraph of its base under it (§473) | §473 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31144,3 +31145,63 @@ row numbers and the column letters beside the cells.
 - **The tree's headings are the headings of the tree's own view**, and
   it may print a sheet that is not the sheet on the screen; here the
   print is the document and the screen is the document too.
+
+## 473. The paragraph of a style
+
+A style carries the **character** of the text it applies to, and it
+carries the **paragraph** it applies to: how that text stands on the
+page.
+
+### What was built
+
+- **Three commands** in the prose battery: `prose.style.paragraph` to
+  set the paragraph of a style, `prose.style.paragraph.read` to read
+  it, and `prose.block.paragraph` to read the paragraph of a block.
+- The **paragraph** is the alignment of the text, the room above it
+  and below it, the spacing of its lines, and its indents — the indent
+  of the whole paragraph, the one at its right, and the one of its
+  first line.
+- The **indent of the first line may be negative**, and a negative one
+  **hangs** the line: the first line stands out to the left of the
+  rest.
+- A style that is **based on** another has the paragraph of its base
+  **under it**, as it has the character of its base under it: the
+  nearer style wins, and the chain is bounded.
+- The **rules**: an alignment is one of the tree's own — `left`,
+  `centre`, `right`, `justify` or `distribute`; a space is a number of
+  points that is not negative; a line spacing is a multiple of the
+  line; and a command that says nothing is refused.
+
+### What the port found
+
+- **The tree's paragraph properties are on the paragraph itself**, and
+  a style is a set of them that a paragraph may point at. Here the
+  paragraph is a **fact of the style**, and the block says which style
+  it is on — the same bargain as the character (§468), and the tree's
+  own styles are a vector of names beside the document while here they
+  are nodes in it.
+- **The tree's properties are many** — the automatic spacing of HTML,
+  the indents in characters, the tabs, the line spacing as *at least*
+  or *exactly* so many points, the widow and orphan control, the
+  keep-with-next — and here the paragraph is eight things.
+
+### What it cost
+
+- **Eleven tests** in the prose battery (`tests/paragraph.rs`): the
+  paragraph being set, the property that is not said staying, a style
+  having the paragraph of its base under it, the first line hanging,
+  and the four refusals — of an alignment, of a space, of a line
+  spacing and of a command that says nothing — and the paragraph of a
+  block, and a block on no style having none, and a node that is not a
+  style being refused.
+- **One new module** (`paragraph`). The prose battery now carries **51**
+  commands and the MCP server **651**.
+
+### What it does not settle
+
+- **The tree's line spacing is three kinds** — a multiple of the line,
+  at least so many points, exactly so many points — and here it is
+  only a multiple.
+- **The tree's automatic spacing, its indents in characters and its
+  widow and orphan control are not here**, and a paragraph that keeps
+  with the next one is not here either.
