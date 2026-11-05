@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3483 tests.** The MCP server links **all fifteen batteries** in, so the
+**3491 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3483 tests
+cargo test          # 3491 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3911,6 +3911,7 @@ so.
 | the **link** of an item | **built.** An item may point at a target outside the document — a web link or a mail link — or at a page inside it, and a target that may not be opened is refused for its own reason (§474) | §474 |
 | the **FCPXML** of a sequence | **built.** The text of an interchange format is derived from the sequence — the spine, the connected clips, the gaps, the transitions and the markers — and what is left out is said (§475) | §475 |
 | the **OTIO** of a sequence | **built.** The timeline of an interchange format is derived from the sequence — its tracks, its clips, its gaps, its transitions and its markers — and it is a text of the document (§476) | §476 |
+| the **cross-reference** of a document | **built.** A block may reference another — it stands for the text of a bookmarked block — and the text it shows is derived, so it cannot be out of date (§477) | §477 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31383,3 +31384,59 @@ OTIO is the interchange format of a non-linear editor that is a
   information**, and here the text is the document and nothing else.
 - **The tree's export writes nested sequences**, and here a sequence
   is a sequence.
+
+## 477. The cross-reference of a document
+
+A block may **reference** another: it stands for the text of a block
+that carries a **bookmark**.
+
+### What was built
+
+- **Three commands** in the prose battery: `prose.block.reference.add`
+  to add a reference, `prose.block.reference.set` to point it at
+  another bookmark, and `prose.block.reference.read` to read the text
+  it shows.
+- The reference is a **block** of a kind of its own
+  (`prose.block.reference`), and the text it shows is **derived** — it
+  is worked out from the block it points at and it is never written
+  down, so a reference cannot be out of date.
+- The reference is an **edge**: from the block that references to the
+  block that is referenced, with the name of the bookmark in the
+  payload.
+- The **rules**: a bookmark that is not in the document is refused, for
+  a reference to a name that is not there points at nothing; a block
+  that points at a block with **no text** shows **nothing**; and a
+  block that is not a reference may not be pointed again.
+
+### What the port found
+
+- **The tree's field is an inline object inside a paragraph**: a field
+  start marker, a code and a field end marker, and the result is the
+  text between them. Here a reference is a **block** of its own kind
+  and the reference is an **edge** — the same bargain as the style of
+  a block (§468): a fact of the document is a node or an edge, and
+  never a marker in the middle of a string.
+- **The tree's cross-reference is a number of a page and a number of a
+  paragraph.** Here the text of the block it points at is derived, and
+  the page is not here at all.
+
+### What it cost
+
+- **Eight tests** in the prose battery (`tests/references.rs`): a
+  reference being added, its text being derived and following the
+  block it points at, the blocks of the document showing the derived
+  text, a bookmark that is not there being refused, a reference being
+  pointed at another bookmark, a reference to a bookmark that is not
+  there being refused, a block with no text showing nothing, and a
+  block that is not a reference being refused.
+- **One new module** (`references`) and **one new kind** of block. The
+  prose battery now carries **54** commands and the MCP server **659**.
+
+### What it does not settle
+
+- **The tree's fields are many** — the page, the number of pages, the
+  date, the table of contents — and here a reference points at a
+  bookmark and at nothing else.
+- **The tree's cross-reference may be a number and a word** ("above",
+  "below", "on page 4"), and here the text of the block is the whole
+  of it.
