@@ -3928,6 +3928,7 @@ so.
 | the **line type** of a layer | **built.** A layer names a line type of the tree's own table, and the pattern of it is derived, so a layer may not name a line type that nothing defines (§491) | §491 |
 | the **margin** of a page | **built.** A page may have margins — the room between its edge and the text — and the margin box is derived, so it cannot be out of date (§492) | §492 |
 | the **columns** of a page | **built.** A page may be set in columns — the text is set in columns side by side — and the column boxes are derived from the margin box (§493) | §493 |
+| the **radius** of an item | **built.** An item may have a radius, and the corners of its rectangle are derived from it, so a radius beyond half the shorter side is refused rather than clamped (§494) | §494 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32404,3 +32405,53 @@ columns side by side, with a gutter of room between them.
   this tree has no engine that puts a text in a column.
 - **The columns are not drawn**: they are a fact of the page, and
   this tree has no canvas for a spread.
+
+## 494. The radius of an item
+
+An item may have a **radius**: the corners of its rectangle are drawn
+as arcs of that radius.
+
+### What was built
+
+- **One command** in the layout battery: `layout.item.radius`.
+- The radius is a fact of the item, in points, and the **corners** are
+  **derived**: they are the centres of the four corner arcs — the
+  corners of the box inset by the radius — so they cannot be out of
+  date.
+- The **rules**: a radius that is not a number, or that is negative,
+  is refused; a radius **beyond half the shorter side** of the box is
+  refused — the tree clamps it and this tree refuses it, because a
+  corner rounded more than half the width is not a corner; and an item
+  whose shape is **not a rectangle** may not have a radius, because a
+  radius is a rectangle's own.
+
+### What the port found
+
+- **The tree's radius is clamped**: the tree's rounded rectangle takes
+  the radius and clamps it to half the shorter side, so a radius that
+  is too big becomes a radius that is not too big — silently. Here the
+  radius is **refused** instead, and the refusal says what the side of
+  the box is.
+- **The tree's radius belongs to the shape**, and the tree's shape is a
+  path of its own — a rounded rectangle is a path with eight anchors,
+  not a rectangle with a number on it. Here the shape is still named
+  and the radius is a fact beside it.
+
+### What it cost
+
+- **Six tests** in the layout battery (`tests/radii.rs`): an item
+  being rounded, the corners of an item being derived, an item with no
+  radius having no corners, a radius that is negative being refused, a
+  radius beyond half the shorter side being refused, and an item that
+  is not a rectangle being refused a radius.
+- **One new module** (`radii`). The layout battery now carries
+  **36** commands and the MCP server **697**.
+
+### What it does not settle
+
+- **The tree's shape is a path** and a rounded rectangle is a path
+  with eight anchors; the radius here is a number beside a shape that
+  is still named.
+- **The tree clamps the radius** and this tree refuses it.
+- **The radius is not drawn**: it is a fact of the item, and this tree
+  has no canvas for a spread.
