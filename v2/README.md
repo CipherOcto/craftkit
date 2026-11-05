@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3398 tests.** The MCP server links **all fifteen batteries** in, so the
+**3408 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3398 tests
+cargo test          # 3408 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3902,6 +3902,7 @@ so.
 | the **area** a sheet prints | **built.** The area that is printed may be set and the pages are of it, and a page may be broken by hand where the paper does not break it (§465) | §465 |
 | the **titles** of a sheet | **built.** The rows and the columns that are printed on every page are the titles, and they are not part of the pages themselves (§466) | §466 |
 | the **import of a list of objects** | **built.** The keys of the objects are the columns of a sheet and the first row holds them, and a value that is a structure is refused (§467) | §467 |
+| the **character** of a style | **built.** A style carries the character of the text it applies to, and a style based on another has the character of its base under it (§468) | §468 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30856,3 +30857,61 @@ of the objects are the columns.
 - **The tree makes a table of what it imports and autofits the
   columns**; here the import makes a sheet and the widths are as they
   are.
+
+## 468. The character of a style
+
+A style is a name and what it applies to — and it carries the
+**character** of the text it applies to.
+
+### What was built
+
+- **Three commands** in the prose battery:
+  `prose.style.character` to set the character of a style,
+  `prose.style.character.read` to read it, and
+  `prose.block.character` to read the character of a block.
+- The **character** of a style is the font, the size, the colour, and
+  whether the text is bold, italic or underlined — and the character
+  that is **not said stays as it was**.
+- A style that is **based on** another has the character of its base
+  **under it**: a style that says nothing about the size has the size
+  of its base, and a style that says a size has its own. The chain is
+  walked from the furthest base to the style itself, so the nearer
+  style wins — and the walk is **bounded**, so a cycle is not a hang.
+- The **rules**: a **colour** is the kit's colour, `#rrggbb`; a
+  **size** is a number that is finite and above zero; a **font** is
+  not nothing; and a command that changes nothing is refused.
+
+### What the port found
+
+- **The tree's style carries a whole set of properties and a style
+  applies to a selection.** Its `style.character.apply` puts a
+  character style on the text that is selected, and its properties
+  are many — a font, a size, a colour, a tracking, a leading, a
+  language. Here the character is a **fact of the style** and the
+  block says which style it is on, because a style that is applied to
+  a selection is a style that is not in the document.
+- **The tree's style is looked up by name and here it is a node.**
+  That was already the finding of this battery (§49): the tree's
+  styles are a vector of names beside the document and here they are
+  nodes in it, and a style that is based on another is an **edge**.
+
+### What it cost
+
+- **Ten tests** in the prose battery (`tests/stylecharacter.rs`): the
+  character being set, a style having the character of its base under
+  it, the character that is not said staying, the refusals of a
+  colour, a size, a font and a command that changes nothing, the
+  refusal of a node that is not a style, the character of a block
+  being the character of its style, and a block on no style having no
+  character.
+- **One new module** (`styles`): the character of a style is its own.
+  The prose battery now carries **48** commands and the MCP server
+  **642**.
+
+### What it does not settle
+
+- **The tree's style holds many more properties** — a paragraph's
+  spacing and its indentation, a table's borders and its shading, a
+  list's numbering — and here the character is six things.
+- **The tree's style may be applied to a selection and not only to a
+  block**, and a style of a run is not here.
