@@ -62,6 +62,7 @@
 mod items;
 mod links;
 mod order;
+mod paint;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
@@ -72,6 +73,7 @@ use craftkit_sdk::{
 pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem};
 pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
 pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
+pub use paint::{SetFill, SetStroke};
 
 /// The layout layer.
 ///
@@ -255,6 +257,8 @@ macro_rules! item_kind {
                     "layer": edge_name(document, node.id, "layout.on_layer"),
                     "story": edge_name(document, node.id, "layout.text"),
                     "opacity": crate::items::opacity_of(node),
+                    "fill": crate::paint::fill_of(node),
+                    "stroke": crate::paint::stroke_of(node),
                     "locked": crate::items::is_locked(node),
                     "hidden": node.muted,
                 }))
@@ -830,6 +834,8 @@ craftkit_sdk::plugin_anchor!(
     PutOnLayer,
     PutStory,
     SetItemLink,
+    SetFill,
+    SetStroke,
     SetItemPageLink,
     ReadLinks,
     PagesEvaluator,
