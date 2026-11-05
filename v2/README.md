@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3414 tests.** The MCP server links **all fifteen batteries** in, so the
+**3424 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3414 tests
+cargo test          # 3424 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3904,6 +3904,7 @@ so.
 | the **import of a list of objects** | **built.** The keys of the objects are the columns of a sheet and the first row holds them, and a value that is a structure is refused (§467) | §467 |
 | the **character** of a style | **built.** A style carries the character of the text it applies to, and a style based on another has the character of its base under it (§468) | §468 |
 | the **column beyond Z** | **built.** The letters of a column are a base of twenty-six, and `AA` is the column after `Z` — a cell set there is read there, and a sheet may be sorted by it (§469) | §469 |
+| the **scale** of a print | **built.** A sheet prints at a scale or to fit, and the scale a fit works out is the largest at which the pages fit — and a fit that cannot be met is refused (§470) | §470 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30966,3 +30967,62 @@ them counts from one: `A` is 0, `Z` is 25 and `AA` is 26.
 - **The tree's own names — a sheet's name, a name of the workbook — are
   checked for their shape and not for their collisions**, and here they
   are checked for their shape only.
+
+## 470. The scale of a print
+
+A sheet may be printed at a **scale** — a percentage of its own size —
+or printed to **fit**: so many pages wide and so many pages tall.
+
+### What was built
+
+- **Two commands** in the grid battery: `grid.print.scale`, given the
+  percent, and `grid.print.fit`, given the number of pages wide and
+  the number of pages tall.
+- The **scale** is a whole number of percent from ten to four hundred.
+  A scale outside that is refused: the tree clamps it, and a scale of a
+  thousand percent is not a scale.
+- The **fit** is worked out: the scale that does it is the **largest**
+  scale at which the pages fit — the content is as big as it may be
+  and still fit — and that scale is reported.
+- The **rules**: a fit of no pages at all is refused, because a fit
+  that fits everywhere is not a fit; and a fit that **cannot be met** —
+  a sheet too big for its pages even at ten percent — is refused,
+  where the tree would print it on more pages than it was told to.
+- A fit and a plain scale are **two ways of saying one thing**, so
+  setting one takes the other away.
+- The **pages** follow the scale, and a sheet that is **fitted** is
+  broken by the fit and not by hand: the fit is the way the pages are
+  chosen, and a break put in by hand is not one.
+
+### What the port found
+
+- **The tree keeps a scale and a fit at the same time**, and lets the
+  fit win — so a sheet may carry a scale that is not the scale it
+  prints at. Here one of them is one fact, and the one that is not in
+  use is taken away.
+- **The tree shrinks a fit by three percent at a time** until the
+  pages fit, which is a number nobody chose. Here the scale is worked
+  out and reported, and a fit that cannot be met is refused rather
+  than quietly printed on more pages.
+- **The tree's fit ignores the breaks put in by hand**, and so does
+  this tree: a fit is a way of choosing the pages, and a break by hand
+  is another.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/scaling.rs`): the scale
+  being set and read back, a scale outside the bounds being refused, a
+  scale that is not a whole number being refused, a smaller scale
+  putting more on a page, the pages saying the scale they are at, the
+  fit being set and its scale worked out, a fit of no pages being
+  refused, a fit that cannot be met being refused, a fit and a scale
+  being one thing, and a fitted sheet being broken by the fit.
+- **One new module** (`scaling`): the scale of a print is its own. The
+  grid battery now carries **92** commands and the MCP server **644**.
+
+### What it does not settle
+
+- **The tree's header and footer are not here**, and neither is its
+  printing of the gridlines and the headings.
+- **The tree scales the header and the footer with the document** (or
+  does not), and here there is no header to scale.
