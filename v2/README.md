@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3518 tests.** The MCP server links **all fifteen batteries** in, so the
+**3526 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3518 tests
+cargo test          # 3526 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3915,6 +3915,7 @@ so.
 | the **chart** of a sheet | **built.** A chart reads a range — the first row names the series, the first column holds the categories — and the data it shows is derived, so it cannot be out of date (§478) | §478 |
 | the **sparkline** of a cell | **built.** A cell may hold a little picture of a range — a line, columns, or wins and losses — and the values it shows are derived, so it cannot be out of date (§479) | §479 |
 | the **picture** of a cell | **built.** A cell may hold a picture — a file beside the document and a size inside it — and the size is measured from the head of the file (§480) | §480 |
+| the **outline** of a document | **built.** A style carries the level of a heading, and the outline of a document is the headings it has, derived, in the order they stand (§481) | §481 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31605,3 +31606,59 @@ A cell may hold a **picture**: a small image drawn in the cell.
   nothing is drawn.
 - **The tree's cell picture may be moved and cropped**, and here a
   picture is the file, the size and the alt text.
+
+## 481. The outline of a document
+
+A style may carry a **level** — the level of a heading, from one to
+nine. A block on a style with a level is a **heading**, and the
+headings of a document in the order they stand are its **outline**.
+
+### What was built
+
+- **Three commands** in the prose battery: `prose.style.level` to set
+  the level of a style, `prose.style.level.read` to read it, and
+  `prose.document.outline` to read the outline of a document.
+- The level is a fact of the style and the outline is **derived**: it
+  is worked out from the blocks and their styles every time it is
+  asked for, so an outline cannot be out of date with the document.
+- The level of a style is the level of its **base** when it has none
+  of its own — the same bargain as the character (§468) and the
+  paragraph (§473) — so a style based on a heading is a heading, and
+  the chain is bounded.
+- The text of a heading is the text the block **shows**, so a heading
+  that is a cross-reference (§477) shows what it references.
+- The **rules**: a level that is not a whole number from one to nine
+  is refused; a style with no level is not a heading and a block on a
+  style with no level is not in the outline; and the level may be
+  taken away.
+
+### What the port found
+
+- **The tree's headings are styles with names** — `Heading 1` to
+  `Heading 9` — and the level comes from the name. Here a style is a
+  node with a name and the level is a fact of its own, so a style
+  called `Heading 1` is a heading only when it says it is.
+- **The tree's table of contents is a field** in the text, with the
+  page of every heading in it. Here the outline is a **reading** of
+  the document, and the page of a heading is not here at all — there
+  is no pagination in this tree.
+
+### What it cost
+
+- **Eight tests** in the prose battery (`tests/outline.rs`): the level
+  being set and read back, a style with no level not being a heading,
+  a style having the level of its base under it, a level that is not a
+  level being refused, the outline being the headings in order, a
+  block on no style not being in the outline, the level being taken
+  away, and a node that is not a style being refused.
+- **One new module** (`outline`). The prose battery now carries **57**
+  commands and the MCP server **672**.
+
+### What it does not settle
+
+- **The tree's table of contents has the page of every heading in it**,
+  and here the outline has no pages: this tree does not lay a document
+  out.
+- **The tree's heading styles carry the whole of Word's heading
+  furniture** — the next style, the list it belongs to, whether it
+  may be numbered — and here a heading is a style with a level.
