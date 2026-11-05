@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3326 tests.** The MCP server links **all fifteen batteries** in, so the
+**3334 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3326 tests
+cargo test          # 3334 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3893,6 +3893,7 @@ so.
 | the **character** of a run | **built.** The way a piece of text is written — bold, italic, underline, colour and size — is put on a range of a block, and the runs are split to fit it (§456) | §456 |
 | the **edit decision list** | **built.** The list of the cuts of a sequence is worked out from it and returned as a text, and a sequence with a transition is refused (§457) | §457 |
 | the **item** of a spread | **built.** An item has facts of its own: its opacity, whether it is hidden, whether it is locked and how big it is (§458) | §458 |
+| the **order** of the items | **built.** The items of a spread are drawn in the order they stand in, and one item may be brought forward or sent back (§459) | §459 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30360,3 +30361,56 @@ whether it is **locked**, and how **big** it is.
   items are drawn.** Here a hidden item is not drawn — that is the
   kit's own word for it — and a locked item is drawn and may not be
   edited.
+
+## 459. The order of the items of a spread
+
+The items of a spread are drawn in the order they stand in: the first
+is drawn first and so it is **at the back**, and the last is drawn
+last and so it is **at the front**.
+
+### What was built
+
+- **Five commands** in the layout battery: `layout.item.list` to read
+  the order, `layout.item.front` and `layout.item.back` to put an
+  item at one end of it, and `layout.item.forward` and
+  `layout.item.backward` to move it one step.
+- A command moves **one** item, because a command that takes a
+  selection is a command that does not say what it does.
+- The **pages** of a spread are not items, and they keep their
+  places: only the order of the items among themselves changes.
+- A **locked** item may not be edited, and the order is an edit — so
+  the command is refused.
+- An item that is already where it was told to go **does not move**,
+  and the command says so — it says `moved: false` — rather than
+  saying that something changed.
+
+### What the port found
+
+- **The tree's arrange takes a selection.** Its
+  `object.bringToFront` and `object.sendToBack` work on what is
+  selected, and the order of the rest is left as it is. Here a
+  command moves **one** item, and the tree's own rule is that a
+  command does one thing.
+- **The tree's order is the order of the objects in the page, and the
+  pages of the document are separate.** Here the order is the order
+  of the children of the spread, and the pages of a spread are
+  children too — so the pages keep their places and only the items
+  move among themselves.
+
+### What it cost
+
+- **Eight tests** in the layout battery (`tests/order.rs`): the items
+  being listed in the order they are drawn, an item being brought to
+  the front, an item being sent to the back, an item moving one step
+  at a time, an item that is already at the front not moving, a
+  locked item being refused, the pages keeping their places, and a
+  node that is not a spread being refused.
+- **One new module** (`order`): the order of the items is its own.
+  The layout battery now carries **22** commands and the MCP server
+  **626**.
+
+### What it does not settle
+
+- **The tree arranges a selection and here a command moves one item.**
+- **The tree's groups are arranged too**, and here an item has no
+  group of its own.
