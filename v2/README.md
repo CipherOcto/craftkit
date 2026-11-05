@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3279 tests.** The MCP server links **all fifteen batteries** in, so the
+**3289 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3279 tests
+cargo test          # 3289 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3888,6 +3888,7 @@ so.
 | the **what-if** of a sheet | **built.** The input cell takes a value and the result cell says what the sheet says then — and the sheet is not changed (§451) | §451 |
 | the **goal** of a sheet | **built.** The other question: what input gives this result? It is found by narrowing the range until the answer is close (§452) | §452 |
 | the **labels** of the pages | **built.** A PDF file may give its pages the names a reader sees beside them, and the labels are written as the format's own page-label tree (§453) | §453 |
+| the **table** of a sheet | **built.** A table is a named range whose first row names the fields, and the fields are derived from that header (§454) | §454 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30035,3 +30036,68 @@ for the rest.
   a second copy of them.
 - **The tree's labels may be any of its own kinds and here there are
   the PDF's five**: `D`, `R`, `r`, `A` and `a`.
+
+## 454. The table of a sheet
+
+A **table** is a named range of cells whose first row names the
+**fields** of the table: `who`, `amount`, `when`. Every column of the
+range is a field, and the header cell of that column is its name.
+
+### What was built
+
+- **Six commands** in the grid battery: `grid.table.create` to make a
+  table, `grid.table.read` to read the tables of a sheet,
+  `grid.table.fields` to read the fields of one, `grid.table.rename`,
+  `grid.table.resize` and `grid.table.remove`.
+- A table is a **fact of the sheet**: its name and the range it
+  reaches, kept in the sheet's payload beside the merges and the notes.
+- The **fields are derived**: they are the text of the header cells,
+  and a header cell that is edited names another field. A table does
+  not keep a copy of its own fields, because a second copy is a copy
+  that can be wrong.
+- The **rules**: the name is not nothing, does not look like a cell or
+  a range, and is not another table's name on the same sheet; the range
+  covers more than one cell, because a table of one cell is a cell;
+  the header is a row of **text** — a cell that holds nothing, a
+  number, a boolean, an error or a formula does not name a field, so
+  the table is **refused** and the refusal says which cell; and two
+  tables of a sheet do not **overlap**, because a cell that is in two
+  tables is in none of them.
+
+### What the port found
+
+- **The tree's table is an object with a style.** The tree's table has
+  a name, a range, a header row and a style — banded rows and banded
+  columns, an emphasised first column and last column, a total row.
+  Here the table is the **name, the range and the fields**, because a
+  style is a drawing and a drawing is not a fact of the sheet.
+- **The tree's table may remove the duplicate rows of its range.** Here
+  it may not, and the reason is the rule the whole tree follows: the
+  removal of the duplicates is a change of the **cells**, and a change
+  of the cells is a change of the sheet — so it is another command, and
+  not this one.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/tables.rs`): a table is
+  made and read back, the fields are the text of the header, a header
+  that holds a number is refused, a table of one cell is refused, two
+  tables that overlap are refused, a name that looks like a cell is
+  refused, a table is renamed, a table is resized, a table is taken
+  away and the cells stay, and the fields follow the header when the
+  header is edited.
+- **One new module** (`tables`): the tables of a sheet are their own.
+  The grid battery now carries **76** commands and the MCP server
+  **610**.
+
+### What it does not settle
+
+- **The tree's table may be read in a formula by its name.** Here the
+  name is a name of the sheet, and a formula cannot read it: the
+  formula reads a range or a name of a workbook, and a table is
+  neither.
+- **The tree's table has a style and here it has none**: no banded
+  rows, no emphasised first column, no total row.
+- **The tree's table may be taken away and turned into a plain
+  range.** Here a table that is taken away leaves the cells where they
+  are, and nothing says they were a table.
