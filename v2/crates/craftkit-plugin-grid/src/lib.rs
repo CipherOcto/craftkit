@@ -374,6 +374,7 @@ mod sheetnames;
 mod sheetreading;
 mod sizes;
 mod sorting;
+mod sparklines;
 mod special;
 mod statistics;
 mod styles;
@@ -427,6 +428,7 @@ pub use sheetnames::RenameSheet;
 pub use sheetreading::ReadSheet;
 pub use sizes::{SetColumnWidth, SetRowHeight};
 pub use sorting::SortRange;
+pub use sparklines::{ReadSparkline, RemoveSparkline, SetSparkline};
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
 pub use tables::{CreateTable, ReadTableFields, ReadTables, RemoveTable, RenameTable, ResizeTable};
 pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
@@ -1749,6 +1751,9 @@ craftkit_sdk::plugin_anchor!(
     SetLink,
     SetNote,
     SortRange,
+    SetSparkline,
+    ReadSparkline,
+    RemoveSparkline,
     CreatePivot,
     ReadPivot,
     RemovePivot,
