@@ -184,7 +184,7 @@ fn ellipse_curve_points(geometry: &Json) -> Vec<(f64, f64)> {
 }
 
 /// The **length** of a geometry: the length of the path it draws.
-fn length_of(kind: &str, geometry: &Json) -> Option<f64> {
+pub(crate) fn length_of(kind: &str, geometry: &Json) -> Option<f64> {
     match kind {
         "cad.entity.line" => {
             let from = point_in(geometry, "from")?;

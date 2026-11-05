@@ -79,6 +79,7 @@ mod arcs;
 mod audits;
 mod copies;
 mod curves;
+mod dimensions;
 mod editable;
 mod layersettings;
 mod measurements;
@@ -96,6 +97,7 @@ use craftkit_sdk::{
     Plan, PlanItem, Point, Relation, Session, Stroke, Text,
 };
 pub use curves::{AddEllipse, AddPolyline};
+pub use dimensions::{AddDimension, DimensionKind, SetDimensionText};
 pub use layersettings::{
     FreezeLayer, ListLayers, LockLayer, SetLayerColor, SetLayerFill, SetLayerLinetype, SetLayerLineweight,
     SetLayerOn,
@@ -626,7 +628,7 @@ fn points_of(geometry: &Json) -> Vec<(f64, f64)> {
 }
 
 /// A point, read from the caller's JSON.
-fn point(value: &Json, id: &str, what: &str) -> Result<(f64, f64), EngineError> {
+pub(crate) fn point(value: &Json, id: &str, what: &str) -> Result<(f64, f64), EngineError> {
     let x = value.get("x").and_then(|x| x.as_f64()).unwrap_or(f64::NAN);
     let y = value.get("y").and_then(|y| y.as_f64()).unwrap_or(f64::NAN);
     if !x.is_finite() || !y.is_finite() {
@@ -1089,6 +1091,7 @@ craftkit_sdk::plugin_anchor!(
     InsertKind,
     EllipseKind,
     PolylineKind,
+    DimensionKind,
     AddDrawing,
     AddLayer,
     AddBlock,
@@ -1124,6 +1127,8 @@ craftkit_sdk::plugin_anchor!(
     MeasureArea,
     MeasureRadius,
     MeasureAngle,
+    AddDimension,
+    SetDimensionText,
     ExtentsEvaluator,
     CadPanel
 );
