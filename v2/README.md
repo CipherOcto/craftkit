@@ -3919,6 +3919,7 @@ so.
 | the **paint** of an item | **built.** An item may be filled with a colour and may have a stroke — a colour and a weight — and both may be nothing (§482) | §482 |
 | the **style** of an item | **built.** A style is a named set of paint facts that items may use, and the paint an item is drawn with is derived from its own paint or its style's (§483) | §483 |
 | the **border** of a cell | **built.** A cell may carry a border — a line on one of its four edges, of one of the tree's styles, in a colour — and it is taken away with the formatting that it is part of (§484) | §484 |
+| the **turn** of an item | **built.** An item may be turned about the middle of its shape, and the box it takes when it is turned is derived, so it cannot be out of date (§485) | §485 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31842,3 +31843,61 @@ in a colour.
   left may be given one.
 - **The border is not drawn**: it is a fact of the document, and
   this tree has no canvas for a sheet.
+
+## 485. The turn of an item
+
+An item may be **turned**: a number of degrees about the middle of its
+shape.
+
+### What was built
+
+- **One command** in the layout battery: `layout.item.rotate`.
+- The turn is a **fact of the item**, written in **degrees** — the way
+  a person writes an angle — and the **radians** are derived from it,
+  because the tree's angle is a radian and the tree's unit is never
+  lost and never written down twice.
+- The turn is about the **middle of the shape**, and the **place** of
+  the item does not move when it is turned — the same bargain as the
+  scale of an item (§482).
+- The **turned box** of an item is **derived**: it is the box the item's
+  shape takes when it is turned about its middle, and it is the box
+  the item occupies once it is turned.
+- The **rules**: a turn that is not a number is refused, and so is a
+  turn so large that the radians of it are not a number; and an item
+  that is **locked** may not be turned, like every other edit.
+
+### What the port found
+
+- **The tree's turn is an affine**, and the tree builds it in radians
+  — `Affine::rotate(30f64.to_radians())` — and the tree's user
+  interface writes degrees. Here the degrees are the fact and the
+  radians are derived.
+- **The tree's turn snaps**, in steps of a quarter and of a degree at
+  a time, when a key is held down; and the tree's turn may be any
+  angle at all. Here the turn is any number of degrees.
+
+### What it cost
+
+- **Eight tests** in the layout battery (`tests/rotation.rs`): an item
+  being turned, an item that is not turned being turned by no
+  degrees, the radians of a turn being derived, the turned box of an
+  item being derived, the place of an item not moving when it is
+  turned, a square turned by forty-five being as wide as its diagonal,
+  a turn that is not a number being refused, and a locked item not
+  being turned.
+- **One new module** (`rotation`). The layout battery now carries
+  **32** commands and the MCP server **682**.
+
+### What it does not settle
+
+- **The tree's turn is a full affine** — a translation, a scale and a
+  turn — and here only the turn is a fact of the item; the scale of an
+  item is its own fact (§482), and the place of an item is the shape's
+  own.
+- **The tree's turn is about the middle of the item** and the tree may
+  turn an item about a **different** point; here the turn is about the
+  middle and there is no other pivot.
+- **The tree snaps the turn** and this tree does not.
+- **The item is not drawn**: the turn is a fact of the document, and
+  the turned box is the box the item would take — this tree has no
+  canvas for a spread.
