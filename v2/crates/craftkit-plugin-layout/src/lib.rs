@@ -60,6 +60,7 @@
 #![forbid(unsafe_code)]
 
 mod items;
+mod links;
 mod order;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
@@ -69,6 +70,7 @@ use craftkit_sdk::{
 };
 
 pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem};
+pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
 pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
 
 /// The layout layer.
@@ -827,6 +829,9 @@ craftkit_sdk::plugin_anchor!(
     BackwardItem,
     PutOnLayer,
     PutStory,
+    SetItemLink,
+    SetItemPageLink,
+    ReadLinks,
     PagesEvaluator,
     FramesEvaluator,
     LayoutPanel
