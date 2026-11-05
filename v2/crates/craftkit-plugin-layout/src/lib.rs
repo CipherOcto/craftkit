@@ -60,6 +60,7 @@
 #![forbid(unsafe_code)]
 
 mod bleed;
+mod columns;
 mod items;
 mod links;
 mod margins;
@@ -75,6 +76,7 @@ use craftkit_sdk::{
 };
 
 pub use bleed::SetBleed;
+pub use columns::SetColumns;
 pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem};
 pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
 pub use margins::SetMargin;
@@ -201,6 +203,13 @@ impl PageKind {
             "bleed": bleed,
             "margin": crate::margins::margin_of(node).to_json(),
             "margin_box": margin_box,
+            "columns": crate::columns::columns_of(node).to_json(),
+            "column_boxes": crate::columns::column_boxes_of(node)
+                .map(|boxes| json!(boxes
+                    .into_iter()
+                    .map(|(x, y, width, height)| json!({ "x": x, "y": y, "width": width, "height": height }))
+                    .collect::<Vec<_>>()))
+                .unwrap_or(Json::Null),
         }))
     }
 }
@@ -876,6 +885,7 @@ craftkit_sdk::plugin_anchor!(
     SetBleed,
     AddSpread,
     AddPage,
+    SetColumns,
     SetMargin,
     AddLayer,
     AddStory,
