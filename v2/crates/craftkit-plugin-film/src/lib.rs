@@ -199,6 +199,7 @@ mod clipreading;
 mod edits;
 mod edl;
 mod enabling;
+mod fcpxml;
 mod gaps;
 mod hold;
 mod inserting;
@@ -239,6 +240,7 @@ pub use clipreading::ReadClip;
 pub use edits::{NextEdit, PrevEdit, Razor};
 pub use edl::ExportEdl;
 pub use enabling::EnableClip;
+pub use fcpxml::ExportFcpxml;
 pub use gaps::CloseGap;
 pub use hold::{DeleteHold, SetHold};
 pub use inserting::InsertClip;
@@ -913,6 +915,7 @@ craftkit_sdk::plugin_anchor!(
     AddTrack,
     AddClip,
     ExportEdl,
+    ExportFcpxml,
     ReadTimeline,
     TrimClip,
     SetPlayhead,
