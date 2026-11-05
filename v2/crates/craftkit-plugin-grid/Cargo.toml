@@ -10,5 +10,11 @@ license.workspace = true
 # The SDK and the macro. **Nothing else** — the application never names a
 # symbol of this crate, and this crate never names a symbol of the
 # application.
+craftkit-image = { workspace = true }
 craftkit-sdk = { workspace = true }
 craftkit-derive = { workspace = true }
+
+[dev-dependencies]
+# The **rasteriser**, and only for the tests: it writes the PNG the tests
+# read. Nothing that ships links it.
+craftkit-raster = { path = "../craftkit-raster", version = "0.2.0" }

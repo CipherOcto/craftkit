@@ -361,6 +361,7 @@ mod merges;
 mod namereading;
 mod names;
 mod notes;
+mod pictures;
 mod pivots;
 mod printing;
 mod protection;
@@ -416,6 +417,7 @@ pub use merges::{ClearMerge, SetMerge};
 pub use namereading::ReadName;
 pub use names::{DeleteName, SetName};
 pub use notes::{DeleteNote, GetNote, SetNote};
+pub use pictures::{ReadPicture, RemovePicture, SetPicture};
 pub use pivots::{CreatePivot, ReadPivot, RemovePivot};
 pub use printing::{
     ReadPages, ReadSetup, SetMargins, SetOrientation, SetPaper, SetPrintArea, SetPrintBreak, SetPrintTitles,
@@ -1751,6 +1753,9 @@ craftkit_sdk::plugin_anchor!(
     SetLink,
     SetNote,
     SortRange,
+    SetPicture,
+    ReadPicture,
+    RemovePicture,
     SetSparkline,
     ReadSparkline,
     RemoveSparkline,

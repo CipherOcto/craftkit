@@ -545,6 +545,8 @@ name = "craftkit-plugin-grid"
 version = "0.2.0"
 dependencies = [
  "craftkit-derive",
+ "craftkit-image",
+ "craftkit-raster",
  "craftkit-sdk",
 ]
 
