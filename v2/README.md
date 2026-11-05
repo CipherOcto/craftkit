@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3526 tests.** The MCP server links **all fifteen batteries** in, so the
+**3533 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3526 tests
+cargo test          # 3533 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3916,6 +3916,7 @@ so.
 | the **sparkline** of a cell | **built.** A cell may hold a little picture of a range — a line, columns, or wins and losses — and the values it shows are derived, so it cannot be out of date (§479) | §479 |
 | the **picture** of a cell | **built.** A cell may hold a picture — a file beside the document and a size inside it — and the size is measured from the head of the file (§480) | §480 |
 | the **outline** of a document | **built.** A style carries the level of a heading, and the outline of a document is the headings it has, derived, in the order they stand (§481) | §481 |
+| the **paint** of an item | **built.** An item may be filled with a colour and may have a stroke — a colour and a weight — and both may be nothing (§482) | §482 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31662,3 +31663,54 @@ headings of a document in the order they stand are its **outline**.
 - **The tree's heading styles carry the whole of Word's heading
   furniture** — the next style, the list it belongs to, whether it
   may be numbered — and here a heading is a style with a level.
+
+## 482. The paint of an item
+
+An item may be **filled** with a colour and may have a **stroke**: a
+colour and a weight.
+
+### What was built
+
+- **Two commands** in the layout battery: `layout.item.fill` and
+  `layout.item.stroke`. Both may be **nothing**, and an item with no
+  fill is not painted and an item with no stroke has no line around
+  it.
+- A colour is written **`#rrggbb`**, the way a person writes one, and
+  a weight is a number of points that is not negative.
+- The **weight** of a stroke with no weight of its own is the tree's
+  own **one point**.
+- The **rules**: a colour that is not a colour is refused; a weight
+  that is not a weight is refused; an item that is **locked** may not
+  be painted; and a colour that is **not said** leaves the paint as it
+  was, while an **empty** colour takes it away — the same bargain as
+  the header of a printed sheet (§471).
+
+### What the port found
+
+- **The tree's fill and stroke are swatches** — a named colour and a
+  tint — and the tree has a list of swatches a document may choose
+  from, and its fills may be gradients with an angle and a vector.
+  Here a colour is a colour, `#rrggbb`, and a fill is a colour and
+  nothing else, which is what the kit's own colour is.
+- **The tree's stroke has a kind, an alignment, caps, joins and
+  arrowheads**, and the tree's default stroke is one point of black.
+  Here a stroke is a colour and a weight, and an item with no stroke
+  has none.
+
+### What it cost
+
+- **Seven tests** in the layout battery (`tests/paint.rs`): an item
+  being filled, an item with no fill not being painted, an item being
+  stroked, a stroke being taken away, a colour that is not a colour
+  being refused, a weight that is not a weight being refused, and a
+  locked item not being painted.
+- **One new module** (`paint`). The layout battery now carries **27**
+  commands and the MCP server **674**.
+
+### What it does not settle
+
+- **The tree's swatches are not here**: a document that may name its
+  colours and tint them has no list of names in this tree, and a
+  colour here is a colour and not a name.
+- **The tree's gradients are not here**, and neither are the caps, the
+  joins and the arrowheads of a stroke.
