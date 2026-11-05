@@ -109,6 +109,7 @@ mod bookmarks;
 mod characters;
 mod comments;
 mod editing;
+mod equations;
 mod finding;
 mod footnotes;
 mod links;
@@ -124,6 +125,7 @@ pub use comments::{DeleteComment, GetComment, SetComment};
 pub use editing::{
     MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
 };
+pub use equations::{AddEquation, SetEquation};
 pub use finding::{Find, Replace};
 pub use footnotes::{AddFootnote, ReadFootnotes};
 pub use links::ReadLinks;
@@ -204,6 +206,33 @@ macro_rules! block_kind {
 
 block_kind!(ParagraphKind, "prose.block.paragraph", "Paragraph");
 block_kind!(TableKind, "prose.block.table", "Table");
+
+/// An **equation**: a block whose text is derived from its parts.
+///
+/// The parts are the equation, and the text is what they are written
+/// as on one line. Both are kept, and they are written together, so
+/// that they cannot disagree.
+#[derive(NodeKind)]
+#[node_kind(kind = "prose.block.equation", label = "Equation", layer = "prose", evaluates)]
+pub struct EquationKind;
+
+impl EquationKind {
+    /// Not drawn.
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Not hit.
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What an equation **means**: its text and its parts.
+    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        Some(json!({
+            "text": node.data.get("text").cloned().unwrap_or(Json::Null),
+            "parts": node.data.get("parts").cloned().unwrap_or(Json::Null),
+        }))
+    }
+}
 
 /// A **style**: a named look, and the side vector of the document.
 #[derive(NodeKind)]
@@ -899,6 +928,7 @@ craftkit_sdk::plugin_anchor!(
     DocumentKind,
     ParagraphKind,
     TableKind,
+    EquationKind,
     StyleKind,
     MediaKind,
     AddDocument,
@@ -906,6 +936,8 @@ craftkit_sdk::plugin_anchor!(
     AddMedia,
     AddParagraph,
     AddTable,
+    AddEquation,
+    SetEquation,
     PutOnStyle,
     SetRuns,
     FormatRun,

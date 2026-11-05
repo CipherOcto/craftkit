@@ -271,6 +271,15 @@ impl Replace {
         let block = self.block.0;
         let (tokens, case) = pattern_of(&id, &self.what.0, self.wildcards, self.case)?;
         let node = the_block(session, &id, block)?;
+        // The text of an **equation** is derived from its parts, and a
+        // replace would make the two disagree.
+        if crate::equations::is_equation(node) {
+            return Err(EngineError::Failed {
+                id,
+                message: "the text of an equation is derived from its parts, and a replace would make them disagree"
+                    .to_string(),
+            });
+        }
         let text = text_of(node);
         let runs = runs_of(node);
         let characters: Vec<char> = text.chars().collect();
