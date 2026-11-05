@@ -214,6 +214,7 @@ mod markers;
 mod mediamarks;
 mod moving;
 mod naming;
+mod otio;
 mod playhead;
 mod project;
 mod rates;
@@ -255,6 +256,7 @@ pub use markers::{AddMarker, ClearMarkers, MarkerKind, RemoveMarker, SetMarker};
 pub use mediamarks::SetMarks;
 pub use moving::MoveClip;
 pub use naming::RenameClip;
+pub use otio::ExportOtio;
 pub use playhead::{GetPlayhead, GoToEnd, GoToStart, SetPlayhead, StepPlayhead};
 pub use project::ReadProject;
 pub use rates::{GetRate, SetRate};
@@ -916,6 +918,7 @@ craftkit_sdk::plugin_anchor!(
     AddClip,
     ExportEdl,
     ExportFcpxml,
+    ExportOtio,
     ReadTimeline,
     TrimClip,
     SetPlayhead,
