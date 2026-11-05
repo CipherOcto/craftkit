@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3533 tests.** The MCP server links **all fifteen batteries** in, so the
+**3541 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3533 tests
+cargo test          # 3541 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3917,6 +3917,7 @@ so.
 | the **picture** of a cell | **built.** A cell may hold a picture — a file beside the document and a size inside it — and the size is measured from the head of the file (§480) | §480 |
 | the **outline** of a document | **built.** A style carries the level of a heading, and the outline of a document is the headings it has, derived, in the order they stand (§481) | §481 |
 | the **paint** of an item | **built.** An item may be filled with a colour and may have a stroke — a colour and a weight — and both may be nothing (§482) | §482 |
+| the **style** of an item | **built.** A style is a named set of paint facts that items may use, and the paint an item is drawn with is derived from its own paint or its style's (§483) | §483 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31714,3 +31715,55 @@ colour and a weight.
   colour here is a colour and not a name.
 - **The tree's gradients are not here**, and neither are the caps, the
   joins and the arrowheads of a stroke.
+
+## 483. The style of an item
+
+A **style** is a named set of paint facts — a fill and a stroke — and
+an item may be put **on** a style.
+
+### What was built
+
+- **Four commands** in the layout battery: `layout.style.add`,
+  `layout.style.fill`, `layout.style.stroke` and `layout.item.style`,
+  and **one new kind** of node, `layout.style`.
+- A style may be **based on** another, and the base's paint sits
+  **under** the style's own — the same bargain as the character of a
+  prose style (§468) — and the chain is **bounded**, so a style based
+  on itself ends the chain instead of hanging the program.
+- The paint an item is drawn with is **derived**: it is the item's own
+  paint when the item has one, and the style's paint when it does not.
+  An item that overrides its style's fill is painted with its own
+  fill, and that is the tree's own bargain — an item follows the
+  style until its own paint differs from the style's.
+- The **rules**: a node that is not a style is refused; and an item
+  that is **locked** may not be put on a style.
+
+### What the port found
+
+- **The tree's styles are a vector of names beside the document**, and
+  an item names its style by that name. Here a style is a **node** in
+  the document and the item's style is an **edge** — the same bargain
+  as the prose style (§468) and as the item's layer and story (§474's
+  own edges).
+- **The tree's style carries far more** — the effects, the text frame
+  options, the paragraph style — and here a style is a fill and a
+  stroke.
+
+### What it cost
+
+- **Eight tests** in the layout battery (`tests/styles.rs`): a style
+  being added, the fill of a style being set, a style having the fill
+  of its base under it, an item on a style being painted with its
+  paint, an item's own paint overriding its style's, an item being
+  taken off its style, a node that is not a style being refused, and a
+  locked item not being put on a style.
+- **One new module** (`styles`) and **one new kind** of node. The
+  layout battery now carries **31** commands and the MCP server
+  **678**.
+
+### What it does not settle
+
+- **The tree's style carries the effects, the text frame options and
+  the paragraph style**, and here a style is a fill and a stroke.
+- **The tree's styles are named by a name and not by a node**, and the
+  tree's style list is beside the document; here the style is in it.
