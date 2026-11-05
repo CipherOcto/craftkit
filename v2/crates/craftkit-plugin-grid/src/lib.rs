@@ -347,6 +347,7 @@ mod formatnames;
 mod formula;
 mod fractions;
 mod goals;
+mod headers;
 mod hiding;
 mod hypotheses;
 mod importing;
@@ -402,6 +403,7 @@ use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
 pub use goals::{GoalScan, GoalSeek};
+pub use headers::{SetFooter, SetHeader};
 pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
 pub use importing::{ImportCsv, ImportJson};
 pub use links::{DeleteLink, GetLink, SetLink};
@@ -1753,6 +1755,8 @@ craftkit_sdk::plugin_anchor!(
     SetPrintTitles,
     SetScale,
     SetFit,
+    SetHeader,
+    SetFooter,
     GoalScan,
     FilteredRows,
     SetConditional,

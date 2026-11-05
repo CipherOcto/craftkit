@@ -514,6 +514,8 @@ impl ReadSetup {
                 None => Json::Null,
             },
             "fit_scale": (fit_scale.0 * 10_000.0).round() / 100.0,
+            "header": crate::headers::to_json(&node)["header"].clone(),
+            "footer": crate::headers::to_json(&node)["footer"].clone(),
             "page": { "width": page_width, "height": page_height },
             "printable": { "width": printable_width, "height": printable_height },
             "area": area_of(&node).map(|area| json!(area.to_text())).unwrap_or(Json::Null),
@@ -586,10 +588,10 @@ impl ReadPages {
             printable_width / scale,
             &column_breaks,
         );
-        let mut pages: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
+        let mut bands_of_pages: Vec<((u32, u32), (u32, u32))> = Vec::new();
         for (first_row, last_row) in &rows {
             for (first_column, last_column) in &columns {
-                if pages.len() >= MAX_PAGES {
+                if bands_of_pages.len() >= MAX_PAGES {
                     return Err(EngineError::Failed {
                         id: id.clone(),
                         message: format!(
@@ -597,20 +599,32 @@ impl ReadPages {
                         ),
                     });
                 }
-                pages.push(json!({
-                    "rows": [first_row + 1, last_row + 1],
-                    "columns": [
-                        crate::formula::CellRef::column_text(*first_column),
-                        crate::formula::CellRef::column_text(*last_column),
-                    ],
-                    "title_rows": title_rows.iter().map(|row| row + 1).collect::<Vec<u32>>(),
-                    "title_columns": title_columns
-                        .iter()
-                        .map(|column| crate::formula::CellRef::column_text(*column))
-                        .collect::<Vec<String>>(),
-
-                }));
+                bands_of_pages.push(((*first_row, *last_row), (*first_column, *last_column)));
             }
+        }
+        // The **header** and the **footer** of each page: the codes in
+        // them are worked out for the page they are on.
+        let count = bands_of_pages.len();
+        let mut pages: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
+        for (number, ((first_row, last_row), (first_column, last_column))) in
+            bands_of_pages.iter().enumerate()
+        {
+            let (header, footer) = crate::headers::of_page(&node, number + 1, count);
+            pages.push(json!({
+                "number": number + 1,
+                "rows": [first_row + 1, last_row + 1],
+                "columns": [
+                    crate::formula::CellRef::column_text(*first_column),
+                    crate::formula::CellRef::column_text(*last_column),
+                ],
+                "title_rows": title_rows.iter().map(|row| row + 1).collect::<Vec<u32>>(),
+                "title_columns": title_columns
+                    .iter()
+                    .map(|column| crate::formula::CellRef::column_text(*column))
+                    .collect::<Vec<String>>(),
+                "header": header.to_json(),
+                "footer": footer.to_json(),
+            }));
         }
         Ok(Outcome::new(format!("the sheet is {} page(s)", pages.len())).with_data(json!({
             "sheet": sheet,
