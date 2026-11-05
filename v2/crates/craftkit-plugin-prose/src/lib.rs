@@ -117,6 +117,7 @@ mod numbering;
 mod page;
 mod resolving;
 mod revisions;
+mod styles;
 mod tables;
 
 pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
@@ -133,6 +134,7 @@ pub use numbering::{AddList, ReadNumber, SetNumbering};
 pub use page::{GetPage, SetPage};
 pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
 pub use revisions::ReadRevisions;
+pub use styles::{ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
 pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell};
 
 /// The prose layer.
@@ -940,6 +942,9 @@ craftkit_sdk::plugin_anchor!(
     SetEquation,
     PutOnStyle,
     SetRuns,
+    SetStyleCharacter,
+    ReadStyleCharacter,
+    ReadBlockCharacter,
     FormatRun,
     SetParagraphText,
     RemoveBlock,
