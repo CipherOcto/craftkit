@@ -325,6 +325,7 @@ mod arithmetic;
 mod bonds;
 mod cashflows;
 mod cellread;
+mod charts;
 mod clearing;
 mod combinations;
 mod complex;
@@ -394,6 +395,7 @@ use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 pub use cellread::ReadCell;
+pub use charts::{AddChart, ReadChart, RemoveChart, SetChart};
 pub use clearing::{ClearContents, ClearFormat};
 pub use conditional::{CheckConditional, ClearConditional, SetConditional};
 pub use criteria::Condition;
@@ -459,6 +461,35 @@ impl WorkbookKind {
     fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
         Some(json!({
             "sheets": node.children.iter().filter(|child| child.kind == "grid.sheet").count(),
+        }))
+    }
+}
+
+/// A **chart**: a picture of a range of a sheet.
+///
+/// The chart reads a range and the data it shows is **derived**: it is
+/// worked out from the cells of the sheet every time it is asked for,
+/// so a chart cannot be out of date with the sheet it reads.
+#[derive(NodeKind)]
+#[node_kind(kind = "grid.chart", label = "Chart", layer = "grid", evaluates)]
+pub struct ChartKind;
+
+impl ChartKind {
+    /// Not drawn.
+    fn paint(_node: &Node, _document: &Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Not hit.
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What a chart **means**: the range it reads, the kind it is and
+    /// the data it shows.
+    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        Some(json!({
+            "range": node.data.get("range").cloned().unwrap_or(Json::Null),
+            "kind": charts::kind_of_chart(node),
+            "title": charts::title_of(node),
         }))
     }
 }
@@ -1700,6 +1731,7 @@ craftkit_sdk::plugin_anchor!(
     GridLayer,
     WorkbookKind,
     SheetKind,
+    ChartKind,
     AddWorkbook,
     AddSheet,
     RenameSheet,
