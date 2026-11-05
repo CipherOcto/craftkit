@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3259 tests.** The MCP server links **all fifteen batteries** in, so the
+**3266 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3259 tests
+cargo test          # 3266 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3885,6 +3885,7 @@ so.
 | the **information** of a document | **built.** The trailer of a PDF file may name an information dictionary, and the document says which object it is (§448) | §448 |
 | the **stops** of a gradient | **built.** A gradient is a list of stops in order, and a stop may be added, changed or taken away — but a gradient has two stops or more (§449) | §449 |
 | the **groups** of a filter | **built.** The columns of a group are judged together and the groups are judged one by one, so a row is hidden when it matches none of them (§450) | §450 |
+| the **what-if** of a sheet | **built.** The input cell takes a value and the result cell says what the sheet says then — and the sheet is not changed (§451) | §451 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29874,3 +29875,55 @@ judged together, and the groups are judged one by one.
 - **The tree's filter copies the rows it keeps to another place**: it
   can take the rows that match and put them in another sheet. That is
   a change and not a filter, and it is not written yet.
+
+## 451. The what-if of a sheet
+
+A what-if asks a question of a sheet by **trying** values: the input
+cell takes this number, and the result cell says what the sheet says
+then.
+
+### What was built
+
+- The command `grid.whatif`: the **input** cell that is varied, the
+  **result** cell that is read, and the **values** to try.
+- The sheet is **not changed**: the trial is made in a **copy** of the
+  workbook and the copy is thrown away when the table is done. A
+  what-if that left the sheet changed would be a second edit wearing a
+  question's coat.
+- The number of values is **bounded**: a what-if may try 256 of them,
+  because each one is an evaluation of the sheet.
+- The input and the result may not be the **same cell**, and a value
+  that is not a number is refused.
+
+### What the port found
+
+- **The tree's what-if has two forms**: a **data table**, which tries a
+  list of inputs and says what each of them gives, and a **goal seek**,
+  which tries inputs until the result reaches a target. Here the **data
+  table** is the command, and the goal seek is not written yet: a goal
+  seek is a search, and a search needs to say how far to look and when
+  to stop.
+- **The tree's data table takes a whole range of inputs and lays the
+  results out beside them.** Here the inputs are a **list** and the
+  results are a **list** too: one input, one result, in the order they
+  were given.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/whatifs.rs`): a what-if
+  says what the sheet would say, the sheet is not changed by it, the
+  input and the result may not be the same cell, a cell that is not a
+  cell is refused, a value that is not a number is refused, a what-if
+  with no value is refused, and the result may be a cell that has
+  nothing in it.
+- **One new module** (`whatifs`): the what-if of a sheet is its own.
+  The grid battery now carries **69** commands and the MCP server
+  **602**.
+
+### What it does not settle
+
+- **The tree's goal seek is not here**: finding the input that gives a
+  target is a search, and the search's bounds are not written.
+- **The tree's data table lays its results out in cells and here they
+  are a list**: a what-if here says what it would say and does not
+  write it down.
