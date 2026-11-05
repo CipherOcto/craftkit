@@ -3929,6 +3929,7 @@ so.
 | the **margin** of a page | **built.** A page may have margins — the room between its edge and the text — and the margin box is derived, so it cannot be out of date (§492) | §492 |
 | the **columns** of a page | **built.** A page may be set in columns — the text is set in columns side by side — and the column boxes are derived from the margin box (§493) | §493 |
 | the **radius** of an item | **built.** An item may have a radius, and the corners of its rectangle are derived from it, so a radius beyond half the shorter side is refused rather than clamped (§494) | §494 |
+| the **shadow** of an item | **built.** An item may have a shadow — the light, the distance, the blur, the colour and the opacity — and the offset and the box of the shadow are derived (§495) | §495 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32455,3 +32456,54 @@ as arcs of that radius.
 - **The tree clamps the radius** and this tree refuses it.
 - **The radius is not drawn**: it is a fact of the item, and this tree
   has no canvas for a spread.
+
+## 495. The shadow of an item
+
+An item may have a **shadow**: a blurred copy of itself, painted
+behind it, moved away from it.
+
+### What was built
+
+- **One command** in the layout battery: `layout.item.shadow`.
+- The shadow is a fact of the item — the **angle** the light comes
+  from, the **distance** the shadow is moved, the **blur** it is
+  softened by, its **colour** and its **opacity** — and the **offset**
+  and the **box** of the shadow are **derived**: the offset is the
+  distance along the angle, and the box is the box of the item grown
+  by the blur and moved by the offset. So neither can be out of date.
+- The **rules**: an angle, a distance or a blur that is not a number
+  is refused, and a distance or a blur that is negative is refused; a
+  **colour** that is not `#rrggbb` is refused; and an **opacity** that
+  is not between zero and one is refused.
+
+### What the port found
+
+- **The tree's shadow has a spread** — a percentage of the blur that
+  grows the shadow — and the tree's shadow may follow the document's
+  **global light** instead of its own angle. Here a shadow has an
+  angle of its own and no spread.
+- **The tree's shadow is one of the tree's effects**, beside the
+  inner shadow, the bevel and the emboss, and the tree's effects are
+  turned on and off together. Here a shadow is a fact of the item and
+  there is one of it.
+
+### What it cost
+
+- **Seven tests** in the layout battery (`tests/shadows.rs`): an item
+  having a shadow, the offset of a shadow being derived, the box of a
+  shadow being derived, an item with no shadow having no shadow facts,
+  a distance that is negative being refused, a colour that is not a
+  colour being refused, and an opacity outside one being refused.
+- **One new module** (`shadows`). The layout battery now carries
+  **37** commands and the MCP server **698**.
+
+### What it does not settle
+
+- **The tree's shadow has a spread** and may follow the document's
+  global light. Here the shadow has an angle of its own and no
+  spread.
+- **The tree's shadow is one effect of many** — the inner shadow, the
+  bevel, the emboss. Here there is one shadow and it is a fact of the
+  item.
+- **The shadow is not drawn**: it is a fact of the item, and this
+  tree has no canvas for a spread.
