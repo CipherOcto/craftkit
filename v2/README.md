@@ -3923,6 +3923,7 @@ so.
 | the **group** of a row | **built.** Rows may be grouped under a summary row, and the groups are worked out from the levels of the rows, so a row that is moved is regrouped (§486) | §486 |
 | the **group** of a column | **built.** Columns may be grouped under a summary column, and the groups are worked out from the levels of the columns (§487) | §487 |
 | the **dimension** of a drawing | **built.** A dimension measures an entity and the measurement is derived, so a dimension cannot be out of date (§488) | §488 |
+| the **dash** of a path | **built.** A line may be dashed — a pattern of lengths and an offset — and the pattern that is run is derived, so an odd pattern keeps its dash and its gap (§489) | §489 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32099,3 +32100,65 @@ and it says it where the reader can see it.
   and the text height, and the tree's dimension may be annotative —
   scaled with the drawing. Here the dimension carries a measurement
   and a text.
+
+## 489. The dash of a path
+
+A line may be **dashed**: a pattern of lengths — a dash, a gap, a dash,
+a gap — and an offset that says where in the pattern the line starts.
+
+### What was built
+
+- **One command** in the vector battery: `vector.path.dash`.
+- The **pattern** is the fact and the **run** is derived: the pattern
+  that is run is the pattern that is written, **doubled** when it has
+  an odd number of lengths, and the length of a **round** of it is the
+  sum of the run. That is the rule of every drawing format that has
+  dashes, and it is derived here so that the dash and the gap keep
+  their places.
+- The **rules**: a length that is not a number, or that is negative,
+  is refused; an offset that is not a number is refused; and a pattern
+  that is **empty** takes the dash away — the line is whole again,
+  and that is the tree's own bargain: an empty value takes it away.
+- The dash is a part of the path's **payload**, beside the path, the
+  fill, the line, the blend, the transform and the opacity — and a
+  path written before the dash was in the payload has none.
+
+### What the port found
+
+- **The tree's dash is a pattern and an offset** — `Dash { pattern,
+  offset, align_corners }` — and the tree's dash belongs to the
+  **stroke**, beside the paint, the width, the cap, the join and the
+  miter limit. Here the dash is a part of the path's payload, because
+  the kit's own stroke has no dash in it.
+- **The tree's dashes are charged for** — the tree counts the memory a
+  dash's pattern takes, and a path that cannot pay is refused. Here a
+  pattern is a list of numbers and there is no budget for it.
+- **The tree's dash may be aligned to the corners** of a shape, so
+  that a dash starts at every corner. Here the dash runs along the
+  outline and knows nothing of the corners.
+
+### What it cost
+
+- **Eight tests** in the vector battery (`tests/dashes.rs`): a line
+  being dashed, a pattern of an odd number of lengths being run twice,
+  a pattern of an even number of lengths being run as it is, a pattern
+  that is empty taking the dash away, a path that is not dashed having
+  no dash, a length that is negative being refused, a length that is
+  not a number being refused, and an offset that is not a number being
+  refused.
+- **One new module** (`dashes`). The vector battery now carries **42**
+  commands and the MCP server **692**. The count of §449 said **40**
+  and was one short — the battery had 41 commands then — and the
+  correction is here.
+
+### What it does not settle
+
+- **The dash is not drawn**: it is a fact of the path's payload, and
+  the kit's own stroke — the one the canvas is given — has no dash in
+  it. A path that is dashed here says so and is drawn whole.
+- **The tree's dash belongs to the stroke** and is shared with the
+  text that runs in it, and the tree's stroke may be a **brush**. Here
+  the dash is a part of the path and nothing else.
+- **The tree's dash may be aligned to the corners** and the tree's
+  pattern may be imported from a file; here the pattern is written in
+  the command and runs along the outline.
