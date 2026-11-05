@@ -62,6 +62,7 @@
 mod bleed;
 mod items;
 mod links;
+mod margins;
 mod order;
 mod paint;
 mod rotation;
@@ -76,6 +77,7 @@ use craftkit_sdk::{
 pub use bleed::SetBleed;
 pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem};
 pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
+pub use margins::SetMargin;
 pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
 pub use paint::{SetFill, SetStroke};
 pub use rotation::RotateItem;
@@ -189,10 +191,16 @@ impl PageKind {
             Some((x, y, width, height)) => json!({ "x": x, "y": y, "width": width, "height": height }),
             None => Json::Null,
         };
+        let margin_box = match crate::margins::margin_box_of(node) {
+            Some((x, y, width, height)) => json!({ "x": x, "y": y, "width": width, "height": height }),
+            None => Json::Null,
+        };
         Some(json!({
             "width": node.data.get("width").cloned().unwrap_or(Json::Null),
             "height": node.data.get("height").cloned().unwrap_or(Json::Null),
             "bleed": bleed,
+            "margin": crate::margins::margin_of(node).to_json(),
+            "margin_box": margin_box,
         }))
     }
 }
@@ -868,6 +876,7 @@ craftkit_sdk::plugin_anchor!(
     SetBleed,
     AddSpread,
     AddPage,
+    SetMargin,
     AddLayer,
     AddStory,
     AddAsset,
