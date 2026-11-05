@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3316 tests.** The MCP server links **all fifteen batteries** in, so the
+**3326 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3316 tests
+cargo test          # 3326 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3892,6 +3892,7 @@ so.
 | the **pivot** of a sheet | **built.** A pivot gathers the rows of a range by a field and puts the numbers of another field together, and the summary is derived (§455) | §455 |
 | the **character** of a run | **built.** The way a piece of text is written — bold, italic, underline, colour and size — is put on a range of a block, and the runs are split to fit it (§456) | §456 |
 | the **edit decision list** | **built.** The list of the cuts of a sequence is worked out from it and returned as a text, and a sequence with a transition is refused (§457) | §457 |
+| the **item** of a spread | **built.** An item has facts of its own: its opacity, whether it is hidden, whether it is locked and how big it is (§458) | §458 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30295,3 +30296,67 @@ is the oldest interchange format there is — CMX 3600 — and it is a
   the refusal says that the list would be wrong.
 - **The tree's list may be written per video track**, one file for
   each, and here the list holds every track of the sequence.
+
+## 458. The item of a spread
+
+An item of a spread is a frame, a graphic or a group, and it has
+**facts** of its own: how **solid** it is, whether it is **hidden**,
+whether it is **locked**, and how **big** it is.
+
+### What was built
+
+- **Six commands** in the layout battery: `layout.item.opacity`,
+  `layout.item.hide`, `layout.item.show`, `layout.item.lock`,
+  `layout.item.unlock` and `layout.item.scale`.
+- The **opacity** is a **percentage**, from zero to a hundred, the way
+  the vector battery's is, and it is kept as the fraction it is. A
+  number outside the percentage is refused.
+- A **hidden** item is not drawn, and that is the kit's own word for
+  it: a muted node is not drawn.
+- A **locked** item may not be **edited**: every command that changes
+  it is refused — the opacity, the scale, the story and the layer —
+  and the refusal says which item and why.
+- The **scale** is a factor on the **size** of the shape, and the place
+  of the item does not move. A factor that is not a number above zero
+  is refused, and so is a size that would not be a number, and an item
+  with no shape has nothing to scale.
+- The facts of an item are in the **plan**, beside its shape and its
+  edges: its opacity, whether it is locked and whether it is hidden.
+
+### What the port found
+
+- **The tree's locked objects are skipped, not refused.** Its
+  commands filter the locked ones out of the set they work on and say
+  how many were left alone. Here an edit of a locked item is
+  **refused**: a command that silently does nothing to half of what it
+  was given is a command whose answer is a lie.
+- **The tree's opacity is a percentage and so is this one, and the
+  tree's scale is a factor and so is this one.** The numbers are the
+  tree's numbers, and a second spelling of a number is a second thing
+  to get wrong.
+
+### What it cost
+
+- **Ten tests** in the layout battery (`tests/items.rs`) — the first
+  tests of that battery: the opacity being a percentage, an opacity
+  outside it being refused, an item being hidden and shown, a locked
+  item refusing an edit, an unlocked item being edited again, a locked
+  item refusing the story, the scale being a factor on the size, a
+  factor that is not a number being refused, an item with no shape
+  having nothing to scale, and a node that is not an item being
+  refused.
+- **One new module** (`items`): the facts of an item are their own.
+  The layout battery now carries **17** commands and the MCP server
+  **621**.
+
+### What it does not settle
+
+- **The tree's items may be arranged, grouped and ungrouped, and they
+  may be sent to the front and to the back.** Here an item has no
+  order of its own beyond the one it is in, and no groups.
+- **The tree's items may be transformed in more ways than they are
+  scaled.** Here the scale is the only transform.
+- **The tree's hidden items are not shown at all, and its locked
+  items are drawn.** Here a hidden item is not drawn — that is the
+  kit's own word for it — and a locked item is drawn and may not be
+  edited.
