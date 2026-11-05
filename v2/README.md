@@ -3924,6 +3924,7 @@ so.
 | the **group** of a column | **built.** Columns may be grouped under a summary column, and the groups are worked out from the levels of the columns (§487) | §487 |
 | the **dimension** of a drawing | **built.** A dimension measures an entity and the measurement is derived, so a dimension cannot be out of date (§488) | §488 |
 | the **dash** of a path | **built.** A line may be dashed — a pattern of lengths and an offset — and the pattern that is run is derived, so an odd pattern keeps its dash and its gap (§489) | §489 |
+| the **bleed** of a document | **built.** A document may have a bleed — the room the paper has beyond the page — and the bleed box of a page is derived from it (§490) | §490 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32162,3 +32163,61 @@ a gap — and an offset that says where in the pattern the line starts.
 - **The tree's dash may be aligned to the corners** and the tree's
   pattern may be imported from a file; here the pattern is written in
   the command and runs along the outline.
+
+## 490. The bleed of a document
+
+A document may have a **bleed**: the room the paper has beyond the
+page, so that the ink that runs off the edge of the page has somewhere
+to go.
+
+### What was built
+
+- **One command** in the layout battery: `layout.document.bleed`.
+- The bleed is a fact of the **document** — every page of it is bled
+  the same way — and it is four numbers: the room at the **top**, at
+  the **bottom**, at the **left** and at the **right**.
+- The **bleed box** of a page is **derived**: it is the box of the
+  page grown by the bleed, and it is the box the paper takes when it
+  is cut. So the box cannot be out of date, and the box of a document
+  with no bleed is the box of the page.
+- The **rules**: a number that is not a number, or that is negative,
+  is refused — the bleed is room, and there is no room that is less
+  than nothing; a side that is **not said** keeps the room it had;
+  and a node that is not a document may not have a bleed.
+
+### What the port found
+
+- **The tree's bleed is of the document** — the tree's document carries
+  the bleed — and the tree's bleed is four numbers: the top, the
+  bottom, the **inside** and the **outside**. Here the bleed is the
+  top, the bottom, the left and the right, because a page here has no
+  side: it does not know whether it is the left page of its spread.
+- **The tree's bleed grows the bounds of the spread**, and the outside
+  bleed goes on the outer pages and the inside bleed on the ones at
+  the spine. Here the bleed grows the box of the **page**, and the
+  page has no side and no spine.
+- **The tree's slug** is a second outset — the room where the sheet's
+  information is printed — and the tree's slug may be narrower than
+  the bleed, so that it sits inside it. Here there is no slug.
+
+### What it cost
+
+- **Six tests** in the layout battery (`tests/bleed.rs`): a document
+  having a bleed, a side that is not said keeping the room it had, the
+  bleed box of a page being derived, a document with no bleed having
+  no room at all, the room of a bleed that is negative being refused,
+  and a node that is not a document being refused a bleed.
+- **One new module** (`bleed`). The layout battery now carries **33**
+  commands and the MCP server **693**.
+
+### What it does not settle
+
+- **The tree's bleed is inside and outside** and the tree's pages have
+  a side. Here the bleed is left and right, and a page has no side.
+- **The tree's bleed grows the bounds of the spread** and the tree's
+  spread knows where its pages stand. Here the bleed grows the box of
+  one page.
+- **The tree's slug** — the room for the sheet's information — is not
+  here, and neither is the tree's bleed box of the whole spread.
+- **The bleed is not drawn**: it is a fact of the document, and this
+  tree has no canvas for a spread.
