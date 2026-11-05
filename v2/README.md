@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3299 tests.** The MCP server links **all fifteen batteries** in, so the
+**3308 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3299 tests
+cargo test          # 3308 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3890,6 +3890,7 @@ so.
 | the **labels** of the pages | **built.** A PDF file may give its pages the names a reader sees beside them, and the labels are written as the format's own page-label tree (§453) | §453 |
 | the **table** of a sheet | **built.** A table is a named range whose first row names the fields, and the fields are derived from that header (§454) | §454 |
 | the **pivot** of a sheet | **built.** A pivot gathers the rows of a range by a field and puts the numbers of another field together, and the summary is derived (§455) | §455 |
+| the **character** of a run | **built.** The way a piece of text is written — bold, italic, underline, colour and size — is put on a range of a block, and the runs are split to fit it (§456) | §456 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30169,3 +30170,64 @@ together — summed, averaged, or the largest or the smallest of them.
   into.** Here it summarises and nothing else.
 - **The tree's pivot may be a chart.** Here a pivot is a table of
   numbers, and a chart is not built.
+
+## 456. The character of a run
+
+The **character** of a piece of text is how it is written: bold,
+italic, underlined, in what colour and in what size.
+
+### What was built
+
+- **One command** in the prose battery: `prose.run.format`, given a
+  block, a **start** and a **length** — counted in characters and not
+  in bytes — and the character it puts on that range.
+- The runs are **split** so that the range lies in whole runs: the run
+  that covers the range is cut at both ends, and the character is put
+  on the piece in the middle and on no other.
+- The **five characters** of the tree: `bold`, `italic`, `underline`,
+  the `colour` and the `size`. A command that says nothing to change
+  is refused, and the read of the runs says the character of each of
+  them.
+- The **rules**: the range must be **inside the text** — a range that
+  reaches past the end is refused and not cut short; a **colour** is
+  the kit's colour, `#rrggbb`, and a text that is not one is refused;
+  a **size** is a number that is finite and above zero, and one that
+  is not is refused; and a **tracked change** is not formatted, because
+  a tracked change is somebody else's text.
+
+### What the port found
+
+- **The tree has a command for each of the characters.** The tree's
+  `format.bold`, `format.italic`, `format.underline`, `format.color`
+  and `format.size` are five commands over the **selection**. Here
+  they are one command over a **range**, because the thing is the same
+  thing: the character of a piece of text.
+- **The tree's selection is a place in the text and this tree's is a
+  number.** The tree's commands act on what is selected; here the
+  range is **two numbers** — where the text begins and how long it is
+  — and the runs are split to fit it.
+
+### What it cost
+
+- **Nine tests** in the prose battery (`tests/characters.rs`): the
+  character being put on the range and on no other, the text not being
+  changed, all five characters being set, a range past the end being
+  refused, a command that changes nothing being refused, a colour that
+  is not a colour being refused, a size that is not a size being
+  refused, a tracked change not being formatted, and the character
+  being read back with the blocks.
+- **One new module** (`characters`): the character of a run is its
+  own. The prose battery now carries **43** commands and the MCP server
+  **614**.
+
+### What it does not settle
+
+- **The tree's character may be put on a selection and not only on a
+  range of a block.** Here the range is given by two numbers, and
+  there is no selection of the document to speak of.
+- **The tree's character is the character of a whole run at a time.**
+  Here the range may be any part of a run, and the run is split to
+  fit it — which is more than the tree does and not less.
+- **The tree's size is the size of a font in the tree's own units, and
+  the tree's colour may be a theme colour.** Here the size is a number
+  and the colour is the kit's `#rrggbb`.
