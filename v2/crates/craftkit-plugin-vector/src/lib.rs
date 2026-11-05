@@ -74,11 +74,13 @@
 )]
 #![forbid(unsafe_code)]
 
+mod dashes;
 mod gradients;
 mod opacity;
 mod reshape;
 mod shapes;
 
+pub use dashes::DashPath;
 pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
 pub use opacity::{SetOpacity, fill_at, stroke_at};
 pub use shapes::{AddLine, AddSpiral, AddStar};
@@ -133,6 +135,8 @@ pub struct VectorNode {
     /// The path's own transparency, and not the fill's: the opacity
     /// multiplies into everything the path is painted with.
     pub opacity: f64,
+    /// The **dash** of the line on its outline, if it has one.
+    pub dash: Option<crate::dashes::Dash>,
 }
 
 impl VectorNode {
@@ -158,6 +162,7 @@ impl FormatValue for VectorNode {
             "blend": self.blend.label(),
             "transform": self.transform.to_json(),
             "opacity": self.opacity,
+            "dash": self.dash.as_ref().map(|dash| dash.to_json()),
         })
     }
 
@@ -195,7 +200,13 @@ impl FormatValue for VectorNode {
             }
             None => 1.0,
         };
-        Ok(VectorNode { path: Path::from_json(path)?, fill, stroke, blend, transform, opacity })
+        // A path written before the **dash** was in the payload has
+        // none, and a path that says nothing has a whole line.
+        let dash = match value.get("dash") {
+            Some(dash) if !dash.is_null() => Some(crate::dashes::Dash::from_json(dash)?),
+            _ => None,
+        };
+        Ok(VectorNode { path: Path::from_json(path)?, fill, stroke, blend, transform, opacity, dash })
     }
 }
 
@@ -252,6 +263,12 @@ impl VectorPathKind {
             "area": geom::area(&vector.placed()),
             "segments": segments,
             "contours": vector.path.subpaths.len(),
+            "dash": vector.dash.as_ref().map(|dash| serde_json::json!({
+                "pattern": dash.pattern.clone(),
+                "offset": dash.offset,
+                "run": dash.run(),
+                "round": dash.round(),
+            })).unwrap_or(Json::Null),
         }))
     }
 }
@@ -969,6 +986,7 @@ impl OutlinePath {
             blend: BlendMode::Normal,
             transform: geom::Matrix::identity(),
             opacity: 1.0,
+            dash: None,
         };
         let rect = bounds(&outline);
         let id =
@@ -2553,7 +2571,7 @@ fn handle_point(
 }
 
 /// The path a node carries.
-fn vector_of(session: &Session, id: u64) -> Result<VectorNode, EngineError> {
+pub(crate) fn vector_of(session: &Session, id: u64) -> Result<VectorNode, EngineError> {
     let node = session.document().node(id).ok_or_else(|| EngineError::Failed {
         id: id.to_string(),
         message: format!("there is no node `{id}`"),
@@ -2565,7 +2583,7 @@ fn vector_of(session: &Session, id: u64) -> Result<VectorNode, EngineError> {
 }
 
 /// Put a path back into a node, and move the node's box to where it is.
-fn write_back(session: &mut Session, id: u64, vector: &VectorNode) -> Result<(), EngineError> {
+pub(crate) fn write_back(session: &mut Session, id: u64, vector: &VectorNode) -> Result<(), EngineError> {
     let rect = geom::bounds(&vector.placed());
     let document = session.document_mut()?;
     let node = document.node_mut(id).ok_or_else(|| EngineError::Failed {
@@ -2659,6 +2677,7 @@ fn add_path(
         blend: BlendMode::Normal,
         transform: geom::Matrix::identity(),
         opacity: 1.0,
+        dash: None,
     };
     let rect = bounds(&path);
     let id = session.document_mut()?.add_node_with(name, "vector.path", Some(rect), vector.to_json());
@@ -2780,6 +2799,7 @@ craftkit_sdk::plugin_anchor!(
     OffsetPath,
     JoinPath,
     CapPath,
+    DashPath,
     SmoothPoint,
     OutlinePath,
     TransformPath,
