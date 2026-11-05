@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3308 tests.** The MCP server links **all fifteen batteries** in, so the
+**3316 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3308 tests
+cargo test          # 3316 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3891,6 +3891,7 @@ so.
 | the **table** of a sheet | **built.** A table is a named range whose first row names the fields, and the fields are derived from that header (§454) | §454 |
 | the **pivot** of a sheet | **built.** A pivot gathers the rows of a range by a field and puts the numbers of another field together, and the summary is derived (§455) | §455 |
 | the **character** of a run | **built.** The way a piece of text is written — bold, italic, underline, colour and size — is put on a range of a block, and the runs are split to fit it (§456) | §456 |
+| the **edit decision list** | **built.** The list of the cuts of a sequence is worked out from it and returned as a text, and a sequence with a transition is refused (§457) | §457 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30231,3 +30232,66 @@ italic, underlined, in what colour and in what size.
 - **The tree's size is the size of a font in the tree's own units, and
   the tree's colour may be a theme colour.** Here the size is a number
   and the colour is the kit's `#rrggbb`.
+
+## 457. The edit decision list of a sequence
+
+An **EDL** is a list of cuts: it says, for every clip of a sequence,
+what was cut, where it came from and where it sits on the timeline. It
+is the oldest interchange format there is — CMX 3600 — and it is a
+**text**, so anything can read it.
+
+### What was built
+
+- **One command** in the film battery: `film.export.edl`, given a
+  sequence and, optionally, a title.
+- The list is **derived**: it is worked out from the sequence as it is
+  now, and it is never written down anywhere else.
+- The shape of a line is the tree's shape: a **title**, the **frame
+  count** (`NON-DROP FRAME`), and then one **event** for every clip —
+  the number of the event, the **reel** it comes from, the **channel**
+  it is on (`V` for a video track, `A`, `AA`, `A3` for the audio
+  ones), the **edit** (`C` for a cut) and the four **timecodes**: the
+  source in and out, and the record in and out.
+- The **reel** is the name of the item in **eight characters** — the
+  tree's rule — with everything that is not a letter or a digit turned
+  into an underscore.
+- The **rules**: a **transition** is a dissolve, and a dissolve is a
+  line this tree does not write, so a sequence with a transition is
+  **refused** rather than written wrongly; and a clip with **no item**
+  has no reel and no source, so the list is refused too.
+
+### What the port found
+
+- **The tree writes the list to a file, and this tree returns it.**
+  The tree's `file.exportEdl` asks for a path and writes the bytes.
+  Here the list is a **reading** and it comes back as a text, because
+  a command that writes a file is a command about the **machine** and
+  not about the document — and the kit's rule is that a command
+  changes the document or says something about it.
+- **The tree's list is a whole interchange format** — it reads EDLs
+  back as well as writing them, and it knows the dissolves, the wipes,
+  the keys and the motion effects. Here the list is **written** and
+  nothing is read back: a list that is read back would be a second
+  copy of the sequence, and a second copy is a copy that can be wrong.
+
+### What it cost
+
+- **Eight tests** in the film battery (`tests/edl.rs`): the list saying
+  what was cut and where it came from and where it sits, the reel
+  being the name of the item in eight characters, the title being the
+  one that was given, the timecodes being counted at the rate of the
+  sequence, two events being numbered one after the other, an audio
+  track being on an audio channel, a transition being refused, and a
+  node that is not a sequence being refused.
+- **One new module** (`edl`): the list of a sequence is its own. The
+  film battery now carries **71** commands and the MCP server **615**.
+
+### What it does not settle
+
+- **The tree's list is read back as well as written.** Here it is
+  written only.
+- **The tree's list has dissolves, wipes, keys and motion effects,
+  and here it has cuts.** A sequence with a transition is refused, and
+  the refusal says that the list would be wrong.
+- **The tree's list may be written per video track**, one file for
+  each, and here the list holds every track of the sequence.
