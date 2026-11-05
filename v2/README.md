@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3390 tests.** The MCP server links **all fifteen batteries** in, so the
+**3398 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3390 tests
+cargo test          # 3398 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3901,6 +3901,7 @@ so.
 | the **import** of a text | **built.** A text of values becomes a sheet of cells, and the rows of the text are the same length or the text is refused (§464) | §464 |
 | the **area** a sheet prints | **built.** The area that is printed may be set and the pages are of it, and a page may be broken by hand where the paper does not break it (§465) | §465 |
 | the **titles** of a sheet | **built.** The rows and the columns that are printed on every page are the titles, and they are not part of the pages themselves (§466) | §466 |
+| the **import of a list of objects** | **built.** The keys of the objects are the columns of a sheet and the first row holds them, and a value that is a structure is refused (§467) | §467 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30803,3 +30804,55 @@ printed on **every** page.
 - **The tree's scaling to fit is not here**, and neither is its
   header and footer, its printing of the gridlines and the headings,
   and its print area when the sheet is fitted.
+
+## 467. The import of a list of objects
+
+The tree's **JSON** is a table too: a list of objects, and the **keys**
+of the objects are the columns.
+
+### What was built
+
+- **One command** in the grid battery: `grid.import.json`, given a
+  workbook and a list of objects — `[{ "who": "ann", "amount": 3 }]`.
+- The **keys** of the objects are the columns of the sheet, in the
+  order they first appear, and the **first row** of the sheet holds
+  them.
+- A **number** is a number, a **boolean** is a boolean, a **string**
+  is text and a **null** is nothing.
+- The **rules**: the data must be a **list of objects**, and a thing
+  in it that is not one is refused; a value that is an **object or a
+  list** is refused — a cell holds a value and not a structure; and a
+  key that an object does not have is **nothing** in that row.
+
+### What the port found
+
+- **The tree's one command reads a file and works out what it is**: a
+  text that begins with a bracket is JSON and a text that does not is
+  a CSV, and the two become a sheet the same way. Here the two are
+  **two commands**, because a command that reads a file is a command
+  about the machine and not about the document, and because a JSON
+  list and a CSV text are two different things.
+- **The tree's JSON is the header row of the sheet, and the sheet is
+  also a table.** Here the keys are the first row and the sheet is a
+  sheet — the table of §454 is made of the range, and a table that
+  the sheet does not have is a table that is not there.
+
+### What it cost
+
+- **Eight tests** in the grid battery (`tests/jsonimport.rs`): the
+  keys being the columns, a key that is not there being nothing, the
+  order the keys first appear, a boolean and a null, a value that is a
+  structure being refused, a thing that is not an object being
+  refused, data that is not a list being refused, and a list that
+  holds nothing being refused.
+- **One new command** in the module of the import (`importing`). The
+  grid battery now carries **90** commands and the MCP server **639**.
+
+### What it does not settle
+
+- **The tree reads the file from disk and this tree takes the data in
+  the command**, so the two never disagree about a file that has
+  changed.
+- **The tree makes a table of what it imports and autofits the
+  columns**; here the import makes a sheet and the widths are as they
+  are.
