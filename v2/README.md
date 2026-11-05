@@ -3925,6 +3925,7 @@ so.
 | the **dimension** of a drawing | **built.** A dimension measures an entity and the measurement is derived, so a dimension cannot be out of date (§488) | §488 |
 | the **dash** of a path | **built.** A line may be dashed — a pattern of lengths and an offset — and the pattern that is run is derived, so an odd pattern keeps its dash and its gap (§489) | §489 |
 | the **bleed** of a document | **built.** A document may have a bleed — the room the paper has beyond the page — and the bleed box of a page is derived from it (§490) | §490 |
+| the **line type** of a layer | **built.** A layer names a line type of the tree's own table, and the pattern of it is derived, so a layer may not name a line type that nothing defines (§491) | §491 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32221,3 +32222,66 @@ to go.
   here, and neither is the tree's bleed box of the whole spread.
 - **The bleed is not drawn**: it is a fact of the document, and this
   tree has no canvas for a spread.
+
+## 491. The line type of a layer
+
+A layer names a **line type**: the pattern its lines are drawn with.
+
+### What was built
+
+- **One command** in the cad battery: `cad.linetype.list`, and the
+  **table** of the line types this tree has — the tree's own
+  **eighteen**: `BORDER`, `CENTER`, `CENTER2`, `CENTERX2`,
+  `DASHDOT`, `DASHDOT2`, `DASHED`, `DASHED2`, `DASHEDX2`, `DIVIDE`,
+  `DOT`, `DOT2`, `HIDDEN`, `HIDDEN2`, `HIDDENX2`, `PHANTOM`,
+  `PHANTOM2` and `ZIGZAG`, each with its description and its pattern.
+- A pattern is a list of **lengths in millimetres**: a dash is a
+  positive length, a gap is a negative one, and a dot is a length of
+  nothing. The tree's own library is written in inches and scaled for
+  a metric drawing, and this tree is in millimetres, so the lengths
+  here are the tree's own multiplied by twenty-five and four tenths —
+  `DASHED` is 12.7 millimetres on and 6.35 off.
+- The **pattern** of the line type a layer names is **derived**: it is
+  the pattern of the table, so it cannot be out of date, and a layer
+  with no line type has no pattern.
+- The **rules**: `cad.layer.linetype` now **refuses** a name that is
+  not one of the table — a name that is not in it is a name nothing
+  defines — and the refusal says what the line types are; and a name
+  is found **without regard to its case**, the way the tree finds a
+  line type.
+
+### What the port found
+
+- **The tree's layer names a line type that the drawing defines** —
+  the tree's library is loaded into the drawing, and the layers name
+  the definitions. Here the table is the tree's own and is built in:
+  a line type is a name and a pattern, and the tree's library is not
+  a file that is read.
+- **The tree's line type may hold text** — the tree's `FENCELINE1`
+  writes a letter along the line — and this tree's patterns are
+  numbers only, so that line type is not here.
+- **The tree's line type has a scale** — the tree's `LTSCALE` — and
+  the tree's library is scaled when it is loaded into a metric
+  drawing. Here the patterns are in millimetres and there is no scale.
+
+### What it cost
+
+- **Seven tests** in the cad battery (`tests/linetypes.rs`): the
+  line types of this tree being listed, a layer naming one of them,
+  the pattern of the line type being derived, the name of a line type
+  being found without regard to its case, a name that is not a line
+  type being refused, and a layer with no line type having no pattern.
+- **One new module** (`linetypes`). The cad battery now carries **39**
+  commands and the MCP server **694**.
+
+### What it does not settle
+
+- **The tree's line type is a definition in the drawing**, and a
+  drawing may hold line types of its own besides the tree's. Here the
+  table is built in and a drawing may not add to it.
+- **The tree's line type may hold text** — a letter along the line —
+  and this tree's patterns are numbers.
+- **The tree's line type is scaled** by the drawing's scale factor,
+  and here the patterns are millimetres and are never scaled.
+- **The line is not drawn**: the pattern is a fact of the layer, and
+  this tree has no canvas for a drawing.
