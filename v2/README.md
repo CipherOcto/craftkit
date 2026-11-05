@@ -3921,6 +3921,7 @@ so.
 | the **border** of a cell | **built.** A cell may carry a border — a line on one of its four edges, of one of the tree's styles, in a colour — and it is taken away with the formatting that it is part of (§484) | §484 |
 | the **turn** of an item | **built.** An item may be turned about the middle of its shape, and the box it takes when it is turned is derived, so it cannot be out of date (§485) | §485 |
 | the **group** of a row | **built.** Rows may be grouped under a summary row, and the groups are worked out from the levels of the rows, so a row that is moved is regrouped (§486) | §486 |
+| the **group** of a column | **built.** Columns may be grouped under a summary column, and the groups are worked out from the levels of the columns (§487) | §487 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31968,3 +31969,61 @@ Rows may be **grouped**: the rows of a group are gathered under a
   rows and expanding it by showing them again. Here the rows are
   hidden one by one, and the group is **collapsed** when they all
   are — the collapse is said, and it is not a command of its own.
+
+## 487. The group of a column
+
+Columns may be **grouped**: the columns of a group are gathered under a
+**summary column**.
+
+### What was built
+
+- **Three commands** in the grid battery: `grid.column.group`,
+  `grid.column.ungroup` and `grid.column.groups`.
+- The **levels** of the columns are the fact and the **groups** are
+  derived, exactly as the rows are (§486): a column carries a level
+  from one to seven, and the groups are the runs of columns at or
+  above a level.
+- The **summary column** of a group is the column after it, or the
+  column before it when the sheet says its summaries sit left of their
+  detail — and the summaries of the **rows** and of the **columns**
+  are placed apart, because they are two settings of the tree and two
+  settings here.
+- The **rules**: a group that would go deeper than the tree's
+  **seven** levels is refused; a column that is in **no group** may
+  not be ungrouped; and a range of columns that runs **backwards** is
+  refused.
+
+### What the port found
+
+- **The tree's outline is of rows and of columns** in one setting, and
+  the tree's summary may sit above or below the rows and left or
+  right of the columns. Here the outline of the rows (§486) and the
+  outline of the columns are the same bargain told twice, and the two
+  settings of the tree are two settings here.
+- **The tree's column is a letter** and the tree's group takes a
+  block of columns — `C:E` — and the tree's ungroup takes one back.
+  Here so does this one.
+
+### What it cost
+
+- **Nine tests** in the grid battery (`tests/column_groups.rs`):
+  columns being grouped, the summary column of a group being the
+  column after it, the summary column sitting before the group, the
+  summaries of the rows and of the columns being placed apart, a group
+  of columns being taken apart, taking a group off a column that has
+  none being refused, a group of columns that is deeper than seven
+  being refused, a group whose columns are all hidden being
+  collapsed, and a range of columns that runs backwards being refused.
+- **No new module**: the outline module grew, and the grid battery now
+  carries **116** commands and the MCP server **689**.
+
+### What it does not settle
+
+- **The tree's outline is one setting for the rows and the columns**,
+  and here there are two. A sheet whose rows are grouped above their
+  detail and whose columns are grouped left of it is said here, and
+  the tree's one setting cannot say it.
+- **The tree's group may be collapsed and expanded** by one command
+  each. Here the rows and the columns are hidden one by one, and the
+  group is **collapsed** when they all are — the collapse is said, and
+  it is not a command of its own.
