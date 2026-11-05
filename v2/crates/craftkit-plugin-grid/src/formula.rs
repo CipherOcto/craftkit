@@ -197,12 +197,16 @@ impl Anchor {
         if letters.is_empty() || digits.is_empty() || at != characters.len() {
             return None;
         }
+        // The **column** of the address: `A` is 0, `Z` is 25 and `AA`
+        // is 26 — the letters are a base of twenty-six, and the first
+        // of them counts from one.
         let mut col = 0u32;
         for character in letters.chars() {
             let upper = character.to_ascii_uppercase();
             let value = (upper as u8 - b'A') as u32;
-            col = col.checked_mul(26)?.checked_add(value)?;
+            col = col.checked_mul(26)?.checked_add(value + 1)?;
         }
+        let col = col.checked_sub(1)?;
         let row = digits.parse::<u32>().ok()?.checked_sub(1)?;
         Some(Anchor { cell: CellRef { col, row }, row_abs, col_abs })
     }

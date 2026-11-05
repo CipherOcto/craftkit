@@ -39,14 +39,20 @@ fn column_at(text: &str, id: &str) -> Result<u32, EngineError> {
     if text.is_empty() || !text.chars().all(|character| character.is_ascii_alphabetic()) {
         return Err(EngineError::Failed { id: id.to_string(), message: format!("`{text}` is not a column") });
     }
+    // The letters are a base of twenty-six: `A` is 0, `Z` is 25 and
+    // `AA` is 26.
     let mut column = 0u32;
     for character in text.chars() {
         let letter = character.to_ascii_uppercase() as u32 - 'A' as u32;
-        column = column.checked_mul(26).and_then(|column| column.checked_add(letter)).ok_or_else(|| {
-            EngineError::Failed { id: id.to_string(), message: format!("`{text}` is not a column") }
-        })?;
+        column =
+            column.checked_mul(26).and_then(|column| column.checked_add(letter + 1)).ok_or_else(|| {
+                EngineError::Failed { id: id.to_string(), message: format!("`{text}` is not a column") }
+            })?;
     }
-    Ok(column)
+    column.checked_sub(1).ok_or_else(|| EngineError::Failed {
+        id: id.to_string(),
+        message: format!("`{text}` is not a column"),
+    })
 }
 
 /// The **order** of two values, the tree's way.
