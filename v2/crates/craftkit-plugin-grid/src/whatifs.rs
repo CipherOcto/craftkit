@@ -27,7 +27,7 @@ use craftkit_derive::Command;
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
 
-use crate::formula::Value;
+use crate::formula::{Book, CellRef, Value};
 
 /// How many values a what-if may try.
 ///
@@ -37,7 +37,7 @@ use crate::formula::Value;
 const MAX_VALUES: usize = 256;
 
 /// The **cell** a name says, if it says one.
-fn cell_of(text: &str, id: &str, what: &str) -> Result<crate::formula::CellRef, EngineError> {
+pub(crate) fn cell_of(text: &str, id: &str, what: &str) -> Result<CellRef, EngineError> {
     crate::cell_at(text, id).map_err(|_| EngineError::Failed {
         id: id.to_string(),
         message: format!("`{text}` is not a cell: the {what} is a cell"),
@@ -122,14 +122,7 @@ impl WhatIf {
         let name = node.name.clone();
         let mut table: Vec<Json> = Vec::with_capacity(values.len());
         for value in values {
-            let Some(cells) = book.sheet_mut(&name) else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("there is no sheet `{name}`"),
-                });
-            };
-            cells.set_value(input, Value::Number(value));
-            let result = book.value_of(&name, result);
+            let result = trial(&mut book, &name, input, result, value, &id)?;
             table.push(json!({ "value": value, "result": result.to_json() }));
         }
         Ok(Outcome::new(format!("the sheet `{sheet}` was asked {} question(s)", table.len())).with_data(
@@ -141,4 +134,27 @@ impl WhatIf {
             }),
         ))
     }
+}
+
+/// The **trial**: the input cell takes a value in a copy of the
+/// workbook, and the result cell says what the sheet says then.
+///
+/// The workbook is a **copy** — the sheet itself is never touched — and
+/// the trial is where the what-if and the goal seek meet.
+pub(crate) fn trial(
+    book: &mut Book,
+    sheet: &str,
+    input: CellRef,
+    result: CellRef,
+    value: f64,
+    id: &str,
+) -> Result<Value, EngineError> {
+    let Some(cells) = book.sheet_mut(sheet) else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("there is no sheet `{sheet}`"),
+        });
+    };
+    cells.set_value(input, Value::Number(value));
+    Ok(book.value_of(sheet, result))
 }

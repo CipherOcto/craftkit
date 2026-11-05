@@ -346,6 +346,7 @@ mod format;
 mod formatnames;
 mod formula;
 mod fractions;
+mod goals;
 mod hiding;
 mod hypotheses;
 mod information;
@@ -395,6 +396,7 @@ pub use finding::FindCells;
 use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
+pub use goals::GoalSeek;
 pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
 pub use links::{DeleteLink, GetLink, SetLink};
 pub use merges::{ClearMerge, SetMerge};
@@ -1717,6 +1719,7 @@ craftkit_sdk::plugin_anchor!(
     SetFilterGroups,
     ClearFilter,
     WhatIf,
+    GoalSeek,
     FilteredRows,
     SetConditional,
     ClearConditional,
