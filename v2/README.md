@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3266 tests.** The MCP server links **all fifteen batteries** in, so the
+**3273 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3266 tests
+cargo test          # 3273 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3886,6 +3886,7 @@ so.
 | the **stops** of a gradient | **built.** A gradient is a list of stops in order, and a stop may be added, changed or taken away — but a gradient has two stops or more (§449) | §449 |
 | the **groups** of a filter | **built.** The columns of a group are judged together and the groups are judged one by one, so a row is hidden when it matches none of them (§450) | §450 |
 | the **what-if** of a sheet | **built.** The input cell takes a value and the result cell says what the sheet says then — and the sheet is not changed (§451) | §451 |
+| the **goal** of a sheet | **built.** The other question: what input gives this result? It is found by narrowing the range until the answer is close (§452) | §452 |
 
 ### The list of things that are honestly not there: empty
 
@@ -29927,3 +29928,56 @@ then.
 - **The tree's data table lays its results out in cells and here they
   are a list**: a what-if here says what it would say and does not
   write it down.
+
+## 452. The goal of a sheet
+
+A goal seek asks the other question: not "what does the sheet say for
+this input?" but "**what input gives this result?**"
+
+### What was built
+
+- The command `grid.goal`: the **input** cell that is varied, the
+  **result** cell that is read, the **target** to reach, and the two
+  **ends** of the range to look in.
+- The answer is found by **narrowing**: the sheet is asked at the two
+  ends, and if the target is between what they say, the range is
+  **halved** and the sheet is asked again in the middle — and again,
+  until the range is small enough to call the answer.
+- The command says the **steps** it took and the **width** of the range
+  it was left with, so a reader knows how close the answer is.
+- The sheet is **not changed**: the search is made in the same copy of
+  the workbook the what-if uses.
+
+### What the port found
+
+- **The tree's goal seek has its own limits and its own way of finding
+  the answer**: it may scan the range in steps, or bisect it, and it
+  stops when the answer is close enough. Here the range is **given**
+  and the answer is found by **halving**: the work is one evaluation of
+  the sheet for each halving, and the number of halvings is bounded.
+- **The tree's goal seek says what it did.** Here it says the **steps**
+  it took and the **width** of the range it was left with.
+
+And the assumption is named, because it is an assumption: the sheet is
+taken to move **one way** as the input moves. A sheet that does not is
+not found, and the command says so rather than giving an answer that
+is a coincidence.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/goals.rs`): the goal is
+  the input that gives the result, the sheet is not changed by it, a
+  target the sheet does not reach is refused, the goal may be at an
+  end of the range, a range whose ends are the same point is refused,
+  the input and the result may not be the same cell, and a result that
+  is not a number is refused.
+- **One new module** (`goals`): the goal of a sheet is its own. The
+  grid battery now carries **70** commands and the MCP server **603**.
+
+### What it does not settle
+
+- **The tree's scan is not here**: the answer is found by halving, and
+  a sheet that moves one way and then the other is not found.
+- **The tree's goal seek may be told to stop at a tolerance and here
+  the tolerance is the width of the range**: the number of halvings is
+  bounded, and the width that is left is reported.
