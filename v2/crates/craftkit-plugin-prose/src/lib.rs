@@ -106,6 +106,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Relation, Session, Text};
 
 mod bookmarks;
+mod characters;
 mod comments;
 mod editing;
 mod finding;
@@ -118,6 +119,7 @@ mod revisions;
 mod tables;
 
 pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
+pub use characters::FormatRun;
 pub use comments::{DeleteComment, GetComment, SetComment};
 pub use editing::{
     MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
@@ -347,6 +349,9 @@ fn runs_with_text(node: &Node) -> Json {
             "len": length,
             "bold": run.get("bold").cloned().unwrap_or(Json::Bool(false)),
             "italic": run.get("italic").cloned().unwrap_or(Json::Bool(false)),
+            "underline": run.get("underline").cloned().unwrap_or(Json::Bool(false)),
+            "colour": run.get("colour").cloned().unwrap_or(Json::Null),
+            "size": run.get("size").cloned().unwrap_or(Json::Null),
             "link": run.get("link").cloned().unwrap_or(Json::Null),
             "revision": run.get("revision").cloned().unwrap_or(Json::Null),
             "footnote": run.get("footnote").cloned().unwrap_or(Json::Null),
@@ -735,7 +740,8 @@ impl PutOnStyle {
 pub struct SetRuns {
     /// The block.
     pub block: NodeRef,
-    /// The runs: a list of `{len, bold, italic}`.
+    /// The runs: a list of `{len, bold, italic, underline, colour,
+    /// size}`.
     pub runs: Json,
 }
 
@@ -902,6 +908,7 @@ craftkit_sdk::plugin_anchor!(
     AddTable,
     PutOnStyle,
     SetRuns,
+    FormatRun,
     SetParagraphText,
     RemoveBlock,
     MoveBlock,
