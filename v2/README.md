@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3289 tests.** The MCP server links **all fifteen batteries** in, so the
+**3299 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3289 tests
+cargo test          # 3299 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3889,6 +3889,7 @@ so.
 | the **goal** of a sheet | **built.** The other question: what input gives this result? It is found by narrowing the range until the answer is close (§452) | §452 |
 | the **labels** of the pages | **built.** A PDF file may give its pages the names a reader sees beside them, and the labels are written as the format's own page-label tree (§453) | §453 |
 | the **table** of a sheet | **built.** A table is a named range whose first row names the fields, and the fields are derived from that header (§454) | §454 |
+| the **pivot** of a sheet | **built.** A pivot gathers the rows of a range by a field and puts the numbers of another field together, and the summary is derived (§455) | §455 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30101,3 +30102,70 @@ range is a field, and the header cell of that column is its name.
 - **The tree's table may be taken away and turned into a plain
   range.** Here a table that is taken away leaves the cells where they
   are, and nothing says they were a table.
+
+## 455. The pivot of a sheet
+
+A **pivot** summarises a range of cells: the rows are gathered by the
+value of one **field**, and the numbers of another field are put
+together — summed, averaged, or the largest or the smallest of them.
+
+### What was built
+
+- **Three commands** in the grid battery: `grid.pivot.create` to make a
+  pivot of a sheet, `grid.pivot.read` to read its summary, and
+  `grid.pivot.remove` to take it away.
+- A pivot is a **fact of the sheet** — the range it reads, the field it
+  gathers by, the field it spreads the groups over, the field it puts
+  together and the way it puts them together — and the **summary is
+  derived**: it is worked out every time it is asked for, so it cannot
+  be out of date.
+- The **five ways** of putting numbers together: `sum`, `average`,
+  `min`, `max` and `count`. A way that is not one of them is refused.
+- The **rules**: the fields are columns of the range and the range has
+  a **header** — the header cell of a field names the field, and a
+  cell that holds nothing or a number does not name one, so the pivot
+  is refused and the refusal says which cell; a cell of the **value
+  field** that holds **text** is not a number, and a number cannot be
+  put together with a text, so the summary is refused and the refusal
+  says which cell; and a group of rows that holds **no number** has
+  **no value** — the answer is nothing, and nothing is written as
+  nothing and not as a zero.
+- The groups are in the **tree's order** — the numbers before the
+  text, and the empty cells last — and a row whose key is empty is in
+  the group **`(blank)`**, which says what it is.
+
+### What the port found
+
+- **The tree's pivot is a thing that is worked on.** The tree's pivot
+  may be **filtered**, **sorted**, given **subtotals** and **refreshed**
+  by a command, and what it shows is a summary that is kept. Here the
+  pivot is the **definition** and the summary is worked out from the
+  cells as they are, and the price of that is the price the tree's own
+  rule asks for: a value that is never written down cannot be wrong.
+- **The tree's pivot is refreshed by a command and here there is
+  nothing to refresh.** The summary is derived, so it is always the
+  summary of the cells as they are, and a refresh would be a command
+  that changes nothing.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/pivots.rs`): the numbers of
+  a group being summed, the groups being spread over the columns, the
+  average, the count, a group with no number having no value, a
+  header that does not name a field being refused, a value that is not
+  a number being refused, a way that is not one of the five being
+  refused, the summary following the cells, and a pivot being taken
+  away.
+- **One new module** (`pivots`): the pivots of a sheet are their own.
+  The grid battery now carries **79** commands and the MCP server
+  **613**.
+
+### What it does not settle
+
+- **The tree's pivot is written into the sheet and may be read back
+  from it.** Here the pivot is a fact of the sheet, and the summary
+  is derived from it, so there is no summary stored to be read.
+- **The tree's pivot may be laid out, filtered, refreshed and drilled
+  into.** Here it summarises and nothing else.
+- **The tree's pivot may be a chart.** Here a pivot is a table of
+  numbers, and a chart is not built.
