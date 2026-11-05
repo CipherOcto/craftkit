@@ -999,7 +999,7 @@ different commands with one id.
   unit and not a mock. The **tenth** crate that may hold `unsafe`
   (§122).
 
-**3374 tests.** The MCP server links **all fifteen batteries** in, so the
+**3383 tests.** The MCP server links **all fifteen batteries** in, so the
 workspace's count is the same with or without the studio's features
 (`craftkit-studio/vector`, `/sound`, `/pdf`, `/film`, `/fx`, `/art`,
 `/grid`, `/cad`, `/prose`, `/layout`, `/numeric`, `/text`, `/image`,
@@ -1101,7 +1101,7 @@ the sentence the whole of phase one was about.
 
 ```bash
 cd v2
-cargo test          # 3374 tests
+cargo test          # 3383 tests
 cargo run -p craftkit-studio
 ```
 
@@ -3899,6 +3899,7 @@ so.
 | the **printing** of a sheet | **built.** A sheet is printed on a paper with margins, and the pages it breaks into are derived from the paper and the sizes of the rows and the columns (§462) | §462 |
 | the **equation** of a document | **built.** An equation is a block whose parts are the equation, and its text is derived from them — five kinds of part and one line of text (§463) | §463 |
 | the **import** of a text | **built.** A text of values becomes a sheet of cells, and the rows of the text are the same length or the text is refused (§464) | §464 |
+| the **area** a sheet prints | **built.** The area that is printed may be set and the pages are of it, and a page may be broken by hand where the paper does not break it (§465) | §465 |
 
 ### The list of things that are honestly not there: empty
 
@@ -30707,3 +30708,53 @@ writing, and it may be brought into a workbook as a sheet.
 - **The tree's import asks about the text and may change how it is
   read** — the delimiter, the encoding, the date and the number
   formats. Here the text is read as it is, and a number is a number.
+
+## 465. The area a sheet prints and the breaks in it
+
+A sheet may print **one area** and not the whole of itself, and a
+page may be **broken** by hand where the paper does not break it.
+
+### What was built
+
+- **Two commands** in the grid battery: `grid.print.area` to set the
+  area that is printed — and to take it away, so that the sheet prints
+  the range it uses — and `grid.print.break` to put a break in a sheet
+  or to take it away.
+- The **area** is a range of cells, and an area of one cell is
+  refused: an area of one cell is a cell.
+- A **break** is a place where a page **begins** — a row or a column,
+  and not both — and the **pages** are broken there as well as at the
+  paper's own breaks.
+- The setup of a sheet says the **area** and the **breaks**, and the
+  breaks are said in the units the commands take: a row is counted
+  from one and a column is a letter.
+
+### What the port found
+
+- **The tree's break is a command with three shapes** — insert, remove
+  and reset — and its break is put at a cell, so that the row and the
+  column are said together. Here a break is **one** row or **one**
+  column, and a command that takes a cell says two things at once.
+- **The tree's print area is trimmed to the used range** when it
+  covers whole rows or whole columns, because a whole row of a sheet
+  is a thousand rows of paper. Here the area is what it says, and the
+  pages are of the area.
+
+### What it cost
+
+- **Nine tests** in the grid battery (`tests/printarea.rs`): the area
+  being set, an area of one cell being refused, the pages being of the
+  area, the area being taken away, a break being a place where a page
+  begins, a break being taken away, a break that is both a row and a
+  column being refused, a break that is neither being refused, and a
+  column break breaking the columns.
+- **Two new commands** in the module of the printing (`printing`): the
+  area and the breaks are the other half of the pages. The grid
+  battery now carries **88** commands and the MCP server **637**.
+
+### What it does not settle
+
+- **The tree's print titles are not here** — the rows and the columns
+  that are printed on every page — and neither is its scaling to fit.
+- **The tree's header and footer are not here**, and neither is its
+  printing of the gridlines and the headings.
