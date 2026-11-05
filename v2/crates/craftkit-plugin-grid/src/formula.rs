@@ -149,6 +149,27 @@ impl Anchor {
         })
     }
 
+    /// The anchor with **rows inserted** at `at`.
+    ///
+    /// A reference whose row is **anchored** — the `$` before the
+    /// number — does not move, and a reference above the row the rows
+    /// are inserted at does not move either. A reference at or below it
+    /// moves down by the number of rows inserted.
+    pub fn inserted(&self, at: u64, count: u64) -> Anchor {
+        if self.row_abs {
+            return *self;
+        }
+        let row = self.cell.row as u64 + 1;
+        if row < at {
+            return *self;
+        }
+        Anchor {
+            cell: CellRef { col: self.cell.col, row: self.cell.row + count as u32 },
+            row_abs: self.row_abs,
+            col_abs: self.col_abs,
+        }
+    }
+
     pub fn to_text(self) -> String {
         let mut text = String::new();
         if self.col_abs {
@@ -2514,6 +2535,52 @@ impl Expr {
         }
     }
 
+    /// The expression with **rows inserted** at `at`.
+    ///
+    /// A reference that names **another sheet** does not move: the
+    /// rows of that sheet are not the rows that were inserted. A
+    /// reference that names this sheet — or names none — moves when it
+    /// is at or below the row the rows are inserted at, and when its
+    /// row is not anchored.
+    pub fn inserted(&self, sheet: &str, at: u64, count: u64) -> Expr {
+        let names_this_sheet = |named: &Option<String>| match named {
+            None => true,
+            Some(name) => name.eq_ignore_ascii_case(sheet),
+        };
+        match self {
+            Expr::Cell { sheet: named, anchor } => {
+                if names_this_sheet(named) {
+                    Expr::Cell { sheet: named.clone(), anchor: anchor.inserted(at, count) }
+                } else {
+                    self.clone()
+                }
+            }
+            Expr::Range { sheet: named, start, end } => {
+                if names_this_sheet(named) {
+                    Expr::Range {
+                        sheet: named.clone(),
+                        start: start.inserted(at, count),
+                        end: end.inserted(at, count),
+                    }
+                } else {
+                    self.clone()
+                }
+            }
+            Expr::Name(name) => Expr::Name(name.clone()),
+            Expr::Call(name, arguments) => Expr::Call(
+                name.clone(),
+                arguments.iter().map(|argument| argument.inserted(sheet, at, count)).collect(),
+            ),
+            Expr::Negate(inner) => Expr::Negate(Box::new(inner.inserted(sheet, at, count))),
+            Expr::Binary(operator, left, right) => Expr::Binary(
+                operator.clone(),
+                Box::new(left.inserted(sheet, at, count)),
+                Box::new(right.inserted(sheet, at, count)),
+            ),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => self.clone(),
+        }
+    }
+
     /// The formula's **text**: the expression written out.
     ///
     /// The tree's printer writes an expression back out, and a copied
@@ -2552,6 +2619,18 @@ pub fn shift_in_formula(text: &str, row_delta: i64, col_delta: i64) -> Option<St
     let expression = parse(text).ok()?;
     let shifted = expression.shifted(row_delta, col_delta)?;
     let printed = shifted.to_text();
+    if text.trim_start().starts_with('=') { Some(format!("={printed}")) } else { Some(printed) }
+}
+
+/// The formula's **text** with **rows inserted** at `at`.
+///
+/// The text is parsed, the rows are inserted and the expression is
+/// printed. A formula that does not parse is `None`: a formula that
+/// cannot be read is not changed.
+pub fn insert_in_formula(text: &str, sheet: &str, at: u64, count: u64) -> Option<String> {
+    let expression = parse(text).ok()?;
+    let inserted = expression.inserted(sheet, at, count);
+    let printed = inserted.to_text();
     if text.trim_start().starts_with('=') { Some(format!("={printed}")) } else { Some(printed) }
 }
 

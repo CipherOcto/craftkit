@@ -354,6 +354,7 @@ mod hiding;
 mod hypotheses;
 mod importing;
 mod information;
+mod inserting;
 mod links;
 mod logic;
 mod lookups;
@@ -414,6 +415,7 @@ pub use goals::{GoalScan, GoalSeek};
 pub use headers::{SetFooter, SetHeader};
 pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
 pub use importing::{ImportCsv, ImportJson};
+pub use inserting::InsertRow;
 pub use links::{DeleteLink, GetLink, SetLink};
 pub use marks::{SetPrintGridlines, SetPrintHeadings};
 pub use merges::{ClearMerge, SetMerge};
@@ -1767,6 +1769,7 @@ craftkit_sdk::plugin_anchor!(
     SetBorder,
     GetBorder,
     ClearBorder,
+    InsertRow,
     GroupRows,
     UngroupRows,
     ReadGroups,
