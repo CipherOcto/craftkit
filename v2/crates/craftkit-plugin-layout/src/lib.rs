@@ -68,6 +68,7 @@ mod order;
 mod paint;
 mod radii;
 mod rotation;
+mod shadows;
 mod styles;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
@@ -85,6 +86,7 @@ pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
 pub use paint::{SetFill, SetStroke};
 pub use radii::SetRadius;
 pub use rotation::RotateItem;
+pub use shadows::SetShadow;
 pub use styles::{AddStyle, SetItemStyle, SetStyleFill, SetStyleStroke};
 
 /// The layout layer.
@@ -332,6 +334,7 @@ macro_rules! item_kind {
                         .map(|radius| json!(radius))
                         .unwrap_or(Json::Null),
                     "corners": crate::radii::corners_json(node),
+                    "shadow": crate::shadows::shadow_json(node),
                     "locked": crate::items::is_locked(node),
                     "hidden": node.muted,
                 }))
@@ -905,6 +908,7 @@ craftkit_sdk::plugin_anchor!(
     ScaleItem,
     RotateItem,
     SetRadius,
+    SetShadow,
     ListItems,
     BringToFront,
     SendToBack,
