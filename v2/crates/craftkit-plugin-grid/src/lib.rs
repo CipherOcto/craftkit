@@ -323,6 +323,7 @@
 
 mod arithmetic;
 mod bonds;
+mod borders;
 mod cashflows;
 mod cellread;
 mod charts;
@@ -396,6 +397,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+pub use borders::{ClearBorder, GetBorder, SetBorder};
 pub use cellread::ReadCell;
 pub use charts::{AddChart, ReadChart, RemoveChart, SetChart};
 pub use clearing::{ClearContents, ClearFormat};
@@ -1519,12 +1521,17 @@ impl ClearCell {
         let mut links = links::links_of(node);
         let had_link = links.remove(&cell.to_text()).is_some();
         node.data["links"] = links::links_into(&links);
+        // The **border** goes with the cell: the tree's *clear all*
+        // takes the style of the cell with it, and the border is part
+        // of the style.
+        let had_border = crate::borders::take_borders(node, &cell.to_text());
         Ok(Outcome::changed(format!("emptied the cell {}", cell.to_text())).with_data(json!({
             "sheet": sheet,
             "cell": cell.to_text(),
             "was_there": was_there,
             "had_note": had_note,
             "had_link": had_link,
+            "had_border": had_border,
         })))
     }
 }
@@ -1753,6 +1760,9 @@ craftkit_sdk::plugin_anchor!(
     SetLink,
     SetNote,
     SortRange,
+    SetBorder,
+    GetBorder,
+    ClearBorder,
     SetPicture,
     ReadPicture,
     RemovePicture,

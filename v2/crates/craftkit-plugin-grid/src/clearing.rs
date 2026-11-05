@@ -98,7 +98,12 @@ impl ClearFormat {
         let mut cells = crate::cells_of(node);
         let had = cells.clear_format(cell);
         node.data["cells"] = crate::cells_into(&cells);
-        Ok(Outcome::changed(format!("the format of the cell {} is gone", cell.to_text()))
-            .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "had": had })))
+        // The **border** is part of the formatting: the tree's *clear
+        // formats* clears the style of the cell, and the border is in
+        // the style.
+        let had_border = crate::borders::take_borders(node, &cell.to_text());
+        Ok(Outcome::changed(format!("the format of the cell {} is gone", cell.to_text())).with_data(
+            json!({ "sheet": sheet, "cell": cell.to_text(), "had": had, "had_border": had_border }),
+        ))
     }
 }
