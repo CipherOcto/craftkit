@@ -3963,6 +3963,7 @@ so.
 | the **total row** of a table | **built.** A table may have a total row, and the totals are derived from the cells — the last row is the total row and is not counted in the total (§526) | §526 |
 | the **way** a table totals | **built.** A table may total in many ways — a sum, an average, a count — and a way that is not one of them is refused (§527) | §527 |
 | the **way of a column** of a table | **built.** A column may be totalled in a way of its own, and the way of the table is the way of the columns that have none (§528) | §528 |
+| the **kind and the flags** a field inherits | **built.** A field that says nothing takes the kind and the flags of its parent, and a field that says its own replaces what it would inherit (§529) | §529 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34673,3 +34674,74 @@ of a sale may be **summed** while the number of the sales is
 - **The ways are not written into the file**: the tree keeps them in
   the table's own record and writes them into the workbook's XML,
   and here they are in the sheet's payload only.
+
+## 529. The kind and the flags a field inherits
+
+A field of a form may **say nothing** about itself: it may have a
+name and no kind, and take the kind of the field it is in.
+
+### What was built
+
+- **One command** in the pdf battery: `pdf.field.inherit`. It says
+  what a field inherits and **which object it comes from**, and the
+  reading of the fields says the kind and the flags the field ends up
+  with — and which of them the file says itself.
+- A field that does not say what it is takes the **kind of its
+  parent**, and a field that does not say how it behaves takes the
+  **flags of its parent**.
+- The **rules**:
+  - a field that says its own kind or its own flags **replaces** what
+    it would have inherited — the two are not added together, and a
+    field that says everything inherits **nothing**;
+  - the kind and the flags come from the **nearest ancestor** that
+    says them;
+  - a node that says what it is **called** but has no kind of its own
+    is a field once it is in a field, and a node that has no name is
+    refused;
+  - the chain of parents is **bounded**, and a **cycle** ends it, so
+    that a field that is its own ancestor still has an answer.
+
+### What the port found
+
+- **The tree's field is the terminal field and here it is the object**:
+  the tree's list of fields holds the fields that have no fields of
+  their own, and a field with children is a **group** of them and not
+  a field. Here every object that says what it is — or that inherits
+  what it is — is a field, and the group is a field too.
+- **The tree's inheritance is down the tree and here it is up the
+  parents**: the tree walks the field tree from the form downwards,
+  carrying the kind, the flags, the value and the appearance down
+  into the children. Here the fields are objects and the relation runs
+  the other way — a field has a parent, and the kind and the flags
+  come **from** the parent.
+- **The tree's child replaces what it would inherit and here it does
+  too**: the tree's walk overwrites the inherited flags with the
+  child's own, and it does not add them together. That rule is the
+  tree's, and it is kept.
+- **The tree's inherited facts are more than the kind and the flags**:
+  the tree also inherits the value, the default value, the default
+  appearance, the way the text is aligned and the maximum length. Only
+  the kind and the flags are here.
+
+### What it cost
+
+- **Ten tests** in the pdf battery (`tests/inherit.rs`): a field
+  that says nothing taking the kind of its parent, a field that says
+  its own kind keeping it, a field that says nothing taking the flags
+  of its parent, a field's own flags replacing the ones it would
+  inherit, what the field inherits being said and where it comes
+  from, a field that says everything inheriting nothing, the kind
+  coming from the nearest ancestor that says one, a node that is not a
+  field being refused, a node that is not there being refused, and a
+  field that is its own ancestor still having an answer.
+- **No new module**: the command grows the fields module. The pdf
+  battery now carries **38** commands and the MCP server **726**.
+
+### What it does not settle
+
+- **The group is still a field**: the tree does not call a field with
+  children a field, and here it is one.
+- **The other inherited facts are not here**: the value, the default
+  value, the appearance and the maximum length do not come down.
+- **The children are not read**: the tree's list of fields is the
+  terminal fields, and here the list holds the groups as well.
