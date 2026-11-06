@@ -20,6 +20,12 @@
 //!   anyway;
 //! - a field **without** a name is named by the number of its object,
 //!   so that it can be asked about.
+//!
+//! And a field may **inherit** from its parent: a field that does not
+//! say what it is takes the kind of its parent, and a field that does
+//! not say how it behaves takes the flags of its parent. A field that
+//! says its own kind or its own flags **replaces** what it would have
+//! inherited — the two are not added together.
 
 use craftkit_derive::Command;
 
@@ -65,12 +71,17 @@ pub struct Field {
     pub object: u64,
     /// What the field is called.
     pub name: String,
-    /// What the field is.
+    /// What the field is: the kind it says, or the kind it inherits.
     pub kind: FieldKind,
+    /// The kind the file says for the field itself.
+    pub own_kind: Option<FieldKind>,
     /// What the field holds now.
     pub value: Option<String>,
-    /// The flags that say how the field behaves.
+    /// The flags that say how the field behaves: the flags it says, or
+    /// the flags it inherits.
     pub flags: f64,
+    /// The flags the file says for the field itself.
+    pub own_flags: Option<f64>,
     /// The options a choice offers: the values it holds.
     pub options: Vec<String>,
     /// The number of the object of the **parent** of the field.
@@ -224,6 +235,77 @@ fn flag_names(flags: f64) -> Vec<&'static str> {
     names
 }
 
+/// The **parent** of a node: the node its `/Parent` names.
+fn parent_of<'a>(document: &'a Document, node: &Node) -> Option<&'a Node> {
+    let entries = entries_of(node);
+    let number = entry(&entries, "Parent").and_then(number_of)?;
+    node_of_number(document, number)
+}
+
+/// The **object number** of a node.
+fn object_of(node: &Node) -> u64 {
+    node.data.get("object").and_then(|number| number.as_u64()).unwrap_or(0)
+}
+
+/// The **kind** a node inherits: the kind of the nearest ancestor that
+/// says one, and the number of the object it comes from.
+///
+/// The chain is **bounded** and a **cycle** ends it, so that a field
+/// that is its own ancestor still has a kind.
+fn inherited_kind(document: &Document, node: &Node) -> Option<(FieldKind, u64)> {
+    // A field that says its own kind inherits none.
+    if entry(&entries_of(node), "FT").and_then(|kind| kind.as_str()).and_then(FieldKind::parse).is_some() {
+        return None;
+    }
+    let mut seen: Vec<u64> = vec![object_of(node)];
+    let mut current = parent_of(document, node);
+    while let Some(parent) = current {
+        if seen.len() > 64 {
+            break;
+        }
+        let object = object_of(parent);
+        if seen.contains(&object) {
+            break;
+        }
+        seen.push(object);
+        let entries = entries_of(parent);
+        if let Some(kind) = entry(&entries, "FT").and_then(|kind| kind.as_str()).and_then(FieldKind::parse) {
+            return Some((kind, object));
+        }
+        current = parent_of(document, parent);
+    }
+    None
+}
+
+/// The **flags** a node inherits: the flags of the nearest ancestor
+/// that says them, and the number of the object they come from.
+///
+/// The chain is **bounded** and a **cycle** ends it.
+fn inherited_flags(document: &Document, node: &Node) -> Option<(f64, u64)> {
+    // A field that says its own flags inherits none.
+    if entry(&entries_of(node), "Ff").and_then(|flags| flags.as_f64()).is_some() {
+        return None;
+    }
+    let mut seen: Vec<u64> = vec![object_of(node)];
+    let mut current = parent_of(document, node);
+    while let Some(parent) = current {
+        if seen.len() > 64 {
+            break;
+        }
+        let object = object_of(parent);
+        if seen.contains(&object) {
+            break;
+        }
+        seen.push(object);
+        let entries = entries_of(parent);
+        if let Some(flags) = entry(&entries, "Ff").and_then(|flags| flags.as_f64()) {
+            return Some((flags, object));
+        }
+        current = parent_of(document, parent);
+    }
+    None
+}
+
 /// The **fields** of a document, in the order the document has them.
 pub fn fields_of(document: &Document) -> Vec<Field> {
     let mut fields: Vec<Field> = Vec::new();
@@ -232,9 +314,26 @@ pub fn fields_of(document: &Document) -> Vec<Field> {
             continue;
         }
         let entries = entries_of(node);
-        let Some(kind) = entry(&entries, "FT").and_then(|kind| kind.as_str()).and_then(FieldKind::parse)
-        else {
-            continue;
+        let own_kind = entry(&entries, "FT").and_then(|kind| kind.as_str()).and_then(FieldKind::parse);
+        let own_flags = entry(&entries, "Ff").and_then(|flags| flags.as_f64());
+        // A field that does not say what it is takes the kind of its
+        // parent — and a node that says neither is not a field.
+        let kind = match own_kind {
+            Some(kind) => kind,
+            None => {
+                let has_name = entry(&entries, "T").and_then(text_of).is_some();
+                if !has_name {
+                    continue;
+                }
+                match inherited_kind(document, node) {
+                    Some((kind, _)) => kind,
+                    None => continue,
+                }
+            }
+        };
+        let flags = match own_flags {
+            Some(flags) => flags,
+            None => inherited_flags(document, node).map(|(flags, _)| flags).unwrap_or(0.0),
         };
         let object = node.data.get("object").and_then(|object| object.as_u64()).unwrap_or(0);
         let name = match qualified_name(document, node) {
@@ -244,12 +343,11 @@ pub fn fields_of(document: &Document) -> Vec<Field> {
         let parent = entry(&entries, "Parent").and_then(number_of);
         let value = entry(&entries, "V")
             .and_then(|value| text_of(value).or_else(|| value.as_str().map(|v| v.to_string())));
-        let flags = entry(&entries, "Ff").and_then(|flags| flags.as_f64()).unwrap_or(0.0);
         let options = match entry(&entries, "Opt") {
             Some(options) => options_of(options),
             None => Vec::new(),
         };
-        fields.push(Field { object, name, kind, value, flags, options, parent });
+        fields.push(Field { object, name, kind, own_kind, value, flags, own_flags, options, parent });
     }
     fields
 }
@@ -297,8 +395,10 @@ impl ReadFields {
                     "object": field.object,
                     "name": field.name.clone(),
                     "kind": field.kind.name(),
+                    "own_kind": field.own_kind.map(|kind| json!(kind.name())).unwrap_or(Json::Null),
                     "value": field.value.clone().map(|value| json!(value)).unwrap_or(Json::Null),
                     "flags": field.flags,
+                    "own_flags": field.own_flags.map(|flags| json!(flags)).unwrap_or(Json::Null),
                     "flag_names": flag_names(field.flags),
                     "options": field.options.clone(),
                     "parent": field.parent.map(|parent| json!(parent)).unwrap_or(Json::Null),
@@ -399,6 +499,73 @@ impl SetField {
     }
 }
 
+/// **Say** what a field **inherits** from its parents.
+///
+/// A field that does not say what it is takes the kind of its parent,
+/// and a field that does not say how it behaves takes the flags of its
+/// parent. A field that says its own kind or its own flags
+/// **replaces** what it would have inherited — the two are not added
+/// together.
+///
+/// The rules:
+///
+/// - a node that is **not a field** is refused;
+/// - the chain of parents is **bounded**, and a **cycle** ends it, so
+///   that a field that is its own ancestor still has an answer.
+#[derive(Command)]
+#[command(id = "pdf.field.inherit", area = "pdf", layer = "pdf", icon = "link")]
+pub struct ReadInherited {
+    /// The field.
+    pub field: NodeRef,
+}
+
+impl ReadInherited {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.field.inherit".to_string();
+        let field = self.field.0;
+        let document = session.document();
+        let Some(node) = document.node(field).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{field}`"),
+            });
+        };
+        let Some(found) = field_of(document, &node) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{field}` is not a field"),
+            });
+        };
+        let kind = inherited_kind(document, &node);
+        let flags = inherited_flags(document, &node);
+        // The **chain**: the parents of the field, nearest first.
+        let mut chain: Vec<u64> = Vec::new();
+        let mut current = parent_of(document, &node);
+        while let Some(parent) = current {
+            if chain.len() > 64 {
+                break;
+            }
+            let object = object_of(parent);
+            if chain.contains(&object) {
+                break;
+            }
+            chain.push(object);
+            current = parent_of(document, parent);
+        }
+        Ok(Outcome::new(format!("the field `{field}` inherits from {} parent(s)", chain.len())).with_data(
+            json!({
+                "field": field,
+                "name": found.name.clone(),
+                "kind": kind.map(|(kind, _)| json!(kind.name())).unwrap_or(Json::Null),
+                "kind_from": kind.map(|(_, object)| json!(object)).unwrap_or(Json::Null),
+                "flags": flags.map(|(flags, _)| json!(flags)).unwrap_or(Json::Null),
+                "flags_from": flags.map(|(_, object)| json!(object)).unwrap_or(Json::Null),
+                "chain": chain,
+            }),
+        ))
+    }
+}
+
 /// **Put** a field in a field.
 ///
 /// A field may have a **parent**: the field it belongs to. The name
@@ -407,7 +574,10 @@ impl SetField {
 ///
 /// The **rules**:
 ///
-/// - the field and the parent must both be **fields**;
+/// - the parent must be a **field**;
+/// - the field must be a field, or a node that says what it is
+///   **called** — a field that has not said what it is yet is a field
+///   once it is in one;
 /// - a field may not be **its own** parent;
 /// - a parent that is **below** the field would make a **loop**, and
 ///   a loop is refused.
@@ -432,12 +602,16 @@ impl SetParent {
                 message: format!("there is no node `{field}`"),
             });
         };
-        let Some(found) = field_of(session.document(), &node) else {
+        // The field may be a field, or a node that says what it is
+        // called: a field that has not said what it is yet becomes one
+        // when it is put in a field.
+        let found = field_of(session.document(), &node);
+        if found.is_none() && entry(&entries_of(&node), "T").and_then(text_of).is_none() {
             return Err(EngineError::Failed {
                 id: id.clone(),
-                message: format!("the node `{field}` is not a field"),
+                message: format!("the node `{field}` has no name, and a field is named"),
             });
-        };
+        }
         let document = session.document();
         match self.parent {
             None => {
@@ -486,7 +660,7 @@ impl SetParent {
                         break;
                     }
                     seen.push(object);
-                    if object == found.object {
+                    if object == object_of(&node) {
                         return Err(EngineError::Failed {
                             id: id.clone(),
                             message: format!(
