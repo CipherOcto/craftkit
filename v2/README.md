@@ -3979,6 +3979,7 @@ so.
 | the **encryption** of a file | **built.** A file says what it is encrypted with and what a person may do with it, and the permissions are said in words (§542) | §542 |
 | the **calculation** of a field | **built.** A field may say how its value is worked out, and the simple way and the expression are read — a script that is not understood is said so (§543) | §543 |
 | the **form** of a file | **built.** The catalog names the form, and the form says which fields it has, whether the reader is to make the appearances and the order the calculated fields are calculated in (§544) | §544 |
+| the **appearance** of a field | **built.** The appearance is read — the box it is drawn in, the matrix that places it, the operators of its stream and the states it has (§545) | §545 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35695,3 +35696,56 @@ names it.
   make them, and this tree reads that and draws nothing.
 - **The default resources are not used**: they are read as the pairs
   they hold, and no field is drawn with them.
+
+## 545. The appearance of a field
+
+A field that is shown on a page has an **appearance**: the stream that
+draws it.
+
+### What was built
+
+- The new module `appearance` reads the appearance of a widget:
+  - the **box** it is drawn in (`/BBox`) and the **matrix** that
+    places it (`/Matrix`);
+  - the **operators** of its stream — the same reading the content
+    module gives for a page's content;
+  - the **states** of an appearance that has more than one — a button
+    has one drawing for the state it is off in and another for the
+    state it is on in — and the field's value says which state it is
+    in.
+- The command **`pdf.field.appearance`** reads the appearance of one
+  field. A field that says nothing about its appearance has none, and
+  the answer says so.
+
+### What the port found
+
+- **The tree's appearance is a form XObject, and it has a box and a
+  matrix**: the tree draws a field from the appearance stream and
+  places it with the matrix, and both are read here — this tree reads
+  them and draws nothing.
+- **The tree's button has one appearance per state**: the tree names
+  the state the field is in and draws that one, and the same rule is
+  here — the value says which state it is in.
+- **A field with no appearance is a field the reader must draw**: the
+  tree's file may ask the reader to make the appearances, and the
+  tree does not pretend that a field it cannot see is a field that
+  looks like something.
+
+### What it cost
+
+- **Five tests** in the pdf battery (`tests/appearance.rs`): the box
+  and the matrix of an appearance, the operators of an appearance, the
+  states of an appearance, a field without an appearance, and a field
+  that is not there.
+- **One new module** (`src/appearance.rs`) and **one new command**
+  (`pdf.field.appearance`). The pdf battery now carries **49**
+  commands and the MCP server **739**.
+
+### What it does not settle
+
+- **The appearance is not drawn**: the operators are read and nothing
+  is painted — the drawing of a field is the evaluator's business.
+- **The resources of the appearance are not read**: the fonts and the
+  other things the appearance uses are not resolved.
+- **The appearance is not written**: a field's appearance may be said,
+  and this tree only reads it.
