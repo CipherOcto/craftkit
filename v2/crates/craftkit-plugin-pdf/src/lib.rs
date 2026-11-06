@@ -129,6 +129,7 @@ mod annot;
 mod boxes;
 mod content;
 mod convert;
+mod encrypt;
 mod fields;
 mod filters;
 mod fonts;
@@ -158,6 +159,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 pub use annot::SetAnnotationFlags;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use convert::Convert;
+pub use encrypt::ReadEncryption;
 pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField, SetFlags, SetParent};
 pub use fonts::ReadFonts;
 pub use information::SetInformation;
@@ -2047,6 +2049,7 @@ craftkit_sdk::plugin_anchor!(
     WriteMetadata,
     WriteIntent,
     SetAnnotationFlags,
+    ReadEncryption,
     SetField,
     SetFlags,
     SetParent,
