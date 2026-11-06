@@ -3983,6 +3983,7 @@ so.
 | the **validation** of a field | **built.** A field may say what it accepts, and the range it accepts is read — a script that is not understood is said so (§546) | §546 |
 | the **format** of a field | **built.** A field may say how its text is shown — a number, a percentage, a date, a special form or a mask — and the script is read (§547) | §547 |
 | the **text of a column**, cut into columns | **built.** The text of a column may be several values, and it is cut at the delimiter — a qualifier keeps the delimiter inside a part (§548) | §548 |
+| the **duplicates** of a range | **built.** A range may hold the same row twice, and the first row of each kind is kept and the rest are emptied (§549) | §549 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35929,3 +35930,64 @@ A column may hold text that is really **several values**.
   columns that are there, and a sheet has so many columns.
 - **The text is not trimmed**: a part keeps the spaces around it,
   because a space in a text is part of the text.
+
+## 549. The duplicates of a range
+
+A range may hold the same row twice — a list that was pasted in
+twice, a table that was joined with itself.
+
+### What was built
+
+- The new command **`grid.duplicates.remove`** keeps the first row of
+  each kind and empties the rows that hold what an earlier row holds
+  already:
+  - the **key** of a row is what the **chosen columns** show: the
+    display of a cell is what a person reads, and two cells that show
+    the same thing are the same thing;
+  - the **first** row of a key is the one that is kept;
+  - the rows that go are **emptied**, not shifted: a row is a place
+    in the sheet, and the place of a row that is gone is empty — and
+    the cells keep their format, because the format of a cell is a
+    fact of its own;
+  - a row whose key is **empty** is left alone: there is nothing to
+    compare;
+  - the **header** is said and not guessed: a header is a fact, and a
+    fact that is not said is not there;
+  - a range that holds a **merge** is refused, because a merged
+    region is one cell and a row of a range is not.
+
+### What the port found
+
+- **The tree's key is the value as it is shown**: the tree compares
+  what the cells show, and this tree does the same — two numbers that
+  are the same number are the same thing, whatever they were typed
+  as.
+- **The tree's header is a guess and this tree's is a fact**: the
+  tree guesses whether the first row is a header, and this tree asks
+  — a header that is not said is not there, and a guess that is
+  wrong removes a row a person wanted.
+- **The tree shifts the rows up and this tree empties them**: the
+  tree's remove duplicates keeps one row and moves the rest up; here
+  the row that is a duplicate is emptied and the rows below it stay
+  where they are, because a row is a place and a place that is moved
+  is a fact that is changed quietly.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/duplicates.rs`): the
+  duplicate rows emptied, the key made of some columns only, the
+  header that stays where it is, two cells that show the same thing,
+  a row whose key is empty, and a column that is not in the range.
+- **One new module** (`src/duplicates.rs`) and **one new command**
+  (`grid.duplicates.remove`). The grid battery now carries **124**
+  commands and the MCP server **743**.
+
+### What it does not settle
+
+- **The rows are not shifted**: the rows below a duplicate row keep
+  their places, and the duplicate row is an empty row.
+- **The formulas are not moved**: a cell that holds a formula is
+  emptied like any other.
+- **The range is not looked at again**: a duplicate of a row that was
+  itself emptied is not a duplicate of anything, because the row is
+  empty and an empty row has no key.
