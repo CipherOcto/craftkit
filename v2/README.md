@@ -3936,6 +3936,7 @@ so.
 | the **column** that is deleted | **built.** A column may be deleted from a sheet, and the columns to the right of it move left — and a formula that names a cell in the deleted columns refuses the delete, because this tree has no #REF! yet (§499) | §499 |
 | the **facts** that name an area | **built.** A conditional format, a validation and a sparkline name an area of cells, and the area moves with the rows and the columns that are inserted or deleted — and an area that covers part of what is deleted refuses (§500) | §500 |
 | the **table** and the **pivot** that move | **built.** A table and a pivot name an area of cells, and the area moves with the rows and the columns that are inserted or deleted — and a pivot gathers by the letters of its columns, so those move with it (§501) | §501 |
+| the **chart** and the **name** that move | **built.** A chart reads a range and a name of the workbook stands for a range, and both move with the rows and the columns that are inserted or deleted — and nothing a sheet holds refuses an insert or a delete any more (§502) | §502 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32983,3 +32984,75 @@ field. Both name an area, and both move with it.
 - **A pivot is named by the letters of its columns** and not by their
   headers, so a pivot whose header text is changed afterwards is a
   pivot whose field no longer names the column it means.
+
+## 502. The chart and the name that move
+
+A sheet may hold a **chart** that reads a range, and a **workbook** may
+hold a **name** that stands for a range of a sheet. Both name an area,
+and both move with it.
+
+### What was built
+
+- **No new command**: this arc lifts the last two refusals. The four
+  commands that move things now move **everything** a sheet holds.
+- A **chart** is a child of the sheet, and it reads a **range**: the
+  range moves with the rows and with the columns.
+  - a chart that reads a range that is **wholly deleted** has no range
+    left to read, and it is **taken away** — a chart that reads nothing
+    is not a chart;
+  - a chart that reads a range that **covers part** of what is deleted
+    refuses the delete.
+- A **name** of the workbook stands for a range of a sheet, and the
+  range moves:
+  - a name that points at rows that are **wholly deleted** goes away —
+    a name of nothing is not a name;
+  - a name that points at a range that **covers part** of what is
+    deleted refuses the delete.
+- And so: **nothing** a sheet holds refuses an insert or a delete any
+  more. Every fact of a sheet is either moved or left alone, and the
+  refusal that is left is the one that was always there — a
+  **protected** sheet, whose cells are locked.
+
+### What the port found
+
+- **The tree's chart has an anchor** — the cell it is drawn at — and
+  the anchor moves with the rows. This tree's chart has no anchor: it
+  reads a range, and the range moves. Where the tree says a chart is
+  drawn is not here.
+- **The tree keeps the chart inside the sheet's own structure**, and
+  so the sheet and its charts are moved by one thing. Here the chart is
+  a **child node**, so moving it means writing to the document and not
+  to the sheet's payload — and a chart that loses its range has to be
+  **taken away**, which is a thing a payload cannot do.
+- **The tree's delete writes the error into what it cannot move**; here
+  the thing that cannot be moved refuses the delete and says what it
+  is, and the refusal is the same for a cell, a chart and a name.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/movingcharts.rs`): a name
+  moving with the rows, a name moving with the columns, a name that
+  points at a deleted row being refused, a name that points at rows
+  that are gone going away, a chart that reads a deleted row being
+  refused, a chart that reads rows that are gone going away, and a
+  chart of another sheet being left alone.
+- **One module** (`moving`) grows three functions: the way a **chart**
+  moves, the way the **names** of a workbook move, and the way an
+  **area** moves. The grid battery still carries **120** commands and
+  the MCP server **702**.
+- **Three tests** in the batteries of the row and the column now say
+  that a **chart moves**: the chart they used was the thing this tree
+  could not move, and it moves now.
+
+### What it does not settle
+
+- **There is no `#REF!`**: a fact whose area covers part of the band
+  that is deleted refuses, where the tree writes the error.
+- **A chart that reads nothing is taken away** rather than left reading
+  a range that is not there — and the tree writes the error into the
+  chart and leaves it.
+- **The names of the workbook that point at another sheet are left
+  alone**, because the rows of that sheet are not the rows that were
+  moved.
+- **The chart is not drawn**: this tree says what a chart reads, and
+  not where it stands.
