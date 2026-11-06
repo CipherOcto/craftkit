@@ -4001,6 +4001,7 @@ so.
 | the **text** of a page | **built.** A page's content is read as the operators show it — the pieces of text, the operator that showed each one, and how its bytes were read (§564) | §564 |
 | the **attachments** of a file | **built.** A file may carry files of its own — the name, the description, the kind, the size and the bytes of each are read (§565) | §565 |
 | the **layers** of a file | **built.** A file may hold layers — the name of each, its intent, and whether it is shown when the file is opened (§566) | §566 |
+| the **appearance** of a field is written | **built.** A field may be given a drawing of its own — the value in the box of the widget, with the font and the size the field says (§567) | §567 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36950,3 +36951,76 @@ parts that are hidden.
   list is in, and the tree does not make a tree of it.
 - **The contents of a layer are not matched to it**: a layer says what
   it is, and the content that belongs to it is not looked for.
+
+## 567. The appearance of a field is written
+
+A field that a reader is to see may be given a **drawing of its
+own**.
+
+### What was built
+
+- The new command **`pdf.field.appearance.write`** writes the
+  appearance of a field:
+  - the drawing is a **form XObject** — a little drawing — with the
+    box of the widget, and the font it draws with;
+  - the widget's `/AP` names it under the key `N`;
+  - the bytes of the drawing go to a **file** of their own, beside
+    the document, and the node of the appearance says which file they
+    are in.
+- The rules:
+  - the widget must have a **rectangle**, for the drawing to be drawn
+    in;
+  - the **value** is the one the widget holds, or the one it inherits
+    from the field it belongs to, and a widget that holds none is
+    refused;
+  - the **size** and the **font** come from the default appearance
+    (`/DA`), and a field that says none is refused;
+  - the font must be **in the file** — in the page's resources or in
+    the form's — and a font that is not there is refused;
+  - the text is drawn at the **top left** of the box, two points from
+    its edge, and the drawing is **clipped** to the box;
+  - a character of the value that has **no byte** is refused: a value
+    that cannot be written is not written.
+
+### What the port found
+
+- **The tree's drawing is placed and this one is not**: the tree reads
+  the quadding of the field (`/Q`) and puts the text in the middle or
+  at the right, and it measures the text with the widths of Helvetica
+  to do it. Here the text is drawn at the top left, two points from
+  the edge, and the width of the text is not measured at all.
+- **The tree's font falls back and this one refuses**: when the font
+  of the default appearance is not in the form's resources, the tree
+  makes a Helvetica of its own and draws with it. Here a font that is
+  not in the file is refused, because the drawing would name a font
+  the file does not have.
+- **The tree's text is WinAnsi and this one is the bytes**: the tree
+  writes the value in the standard encoding it knows. Here the bytes
+  of the value are written as they are, and a character that has no
+  byte in a byte is refused.
+- **The tree draws the frame**: the tree draws the border of the
+  field when the field says it has one, and it draws the list of a
+  choice field with the options that are chosen. Here the drawing is
+  clipped to the box and nothing else is drawn.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/writtenappearance.rs`): the
+  appearance that is written, the appearance that is written and read
+  back, the file that is written holding the appearance, and a widget
+  that holds no value.
+- **One new command** (`pdf.field.appearance.write`), in the module
+  that reads the appearance. The pdf battery now carries **60** commands
+  and the MCP server **763**.
+
+### What it does not settle
+
+- **The text is not measured**: the drawing puts the text at the top
+  left, and the size of the text is not worked out, so a long value
+  may run past the box.
+- **The drawing is not made for a button or a choice**: the value of
+  a button is a state and the value of a choice is one of its
+  options, and neither is drawn here.
+- **The size is not made to fit**: a field whose default appearance
+  says a size of zero is refused, and the tree does not shrink the
+  text to fit the box.
