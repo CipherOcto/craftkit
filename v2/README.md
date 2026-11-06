@@ -3948,6 +3948,7 @@ so.
 | the **fonts** of a PDF file | **built.** A file names its fonts, and the preflight says when one of them is not embedded — the rule of the clause 6.2.11.4 (§511) | §511 |
 | the **colour** of a PDF file | **built.** A file that paints in a device colour needs an output intent, and the preflight says when there is none — the clauses 6.2.3 and 6.2.4.3 (§512) | §512 |
 | the **trailer** of a PDF file | **built.** The trailer is the file's last word, and it is kept in the document — and the preflight says when the file was encrypted (§513) | §513 |
+| the **alt text** of a picture | **built.** A picture says what it is, and an empty text takes the words away — and a picture that says nothing has no alt text (§514) | §514 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33771,3 +33772,56 @@ file's index is, which object is the catalog, and — when the file is
 - **The tree's preflight checks the file and not the document**: here
   the rule can only be seen in a document that was loaded from a
   file, and a document that was built by hand has no trailer.
+
+## 514. The alt text of a picture
+
+A picture that says nothing about itself is not there for the reader
+who cannot see it. The words that stand for it are the picture's **alt
+text**.
+
+### What was built
+
+- **One command** in the prose battery: `prose.media.alt`. It says
+  what a picture is, and the picture's own reading says it too.
+- The alt text is a **fact of the picture**, and it is read back by
+  the evaluator: a picture that says nothing about itself has **no**
+  alt text, and the answer is nothing and not an empty text that means
+  the same thing.
+- The **rules**: a node that is **not a picture** may not have alt
+  text — the words stand for a picture, and a paragraph is not a
+  picture; and an **empty** alt text **takes the text away**, because
+  a picture with no text and a picture whose text was taken away are
+  the same picture.
+
+### What the port found
+
+- **The tree's alt text lives in the drawing**: the tree's
+  accessibility checker reads the alt text of a drawing from the
+  drawing itself, and a drawing with no alt text is reported as an
+  error. Here the picture is a **media** of the document, and the alt
+  text is a fact of the media.
+- **The tree's "decorative" is a way of saying nothing on purpose**:
+  the tree skips a drawing that is decorative, because a decorative
+  drawing is not there to be read. This tree has no decorative mark
+  yet, so a picture with no alt text is an error and nothing else.
+
+### What it cost
+
+- **Six tests** in the prose battery (`tests/alt.rs`): a picture that
+  says nothing about itself having no alt text, a picture saying what
+  it is, the alt text being changed and not added twice, an empty alt
+  text taking the text away, a node that is not a picture being
+  refused, and a node that is not there being refused.
+- **One new module** (`media`). The prose battery now carries **58**
+  commands and the MCP server **713**.
+
+### What it does not settle
+
+- **A picture cannot be marked as decorative**: the tree's checker
+  skips a decorative drawing, and this tree has no mark that says
+  "this picture is there for the looks".
+- **The alt text is not read out of a file**: the tree reads the alt
+  text of a picture from the document it is in, and here the picture
+  is a file with a name and the words beside it.
+- **Nothing checks the alt text yet**: the tree's checker says when a
+  picture has none, and the checker is still to come.
