@@ -3996,6 +3996,7 @@ so.
 | the **baking** of an expression into keyframes | **built.** An expression is sampled over the frames and written down as keyframes — and a bake that would be too long is refused (§559) | §559 |
 | the **named destinations** of a file | **built.** A file may give its pages names — the name and the page the destination points at are read (§560) | §560 |
 | the **merged cells** of a table | **built.** A range of cells may be one cell — the top left keeps the value, the covered cells are emptied, and a merge that overlaps another is refused (§561) | §561 |
+| the **signatures** of a file | **built.** A file may be signed — the byte range, the signer, the time and the way it was made are read, and the bytes are not checked (§562) | §562 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36645,3 +36646,57 @@ A table may have cells that are **one cell**.
   merged cell holds the value of its top left cell and nothing more.
 - **The merges of a table are not in the document's outline**: a
   merged cell is a fact of the table and not a thing of its own.
+
+## 562. The signatures of a file
+
+A file may be **signed**.
+
+### What was built
+
+- The new command **`pdf.signatures.read`** reads the signature fields
+  of a file — the fields of the kind `Sig`:
+  - the **byte range** the signature covers, in pairs;
+  - the **name** of the signer and the **time** the file was signed
+    at;
+  - the **sub-filter** — the way the signature was made;
+  - whether the signature **holds bytes**.
+- The rules:
+  - a file with **no signature field** has no signatures, and the
+    answer says so;
+  - a signature field with **no value** is not signed yet, and the
+    answer says that;
+  - the bytes of a signature are **not checked**: there is no key
+    here and no way to check them, and an answer that said a
+    signature is good would be a guess — the answer says
+    `verified: false` and means it.
+
+### What the port found
+
+- **The tree's validation reads the byte range and the CMS from the
+  file's own bytes**, and it checks them against the certificates it
+  was given; here the range and the dictionary are read and the bytes
+  are not checked — the tree has a whole crate of keys and
+  certificates, and this tree has none.
+- **The tree's signature is a field and its value is the signature
+  dictionary**, and here the same: the field is of the kind `Sig` and
+  its `/V` is the dictionary that holds the bytes, the range and the
+  name.
+
+### What it cost
+
+- **Five tests** in the pdf battery (`tests/signatures.rs`): the
+  signature of a file, a field that is not signed yet, one signature
+  by the name of its field, the bytes that are not checked, and a
+  name the file does not use.
+- **One new module** (`src/signatures.rs`) and **one new command**
+  (`pdf.signatures.read`). The pdf battery now carries **55**
+  commands and the MCP server **758**.
+
+### What it does not settle
+
+- **A signature is not verified**: the bytes are read as they are and
+  nothing says that they are good.
+- **The certificates are not read**: the chain that signed the file
+  is inside the signature, and this tree does not open it.
+- **A signature is not made**: a file may be signed elsewhere and
+  read here, and this tree does not sign one.
