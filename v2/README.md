@@ -3935,6 +3935,7 @@ so.
 | the **column** that is inserted | **built.** A column may be inserted into a sheet, and everything that named a column is moved with it — the cells, the formulas, the merges, the notes, the widths — and what cannot be moved refuses the insert (§498) | §498 |
 | the **column** that is deleted | **built.** A column may be deleted from a sheet, and the columns to the right of it move left — and a formula that names a cell in the deleted columns refuses the delete, because this tree has no #REF! yet (§499) | §499 |
 | the **facts** that name an area | **built.** A conditional format, a validation and a sparkline name an area of cells, and the area moves with the rows and the columns that are inserted or deleted — and an area that covers part of what is deleted refuses (§500) | §500 |
+| the **table** and the **pivot** that move | **built.** A table and a pivot name an area of cells, and the area moves with the rows and the columns that are inserted or deleted — and a pivot gathers by the letters of its columns, so those move with it (§501) | §501 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32915,3 +32916,70 @@ or deleted, those facts move with the area they name.
   that is deleted refuses, where the tree writes the error.
 - **An area is written out again**, so its text may be another
   spelling of the same area.
+
+## 501. The table and the pivot that move
+
+A sheet holds a **table** — a named range whose first row names the
+fields — and a **pivot** — a gathering of the rows of a range by a
+field. Both name an area, and both move with it.
+
+### What was built
+
+- **No new command**: this arc lifts two more refusals. The **table**
+  and the **pivot** move with the rows and the columns that are
+  inserted or deleted.
+- A **table** names a range, and the range moves. Its **fields** are
+  derived from the header row, so they follow the header.
+- A **pivot** names a range and gathers by **columns**, and those
+  columns are columns of the range it reads — so the range moves and
+  the fields move with it:
+  - a row that is inserted moves the range and leaves the fields
+    alone, because a field is a column and a row is not a column;
+  - a column that is inserted moves the range and moves the fields
+    with it;
+  - a pivot that gathers by a column that is deleted **refuses** the
+    delete: a pivot that gathers by nothing is not a pivot.
+- The **rules** are the rules of the area, and they are the rules of
+  §500: an area wholly in the band that is deleted goes away with it,
+  and an area that covers part of the band refuses.
+
+### What the port found
+
+- **The tree's pivot names its fields by their headers**, not by their
+  columns: the tree's field holds the *text* of the header of the
+  column it gathers by, and a column that moves keeps its header, so
+  the tree's pivot needs nothing done to it. Here the pivot holds the
+  **letters** of the columns, so a column that moves must move the
+  letter with it — and a pivot whose field is a deleted column is a
+  pivot that gathers by a column that is not there.
+- **The tree's table is a range with a header**, and so is this one.
+  What the tree does not have to say is what happens to a table when
+  the rows under its header are taken away: here the table goes with
+  them, because a table of no rows is not a table.
+
+### What it cost
+
+- **Eight tests** in the grid battery (`tests/movingtables.rs`): a
+  table moving with the rows, a table moving with the columns, a table
+  that is deleted going away, a table that covers a deleted row being
+  refused, a pivot moving with the rows, a pivot moving with the
+  columns and its fields moving with the range, a pivot that gathers by
+  a deleted column being refused, and a pivot that is deleted going
+  away.
+- **One module** (`moving`) grows two functions: the way a **column
+  letter** moves, and the way a **pivot** moves. The grid battery still
+  carries **120** commands and the MCP server **702**.
+- **Three tests** in the batteries of the row and the column now say
+  that a **chart** is what this tree cannot move: the table they used
+  is a fact that moves now.
+
+### What it does not settle
+
+- **The charts and the names of the workbook are not moved** yet, and
+  a sheet that holds one of them refuses the insert or the delete and
+  says which.
+- **There is no `#REF!`**: a fact whose area covers part of the band
+  that is deleted refuses, where the tree writes the error.
+- **A pivot is named by the letters of its columns** and not by their
+  headers, so a pivot whose header text is changed afterwards is a
+  pivot whose field no longer names the column it means.
