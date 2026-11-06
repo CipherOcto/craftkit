@@ -66,6 +66,7 @@ mod links;
 mod margins;
 mod order;
 mod paint;
+mod parents;
 mod radii;
 mod rotation;
 mod shadows;
@@ -84,6 +85,7 @@ pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
 pub use margins::SetMargin;
 pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
 pub use paint::{SetFill, SetStroke};
+pub use parents::{ClearParent, SetParent};
 pub use radii::SetRadius;
 pub use rotation::RotateItem;
 pub use shadows::SetShadow;
@@ -197,7 +199,7 @@ impl PageKind {
             Some((x, y, width, height)) => json!({ "x": x, "y": y, "width": width, "height": height }),
             None => Json::Null,
         };
-        let margin_box = match crate::margins::margin_box_of(node) {
+        let margin_box = match crate::parents::margin_box_of(document, node.id) {
             Some((x, y, width, height)) => json!({ "x": x, "y": y, "width": width, "height": height }),
             None => Json::Null,
         };
@@ -205,10 +207,11 @@ impl PageKind {
             "width": node.data.get("width").cloned().unwrap_or(Json::Null),
             "height": node.data.get("height").cloned().unwrap_or(Json::Null),
             "bleed": bleed,
-            "margin": crate::margins::margin_of(node).to_json(),
+            "margin": crate::parents::margins_of(document, node.id).to_json(),
             "margin_box": margin_box,
-            "columns": crate::columns::columns_of(node).to_json(),
-            "column_boxes": crate::columns::column_boxes_of(node)
+            "parent": crate::parents::parent_of(node).map(|parent| json!(parent)).unwrap_or(Json::Null),
+            "columns": crate::parents::columns_of(document, node.id).to_json(),
+            "column_boxes": crate::parents::column_boxes_of(document, node.id)
                 .map(|boxes| json!(boxes
                     .into_iter()
                     .map(|(x, y, width, height)| json!({ "x": x, "y": y, "width": width, "height": height }))
@@ -896,6 +899,8 @@ craftkit_sdk::plugin_anchor!(
     AddPage,
     SetColumns,
     SetMargin,
+    SetParent,
+    ClearParent,
     AddLayer,
     AddStory,
     AddAsset,

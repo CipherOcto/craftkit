@@ -84,12 +84,6 @@ pub fn columns_of(page: &Node) -> Columns {
     Columns { count, gutter }
 }
 
-/// The **column boxes** of a page, if it has any.
-pub fn column_boxes_of(page: &Node) -> Option<Vec<(f64, f64, f64, f64)>> {
-    let margin_box = crate::margins::margin_box_of(page)?;
-    columns_of(page).boxes_of(margin_box)
-}
-
 /// **Set** the columns of a page.
 #[derive(Command)]
 #[command(id = "layout.page.columns", area = "layout", layer = "layout", icon = "rect", mutates, undoable)]
