@@ -3959,6 +3959,7 @@ so.
 | the **empty row** and the **empty column** of a table | **built.** A row or a column with nothing in it looks like spacing, and the checker says which one (§522) | §522 |
 | the **fields** of a form | **built.** A field says what it is and what it holds, and a value the field cannot hold is refused — the options and the states are named (§523) | §523 |
 | the **name** of a field with a parent | **built.** A field may have a parent, and its name is then the two names joined with a dot — and a loop is refused (§524) | §524 |
+| the **flags** of a field | **built.** The flags of a field are a number and a list of names, and a field may be made read only or required (§525) | §525 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34407,3 +34408,56 @@ field is then the name of its parent and its own, joined with a dot
 - **The parent is not written into a file**: the tree's fields are
   written with their parents, and here the parent is an entry of the
   object and the writer does not know it.
+
+## 525. The flags of a field
+
+The flags of a field are a **number**, and the number is a list of
+facts about how the field behaves.
+
+### What was built
+
+- **One command** in the pdf battery: `pdf.field.flags`. It says
+  whether a field is **read only** and whether it **must be filled
+  in**, and it leaves every other flag as it was.
+- The **flags** are read as the tree's own **names**: `read-only`,
+  `required`, `multiline`, `password`, `no-toggle-to-off`, `radio`,
+  `push-button`, `combo`, `edit`, `sort`, `file-select`,
+  `multi-select`, `do-not-spell-check`, `do-not-scroll`, `comb` and
+  `commit-on-selection-change`.
+- The **rules**: a node that is **not a field** may not have flags;
+  the flags of a field are a **whole number**; and a flag that is
+  **not said** is left as it was — the same bargain as everywhere
+  else in this tree.
+
+### What the port found
+
+- **The tree gives one bit two meanings**: the twenty-sixth bit is
+  both *the radio buttons are in unison* and *the text is rich*, and
+  the tree's own list says so. A bit with two meanings says nothing,
+  so it is **left unnamed** here — and the tree's names for the other
+  bits are the tree's own.
+- **The tree's flags are set one at a time**: the tree's author
+  module takes a list of flags to set and a list to clear. Here two
+  of them are the ones a form is usually asked about — read only and
+  required — and the rest are left as the file says them.
+
+### What it cost
+
+- **Eight tests** in the pdf battery (`tests/flags.rs`): a field that
+  is read only saying so, the flags being read as a number and as
+  names, a field that must be filled in saying so, a field being made
+  read only, a field being made required, a flag being taken away
+  again, a flag that is not said being left as it was, and a node that
+  is not a field being refused.
+- **No new module**: the command grows the fields module. The pdf
+  battery now carries **37** commands and the MCP server **723**.
+
+### What it does not settle
+
+- **The other flags are not set**: the tree's author module sets any
+  of them, and here only the two that are asked about most.
+- **The flags of a child are not gathered into the parent**: the
+  tree's parent field holds the flags of its children, and here each
+  child says what it is.
+- **The twenty-sixth bit is unnamed**: it means two things, and this
+  tree does not guess which.
