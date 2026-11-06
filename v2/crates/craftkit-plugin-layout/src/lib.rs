@@ -70,6 +70,7 @@ mod parents;
 mod radii;
 mod rotation;
 mod shadows;
+mod sides;
 mod styles;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
@@ -89,6 +90,7 @@ pub use parents::{ClearParent, SetParent};
 pub use radii::SetRadius;
 pub use rotation::RotateItem;
 pub use shadows::SetShadow;
+pub use sides::SetSide;
 pub use styles::{AddStyle, SetItemStyle, SetStyleFill, SetStyleStroke};
 
 /// The layout layer.
@@ -208,6 +210,9 @@ impl PageKind {
             "height": node.data.get("height").cloned().unwrap_or(Json::Null),
             "bleed": bleed,
             "margin": crate::parents::margins_of(document, node.id).to_json(),
+            "side": crate::sides::side_of(node).name(),
+            "inside": crate::sides::inside_outside(node).0,
+            "outside": crate::sides::inside_outside(node).1,
             "margin_box": margin_box,
             "parent": crate::parents::parent_of(node).map(|parent| json!(parent)).unwrap_or(Json::Null),
             "columns": crate::parents::columns_of(document, node.id).to_json(),
@@ -901,6 +906,7 @@ craftkit_sdk::plugin_anchor!(
     SetMargin,
     SetParent,
     ClearParent,
+    SetSide,
     AddLayer,
     AddStory,
     AddAsset,
