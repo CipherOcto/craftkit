@@ -24,7 +24,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Bool, Document, EngineError, Node, NodeRef, Outcome, Session, Text};
 
 /// The **kind** of a field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -187,6 +187,43 @@ fn states_of(node: &Node) -> Vec<String> {
     pairs_of(&normal).into_iter().map(|(key, _)| key).collect()
 }
 
+/// The **flags** of a field, as the tree's own names.
+///
+/// The flags are a number, and the number is a list of facts about
+/// how the field behaves: a field that is **read only**, a field that
+/// must be **filled in**, a field that holds **many lines**, and so
+/// on.
+///
+/// The tree gives one bit two meanings — the twenty-sixth is both
+/// *the radio buttons are in unison* and *the text is rich* — and a
+/// bit with two meanings says nothing, so it is left unnamed.
+fn flag_names(flags: f64) -> Vec<&'static str> {
+    let bits = flags as u32;
+    let mut names: Vec<&'static str> = Vec::new();
+    let mut add = |bit: u32, name: &'static str| {
+        if bits & bit != 0 {
+            names.push(name);
+        }
+    };
+    add(1, "read-only");
+    add(1 << 1, "required");
+    add(1 << 12, "multiline");
+    add(1 << 13, "password");
+    add(1 << 14, "no-toggle-to-off");
+    add(1 << 15, "radio");
+    add(1 << 16, "push-button");
+    add(1 << 17, "combo");
+    add(1 << 18, "edit");
+    add(1 << 19, "sort");
+    add(1 << 20, "file-select");
+    add(1 << 21, "multi-select");
+    add(1 << 22, "do-not-spell-check");
+    add(1 << 23, "do-not-scroll");
+    add(1 << 24, "comb");
+    add(1 << 26, "commit-on-selection-change");
+    names
+}
+
 /// The **fields** of a document, in the order the document has them.
 pub fn fields_of(document: &Document) -> Vec<Field> {
     let mut fields: Vec<Field> = Vec::new();
@@ -262,6 +299,7 @@ impl ReadFields {
                     "kind": field.kind.name(),
                     "value": field.value.clone().map(|value| json!(value)).unwrap_or(Json::Null),
                     "flags": field.flags,
+                    "flag_names": flag_names(field.flags),
                     "options": field.options.clone(),
                     "parent": field.parent.map(|parent| json!(parent)).unwrap_or(Json::Null),
                 })
@@ -482,5 +520,76 @@ impl SetParent {
                     .with_data(json!({ "field": field, "parent": parent.0 })))
             }
         }
+    }
+}
+
+/// **Say** how a field behaves.
+///
+/// The flags of a field are a number, and two of them are the ones a
+/// form is usually asked about: the field is **read only**, or the
+/// field **must be filled in**. A flag that is not named here is left
+/// as it was.
+#[derive(Command)]
+#[command(id = "pdf.field.flags", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
+pub struct SetFlags {
+    /// The field.
+    pub field: NodeRef,
+    /// Whether the field is read only.
+    pub read_only: Option<Bool>,
+    /// Whether the field must be filled in.
+    pub required: Option<Bool>,
+}
+
+impl SetFlags {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.field.flags".to_string();
+        let field = self.field.0;
+        let Some(node) = session.document().node(field).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{field}`"),
+            });
+        };
+        if field_of(session.document(), &node).is_none() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{field}` is not a field"),
+            });
+        }
+        let entries = entries_of(&node);
+        let mut flags = entry(&entries, "Ff").and_then(|flags| flags.as_f64()).unwrap_or(0.0);
+        if !flags.is_finite() || flags < 0.0 || flags.fract() != 0.0 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "the flags of a field are a whole number".to_string(),
+            });
+        }
+        let mut bits = flags as u32;
+        if let Some(read_only) = &self.read_only {
+            bits = if read_only.0 { bits | 1 } else { bits & !1 };
+        }
+        if let Some(required) = &self.required {
+            bits = if required.0 { bits | (1 << 1) } else { bits & !(1 << 1) };
+        }
+        flags = f64::from(bits);
+        let mut entries = entries;
+        let value = json!(flags);
+        match entries.iter_mut().find(|(key, _)| key == "Ff") {
+            Some(entry) => entry.1 = value,
+            None => entries.push(("Ff".to_string(), value)),
+        }
+        let data = json!({
+            "object": node.data.get("object").cloned().unwrap_or(Json::Null),
+            "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+        });
+        let Some(node) = session.document_mut()?.node_mut(field) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{field}`"),
+            });
+        };
+        node.data = data;
+        Ok(Outcome::changed(format!("the flags of the field `{field}` are {flags}"))
+            .with_data(json!({ "field": field, "flags": flags, "flag_names": flag_names(flags) })))
     }
 }
