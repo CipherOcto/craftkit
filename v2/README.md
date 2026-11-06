@@ -3975,6 +3975,7 @@ so.
 | the **flags** of an annotation | **built.** An annotation says whether it prints and whether it is hidden, and the checker says when it may not (§538) | §538 |
 | the **images** of a file | **built.** An image may not ask to be interpolated, and it may not carry alternates — and the conversion clears both (§539) | §539 |
 | the **annotations** of a converted file | **built.** The conversion makes every annotation print and shown, and leaves a popup alone (§540) | §540 |
+| the **numbers** of a file | **built.** A file's numbers are numbers, and a whole one is taken as the whole one it is — a number that is not a whole one names no object (§541) | §541 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35434,3 +35435,67 @@ PDF/A rule — and the **conversion** puts it right.
 - **The flags of an annotation are also said one at a time**: the
   command that says them is there (§538), and the conversion does the
   same thing to all of them at once.
+
+## 541. The numbers of a file
+
+A file's numbers are numbers — and the loader keeps them the way the
+file wrote them, so a whole number may arrive as a fraction.
+
+### What was built
+
+- The crate has two helpers that read a **number**: one gives the
+  **whole number** a value holds, the other gives the **object number**
+  a reference names. A number that is not a whole one names no
+  object, and the answer is nothing rather than a rounded guess.
+- Every place that read a number or a reference now uses them:
+  - the **page**: the reference to the annotations, the rotation,
+    the count and the first of an object stream;
+  - the **form**: the reference to a field's parent, the flags and
+    the rectangles of a widget;
+  - the **fonts**: the reference to a font's descriptor and to the
+    program in it;
+  - the **outline**: the reference to a destination and the numbers
+    in a title;
+  - the **preflight** and the **conversion**: the references they
+    follow and the numbers they read;
+  - the **trailer** and the **encryption**: the reference to the
+    catalog and to the encrypted dictionary.
+
+### What the port found
+
+- **The tree's numbers are integers and this tree's were not**: the
+  tree's reader parses a number as an integer, so `/Rotate 90` is
+  ninety. Here the reader parses it as the number it is, and the
+  question "is this a whole number?" was being asked of the wrong
+  type — so the answer was always nothing.
+- **The fault was quiet**: every command that followed a reference
+  reported an empty list rather than an error, so the battery read a
+  file that it had itself written and did not find the fields, the
+  annotations, the fonts or the rotation in it. Nothing crashed and
+  nothing said that it had found nothing.
+- **The tree's own tests did not see it either**: the tree builds
+  its files in memory as objects, and an object built in memory
+  carries an integer number, so the whole path was never walked with
+  a file that had been parsed.
+
+### What it cost
+
+- **Five tests** in the pdf battery (`tests/references.rs`): the
+  reference of a page's annotations, the reference of a field's
+  parent, the reference of a font's descriptor, the reference of the
+  catalog and the whole number of a page's rotation.
+- **No new module and no new command**: the two helpers live in the
+  crate root and are used by the modules that read numbers. The pdf
+  battery still carries **45** commands and the MCP server **735**.
+
+### What it does not settle
+
+- **A number that is not a whole one is still refused**: a file may
+  write `2.0 0 R` and this tree will not follow it, because an
+  object number is a whole one and a fraction is not one.
+- **The bytes of a file are not numbers**: a stream's length is
+  read as a whole number too, and a file that lies about its length
+  is refused rather than believed.
+- **The encryption of a file is still read as a fact and not
+  undone**: the numbers of an encrypted dictionary are read, and the
+  bytes behind them are not decrypted (§542).
