@@ -3956,6 +3956,7 @@ so.
 | the **facing page** of a page | **built.** A page that faces another has the two of them side by side in one spread, and the page across is derived (§519) | §519 |
 | the **contrast** of the text | **built.** The text is measured with the ratio of the WCAG 2 — four and a half for normal text and three for large text — and the checker says when it is hard to read (§520) | §520 |
 | the **alt text** of a table | **built.** A table says what it is, and an empty text takes the words away — and the checker says when a table has none (§521) | §521 |
+| the **empty row** and the **empty column** of a table | **built.** A row or a column with nothing in it looks like spacing, and the checker says which one (§522) | §522 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34230,3 +34231,55 @@ cannot describe.
 - **The blank rows and the blank columns are not checked**: the tree's
   checker says when a row of a table is empty and when a column is,
   and here a cell may be empty on purpose.
+
+## 522. The empty row and the empty column of a table
+
+A row of a table with nothing in it, and a column with nothing in it,
+are usually not data: they are **spacing** made with the return key.
+
+### What was built
+
+- The **accessibility** checker now knows two more rules, both the
+  tree's own:
+  - **blankRow** — a row of a table with nothing in it. It is a
+    **warning**: it looks like spacing;
+  - **blankColumn** — a column of a table with nothing in it. It is a
+    **warning** for the same reason.
+- The **rules** that go with them: a table with **nothing at all** in
+  it is being filled in, and not used for spacing, so it is left
+  alone; a cell is empty when it is **nothing** or a text with
+  nothing in it, and a cell that holds a number is not empty; and the
+  columns that are looked at are **bounded**, so that a hostile table
+  cannot make the report endless.
+
+### What the port found
+
+- **The tree's cells hold blocks and here they hold values**: the
+  tree asks whether every block of a cell is an empty paragraph, and
+  here a cell is a value — a number, a text or nothing — and the
+  question is whether it is there at all.
+- **The tree's rule is about the table and not about the row**: the
+  tree checks that the table is **filled** before it looks for the
+  empty rows and the empty columns, because a table with nothing in
+  it is being filled in. Here the same.
+
+### What it cost
+
+- **Seven tests** in the prose battery (`tests/blanks.rs`): an empty
+  row looking like spacing, the issue saying which row it is, an
+  empty column looking like spacing, a table with nothing in it being
+  filled in, a table with no empty row breaking nothing, a table of
+  one row having no empty row to be spacing, and a cell that is a
+  number not being empty.
+- **No new command**: the checker grows two rules. The prose battery
+  still carries **62** commands and the MCP server **719**.
+
+### What it does not settle
+
+- **The merged cells are not checked**: the tree's checker says when
+  a table has merged cells, and here a cell has no span.
+- **The header cells are not named**: the tree's table may name its
+  header cells, and here a cell is a value.
+- **The rows of a table are not read out**: the tree's checker says
+  which row and which column, and here the issue says so too — but
+  nothing reads the cells of the table aloud.
