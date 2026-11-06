@@ -97,17 +97,15 @@ fn the_formula_of_a_cell_that_moves_is_written_again() {
     );
 }
 
-/// A formula that names a **deleted** row is refused.
+/// A formula that names a **deleted** row names the error.
 #[test]
-fn a_formula_that_names_a_deleted_row_is_refused() {
+fn a_formula_that_names_a_deleted_row_names_the_error() {
     let mut session = session();
     let (_workbook, sheet) = a_sheet(&mut session);
     set_number(&mut session, sheet, "A2", 2.0);
     set_formula(&mut session, sheet, "B1", "=A2");
-    let refused = session
-        .execute("grid.row.delete", &json!({ "sheet": sheet, "row": 2 }))
-        .expect_err("the delete is refused");
-    assert!(refused.to_string().contains("names a cell"), "the refusal says why");
+    session.execute("grid.row.delete", &json!({ "sheet": sheet, "row": 2 })).expect("the row is deleted");
+    assert_eq!(cell_of(&mut session, sheet, "B1")["formula"], json!("=#REF!"), "the formula names the error");
 }
 
 /// A **note** of a deleted cell goes with the cell.

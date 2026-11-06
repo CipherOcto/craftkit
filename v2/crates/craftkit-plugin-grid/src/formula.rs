@@ -40,6 +40,11 @@ use craftkit_sdk::serde_json;
 
 use crate::format::Format;
 
+/// The error a reference that is gone is written as.
+///
+/// The tree's own spelling: `#REF!`.
+const REF_ERROR: &str = "#REF!";
+
 /// The most rows a sheet has.
 ///
 /// The tree's bound: a sheet is a million rows tall, and an address
@@ -450,6 +455,14 @@ pub enum Expr {
     /// A **name**: a word that is not a cell and not a function, and
     /// that stands for a range of cells.
     Name(String),
+    /// An **error**: a reference that is gone, or a value that is not
+    /// one.
+    ///
+    /// The tree's errors are written in the formula itself — `#REF!`
+    /// where a reference names a cell that is not there — and the
+    /// engine knows them. Here they are written in the formula too,
+    /// and the value of a cell that holds one is the error.
+    Error(String),
     /// A function and its arguments.
     Call(String, Vec<Expr>),
     /// A negation.
@@ -738,7 +751,7 @@ fn collect_precedents(expression: &Expr, names: &BTreeMap<String, Name>, found: 
             collect_precedents(left, names, found);
             collect_precedents(right, names, found);
         }
-        Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => {}
+        Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => {}
     }
 }
 
@@ -937,6 +950,9 @@ impl Parser {
             }
             return Ok(Expr::Text(text));
         }
+        if character == '#' {
+            return self.error_literal();
+        }
         if character.is_ascii_digit() || (character == '.' && self.next_is_digit()) {
             return self.number();
         }
@@ -944,6 +960,23 @@ impl Parser {
             return self.word();
         }
         Err(self.error("this is not something a formula can hold"))
+    }
+
+    /// An **error** written in the formula: `#REF!`.
+    ///
+    /// The error is written with an exclamation mark, and the tree's
+    /// errors that are written that way are the ones a formula may
+    /// hold.
+    fn error_literal(&mut self) -> Result<Expr, FormulaError> {
+        let start = self.at;
+        while self.at < self.characters.len() && self.characters[self.at] != '!' {
+            self.at += 1;
+        }
+        if !self.take('!') {
+            return Err(self.error("an error is written with an exclamation mark"));
+        }
+        let text: String = self.characters[start..self.at].iter().collect();
+        Ok(Expr::Error(text))
     }
 
     /// Whether the next character is a digit.
@@ -1496,6 +1529,7 @@ impl Book {
             Expr::Number(number) => Value::Number(*number),
             Expr::Text(text) => Value::Text(text.clone()),
             Expr::Bool(value) => Value::Bool(*value),
+            Expr::Error(message) => Value::Error(message.clone()),
             Expr::Cell { sheet: named, anchor } => {
                 let name = named.as_deref().unwrap_or(sheet);
                 self.value_of_guarded(name, anchor.cell, being)
@@ -1527,9 +1561,12 @@ impl Book {
                 }
                 Value::Text(format!("{} values", values.len()))
             }
-            Expr::Negate(inner) => match self.evaluate(sheet, inner, being).as_number() {
-                Some(number) => Value::Number(-number),
-                None => Value::Error("#VALUE!".to_string()),
+            Expr::Negate(inner) => match self.evaluate(sheet, inner, being) {
+                Value::Error(message) => Value::Error(message),
+                value => match value.as_number() {
+                    Some(number) => Value::Number(-number),
+                    None => Value::Error("#VALUE!".to_string()),
+                },
             },
             Expr::Binary(operator, left, right) => {
                 let left = self.evaluate(sheet, left, being);
@@ -1542,6 +1579,13 @@ impl Book {
 
     /// Call a function.
     fn call(&self, sheet: &str, name: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        // An argument that is an **error** makes the call an error, and
+        // the error is the one the argument says.
+        for argument in arguments {
+            if let Expr::Error(message) = argument {
+                return Value::Error(message.clone());
+            }
+        }
         if name == "TEXT" {
             return self.text_call(sheet, arguments, being);
         }
@@ -2543,7 +2587,7 @@ impl Expr {
     /// them.
     pub fn renamed_sheet(&self, old: &str, new: &str) -> Expr {
         match self {
-            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => self.clone(),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => self.clone(),
             Expr::Cell { sheet, anchor } => Expr::Cell {
                 sheet: sheet.as_ref().map(|sheet| {
                     if sheet.eq_ignore_ascii_case(old) { new.to_string() } else { sheet.clone() }
@@ -2602,7 +2646,7 @@ impl Expr {
                 Box::new(left.shifted(row_delta, col_delta)?),
                 Box::new(right.shifted(row_delta, col_delta)?),
             )),
-            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => Some(self.clone()),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => Some(self.clone()),
         }
     }
 
@@ -2648,7 +2692,7 @@ impl Expr {
                 Box::new(left.inserted(sheet, at, count)),
                 Box::new(right.inserted(sheet, at, count)),
             ),
-            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => self.clone(),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => self.clone(),
         }
     }
 
@@ -2659,7 +2703,15 @@ impl Expr {
     /// reference that names this sheet — or names none — moves up when
     /// it is below the rows that are deleted, and `None` says that a
     /// reference names a row that is gone.
-    pub fn deleted(&self, sheet: &str, at: u64, count: u64) -> Option<Expr> {
+    /// The expression with the rows **deleted** at `at`.
+    ///
+    /// A reference that names **another sheet** does not move: the
+    /// rows of that sheet are not the rows that are deleted. A
+    /// reference that names this sheet — or names none — moves up when
+    /// it is below the rows that are deleted, and a reference that
+    /// names a row that is gone becomes the **error** `#REF!`, which
+    /// is what the tree writes there.
+    pub fn deleted(&self, sheet: &str, at: u64, count: u64) -> Expr {
         let names_this_sheet = |named: &Option<String>| match named {
             None => true,
             Some(name) => name.eq_ignore_ascii_case(sheet),
@@ -2667,35 +2719,34 @@ impl Expr {
         match self {
             Expr::Cell { sheet: named, anchor } => {
                 if !names_this_sheet(named) {
-                    return Some(self.clone());
+                    return self.clone();
                 }
-                Some(Expr::Cell { sheet: named.clone(), anchor: anchor.deleted(at, count)? })
+                match anchor.deleted(at, count) {
+                    Some(anchor) => Expr::Cell { sheet: named.clone(), anchor },
+                    None => Expr::Error(REF_ERROR.to_string()),
+                }
             }
             Expr::Range { sheet: named, start, end } => {
                 if !names_this_sheet(named) {
-                    return Some(self.clone());
+                    return self.clone();
                 }
-                Some(Expr::Range {
-                    sheet: named.clone(),
-                    start: start.deleted(at, count)?,
-                    end: end.deleted(at, count)?,
-                })
+                match (start.deleted(at, count), end.deleted(at, count)) {
+                    (Some(start), Some(end)) => Expr::Range { sheet: named.clone(), start, end },
+                    _ => Expr::Error(REF_ERROR.to_string()),
+                }
             }
-            Expr::Name(name) => Some(Expr::Name(name.clone())),
-            Expr::Call(name, arguments) => Some(Expr::Call(
+            Expr::Name(name) => Expr::Name(name.clone()),
+            Expr::Call(name, arguments) => Expr::Call(
                 name.clone(),
-                arguments
-                    .iter()
-                    .map(|argument| argument.deleted(sheet, at, count))
-                    .collect::<Option<Vec<_>>>()?,
-            )),
-            Expr::Negate(inner) => Some(Expr::Negate(Box::new(inner.deleted(sheet, at, count)?))),
-            Expr::Binary(operator, left, right) => Some(Expr::Binary(
+                arguments.iter().map(|argument| argument.deleted(sheet, at, count)).collect(),
+            ),
+            Expr::Negate(inner) => Expr::Negate(Box::new(inner.deleted(sheet, at, count))),
+            Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
-                Box::new(left.deleted(sheet, at, count)?),
-                Box::new(right.deleted(sheet, at, count)?),
-            )),
-            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => Some(self.clone()),
+                Box::new(left.deleted(sheet, at, count)),
+                Box::new(right.deleted(sheet, at, count)),
+            ),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => self.clone(),
         }
     }
 
@@ -2741,7 +2792,7 @@ impl Expr {
                 Box::new(left.inserted_column(sheet, at, count)),
                 Box::new(right.inserted_column(sheet, at, count)),
             ),
-            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => self.clone(),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => self.clone(),
         }
     }
 
@@ -2752,7 +2803,15 @@ impl Expr {
     /// reference that names this sheet — or names none — moves left
     /// when it is to the right of the columns that are deleted, and
     /// `None` says that a reference names a column that is gone.
-    pub fn deleted_column(&self, sheet: &str, at: u64, count: u64) -> Option<Expr> {
+    /// The expression with the columns **deleted** at `at`.
+    ///
+    /// A reference that names **another sheet** does not move: the
+    /// columns of that sheet are not the columns that are deleted. A
+    /// reference that names this sheet — or names none — moves left
+    /// when it is to the right of the columns that are deleted, and a
+    /// reference that names a column that is gone becomes the
+    /// **error** `#REF!`, which is what the tree writes there.
+    pub fn deleted_column(&self, sheet: &str, at: u64, count: u64) -> Expr {
         let names_this_sheet = |named: &Option<String>| match named {
             None => true,
             Some(name) => name.eq_ignore_ascii_case(sheet),
@@ -2760,35 +2819,34 @@ impl Expr {
         match self {
             Expr::Cell { sheet: named, anchor } => {
                 if !names_this_sheet(named) {
-                    return Some(self.clone());
+                    return self.clone();
                 }
-                Some(Expr::Cell { sheet: named.clone(), anchor: anchor.deleted_column(at, count)? })
+                match anchor.deleted_column(at, count) {
+                    Some(anchor) => Expr::Cell { sheet: named.clone(), anchor },
+                    None => Expr::Error(REF_ERROR.to_string()),
+                }
             }
             Expr::Range { sheet: named, start, end } => {
                 if !names_this_sheet(named) {
-                    return Some(self.clone());
+                    return self.clone();
                 }
-                Some(Expr::Range {
-                    sheet: named.clone(),
-                    start: start.deleted_column(at, count)?,
-                    end: end.deleted_column(at, count)?,
-                })
+                match (start.deleted_column(at, count), end.deleted_column(at, count)) {
+                    (Some(start), Some(end)) => Expr::Range { sheet: named.clone(), start, end },
+                    _ => Expr::Error(REF_ERROR.to_string()),
+                }
             }
-            Expr::Name(name) => Some(Expr::Name(name.clone())),
-            Expr::Call(name, arguments) => Some(Expr::Call(
+            Expr::Name(name) => Expr::Name(name.clone()),
+            Expr::Call(name, arguments) => Expr::Call(
                 name.clone(),
-                arguments
-                    .iter()
-                    .map(|argument| argument.deleted_column(sheet, at, count))
-                    .collect::<Option<Vec<_>>>()?,
-            )),
-            Expr::Negate(inner) => Some(Expr::Negate(Box::new(inner.deleted_column(sheet, at, count)?))),
-            Expr::Binary(operator, left, right) => Some(Expr::Binary(
+                arguments.iter().map(|argument| argument.deleted_column(sheet, at, count)).collect(),
+            ),
+            Expr::Negate(inner) => Expr::Negate(Box::new(inner.deleted_column(sheet, at, count))),
+            Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
-                Box::new(left.deleted_column(sheet, at, count)?),
-                Box::new(right.deleted_column(sheet, at, count)?),
-            )),
-            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => Some(self.clone()),
+                Box::new(left.deleted_column(sheet, at, count)),
+                Box::new(right.deleted_column(sheet, at, count)),
+            ),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => self.clone(),
         }
     }
 
@@ -2848,16 +2906,14 @@ pub fn insert_in_formula(text: &str, sheet: &str, at: u64, count: u64) -> Option
 /// The formula's **text** with the rows **deleted** at `at`.
 ///
 /// The text is parsed, the rows are deleted and the expression is
-/// printed. The answer is `Err` when a reference names a row that is
-/// gone: this tree has no `#REF!` yet, and a formula that names
-/// nothing is refused rather than written.
-pub fn delete_in_formula(text: &str, sheet: &str, at: u64, count: u64) -> Result<String, String> {
-    let expression = parse(text).map_err(|_| "the formula cannot be read".to_string())?;
-    let deleted = expression
-        .deleted(sheet, at, count)
-        .ok_or_else(|| "a formula names a cell in the rows that are deleted".to_string())?;
+/// printed. A reference that names a row that is gone becomes the
+/// error `#REF!`. A formula that does not parse is `None`: a formula
+/// that cannot be read is left as it was.
+pub fn delete_in_formula(text: &str, sheet: &str, at: u64, count: u64) -> Option<String> {
+    let expression = parse(text).ok()?;
+    let deleted = expression.deleted(sheet, at, count);
     let printed = deleted.to_text();
-    Ok(if text.trim_start().starts_with('=') { format!("={printed}") } else { printed })
+    Some(if text.trim_start().starts_with('=') { format!("={printed}") } else { printed })
 }
 
 /// The formula's **text** with **columns inserted** at `at`.
@@ -2875,16 +2931,14 @@ pub fn insert_column_in_formula(text: &str, sheet: &str, at: u64, count: u64) ->
 /// The formula's **text** with the columns **deleted** at `at`.
 ///
 /// The text is parsed, the columns are deleted and the expression is
-/// printed. The answer is `Err` when a reference names a column that
-/// is gone: this tree has no `#REF!` yet, and a formula that names
-/// nothing is refused rather than written.
-pub fn delete_column_in_formula(text: &str, sheet: &str, at: u64, count: u64) -> Result<String, String> {
-    let expression = parse(text).map_err(|_| "the formula cannot be read".to_string())?;
-    let deleted = expression
-        .deleted_column(sheet, at, count)
-        .ok_or_else(|| "a formula names a cell in the columns that are deleted".to_string())?;
+/// printed. A reference that names a column that is gone becomes the
+/// error `#REF!`. A formula that does not parse is `None`: a formula
+/// that cannot be read is left as it was.
+pub fn delete_column_in_formula(text: &str, sheet: &str, at: u64, count: u64) -> Option<String> {
+    let expression = parse(text).ok()?;
+    let deleted = expression.deleted_column(sheet, at, count);
     let printed = deleted.to_text();
-    Ok(if text.trim_start().starts_with('=') { format!("={printed}") } else { printed })
+    Some(if text.trim_start().starts_with('=') { format!("={printed}") } else { printed })
 }
 
 /// The precedence of an expression.
@@ -2914,6 +2968,7 @@ fn expression_text(expression: &Expr, min_precedence: u8) -> String {
                 "FALSE".to_string()
             }
         }
+        Expr::Error(message) => message.clone(),
         Expr::Name(name) => name.clone(),
         Expr::Cell { sheet, anchor } => format!("{}{}", sheet_prefix(sheet), anchor.to_text()),
         Expr::Range { sheet, start, end } => {
@@ -2981,7 +3036,7 @@ pub struct ShiftError {
 /// refused and the reference is named.
 pub fn shift(expression: &Expr, dr: i64, dc: i64) -> Result<Expr, ShiftError> {
     match expression {
-        Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => Ok(expression.clone()),
+        Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => Ok(expression.clone()),
         // A **name** does not move: it stands for a range and not for
         // a place, so there is nothing relative in it.
         Expr::Name(_) => Ok(expression.clone()),

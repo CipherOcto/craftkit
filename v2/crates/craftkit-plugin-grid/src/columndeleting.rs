@@ -237,9 +237,9 @@ pub fn delete_columns(sheet: &mut Node, name: &str, at: u64, count: u64) -> Resu
         let new_cell =
             if col >= at + count { CellRef { col: cell.col - count as u32, row: cell.row } } else { cell };
         let mut entry = entry.clone();
-        if let Some(formula) = &entry.formula {
-            let rewritten = crate::formula::delete_column_in_formula(formula, name, at, count)
-                .map_err(|why| format!("the formula of the cell {}: {why}", cell.to_text()))?;
+        if let Some(formula) = &entry.formula
+            && let Some(rewritten) = crate::formula::delete_column_in_formula(formula, name, at, count)
+        {
             entry.formula = Some(rewritten);
         }
         moved.set_entry(new_cell, entry);
