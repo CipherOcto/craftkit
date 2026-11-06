@@ -3962,6 +3962,7 @@ so.
 | the **flags** of a field | **built.** The flags of a field are a number and a list of names, and a field may be made read only or required (§525) | §525 |
 | the **total row** of a table | **built.** A table may have a total row, and the totals are derived from the cells — the last row is the total row and is not counted in the total (§526) | §526 |
 | the **way** a table totals | **built.** A table may total in many ways — a sum, an average, a count — and a way that is not one of them is refused (§527) | §527 |
+| the **way of a column** of a table | **built.** A column may be totalled in a way of its own, and the way of the table is the way of the columns that have none (§528) | §528 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34600,3 +34601,75 @@ A table may total its columns in more than one way: a **sum**, an
 - **The population variance is not here**: the tree asks the
   spreadsheet for the variance of a sample, and the variance of a
   population is not asked about.
+
+## 528. The way of a column of a table
+
+A table's columns need not all be totalled the same way: the amounts
+of a sale may be **summed** while the number of the sales is
+**counted**.
+
+### What was built
+
+- **One command** in the grid battery: `grid.table.way`. It says the
+  way a **column** of a table is totalled in, and the reading of the
+  table says the way of every column too.
+- The **way of the table** is the way of the columns that have **no
+  way of their own** — it is the way they fall back to.
+- The **rules**:
+  - a column that is **not a column** of the table is refused, and a
+    name that **two columns share** is refused too, because a name
+    that is two columns does not say which one is meant;
+  - a way that is **not a way** is refused, and the refusal names the
+    ways there are;
+  - an **empty** way takes the column's own way away, and the column
+    falls back to the way of the table;
+  - the way belongs to the **column** and not to its **name**, so a
+    header that is edited changes the name and leaves the way where
+    it is;
+  - a resize keeps the ways of the columns that **stay**, and the
+    way of a column that is not there any more is **gone**.
+
+### What the port found
+
+- **The tree's way is per column and here it is per column with a
+  way of the table behind it**: the tree's table gives every column
+  its own way, and a column the tree has not been told about has
+  none at all. Here the table holds a way as well, and it is the
+  way of the columns that have none — so a table may be given a way
+  once and one column be given another.
+- **The tree's way is named by the column and here it is too**: the
+  tree's command takes the name of the column, and here it does as
+  well — the fields of a table are the text of its header cells, and
+  the header cell is what says which column is meant.
+- **The tree's totals are written into the cells and here they are
+  derived**: this is the tree's rule and not this tree's (§526), and
+  it is unchanged here: a column's way changes what its total is and
+  nothing else.
+
+### What it cost
+
+- **Twelve tests** in the grid battery (`tests/columnways.rs`): a
+  column's own way being said, a column with no way of its own
+  falling back to the way of the table, a column's own way being the
+  way of that column and not of the table, the totals following the
+  way of each column, a column that is not a column being refused, a
+  name that two columns share being refused, a way that is not a way
+  being refused, an empty way taking the way away, the way staying
+  with the column when the header is edited, the ways of the columns
+  that stay being kept when the table is resized, the way of a column
+  that is not there any more being gone, and a table that is not
+  there being refused.
+- **No new module**: the command grows the tables module. The grid
+  battery now carries **122** commands and the MCP server **725**.
+
+### What it does not settle
+
+- **The total row is still not written**: the tree's total row is a
+  row of cells, and here it is not in the sheet at all.
+- **The tree's `Custom` is not here**: the tree's list of ways has a
+  custom one, and a custom way is a **label** — the total cell holds
+  words of its own instead of a total. Here a way works out a number
+  or says nothing, and a label is a value in a cell.
+- **The ways are not written into the file**: the tree keeps them in
+  the table's own record and writes them into the workbook's XML,
+  and here they are in the sheet's payload only.
