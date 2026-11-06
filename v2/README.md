@@ -3981,6 +3981,7 @@ so.
 | the **form** of a file | **built.** The catalog names the form, and the form says which fields it has, whether the reader is to make the appearances and the order the calculated fields are calculated in (§544) | §544 |
 | the **appearance** of a field | **built.** The appearance is read — the box it is drawn in, the matrix that places it, the operators of its stream and the states it has (§545) | §545 |
 | the **validation** of a field | **built.** A field may say what it accepts, and the range it accepts is read — a script that is not understood is said so (§546) | §546 |
+| the **format** of a field | **built.** A field may say how its text is shown — a number, a percentage, a date, a special form or a mask — and the script is read (§547) | §547 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35807,3 +35808,63 @@ small script.
   events are in the same dictionary and are not read here.
 - **The script is not written**: a field's validation may be said,
   and this tree only reads it.
+
+## 547. The format of a field
+
+A field may say how its text is **shown** — and a file that says it
+carries a small script.
+
+### What was built
+
+- The new module `format` reads the **format** event of a field's
+  additional actions — the `/AA` dictionary, key `/F` — and says what
+  the field is shown as:
+  - a **number**: how many decimals it has, how its parts are
+    separated, how a negative one is written, the currency it is
+    written in and whether the currency comes first;
+  - a **percentage**;
+  - a **date** or a **time**, in the pattern the file says;
+  - one of the **special forms** — the postal code, the postal code
+    with four more digits, the telephone number and the social
+    security number;
+  - the **mask** a person types into.
+- A script that is **not understood** is reported as unsupported and
+  is not pretended to be run.
+- The command **`pdf.field.format`** reads the format of one field. A
+  field that says nothing about how its text is shown is shown as it
+  is, and the answer says so.
+
+### What the port found
+
+- **The tree's format is the set of calls it knows, and it is the
+  same set here**: the number, the percentage, the date, the time, the
+  special form and the mask — the tree reads each of them from the
+  script and this tree reads each of them from the same script.
+- **The tree's two preset calls are not read here**: the date and the
+  time may be named by a **preset** — a number that stands for a
+  pattern — and this tree does not hold the table of presets, so a
+  script that uses one is reported as unsupported rather than guessed
+  at.
+- **The tree's currency is written first unless the file says
+  otherwise**: the last argument of the number call says whether the
+  currency comes before the number, and when the file does not say it
+  is written first — the same rule here.
+
+### What it cost
+
+- **Six tests** in the pdf battery (`tests/format.rs`): a field shown
+  as a number, a field shown as a percentage, a field shown as a
+  special form, a field typed into through a mask, a field that says
+  nothing, and a field that is not there.
+- **One new module** (`src/format.rs`) and **one new command**
+  (`pdf.field.format`). The pdf battery now carries **51** commands
+  and the MCP server **741**.
+
+### What it does not settle
+
+- **The text is not shown**: the format is read and nothing is written
+  into the field's text.
+- **The keystroke event is not read**: it is the last of the four
+  events in the same dictionary, and it is not read here.
+- **The format is not written**: a field's format may be said, and
+  this tree only reads it.
