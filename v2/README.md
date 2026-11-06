@@ -3951,6 +3951,7 @@ so.
 | the **alt text** of a picture | **built.** A picture says what it is, and an empty text takes the words away — and a picture that says nothing has no alt text (§514) | §514 |
 | the **accessibility** of a document | **built.** A document is checked and the issues are reported — an error, a warning or a tip, with the rule it breaks (§515) | §515 |
 | the **header row** of a table | **built.** A table says whether its first row is a header row, and the checker says when a table has none (§516) | §516 |
+| the **title** of a document | **built.** A document says what it is, and an empty title takes the words away — and the checker says when a document has no title (§517) | §517 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33947,3 +33948,56 @@ row a screen reader reads to know the names of the columns.
 - **The other table rules are not here**: the tree's checker says when
   a row of a table is empty and when a column is empty, and here the
   cells of a table are values that may be empty on purpose.
+
+## 517. The title of a document
+
+A document with no title is a document that a reader cannot name: in
+a list of files, in the window bar, and in the properties a screen
+reader reads out.
+
+### What was built
+
+- **One command** in the prose battery: `prose.document.title`. It
+  says what a document is, and the document's own reading says it
+  too.
+- The title is a **fact of the document**, and it is not the **name**
+  of the node: the name is how the tree calls it, and the title is
+  what the document says it is.
+- The **rules**: an **empty** title **takes the title away** — a
+  document that has no title and a document whose title was taken away
+  are the same document; and a node that is **not a document** may not
+  have a title.
+- The **accessibility** checker now knows the rule `docTitle`: a
+  document with no title is a **tip** — nothing says what the document
+  is.
+
+### What the port found
+
+- **The tree's title is in the document's properties and not in its
+  name**: the tree's checker reads `doc.core.title`, and the tree's
+  fix is a command that sets the title in the properties. Here the
+  title is a fact of the document node, beside the name that the tree
+  gave it.
+- **The tree's rule is a tip and not an error**: a document with no
+  title is a thing a reader can work around — the file has a name on
+  disk — and the tree says so gently. Here the same.
+
+### What it cost
+
+- **Seven tests** in the prose battery (`tests/titles.rs`): a
+  document that says nothing having no title, a document saying what
+  it is, the title being changed and not added twice, an empty title
+  taking the title away, a document with no title being a tip, a
+  document with a title breaking nothing, and a node that is not a
+  document being refused.
+- **One new module** (`titles`). The prose battery now carries **61**
+  commands and the MCP server **716**.
+
+### What it does not settle
+
+- **The title is not written to a file**: the tree's title goes into
+  the properties of the document file, and here a document has no file
+  of its own yet.
+- **The title is not a property of the tree's own**: the tree's
+  properties hold an author and a subject and a language as well, and
+  here the document says what it is and nothing else.
