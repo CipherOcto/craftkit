@@ -3991,6 +3991,7 @@ so.
 | the **deleting** of a style | **built.** A style that is not used may be taken away — the blocks that were in it are left as they are, and a style another style is based on is refused (§554) | §554 |
 | the **styles** of a document | **built.** A document may be asked what styles it holds — the kind, the base and the blocks that are in it (§555) | §555 |
 | the **information** of a file | **built.** The information dictionary says who wrote the file and what it is called, and it is found by the node or by the trailer (§556) | §556 |
+| the **exporting** of a sheet as a text of values | **built.** A range is written as a CSV — a cell is written as it is shown, and a field that holds the delimiter is quoted (§557) | §557 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36372,3 +36373,51 @@ is called and when it was made.
   are, and the eight the tree names are named for the reader.
 - **The information is not of the trailer's own**: a file whose
   trailer names no information has none, whatever its objects hold.
+
+## 557. The exporting of a sheet as a text of values
+
+A sheet may be **exported** — the same shape the import reads.
+
+### What was built
+
+- The new command **`grid.export.csv`** writes the cells of a range
+  as a text of values separated by a delimiter:
+  - a cell is written as it is **shown**: the text a person reads,
+    with its format;
+  - a field that holds the **delimiter**, a quote or a line break is
+    **quoted**, and a quote inside it is **doubled**;
+  - an **empty** cell is an empty field;
+  - the **delimiter** is one character, and it is a comma unless the
+    file says otherwise — a delimiter of more than one character is
+    refused.
+- The text is **given**, and writing it to a file is the caller's
+  business: the command does not change the document.
+
+### What the port found
+
+- **The tree's export writes what the cell shows**: the tree writes
+  the cell's text, with its format — and here the same, because a
+  text of values that is not what a person reads is not the sheet.
+- **The tree's delimiter is a comma and the quoting is the usual
+  one**: a field that holds the delimiter is quoted and the quotes
+  inside it are doubled — here the same.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/exporting.rs`): the cells
+  written as a text of values, a field that holds the delimiter, a
+  quote inside a field, another delimiter, an empty cell, and a
+  delimiter of more than one character.
+- **One new module** (`src/exporting.rs`) and **one new command**
+  (`grid.export.csv`). The grid battery now carries **127** commands
+  and the MCP server **751**.
+
+### What it does not settle
+
+- **No file is written**: the text is given and the file is the
+  caller's business — the grid battery has no file format of its own
+  yet.
+- **The formulas are not exported as formulas**: the value of a cell
+  is what is written, because that is what the cell shows.
+- **The sheet is not exported whole**: the range is the one that was
+  named, or the used range.
