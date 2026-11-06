@@ -3954,6 +3954,7 @@ so.
 | the **title** of a document | **built.** A document says what it is, and an empty title takes the words away — and the checker says when a document has no title (§517) | §517 |
 | the **convert** of a PDF file | **built.** The file is fixed where it can be — the actions and the flags — and what is left is the preflight's own answer (§518) | §518 |
 | the **facing page** of a page | **built.** A page that faces another has the two of them side by side in one spread, and the page across is derived (§519) | §519 |
+| the **contrast** of the text | **built.** The text is measured with the ratio of the WCAG 2 — four and a half for normal text and three for large text — and the checker says when it is hard to read (§520) | §520 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34122,3 +34123,61 @@ from a page is its **facing page**.
 - **The tree's books have a gutter and a creep**: the tree's spreads
   carry the measurements of the binding, and here the inside margin
   of a page is only the room at the spine.
+
+## 520. The contrast of the text
+
+Text that is hard to read is hard to read for everyone, and it is
+impossible for some. The measure is the one the WCAG 2 gives.
+
+### What was built
+
+- **One new module** (`contrast`) in the prose battery: the
+  **relative luminance** of a colour, the **contrast ratio** of two
+  colours, and the ratio that the text needs.
+- The **accessibility** checker now knows the rule `contrast`: the
+  ratio of the colour of the text against the page is **four and a
+  half** for normal text and **three** for text that is large —
+  eighteen points, or fourteen when it is bold. A ratio under
+  **three** is a **warning** and the rest is a **tip**.
+- The measure is the tree's own: black on white is **21**, and
+  `#777777` on white is **4.48**, and the tree's own test says the
+  same.
+
+### What the port found
+
+- **The tree measures the text against what is behind it**: the tree
+  asks for the highlight of the run, then the shading of the run,
+  then the shading of the paragraph, then the shading of the cell,
+  and the colour of the page — and the page is white when nothing
+  says otherwise. Here the text is measured against **white**, because
+  this tree's runs have a colour and nothing else: there is no
+  shading and no highlight to measure it against.
+- **The tree's rule is one issue for a paragraph**: the tree stops at
+  the first run that is hard to read, because saying it twice says it
+  no better. Here the same: one issue for the block.
+- **The tree's sizes are in points**: the tree's large text is
+  eighteen points, and fourteen when it is bold. Here the size of a
+  run is the number the caller gave, and the rule is the tree's.
+
+### What it cost
+
+- **Nine tests** in the prose battery (`tests/contrast.rs`): black on
+  white being the ratio of twenty-one, grey on white being the ratio
+  the tree measures, text that is hard to read being a warning, text
+  that is a little hard to read being a tip, black text breaking
+  nothing, large text needing only three, bold text of fourteen points
+  needing only three, text with no colour not being measured, and the
+  issue saying what the ratio is.
+- **No new command**: the checker grows a rule. The prose battery
+  still carries **61** commands and the MCP server **718**.
+
+### What it does not settle
+
+- **The text is measured against white**: the tree measures it
+  against the shading behind it, and this tree has no shading.
+- **The colour of the text is the run's own**: the tree resolves the
+  colour through the character style, and here the run says its
+  colour and that is all.
+- **The page is white**: the tree takes the colour of the page from
+  the settings of the document, and this tree's documents have no
+  page colour.
