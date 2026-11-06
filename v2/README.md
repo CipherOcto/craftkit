@@ -3965,6 +3965,7 @@ so.
 | the **way of a column** of a table | **built.** A column may be totalled in a way of its own, and the way of the table is the way of the columns that have none (§528) | §528 |
 | the **kind and the flags** a field inherits | **built.** A field that says nothing takes the kind and the flags of its parent, and a field that says its own replaces what it would inherit (§529) | §529 |
 | the **children** of a field | **built.** A field may hold fields, and a kid with no name is a widget — the field's appearance on a page — and not a child (§530) | §530 |
+| the **widgets** of a field | **built.** A widget is the field's appearance on a page, and it says where it is, what state it shows and whether it is locked (§531) | §531 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34808,3 +34809,72 @@ the fields it is a group of.
 - **The form's roots are not read**: the tree's form holds the fields
   that have no parent, and the tree's list of fields is the terminal
   ones.
+
+## 531. The widgets of a field
+
+A widget is the **appearance of a field on a page**: where the field
+is drawn, what it shows, and whether it may be touched.
+
+### What was built
+
+- **One command** in the pdf battery: `pdf.field.widgets`. It says
+  the widgets of a field — where each one is, what state it shows,
+  the **on state** of a box, and whether it is **locked** or
+  **hidden**.
+- The **rules**:
+  - the **page** of a widget is the page whose **annotations** hold it,
+    and a widget that is on no page has no page;
+  - the **rectangle** is **two corners in order**, and a widget with
+    no rectangle, or with one that is not four numbers, is at the
+    **origin**;
+  - the **on state** — the appearance a ticked box shows — is the
+    appearance that is **not** called `Off`, and it is said for a box
+    and not for a field of any other kind;
+  - the **locked** flag is the seventh of the file's flags, and the
+    **hidden** flag is the first or the fifth — a widget that is
+    hidden or that cannot be seen is not shown;
+  - a **child** is not a widget, and a node that is not a field is
+    refused.
+
+### What the port found
+
+- **The tree's widget is an object with a rectangle and here it is
+  too**: the tree's widget says where it is, on which page, what state
+  it shows and what state is the ticked one, and whether it is locked
+  or hidden. Here the same facts are said, and the page is the **page
+  that holds the widget** — the tree's way of finding it.
+- **The tree's corners are put in order and here they are too**: the
+  rectangle of the file is two corners that may come in any order, and
+  the tree sorts them; a widget with no rectangle is at the origin
+  there and here.
+- **The tree's on state is only for a box and only for a box that is
+  ticked**: the tree's on state is the appearance that is not `Off`,
+  and it is said for a check box and a radio button and not for a
+  text field. Here it is said for a button that is not a push button.
+- **The tree's tab order is not here**: the tree says where a widget
+  stands in the tab order of the document, and that is not here.
+
+### What it cost
+
+- **Twelve tests** in the pdf battery (`tests/widgets.rs`): the
+  widgets of a field being said, the page of a widget being the page
+  whose annotations hold it, the rectangle being two corners in order,
+  a widget with no rectangle being at the origin, the state a widget
+  shows being said, the on state of a box being the appearance that is
+  not the off one, the on state not being said for a field of another
+  kind, a locked widget saying so, a hidden widget saying so, a field
+  with no widgets having none, a child not being a widget, and a node
+  that is not a field being refused.
+- **No new module**: the command grows the fields module. The pdf
+  battery now carries **40** commands and the MCP server **728**.
+
+### What it does not settle
+
+- **The tab order is not here**: the tree says where a widget stands
+  in the tab order of the document.
+- **The appearance of a widget is not built**: the tree can draw the
+  two appearances of a box — the one it shows and the one it shows
+  when it is ticked — and here the appearances are only read.
+- **The widget's own page is not read**: the tree finds the page
+  through the page's annotations, and the page the widget names with
+  its `/P` is not looked at.
