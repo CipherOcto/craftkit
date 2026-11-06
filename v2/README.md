@@ -3949,6 +3949,7 @@ so.
 | the **colour** of a PDF file | **built.** A file that paints in a device colour needs an output intent, and the preflight says when there is none — the clauses 6.2.3 and 6.2.4.3 (§512) | §512 |
 | the **trailer** of a PDF file | **built.** The trailer is the file's last word, and it is kept in the document — and the preflight says when the file was encrypted (§513) | §513 |
 | the **alt text** of a picture | **built.** A picture says what it is, and an empty text takes the words away — and a picture that says nothing has no alt text (§514) | §514 |
+| the **accessibility** of a document | **built.** A document is checked and the issues are reported — an error, a warning or a tip, with the rule it breaks (§515) | §515 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33825,3 +33826,72 @@ text**.
   is a file with a name and the words beside it.
 - **Nothing checks the alt text yet**: the tree's checker says when a
   picture has none, and the checker is still to come.
+
+## 515. The accessibility of a document
+
+Some documents are hard to use: with a screen reader, with a
+magnifier, or with a reader who cannot see the picture at all. The
+**checker** says what is wrong.
+
+### What was built
+
+- **One command** in the prose battery: `prose.accessibility`. It
+  reads a document and reports its **issues**: each one has a **kind**
+  — an `error`, a `warning` or a `tip` — the **rule** it breaks, the
+  **words** that say what is wrong, and the **place** it is about.
+- The **rules** that are here are the ones this tree can see:
+  - **altText** — a picture that says nothing about itself. It is an
+    **error**.
+  - **headingOrder** — a heading that is more than one level deeper
+    than the heading before it. It is a **warning**: the outline has a
+    gap in it.
+  - **blankParagraphs** — empty paragraphs in a row. It is a **tip**:
+    spacing made with the return key.
+  - **linkText** — a link whose words are "click here". It is a
+    **tip**: the words say nothing about where the link goes.
+- The **order** of the report: the errors come first, then the
+  warnings, then the tips, and the order of the document is kept
+  within each kind.
+
+### What the port found
+
+- **The tree's checker is a checker and not a fact**: the tree's
+  `file.accessibility` runs the checks over the document and returns
+  the issues, each with the place in the document and a **fix** — a
+  command that repairs it. Here the issues are reported and nothing
+  is repaired: a fix that a command cannot make is not a fix.
+- **The tree's rules are its own**: the tree's wording and the tree's
+  set of rules — the alt text, the heading order, the blank
+  paragraphs, the link words — and the tree has more of them: the
+  **contrast** of the text against its shading, the **reading order**
+  of the drawings, the **headers** of a table, the **title** of the
+  document. Here four rules are here and the rest are not.
+- **The tree's blank paragraphs are top-level ones**: the tree counts
+  the empty paragraphs of the body that follow one another. Here every
+  paragraph of the document counts, and a paragraph that holds a table
+  is not one of them.
+
+### What it cost
+
+- **Ten tests** in the prose battery (`tests/accessibility.rs`): a
+  picture that says nothing about itself being an error, a picture
+  that says what it is not being an error, a heading that is too deep
+  being a warning, a heading that is one level deeper not being a
+  warning, empty paragraphs in a row being a tip, two empty
+  paragraphs in a row not being a tip, the words of a link that say
+  nothing being a tip, the words of a link that say something not
+  being a tip, the errors coming before the warnings and the tips, and
+  a node that is not a document being refused.
+- **One new module** (`accessibility`). The prose battery carries
+  **59** commands and the MCP server **714**.
+
+### What it does not settle
+
+- **The contrast is not checked**: the tree's checker measures the
+  contrast of the text against its shading with the WCAG ratio, and
+  this tree's text has no shading to measure it against.
+- **The tables are not checked**: the tree's checker says when a
+  table has no header row, and here the tables are not looked at.
+- **Nothing is fixed**: the tree's issues carry a fix — a command and
+  its parameters — and here an issue says what is wrong and stops
+  there.
