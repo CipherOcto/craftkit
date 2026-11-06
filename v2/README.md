@@ -3934,6 +3934,7 @@ so.
 | the **row** that is deleted | **built.** A row may be deleted from a sheet, and the rows below it move up — and a formula that names a cell in the deleted rows refuses the delete, because this tree has no #REF! yet (§497) | §497 |
 | the **column** that is inserted | **built.** A column may be inserted into a sheet, and everything that named a column is moved with it — the cells, the formulas, the merges, the notes, the widths — and what cannot be moved refuses the insert (§498) | §498 |
 | the **column** that is deleted | **built.** A column may be deleted from a sheet, and the columns to the right of it move left — and a formula that names a cell in the deleted columns refuses the delete, because this tree has no #REF! yet (§499) | §499 |
+| the **facts** that name an area | **built.** A conditional format, a validation and a sparkline name an area of cells, and the area moves with the rows and the columns that are inserted or deleted — and an area that covers part of what is deleted refuses (§500) | §500 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32833,3 +32834,84 @@ them.
 - **The formula is written out again**, so its text may be another
   spelling of the same meaning, and a formula this tree cannot read
   is left exactly as it was.
+
+## 500. The facts that name an area
+
+A sheet holds facts that name an **area** of cells: a conditional
+format, a validation, a sparkline. When rows or columns are inserted
+or deleted, those facts move with the area they name.
+
+### What was built
+
+- **No new command**: this arc lifts three refusals. The four
+  commands that move things — the row that is inserted (§496), the row
+  that is deleted (§497), the column that is inserted (§498) and the
+  column that is deleted (§499) — move three more kinds of fact:
+  - a **conditional format** names a range, and the range moves;
+  - a **validation** names a range, and the range moves;
+  - a **sparkline** is drawn in a cell and reads a range, and **both**
+    move — the cell with the row or the column it is in, and the range
+    with the area it reads.
+- **One new module** (`moving`): **one** way of moving an area, used
+  by all four commands, because a row insert and a column insert are
+  the same move sideways.
+- The **rules**:
+  - an area that is **wholly** in the band that is deleted goes away
+    with it: a conditional format of rows that are gone is a
+    conditional format of nothing;
+  - an area that **covers part** of the band refuses: this tree has no
+    `#REF!` yet, and an area that names half of what is gone is not an
+    area;
+  - an area that is **beside** the band moves with it, and an area the
+    band falls **inside** grows or shrinks by the size of the band — a
+    format on `A1:A10` with a row put in at the fifth row is a format
+    on `A1:A11`, and with the fifth row taken away it is a format on
+    `A1:A9`.
+
+### What the port found
+
+- **The tree's areas move with the sheet**, because the tree's sheet
+  is one thing and the areas are parts of it. Here an area is **text**
+  in the payload of the sheet, and moving it means writing the text
+  again — and a text that is written again may be another spelling of
+  the same area.
+- **An area is a pair of corners**, and the corners move one by one:
+  that is why an area the band falls inside grows, and why an area
+  that covers part of the band cannot be written at all. The tree
+  keeps the same idea — the tree's range is a start and an end — and
+  here it is said once and used four ways.
+- **A sparkline is two facts in one**: the cell it is drawn in and the
+  range it reads. The tree keeps them together in one structure; here
+  the cell is a key of a map and the range is a field of its entry,
+  and both move.
+
+### What it cost
+
+- **Thirteen tests** in the grid battery (`tests/moving.rs`): a
+  conditional format moving with the rows, a conditional format
+  growing when the row falls inside it, a conditional format moving
+  with the columns, a validation moving with the rows, a validation
+  moving with the columns, a sparkline moving with its cell, a
+  sparkline moving with its column, a conditional format that is
+  deleted going away, a conditional format that covers a deleted row
+  being refused, a conditional format that is deleted with a column
+  going away, a conditional format that covers a deleted column being
+  refused, the sparkline of a deleted cell going away with the cell,
+  and a validation that is deleted going away.
+- **One new module** (`moving`) and three keys added to the lists of
+  what a row or a column moves. The grid battery still carries **120**
+  commands and the MCP server **702**.
+- **Three tests** in the batteries of the row and the column now say
+  that a **table** is what this tree cannot move: the conditional
+  format they used is a fact that moves now, and a test that names a
+  fact that has changed is a test that is wrong.
+
+### What it does not settle
+
+- **The tables, the pivots, the charts and the names of the workbook
+  are not moved** yet, and a sheet that holds one of them refuses the
+  insert or the delete and says which.
+- **There is no `#REF!`**: a fact whose area covers part of the band
+  that is deleted refuses, where the tree writes the error.
+- **An area is written out again**, so its text may be another
+  spelling of the same area.
