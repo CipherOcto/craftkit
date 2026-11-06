@@ -61,6 +61,7 @@
 
 mod bleed;
 mod columns;
+mod facing;
 mod items;
 mod links;
 mod margins;
@@ -81,6 +82,7 @@ use craftkit_sdk::{
 
 pub use bleed::SetBleed;
 pub use columns::SetColumns;
+pub use facing::ReadFacing;
 pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem};
 pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
 pub use margins::SetMargin;
@@ -211,6 +213,8 @@ impl PageKind {
             "bleed": bleed,
             "margin": crate::parents::margins_of(document, node.id).to_json(),
             "side": crate::sides::side_of(node).name(),
+            "spread": crate::facing::spread_of(document, node.id).map(|spread| json!(spread)).unwrap_or(Json::Null),
+            "facing": crate::facing::facing_of(document, node.id).map(|facing| json!(facing)).unwrap_or(Json::Null),
             "inside": crate::sides::inside_outside(node).0,
             "outside": crate::sides::inside_outside(node).1,
             "margin_box": margin_box,
@@ -907,6 +911,7 @@ craftkit_sdk::plugin_anchor!(
     SetParent,
     ClearParent,
     SetSide,
+    ReadFacing,
     AddLayer,
     AddStory,
     AddAsset,
