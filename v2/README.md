@@ -3998,6 +3998,7 @@ so.
 | the **merged cells** of a table | **built.** A range of cells may be one cell — the top left keeps the value, the covered cells are emptied, and a merge that overlaps another is refused (§561) | §561 |
 | the **signatures** of a file | **built.** A file may be signed — the byte range, the signer, the time and the way it was made are read, and the bytes are not checked (§562) | §562 |
 | the **structure** of a file | **built.** A tagged file carries a structure tree — the type of every element, its title, its alt text, its language and its children are read (§563) | §563 |
+| the **text** of a page | **built.** A page's content is read as the operators show it — the pieces of text, the operator that showed each one, and how its bytes were read (§564) | §564 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36753,3 +36754,68 @@ A file may be **tagged**: its content carries a **structure tree**.
   followed.
 - **The roles are not a list**: any type is read as the file says it,
   and this tree does not know the standard types.
+
+## 564. The text of a page
+
+A page's content is a stream of operators, and four of them **show
+text**.
+
+### What was built
+
+- The new command **`pdf.page.text`** reads the text a page shows:
+  - every **piece** of text — what it says, the operator that showed
+    it, and how its bytes were read;
+  - the **text** of the page, as one string.
+- The rules:
+  - text is shown inside a **text object**: the operators `BT` and `ET`
+    open and close one, and a string shown outside one is not text and
+    is ignored;
+  - a number below **-100** in a `TJ` array is the space between two
+    words — a number in the array moves the pen by that many
+    thousandths of a unit of text space, and a move of more than a
+    tenth of an em is the gap between two words;
+  - a string is **bytes**: one that begins with a byte-order mark is
+    read as UTF-16 — big-endian or little-endian, as the mark says —
+    and any other string is read as Latin-1, the byte's own value as a
+    character. The answer says which of the three it was;
+  - a page with **no content** has no text, and that is not a failure.
+
+### What the port found
+
+- **The tree's text is glyphs and not strings**: the tree reads the
+  glyphs of a page — each with its place, its line and whether a word
+  break comes before it — because it renders the page and a rendered
+  page is laid out. Here the text is what the **operators** show, in
+  the order they show it, with no place and no lines.
+- **The tree's bytes are mapped to Unicode and here they are not**:
+  the tree reads the `/ToUnicode` of the font, and failing that the
+  encoding of the font, and a glyph is the character it stands for.
+  Here the bytes are read as they are — UTF-16 when the string says
+  so, Latin-1 otherwise — so a text in a font that carries a
+  `/ToUnicode` is read as the codes of the font and not as the
+  letters.
+- **The tree's word breaks come from the glyphs**: the tree says a
+  word break is before a glyph when the space before it is wide
+  enough. Here a word break comes from the numbers in the array, and
+  a gap the font makes is not a gap the text has.
+
+### What it cost
+
+- **Six tests** in the pdf battery (`tests/pagetext.rs`): the text of
+  a page, a number that is a space, a string of UTF-16, a string
+  shown outside a text object, a page with no content, and an object
+  that is not a page.
+- **One new module** (`src/pagetext.rs`) and **one new command**
+  (`pdf.page.text`). The pdf battery now carries **57** commands and
+  the MCP server **760**.
+
+### What it does not settle
+
+- **The fonts are not read**: the encoding of a font, its codes and
+  its `/ToUnicode` are not here, and a text in a font that is not
+  UTF-16 is read as the bytes it is.
+- **The place of the text is not worked out**: the operators that move
+  the pen are read and not carried out, so a piece of text says what
+  it says and not where it is.
+- **The lines are not the file's**: a line break comes from the `'` and
+  `"` operators and not from where the text falls on the page.
