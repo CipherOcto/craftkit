@@ -116,6 +116,7 @@ mod finding;
 mod footnotes;
 mod links;
 mod media;
+mod numberformat;
 mod numbering;
 mod outline;
 mod page;
@@ -140,6 +141,7 @@ pub use finding::{Find, Replace};
 pub use footnotes::{AddFootnote, ReadFootnotes};
 pub use links::ReadLinks;
 pub use media::{SetAlt, SetDecorative, SetPlacement};
+pub use numberformat::NumberFormat;
 pub use numbering::{AddList, ReadNumber, SetNumbering};
 pub use outline::{ReadOutline, ReadStyleLevel, SetStyleLevel};
 pub use page::{GetPage, SetPage};
@@ -1024,6 +1026,7 @@ craftkit_sdk::plugin_anchor!(
     SetPlacement,
     SetTitle,
     ReadStatistics,
+    NumberFormat,
     SetHeader,
     SetTableAlt,
     CheckAccessibility,
