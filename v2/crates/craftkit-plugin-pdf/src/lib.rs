@@ -136,6 +136,7 @@ mod fields;
 mod filters;
 mod fonts;
 mod form;
+mod format;
 mod free;
 mod information;
 mod intent;
@@ -170,6 +171,7 @@ pub use encrypt::ReadEncryption;
 pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField, SetFlags, SetParent};
 pub use fonts::ReadFonts;
 pub use form::ReadForm;
+pub use format::ReadFormat;
 pub use information::SetInformation;
 pub use intent::WriteIntent;
 pub use labels::SetPageLabels;
@@ -2063,6 +2065,7 @@ craftkit_sdk::plugin_anchor!(
     ReadForm,
     ReadAppearance,
     ReadValidation,
+    ReadFormat,
     SetField,
     SetFlags,
     SetParent,
