@@ -3940,6 +3940,7 @@ so.
 | the **error** of a reference that is gone | **built.** A formula may hold the error `#REF!`, and a delete that orphans a reference writes it there — the tree's own spelling, and the correction of what §497 and §499 said (§503) | §503 |
 | the **copy** that would leave the sheet | **built.** A formula may be copied into a cell that would put a reference outside the sheet, and the copy is done: the reference is written as the error, and the copy is not refused (§504) | §504 |
 | the **parent** of a page | **built.** A page may have a parent — the page it takes what it has not got of its own from — and the margins and the columns it does not have of its own are derived from it (§505) | §505 |
+| the **side** of a page | **built.** A page may be the left or the right face of a spread, and the inside and the outside margins are derived from the side — the inside margin is the room at the spine (§506) | §506 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33263,3 +33264,65 @@ of its own from. That is the tree's **master page**.
 - **The parent is named and not chosen by the side**: the tree picks
   the parent page of the spread that matches the page's side, and
   here there is no side to pick by.
+
+## 506. The side of a page
+
+A page may be the **left** face of a spread or the **right** one, and
+the side is what makes the inside and the outside margins mean
+something: the inside margin is the room at the **spine**, and the
+outside margin is the room at the other edge.
+
+### What was built
+
+- **One command** in the layout battery: `layout.page.side`.
+- The side is a fact of the **page** — `single`, `left` or `right` —
+  and a page that says nothing is **single**: it is on its own and has
+  no facing page.
+- The **inside** and the **outside** margins of a page are **derived**
+  from the side and from the margins:
+  - a single page, and a right-hand page, has its inside margin at
+    its **left** and its outside margin at its **right**;
+  - a **left-hand** page has its inside margin at its **right**,
+    because the spine is on that side.
+- The **rules**: a side that is not one of the three is refused — a
+  page that is neither single nor left nor right is a page of no
+  side; and a node that is not a page may not have a side.
+
+### What the port found
+
+- **The tree's page has a side** — the tree's own `PageSide` is
+  `Single`, `Left` or `Right` — and the tree's margins are the top,
+  the bottom, the **inside** and the **outside**, and the tree's left
+  and right are *worked out* from them by the side.
+- Here the margins are the top, the bottom, the **left** and the
+  **right** (§492), and the inside and the outside are worked out from
+  them by the side. The two trees keep the same fact on opposite sides
+  of the mirror: what one of them holds, the other derives.
+- **The tree's side chooses the parent page**: the tree's page follows
+  the parent page of its applied parent spread that **matches its
+  side**. Here the parent is named (§505), so the side does not choose
+  it — but the two fit together, and a page that follows a parent and
+  is a left-hand page is the tree's shape.
+
+### What it cost
+
+- **Eight tests** in the layout battery (`tests/sides.rs`): a page that
+  says nothing being a single page, a page being a left-hand page, a
+  page being a right-hand page, the inside margin of a single page
+  being at its left, the inside margin of a right-hand page being at
+  its left, the inside margin of a left-hand page being at its right, a
+  side that is not a side being refused, and a node that is not a page
+  being refused a side.
+- **One new module** (`sides`). The layout battery now carries
+  **40** commands and the MCP server **705**.
+
+### What it does not settle
+
+- **The margins are the left and the right** and the tree's are the
+  inside and the outside: what one tree holds, the other works out.
+- **The side does not choose the parent page** — the tree's does, and
+  here the parent is named.
+- **The page is not placed**: the tree's page has a place in its
+  spread — the distance of its left edge from the edge of the spread —
+  and here a page has a size and a side, and nothing says where it
+  lies.
