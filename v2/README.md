@@ -3967,6 +3967,7 @@ so.
 | the **children** of a field | **built.** A field may hold fields, and a kid with no name is a widget — the field's appearance on a page — and not a child (§530) | §530 |
 | the **widgets** of a field | **built.** A widget is the field's appearance on a page, and it says where it is, what state it shows and whether it is locked (§531) | §531 |
 | the **decorative** picture | **built.** A picture may say nothing about itself on purpose, and the checker does not ask it for words (§532) | §532 |
+| the **placement** of a picture | **built.** A picture sits in the line of the text or floats beside it, and a floating one makes the reading order unclear (§533) | §533 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34938,3 +34939,60 @@ purpose** — it is a rule, a flourish, a mark that a reader may skip.
   is.
 - **The ink is not here**: the tree's checker walks past the strokes
   of a pen, because every stroke is its own object.
+
+## 533. The placement of a picture
+
+A picture sits either **in the line** of the text — so a reader who
+cannot see it knows where it belongs — or **floating** beside it.
+
+### What was built
+
+- **One command** in the prose battery: `prose.media.placement`. It
+  says where a picture sits, and the reading of a picture says it too.
+- The **checker** reports a floating picture as a **tip**: the reading
+  order is unclear.
+- The **rules**:
+  - a node that is **not a picture** is refused;
+  - a placement that is **not a placement** is refused, and the
+    refusal names the placements there are;
+  - a placement that is **not said** leaves the picture as it was;
+  - a picture that says nothing sits **inline**, because that is how a
+    picture sits unless it says otherwise.
+
+### What the port found
+
+- **The tree's floating object is a tip and here it is a tip too**:
+  the tree's checker says that an object which is not in line with
+  text has an unclear reading order. Here the same, and the picture
+  that floats is the object that floats.
+- **The tree's floating is a fact of the drawing and here it is a
+  fact of the picture**: the tree's object knows how it is wrapped —
+  in line with the text, or floating with a way round the text and a
+  distance from it. Here the picture says only **inline** or
+  **floating**, and the way round and the distance are not here.
+- **The tree's fix moves the object into the line and here the fact
+  may be said again**: the tree's issue carries the action that puts
+  the object in line. Here the placement may be said to be `inline`
+  again, and the checker is quiet.
+
+### What it cost
+
+- **Eight tests** in the prose battery (`tests/placement.rs`): a
+  picture that says nothing being inline, a picture being said to
+  float, a floating picture making the reading order unclear, a
+  picture that is inline not being asked about, a placement that is
+  not a placement being refused, a placement that is not said leaving
+  the picture as it was, a node that is not a picture being refused,
+  and a node that is not there being refused.
+- **No new module**: the command grows the media module. The prose
+  battery now carries **64** commands and the MCP server **730**.
+
+### What it does not settle
+
+- **The way round the text is not here**: the tree's floating object
+  says how the text goes round it and how far away it sits.
+- **The order of the floating pictures is not here**: the tree's
+  document has an order for the objects that float, and here there is
+  none.
+- **Only a picture may float here**: the tree's shapes, charts and
+  text boxes are not here to be placed.
