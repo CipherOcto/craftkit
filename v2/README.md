@@ -3994,6 +3994,7 @@ so.
 | the **exporting** of a sheet as a text of values | **built.** A range is written as a CSV — a cell is written as it is shown, and a field that holds the delimiter is quoted (§557) | §557 |
 | the **value** a field is calculated to hold | **built.** The simple way a field is calculated in is worked out — the values of the fields it names, put together in the way the script says (§558) | §558 |
 | the **baking** of an expression into keyframes | **built.** An expression is sampled over the frames and written down as keyframes — and a bake that would be too long is refused (§559) | §559 |
+| the **named destinations** of a file | **built.** A file may give its pages names — the name and the page the destination points at are read (§560) | §560 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36531,3 +36532,52 @@ An expression says what the value of a property is at every frame.
   bake does not change what it means.
 - **The bake does not write the property's value anywhere else**: the
   keyframes are the property, and nothing else is told.
+
+## 560. The named destinations of a file
+
+A file may give its pages **names**.
+
+### What was built
+
+- The new command **`pdf.dests.read`** reads the named destinations
+  of a file — the name and the page the destination points at — or
+  **one** of them by its name.
+- The rules:
+  - a file that names no destination has **no named destinations**,
+    and the answer says so;
+  - a destination that points at a **page** gives the page it points
+    at: the number of the object, which is the number the file uses;
+  - a destination that points at **something else** — a place inside
+    a page, say — is reported with **no page**, because this tree
+    does not work out where inside a page a destination is;
+  - the **kids** of a name tree are not read: a tree with kids is a
+    tree of trees, and the names of the kids are not read here.
+
+### What the port found
+
+- **The tree's destinations are a name tree too**: the tree keeps the
+  destinations under the catalog's names and reads the pairs of a
+  name and what it points at — here the same, and the tree's own
+  `/Dests` dictionary is read rather than a list of the tree's own.
+- **The tree's destinations point at pages and at places**: the tree
+  resolves a destination to a page and to a position inside it; here
+  the page is given and the position is not, because a position
+  inside a page is a place and not a fact about the file.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/destinations.rs`): the
+  named destinations read, one destination by its name, a name the
+  file does not use, and a file that names no destination.
+- **One new module** (`src/destinations.rs`) and **one new command**
+  (`pdf.dests.read`). The pdf battery now carries **54** commands and
+  the MCP server **754**.
+
+### What it does not settle
+
+- **The place inside a page is not worked out**: the destination says
+  `/XYZ` and the tree does not read it.
+- **The kids of a name tree are not read**: a file with a big name
+  tree keeps its deeper names to itself here.
+- **The destinations are not written**: a name and a page may be
+  read, and nothing puts one into a file.
