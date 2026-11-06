@@ -3964,6 +3964,7 @@ so.
 | the **way** a table totals | **built.** A table may total in many ways — a sum, an average, a count — and a way that is not one of them is refused (§527) | §527 |
 | the **way of a column** of a table | **built.** A column may be totalled in a way of its own, and the way of the table is the way of the columns that have none (§528) | §528 |
 | the **kind and the flags** a field inherits | **built.** A field that says nothing takes the kind and the flags of its parent, and a field that says its own replaces what it would inherit (§529) | §529 |
+| the **children** of a field | **built.** A field may hold fields, and a kid with no name is a widget — the field's appearance on a page — and not a child (§530) | §530 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34745,3 +34746,65 @@ name and no kind, and take the kind of the field it is in.
   value, the appearance and the maximum length do not come down.
 - **The children are not read**: the tree's list of fields is the
   terminal fields, and here the list holds the groups as well.
+
+## 530. The children of a field
+
+A field of a form may be a **group**: a field that holds other fields,
+the fields it is a group of.
+
+### What was built
+
+- **One command** in the pdf battery: `pdf.field.children`. It says
+  the children of a field and the **widgets** it shows itself with,
+  and the reading of the fields says them too.
+- The **relation is written on both sides**: putting a field in a
+  field writes the **parent** on the child and the **kids** on the
+  parent, and taking the parent away takes the child out of the
+  parent's kids — so the two halves of the file cannot disagree.
+- The **rules**:
+  - a kid with **no name** is a **widget** and not a child: it is the
+    field's appearance on a page;
+  - a kid that **is not there** is neither a child nor a widget: the
+    file names an object that is not in it, and there is nothing to
+    say of it;
+  - a **list of no kids takes the fact away**: the `/Kids` of a field
+    with no kids is not in the file at all;
+  - a node that is **not a field** is refused.
+
+### What the port found
+
+- **The tree's kid with no name is a widget, and here it is one too**:
+  the tree tells a child from a widget by the name — a kid with a
+  name is a field and a kid without one is the field's appearance on a
+  page. Here the same rule says which is which.
+- **The tree's field tree is walked downwards and here the relation
+  runs both ways**: the tree walks the form's fields from the roots
+  into the children, and the parent is found by the walk. Here a field
+  has a parent and a parent has kids, and the file says both.
+- **The tree's widgets are fields with a rectangle and here they are
+  only counted**: the tree's widget says which page it is on, where it
+  is, and what state it shows. Here a widget is the number of its
+  object.
+
+### What it cost
+
+- **Eight tests** in the pdf battery (`tests/children.rs`): a field
+  put in a field becoming its child and the file saying it on both
+  sides, a field with no children having none, a kid with no name
+  being a widget and not a child, the reading of the fields saying the
+  children and the widgets, a field that leaves its parent leaving its
+  kids too, a field that moves to another parent leaving the one it
+  was in, a node that is not a field being refused, and a node that is
+  not there being refused.
+- **No new module**: the command grows the fields module. The pdf
+  battery now carries **39** commands and the MCP server **727**.
+
+### What it does not settle
+
+- **The widgets are not read**: the page a widget is on, where it is
+  and what state it shows are not here.
+- **The group is still a field**: the tree does not call a field with
+  children a field, and here it is one.
+- **The form's roots are not read**: the tree's form holds the fields
+  that have no parent, and the tree's list of fields is the terminal
+  ones.
