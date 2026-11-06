@@ -3966,6 +3966,7 @@ so.
 | the **kind and the flags** a field inherits | **built.** A field that says nothing takes the kind and the flags of its parent, and a field that says its own replaces what it would inherit (§529) | §529 |
 | the **children** of a field | **built.** A field may hold fields, and a kid with no name is a widget — the field's appearance on a page — and not a child (§530) | §530 |
 | the **widgets** of a field | **built.** A widget is the field's appearance on a page, and it says where it is, what state it shows and whether it is locked (§531) | §531 |
+| the **decorative** picture | **built.** A picture may say nothing about itself on purpose, and the checker does not ask it for words (§532) | §532 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34878,3 +34879,62 @@ is drawn, what it shows, and whether it may be touched.
 - **The widget's own page is not read**: the tree finds the page
   through the page's annotations, and the page the widget names with
   its `/P` is not looked at.
+
+## 532. The decorative picture
+
+A picture may be **decorative**: it says nothing about itself **on
+purpose** — it is a rule, a flourish, a mark that a reader may skip.
+
+### What was built
+
+- **One command** in the prose battery: `prose.media.decorative`. It
+  says whether a picture is decorative, and the reading of a picture
+  says it too.
+- The **checker** does not ask a decorative picture for words: the
+  **altText** rule leaves it alone, because words would be wrong.
+- The **rules**:
+  - a node that is **not a picture** is refused;
+  - a picture that is **not said** to be decorative keeps the fact it
+    has — the words "not said" leave the picture as it was;
+  - a picture that is **not** decorative is not decorative: the fact
+    is taken away, and the checker asks for words again.
+
+### What the port found
+
+- **The tree's decorative object is skipped by the checker and here it
+  is too**: the tree's checker walks past a drawing that is marked
+  decorative, because a decorative drawing is not there to be read.
+  Here the checker walks past a picture that says it is decorative.
+- **The tree's decorative mark lives in the alt text and here it is a
+  fact of its own**: the tree's command sets the alt text and marks
+  the object decorative in the same breath, because in the tree the
+  two are one thing — the alt text of a decorative object. Here they
+  are two facts, and each has its own command: the words and the
+  mark.
+- **The tree's decorative objects are shapes and drawings and here a
+  picture is a picture**: the tree's document has many kinds of
+  drawing — a shape, a chart, a text box — and any of them may be
+  decorative. Here there is one kind, and it may be decorative.
+
+### What it cost
+
+- **Eight tests** in the prose battery (`tests/decorative.rs`): a
+  picture that says nothing not being decorative, a picture being said
+  to be decorative, a decorative picture not being asked for words, a
+  picture that is not decorative being asked for words again, a
+  decorative picture that says what it is still being decorative, a
+  picture that is not said to be decorative keeping the fact it has, a
+  node that is not a picture being refused, and a node that is not
+  there being refused.
+- **No new module**: the command grows the media module. The prose
+  battery now carries **63** commands and the MCP server **729**.
+
+### What it does not settle
+
+- **Only a picture may be decorative here**: the tree's shapes, charts
+  and text boxes are not here to be marked.
+- **The words of a decorative picture are not taken away**: the two
+  facts are separate, and a decorative picture may still say what it
+  is.
+- **The ink is not here**: the tree's checker walks past the strokes
+  of a pen, because every stroke is its own object.
