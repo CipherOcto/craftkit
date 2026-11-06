@@ -337,3 +337,71 @@ impl DeleteStyle {
         })))
     }
 }
+
+/// **Read** the **styles** of a document.
+///
+/// A query: it does not change the document. Each style is given with
+/// what it applies to, the style it is **based on**, and the blocks
+/// that are in it.
+#[derive(Command)]
+#[command(id = "prose.style.list", area = "prose", layer = "prose", icon = "list")]
+pub struct ListStyles {
+    /// The document to look in.
+    pub document: NodeRef,
+}
+
+impl ListStyles {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "prose.style.list".to_string();
+        let document = self.document.0;
+        let Some(node) = session.document().node(document) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no document `{document}`"),
+            });
+        };
+        if node.kind != "prose.document" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+            });
+        }
+        let styles: Vec<Json> = node
+            .children
+            .iter()
+            .filter(|child| child.kind == "prose.style")
+            .map(|style| {
+                let base = session
+                    .document()
+                    .relations
+                    .iter()
+                    .find(|relation| relation.kind == "prose.based_on" && relation.from == style.id)
+                    .map(|relation| {
+                        let name = session.document().node(relation.to).map(|node| node.name.clone());
+                        json!({ "id": relation.to, "name": name })
+                    })
+                    .unwrap_or(Json::Null);
+                let blocks: Vec<Json> = session
+                    .document()
+                    .relations
+                    .iter()
+                    .filter(|relation| relation.kind == "prose.styled_by" && relation.to == style.id)
+                    .map(|relation| json!(relation.from))
+                    .collect();
+                json!({
+                    "id": style.id,
+                    "name": style.name.clone(),
+                    "kind": style.data.get("style_kind").cloned().unwrap_or(Json::Null),
+                    "based_on": base,
+                    "blocks": blocks,
+                })
+            })
+            .collect();
+        let count = styles.len();
+        Ok(Outcome::new(format!("the document holds {count} style(s)")).with_data(json!({
+            "document": document,
+            "styles": styles,
+            "count": count,
+        })))
+    }
+}
