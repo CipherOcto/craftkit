@@ -3972,6 +3972,7 @@ so.
 | the **tab order** of a page | **built.** The order a page's annotations are reached in may be said, and the order **annotations** takes the fact away (§535) | §535 |
 | the **XMP metadata** of a file | **built.** The packet that says what the file is is written from the information the file has, and the catalog names it (§536) | §536 |
 | the **output intent** of a file | **built.** The intent that says what the colours mean names an sRGB profile, and the profile is built in code (§537) | §537 |
+| the **flags** of an annotation | **built.** An annotation says whether it prints and whether it is hidden, and the checker says when it may not (§538) | §538 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35258,3 +35259,68 @@ intent**: a dictionary that names an ICC profile.
   colour space has no way to say so here.
 - **The profile is not checked**: the checker reads the intent and
   believes it, and it does not open the profile to see what is inside.
+
+## 538. The flags of an annotation
+
+An annotation says how it behaves with its **flags**: whether it
+prints, whether it is hidden, whether it may be turned.
+
+### What was built
+
+- **One command** in the pdf battery: `pdf.annot.flags`. It says
+  whether an annotation prints and whether it is hidden, and the
+  reading of a page's annotations says them too.
+- The **checker** gained the rule **6.3.2**: an annotation that is
+  not set to print, or that is hidden, breaks it — a reader who
+  prints the file must get the notes, and a note that is hidden is a
+  note nobody sees.
+- The **flags** of the format:
+  - the **first** bit is *hidden*;
+  - the **second** bit is *print*;
+  - the **fifth** bit is *no view* — the annotation cannot be seen;
+  - the **seventh** bit is *locked* — its properties may not be
+    changed.
+- The **rules**:
+  - a node that is **not an annotation** is refused;
+  - a flag that is **not said** leaves the annotation as it was, and a
+    flag that is not named is left as it was.
+
+### What the port found
+
+- **The tree's rule is the rule here too**: the tree's checker says
+  that an annotation which is not set to print, or that is hidden,
+  breaks the PDF/A rule — and a **popup** is let off, because a popup
+  is the window of another annotation and not a note of its own. Here
+  a popup is let off as well.
+- **The tree's hidden flag counts the unused first bit and here it
+  does not**: the tree's rule treats the value one as hidden as well
+  as the value two and the value thirty-two. The format names two
+  hidden flags — *hidden* and *no view* — and here those are the two
+  that are hidden.
+- **The tree's fix sets the flags of every annotation and here a flag
+  is said for one annotation at a time**: the tree's conversion sets
+  the print flag on the annotations it finds and shows the ones that
+  are hidden. Here the flags of an annotation are said on that
+  annotation.
+
+### What it cost
+
+- **Nine tests** in the pdf battery (`tests/annotflags.rs`): an
+  annotation that does not print breaking the rule, an annotation that
+  is hidden breaking the rule, an annotation that prints and is shown
+  breaking nothing, an annotation being made to print, an annotation
+  being shown again, a flag that is not said leaving the annotation as
+  it was, the reading of a page's annotations saying the flags, a node
+  that is not an annotation being refused, and a node that is not there
+  being refused.
+- **One new module**: `annot.rs`. The pdf battery now carries **45**
+  commands and the MCP server **735**.
+
+### What it does not settle
+
+- **The other flags are not said**: the flag that locks an annotation
+  and the flag that turns it are read, not set.
+- **The appearance of an annotation is not checked**: the tree's rule
+  asks for an appearance stream too, and here it does not.
+- **The checker does not fix it by itself**: the flags are said by
+  their own command.
