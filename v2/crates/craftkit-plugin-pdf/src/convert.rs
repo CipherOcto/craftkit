@@ -201,6 +201,28 @@ impl Convert {
         if images > 0 {
             fixed.push(format!("{images}: cleared the image interpolation and the alternates"));
         }
+        // The **annotations**: they print, and they are shown. A
+        // popup is left alone: it is the window of another annotation
+        // and not a note of its own.
+        let mut annotations = 0_usize;
+        for node in the_objects(session.document()) {
+            let Some(found) = session.document().node(node).cloned() else { continue };
+            let entries = preflight::entries_of(&found);
+            if !preflight::is_an_annotation(&entries) {
+                continue;
+            }
+            if preflight::name_of(&entries, "Subtype").as_deref() == Some("Popup") {
+                continue;
+            }
+            if let Some(found) = session.document_mut()?.node_mut(node)
+                && crate::annot::show(found)
+            {
+                annotations += 1;
+            }
+        }
+        if annotations > 0 {
+            fixed.push(format!("{annotations}: set the annotations to print and show"));
+        }
         // The **NeedAppearances** flag: it asks the viewer to make the
         // appearances of the form.
         let mut appearances = 0_usize;

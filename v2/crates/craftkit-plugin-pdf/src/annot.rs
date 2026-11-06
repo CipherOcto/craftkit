@@ -57,6 +57,31 @@ pub fn is_hidden(node: &Node) -> bool {
     flags_of(node) & (HIDDEN | NO_VIEW) != 0
 }
 
+/// Make an annotation **print** and be **shown**.
+///
+/// The print flag is set and the hidden flags are taken away. It says
+/// whether anything changed: an annotation that already prints and is
+/// already shown is not changed.
+pub fn show(node: &mut Node) -> bool {
+    let entries = crate::entries_of(&node.data);
+    let before = flags_of(node);
+    let after = (before | PRINT) & !(HIDDEN | NO_VIEW);
+    if before == after && entries.iter().any(|(key, _)| key == "F") {
+        return false;
+    }
+    let mut entries = entries;
+    let value = json!(after);
+    match entries.iter_mut().find(|(key, _)| key == "F") {
+        Some(entry) => entry.1 = value,
+        None => entries.push(("F".to_string(), value)),
+    }
+    node.data = json!({
+        "object": node.data.get("object").cloned().unwrap_or(craftkit_sdk::serde_json::Value::Null),
+        "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+    });
+    true
+}
+
 /// **Say** the **flags** of an annotation.
 ///
 /// The flags that are asked about are said; the flags that are not
