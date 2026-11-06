@@ -3946,6 +3946,7 @@ so.
 | the **divide** and the **merge** of two paths | **built.** The divide cuts the paths where they meet and leaves one path for each face, and the merge joins the parts that are painted the same way (§509) | §509 |
 | the **pathfinder** on a whole selection | **built.** The crop and the trim work on a whole selection, and every path is trimmed by every path above it — and a path that has nothing left is gone (§510) | §510 |
 | the **fonts** of a PDF file | **built.** A file names its fonts, and the preflight says when one of them is not embedded — the rule of the clause 6.2.11.4 (§511) | §511 |
+| the **colour** of a PDF file | **built.** A file that paints in a device colour needs an output intent, and the preflight says when there is none — the clauses 6.2.3 and 6.2.4.3 (§512) | §512 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33647,3 +33648,65 @@ must be in the file, and not only its name.
   here nothing of that is known.
 - **The preflight does not check the colour and the encryption yet**:
   the tree checks both, and the rules are still to come.
+
+## 512. The colour of a PDF file
+
+A PDF/A file that paints in a **device colour** needs an **output
+intent**: the intent says how the device colour is to be read, and
+without it the file says nothing about its own colours.
+
+### What was built
+
+- The **preflight** now says when a file paints in a device colour and
+  has no PDF/A output intent: the clause is `6.2.3`, and the rule can
+  be fixed when the colour is not CMYK — an sRGB intent is something
+  the tree can add.
+- **CMYK** has a rule of its own: the clause is `6.2.4.3`, and it
+  cannot be fixed — a CMYK intent is not one thing that can be added
+  without asking, so the preflight says so and leaves it alone.
+- The **colour** is found in the two ways a file says it: a
+  dictionary that names a **device colour space** says it outright,
+  and a **content stream** says it with the operators that set a
+  colour — `rg`, `RG`, `g` and `G` for red, green, blue and gray, and
+  `k` and `K` for CMYK. The content streams are read with the kit's
+  own content reader, and not by looking for letters in the bytes.
+- The preflight **reports the colour** it found, so that a caller
+  need not read the issues to know it.
+
+### What the port found
+
+- **The tree's colour rule is about the device colour and not about
+  the colour**: the tree asks whether the file paints in `DeviceRGB`,
+  in `DeviceGray` or in `DeviceCMYK` and in nothing else, and gray
+  counts: it is a device colour and it needs the intent as much as
+  red does.
+- **The tree's check is a check and not a reading**: the tree's
+  `uses_device_colour` looks at the colour space of every dictionary
+  and at the operators of the content streams, and it does not report
+  what it found — it only says whether the file breaks the rule. Here
+  the colour is a fact of its own and the rule is made of it.
+- **The tree's output intent is a strict one**: the tree wants an
+  intent of the subtype `GTS_PDFA1` that names a profile, and an
+  intent of any other kind does not count — the same here.
+
+### What it cost
+
+- **Seven tests** in the pdf battery (`tests/colour.rs`): device
+  colour without an output intent breaking the rule, device colour
+  with an output intent breaking nothing, CMYK needing an intent of
+  its own, the CMYK rule not being fixable, a dictionary that names a
+  device colour space, the colour the file paints in being reported,
+  and gray being a device colour too.
+- **No new command** and no new module. The pdf battery still
+  carries **31** commands and the MCP server **711**.
+
+### What it does not settle
+
+- **The ICC profile is not read**: the tree's preflight has an `icc`
+  module of its own, and here the profile is only named by the intent
+  and not looked at.
+- **The intent is not written**: the tree's `convert` adds an sRGB
+  output intent when there is none, and this tree has no command that
+  writes one.
+- **The rule about encryption is not here**: the tree checks it, and
+  the trailer it needs is not in the document yet.
