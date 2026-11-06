@@ -186,10 +186,5 @@ fn without(entries: &[(String, serde_json::Value)], number: u64) -> Vec<(String,
 ///
 /// A reference is a value of the shape `{"ref": [number, generation]}`.
 fn names(value: &serde_json::Value, number: u64) -> bool {
-    value
-        .get("ref")
-        .and_then(|pair| pair.as_array())
-        .and_then(|pair| pair.first())
-        .and_then(|number| number.as_u64())
-        .is_some_and(|named| named == number)
+    crate::number_of(value).is_some_and(|named| named == number)
 }

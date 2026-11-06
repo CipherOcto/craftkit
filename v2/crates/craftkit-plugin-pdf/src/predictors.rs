@@ -115,7 +115,7 @@ pub fn spec_of(entries: &[(String, Json)]) -> Result<Option<Spec>, Error> {
     };
     let mut spec = Spec::default();
     for (key, value) in pairs {
-        let Some(number) = value.as_i64() else { continue };
+        let Some(number) = crate::whole_number_of(&value) else { continue };
         match key.as_str() {
             "Predictor" => {
                 let Some(predictor) = Predictor::by_number(number) else {

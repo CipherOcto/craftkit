@@ -72,8 +72,7 @@ fn number_of(node: &craftkit_sdk::Node) -> Option<u64> {
 
 /// The **node** a reference names: the node with that object number.
 fn node_of<'a>(document: &'a Document, value: &Json) -> Option<&'a craftkit_sdk::Node> {
-    let number = value.get("ref").and_then(|pair| pair.as_array())?.first()?;
-    let number = number.as_u64()?;
+    let number = crate::number_of(value)?;
     document.walk().find(|node| number_of(node) == Some(number))
 }
 

@@ -44,7 +44,7 @@ use crate::preflight::{self, Level};
 
 /// The **object number** a reference names.
 fn number_of(value: &Json) -> Option<u64> {
-    value.get("ref").and_then(|pair| pair.as_array())?.first()?.as_u64()
+    crate::number_of(value)
 }
 
 /// The **entries** of a node's dictionary, without the key.

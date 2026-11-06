@@ -1220,11 +1220,7 @@ fn where_it_goes(document: &Document, entries: &[(String, serde_json::Value)]) -
     // The **action** first: it is the one that is used when both are
     // there, and the tree says so.
     if let Some((_, action)) = entries.iter().find(|(key, _)| key == "A") {
-        let number = action
-            .get("ref")
-            .and_then(|pair| pair.as_array())
-            .and_then(|pair| pair.first())
-            .and_then(|number| number.as_u64())?;
+        let number = number_of(action)?;
         let node = document.walk().find(|node| the_number_of(node) == Some(number))?;
         let uri =
             entries_of(&node.data).into_iter().find(|(key, _)| key == "URI").and_then(|(_, value)| {
@@ -1233,13 +1229,7 @@ fn where_it_goes(document: &Document, entries: &[(String, serde_json::Value)]) -
         return Some(serde_json::json!({ "uri": uri }));
     }
     let (_, dest) = entries.iter().find(|(key, _)| key == "Dest")?;
-    let number = dest
-        .as_array()
-        .and_then(|list| list.first())
-        .and_then(|first| first.get("ref"))
-        .and_then(|pair| pair.as_array())
-        .and_then(|pair| pair.first())
-        .and_then(|number| number.as_u64())?;
+    let number = number_of(dest.as_array().and_then(|list| list.first())?)?;
     Some(serde_json::json!({ "page": number }))
 }
 
@@ -1296,6 +1286,37 @@ fn add_reference(
 }
 
 /// The **object number** of a node, if it has one.
+/// The **whole number** a value holds.
+///
+/// A file's numbers are numbers, and a whole number may be written as
+/// a fraction — the loader keeps the number as the file wrote it, and
+/// a number in the bytes is a number and not an integer until
+/// somebody says so. So a whole number is read as a number and taken
+/// as the whole one it is, and a number that is not a whole one is
+/// not one.
+pub fn whole_number_of(value: &serde_json::Value) -> Option<i64> {
+    let number = value.as_f64()?;
+    if !number.is_finite() || number.fract() != 0.0 {
+        return None;
+    }
+    Some(number as i64)
+}
+
+/// The **object number** a reference names.
+///
+/// The number in a reference is a number, and a file's object number
+/// is a whole one — but a file may write it as a fraction, and the
+/// loader keeps the number as the file wrote it. So the number is
+/// read as a number and taken as a whole one, and a number that is
+/// not a whole one names no object.
+pub fn number_of(value: &serde_json::Value) -> Option<u64> {
+    let number = value.get("ref")?.as_array()?.first()?.as_f64()?;
+    if !number.is_finite() || number < 0.0 || number.fract() != 0.0 {
+        return None;
+    }
+    Some(number as u64)
+}
+
 fn the_number_of(node: &Node) -> Option<u64> {
     node.data.get("object").and_then(|number| number.as_u64())
 }
@@ -1423,20 +1444,24 @@ impl ReadObjectStream {
         }
         let entries = entries_of(&node.data);
         // The **count** and the **first**: what the dictionary says.
-        let count =
-            entries.iter().find(|(key, _)| key == "N").and_then(|(_, value)| value.as_u64()).ok_or_else(
-                || EngineError::Failed {
-                    id: "pdf.objstm.read".to_string(),
-                    message: "the object stream does not say how many objects it has".to_string(),
-                },
-            )?;
-        let first =
-            entries.iter().find(|(key, _)| key == "First").and_then(|(_, value)| value.as_u64()).ok_or_else(
-                || EngineError::Failed {
-                    id: "pdf.objstm.read".to_string(),
-                    message: "the object stream does not say where the first object begins".to_string(),
-                },
-            )?;
+        let count = entries
+            .iter()
+            .find(|(key, _)| key == "N")
+            .and_then(|(_, value)| whole_number_of(value))
+            .and_then(|number| u64::try_from(number).ok())
+            .ok_or_else(|| EngineError::Failed {
+                id: "pdf.objstm.read".to_string(),
+                message: "the object stream does not say how many objects it has".to_string(),
+            })?;
+        let first = entries
+            .iter()
+            .find(|(key, _)| key == "First")
+            .and_then(|(_, value)| whole_number_of(value))
+            .and_then(|number| u64::try_from(number).ok())
+            .ok_or_else(|| EngineError::Failed {
+                id: "pdf.objstm.read".to_string(),
+                message: "the object stream does not say where the first object begins".to_string(),
+            })?;
         let decoded = decoded_bytes(node, None, None, false, "pdf.objstm.read")?;
         let objects =
             objects::object_stream(&decoded.bytes, count as usize, first as usize).map_err(|error| {

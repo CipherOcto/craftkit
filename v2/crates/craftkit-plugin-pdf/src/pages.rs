@@ -407,9 +407,5 @@ fn names(value: &serde_json::Value, number: u64) -> bool {
 
 /// The object number a value names, if it names one.
 fn number_named(value: &serde_json::Value) -> Option<u64> {
-    value
-        .get("ref")
-        .and_then(|pair| pair.as_array())
-        .and_then(|pair| pair.first())
-        .and_then(|number| number.as_u64())
+    crate::number_of(value)
 }

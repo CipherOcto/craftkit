@@ -148,14 +148,7 @@ fn index_of(document: &Document, page: u64, widget: u64) -> Option<usize> {
         .find(|(key, _)| key == "Annots")
         .and_then(|(_, value)| value.as_array().cloned())
         .unwrap_or_default();
-    annots.iter().position(|annot| {
-        annot
-            .get("ref")
-            .and_then(|pair| pair.as_array())
-            .and_then(|pair| pair.first())
-            .and_then(|number| number.as_u64())
-            == Some(widget)
-    })
+    annots.iter().position(|annot| crate::number_of(annot) == Some(widget))
 }
 
 /// **Say** the **tab order** of a page.

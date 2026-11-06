@@ -68,7 +68,7 @@ fn parent_of(session: &Session, id: u64) -> Option<u64> {
 pub fn rotation_of(session: &Session, id: u64) -> i64 {
     if let Some(node) = session.document().node(id)
         && let Some((_, value)) = entries_of(&node.data).iter().find(|(name, _)| name == "Rotate")
-        && let Some(degrees) = value.as_i64()
+        && let Some(degrees) = crate::whole_number_of(value)
     {
         return degrees.rem_euclid(360);
     }
@@ -81,7 +81,7 @@ pub fn rotation_of(session: &Session, id: u64) -> i64 {
         }
         let Some(current_node) = session.document().node(current) else { break };
         if let Some((_, value)) = entries_of(&current_node.data).iter().find(|(name, _)| name == "Rotate")
-            && let Some(degrees) = value.as_i64()
+            && let Some(degrees) = crate::whole_number_of(value)
         {
             return degrees.rem_euclid(360);
         }
@@ -180,7 +180,7 @@ impl ReadRotation {
         let own = entries_of(&node.data)
             .into_iter()
             .find(|(name, _)| name == "Rotate")
-            .map(|(_, value)| value.as_i64());
+            .and_then(|(_, value)| crate::whole_number_of(&value));
         let degrees = rotation_of(session, page);
         Ok(Outcome::new(format!("the page `{page}` is turned {degrees} degrees"))
             .with_data(serde_json::json!({ "id": page, "rotate": degrees, "own": own })))

@@ -425,14 +425,7 @@ fn the_node_of(session: &Session, value: &serde_json::Value) -> Option<u64> {
 /// until somebody says so — and a number that was made here is an
 /// integer. Both are numbers, and both are read the same way.
 fn the_whole(value: &serde_json::Value) -> Option<i64> {
-    if let Some(number) = value.as_i64() {
-        return Some(number);
-    }
-    let number = value.as_f64()?;
-    if !number.is_finite() || number.fract() != 0.0 {
-        return None;
-    }
-    Some(number as i64)
+    crate::whole_number_of(value)
 }
 
 /// Work the **counts** out again.
