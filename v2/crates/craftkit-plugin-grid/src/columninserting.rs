@@ -339,11 +339,6 @@ pub fn insert_columns(sheet: &mut Node, name: &str, at: u64, count: u64) -> Resu
     Ok(moved_cells)
 }
 
-/// The **names** of the workbook a sheet is in that point at it.
-pub(crate) fn names_of_the_workbook(session: &Session, sheet: u64) -> Vec<String> {
-    crate::inserting::names_of_the_workbook(session, sheet)
-}
-
 /// The **last column** of a sheet: the column of the last cell in it.
 pub fn last_column(sheet: &Node) -> u64 {
     crate::cells_of(sheet).iter().map(|(cell, _)| cell.col as u64 + 1).max().unwrap_or(0)
@@ -415,32 +410,38 @@ impl InsertColumn {
                 ),
             });
         }
-        // A **chart** of the sheet reads a range, and this tree does not
-        // move it yet.
-        if node.children.iter().any(|child| child.kind == "grid.chart") {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the sheet `{sheet}` holds a chart, and this tree does not move it yet"),
-            });
-        }
-        // A **name** of the workbook may point at this sheet, and this
-        // tree does not move the name yet.
-        for name in names_of_the_workbook(session, sheet) {
-            if name.eq_ignore_ascii_case(&node.name) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "the workbook has a name that points at the sheet `{sheet}`, and this tree does not move it yet"
-                    ),
-                });
-            }
-        }
         let name = node.name.clone();
         let mut sheet_node = node;
         let moved = insert_columns(&mut sheet_node, &name, at, count)
             .map_err(|why| EngineError::Failed { id: id.clone(), message: why })?;
+        // The **charts** of the sheet: the ranges they read move with
+        // the cells.
+        let charts = crate::moving::moved_charts(&sheet_node, crate::moving::Way::Columns, at, count, true)
+            .map_err(|why| EngineError::Failed { id: id.clone(), message: why })?;
+        // The **names** of the workbook that point at the sheet: their
+        // areas move with it.
+        let names =
+            crate::moving::moved_names(session, sheet, &name, crate::moving::Way::Columns, at, count, true)
+                .map_err(|why| EngineError::Failed { id: id.clone(), message: why })?;
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
             node.data = sheet_node.data;
+        }
+        for (chart, range) in charts {
+            match range {
+                Some(range) => {
+                    if let Some(node) = session.document_mut()?.node_mut(chart) {
+                        node.data["range"] = Json::String(range);
+                    }
+                }
+                None => {
+                    session.document_mut()?.remove_node(chart);
+                }
+            }
+        }
+        if let Some((workbook, names)) = names
+            && let Some(node) = session.document_mut()?.node_mut(workbook)
+        {
+            node.data["names"] = names;
         }
         Ok(Outcome::changed(format!("{count} column(s) were inserted at the column {text} of `{sheet}`"))
             .with_data(json!({ "sheet": sheet, "column": text, "count": count, "moved": moved })))

@@ -230,18 +230,20 @@ fn the_filter_of_a_deleted_column_refuses_the_delete() {
     assert!(refused.to_string().contains("filter"), "the refusal says the filter");
 }
 
-/// A sheet that holds something this tree **cannot move** is refused.
+/// A **chart** of the sheet moves with the columns.
 #[test]
-fn a_sheet_that_holds_something_this_tree_cannot_move_is_refused() {
+fn a_chart_of_the_sheet_moves_with_the_columns() {
     let mut session = session();
     let (_workbook, sheet) = a_sheet(&mut session);
-    session
-        .execute("grid.chart.add", &json!({ "sheet": sheet, "range": "A1:C5" }))
+    let outcome = session
+        .execute("grid.chart.add", &json!({ "sheet": sheet, "range": "B1:D5" }))
         .expect("the chart is added");
-    let refused = session
+    let chart = outcome.data["chart"].as_u64().expect("the chart has an id");
+    session
         .execute("grid.column.delete", &json!({ "sheet": sheet, "column": "A" }))
-        .expect_err("the delete is refused");
-    assert!(refused.to_string().contains("chart"), "the refusal says what it holds");
+        .expect("the column is deleted");
+    let outcome = session.execute("grid.chart.read", &json!({ "chart": chart })).expect("the chart is read");
+    assert_eq!(outcome.data["range"], json!("A1:C5"), "the range the chart reads moved left");
 }
 
 /// A **protected** sheet refuses.

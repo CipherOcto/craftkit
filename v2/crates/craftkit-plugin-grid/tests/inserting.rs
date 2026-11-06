@@ -194,18 +194,18 @@ fn a_hidden_row_moves_with_the_rows() {
     assert!(refused.to_string().contains("already hidden"), "the refusal says why");
 }
 
-/// A sheet that holds something this tree **cannot move** is refused.
+/// A **chart** of the sheet moves with the rows.
 #[test]
-fn a_sheet_that_holds_something_this_tree_cannot_move_is_refused() {
+fn a_chart_of_the_sheet_moves_with_the_rows() {
     let mut session = session();
     let (_workbook, sheet) = a_sheet(&mut session);
-    session
+    let outcome = session
         .execute("grid.chart.add", &json!({ "sheet": sheet, "range": "A1:C5" }))
         .expect("the chart is added");
-    let refused = session
-        .execute("grid.row.insert", &json!({ "sheet": sheet, "row": 1 }))
-        .expect_err("the insert is refused");
-    assert!(refused.to_string().contains("chart"), "the refusal says what it holds");
+    let chart = outcome.data["chart"].as_u64().expect("the chart has an id");
+    session.execute("grid.row.insert", &json!({ "sheet": sheet, "row": 1 })).expect("the row is inserted");
+    let outcome = session.execute("grid.chart.read", &json!({ "chart": chart })).expect("the chart is read");
+    assert_eq!(outcome.data["range"], json!("A2:C6"), "the range the chart reads moved down");
 }
 
 /// A **protected** sheet refuses.
