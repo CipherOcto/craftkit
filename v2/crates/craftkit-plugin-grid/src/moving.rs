@@ -206,6 +206,68 @@ pub fn moved_sparklines(value: &Json, way: Way, at: u64, count: u64, insert: boo
     Ok(Json::Object(moved))
 }
 
+/// The **column** a letter names, moved.
+///
+/// It is `None` when the column is deleted.
+pub fn moved_column(text: &str, at: u64, count: u64, insert: bool) -> Option<String> {
+    let index = CellRef::column_index(text.trim())?;
+    let number = index as u64 + 1;
+    let moved = if insert {
+        if number < at { number } else { number + count }
+    } else {
+        if number >= at && number < at + count {
+            return None;
+        }
+        if number >= at + count { number - count } else { number }
+    };
+    Some(CellRef::column_text(moved as u32 - 1))
+}
+
+/// The **pivots** of a sheet: the ranges move and the fields move with
+/// them.
+///
+/// A pivot gathers by **columns**, and those columns are columns of
+/// the range it reads, so they move with the range — and a pivot that
+/// gathers by a column that is deleted refuses the delete, because a
+/// pivot that gathers by nothing is not a pivot.
+pub fn moved_pivots(value: &Json, way: Way, at: u64, count: u64, insert: bool) -> Result<Json, String> {
+    let Some(list) = value.as_array() else { return Ok(value.clone()) };
+    let mut moved = Vec::with_capacity(list.len());
+    for fact in list {
+        let Some(text) = fact.get("range").and_then(|range| range.as_str()) else {
+            moved.push(fact.clone());
+            continue;
+        };
+        let Some((start, end)) = corners(text) else {
+            moved.push(fact.clone());
+            continue;
+        };
+        if !insert && wholly_inside(start, end, way, at, count) {
+            continue;
+        }
+        let mut moved_fact = fact.clone();
+        if way == Way::Columns {
+            for key in ["row", "column", "value"] {
+                let Some(letter) = moved_fact.get(key).and_then(|letter| letter.as_str()) else {
+                    continue;
+                };
+                let Some(moved_letter) = moved_column(letter, at, count, insert) else {
+                    return Err(format!("the pivot gathers by the column {letter}, which is deleted"));
+                };
+                moved_fact[key] = Json::String(moved_letter);
+            }
+        }
+        if !insert && covers_inside(start, end, way, at, count) {
+            return Err(format!("the range `{text}` names a {} that is deleted", word(way)));
+        }
+        let area = moved_area(text, way, at, count, insert)
+            .ok_or_else(|| format!("the range `{text}` names a {} that is deleted", word(way)))?;
+        moved_fact["range"] = Json::String(area);
+        moved.push(moved_fact);
+    }
+    Ok(Json::Array(moved))
+}
+
 /// The **word** a way is called, in a message.
 fn word(way: Way) -> &'static str {
     match way {

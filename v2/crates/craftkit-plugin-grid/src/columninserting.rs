@@ -44,7 +44,7 @@ use crate::formula::{Anchor, CellRef, MAX_COLS};
 
 /// The keys of a sheet that this tree **moves** when columns are
 /// inserted.
-pub(crate) const MOVED: [&str; 16] = [
+pub(crate) const MOVED: [&str; 18] = [
     "cells",
     "borders",
     "notes",
@@ -61,6 +61,8 @@ pub(crate) const MOVED: [&str; 16] = [
     "conditionals",
     "validations",
     "sparklines",
+    "tables",
+    "pivots",
 ];
 
 /// The keys of a sheet that name **no column**, and so are left as
@@ -325,6 +327,14 @@ pub fn insert_columns(sheet: &mut Node, name: &str, at: u64, count: u64) -> Resu
     if let Some(value) = sheet.data.get("sparklines").cloned() {
         let moved = crate::moving::moved_sparklines(&value, crate::moving::Way::Columns, at, count, true)?;
         sheet.data["sparklines"] = moved;
+    }
+    if let Some(value) = sheet.data.get("tables").cloned() {
+        let moved = crate::moving::moved_ranges(&value, crate::moving::Way::Columns, at, count, true)?;
+        sheet.data["tables"] = moved;
+    }
+    if let Some(value) = sheet.data.get("pivots").cloned() {
+        let moved = crate::moving::moved_pivots(&value, crate::moving::Way::Columns, at, count, true)?;
+        sheet.data["pivots"] = moved;
     }
     Ok(moved_cells)
 }

@@ -200,18 +200,12 @@ fn a_sheet_that_holds_something_this_tree_cannot_move_is_refused() {
     let mut session = session();
     let (_workbook, sheet) = a_sheet(&mut session);
     session
-        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1", "value": "name" }))
-        .expect("the header is written");
-    session
-        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B1", "value": "size" }))
-        .expect("the header is written");
-    session
-        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "the table", "range": "A1:B2" }))
-        .expect("the table is made");
+        .execute("grid.chart.add", &json!({ "sheet": sheet, "range": "A1:C5" }))
+        .expect("the chart is added");
     let refused = session
         .execute("grid.row.insert", &json!({ "sheet": sheet, "row": 1 }))
         .expect_err("the insert is refused");
-    assert!(refused.to_string().contains("tables"), "the refusal says what it holds");
+    assert!(refused.to_string().contains("chart"), "the refusal says what it holds");
 }
 
 /// A **protected** sheet refuses.

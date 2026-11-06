@@ -332,6 +332,14 @@ pub fn delete_columns(sheet: &mut Node, name: &str, at: u64, count: u64) -> Resu
         let moved = crate::moving::moved_sparklines(&value, crate::moving::Way::Columns, at, count, false)?;
         sheet.data["sparklines"] = moved;
     }
+    if let Some(value) = sheet.data.get("tables").cloned() {
+        let moved = crate::moving::moved_ranges(&value, crate::moving::Way::Columns, at, count, false)?;
+        sheet.data["tables"] = moved;
+    }
+    if let Some(value) = sheet.data.get("pivots").cloned() {
+        let moved = crate::moving::moved_pivots(&value, crate::moving::Way::Columns, at, count, false)?;
+        sheet.data["pivots"] = moved;
+    }
     Ok(deleted)
 }
 
