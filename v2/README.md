@@ -3938,6 +3938,7 @@ so.
 | the **table** and the **pivot** that move | **built.** A table and a pivot name an area of cells, and the area moves with the rows and the columns that are inserted or deleted — and a pivot gathers by the letters of its columns, so those move with it (§501) | §501 |
 | the **chart** and the **name** that move | **built.** A chart reads a range and a name of the workbook stands for a range, and both move with the rows and the columns that are inserted or deleted — and nothing a sheet holds refuses an insert or a delete any more (§502) | §502 |
 | the **error** of a reference that is gone | **built.** A formula may hold the error `#REF!`, and a delete that orphans a reference writes it there — the tree's own spelling, and the correction of what §497 and §499 said (§503) | §503 |
+| the **copy** that would leave the sheet | **built.** A formula may be copied into a cell that would put a reference outside the sheet, and the copy is done: the reference is written as the error, and the copy is not refused (§504) | §504 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33135,3 +33136,64 @@ they were written.
 - **The merge and the print area still refuse**: a fact that is not a
   formula cannot be half-written, and there is no error value for a
   merge.
+
+## 504. The copy that would leave the sheet
+
+A formula may be **copied** into a cell that would put one of its
+references outside the sheet. The tree writes the error `#REF!` there
+and carries on. This tree refused the copy.
+
+### What was built
+
+- **No new command**: the **shift** — the tree's `shift_relative`,
+  which moves the relative references of a formula when it is copied —
+  writes the error instead of refusing.
+- And so:
+  - a **fill** that would copy a reference off the sheet writes
+    `=#REF!` in the cell it writes, and the fill is done;
+  - a **sort** that would move a formula off the sheet writes the
+    error in the formula it moves;
+  - a **call** whose argument leaves the sheet holds the error in the
+    argument: `=SUM(#REF!)`;
+  - an **anchored** reference never leaves, because it is the same
+    cell in every cell — that was true before and is true now.
+- And the **value** of a cell that holds the error is the error.
+
+### What the port found
+
+- **The tree writes the error and carries on**: the copy is not
+  refused, the cell holds `#REF!`, and the engine knows that value.
+  Here it is the same — the copy is done, and the cell holds the error.
+- **A cell may only hold a formula that parses**: a formula that does
+  not parse is refused when it is written, so the case of a formula
+  this tree cannot read cannot arise. The paths that would leave such
+  a formula alone are there anyway, and do nothing.
+- **The anchored reference is the one that never leaves**: the tree's
+  `$` earns its keep here — `$A$1` is the same cell in every cell a
+  formula is copied to, and `A1` is the cell to the right of the one
+  it was written in.
+
+### What it cost
+
+- **Five tests** in the grid battery (`tests/leaving.rs`): a copy that
+  would leave the sheet naming the error, the value of such a copy
+  being the error, an anchored reference never leaving the sheet, a
+  call with an argument that leaves naming the error, and a sorted
+  formula that leaves the sheet naming the error.
+- **One module** (`formula`) loses the **refusal**: the shift no
+  longer returns a result and cannot fail, and the error is written
+  where the reference was. The grid battery still carries **120**
+  commands and the MCP server **702**.
+- **One test** in the battery of the fill now says that the copy names
+  the error: it used to say that the fill is refused, and that was
+  true then and is not true now.
+
+### What it does not settle
+
+- **The fill still refuses a copy that would make a cell read itself**:
+  a cycle is a cycle, and the tree refuses that too.
+- **A formula that cannot be read cannot be written**, so the paths
+  that would leave one alone are unreachable; they are there because a
+  document may come from somewhere else.
+- **The rule of a validation moves with its cell** and may hold the
+  error as well — the tree writes the error there too.
