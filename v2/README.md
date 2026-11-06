@@ -3985,6 +3985,7 @@ so.
 | the **text of a column**, cut into columns | **built.** The text of a column may be several values, and it is cut at the delimiter — a qualifier keeps the delimiter inside a part (§548) | §548 |
 | the **duplicates** of a range | **built.** A range may hold the same row twice, and the first row of each kind is kept and the rest are emptied (§549) | §549 |
 | the **statistics** of a document | **built.** A document may be measured — the words, the characters with and without the spaces, the paragraphs — and a mark is not a word of its own (§550) | §550 |
+| the **numbering format** of a number | **built.** A number may be written in a named form — roman, letters, ordinal, cardinal — and a number that is too large for the form is refused (§551) | §551 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36047,3 +36048,65 @@ characters, how many paragraphs.
   is a block, and the text of its cells is text of the document.
 - **The statistics are not kept**: they are read, and they are
   worked out again the next time they are asked for.
+
+## 551. The numbering format of a number
+
+A number may be written in a **named form**: a paragraph may be the
+fourth one and a list may count in letters.
+
+### What was built
+
+- The new module `numberformat` writes a number in the forms this
+  tree knows:
+  - **roman** — `i`, `ii`, `iii`, `iv` — and the number above three
+    thousand nine hundred and ninety-nine has no roman form here;
+  - **letters** — `a`, `b`, `c` — and the twenty-seventh is `aa`;
+  - **ordinal** — `first`, `second`, `third`;
+  - **cardinal** — `one`, `two`, `three`.
+- The command **`prose.number.format`** writes a number in a form.
+- The rules:
+  - a number that is **not a whole one** has no form here;
+  - a **negative** number has none either: there is no negative
+    letter and no negative roman numeral in this tree;
+  - a number that is **too large** for the form is **refused** and not
+    written as a long string of letters: a form that runs out is a
+    form that is not there;
+  - a **name** this tree does not know is refused, and not guessed
+    at.
+
+### What the port found
+
+- **The tree's forms are the tree's own**: the tree renders a number
+  in a named numbering format, and the four forms here are the ones a
+  document actually uses — the numerals of the Romans, the letters of
+  the alphabet, the number in words and the number in words with its
+  place.
+- **The tree caps the roman form at fifty thousand and the letter
+  form at seven hundred and eighty, and this tree refuses instead**:
+  the tree writes a long string of letters where the form has run
+  out, and here the number is refused — a form that runs out is a
+  form that is not there, and a string of `m`s is not a number a
+  person wrote.
+- **The tree's ordinal is the cardinal with its place**: `forty-two`
+  and `forty-second` are the same number said two ways, and here the
+  same.
+
+### What it cost
+
+- **Seven tests** in the prose battery (`tests/numberformat.rs`): the
+  roman numerals, the letters, the words, a number that is not whole,
+  a negative number, a number that is too large, and a name that is
+  not known.
+- **One new module** (`src/numberformat.rs`) and **one new command**
+  (`prose.number.format`). The prose battery now carries **67**
+  commands and the MCP server **745**.
+
+### What it does not settle
+
+- **The forms are not in other languages**: the words are English, and
+  a form in another language is a form this tree does not have.
+- **The number is not written anywhere**: the command gives the form
+  and writes nothing — a paragraph that counts itself is a different
+  feature.
+- **The list labels are not made**: the prose battery has lists, and
+  the label of a list is not this command's work.
