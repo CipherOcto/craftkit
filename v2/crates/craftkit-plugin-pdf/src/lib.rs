@@ -131,6 +131,7 @@ mod boxes;
 mod calculate;
 mod content;
 mod convert;
+mod destinations;
 mod encrypt;
 mod fields;
 mod filters;
@@ -167,6 +168,7 @@ pub use appearance::ReadAppearance;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use calculate::{ReadCalculatedValue, ReadCalculation};
 pub use convert::Convert;
+pub use destinations::ReadDestinations;
 pub use encrypt::ReadEncryption;
 pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField, SetFlags, SetParent};
 pub use fonts::ReadFonts;
@@ -2073,6 +2075,7 @@ craftkit_sdk::plugin_anchor!(
     AddStream,
     SetInformation,
     ReadInformation,
+    ReadDestinations,
     SetPageLabels,
     RemoveObject,
     SetNumber,
