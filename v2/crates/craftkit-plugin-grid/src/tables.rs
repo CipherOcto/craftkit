@@ -63,6 +63,9 @@ pub struct Table {
     /// in. A column that is not here is totalled in the way of the
     /// table.
     pub ways: Vec<(u32, String)>,
+    /// The **label** of the total row: the text the total row shows
+    /// in its first cell.
+    pub label: Option<String>,
 }
 
 impl Table {
@@ -73,6 +76,7 @@ impl Table {
             "range": self.range.to_text(),
             "totals": self.totals,
             "way": self.way.clone(),
+            "label": self.label.clone().map(|label| json!(label)).unwrap_or(craftkit_sdk::serde_json::Value::Null),
             "ways": self
                 .ways
                 .iter()
@@ -107,7 +111,8 @@ pub fn tables_of(node: &Node) -> Vec<Table> {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        tables.push(Table { name: name.to_string(), range: area, totals, way, ways });
+        let label = table.get("label").and_then(|label| label.as_str()).map(|label| label.to_string());
+        tables.push(Table { name: name.to_string(), range: area, totals, way, ways, label });
     }
     tables
 }
@@ -375,6 +380,7 @@ impl CreateTable {
             name: name.clone(),
             range: area,
             totals: false,
+            label: None,
             way: "sum".to_string(),
             ways: Vec::new(),
         };
@@ -511,7 +517,13 @@ impl SetTableTotals {
             });
         };
         if let Some(totals) = &self.totals {
+            let was = table.totals;
             table.totals = totals.0;
+            // A table that gains a total row shows a **label** in it:
+            // the text the total row has in its first cell.
+            if table.totals && !was && table.label.is_none() {
+                table.label = Some("Total".to_string());
+            }
         }
         if let Some(way) = &self.way {
             let name = way.0.trim().to_ascii_lowercase();
@@ -754,6 +766,7 @@ impl ResizeTable {
             name: name.clone(),
             range: area,
             totals: table.totals,
+            label: table.label.clone(),
             way: table.way.clone(),
             ways: ways.clone(),
         };
@@ -803,6 +816,77 @@ impl RemoveTable {
             "sheet": sheet,
             "name": name,
             "range": table.range.to_text(),
+        })))
+    }
+}
+
+/// **Say** the **label** of the **total row** of a table.
+///
+/// The label is the text the total row shows in its first cell — the
+/// word that says what the numbers below it are.
+///
+/// The rules:
+///
+/// - a table that is **not there** is refused;
+/// - a table with **no total row** has no label, and saying one is
+///   refused: the row the label would sit in is not there;
+/// - an **empty** label takes the label away, and the total row
+///   shows nothing in its first cell;
+/// - the label is read as it is.
+#[derive(Command)]
+#[command(id = "grid.table.label", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct SetTableLabel {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The name of the table.
+    pub name: Text,
+    /// The label of the total row.
+    ///
+    /// Leave it out and the label is read. An empty label takes the
+    /// label away.
+    pub label: Option<Text>,
+}
+
+impl SetTableLabel {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.table.label".to_string();
+        let sheet = self.sheet.0;
+        let node = sheet_of(session, &id, sheet)?;
+        let name = self.name.0.trim().to_string();
+        let mut tables = tables_of(&node);
+        let table = table_of(&tables, &name, &id)?;
+        if let Some(label) = &self.label {
+            if !table.totals {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the table `{name}` has no total row, and a label sits in one"),
+                });
+            }
+            let label = label.0.trim().to_string();
+            let table =
+                tables.iter_mut().find(|table| table.name == name).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no table `{name}` on the sheet"),
+                })?;
+            table.label = if label.is_empty() { None } else { Some(label) };
+        }
+        let label = tables.iter().find(|table| table.name == name).and_then(|table| table.label.clone());
+        let sheet_node = session.document_mut()?.node_mut(sheet);
+        let Some(sheet_node) = sheet_node else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        sheet_node.data["tables"] = tables_into(&tables);
+        Ok(Outcome::changed(match &label {
+            Some(label) => format!("the total row of the table `{name}` says `{label}`"),
+            None => format!("the total row of the table `{name}` says nothing"),
+        })
+        .with_data(json!({
+            "sheet": sheet,
+            "name": name,
+            "label": label.clone().map(|label| json!(label)).unwrap_or(craftkit_sdk::serde_json::Value::Null),
         })))
     }
 }

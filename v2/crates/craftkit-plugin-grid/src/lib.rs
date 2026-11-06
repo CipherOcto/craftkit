@@ -454,7 +454,7 @@ pub use sparklines::{ReadSparkline, RemoveSparkline, SetSparkline};
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
 pub use tables::{
     CreateTable, ReadTableFields, ReadTables, RemoveTable, RenameTable, ResizeTable, SetTableColumnWay,
-    SetTableTotals,
+    SetTableLabel, SetTableTotals,
 };
 pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
 pub use tabsorder::MoveSheet;
@@ -1783,6 +1783,7 @@ craftkit_sdk::plugin_anchor!(
     SetNote,
     SortRange,
     ReplaceText,
+    SetTableLabel,
     TextColumns,
     RemoveDuplicates,
     SetBorder,
