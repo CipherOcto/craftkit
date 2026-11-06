@@ -113,6 +113,7 @@ mod equations;
 mod finding;
 mod footnotes;
 mod links;
+mod media;
 mod numbering;
 mod outline;
 mod page;
@@ -133,6 +134,7 @@ pub use equations::{AddEquation, SetEquation};
 pub use finding::{Find, Replace};
 pub use footnotes::{AddFootnote, ReadFootnotes};
 pub use links::ReadLinks;
+pub use media::SetAlt;
 pub use numbering::{AddList, ReadNumber, SetNumbering};
 pub use outline::{ReadOutline, ReadStyleLevel, SetStyleLevel};
 pub use page::{GetPage, SetPage};
@@ -377,13 +379,15 @@ impl MediaKind {
         false
     }
 
-    /// What a media **means**: the file it is.
+    /// What a media **means**: the file it is, and what it says
+    /// about itself.
     fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
         Some(json!({
             "file": match node.stream.clone() {
                 Some(path) => Json::String(path),
                 None => Json::Null,
             },
+            "alt": crate::media::alt_of(node).map(|alt| json!(alt)).unwrap_or(Json::Null),
         }))
     }
 }
@@ -977,6 +981,7 @@ craftkit_sdk::plugin_anchor!(
     AddDocument,
     AddStyle,
     AddMedia,
+    SetAlt,
     AddParagraph,
     AddTable,
     AddEquation,
