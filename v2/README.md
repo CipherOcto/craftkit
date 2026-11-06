@@ -4000,6 +4000,7 @@ so.
 | the **structure** of a file | **built.** A tagged file carries a structure tree — the type of every element, its title, its alt text, its language and its children are read (§563) | §563 |
 | the **text** of a page | **built.** A page's content is read as the operators show it — the pieces of text, the operator that showed each one, and how its bytes were read (§564) | §564 |
 | the **attachments** of a file | **built.** A file may carry files of its own — the name, the description, the kind, the size and the bytes of each are read (§565) | §565 |
+| the **layers** of a file | **built.** A file may hold layers — the name of each, its intent, and whether it is shown when the file is opened (§566) | §566 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36889,3 +36890,63 @@ PDF — and a viewer shows them in a list of attachments.
   page is an annotation, and its file is not read here.
 - **The times are not read**: the parameters of a file may say when it
   was made and when it was changed, and neither is read here.
+
+## 566. The layers of a file
+
+A file may hold **layers** — parts of the content that are shown and
+parts that are hidden.
+
+### What was built
+
+- The new command **`pdf.layers.read`** reads the layers of a file:
+  - the **name** of the layer, as the file says it;
+  - the **intent** — what the layer is for, when it is a name;
+  - whether the layer is **shown** when the file is opened.
+- The rules:
+  - a file that has no optional content has **no layers**, and the
+    answer says so;
+  - a layer that says **how it is shown** (`/Usage`) is shown that
+    way, and the usage of the view is preferred over the usage of the
+    print and the usage of the edit;
+  - a layer that is in the `/ON` list is shown, and a layer that is in
+    the `/OFF` list is not;
+  - a layer that is in neither list follows the **base state**, and a
+    base state of `UseNone` shows nothing;
+  - the **order** of the layers is not read, and an **intent** that is
+    a dictionary is not read either;
+  - a layer may be asked for **by name**, and one that is not there is
+    refused.
+
+### What the port found
+
+- **The tree's layer carries an id and a name that is never empty**:
+  the tree gives a layer that has no name the name `Layer`, and it
+  carries the object the layer is. Here the name is the name the file
+  gives, and a layer with no name has no name.
+- **The tree does not read the usage of a layer**: the tree's layers
+  are on and off by the lists of the default configuration and by
+  nothing else, so a layer that says how it is to be shown is shown
+  the way the lists say. Here the usage is read and it wins.
+- **The tree's base state is `OFF` or not `OFF`**: a base state of
+  `UseNone` — which says that nothing is shown — is not `OFF`, and the
+  tree shows the layers that are in neither list. Here `UseNone` shows
+  nothing, because that is what it says.
+
+### What it cost
+
+- **Three tests** in the pdf battery (`tests/optional.rs`): the layers
+  of a file and how each one is shown, a file with no optional
+  content, and a layer asked for by name.
+- **One new module** (`src/optional.rs`) and **one new command**
+  (`pdf.layers.read`). The pdf battery now carries **59** commands and
+  the MCP server **762**.
+
+### What it does not settle
+
+- **The layers are not turned on and off**: the answer says how a
+  layer is shown when the file is opened, and nothing changes the
+  configuration of the file.
+- **The order of the layers is not read**: the order is the order the
+  list is in, and the tree does not make a tree of it.
+- **The contents of a layer are not matched to it**: a layer says what
+  it is, and the content that belongs to it is not looked for.
