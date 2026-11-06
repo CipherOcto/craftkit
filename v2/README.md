@@ -3955,6 +3955,7 @@ so.
 | the **convert** of a PDF file | **built.** The file is fixed where it can be — the actions and the flags — and what is left is the preflight's own answer (§518) | §518 |
 | the **facing page** of a page | **built.** A page that faces another has the two of them side by side in one spread, and the page across is derived (§519) | §519 |
 | the **contrast** of the text | **built.** The text is measured with the ratio of the WCAG 2 — four and a half for normal text and three for large text — and the checker says when it is hard to read (§520) | §520 |
+| the **alt text** of a table | **built.** A table says what it is, and an empty text takes the words away — and the checker says when a table has none (§521) | §521 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34181,3 +34182,51 @@ impossible for some. The measure is the one the WCAG 2 gives.
 - **The page is white**: the tree takes the colour of the page from
   the settings of the document, and this tree's documents have no
   page colour.
+
+## 521. The alt text of a table
+
+A table that says nothing about itself is a table that a screen reader
+cannot describe.
+
+### What was built
+
+- **One command** in the prose battery: `prose.table.alt`. It says
+  what a table is, and the table's own reading says it too.
+- The alt text is a **fact of the table**, and the **rules** are the
+  rules of the picture's (§514): an **empty** text **takes the text
+  away**, and a node that is **not a table** may not have one.
+- The **accessibility** checker now knows the rule `tableAltText`: a
+  table that says nothing about itself is a **warning** — nothing says
+  what the table is.
+
+### What the port found
+
+- **The tree's table has two things and here it has one**: the tree's
+  table carries a **caption** and a **description**, and the tree's
+  checker is content when either of them is there. Here a table has
+  **one** text that stands for it, and it is the alt text of the
+  picture (§514) and not two.
+- **The tree's rule is a warning**: the tree says that a table with
+  no caption and no description is hard to use, and it is not an
+  error — a table that cannot be described is still a table. Here the
+  same.
+
+### What it cost
+
+- **Six tests** in the prose battery (`tests/alttext.rs`): a table
+  that says nothing having no alt text, a table saying what it is, an
+  empty alt text taking the text away, a table that says nothing about
+  itself being a warning, a table that says what it is breaking
+  nothing, and a node that is not a table being refused.
+- **No new module**: the command grows the tables module. The prose
+  battery now carries **62** commands and the MCP server **719**.
+
+### What it does not settle
+
+- **The table has no caption**: the tree's table has a title and a
+  description, and they are two things; here there is one text.
+- **The table is not read out**: the tree's table may name its header
+  cells, and here the cells are values and nothing more.
+- **The blank rows and the blank columns are not checked**: the tree's
+  checker says when a row of a table is empty and when a column is,
+  and here a cell may be empty on purpose.
