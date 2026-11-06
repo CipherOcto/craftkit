@@ -3960,6 +3960,7 @@ so.
 | the **fields** of a form | **built.** A field says what it is and what it holds, and a value the field cannot hold is refused — the options and the states are named (§523) | §523 |
 | the **name** of a field with a parent | **built.** A field may have a parent, and its name is then the two names joined with a dot — and a loop is refused (§524) | §524 |
 | the **flags** of a field | **built.** The flags of a field are a number and a list of names, and a field may be made read only or required (§525) | §525 |
+| the **total row** of a table | **built.** A table may have a total row, and the totals are derived from the cells — the last row is the total row and is not counted in the total (§526) | §526 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34461,3 +34462,59 @@ facts about how the field behaves.
   child says what it is.
 - **The twenty-sixth bit is unnamed**: it means two things, and this
   tree does not guess which.
+
+## 526. The total row of a table
+
+A table may have a **total row**: the row at the bottom of it that
+holds the totals of the columns.
+
+### What was built
+
+- **One command** in the grid battery: `grid.table.totals`. It says
+  whether a table has a total row, and the reading of the table says
+  it too.
+- The **totals** are **derived**: they are worked out from the cells
+  every time they are asked for, so a table cannot have a total that
+  is out of date with the cells. The total of a column is the **sum**
+  of the numbers of the rows under the header.
+- The **rules**:
+  - a table with a total row takes its **last row** for the totals,
+    and the rows above it are the data — the last row is not counted
+    in the total;
+  - a column whose cells hold **no numbers** has **no total**: the
+    answer is nothing and not a zero that means something else.
+
+### What the port found
+
+- **The tree's total row is a row of cells and here it is a
+  derivation**: the tree writes the totals into the cells of the
+  total row, and the cells are what the sheet holds. Here the total
+  row is a **fact of the table** and the totals are worked out from
+  the cells, because a derived value is derived and a second copy of
+  a number is a copy that can be wrong.
+- **The tree's total row may total in many ways** — a sum, an
+  average, a count — and here it is the **sum**, the way the grid's
+  own `SUM` does it: the numbers are added up and the cells that hold
+  no number are left out.
+
+### What it cost
+
+- **Eight tests** in the grid battery (`tests/totals.rs`): a table
+  with a total row saying that it has one, the totals being the sums
+  of the columns, the last row being the total row, a table with no
+  total row having no totals, the total row being taken away, a
+  column with no numbers having no total, the totals being derived
+  and following the cells, and a table that is not there being
+  refused.
+- **No new module**: the command grows the tables module. The grid
+  battery now carries **121** commands and the MCP server **724**.
+
+### What it does not settle
+
+- **The total row is not written**: the tree's total row is a row of
+  cells, and here it is not in the sheet at all.
+- **The total is a sum and nothing else**: the tree's total row may
+  total in many ways, and here it is the sum.
+- **The totals of a table are not moved with its rows**: the tree's
+  total row moves with the table, and here the total is worked out
+  from the cells and is right wherever they are.
