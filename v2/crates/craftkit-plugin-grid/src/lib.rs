@@ -341,6 +341,7 @@ mod daycounts;
 mod deleting;
 mod depreciation;
 mod distributions;
+mod duplicates;
 mod engineering;
 mod fill;
 mod filters;
@@ -413,6 +414,7 @@ pub use columninserting::InsertColumn;
 pub use conditional::{CheckConditional, ClearConditional, SetConditional};
 pub use criteria::Condition;
 pub use deleting::DeleteRow;
+pub use duplicates::RemoveDuplicates;
 use fill::FillRange;
 pub use filters::{ClearFilter, FilteredRows, SetFilter, SetFilterGroups};
 pub use finding::FindCells;
@@ -1779,6 +1781,7 @@ craftkit_sdk::plugin_anchor!(
     SetNote,
     SortRange,
     TextColumns,
+    RemoveDuplicates,
     SetBorder,
     GetBorder,
     ClearBorder,
