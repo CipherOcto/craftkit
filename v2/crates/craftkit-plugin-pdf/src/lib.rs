@@ -148,6 +148,7 @@ mod number;
 mod objects;
 mod outline;
 mod pages;
+mod pagetext;
 mod predictors;
 mod preflight;
 mod remove;
@@ -183,6 +184,7 @@ pub use metadata::WriteMetadata;
 pub use number::SetNumber;
 pub use outline::{AddOutline, ReadOutline};
 pub use pages::RemovePage;
+pub use pagetext::ReadPageText;
 pub use preflight::Preflight;
 pub use remove::RemoveObject;
 pub use rotation::{ReadRotation, RotatePage};
@@ -2082,6 +2084,7 @@ craftkit_sdk::plugin_anchor!(
     ReadDestinations,
     ReadSignatures,
     ReadStructure,
+    ReadPageText,
     SetPageLabels,
     RemoveObject,
     SetNumber,
