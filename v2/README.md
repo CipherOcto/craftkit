@@ -3988,6 +3988,7 @@ so.
 | the **numbering format** of a number | **built.** A number may be written in a named form — roman, letters, ordinal, cardinal — and a number that is too large for the form is refused (§551) | §551 |
 | the **replacing** of text in a sheet | **built.** What was found may be replaced — the case does not matter unless the search says it does, and a formula that does not parse afterwards is refused (§552) | §552 |
 | the **label** of the total row of a table | **built.** A table that gains a total row shows a label in it — the tree's own word is Total, and an empty label takes it away (§553) | §553 |
+| the **deleting** of a style | **built.** A style that is not used may be taken away — the blocks that were in it are left as they are, and a style another style is based on is refused (§554) | §554 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36220,3 +36221,52 @@ A table that gains a total row shows a **label** in it.
   total row has a label, and the other columns hold their totals.
 - **The totals are not recalculated**: they are derived, and they
   are worked out again when they are asked for.
+
+## 554. The deleting of a style
+
+A style that is not used may be **taken away**.
+
+### What was built
+
+- The new command **`prose.style.delete`** deletes a style:
+  - the blocks that were in it are **left as they are**: the edge
+    that said which style they were in is taken away, so they have no
+    style;
+  - a style that **another style is based on** is refused: the other
+    style would lose the base it was based on, and a chain that begins
+    nowhere is not a chain;
+  - a node that is **not a style** is refused, and so is a style that
+    is not there.
+
+### What the port found
+
+- **The tree's delete refuses a style that may not be deleted**: the
+  tree refuses its own built-in styles, because a built-in is a fact
+  the program holds rather than a fact a person made — and here the
+  rule is the same idea with this tree's own names: a style another
+  style is based on is a fact another style stands on, and it may not
+  be taken away.
+- **The tree's blocks fall back to the default**: the tree restyles
+  the blocks that used the deleted style to the default style, and
+  here the edge is taken away, so the blocks have **no** style — and
+  the default of this tree is nothing, which is the same answer in
+  this tree's own words.
+
+### What it cost
+
+- **Five tests** in the prose battery (`tests/styledelete.rs`): a
+  style taken away, the blocks that were in it left as they are, a
+  style that another style is based on, a node that is not a style,
+  and a style that is not there.
+- **One new command** (`prose.style.delete`). The prose battery now
+  carries **68** commands and the MCP server **748**.
+
+### What it does not settle
+
+- **The style is not put back**: a deleted style is gone, and nothing
+  remembers what it carried.
+- **The styles of a document are not listed**: the battery can add a
+  style, read a block's style and delete one, and it cannot say what
+  styles a document holds.
+- **The styles of other kinds are not touched**: a style of any kind
+  is deleted the same way, and the kind is not checked.
