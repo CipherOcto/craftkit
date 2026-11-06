@@ -125,6 +125,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod annot;
 mod boxes;
 mod content;
 mod convert;
@@ -154,6 +155,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+pub use annot::SetAnnotationFlags;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use convert::Convert;
 pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField, SetFlags, SetParent};
@@ -1196,6 +1198,11 @@ impl PageAnnotations {
                     annotation.insert(key.to_string(), value.clone());
                 }
             }
+            // The **flags**: whether the annotation prints, and whether
+            // it is hidden.
+            annotation.insert("flags".to_string(), serde_json::json!(crate::annot::flags_of(node)));
+            annotation.insert("print".to_string(), serde_json::json!(crate::annot::prints(node)));
+            annotation.insert("hidden".to_string(), serde_json::json!(crate::annot::is_hidden(node)));
             if let Some(where_) = where_it_goes(session.document(), &entries) {
                 annotation.insert("goes_to".to_string(), where_);
             }
@@ -2014,6 +2021,7 @@ craftkit_sdk::plugin_anchor!(
     SetTabs,
     WriteMetadata,
     WriteIntent,
+    SetAnnotationFlags,
     SetField,
     SetFlags,
     SetParent,

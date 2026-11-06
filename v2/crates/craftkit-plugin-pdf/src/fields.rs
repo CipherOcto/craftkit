@@ -181,7 +181,7 @@ fn widget_flags(entries: &[(String, Json)]) -> (bool, bool) {
         return (false, false);
     }
     let bits = flags as i64;
-    (bits & 128 != 0, bits & (2 | 32) != 0)
+    (bits & crate::annot::LOCKED != 0, bits & (crate::annot::HIDDEN | crate::annot::NO_VIEW) != 0)
 }
 
 /// The **on state** of a widget: the appearance that is not the off

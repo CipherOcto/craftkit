@@ -277,6 +277,17 @@ fn has_a_pdfa_intent(document: &Document) -> bool {
     })
 }
 
+/// Whether a dictionary is an **annotation**.
+///
+/// The file says an annotation with its **type**, or with its
+/// **shape**: a rectangle and a page.
+pub fn is_an_annotation(entries: &[(String, Json)]) -> bool {
+    let kind = name_of(entries, "Type");
+    let subtype = name_of(entries, "Subtype");
+    kind.as_deref() == Some("Annot")
+        || (subtype.is_some() && entry(entries, "Rect").is_some() && entry(entries, "P").is_some())
+}
+
 /// The **action** a dictionary holds, when it is one that a PDF/A
 /// file may not have.
 ///
@@ -375,16 +386,25 @@ pub fn issues(document: &Document, level: Option<Level>) -> Vec<Issue> {
             issue("6.5.1", format!("A {action} action isn't allowed"), true);
         }
         // An **annotation** that is not allowed.
-        let kind = name_of(&entries, "Type");
         let subtype = name_of(&entries, "Subtype");
-        let is_annotation = kind.as_deref() == Some("Annot")
-            || (subtype.is_some() && entry(&entries, "Rect").is_some() && entry(&entries, "P").is_some());
+        let is_annotation = is_an_annotation(&entries);
         if is_annotation
             && let Some(subtype) = subtype.as_deref()
             && FORBIDDEN_ANNOTS.contains(&subtype)
         {
             issue("6.3.1", format!("{subtype} annotations aren't allowed"), true);
             continue;
+        }
+        // An **annotation** that does not print, or that is hidden: a
+        // reader who prints the file must get the notes, and a note
+        // that is hidden is a note nobody sees.
+        if is_annotation && subtype.as_deref() != Some("Popup") {
+            let flags = entry(&entries, "F").and_then(|flags| flags.as_f64()).unwrap_or(0.0);
+            let bits = if flags.is_finite() && flags > 0.0 { flags as i64 } else { 0 };
+            if bits & crate::annot::PRINT == 0 || bits & (crate::annot::HIDDEN | crate::annot::NO_VIEW) != 0 {
+                let name = subtype.clone().unwrap_or_default();
+                issue("6.3.2", format!("A {name} annotation isn't set to print, or is hidden"), true);
+            }
         }
         // **Additional actions**: the document, a page or an
         // annotation may not have them.
