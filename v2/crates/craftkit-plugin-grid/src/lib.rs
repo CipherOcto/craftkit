@@ -448,7 +448,8 @@ pub use sorting::SortRange;
 pub use sparklines::{ReadSparkline, RemoveSparkline, SetSparkline};
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
 pub use tables::{
-    CreateTable, ReadTableFields, ReadTables, RemoveTable, RenameTable, ResizeTable, SetTableTotals,
+    CreateTable, ReadTableFields, ReadTables, RemoveTable, RenameTable, ResizeTable, SetTableColumnWay,
+    SetTableTotals,
 };
 pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
 pub use tabsorder::MoveSheet;
@@ -1803,6 +1804,7 @@ craftkit_sdk::plugin_anchor!(
     ReadTableFields,
     RenameTable,
     SetTableTotals,
+    SetTableColumnWay,
     ResizeTable,
     RemoveTable,
     UnprotectSheet,

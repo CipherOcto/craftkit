@@ -58,6 +58,11 @@ pub struct Table {
     /// `count`, `count-numbers`, `max`, `min`, `standard-deviation`,
     /// `variance` or `none`.
     pub way: String,
+    /// The **ways of the columns that have one of their own**: the
+    /// index of the column in the range and the way it is totalled
+    /// in. A column that is not here is totalled in the way of the
+    /// table.
+    pub ways: Vec<(u32, String)>,
 }
 
 impl Table {
@@ -68,6 +73,11 @@ impl Table {
             "range": self.range.to_text(),
             "totals": self.totals,
             "way": self.way.clone(),
+            "ways": self
+                .ways
+                .iter()
+                .map(|(column, way)| json!({ "column": column, "way": way.clone() }))
+                .collect::<Vec<_>>(),
         })
     }
 }
@@ -84,7 +94,20 @@ pub fn tables_of(node: &Node) -> Vec<Table> {
         let Some((_, area)) = crate::merges::parse_area(range) else { continue };
         let totals = table.get("totals").and_then(|totals| totals.as_bool()).unwrap_or(false);
         let way = table.get("way").and_then(|way| way.as_str()).unwrap_or("sum").to_string();
-        tables.push(Table { name: name.to_string(), range: area, totals, way });
+        let ways = table
+            .get("ways")
+            .and_then(|ways| ways.as_array())
+            .map(|ways| {
+                ways.iter()
+                    .filter_map(|entry| {
+                        let column = entry.get("column")?.as_u64()?;
+                        let way = entry.get("way")?.as_str()?;
+                        Some((column as u32, way.to_string()))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        tables.push(Table { name: name.to_string(), range: area, totals, way, ways });
     }
     tables
 }
@@ -194,7 +217,8 @@ fn totals_of(
                 numbers.push(number);
             }
         }
-        let total = match total_of(&table.way, &numbers, filled) {
+        let index = cell.col.saturating_sub(table.range.start.col);
+        let total = match total_of(way_of(table, index), &numbers, filled) {
             Some(total) => json!(total),
             None => craftkit_sdk::serde_json::Value::Null,
         };
@@ -283,6 +307,17 @@ fn table_of(tables: &[Table], name: &str, id: &str) -> Result<Table, EngineError
     })
 }
 
+/// The **way** a column of a table is totalled in: the way the column
+/// has of its own, and the way of the table when it has none.
+fn way_of(table: &Table, index: u32) -> &str {
+    table
+        .ways
+        .iter()
+        .find(|(column, _)| *column == index)
+        .map(|(_, way)| way.as_str())
+        .unwrap_or(table.way.as_str())
+}
+
 /// **Make** a table of a sheet.
 ///
 /// The range's first row names the fields of the table, and every cell
@@ -336,7 +371,13 @@ impl CreateTable {
         // The **header**: a row of text, because a field is named by
         // text.
         let cells = crate::cells_of(&node);
-        let table = Table { name: name.clone(), range: area, totals: false, way: "sum".to_string() };
+        let table = Table {
+            name: name.clone(),
+            range: area,
+            totals: false,
+            way: "sum".to_string(),
+            ways: Vec::new(),
+        };
         let fields =
             fields_of(&table, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
         let mut tables = tables;
@@ -416,6 +457,7 @@ impl ReadTableFields {
                     "name": name,
                     "column": CellRef::column_text(cell.col),
                     "cell": cell.to_text(),
+                    "way": way_of(&table, cell.col.saturating_sub(table.range.start.col)),
                 }))
                 .collect::<Vec<_>>(),
         })))
@@ -498,6 +540,107 @@ impl SetTableTotals {
             format!("the table `{name}` has no total row")
         })
         .with_data(json!({ "sheet": sheet, "name": name, "totals": totals, "way": way })))
+    }
+}
+
+/// **Say** the way a **column** of a table is totalled in.
+///
+/// A column may be totalled in a way of its own, and the way of the
+/// table is the way of the columns that have none of their own.
+///
+/// The rules:
+///
+/// - a column that is **not a column** of the table is refused, and a
+///   name that **two columns share** is refused too, because a name
+///   that is two columns does not say which one is meant;
+/// - a way that is **not a way** is refused, and the refusal names
+///   the ways there are;
+/// - an **empty** way takes the column's own way away, and the column
+///   is totalled in the way of the table again.
+#[derive(Command)]
+#[command(id = "grid.table.way", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct SetTableColumnWay {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The name of the table.
+    pub name: Text,
+    /// The **column** of the table: the name of its field.
+    pub column: Text,
+    /// The way the column is totalled in: `sum`, `average`, `count`,
+    /// `count-numbers`, `max`, `min`, `standard-deviation`, `variance`
+    /// or `none`.
+    ///
+    /// An empty way takes the column's own way away.
+    pub way: Text,
+}
+
+impl SetTableColumnWay {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.table.way".to_string();
+        let sheet = self.sheet.0;
+        let node = sheet_of(session, &id, sheet)?;
+        let name = self.name.0.trim().to_string();
+        let mut tables = tables_of(&node);
+        let table = table_of(&tables, &name, &id)?;
+        let cells = crate::cells_of(&node);
+        let fields =
+            fields_of(&table, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+        let column = self.column.0.trim().to_string();
+        let matches = fields
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, field))| *field == column)
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        let Some(index) = matches.first().copied() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the table `{name}` has no column called `{column}`"),
+            });
+        };
+        if matches.len() > 1 {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the table `{name}` has {} columns called `{column}`, and a name that is two columns does not say which one",
+                    matches.len()
+                ),
+            });
+        }
+        let way = self.way.0.trim().to_ascii_lowercase();
+        if !way.is_empty() && !WAYS.contains(&way.as_str()) {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("`{way}` is not a way to total: the ways are {}", WAYS.join(", ")),
+            });
+        }
+        let Some(table) = tables.iter_mut().find(|table| table.name == name) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no table `{name}` on the sheet"),
+            });
+        };
+        table.ways.retain(|(held, _)| *held != index as u32);
+        if !way.is_empty() {
+            table.ways.push((index as u32, way.clone()));
+        }
+        let way = way_of(table, index as u32).to_string();
+        let tables = tables;
+        let sheet_node = session.document_mut()?.node_mut(sheet);
+        let Some(sheet_node) = sheet_node else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        sheet_node.data["tables"] = tables_into(&tables);
+        Ok(Outcome::changed(format!("the column `{column}` of the table `{name}` is totalled in `{way}`"))
+            .with_data(json!({
+                "sheet": sheet,
+                "name": name,
+                "column": column,
+                "way": way,
+            })))
     }
 }
 
@@ -605,11 +748,20 @@ impl ResizeTable {
                 message: format!("there is no table `{name}` on the sheet"),
             });
         };
-        let resized = Table { name: name.clone(), range: area, totals: table.totals, way: table.way.clone() };
+        let columns = area.end.col.saturating_sub(area.start.col) + 1;
+        let ways = table.ways.iter().filter(|(column, _)| *column < columns).cloned().collect::<Vec<_>>();
+        let resized = Table {
+            name: name.clone(),
+            range: area,
+            totals: table.totals,
+            way: table.way.clone(),
+            ways: ways.clone(),
+        };
         let cells = crate::cells_of(&node);
         let fields =
             fields_of(&resized, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
         table.range = area;
+        table.ways = ways;
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
             node.data["tables"] = tables_into(&tables);
         }
