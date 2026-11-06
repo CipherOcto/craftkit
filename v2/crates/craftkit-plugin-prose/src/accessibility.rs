@@ -50,6 +50,20 @@ const MAX_ISSUES: usize = 500;
 /// The link words that say nothing about where the link goes.
 const CLICK_HERE: &str = "click here";
 
+/// The most **columns** of a table that are looked at: a hostile
+/// table cannot make the report endless.
+const COLUMNS: usize = 63;
+
+/// Whether a **cell** is empty: nothing, or a text with nothing in
+/// it.
+fn is_empty(cell: &Json) -> bool {
+    match cell {
+        Json::Null => true,
+        Json::String(text) => text.trim().is_empty(),
+        _ => false,
+    }
+}
+
 /// An **issue**: something that makes a document hard to use.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Issue {
@@ -188,6 +202,47 @@ pub fn issues_of(document: &Document, node: &Node) -> Vec<Issue> {
                 issue: "The table has no alternative text, and nothing says what it is".to_string(),
                 place: block.id,
             });
+        }
+        // The **tables**: the empty rows and the empty columns. A
+        // table with nothing in it yet is being filled in, and not
+        // used for spacing.
+        if block.kind == "prose.block.table" {
+            let rows = block.data.get("rows").and_then(|rows| rows.as_array()).cloned().unwrap_or_default();
+            let grid: Vec<Vec<Json>> =
+                rows.iter().map(|row| row.as_array().cloned().unwrap_or_default()).collect();
+            let filled = grid.iter().flatten().any(|cell| !is_empty(cell));
+            if grid.len() >= 2 && filled {
+                for (index, row) in grid.iter().enumerate() {
+                    if !row.is_empty() && row.iter().all(is_empty) {
+                        issues.push(Issue {
+                            kind: "warning",
+                            rule: "blankRow",
+                            issue: format!("Row {} of a table is empty: it looks like spacing", index + 1),
+                            place: block.id,
+                        });
+                    }
+                }
+                let width = grid.iter().map(|row| row.len()).max().unwrap_or(0);
+                if width >= 2 {
+                    for column in 0..width.min(COLUMNS) {
+                        let empty = grid.iter().all(|row| match row.get(column) {
+                            Some(cell) => is_empty(cell),
+                            None => true,
+                        });
+                        if empty {
+                            issues.push(Issue {
+                                kind: "warning",
+                                rule: "blankColumn",
+                                issue: format!(
+                                    "Column {} of a table is empty: it looks like spacing",
+                                    column + 1
+                                ),
+                                place: block.id,
+                            });
+                        }
+                    }
+                }
+            }
         }
         // The **tables**: a table with two or more rows says what
         // its columns are in a header row.
