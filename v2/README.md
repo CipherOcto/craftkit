@@ -3977,6 +3977,7 @@ so.
 | the **annotations** of a converted file | **built.** The conversion makes every annotation print and shown, and leaves a popup alone (§540) | §540 |
 | the **numbers** of a file | **built.** A file's numbers are numbers, and a whole one is taken as the whole one it is — a number that is not a whole one names no object (§541) | §541 |
 | the **encryption** of a file | **built.** A file says what it is encrypted with and what a person may do with it, and the permissions are said in words (§542) | §542 |
+| the **calculation** of a field | **built.** A field may say how its value is worked out, and the simple way and the expression are read — a script that is not understood is said so (§543) | §543 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35572,3 +35573,61 @@ do with it.
 - **The owner password and the user password are not distinguished**:
   the dictionary's `/O` and `/U` are read as entries, and the tree
   does not say which of them a person would be asked for.
+
+## 543. The calculation of a field
+
+A field may say how its value is worked out — and a file that says it
+carries a small script.
+
+### What was built
+
+- The new module `calculate` reads the **script** of a field: the
+  **calculate** event of the field's additional actions — the `/AA`
+  dictionary, key `/C` — and the text of the action it names. The
+  action may be named by a reference or written where it is used.
+- The **ways** a value is worked out:
+  - the **simple** way — `AFSimple_Calculate("SUM", new Array("a",
+    "b"))` — with the way (sum, product, average, minimum, maximum)
+    and the fields it is worked out from;
+  - the **expression** the file keeps in a comment between `BVCALC`
+    and `EVCALC`;
+  - a script that is **not understood**, which is reported as
+    unsupported and is not pretended to be run.
+- The command **`pdf.field.calculate`** reads the calculation of one
+  field. A field that says nothing about how its value is worked out
+  calculates nothing, and the answer says so.
+
+### What the port found
+
+- **The tree's scripts are the ones the tree knows**: the tree
+  recognises the `AFSimple_Calculate` call and the simplified field
+  notation, and it keeps every other script untouched and reports it
+  as unsupported — because a script that needs a JavaScript engine is
+  not one this tree may pretend to run.
+- **The tree's five ways are the tree's own**: sum, product,
+  average, minimum and maximum, named by the codes the file uses —
+  `SUM`, `PRD`, `AVG`, `MIN`, `MAX`.
+- **The tree's notation lives in a comment**: the file keeps the
+  expression between `BVCALC` and `EVCALC`, and the tree reads it
+  from there, which is why the expression is found and not guessed.
+
+### What it cost
+
+- **Six tests** in the pdf battery (`tests/calculate.rs`): a field
+  that says how it is calculated, a field that says nothing, the
+  action written where it is used, the expression of a field, a
+  script that is not understood, and a field that is not there.
+- **One new module** (`src/calculate.rs`) and **one new command**
+  (`pdf.field.calculate`). The pdf battery now carries **47** commands
+  and the MCP server **737**.
+
+### What it does not settle
+
+- **The value is not worked out**: the tree says how a value is
+  calculated and this tree says it too — the arithmetic itself is not
+  run, and no field is written.
+- **The calculation order is not read**: a form may list the fields
+  that are calculated in the order they are calculated in (`/CO`), and
+  that list is not read here.
+- **The script is not written**: a field's script may be said, and
+  this tree only reads it.
