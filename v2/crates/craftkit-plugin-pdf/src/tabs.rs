@@ -26,7 +26,10 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Session, Text};
+
+/// The **orders** a page may be reached in: this tree's own names.
+const ORDERS: [&str; 4] = ["rows", "columns", "structure", "annotations"];
 
 /// The **order** a page's annotations are reached in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,6 +62,29 @@ impl TabOrder {
             TabOrder::Column => "columns",
             TabOrder::Structure => "structure",
             TabOrder::Annotations => "annotations",
+        }
+    }
+
+    /// The order, from the name this tree uses.
+    pub fn parse(name: &str) -> Option<TabOrder> {
+        match name {
+            "rows" => Some(TabOrder::Row),
+            "columns" => Some(TabOrder::Column),
+            "structure" => Some(TabOrder::Structure),
+            "annotations" => Some(TabOrder::Annotations),
+            _ => None,
+        }
+    }
+
+    /// The name the **file** uses for the order.
+    pub fn the_name(self) -> Option<&'static str> {
+        match self {
+            TabOrder::Row => Some("R"),
+            TabOrder::Column => Some("C"),
+            TabOrder::Structure => Some("S"),
+            // A page that says nothing is reached in the annotation
+            // order, and a page that says so has nothing to say.
+            TabOrder::Annotations => None,
         }
     }
 }
@@ -130,6 +156,84 @@ fn index_of(document: &Document, page: u64, widget: u64) -> Option<usize> {
             .and_then(|number| number.as_u64())
             == Some(widget)
     })
+}
+
+/// **Say** the **tab order** of a page.
+///
+/// The order in which the annotations of a page are reached: `rows`,
+/// `columns`, `structure` or `annotations`.
+///
+/// The rules:
+///
+/// - a node that is **not a page** is refused;
+/// - an order that is **not an order** is refused, and the refusal
+///   names the orders there are;
+/// - an order that is **not said** leaves the page as it was;
+/// - the order **annotations** takes the fact away: a page that says
+///   nothing is reached in the annotation order, and a page that says
+///   so has nothing to say.
+#[derive(Command)]
+#[command(id = "pdf.page.tabs", area = "pdf", layer = "pdf", icon = "list", mutates, undoable)]
+pub struct SetTabs {
+    /// The page.
+    pub page: NodeRef,
+    /// The order the page's annotations are reached in: `rows`,
+    /// `columns`, `structure` or `annotations`.
+    ///
+    /// Leave it out and the page keeps the order it has.
+    pub tabs: Option<Text>,
+}
+
+impl SetTabs {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.page.tabs".to_string();
+        let page = self.page.0;
+        let Some(node) = session.document().node(page).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{page}`"),
+            });
+        };
+        if !crate::entries_of(&node.data)
+            .iter()
+            .any(|(key, value)| key == "Type" && value.as_str() == Some("Page"))
+        {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{page}` is not a page"),
+            });
+        }
+        let mut entries = crate::entries_of(&node.data);
+        if let Some(tabs) = &self.tabs {
+            let tabs = tabs.0.trim().to_ascii_lowercase();
+            let Some(order) = TabOrder::parse(&tabs) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{tabs}` is not an order: the orders are {}", ORDERS.join(", ")),
+                });
+            };
+            match order.the_name() {
+                Some(name) => match entries.iter_mut().find(|(key, _)| key == "Tabs") {
+                    Some(entry) => entry.1 = json!(name),
+                    None => entries.push(("Tabs".to_string(), json!(name))),
+                },
+                None => {
+                    // The order **annotations** takes the fact away.
+                    entries.retain(|(key, _)| key != "Tabs");
+                }
+            }
+        }
+        let order = order_of(session.document(), page);
+        let data = json!({
+            "object": node.data.get("object").cloned().unwrap_or(Json::Null),
+            "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+        });
+        if let Some(node) = session.document_mut()?.node_mut(page) {
+            node.data = data;
+        }
+        Ok(Outcome::changed(format!("the page `{page}` is reached in `{}`", order.name()))
+            .with_data(json!({ "id": page, "tabs": order.name() })))
+    }
 }
 
 /// The **order** a page's annotations are reached in, from the name

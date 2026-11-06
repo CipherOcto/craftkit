@@ -164,7 +164,7 @@ pub use pages::RemovePage;
 pub use preflight::Preflight;
 pub use remove::RemoveObject;
 pub use rotation::{ReadRotation, RotatePage};
-pub use tabs::ReadTabOrder;
+pub use tabs::{ReadTabOrder, SetTabs};
 pub use trailer::ReadTrailer;
 
 /// The PDF layer.
@@ -2007,6 +2007,7 @@ craftkit_sdk::plugin_anchor!(
     ReadChildren,
     ReadWidgets,
     ReadTabOrder,
+    SetTabs,
     SetField,
     SetFlags,
     SetParent,
