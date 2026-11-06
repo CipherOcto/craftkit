@@ -3961,6 +3961,7 @@ so.
 | the **name** of a field with a parent | **built.** A field may have a parent, and its name is then the two names joined with a dot — and a loop is refused (§524) | §524 |
 | the **flags** of a field | **built.** The flags of a field are a number and a list of names, and a field may be made read only or required (§525) | §525 |
 | the **total row** of a table | **built.** A table may have a total row, and the totals are derived from the cells — the last row is the total row and is not counted in the total (§526) | §526 |
+| the **way** a table totals | **built.** A table may total in many ways — a sum, an average, a count — and a way that is not one of them is refused (§527) | §527 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34518,3 +34519,84 @@ holds the totals of the columns.
 - **The totals of a table are not moved with its rows**: the tree's
   total row moves with the table, and here the total is worked out
   from the cells and is right wherever they are.
+
+## 527. The way a table totals
+
+A table may total its columns in more than one way: a **sum**, an
+**average**, a **count** of the cells that hold something, the
+**largest** of the numbers, and so on.
+
+### What was built
+
+- The **way** is a **fact of the table**, held beside the total row,
+  and it is **said** when the table is read. The default is the
+  **sum**, the way the grid's own `SUM` does it.
+- The **ways** are the tree's own list: `sum`, `average`, `count`,
+  `count-numbers`, `max`, `min`, `standard-deviation`, `variance` and
+  `none` — under this tree's own names, where the tree says
+  `countNums`, `stdDev` and `var`.
+- The **totals** are still **derived**: they are worked out from the
+  cells every time they are asked for, so a table cannot have a
+  total that is out of date with the cells.
+- The **rules**:
+  - a way that is **not a way** is refused, and the refusal names
+    the ways there are — `median` is not one of them;
+  - a way that is **not said** leaves the table as it was: the way
+    it has, and the total row it has, are both kept;
+  - the **variance** is the **sample variance** — the divisor is one
+    less than the number of the numbers — and a column with **one
+    number** has no variance, because the variance of one number is
+    nothing and not a zero that means something else;
+  - the way **none** gives **no total at all**;
+  - the **count** is of the cells that hold **something**, and the
+    count-numbers is of the cells that hold a **number**: a column
+    that holds words counts once and counts no numbers;
+  - a **count** of an empty column is **zero**, because counting
+    nothing gives zero — and that is the one answer where a zero is
+    the truth and not a number standing in for a missing one.
+
+### What the port found
+
+- **The tree's way is a name too, but a name it does not know is a
+  sum**: the tree's list of ways is a match in a command, and a name
+  that matches nothing falls through to the sum. Here a name that is
+  not a way is **refused**, because a way that is not a way is a
+  mistake and a mistake that quietly becomes a sum is a mistake
+  nobody sees.
+- **The tree's way is per column and here it is per table**: the
+  tree's table holds a way for each of its columns, so one column
+  may be summed and the next averaged. Here one way belongs to the
+  table, and every column is totalled in it.
+- **The tree's totals live in the cells and here they do not**: the
+  tree writes a `SUBTOTAL` formula into the total row — with the
+  number the spreadsheet knows that way by — and the total is
+  whatever the spreadsheet says it is. Here the total is **worked
+  out** from the cells, so a cell holding a **formula** is read
+  through the book and the total follows it.
+- **The tree's variance is the spreadsheet's own**: it asks for
+  `SUBTOTAL` 110, and that is the variance of a **sample** — the
+  divisor is one less than the number of the numbers. Here it is
+  the sample variance too, and the population variance is not here.
+
+### What it cost
+
+- **Thirteen tests** in the grid battery (`tests/totalsways.rs`): the
+  way being said, the sum being the way a table totals by default,
+  the average, the count of the cells that hold something, the count
+  of the numbers, the largest, the smallest, the variance, the
+  standard deviation, a column with one number having no variance,
+  the way none giving no total at all, a way that is not a way being
+  refused, and the way that is not said being left as it was.
+- **No new module**: the command grows the tables module. The grid
+  battery now carries **121** commands and the MCP server **724**.
+
+### What it does not settle
+
+- **The way is one way for the whole table**: the tree's table may
+  total its columns in different ways, and here they are all
+  totalled the same way.
+- **The total row is still not written**: the tree's total row is a
+  row of cells, and here it is not in the sheet at all.
+- **The population variance is not here**: the tree asks the
+  spreadsheet for the variance of a sample, and the variance of a
+  population is not asked about.
