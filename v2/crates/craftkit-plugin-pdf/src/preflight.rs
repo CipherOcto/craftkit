@@ -308,6 +308,10 @@ pub fn issues(document: &Document, level: Option<Level>) -> Vec<Issue> {
             issue("6.2.11.4", format!("The font {} isn't embedded", font.base), false);
         }
     }
+    // The **encryption**: a PDF/A file may not be encrypted.
+    if crate::trailer::is_encrypted(document) {
+        issue("6.1.3", "The document is encrypted".to_string(), true);
+    }
     // The **colour**: device colour needs a PDF/A output intent.
     let (rgb, cmyk) = device_colour(document);
     if (rgb || cmyk) && !has_a_pdfa_intent(document) {

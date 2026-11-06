@@ -141,6 +141,7 @@ mod predictors;
 mod preflight;
 mod remove;
 mod rotation;
+mod trailer;
 mod writer;
 mod xref;
 
@@ -158,6 +159,7 @@ pub use pages::RemovePage;
 pub use preflight::Preflight;
 pub use remove::RemoveObject;
 pub use rotation::{ReadRotation, RotatePage};
+pub use trailer::ReadTrailer;
 
 /// The PDF layer.
 ///
@@ -1534,6 +1536,11 @@ impl LoadFile {
             message: format!("the file cannot be loaded: {error:?}"),
         })?;
         let objects = file.objects;
+        // The **trailer**: the file's own last word, kept in the
+        // document's payload so that the document still says what the
+        // file said.
+        let trailer: Vec<serde_json::Value> =
+            file.trailer.iter().map(|(key, value)| serde_json::json!([key, value])).collect();
         std::fs::create_dir_all(&into).map_err(|error| EngineError::Failed {
             id: "pdf.file.load".to_string(),
             message: format!("the streams' bytes have nowhere to go: {error}"),
@@ -1588,6 +1595,13 @@ impl LoadFile {
             }
         }
         let count = objects.len();
+        // The **trailer** of the file goes into the document's own
+        // payload: it is the file's last word and not an object of
+        // the file.
+        if !trailer.is_empty() {
+            let document = session.document_mut()?;
+            document.data["pdf.trailer"] = serde_json::json!({ "entries": trailer });
+        }
         // The **free numbers** of the file: the numbers the file says
         // are not in use. They are kept, because a number that is free
         // is a number something had.
@@ -1980,6 +1994,7 @@ craftkit_sdk::plugin_anchor!(
     AddObject,
     Preflight,
     ReadFonts,
+    ReadTrailer,
     AddStream,
     SetInformation,
     SetPageLabels,

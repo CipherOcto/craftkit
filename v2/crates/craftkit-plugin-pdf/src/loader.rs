@@ -71,6 +71,9 @@ pub struct File {
     /// The numbers that are not in use, and the generation each of
     /// them gets if it is used again.
     pub free: Vec<Free>,
+    /// The **trailer** of the file: the pairs it holds, in the order
+    /// the file had them.
+    pub trailer: Vec<(String, Json)>,
 }
 
 /// Read the **objects** of a file.
@@ -80,6 +83,16 @@ pub struct File {
 /// are read too: they are numbers something had, and the file says so.
 pub fn load(bytes: &[u8]) -> Result<File, Error> {
     let table = xref::read(bytes).map_err(from_xref)?;
+    // The **trailer**: the kit's spelling of a key has no slash in
+    // front of it, and the trailer's keys are read the same way.
+    let trailer: Vec<(String, Json)> = table
+        .trailer
+        .iter()
+        .map(|(key, value)| {
+            let key = key.strip_prefix('/').unwrap_or(key.as_str()).to_string();
+            (key, value.clone())
+        })
+        .collect();
     let mut loaded: Vec<Loaded> = Vec::with_capacity(table.entries.len());
     let mut free: Vec<Free> = Vec::new();
     for entry in &table.entries {
@@ -127,7 +140,7 @@ pub fn load(bytes: &[u8]) -> Result<File, Error> {
             references,
         });
     }
-    Ok(File { objects: loaded, free })
+    Ok(File { objects: loaded, free, trailer })
 }
 
 /// The **references** a value holds.
