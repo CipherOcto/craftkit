@@ -3980,6 +3980,7 @@ so.
 | the **calculation** of a field | **built.** A field may say how its value is worked out, and the simple way and the expression are read — a script that is not understood is said so (§543) | §543 |
 | the **form** of a file | **built.** The catalog names the form, and the form says which fields it has, whether the reader is to make the appearances and the order the calculated fields are calculated in (§544) | §544 |
 | the **appearance** of a field | **built.** The appearance is read — the box it is drawn in, the matrix that places it, the operators of its stream and the states it has (§545) | §545 |
+| the **validation** of a field | **built.** A field may say what it accepts, and the range it accepts is read — a script that is not understood is said so (§546) | §546 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35748,4 +35749,61 @@ draws it.
 - **The resources of the appearance are not read**: the fonts and the
   other things the appearance uses are not resolved.
 - **The appearance is not written**: a field's appearance may be said,
+  and this tree only reads it.
+
+## 546. The validation of a field
+
+A field may say what it accepts — and a file that says it carries a
+small script.
+
+### What was built
+
+- The new module `validation` reads the **validate** event of a
+  field's additional actions — the `/AA` dictionary, key `/V` — and
+  says the **range** the field accepts: whether there is a smallest
+  value and what it is, and whether there is a largest one and what it
+  is.
+- A script that is **not understood** is reported as unsupported and
+  is not pretended to be run.
+- The command **`pdf.field.validate`** reads the validation of one
+  field. A field that says nothing about what it accepts validates
+  nothing, and the answer says so.
+- The reading of a **script** and of the action that holds it now
+  lives in one module — `scripts` — because the calculation and the
+  validation are read the same way.
+
+### What the port found
+
+- **The tree's validation is the range call and nothing else**: the
+  tree knows `AFRange_Validate(bGreater, nGreater, bLess, nLess)`,
+  and it reads the two flags and the two numbers from it — here the
+  same four things are read, and the flag that is false means there
+  is no bound in that direction.
+- **The tree keeps the other scripts and reports them as
+  unsupported**: a form may carry any script, and the tree does not
+  pretend to run the ones it does not know — here the script is kept
+  as it is and named as unsupported.
+- **The tree's events are the tree's own**: the additional actions
+  hold the keystroke, format, validate and calculate events under
+  `K`, `F`, `V` and `C`, and this tree reads the validate event from
+  the same place.
+
+### What it cost
+
+- **Five tests** in the pdf battery (`tests/validation.rs`): a field
+  that says the range it accepts, a field that says nothing, the
+  action written where it is used, a script that is not understood,
+  and a field that is not there.
+- **One new module** (`src/validation.rs`), one module of shared
+  reading (`src/scripts.rs`) and **one new command**
+  (`pdf.field.validate`). The pdf battery now carries **50** commands
+  and the MCP server **740**.
+
+### What it does not settle
+
+- **The value is not checked**: the range is read and nothing is
+  refused — a field's value is not validated against it.
+- **The other events are not read**: the keystroke and the format
+  events are in the same dictionary and are not read here.
+- **The script is not written**: a field's validation may be said,
   and this tree only reads it.
