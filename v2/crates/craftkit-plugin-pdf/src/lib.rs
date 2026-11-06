@@ -169,7 +169,7 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 pub use annot::SetAnnotationFlags;
-pub use appearance::ReadAppearance;
+pub use appearance::{ReadAppearance, WriteAppearance};
 pub use attachments::ReadAttachments;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use calculate::{ReadCalculatedValue, ReadCalculation};
@@ -2091,6 +2091,7 @@ craftkit_sdk::plugin_anchor!(
     ReadPageText,
     ReadAttachments,
     ReadLayers,
+    WriteAppearance,
     SetPageLabels,
     RemoveObject,
     SetNumber,
