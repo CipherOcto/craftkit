@@ -3945,6 +3945,7 @@ so.
 | the **crop** and the **trim** of two paths | **built.** The crop keeps what the path in front was covering, and the trim takes the hidden part of the path behind away — both made out of the boolean this tree has (§508) | §508 |
 | the **divide** and the **merge** of two paths | **built.** The divide cuts the paths where they meet and leaves one path for each face, and the merge joins the parts that are painted the same way (§509) | §509 |
 | the **pathfinder** on a whole selection | **built.** The crop and the trim work on a whole selection, and every path is trimmed by every path above it — and a path that has nothing left is gone (§510) | §510 |
+| the **fonts** of a PDF file | **built.** A file names its fonts, and the preflight says when one of them is not embedded — the rule of the clause 6.2.11.4 (§511) | §511 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33588,3 +33589,61 @@ the shape in front.
 - **The result is a path and not a group**: the tree's crop and trim
   make a group of the parts, and here the parts are paths of their
   own.
+
+## 511. The fonts of a PDF file
+
+A PDF/A file must have every font **embedded**: the font's own program
+must be in the file, and not only its name.
+
+### What was built
+
+- **One command** in the pdf battery: `pdf.fonts`.
+- It reads the **fonts** of the document and says what each one is:
+  the **base font** it draws with, the **subtype** it is written in,
+  and whether its program is **in the file**. A font that is named is
+  a font; nothing is guessed about it.
+- The **preflight** now says when a font is **not embedded**: the
+  clause is `6.2.11.4`, the message names the font, and the rule is
+  one the tree cannot fix — a font's program is not something a
+  preflight writes.
+- The **rules** of the tree's own check: a **Type 3** font is its own
+  program and is embedded in the very object that names it, so it
+  needs no descriptor and the rule does not touch it; a **composite**
+  font (a `Type0`) has no descriptor of its own, and it is embedded
+  when the font it descends from is.
+
+### What the port found
+
+- **The tree's font check is in its preflight and not in a catalogue**:
+  the tree's `check_font` walks the objects of the file and asks each
+  font whether its descriptor holds a `FontFile`, a `FontFile2` or a
+  `FontFile3`. Here the same question is asked of the document, and
+  the answer is a command of its own.
+- **The tree's rule is a rule and not a fact**: a font that is not
+  embedded is an **issue** the preflight reports, and the tree's
+  `convert` cannot fix it either — it says so in the issue itself.
+  Here the same: the issue is not fixable, and it says so.
+- **The tree's fonts are a catalogue with a craft**: its `fonts` crate
+  writes the programs into a file, chooses the encodings and knows
+  the scripts. Here a font is **read** and not written.
+
+### What it cost
+
+- **Eight tests** in the pdf battery (`tests/fonts.rs`): a font that
+  is not embedded breaking the rule, the rule naming the font, a
+  font that is embedded breaking nothing, a composite font embedded
+  when the font it descends from is, a composite font without a
+  program breaking the rule, a Type 3 font being its own program, the
+  fonts being read, and the preflight saying what fonts the file has.
+- **One new module** (`fonts`). The pdf battery now carries **31**
+  commands and the MCP server **711**.
+
+### What it does not settle
+
+- **A font cannot be embedded here**: the tree writes the program of a
+  font into the file, and this tree has no font programs to write.
+- **The font says its name and its subtype and nothing more**: the
+  tree's catalogue knows the encodings and the scripts of a font, and
+  here nothing of that is known.
+- **The preflight does not check the colour and the encryption yet**:
+  the tree checks both, and the rules are still to come.
