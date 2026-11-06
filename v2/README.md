@@ -3947,6 +3947,7 @@ so.
 | the **pathfinder** on a whole selection | **built.** The crop and the trim work on a whole selection, and every path is trimmed by every path above it — and a path that has nothing left is gone (§510) | §510 |
 | the **fonts** of a PDF file | **built.** A file names its fonts, and the preflight says when one of them is not embedded — the rule of the clause 6.2.11.4 (§511) | §511 |
 | the **colour** of a PDF file | **built.** A file that paints in a device colour needs an output intent, and the preflight says when there is none — the clauses 6.2.3 and 6.2.4.3 (§512) | §512 |
+| the **trailer** of a PDF file | **built.** The trailer is the file's last word, and it is kept in the document — and the preflight says when the file was encrypted (§513) | §513 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33710,3 +33711,63 @@ without it the file says nothing about its own colours.
   writes one.
 - **The rule about encryption is not here**: the tree checks it, and
   the trailer it needs is not in the document yet.
+
+## 513. The trailer of a PDF file
+
+A file ends with a **trailer**: the dictionary that says where the
+file's index is, which object is the catalog, and — when the file is
+**encrypted** — which object holds the encryption.
+
+### What was built
+
+- The **loader** keeps the **trailer**. It was read and thrown away
+  before, and a document that was loaded from a file could not say
+  what the file's last word was.
+- The trailer goes into the **document's own payload**, under the key
+  the pdf battery owns, because the trailer is not an object of the
+  file: it has no number and it is not in the index.
+- **One command** in the pdf battery: `pdf.trailer.read`. It reads the
+  entries of the trailer, or one of them when it is asked for one,
+  and it says whether the file is **encrypted**. An entry the trailer
+  does not have is refused, and the refusal names it.
+- The **preflight** now says when a document is encrypted: the clause
+  is `6.1.3`, the message is the tree's own, and the rule can be
+  fixed — the encryption can be taken away.
+
+### What the port found
+
+- **The tree's trailer is a dictionary and not an object**: the tree
+  keeps it in the file and reaches it with `doc.trailer()`, and its
+  objects are reached by number. Here the same: the trailer is in
+  the document's payload and the objects are nodes.
+- **The tree's rule about the encryption is a rule about the
+  trailer**: the tree asks the trailer whether it holds an `Encrypt`
+  entry, and it does not ask the objects — an encrypted file's objects
+  are still objects, and the encryption is said once, at the end.
+- **The tree's `convert` takes the encryption away** and says that it
+  did. Here the rule is fixable for the same reason, and nothing
+  takes it away yet.
+
+### What it cost
+
+- **Eight tests** in the pdf battery (`tests/trailer.rs`): the
+  trailer of a file being kept in the document, the trailer not being
+  an object of the file, a file that is encrypted breaking the rule, a
+  file that is not encrypted breaking nothing, the trailer saying
+  whether the file is encrypted, one entry of the trailer being read,
+  an entry the trailer does not have being refused, and a document
+  that was not loaded from a file having no trailer.
+- **One new module** (`trailer`). The pdf battery now carries **32**
+  commands and the MCP server **712**.
+
+### What it does not settle
+
+- **The encryption is not read**: the tree's `crypt` crate decrypts a
+  file and encrypts one, and here the trailer says that a file is
+  encrypted and nothing more.
+- **The file is not written with its trailer**: the writer writes a
+  trailer of its own — the size, the root and the information — and
+  the trailer the document keeps is not the one it writes.
+- **The tree's preflight checks the file and not the document**: here
+  the rule can only be seen in a document that was loaded from a
+  file, and a document that was built by hand has no trailer.
