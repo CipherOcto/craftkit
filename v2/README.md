@@ -3997,6 +3997,7 @@ so.
 | the **named destinations** of a file | **built.** A file may give its pages names — the name and the page the destination points at are read (§560) | §560 |
 | the **merged cells** of a table | **built.** A range of cells may be one cell — the top left keeps the value, the covered cells are emptied, and a merge that overlaps another is refused (§561) | §561 |
 | the **signatures** of a file | **built.** A file may be signed — the byte range, the signer, the time and the way it was made are read, and the bytes are not checked (§562) | §562 |
+| the **structure** of a file | **built.** A tagged file carries a structure tree — the type of every element, its title, its alt text, its language and its children are read (§563) | §563 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36700,3 +36701,55 @@ A file may be **signed**.
   is inside the signature, and this tree does not open it.
 - **A signature is not made**: a file may be signed elsewhere and
   read here, and this tree does not sign one.
+
+## 563. The structure of a file
+
+A file may be **tagged**: its content carries a **structure tree**.
+
+### What was built
+
+- The new command **`pdf.structure.read`** reads the structure tree of
+  a file — every element with:
+  - what it **is**: its type, as the file says it;
+  - its **title** and its **alternative text**;
+  - its **language**;
+  - its **children**, the elements below it.
+- The rules:
+  - a file with **no structure tree** is not tagged, and the answer
+    says so;
+  - a child that is **not an element** — a marked content number, say
+    — is skipped: it is not a thing of the tree;
+  - the walk is **bounded**: a tree deeper than the tree reads is not
+    read further — a structure tree is written by a program, and a
+    program can make a deep one, and this tree reads a document and
+    not a machine.
+
+### What the port found
+
+- **The tree's checker reads the same tree and the same rules**: the
+  tree's accessibility crate reads the structure tree and checks the
+  alternate text, the tables, the lists and the headings against it
+  — here the tree itself is read, and the checks are not made.
+- **The tree's root is not an element**: the tree's root is the
+  structure tree, and the element that is the document is below it —
+  here the same, and the answer gives the element that is the
+  document.
+
+### What it cost
+
+- **Two tests** in the pdf battery (`tests/structure.rs`): the
+  structure tree of a tagged file, and a file with no structure tree.
+- **One new module** (`src/structure.rs`) and **one new command**
+  (`pdf.structure.read`). The pdf battery now carries **56** commands
+  and the MCP server **759**.
+
+### What it does not settle
+
+- **The structure is not checked**: the alternate text of the figures
+  and the headings of the tree are read, and nothing says that they
+  are missing.
+- **The content is not matched to the tree**: a structure element
+  says what it is, and the marked content it points at is not
+  followed.
+- **The roles are not a list**: any type is read as the file says it,
+  and this tree does not know the standard types.
