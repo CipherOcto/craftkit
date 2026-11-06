@@ -257,3 +257,83 @@ impl ReadBlockCharacter {
         })))
     }
 }
+
+/// **Delete** a **style**.
+///
+/// A style is a name and what it applies to, and a style that is not
+/// used may be taken away. The blocks that were in it are **left as
+/// they are**: the edge that said which style they were in is taken
+/// away, so they have no style — and the tree's rule is the same, a
+/// block that was in a deleted style is in the default style
+/// afterwards.
+///
+/// The rules:
+///
+/// - a node that is **not a style** is refused, and so is a style
+///   that is not there;
+/// - a style that **another style is based on** is refused: the other
+///   style would lose the base it was based on, and a chain that
+///   begins nowhere is not a chain.
+#[derive(Command)]
+#[command(id = "prose.style.delete", area = "prose", layer = "prose", icon = "minus", mutates, undoable)]
+pub struct DeleteStyle {
+    /// The style to delete.
+    pub style: NodeRef,
+}
+
+impl DeleteStyle {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "prose.style.delete".to_string();
+        let style = self.style.0;
+        let Some(node) = session.document().node(style) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no style `{style}`"),
+            });
+        };
+        if node.kind != "prose.style" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{style}` is a `{}` and not a style", node.kind),
+            });
+        }
+        let name = node.name.clone();
+        // A style that another style is **based on** may not be
+        // deleted.
+        let based = session
+            .document()
+            .relations
+            .iter()
+            .find(|relation| relation.kind == "prose.based_on" && relation.to == style)
+            .map(|relation| (relation.from, relation.payload.get("based_on").cloned().unwrap_or(Json::Null)));
+        if let Some((other, other_name)) = based {
+            let other_name = match other_name {
+                Json::String(text) => text,
+                _ => format!("the style `{other}`"),
+            };
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the style `{other_name}` is based on the style `{name}`"),
+            });
+        }
+        // The **blocks** that were in the style: the edge is taken
+        // away, and the blocks are left as they are.
+        let blocks: Vec<u64> = session
+            .document()
+            .relations
+            .iter()
+            .filter(|relation| relation.kind == "prose.styled_by" && relation.to == style)
+            .map(|relation| relation.from)
+            .collect();
+        let document = session.document_mut()?;
+        document.remove_relations(|relation| {
+            (relation.kind == "prose.styled_by" || relation.kind == "prose.based_on") && relation.to == style
+        });
+        document.remove_node(style);
+        Ok(Outcome::changed(format!("deleted the style `{name}`")).with_data(json!({
+            "style": style,
+            "name": name,
+            "blocks": blocks.len(),
+        })))
+    }
+}

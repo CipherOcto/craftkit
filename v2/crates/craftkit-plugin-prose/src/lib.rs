@@ -150,7 +150,7 @@ pub use references::{AddReference, ReadReference, SetReference};
 pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
 pub use revisions::ReadRevisions;
 pub use statistics::ReadStatistics;
-pub use styles::{ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
+pub use styles::{DeleteStyle, ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
 pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell, SetHeader, SetTableAlt};
 pub use titles::SetTitle;
 
@@ -1026,6 +1026,7 @@ craftkit_sdk::plugin_anchor!(
     SetPlacement,
     SetTitle,
     ReadStatistics,
+    DeleteStyle,
     NumberFormat,
     SetHeader,
     SetTableAlt,
