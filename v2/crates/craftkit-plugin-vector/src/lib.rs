@@ -84,7 +84,7 @@ mod shapes;
 pub use dashes::DashPath;
 pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
 pub use opacity::{SetOpacity, fill_at, stroke_at};
-pub use pathfinder::{CropPaths, TrimPaths};
+pub use pathfinder::{CropPaths, DividePaths, MergePaths, TrimPaths};
 pub use shapes::{AddLine, AddSpiral, AddStar};
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
@@ -2799,6 +2799,8 @@ craftkit_sdk::plugin_anchor!(
     IntersectPaths,
     CropPaths,
     TrimPaths,
+    DividePaths,
+    MergePaths,
     SimplifyPath,
     OffsetPath,
     JoinPath,
