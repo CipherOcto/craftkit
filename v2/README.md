@@ -3968,6 +3968,7 @@ so.
 | the **widgets** of a field | **built.** A widget is the field's appearance on a page, and it says where it is, what state it shows and whether it is locked (§531) | §531 |
 | the **decorative** picture | **built.** A picture may say nothing about itself on purpose, and the checker does not ask it for words (§532) | §532 |
 | the **placement** of a picture | **built.** A picture sits in the line of the text or floats beside it, and a floating one makes the reading order unclear (§533) | §533 |
+| the **tab order** of a form | **built.** A page says how its annotations are reached — in rows, in columns, or in the order it lists them — and the order is read (§534) | §534 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34996,3 +34997,71 @@ cannot see it knows where it belongs — or **floating** beside it.
   none.
 - **Only a picture may float here**: the tree's shapes, charts and
   text boxes are not here to be placed.
+
+## 534. The tab order of a form
+
+The order in which a person reaches the fields of a form is not the
+order they were made in: it is the order the **page** says.
+
+### What was built
+
+- **One command** in the pdf battery: `pdf.tab.order`. It says the
+  order the annotations of a form are reached in, and the order each
+  page asks for.
+- The **rules**:
+  - the pages come in the **document's order**, and each page's
+    annotations are reached before the next page's;
+  - a page that says `R` gives its annotations in **rows** — from the
+    top of the page down, and in a row from the left to the right;
+  - a page that says `C` gives them in **columns** — from the left of
+    the page across, and in a column from the top down;
+  - a page that says `S` gives the **structure** of the document, and
+    a page that says nothing gives the **annotation order** — the
+    order it lists its annotations in;
+  - two annotations are in the same **row** when their top edges are
+    within half the height of the first one — and never nearer than
+    two — and in the same **column** when their left edges are within
+    half the width of the first one;
+  - an annotation that is **on no page** has no place in the order:
+    the answer is nothing and not a place that means something else.
+
+### What the port found
+
+- **The tree's tab order is the order of the annotations and here it
+  is too**: the tree's form says where every widget stands in the tab
+  order, and it works it out from the page's `/Tabs` and the
+  rectangles of the widgets. Here the order is read the same way.
+- **The tree's structure order is the annotation order, and here it is
+  too**: the tree names four orders — rows, columns, structure and
+  annotations — and the structure one is worked out the same way as
+  the annotation one. That is the tree's rule and it is kept.
+- **The tree's pages come from the page tree and here they come from
+  the document**: the tree walks the tree of pages for the order of
+  the pages. Here the pages are the pages of the document in the
+  order the document has them.
+- **The tree's rows are grouped by the top edge and here they are too**:
+  the tree puts two widgets in one row when their top edges are within
+  half the height of the first, and never nearer than two.
+
+### What it cost
+
+- **Eight tests** in the pdf battery (`tests/taborder.rs`): a page
+  that says nothing having the annotation order, a page that says rows
+  giving the rows of the page, a page that says columns giving the
+  columns of the page, a page that says the structure giving the
+  annotation order, the pages coming in the document's order, a widget
+  that is on no page having no place in the order, the order of one
+  page being read on its own, and a page that is not there being
+  refused.
+- **One new module**: `tabs.rs`. The pdf battery now carries **41**
+  commands and the MCP server **731**.
+
+### What it does not settle
+
+- **The order is not written**: the tree's editor sets the tab order
+  of a page, and here the `/Tabs` of a page is only read.
+- **The structure order is not the structure**: the tree's structure
+  order is the annotation order, and the structure of the document is
+  not here.
+- **The pages do not come from the page tree**: the tree's pages come
+  from the tree of pages, and here they come from the document.
