@@ -3986,6 +3986,7 @@ so.
 | the **duplicates** of a range | **built.** A range may hold the same row twice, and the first row of each kind is kept and the rest are emptied (§549) | §549 |
 | the **statistics** of a document | **built.** A document may be measured — the words, the characters with and without the spaces, the paragraphs — and a mark is not a word of its own (§550) | §550 |
 | the **numbering format** of a number | **built.** A number may be written in a named form — roman, letters, ordinal, cardinal — and a number that is too large for the form is refused (§551) | §551 |
+| the **replacing** of text in a sheet | **built.** What was found may be replaced — the case does not matter unless the search says it does, and a formula that does not parse afterwards is refused (§552) | §552 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36110,3 +36111,61 @@ fourth one and a list may count in letters.
   feature.
 - **The list labels are not made**: the prose battery has lists, and
   the label of a list is not this command's work.
+
+## 552. The replacing of text in a sheet
+
+A sheet may be searched — and what was found may be **replaced**.
+
+### What was built
+
+- The new command **`grid.replace`** writes the text it replaces with:
+  - the replacement is the **text as it is**, and a **wildcard** is
+    not something that can be replaced — a search that holds one is
+    refused;
+  - the **case** does not matter unless the search says it does, and
+    when it does not matter the text is found whatever its case and
+    the replacement is written as it was given;
+  - a cell that holds a **number** is a cell whose text may be
+    changed, and the new text is read again as a value: a text that
+    is a number is a number, and a text that is not is a text;
+  - a cell that holds a **formula** is changed only when the search
+    asks for the formulas, and a formula that does not parse after
+    the replacing is **refused** — a formula that is not a formula is
+    not written down;
+  - a cell that is **locked** by the sheet's protection or covered by
+    a merge is not written;
+  - the **whole cell** may have to match, as in the finding.
+
+### What the port found
+
+- **The tree's finding and replacing are one language**: the tree's
+  find takes the same options the replace takes — the case, the whole
+  cell and the formulas — and here the replace takes the same three,
+  because a search and a replacing that disagree are two languages.
+- **The tree's wildcards are for finding**: the tree's find has a
+  whole pattern language and the tree's replace works on the text as
+  it is; here the same, and a wildcard in a replacing is refused
+  rather than half honoured.
+- **The tree's replacing works on the text of the cell**: the tree
+  writes what the text says, and here the new text is read again as
+  a value — the same rule the cutting of a column of text follows.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/replacing.rs`): the
+  text replaced, the case that does not matter, a cell that holds a
+  number afterwards, the whole cell that has to match, the formulas
+  that are looked in, a formula that does not parse, and a wildcard
+  that is refused.
+- **One new module** (`src/replacing.rs`) and **one new command**
+  (`grid.replace`). The grid battery now carries **125** commands and
+  the MCP server **746**.
+
+### What it does not settle
+
+- **The formulas are not recalculated**: the formula is written and
+  the value of the cell is worked out when it is asked for.
+- **The other sheets are not looked in** when a sheet is named: the
+  whole workbook is looked in only when no sheet is named.
+- **The text is not replaced in a cell that is empty**: there is
+  nothing to replace in a cell that holds nothing.
