@@ -3943,6 +3943,7 @@ so.
 | the **side** of a page | **built.** A page may be the left or the right face of a spread, and the inside and the outside margins are derived from the side — the inside margin is the room at the spine (§506) | §506 |
 | the **preflight** of a PDF file | **built.** A preflight says what a file declares — the PDF/A part, the PDF/UA part, the output intents — and what it breaks, with the clause it breaks and whether the tree can fix it (§507) | §507 |
 | the **crop** and the **trim** of two paths | **built.** The crop keeps what the path in front was covering, and the trim takes the hidden part of the path behind away — both made out of the boolean this tree has (§508) | §508 |
+| the **divide** and the **merge** of two paths | **built.** The divide cuts the paths where they meet and leaves one path for each face, and the merge joins the parts that are painted the same way (§509) | §509 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33461,3 +33462,65 @@ what lies **inside**.
 - **The result is a path and not a group**: the tree's crop and trim
   make a group of the parts, and here the parts are paths of their
   own.
+
+## 509. The divide and the merge of two paths
+
+The tree's pathfinder has more than the booleans: it has the
+operations that take the **hidden** parts away and the ones that
+**cut** the shapes where they meet.
+
+### What was built
+
+- **Two commands** in the vector battery: `vector.path.divide` and
+  `vector.path.merge`.
+- The **divide** cuts the paths at the places where they meet, and
+  what is left is one path for each **face**: the part of the path
+  behind that the path in front does not cover, the part of the path
+  in front that the path behind does not cover, and the part they
+  **share**. The face they share takes the **style of the path in
+  front**, because the path in front is what covers it.
+- The **merge** is the trim and then a join: the parts that are left
+  are joined into **one path** when they are painted the same way, and
+  they are **kept apart** when they are not — the part of the path
+  behind that the path in front covers is taken away, and the two
+  paths do not overlap afterwards.
+- Both are made out of the boolean this tree has: the divide is the
+  two **differences** and the **intersection**, and the merge is the
+  **union** or the **difference**.
+
+### What the port found
+
+- **The tree's divide reads the faces out of an arrangement**: the
+  tree builds the **planar arrangement** of the shapes and every face
+  of it is a piece, so the tree's divide cuts a shape that crosses
+  another one into pieces the eye cannot see. Here the divide is
+  made of two differences and an intersection, which gives the same
+  three faces for two paths — and not the pieces of a shape that
+  crosses itself.
+- **The tree's merge joins the parts that have the same key**, and
+  the key is the paint; here the two paths are painted the same way
+  or they are not, and the same way means one path.
+- **The tree's faces are a group** and the tree's merge makes a group
+  of the parts it joins. Here the faces are paths of their own, and
+  the path that was divided is the path of one of the faces.
+
+### What it cost
+
+- **Six tests** in the vector battery (`tests/faces.rs`): the divide
+  cutting the paths where they meet, the divide making a path for the
+  part the paths share, the shared face taking the style of the path
+  in front, the divide of two paths that do not meet making two faces,
+  the merge of two paths painted the same way making one path, and the
+  merge of two paths painted differently keeping them apart.
+- **One module** (`pathfinder`) grows two commands. The vector battery
+  now carries **46** commands and the MCP server **710**.
+
+### What it does not settle
+
+- **The divide is of two paths**: the tree's is of a whole selection,
+  and a shape under three others is cut by all of them there and by
+  one here.
+- **The pieces of a shape that crosses itself are not here**: the
+  tree's arrangement gives them, and this tree's boolean does not.
+- **The faces are paths and not a group**: the tree's divide makes a
+  group of the faces, and here they are paths beside one another.
