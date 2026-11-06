@@ -3944,6 +3944,7 @@ so.
 | the **preflight** of a PDF file | **built.** A preflight says what a file declares — the PDF/A part, the PDF/UA part, the output intents — and what it breaks, with the clause it breaks and whether the tree can fix it (§507) | §507 |
 | the **crop** and the **trim** of two paths | **built.** The crop keeps what the path in front was covering, and the trim takes the hidden part of the path behind away — both made out of the boolean this tree has (§508) | §508 |
 | the **divide** and the **merge** of two paths | **built.** The divide cuts the paths where they meet and leaves one path for each face, and the merge joins the parts that are painted the same way (§509) | §509 |
+| the **pathfinder** on a whole selection | **built.** The crop and the trim work on a whole selection, and every path is trimmed by every path above it — and a path that has nothing left is gone (§510) | §510 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33524,3 +33525,66 @@ operations that take the **hidden** parts away and the ones that
   tree's arrangement gives them, and this tree's boolean does not.
 - **The faces are paths and not a group**: the tree's divide makes a
   group of the faces, and here they are paths beside one another.
+
+## 510. The pathfinder on a whole selection
+
+The tree's crop and trim are of a **whole selection**: every shape is
+trimmed by every shape above it, and every lower shape is cropped by
+the shape in front.
+
+### What was built
+
+- The **crop** and the **trim** now work on a whole **selection** and
+  not on two paths. The paths are taken in the order of the
+  **document**, the last one being the one in front.
+- The **crop** keeps, for **every** path behind, the part of it that
+  lies inside the path in front; the path in front is taken away. A
+  path behind that does not meet the path in front has **nothing
+  left** of the crop, and it is gone.
+- The **trim** takes, from **every** path, the parts that the paths in
+  front of it cover — one path at a time, because a path in front is a
+  path and not a shape of many. A path that is hidden altogether has
+  nothing left, and it is gone.
+- The **divide** and the **merge** are still of **two** paths: a
+  selection of more than two is refused, and the refusal says how
+  many there are.
+
+### What the port found
+
+- **The tree's order is the selection's order**: the tree's trim
+  works down the selection from the front, and the tree's crop keeps
+  "the visible parts of lower shapes". Here the order is the
+  **document's**, and the last path in it is the one in front — a
+  selection is a set of paths, and the document is where they stand.
+- **The tree's trim removes a shape that is hidden altogether**, and
+  so does this one: a shape that covers nothing is not a shape. Here
+  the shape that has nothing left is **taken out of the document**,
+  and the tree keeps it as an empty shape — the tree's shape may
+  cover nothing, and this tree's may not.
+- **The tree's crop is of the shapes below the front one**, and a
+  shape that does not meet the front one is **not touched** there.
+  Here it is **gone**, because the crop keeps what lies inside and
+  there is none of it.
+
+### What it cost
+
+- **Five tests** in the vector battery (`tests/selection.rs`): the
+  trim taking the hidden part of every path away, the trim taking a
+  path that is hidden altogether away, the crop keeping what the path
+  in front was covering for every path behind it, the crop of two
+  paths being what it always was, and the divide of more than two
+  paths being refused.
+- The **pathfinder** module grows no command and loses none. The
+  vector battery still carries **46** commands and the MCP server
+  **710**.
+
+### What it does not settle
+
+- **The divide and the merge are still of two paths**: the tree's
+  divide splits the shapes into every face of the arrangement, and
+  this tree's boolean cannot do that.
+- **The pieces of a shape that crosses itself are not here**: the
+  tree's arrangement gives them, and this tree's boolean does not.
+- **The result is a path and not a group**: the tree's crop and trim
+  make a group of the parts, and here the parts are paths of their
+  own.
