@@ -237,11 +237,11 @@ fn shown(array: &[Json]) -> (String, String) {
 fn string_of(value: &Json) -> Option<(String, String)> {
     let Json::String(text) = value else { return None };
     let bytes: Vec<u8> = text.chars().map(|character| character as u32 as u8).collect();
-    Some(decode(&bytes))
+    Some(decode_bytes(&bytes))
 }
 
 /// The **text** of a string's bytes, and how they were read.
-fn decode(bytes: &[u8]) -> (String, String) {
+pub(crate) fn decode_bytes(bytes: &[u8]) -> (String, String) {
     if bytes.len() >= 2 && bytes[0] == 0xfe && bytes[1] == 0xff {
         let units: Vec<u16> = bytes[2..]
             .chunks(2)

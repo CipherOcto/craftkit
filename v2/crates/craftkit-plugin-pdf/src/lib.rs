@@ -127,6 +127,7 @@
 
 mod annot;
 mod appearance;
+mod attachments;
 mod boxes;
 mod calculate;
 mod content;
@@ -168,6 +169,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 pub use annot::SetAnnotationFlags;
 pub use appearance::ReadAppearance;
+pub use attachments::ReadAttachments;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use calculate::{ReadCalculatedValue, ReadCalculation};
 pub use convert::Convert;
@@ -2085,6 +2087,7 @@ craftkit_sdk::plugin_anchor!(
     ReadSignatures,
     ReadStructure,
     ReadPageText,
+    ReadAttachments,
     SetPageLabels,
     RemoveObject,
     SetNumber,
