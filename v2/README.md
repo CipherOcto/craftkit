@@ -3933,6 +3933,7 @@ so.
 | the **row** that is inserted | **built.** A row may be inserted into a sheet, and everything that named a row is moved with it — the cells, the formulas, the merges, the notes — and what cannot be moved refuses the insert (§496) | §496 |
 | the **row** that is deleted | **built.** A row may be deleted from a sheet, and the rows below it move up — and a formula that names a cell in the deleted rows refuses the delete, because this tree has no #REF! yet (§497) | §497 |
 | the **column** that is inserted | **built.** A column may be inserted into a sheet, and everything that named a column is moved with it — the cells, the formulas, the merges, the notes, the widths — and what cannot be moved refuses the insert (§498) | §498 |
+| the **column** that is deleted | **built.** A column may be deleted from a sheet, and the columns to the right of it move left — and a formula that names a cell in the deleted columns refuses the delete, because this tree has no #REF! yet (§499) | §499 |
 
 ### The list of things that are honestly not there: empty
 
@@ -32749,3 +32750,86 @@ with them.
   spelling of the same meaning.
 - **The column that is deleted is not here**: a deletion moves the
   columns left and takes the last one away, and it is its own work.
+
+## 499. The column that is deleted
+
+A column may be **deleted** from a sheet: the columns to the right of
+it move left, and the cells of the deleted columns are taken away with
+them.
+
+### What was built
+
+- **One command** in the grid battery: `grid.column.delete`, and the
+  machinery it needs: a formula's **references** are deleted with the
+  columns, and an expression is written out again with them.
+- A column is deleted by **moving** the facts that name columns,
+  exactly as a column is inserted — the other way:
+  - the **cells** to the right move left, and the **formulas** are
+    rewritten: a reference to a cell that moved now names the cell it
+    moved to;
+  - the **borders**, the **notes**, the **links** and the **pictures**
+    move with their cell, and the ones of the deleted cells go with
+    the cells;
+  - the **merges** and the **area** the sheet prints move left;
+  - the **widths** of the columns, the **hidden columns**, the
+    **outline levels**, the **title columns** and the **breaks** of the
+    print move left, and the ones of the deleted columns go with the
+    columns;
+  - the **filter** moves left.
+- The **rules**: a column is named by its **letters** — `A`, `B`, `AA` —
+  and the number of columns deleted is a whole number above zero; a
+  **formula that names a cell in the deleted columns** refuses the
+  delete, because this tree has no `#REF!` yet and a formula that
+  names nothing is refused rather than written; a **merge** that covers
+  one of the deleted columns refuses it, and so does a **print area**
+  that names one; a **filter** of a deleted column refuses it, because
+  a filter that filters nothing is not a filter; a sheet that is
+  **protected** refuses, because its cells are locked; and a sheet that
+  holds something this tree **cannot move** refuses and says what it
+  holds, as it does when a column is inserted (§498).
+
+### What the port found
+
+- **The tree's delete writes `#REF!`** where a formula named a cell
+  that is gone, and the tree's engine knows that value. This tree has
+  no `#REF!` yet, so the delete is **refused** instead: a formula that
+  names nothing is not written.
+- **The tree's delete moves everything** — the tree's cells, the
+  tree's formulas, the tree's merges, the tree's charts and the
+  tree's names — and here the moving is a list of the facts this tree
+  knows how to move, and a fact it does not know how to move
+  **refuses** the delete rather than being left behind.
+- **The tree's filter is over a range** and its columns are part of
+  the range, so the tree's delete moves the filter with the range. Here
+  the filter is over **one column**, and a filter of a deleted column
+  refuses the delete rather than becoming a filter of nothing.
+
+### What it cost
+
+- **Fourteen tests** in the grid battery (`tests/columndeleting.rs`): a
+  column being deleted and the cells moving left, more than one column
+  being deleted, the formula of a cell that moves being written again,
+  a formula that names a deleted column being refused, the note of a
+  deleted cell going with the cell, the note of a cell to the right
+  moving left, a merge that covers a deleted column being refused, the
+  width of a column moving left, a hidden column moving left, the area
+  a sheet prints moving left, the filter of a deleted column being
+  refused, a sheet that holds something this tree cannot move being
+  refused, a protected sheet refusing, and a column that is not a
+  column being refused.
+- **One new module** (`columndeleting`) and the delete of a column in
+  the formula module. The grid battery now carries **120**
+  commands and the MCP server **702**.
+
+### What it does not settle
+
+- **There is no `#REF!`**: a formula that names a cell in the deleted
+  columns refuses the delete, where the tree writes the error.
+- **The conditional formats, the validations, the sparklines, the
+  tables, the pivots and the charts are not moved**, and a sheet that
+  holds one of them refuses the delete and says which.
+- **A name of the workbook that points at the sheet is not moved**,
+  and a sheet with such a name refuses the delete.
+- **The formula is written out again**, so its text may be another
+  spelling of the same meaning, and a formula this tree cannot read
+  is left exactly as it was.
