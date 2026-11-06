@@ -21,6 +21,10 @@
 //! - a field **without** a name is named by the number of its object,
 //!   so that it can be asked about.
 //!
+//! And a field may have **children**: the fields it holds, and the
+//! **widgets** it shows itself with — a kid with no name is not a
+//! child but the field's appearance on a page.
+//!
 //! And a field may **inherit** from its parent: a field that does not
 //! say what it is takes the kind of its parent, and a field that does
 //! not say how it behaves takes the flags of its parent. A field that
@@ -86,6 +90,11 @@ pub struct Field {
     pub options: Vec<String>,
     /// The number of the object of the **parent** of the field.
     pub parent: Option<u64>,
+    /// The **children** of the field: the fields it holds.
+    pub children: Vec<u64>,
+    /// The **widgets** of the field: the kids with no name, which are
+    /// the field's appearance on a page.
+    pub widgets: Vec<u64>,
 }
 
 /// The **text** a value holds: the file's own spelling of a text.
@@ -242,6 +251,50 @@ fn parent_of<'a>(document: &'a Document, node: &Node) -> Option<&'a Node> {
     node_of_number(document, number)
 }
 
+/// The **kids** of a node: the entries its `/Kids` holds.
+fn kids_entries_of(node: &Node) -> Vec<Json> {
+    let entries = entries_of(node);
+    entry(&entries, "Kids").and_then(|kids| kids.as_array()).cloned().unwrap_or_default()
+}
+
+/// The **object numbers** the kids of a node name.
+fn kids_of(node: &Node) -> Vec<u64> {
+    kids_entries_of(node).iter().filter_map(number_of).collect()
+}
+
+/// The **kids** of a node, with one **kid** put in or taken out.
+fn kids_with(node: &Node, kid: u64, keep: bool) -> Vec<Json> {
+    let mut kids = kids_entries_of(node);
+    kids.retain(|entry| number_of(entry) != Some(kid));
+    if keep {
+        kids.push(json!({ "ref": [kid, 0] }));
+    }
+    kids
+}
+
+/// The **value** of a `/Kids` entry: the list of the kids, and
+/// nothing at all when the list is empty — an empty value takes the
+/// fact away.
+fn kids_of_value(kids: Vec<Json>) -> Option<Json> {
+    (!kids.is_empty()).then(|| json!(kids))
+}
+
+/// The **data** of a node, with one **entry** set — and an entry with
+/// no value is taken away.
+fn data_with(node: &Node, key: &str, value: Option<Json>) -> Json {
+    let mut entries = entries_of(node);
+    match value {
+        Some(value) => match entries.iter_mut().find(|(name, _)| name == key) {
+            Some(entry) => entry.1 = value,
+            None => entries.push((key.to_string(), value)),
+        },
+        None => entries.retain(|(name, _)| name != key),
+    }
+    let mut data = node.data.clone();
+    data["entries"] = json!(entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>());
+    data
+}
+
 /// The **object number** of a node.
 fn object_of(node: &Node) -> u64 {
     node.data.get("object").and_then(|number| number.as_u64()).unwrap_or(0)
@@ -347,7 +400,32 @@ pub fn fields_of(document: &Document) -> Vec<Field> {
             Some(options) => options_of(options),
             None => Vec::new(),
         };
-        fields.push(Field { object, name, kind, own_kind, value, flags, own_flags, options, parent });
+        // The **kids**: a kid with a name is a field, and a kid with
+        // no name is a widget — the field's appearance on a page.
+        let mut children: Vec<u64> = Vec::new();
+        let mut widgets: Vec<u64> = Vec::new();
+        for kid in kids_of(node) {
+            let Some(kid_node) = node_of_number(document, kid) else { continue };
+            let kid_entries = entries_of(kid_node);
+            if entry(&kid_entries, "T").and_then(text_of).is_some() {
+                children.push(kid);
+            } else {
+                widgets.push(kid);
+            }
+        }
+        fields.push(Field {
+            object,
+            name,
+            kind,
+            own_kind,
+            value,
+            flags,
+            own_flags,
+            options,
+            parent,
+            children,
+            widgets,
+        });
     }
     fields
 }
@@ -402,6 +480,8 @@ impl ReadFields {
                     "flag_names": flag_names(field.flags),
                     "options": field.options.clone(),
                     "parent": field.parent.map(|parent| json!(parent)).unwrap_or(Json::Null),
+                    "children": field.children.clone(),
+                    "widgets": field.widgets.clone(),
                 })
             })
             .collect();
@@ -616,12 +696,22 @@ impl SetParent {
         match self.parent {
             None => {
                 // The field has **no parent** any more.
+                let old_parent = entry(&entries_of(&node), "Parent").and_then(number_of);
+                let child = object_of(&node);
+                let old_parent_node = old_parent.and_then(|object| node_of_number(document, object)).cloned();
                 let mut entries = entries_of(&node);
                 entries.retain(|(key, _)| key != "Parent");
                 let data = json!({
                     "object": node.data.get("object").cloned().unwrap_or(Json::Null),
                     "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
                 });
+                if let Some(old) = &old_parent_node {
+                    let kids = kids_with(old, child, false);
+                    let data = data_with(old, "Kids", kids_of_value(kids));
+                    if let Some(node) = session.document_mut()?.node_mut(old.id) {
+                        node.data = data;
+                    }
+                }
                 let Some(node) = session.document_mut()?.node_mut(field) else {
                     return Err(EngineError::Failed {
                         id: id.clone(),
@@ -673,6 +763,12 @@ impl SetParent {
                     let entries = entries_of(node);
                     current = entry(&entries, "Parent").and_then(number_of);
                 }
+                // The **old parent**: the field leaves it.
+                let old_parent = entry(&entries_of(&node), "Parent").and_then(number_of);
+                let child = object_of(&node);
+                let old_parent_node = old_parent.and_then(|object| node_of_number(document, object)).cloned();
+                // The **new parent**: the field joins it.
+                let new_parent_node = Some(parent_node.clone());
                 let mut entries = entries_of(&node);
                 let value = json!({ "ref": [parent_field.object, 0] });
                 match entries.iter_mut().find(|(key, _)| key == "Parent") {
@@ -683,6 +779,22 @@ impl SetParent {
                     "object": node.data.get("object").cloned().unwrap_or(Json::Null),
                     "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
                 });
+                if let Some(old) = &old_parent_node
+                    && old.data.get("object").and_then(|number| number.as_u64()) != Some(parent_field.object)
+                {
+                    let kids = kids_with(old, child, false);
+                    let data = data_with(old, "Kids", kids_of_value(kids));
+                    if let Some(node) = session.document_mut()?.node_mut(old.id) {
+                        node.data = data;
+                    }
+                }
+                if let Some(new) = &new_parent_node {
+                    let kids = kids_with(new, child, true);
+                    let data = data_with(new, "Kids", kids_of_value(kids));
+                    if let Some(node) = session.document_mut()?.node_mut(parent.0) {
+                        node.data = data;
+                    }
+                }
                 let Some(node) = session.document_mut()?.node_mut(field) else {
                     return Err(EngineError::Failed {
                         id: id.clone(),
@@ -694,6 +806,73 @@ impl SetParent {
                     .with_data(json!({ "field": field, "parent": parent.0 })))
             }
         }
+    }
+}
+
+/// **Say** the **children** of a field.
+///
+/// A field may hold **children**: the fields it is a group of. The
+/// file says them in its `/Kids`, and a kid with **no name** is not a
+/// child but a **widget** — the field's appearance on a page.
+///
+/// The rules:
+///
+/// - a node that is **not a field** is refused;
+/// - a kid that **names nothing** is a widget and not a child;
+/// - a kid that is **not there** is not a child and not a widget: the
+///   file names an object that is not in it.
+#[derive(Command)]
+#[command(id = "pdf.field.children", area = "pdf", layer = "pdf", icon = "list")]
+pub struct ReadChildren {
+    /// The field.
+    pub field: NodeRef,
+}
+
+impl ReadChildren {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.field.children".to_string();
+        let field = self.field.0;
+        let document = session.document();
+        let Some(node) = document.node(field).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{field}`"),
+            });
+        };
+        if field_of(document, &node).is_none() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{field}` is not a field"),
+            });
+        }
+        let mut children: Vec<Json> = Vec::new();
+        let mut widgets: Vec<u64> = Vec::new();
+        for kid in kids_of(&node) {
+            let Some(kid_node) = node_of_number(document, kid) else { continue };
+            let kid_entries = entries_of(kid_node);
+            let Some(name) = entry(&kid_entries, "T").and_then(text_of) else {
+                // A kid with **no name** is a widget.
+                widgets.push(kid);
+                continue;
+            };
+            children.push(json!({
+                "object": kid,
+                "name": name,
+                "field": qualified_name(document, kid_node).unwrap_or_else(|| name.clone()),
+                "kind": entry(&kid_entries, "FT")
+                    .and_then(|kind| kind.as_str())
+                    .and_then(FieldKind::parse)
+                    .map(|kind| json!(kind.name()))
+                    .unwrap_or(Json::Null),
+            }));
+        }
+        Ok(Outcome::new(format!("the field `{field}` holds {} child(ren)", children.len())).with_data(
+            json!({
+                "field": field,
+                "children": children,
+                "widgets": widgets,
+            }),
+        ))
     }
 }
 
