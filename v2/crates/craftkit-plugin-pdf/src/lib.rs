@@ -128,6 +128,7 @@
 mod boxes;
 mod content;
 mod convert;
+mod fields;
 mod filters;
 mod fonts;
 mod free;
@@ -152,6 +153,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 pub use boxes::{PageBoxes, SetPageBox};
 pub use convert::Convert;
+pub use fields::{ReadFields, SetField};
 pub use fonts::ReadFonts;
 pub use information::SetInformation;
 pub use labels::SetPageLabels;
@@ -1998,6 +2000,8 @@ craftkit_sdk::plugin_anchor!(
     ReadFonts,
     ReadTrailer,
     Convert,
+    ReadFields,
+    SetField,
     AddStream,
     SetInformation,
     SetPageLabels,
