@@ -3974,6 +3974,7 @@ so.
 | the **output intent** of a file | **built.** The intent that says what the colours mean names an sRGB profile, and the profile is built in code (§537) | §537 |
 | the **flags** of an annotation | **built.** An annotation says whether it prints and whether it is hidden, and the checker says when it may not (§538) | §538 |
 | the **images** of a file | **built.** An image may not ask to be interpolated, and it may not carry alternates — and the conversion clears both (§539) | §539 |
+| the **annotations** of a converted file | **built.** The conversion makes every annotation print and shown, and leaves a popup alone (§540) | §540 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35381,3 +35382,55 @@ An image may not ask to be **interpolated**, and it may not carry
   are written by their own commands (§536, §537).
 - **The embedded files are not marked**: the tree's conversion marks
   the relationship of an embedded file, and here it does not.
+
+## 540. The annotations of a converted file
+
+An annotation that does not print, or that is hidden, breaks the
+PDF/A rule — and the **conversion** puts it right.
+
+### What was built
+
+- The **conversion** now makes every annotation **print** and be
+  **shown**: the print flag is set, and the hidden flags are taken
+  away. The report says how many annotations it changed.
+- The **rules**:
+  - a **popup** is left alone: it is the window of another annotation
+    and not a note of its own;
+  - an annotation that already prints and is already shown is **not
+    counted**: nothing about it changed.
+
+### What the port found
+
+- **The tree's conversion sets the flags of every annotation and here
+  it does too**: the tree's fix sets the print flag on the
+  annotations it finds and shows the ones that are hidden, and it
+  counts them.
+- **The tree's popup is left alone and here it is too**: the tree's
+  rule lets a popup off, and the tree's fix does not touch it — the
+  popup is the window of another annotation, and its flags are the
+  other annotation's business.
+- **The tree's fix sets the flags and does not take them away**: the
+  print flag is a flag and not an entry, so an annotation that
+  prints still carries the entry that says so. Here the same: the
+  flag is set to true and the hidden flags are set to false.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/annotations.rs`): the
+  conversion making an annotation print and shown, the conversion
+  showing an annotation that is hidden, a popup being left alone, and
+  the conversion saying how many annotations it changed.
+- **No new module**: the fix grows the convert module and the helper
+  grows the annot module. The pdf battery now carries **45** commands
+  and the MCP server **735**.
+
+### What it does not settle
+
+- **The appearance of an annotation is not made**: the tree's rule
+  asks for an appearance stream too, and the conversion does not draw
+  one.
+- **The conversion does not write the metadata or the intent**: they
+  are written by their own commands (§536, §537).
+- **The flags of an annotation are also said one at a time**: the
+  command that says them is there (§538), and the conversion does the
+  same thing to all of them at once.
