@@ -3993,6 +3993,7 @@ so.
 | the **information** of a file | **built.** The information dictionary says who wrote the file and what it is called, and it is found by the node or by the trailer (§556) | §556 |
 | the **exporting** of a sheet as a text of values | **built.** A range is written as a CSV — a cell is written as it is shown, and a field that holds the delimiter is quoted (§557) | §557 |
 | the **value** a field is calculated to hold | **built.** The simple way a field is calculated in is worked out — the values of the fields it names, put together in the way the script says (§558) | §558 |
+| the **baking** of an expression into keyframes | **built.** An expression is sampled over the frames and written down as keyframes — and a bake that would be too long is refused (§559) | §559 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36476,3 +36477,57 @@ The simple way a field is calculated in is **worked out**.
 - **The order of the calculation is not used**: a form may list the
   fields that are calculated in the order they are calculated in
   (§544), and this command does not follow that order.
+
+## 559. The baking of an expression into keyframes
+
+An expression says what the value of a property is at every frame.
+
+### What was built
+
+- The new command **`fx.prop.bake`** samples the expression of a
+  property and writes the samples down as **keyframes**, so the value
+  is a fact of the property and not a thing that is worked out every
+  time it is asked for. The expression is **taken away** afterwards.
+- The rules:
+  - the property must have an **expression**: there is nothing to
+    bake otherwise;
+  - the frames are **whole numbers**, the first is not after the
+    last, and the step between them is a whole number of at least
+    one;
+  - the number of samples is **bounded** — a bake is at most a
+    thousand of them, and a bake that would be longer is **refused**
+    rather than truncated;
+  - an expression that cannot be worked out at a frame is **refused**,
+    and the refusal names the frame;
+  - the keyframes that are written are **straight lines** between the
+    samples: the samples are points and a curve between them is a
+    guess.
+
+### What the port found
+
+- **The tree's conversion samples the expression over the comp's
+  frames**: the tree replaces the expression with real keyframes, and
+  here the same — the expression goes and the keyframes are the fact.
+- **The tree's samples are bounded in number and in time**, and the
+  tree cuts them short; here a bake that would be too long is
+  **refused**, because a bake that stops half way is a fact that was
+  changed quietly.
+
+### What it cost
+
+- **Five tests** in the fx battery (`tests/baking.rs`): an expression
+  baked into keyframes, a step of more than one frame, the expression
+  taken away, a property with no expression, and a bake that is too
+  long.
+- **One new command** (`fx.prop.bake`). The fx battery now carries
+  **50** commands and the MCP server **753**.
+
+### What it does not settle
+
+- **The curve between the samples is a straight line**: the samples
+  are the fact and the line between them is the plainest reading.
+- **The property's own value is the one its keyframes gave before the
+  bake**: the name `value` inside an expression means that, and the
+  bake does not change what it means.
+- **The bake does not write the property's value anywhere else**: the
+  keyframes are the property, and nothing else is told.
