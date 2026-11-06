@@ -3941,6 +3941,7 @@ so.
 | the **copy** that would leave the sheet | **built.** A formula may be copied into a cell that would put a reference outside the sheet, and the copy is done: the reference is written as the error, and the copy is not refused (§504) | §504 |
 | the **parent** of a page | **built.** A page may have a parent — the page it takes what it has not got of its own from — and the margins and the columns it does not have of its own are derived from it (§505) | §505 |
 | the **side** of a page | **built.** A page may be the left or the right face of a spread, and the inside and the outside margins are derived from the side — the inside margin is the room at the spine (§506) | §506 |
+| the **preflight** of a PDF file | **built.** A preflight says what a file declares — the PDF/A part, the PDF/UA part, the output intents — and what it breaks, with the clause it breaks and whether the tree can fix it (§507) | §507 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33326,3 +33327,71 @@ outside margin is the room at the other edge.
   spread — the distance of its left edge from the edge of the spread —
   and here a page has a size and a side, and nothing says where it
   lies.
+
+## 507. The preflight of a PDF file
+
+A preflight says what a file **declares** about itself and what it
+**breaks**.
+
+### What was built
+
+- **One command** in the pdf battery: `pdf.preflight`.
+- What the file **declares**:
+  - the **PDF/A part** and its **conformance**, from the XMP metadata;
+  - the **PDF/UA part**;
+  - the **output intents** it names.
+- What the file **breaks**, each with the **clause** it breaks, the
+  **message** that says what is wrong, and whether the tree can **fix**
+  it:
+  - **6.6.2.1** — the document has no XMP metadata, and the tree can
+    add it;
+  - **6.6.4** — the metadata does not identify the file as the level
+    that was asked for (`2b` or `3b`);
+  - **6.5.1** — a forbidden action: JavaScript, Launch, Sound, Movie,
+    ResetForm, ImportData, Hide, SetOCGState, Rendition, Trans or
+    GoTo3DView;
+  - **6.3.1** — a forbidden annotation: Sound, Movie, Screen, 3D or
+    RichMedia;
+  - **6.5.2** — the document or an annotation has additional actions
+    (`/AA`).
+- The XMP is read by **looking for the value**: an attribute
+  (`pdfaid:part="2"`) or an element (`<pdfaid:part>2</pdfaid:part>`),
+  with the escapes undone.
+
+### What the port found
+
+- **The tree's preflight is a crate of its own**, and it checks the
+  **file**: the fonts, the colour, the encryption and the metadata.
+  This tree has a **document** and not a file, so the rules it can
+  see are the ones the document holds — the metadata and what it
+  says, the actions, the annotations and the additional actions.
+- **The tree's levels are two** — PDF/A-2b and PDF/A-3b — and the
+  tree's check is *against* a level: without one, the rule that needs
+  a level is not checked, and the same is true here.
+- **The tree's XMP reading is a search**: the value is found as an
+  attribute or as an element, and the tree does not parse the whole
+  of the XMP. Here it is the same — a search, and not a parser.
+
+### What it cost
+
+- **Nine tests** in the pdf battery (`tests/preflight.rs`): a document
+  with no metadata breaking the metadata rule, a document with
+  metadata saying what it declares, a document that declares the right
+  level breaking nothing, a document that declares the wrong level
+  breaking the rule, a JavaScript action not being allowed, a Sound
+  annotation not being allowed, additional actions not being allowed,
+  the output intents being read, and a level that is not a level being
+  refused.
+- **One new module** (`preflight`). The pdf battery now carries
+  **30** commands and the MCP server **706**.
+
+### What it does not settle
+
+- **The fonts, the colour and the encryption are not checked**: the
+  tree checks them against the file, and this tree has a document.
+- **The file is not made a PDF/A**: the tree's own `convert` writes the
+  metadata, the output intents and the rest, and here the preflight
+  says what is wrong and nothing fixes it.
+- **The XMP is searched for and not parsed**: a property written in a
+  way this search does not know is not found, and the file is then
+  said to have no metadata.
