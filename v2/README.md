@@ -3970,6 +3970,7 @@ so.
 | the **placement** of a picture | **built.** A picture sits in the line of the text or floats beside it, and a floating one makes the reading order unclear (§533) | §533 |
 | the **tab order** of a form | **built.** A page says how its annotations are reached — in rows, in columns, or in the order it lists them — and the order is read (§534) | §534 |
 | the **tab order** of a page | **built.** The order a page's annotations are reached in may be said, and the order **annotations** takes the fact away (§535) | §535 |
+| the **XMP metadata** of a file | **built.** The packet that says what the file is is written from the information the file has, and the catalog names it (§536) | §536 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35124,3 +35125,72 @@ the page, and it may be said.
 - **The structure order is still the annotation order**: the name is
   written and the file reads it, but the structure of the document is
   not here.
+
+## 536. The XMP metadata of a file
+
+A PDF file may say what it is in two places: the **information
+dictionary** — who wrote it, what it is called — and the **XMP
+metadata**, a packet of XML that says what the file is and what it
+follows.
+
+### What was built
+
+- **One command** in the pdf battery: `pdf.metadata.write`. It builds
+  the packet from the information the file has, writes it to a **file**
+  of its own, and the catalog names it.
+- The packet carries the **identification** — the level the file is,
+  `PDF/A-2b` or `PDF/A-3b` — and the **information**: the title, the
+  author, the subject, the keywords, the tool that made the file and
+  the dates.
+- The **rules**:
+  - the packet is **uncompressed**, so that another tool may find it
+    in the file without decoding anything;
+  - the **dates** are written the way XMP writes them —
+    `2024-01-05T09:30:00Z` — and a date that is not a date is left
+    out;
+  - the **words** are escaped, so that a title with an ampersand in it
+    does not break the packet;
+  - a path that is **empty**, a level that is **not a level** and a
+    file with **no catalog** are all refused.
+
+### What the port found
+
+- **The tree's packet is built from the information and here it is
+  too**: the tree's fix writes a packet that carries the identification
+  and the information the file has, and here the same packet is built
+  from the same information dictionary.
+- **The tree's packet is written into the file and here it is written
+  into a file of its own**: the tree's document holds the bytes of a
+  stream in the stream. Here the bytes of a stream are bytes in a
+  file, so the packet is written to the path the caller names and the
+  stream names it.
+- **The tree's fix finds the information through the trailer and here
+  it is found through the information node**: the tree's document keeps
+  the information in its trailer; here the file says which object is
+  the information, and the packet is built from that object.
+- **The tree's packet is not compressed and here it is not either**:
+  the tree keeps the metadata uncompressed so that other tools may find
+  it, and a stream with no filter is uncompressed here too.
+
+### What it cost
+
+- **Seven tests** in the pdf battery (`tests/metadata.rs`): the
+  packet saying the level the file is, the packet carrying the
+  information the file has, the catalog naming the metadata, the
+  checker stopping to say the file has no metadata, a level that is
+  not a level being refused, a path that is empty being refused, and a
+  file with no catalog being refused.
+- **One new module**: `metadata.rs`. The pdf battery now carries **43**
+  commands and the MCP server **733**.
+
+### What it does not settle
+
+- **The checker does not fix it by itself**: the tree's `convert` writes
+  the packet as part of the conversion, and here the packet is written
+  by its own command.
+- **The packet does not carry everything XMP may carry**: the tree's
+  packet carries the same properties as here, and the rest of the
+  schema is not here.
+- **The PDF/UA identification is not written**: the packet says the
+  PDF/A part, and a file that follows PDF/UA says that in its own
+  property.
