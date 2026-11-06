@@ -42,7 +42,7 @@ use craftkit_derive::Command;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session, Text};
 
-use crate::formula::{Area, CellRef, Cells, Value};
+use crate::formula::{Area, Book, CellRef, Cells, Value};
 
 /// A **table** of a sheet.
 #[derive(Debug, Clone)]
@@ -54,6 +54,10 @@ pub struct Table {
     /// Whether the table has a **total row**: the row at the bottom
     /// of it that holds the totals of the columns.
     pub totals: bool,
+    /// The **way** the columns are totalled in: `sum`, `average`,
+    /// `count`, `count-numbers`, `max`, `min`, `standard-deviation`,
+    /// `variance` or `none`.
+    pub way: String,
 }
 
 impl Table {
@@ -63,6 +67,7 @@ impl Table {
             "name": self.name,
             "range": self.range.to_text(),
             "totals": self.totals,
+            "way": self.way.clone(),
         })
     }
 }
@@ -78,7 +83,8 @@ pub fn tables_of(node: &Node) -> Vec<Table> {
         let Some(range) = table.get("range").and_then(|range| range.as_str()) else { continue };
         let Some((_, area)) = crate::merges::parse_area(range) else { continue };
         let totals = table.get("totals").and_then(|totals| totals.as_bool()).unwrap_or(false);
-        tables.push(Table { name: name.to_string(), range: area, totals });
+        let way = table.get("way").and_then(|way| way.as_str()).unwrap_or("sum").to_string();
+        tables.push(Table { name: name.to_string(), range: area, totals, way });
     }
     tables
 }
@@ -159,6 +165,8 @@ fn totals_of(
     table: &Table,
     fields: &[(CellRef, String)],
     cells: &Cells,
+    book: &Book,
+    sheet: &str,
 ) -> Vec<craftkit_sdk::serde_json::Value> {
     if !table.totals {
         return Vec::new();
@@ -166,15 +174,30 @@ fn totals_of(
     let last = table.range.end.row;
     let mut totals: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
     for (cell, name) in fields {
-        let mut sum = 0.0;
-        let mut numbers = 0usize;
+        let mut numbers: Vec<f64> = Vec::new();
+        let mut filled = 0usize;
         for row in table.range.start.row + 1..last {
-            let Some(entry) = cells.get(CellRef { col: cell.col, row }) else { continue };
-            let Some(Value::Number(number)) = &entry.value else { continue };
-            sum += *number;
-            numbers += 1;
+            let at = CellRef { col: cell.col, row };
+            let value = match cells.get(at) {
+                Some(entry) => match (&entry.value, &entry.formula) {
+                    (Some(value), _) => value.clone(),
+                    (None, Some(_)) => book.value_of(sheet, at),
+                    (None, None) => Value::Empty,
+                },
+                None => Value::Empty,
+            };
+            if matches!(value, Value::Empty) {
+                continue;
+            }
+            filled += 1;
+            if let Some(number) = value.as_number() {
+                numbers.push(number);
+            }
         }
-        let total = if numbers == 0 { craftkit_sdk::serde_json::Value::Null } else { json!(sum) };
+        let total = match total_of(&table.way, &numbers, filled) {
+            Some(total) => json!(total),
+            None => craftkit_sdk::serde_json::Value::Null,
+        };
         totals.push(json!({
             "name": name.clone(),
             "column": CellRef::column_text(cell.col),
@@ -182,6 +205,57 @@ fn totals_of(
         }));
     }
     totals
+}
+
+/// The **ways** a table may total in: the tree's own list.
+const WAYS: [&str; 9] =
+    ["sum", "average", "count", "count-numbers", "max", "min", "standard-deviation", "variance", "none"];
+
+/// The **total** of a column, in the way the table says.
+///
+/// The numbers are the ones the cells hold, and the count is the
+/// number of the cells that hold something at all. A column with
+/// nothing to total has **no total**: the answer is nothing and not
+/// a zero that means something else.
+fn total_of(way: &str, numbers: &[f64], filled: usize) -> Option<f64> {
+    match way {
+        "sum" => {
+            if numbers.is_empty() {
+                None
+            } else {
+                Some(numbers.iter().sum())
+            }
+        }
+        "average" => {
+            if numbers.is_empty() {
+                None
+            } else {
+                Some(numbers.iter().sum::<f64>() / numbers.len() as f64)
+            }
+        }
+        "count" => Some(filled as f64),
+        "count-numbers" => Some(numbers.len() as f64),
+        "max" => numbers.iter().copied().fold(None, |largest: Option<f64>, number| {
+            Some(largest.map_or(number, |largest| largest.max(number)))
+        }),
+        "min" => numbers.iter().copied().fold(None, |smallest: Option<f64>, number| {
+            Some(smallest.map_or(number, |smallest| smallest.min(number)))
+        }),
+        "variance" => variance(numbers),
+        "standard-deviation" => variance(numbers).map(|variance| variance.sqrt()),
+        _ => None,
+    }
+}
+
+/// The **variance** of the numbers: the sample variance, with the
+/// divisor being one less than the number of them.
+fn variance(numbers: &[f64]) -> Option<f64> {
+    if numbers.len() < 2 {
+        return None;
+    }
+    let mean = numbers.iter().sum::<f64>() / numbers.len() as f64;
+    let sum = numbers.iter().map(|number| (number - mean) * (number - mean)).sum::<f64>();
+    Some(sum / (numbers.len() as f64 - 1.0))
 }
 
 /// The **sheet** a command is about, and whether it is a sheet.
@@ -262,7 +336,7 @@ impl CreateTable {
         // The **header**: a row of text, because a field is named by
         // text.
         let cells = crate::cells_of(&node);
-        let table = Table { name: name.clone(), range: area, totals: false };
+        let table = Table { name: name.clone(), range: area, totals: false, way: "sum".to_string() };
         let fields =
             fields_of(&table, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
         let mut tables = tables;
@@ -325,6 +399,8 @@ impl ReadTableFields {
         let cells = crate::cells_of(&node);
         let fields =
             fields_of(&table, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+        let book = crate::book_of(session.document());
+        let sheet_name = node.name.clone();
         let rows = table.range.end.row.saturating_sub(table.range.start.row);
         Ok(Outcome::new(format!("the table `{name}` holds {} fields", fields.len())).with_data(json!({
             "sheet": sheet,
@@ -332,7 +408,8 @@ impl ReadTableFields {
             "range": table.range.to_text(),
             "rows": rows,
             "totals": table.totals,
-            "sums": totals_of(&table, &fields, &cells),
+            "way": table.way.clone(),
+            "sums": totals_of(&table, &fields, &cells, &book, &sheet_name),
             "fields": fields
                 .iter()
                 .map(|(cell, name)| json!({
@@ -367,7 +444,15 @@ pub struct SetTableTotals {
     /// The name of the table.
     pub name: Text,
     /// Whether the table has a total row.
-    pub totals: Bool,
+    ///
+    /// Leave it out and the table keeps the total row it has.
+    pub totals: Option<Bool>,
+    /// The **way** the columns are totalled in: `sum`, `average`,
+    /// `count`, `count-numbers`, `max`, `min`, `standard-deviation`,
+    /// `variance` or `none`.
+    ///
+    /// Leave it out and the table keeps the way it has.
+    pub way: Option<Text>,
 }
 
 impl SetTableTotals {
@@ -383,7 +468,21 @@ impl SetTableTotals {
                 message: format!("there is no table `{name}` on the sheet"),
             });
         };
-        table.totals = self.totals.0;
+        if let Some(totals) = &self.totals {
+            table.totals = totals.0;
+        }
+        if let Some(way) = &self.way {
+            let name = way.0.trim().to_ascii_lowercase();
+            if !WAYS.contains(&name.as_str()) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{name}` is not a way to total: the ways are {}", WAYS.join(", ")),
+                });
+            }
+            table.way = name;
+        }
+        let totals = table.totals;
+        let way = table.way.clone();
         let tables = tables;
         let sheet_node = session.document_mut()?.node_mut(sheet);
         let Some(sheet_node) = sheet_node else {
@@ -393,12 +492,12 @@ impl SetTableTotals {
             });
         };
         sheet_node.data["tables"] = tables_into(&tables);
-        Ok(Outcome::changed(if self.totals.0 {
-            format!("the table `{name}` has a total row")
+        Ok(Outcome::changed(if totals {
+            format!("the table `{name}` has a total row, and it totals in `{way}`")
         } else {
             format!("the table `{name}` has no total row")
         })
-        .with_data(json!({ "sheet": sheet, "name": name, "totals": self.totals.0 })))
+        .with_data(json!({ "sheet": sheet, "name": name, "totals": totals, "way": way })))
     }
 }
 
@@ -506,7 +605,7 @@ impl ResizeTable {
                 message: format!("there is no table `{name}` on the sheet"),
             });
         };
-        let resized = Table { name: name.clone(), range: area, totals: table.totals };
+        let resized = Table { name: name.clone(), range: area, totals: table.totals, way: table.way.clone() };
         let cells = crate::cells_of(&node);
         let fields =
             fields_of(&resized, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
