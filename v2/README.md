@@ -3982,6 +3982,7 @@ so.
 | the **appearance** of a field | **built.** The appearance is read — the box it is drawn in, the matrix that places it, the operators of its stream and the states it has (§545) | §545 |
 | the **validation** of a field | **built.** A field may say what it accepts, and the range it accepts is read — a script that is not understood is said so (§546) | §546 |
 | the **format** of a field | **built.** A field may say how its text is shown — a number, a percentage, a date, a special form or a mask — and the script is read (§547) | §547 |
+| the **text of a column**, cut into columns | **built.** The text of a column may be several values, and it is cut at the delimiter — a qualifier keeps the delimiter inside a part (§548) | §548 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35868,3 +35869,63 @@ carries a small script.
   events in the same dictionary, and it is not read here.
 - **The format is not written**: a field's format may be said, and
   this tree only reads it.
+
+## 548. The text of a column, cut into columns
+
+A column may hold text that is really **several values**.
+
+### What was built
+
+- The new command **`grid.text.columns`** cuts the text of a column
+  into the columns beside it:
+  - the **delimiter** is the text the parts are separated by, and it
+    is a tab unless the file says otherwise — a delimiter of more than
+    one character is **refused**, because a delimiter that is a word
+    is a guess;
+  - the **qualifier** marks a part that holds the delimiter itself,
+    and the qualifier is taken away — a double quote unless the file
+    says otherwise;
+  - a **run** of delimiters is one delimiter when the file says so,
+    and each one is a part when it does not;
+  - every part is read as a **value**: a text that is a number is a
+    number, and a text that is nothing is nothing — an empty value
+    takes the cell away;
+  - the parts may be written into **another column**;
+  - a cell that holds **no text** is left alone: there is nothing to
+    cut.
+  - the cells that are covered by a merge or locked by the sheet's
+    protection are **not written**.
+
+### What the port found
+
+- **The tree's delimiter is a tab and its qualifier is a double
+  quote**, and this tree has the same two defaults — the tree's own
+  defaults, not a guess about what a file probably means.
+- **The tree's parts are values again**: the tree reads each part as a
+  cell value, so a part that is a number becomes a number — here the
+  same, and a part that is nothing takes the cell away.
+- **The tree's destination is a cell and not a column**: the tree
+  names the cell the parts are written into, and this tree names the
+  column they start in, because the parts are a row of values and a
+  row starts in one place.
+
+### What it cost
+
+- **Eight tests** in the grid battery (`tests/textcolumns.rs`): the
+  text of a column cut into columns, a part that is a number, the
+  parts written into another column, the qualifier, the run of
+  delimiters, a cell that holds no text, a delimiter of more than one
+  character, and a column that is not a column.
+- **One new module** (`src/textcolumns.rs`) and **one new command**
+  (`grid.text.columns`). The grid battery now carries **123** commands
+  and the MCP server **742**.
+
+### What it does not settle
+
+- **The text of a cell that holds a formula is not cut**: the value
+  of a formula cell is computed, and the command cuts only the text a
+  cell holds.
+- **The columns are not widened**: the parts are written into the
+  columns that are there, and a sheet has so many columns.
+- **The text is not trimmed**: a part keeps the spaces around it,
+  because a space in a text is part of the text.
