@@ -3953,6 +3953,7 @@ so.
 | the **header row** of a table | **built.** A table says whether its first row is a header row, and the checker says when a table has none (§516) | §516 |
 | the **title** of a document | **built.** A document says what it is, and an empty title takes the words away — and the checker says when a document has no title (§517) | §517 |
 | the **convert** of a PDF file | **built.** The file is fixed where it can be — the actions and the flags — and what is left is the preflight's own answer (§518) | §518 |
+| the **facing page** of a page | **built.** A page that faces another has the two of them side by side in one spread, and the page across is derived (§519) | §519 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34063,3 +34064,61 @@ can and says what is left.
 - **The annotations are not set to print**: the tree's convert gives
   an annotation its print flag and takes the hidden flag away, and
   here the annotations are left as they are.
+
+## 519. The facing page of a page
+
+A page that faces another page has the two of them side by side in
+one spread: the **left** face and the **right** face. The page across
+from a page is its **facing page**.
+
+### What was built
+
+- **One command** in the layout battery: `layout.page.facing`. It
+  reads the page across from a page, and the page's own reading says
+  it too — along with the spread the page is in.
+- The facing page is **derived**: it is worked out from the spread
+  and the side every time it is asked for, so it cannot be out of date
+  with the document.
+- The **rules**:
+  - a page that says it is **single** has no facing page: it does not
+    face another;
+  - a page whose spread holds **two** pages has the other one as its
+    facing page;
+  - a spread that holds **one** page, or more than two, has no facing
+    page in it: there is nothing to face.
+
+### What the port found
+
+- **The tree's side and the tree's facing page are one thing**: the
+  tree's left-hand page is the one whose facing page is on its right,
+  and the two are worked out together. Here the **side** is said
+  (§506) and the **facing page** is derived from it and from the
+  spread — and the two cannot disagree, because a page that says it
+  is single faces nothing.
+- **The tree's spreads hold two pages**: a spread of a book is a
+  left face and a right face. Here a spread may hold one page or
+  three, and the rule says what happens: a spread of one page has
+  nothing to face.
+
+### What it cost
+
+- **Seven tests** in the layout battery (`tests/facing.rs`): a page
+  that faces nothing having no facing page, a page in a spread of two
+  facing the other one, a page that says it is single facing
+  nothing, a spread of three pages having no facing page in it, the
+  page saying which page it faces and which spread it is in, the
+  facing page being derived and following the spread, and a node that
+  is not a page being refused.
+- **One new module** (`facing`). The layout battery now carries
+  **41** commands and the MCP server **718**.
+
+### What it does not settle
+
+- **The pages of a spread are not checked against one another**: the
+  two faces of a spread may both say they are left, and the tree does
+  not police it.
+- **A spread of more than two pages is not a spread of a book**: it
+  is allowed here, and it simply has no facing page in it.
+- **The tree's books have a gutter and a creep**: the tree's spreads
+  carry the measurements of the binding, and here the inside margin
+  of a page is only the room at the spine.
