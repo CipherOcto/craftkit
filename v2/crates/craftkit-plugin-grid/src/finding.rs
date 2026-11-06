@@ -32,7 +32,7 @@ use crate::formula::{CellRef, Cells, Value};
 /// The tree's rule: the case does not matter unless it is asked for,
 /// a wildcard search is a wildcard search, and a search without a
 /// wildcard looks for the text inside the cell's text.
-fn holds(cell: &str, what: &str, case: bool, whole: bool) -> bool {
+pub(crate) fn holds(cell: &str, what: &str, case: bool, whole: bool) -> bool {
     let (cell, what) =
         if case { (cell.to_string(), what.to_string()) } else { (cell.to_lowercase(), what.to_lowercase()) };
     if what.contains(['*', '?']) {
@@ -43,7 +43,7 @@ fn holds(cell: &str, what: &str, case: bool, whole: bool) -> bool {
 }
 
 /// The **text** of a cell: the text it shows, or its formula.
-fn text_of(
+pub(crate) fn text_of(
     session: &Session,
     sheet: u64,
     name: &str,

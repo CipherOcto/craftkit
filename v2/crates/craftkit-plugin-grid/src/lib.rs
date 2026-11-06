@@ -376,6 +376,7 @@ mod protection;
 mod reading;
 mod regression;
 mod removal;
+mod replacing;
 mod scaling;
 mod sections;
 mod securities;
@@ -443,6 +444,7 @@ pub use printing::{
 pub use protection::{ProtectSheet, UnprotectSheet};
 pub use reading::ReadRange;
 pub use removal::RemoveSheet;
+pub use replacing::ReplaceText;
 pub use scaling::{SetFit, SetScale};
 pub use sheetnames::RenameSheet;
 pub use sheetreading::ReadSheet;
@@ -1780,6 +1782,7 @@ craftkit_sdk::plugin_anchor!(
     SetLink,
     SetNote,
     SortRange,
+    ReplaceText,
     TextColumns,
     RemoveDuplicates,
     SetBorder,
