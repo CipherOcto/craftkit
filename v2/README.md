@@ -3995,6 +3995,7 @@ so.
 | the **value** a field is calculated to hold | **built.** The simple way a field is calculated in is worked out — the values of the fields it names, put together in the way the script says (§558) | §558 |
 | the **baking** of an expression into keyframes | **built.** An expression is sampled over the frames and written down as keyframes — and a bake that would be too long is refused (§559) | §559 |
 | the **named destinations** of a file | **built.** A file may give its pages names — the name and the page the destination points at are read (§560) | §560 |
+| the **merged cells** of a table | **built.** A range of cells may be one cell — the top left keeps the value, the covered cells are emptied, and a merge that overlaps another is refused (§561) | §561 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36581,3 +36582,66 @@ A file may give its pages **names**.
   tree keeps its deeper names to itself here.
 - **The destinations are not written**: a name and a page may be
   read, and nothing puts one into a file.
+
+## 561. The merged cells of a table
+
+A table may have cells that are **one cell**.
+
+### What was built
+
+- The new commands **`prose.table.merge`** and **`prose.table.split`**
+  say that a range of cells is one cell and take it away again, and
+  **`prose.table.merges`** reads the merges of a table.
+- The rules:
+  - a merge of **one cell** is refused: one cell is not a merge;
+  - a merge that reaches **outside the table** is refused;
+  - a merge that **overlaps** another merge is refused: two cells
+    that are one cell are not one cell;
+  - the cells a merge covers are **emptied** and the **top left** one
+    keeps its value — a value that is covered is a value that is
+    gone;
+  - a **row** that is the first row of a merge may not be taken out,
+    and a **column** that is the first column of a merge may not be
+    either: that cell holds the value of the merge, and the value
+    would go with it;
+  - a row or a column that goes in or comes out **beside** a merge
+    moves it, and one that goes in **inside** a merge makes the merge
+    reach over it.
+
+### What the port found
+
+- **The tree's merge is a cell of its own and this tree's is a fact
+  of the table**: the tree gives every cell an identity and the merge
+  is a range of them, so a row that goes in moves the cells and the
+  merge with them; here the merge is a fact of the table — which
+  cells are one cell — and a row that goes in beside it moves the
+  fact.
+- **The tree's value survives in the first cell**: the tree keeps the
+  value of the top left cell and empties the others, and here the
+  same — the value is the one of the top left cell, and the others
+  are empty.
+- **The tree's split gives the cells their own values back and this
+  tree's does not**: the tree's cells had their own values all along
+  and the merge hid them; here the values were taken when the merge
+  was made, and a split does not invent them back.
+
+### What it cost
+
+- **Nine tests** in the prose battery (`tests/merging.rs`): two cells
+  merged into one, the cells a merge covers emptied, a merge of one
+  cell, a merge outside the table, a merge that overlaps another, a
+  merged cell split, a cell that is not merged, a row that holds a
+  merged value, and a row that moves a merge.
+- **One new module** (`src/merges.rs`) and **three new commands**
+  (`prose.table.merge`, `prose.table.split`, `prose.table.merges`).
+  The prose battery now carries **71** commands and the MCP server
+  **757**.
+
+### What it does not settle
+
+- **The table is not laid out**: a merged cell is a fact of the
+  table, and nothing is drawn from it — the table is not a page.
+- **The cells are not blocks**: a cell holds a value here, and a
+  merged cell holds the value of its top left cell and nothing more.
+- **The merges of a table are not in the document's outline**: a
+  merged cell is a fact of the table and not a thing of its own.
