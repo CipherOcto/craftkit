@@ -124,6 +124,7 @@ mod resolving;
 mod revisions;
 mod styles;
 mod tables;
+mod titles;
 
 pub use accessibility::CheckAccessibility;
 pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
@@ -146,6 +147,7 @@ pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, Reje
 pub use revisions::ReadRevisions;
 pub use styles::{ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
 pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell, SetHeader};
+pub use titles::SetTitle;
 
 /// The prose layer.
 ///
@@ -169,9 +171,11 @@ impl DocumentKind {
         false
     }
 
-    /// What a document **means**: its blocks, its styles and its media.
+    /// What a document **means**: its blocks, its styles and its media,
+    /// and what it says it is.
     fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
         Some(json!({
+            "title": crate::titles::title_of(node).map(|title| json!(title)).unwrap_or(Json::Null),
             "blocks": node.children.iter().filter(|child| child.kind.starts_with("prose.block.")).count(),
             "styles": node.children.iter().filter(|child| child.kind == "prose.style").count(),
             "media": node.children.iter().filter(|child| child.kind == "prose.media").count(),
@@ -1010,6 +1014,7 @@ craftkit_sdk::plugin_anchor!(
     AddStyle,
     AddMedia,
     SetAlt,
+    SetTitle,
     SetHeader,
     CheckAccessibility,
     AddParagraph,

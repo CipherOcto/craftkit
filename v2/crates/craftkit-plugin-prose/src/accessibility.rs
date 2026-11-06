@@ -22,6 +22,8 @@
 //! - **tableHeader** — a table of two or more rows whose first row is
 //!   not a **header row**. It is a **warning**: nothing says what the
 //!   columns are.
+//! - **docTitle** — a document with no title. It is a **tip**: nothing
+//!   says what the document is.
 //!
 //! The issues come first as **errors**, then as warnings, then as
 //! tips, and the order of the document is kept within each kind.
@@ -187,6 +189,15 @@ pub fn issues_of(document: &Document, node: &Node) -> Vec<Issue> {
             rule: "blankParagraphs",
             issue: format!("{} empty paragraphs in a row", blank.len()),
             place: blank[0],
+        });
+    }
+    // The **title** of the document: nothing says what it is.
+    if crate::titles::title_of(node).is_none() {
+        issues.push(Issue {
+            kind: "tip",
+            rule: "docTitle",
+            issue: "The document has no title".to_string(),
+            place: node.id,
         });
     }
     // The **errors** come first, then the warnings, then the tips.
