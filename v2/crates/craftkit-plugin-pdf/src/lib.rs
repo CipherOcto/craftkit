@@ -126,6 +126,7 @@
 #![forbid(unsafe_code)]
 
 mod annot;
+mod appearance;
 mod boxes;
 mod calculate;
 mod content;
@@ -159,6 +160,7 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 pub use annot::SetAnnotationFlags;
+pub use appearance::ReadAppearance;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use calculate::ReadCalculation;
 pub use convert::Convert;
@@ -2056,6 +2058,7 @@ craftkit_sdk::plugin_anchor!(
     ReadEncryption,
     ReadCalculation,
     ReadForm,
+    ReadAppearance,
     SetField,
     SetFlags,
     SetParent,
