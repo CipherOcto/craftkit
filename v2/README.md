@@ -3952,6 +3952,7 @@ so.
 | the **accessibility** of a document | **built.** A document is checked and the issues are reported — an error, a warning or a tip, with the rule it breaks (§515) | §515 |
 | the **header row** of a table | **built.** A table says whether its first row is a header row, and the checker says when a table has none (§516) | §516 |
 | the **title** of a document | **built.** A document says what it is, and an empty title takes the words away — and the checker says when a document has no title (§517) | §517 |
+| the **convert** of a PDF file | **built.** The file is fixed where it can be — the actions and the flags — and what is left is the preflight's own answer (§518) | §518 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34001,3 +34002,64 @@ reader reads out.
 - **The title is not a property of the tree's own**: the tree's
   properties hold an author and a subject and a language as well, and
   here the document says what it is and nothing else.
+
+## 518. The convert of a PDF file
+
+The preflight says what a file breaks. The **convert** fixes what it
+can and says what is left.
+
+### What was built
+
+- **One command** in the pdf battery: `pdf.convert`. It changes the
+  document, and it says what it fixed and what is **left** — and what
+  is left is the preflight's own answer, asked again after the fix.
+- The **fixes** that need nothing new:
+  - the **additional actions** (`/AA`) are taken away from every
+    dictionary that has them, and so are the edges that pointed at
+    them;
+  - the **forbidden actions** — the actions of the tree's own list —
+    are taken away, and so are the entries that pointed at them;
+  - the **NeedAppearances** flag is taken away: it asks the viewer to
+    make the appearances of the form, and a PDF/A file must not ask.
+- The **preflight** gained the rule `6.4.1` — the form asks viewers
+  to make appearances — and the rule `6.1.3` (the encryption) is no
+  longer one the tree can fix: the tree decrypts a file when it opens
+  it, and this tree cannot, so taking the encryption away here would
+  leave a file whose strings are still encrypted.
+
+### What the port found
+
+- **The tree's convert is a fixer and a reporter in one**: the tree's
+  `convert` returns a **report** — what it fixed, in words, and the
+  issues that are left — and the issues that are left are the
+  preflight's own answer asked again. Here the same shape, and the
+  fix is a **document** and not a file.
+- **The tree can fix the encryption and this tree cannot**: the tree
+  opens a file by decrypting it, so a file it writes back is plain.
+  This tree has no decryption at all, so the rule says what it is:
+  not fixable.
+- **The tree's fixes that need new content are not here**: the tree
+  writes an XMP packet that identifies the file, and it writes an
+  sRGB output intent with an ICC profile inside it. Both need bytes
+  this tree does not have, so both are left — and the report says so.
+
+### What it cost
+
+- **Eight tests** in the pdf battery (`tests/convert.rs`): the
+  additional actions being taken away, the forbidden actions being
+  taken away, the entry that pointed at a forbidden action being taken
+  away, the NeedAppearances flag being taken away, the report saying
+  what was fixed, the report saying what is left, the encryption not
+  being taken away, and a level that is not a level being refused.
+- **One new module** (`convert`). The pdf battery now carries **33**
+  commands and the MCP server **717**.
+
+### What it does not settle
+
+- **The metadata is not written**: a PDF/A file identifies itself in
+  an XMP packet, and writing one means writing a stream of bytes.
+- **The output intent is not written**: it names an ICC profile, and
+  this tree has no profile to name.
+- **The annotations are not set to print**: the tree's convert gives
+  an annotation its print flag and takes the hidden flag away, and
+  here the annotations are left as they are.
