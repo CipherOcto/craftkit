@@ -11,7 +11,8 @@
 //!
 //! - **altText** — a picture that says nothing about itself. It is an
 //!   **error**: a picture with no alt text is not there for the reader
-//!   who cannot see it.
+//!   who cannot see it. A picture that is **decorative** is not asked
+//!   for words, because it says nothing on purpose.
 //! - **headingOrder** — a heading that is more than one level deeper
 //!   than the heading before it. It is a **warning**: the outline has
 //!   a gap in it.
@@ -146,6 +147,11 @@ pub fn issues_of(document: &Document, node: &Node) -> Vec<Issue> {
     let mut issues: Vec<Issue> = Vec::new();
     // The **pictures**: a picture that says nothing about itself.
     for media in node.children.iter().filter(|child| child.kind == "prose.media") {
+        // A **decorative** picture says nothing on purpose, and it is
+        // not asked for words.
+        if crate::media::is_decorative(media) {
+            continue;
+        }
         if crate::media::alt_of(media).is_none() {
             issues.push(Issue {
                 kind: "error",
