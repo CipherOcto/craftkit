@@ -116,6 +116,7 @@ mod finding;
 mod footnotes;
 mod links;
 mod media;
+mod merges;
 mod numberformat;
 mod numbering;
 mod outline;
@@ -141,6 +142,7 @@ pub use finding::{Find, Replace};
 pub use footnotes::{AddFootnote, ReadFootnotes};
 pub use links::ReadLinks;
 pub use media::{SetAlt, SetDecorative, SetPlacement};
+pub use merges::{MergeCells, ReadMerges, SplitCell};
 pub use numberformat::NumberFormat;
 pub use numbering::{AddList, ReadNumber, SetNumbering};
 pub use outline::{ReadOutline, ReadStyleLevel, SetStyleLevel};
@@ -1027,6 +1029,9 @@ craftkit_sdk::plugin_anchor!(
     SetTitle,
     ReadStatistics,
     DeleteStyle,
+    MergeCells,
+    SplitCell,
+    ReadMerges,
     ListStyles,
     NumberFormat,
     SetHeader,

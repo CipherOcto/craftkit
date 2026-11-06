@@ -128,7 +128,7 @@ impl SetHeader {
 /// Every row must be as long as every other row: a table that is not
 /// a grid has no cell at some place, and a cell that is not there
 /// cannot be read or written.
-fn rows_of(node: &Node, id: &str) -> Result<Vec<Vec<Json>>, EngineError> {
+pub(crate) fn rows_of(node: &Node, id: &str) -> Result<Vec<Vec<Json>>, EngineError> {
     let rows = node.data.get("rows").and_then(|rows| rows.as_array()).cloned().unwrap_or_default();
     let mut grid: Vec<Vec<Json>> = Vec::with_capacity(rows.len());
     let mut width: Option<usize> = None;
@@ -183,8 +183,30 @@ fn index_of(id: &str, number: Number, what: &str) -> Result<usize, EngineError> 
     Ok(number.0 as usize)
 }
 
+/// Put a table's **merges** back into a table.
+pub(crate) fn write_merges(
+    session: &mut Session,
+    id: &str,
+    table: u64,
+    merges: &[crate::merges::Merge],
+) -> Result<(), EngineError> {
+    let Some(node) = session.document_mut()?.node_mut(table) else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("there is no table `{table}`"),
+        });
+    };
+    node.data["merges"] = crate::merges::merges_into(merges);
+    Ok(())
+}
+
 /// Put a table's **rows** back into a table.
-fn write_rows(session: &mut Session, id: &str, table: u64, rows: &[Vec<Json>]) -> Result<(), EngineError> {
+pub(crate) fn write_rows(
+    session: &mut Session,
+    id: &str,
+    table: u64,
+    rows: &[Vec<Json>],
+) -> Result<(), EngineError> {
     let Some(node) = session.document_mut()?.node_mut(table) else {
         return Err(EngineError::Failed {
             id: id.to_string(),
@@ -301,9 +323,12 @@ impl AddRow {
                 message: format!("the table `{table}` has no row `{at}`"),
             });
         }
+        // The **merges** move with the rows.
+        let merges = crate::merges::merges_after_row_added(&crate::merges::merges_of(node), at);
         let empty: Vec<Json> = (0..width).map(|_| Json::Null).collect();
         rows.insert(at, empty);
         write_rows(session, &id, table, &rows)?;
+        write_merges(session, &id, table, &merges)?;
         Ok(Outcome::changed(format!("put a row in the table `{table}`"))
             .with_data(json!({ "table": table, "at": at, "rows": rows.len() })))
     }
@@ -332,8 +357,19 @@ impl RemoveRow {
                 message: format!("the table `{table}` has no row `{row}`"),
             });
         }
+        // A row that is the **first** row of a merge holds the value
+        // of the merged cell, and the value would go with it.
+        let merges = crate::merges::merges_of(node);
+        if merges.iter().any(|merge| merge.row == row) {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the row `{row}` of the table `{table}` holds the value of a merged cell"),
+            });
+        }
+        let merges = crate::merges::merges_after_row_removed(&merges, row);
         rows.remove(row);
         write_rows(session, &id, table, &rows)?;
+        write_merges(session, &id, table, &merges)?;
         Ok(Outcome::changed(format!("took a row out of the table `{table}`"))
             .with_data(json!({ "table": table, "row": row, "rows": rows.len() })))
     }
@@ -367,10 +403,13 @@ impl AddColumn {
                 message: format!("the table `{table}` has no column `{at}`"),
             });
         }
+        // The **merges** move with the columns.
+        let merges = crate::merges::merges_after_column_added(&crate::merges::merges_of(node), at);
         for row in rows.iter_mut() {
             row.insert(at, Json::Null);
         }
         write_rows(session, &id, table, &rows)?;
+        write_merges(session, &id, table, &merges)?;
         Ok(Outcome::changed(format!("put a column in the table `{table}`"))
             .with_data(json!({ "table": table, "at": at, "width": width + 1 })))
     }
@@ -407,10 +446,23 @@ impl RemoveColumn {
                 message: format!("the table `{table}` has no column `{column}`"),
             });
         }
+        // A column that is the **first** column of a merge holds the
+        // value of the merged cell, and the value would go with it.
+        let merges = crate::merges::merges_of(node);
+        if merges.iter().any(|merge| merge.column == column) {
+            return Err(EngineError::Failed {
+                id,
+                message: format!(
+                    "the column `{column}` of the table `{table}` holds the value of a merged cell"
+                ),
+            });
+        }
+        let merges = crate::merges::merges_after_column_removed(&merges, column);
         for row in rows.iter_mut() {
             row.remove(column);
         }
         write_rows(session, &id, table, &rows)?;
+        write_merges(session, &id, table, &merges)?;
         Ok(Outcome::changed(format!("took a column out of the table `{table}`"))
             .with_data(json!({ "table": table, "column": column, "width": width - 1 })))
     }
