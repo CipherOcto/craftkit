@@ -25,7 +25,48 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session};
+
+/// Whether the **first row** of a table is a **header row**.
+///
+/// A header row says what the columns are, and it is the row a
+/// screen reader reads to know the names of the columns. A table
+/// that does not say is a table that does not say.
+pub fn has_a_header(node: &Node) -> bool {
+    node.data.get("header").and_then(|header| header.as_bool()).unwrap_or(false)
+}
+
+/// The **rows** of a table: how many there are.
+pub fn row_count(node: &Node) -> usize {
+    node.data.get("rows").and_then(|rows| rows.as_array()).map(|rows| rows.len()).unwrap_or(0)
+}
+
+/// **Say** whether the first row of a table is a header row.
+#[derive(Command)]
+#[command(id = "prose.table.header", area = "prose", layer = "prose", icon = "list", mutates, undoable)]
+pub struct SetHeader {
+    /// The table.
+    pub table: NodeRef,
+    /// Whether the first row is a header row.
+    pub header: Bool,
+}
+
+impl SetHeader {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "prose.table.header".to_string();
+        let table = self.table.0;
+        the_table(session, &id, table)?;
+        if let Some(node) = session.document_mut()?.node_mut(table) {
+            node.data["header"] = json!(self.header.0);
+        }
+        Ok(Outcome::changed(if self.header.0 {
+            format!("the first row of the table `{table}` is a header row")
+        } else {
+            format!("the first row of the table `{table}` is not a header row")
+        })
+        .with_data(json!({ "table": table, "header": self.header.0 })))
+    }
+}
 
 /// The **rows** of a table: a grid, or an error.
 ///

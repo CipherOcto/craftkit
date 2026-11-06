@@ -19,6 +19,9 @@
 //!   spacing made with the return key.
 //! - **linkText** — a link whose words are "click here". It is a
 //!   **tip**: the words say nothing about where the link goes.
+//! - **tableHeader** — a table of two or more rows whose first row is
+//!   not a **header row**. It is a **warning**: nothing says what the
+//!   columns are.
 //!
 //! The issues come first as **errors**, then as warnings, then as
 //! tips, and the order of the document is kept within each kind.
@@ -149,6 +152,19 @@ pub fn issues_of(document: &Document, node: &Node) -> Vec<Issue> {
                 });
             }
             blank.clear();
+        }
+        // The **tables**: a table with two or more rows says what
+        // its columns are in a header row.
+        if block.kind == "prose.block.table"
+            && crate::tables::row_count(block) >= 2
+            && !crate::tables::has_a_header(block)
+        {
+            issues.push(Issue {
+                kind: "warning",
+                rule: "tableHeader",
+                issue: "The table has no header row, and nothing says what its columns are".to_string(),
+                place: block.id,
+            });
         }
         // The **link words**: "click here" says nothing.
         for (covered, target) in runs_of(block) {

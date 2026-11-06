@@ -145,7 +145,7 @@ pub use references::{AddReference, ReadReference, SetReference};
 pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
 pub use revisions::ReadRevisions;
 pub use styles::{ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
-pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell};
+pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell, SetHeader};
 
 /// The prose layer.
 ///
@@ -217,7 +217,33 @@ macro_rules! block_kind {
 }
 
 block_kind!(ParagraphKind, "prose.block.paragraph", "Paragraph");
-block_kind!(TableKind, "prose.block.table", "Table");
+
+/// A **table**: a grid of values.
+#[derive(NodeKind)]
+#[node_kind(kind = "prose.block.table", label = "Table", layer = "prose", evaluates)]
+pub struct TableKind;
+
+impl TableKind {
+    /// Not drawn.
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Not hit.
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What a table **means**: its grid, and whether its first row is
+    /// a header row.
+    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        let rows = node.data.get("rows").and_then(|rows| rows.as_array()).cloned().unwrap_or_default();
+        let columns = rows.first().and_then(|row| row.as_array()).map(|row| row.len()).unwrap_or(0);
+        Some(json!({
+            "rows": rows,
+            "columns": columns,
+            "header": crate::tables::has_a_header(node),
+        }))
+    }
+}
 
 /// An **equation**: a block whose text is derived from its parts.
 ///
@@ -984,6 +1010,7 @@ craftkit_sdk::plugin_anchor!(
     AddStyle,
     AddMedia,
     SetAlt,
+    SetHeader,
     CheckAccessibility,
     AddParagraph,
     AddTable,
