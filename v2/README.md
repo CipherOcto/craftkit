@@ -3984,6 +3984,7 @@ so.
 | the **format** of a field | **built.** A field may say how its text is shown — a number, a percentage, a date, a special form or a mask — and the script is read (§547) | §547 |
 | the **text of a column**, cut into columns | **built.** The text of a column may be several values, and it is cut at the delimiter — a qualifier keeps the delimiter inside a part (§548) | §548 |
 | the **duplicates** of a range | **built.** A range may hold the same row twice, and the first row of each kind is kept and the rest are emptied (§549) | §549 |
+| the **statistics** of a document | **built.** A document may be measured — the words, the characters with and without the spaces, the paragraphs — and a mark is not a word of its own (§550) | §550 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35991,3 +35992,58 @@ twice, a table that was joined with itself.
 - **The range is not looked at again**: a duplicate of a row that was
   itself emptied is not a duplicate of anything, because the row is
   empty and an empty row has no key.
+
+## 550. The statistics of a document
+
+A document may be **measured**: how many words it holds, how many
+characters, how many paragraphs.
+
+### What was built
+
+- The new module `statistics` counts the words of a text: a **word**
+  is a run of text between spaces that holds at least one letter or
+  digit — the tree's counting rule, and the same rule here: a mark
+  that is not a letter or a digit is not a word of its own.
+- The new command **`prose.document.stats`** measures a document:
+  - the **blocks** and the **paragraphs**;
+  - the **words**;
+  - the **characters**, counted twice — with the spaces and without
+    them.
+- The counting is of the **body** of the document: the footnotes and
+  the comments are other stories, and they are not counted here — a
+  number that counts more than it counts is a number a person does
+  not believe.
+
+### What the port found
+
+- **The tree's word is a token with a letter or a digit in it**: the
+  tree splits the text on spaces and counts only the tokens that
+  hold an alphanumeric character, and this tree has the same rule —
+  a dash between two words is not a third word.
+- **The tree's characters are counted twice as well**: the tree
+  counts the characters with the spaces and the characters without
+  them, and here the same two numbers are given.
+- **The tree counts every story behind a preference and this tree
+  counts the body only**: the tree's pref says whether the footnotes
+  and the text boxes are counted, and this tree says plainly that it
+  counts the body — a count that depends on a pref that is not said
+  is a count that cannot be believed.
+
+### What it cost
+
+- **Five tests** in the prose battery (`tests/statistics.rs`): the
+  words of a document, a mark that is not a word of its own, the
+  characters counted with and without the spaces, the footnotes that
+  are not counted, and a document that is not there.
+- **One new module** (`src/statistics.rs`) and **one new command**
+  (`prose.document.stats`). The prose battery now carries **66**
+  commands and the MCP server **744**.
+
+### What it does not settle
+
+- **The lines are not counted**: a line is a thing a page has and not
+  a thing a document holds until it is laid out.
+- **The words of a table are counted, but the rows are not**: a table
+  is a block, and the text of its cells is text of the document.
+- **The statistics are not kept**: they are read, and they are
+  worked out again the next time they are asked for.
