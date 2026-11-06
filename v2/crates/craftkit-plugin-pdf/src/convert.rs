@@ -15,19 +15,22 @@
 //!   are taken away, and so are the entries that point at them;
 //! - the **NeedAppearances** flag is taken away: it asks the viewer
 //!   to make the appearances of the form, and a PDF/A file must not
-//!   ask.
+//!   ask;
+//! - the **images** are asked for nothing: the interpolation is
+//!   cleared, and the alternates and the OPI information go away.
 //!
 //! What is **not** here is what needs something this tree does not
-//! have:
+//! have, or what another command does better:
 //!
 //! - the **encryption** is not taken away: the tree decrypts a file
 //!   when it opens it, and this tree cannot, so a file whose strings
 //!   are still encrypted would be broken by the taking;
 //! - the **metadata** is not written: a PDF/A file identifies itself
-//!   in an XMP packet, and writing one means writing a stream of
-//!   bytes that this tree does not have;
+//!   in an XMP packet, and the packet is written by its own command
+//!   (§536) — the bytes of a stream are bytes in a file, and the
+//!   conversion does not name a file;
 //! - the **output intent** is not written: it names an ICC profile,
-//!   and this tree has no profile to name.
+//!   and the profile is written by its own command (§537).
 //!
 //! So the report says what was fixed and what is left, and the
 //! preflight's own answer is the second list.
@@ -160,6 +163,43 @@ impl Convert {
         }
         if forbidden > 0 {
             fixed.push(format!("{forbidden}: removed the forbidden actions"));
+        }
+        // The **images**: the interpolate flag is cleared, and the
+        // alternates and the OPI information go away.
+        let mut images = 0_usize;
+        for node in the_objects(session.document()) {
+            let Some(found) = session.document().node(node).cloned() else { continue };
+            let entries = preflight::entries_of(&found);
+            if preflight::name_of(&entries, "Subtype").as_deref() != Some("Image") {
+                continue;
+            }
+            let mut changed = false;
+            if let Some(found) = session.document_mut()?.node_mut(node) {
+                changed |= take_away(found, "Alternates");
+                changed |= take_away(found, "OPI");
+                // The **interpolate flag**: it is cleared, not taken
+                // away.
+                let mut entries = crate::entries_of(&found.data);
+                if let Some(entry) = entries.iter_mut().find(|(key, _)| key == "Interpolate")
+                    && entry.1.as_bool().unwrap_or(false)
+                {
+                    entry.1 = json!(false);
+                    found.data = json!({
+                        "object": found.data.get("object").cloned().unwrap_or(Json::Null),
+                        "entries": entries
+                            .iter()
+                            .map(|(key, value)| json!([key, value]))
+                            .collect::<Vec<_>>(),
+                    });
+                    changed = true;
+                }
+            }
+            if changed {
+                images += 1;
+            }
+        }
+        if images > 0 {
+            fixed.push(format!("{images}: cleared the image interpolation and the alternates"));
         }
         // The **NeedAppearances** flag: it asks the viewer to make the
         // appearances of the form.

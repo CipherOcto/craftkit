@@ -406,6 +406,17 @@ pub fn issues(document: &Document, level: Option<Level>) -> Vec<Issue> {
                 issue("6.3.2", format!("A {name} annotation isn't set to print, or is hidden"), true);
             }
         }
+        // An **image** that asks to be interpolated, or that has
+        // alternates or OPI information: a PDF/A file may not have
+        // either.
+        if node.kind == "pdf.stream" && name_of(&entries, "Subtype").as_deref() == Some("Image") {
+            if entry(&entries, "Interpolate").and_then(|value| value.as_bool()).unwrap_or(false) {
+                issue("6.2.8", "An image asks to be interpolated".to_string(), true);
+            }
+            if entry(&entries, "Alternates").is_some() || entry(&entries, "OPI").is_some() {
+                issue("6.2.8", "An image has alternates or OPI information".to_string(), true);
+            }
+        }
         // **Additional actions**: the document, a page or an
         // annotation may not have them.
         if entry(&entries, "AA").is_some() {
