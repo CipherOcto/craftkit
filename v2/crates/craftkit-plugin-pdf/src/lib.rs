@@ -147,6 +147,7 @@ mod loader;
 mod metadata;
 mod number;
 mod objects;
+mod optional;
 mod outline;
 mod pages;
 mod pagetext;
@@ -184,6 +185,7 @@ pub use intent::WriteIntent;
 pub use labels::SetPageLabels;
 pub use metadata::WriteMetadata;
 pub use number::SetNumber;
+pub use optional::ReadLayers;
 pub use outline::{AddOutline, ReadOutline};
 pub use pages::RemovePage;
 pub use pagetext::ReadPageText;
@@ -2088,6 +2090,7 @@ craftkit_sdk::plugin_anchor!(
     ReadStructure,
     ReadPageText,
     ReadAttachments,
+    ReadLayers,
     SetPageLabels,
     RemoveObject,
     SetNumber,
