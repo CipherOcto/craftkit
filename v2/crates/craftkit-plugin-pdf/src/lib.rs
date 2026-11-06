@@ -128,6 +128,7 @@
 mod boxes;
 mod content;
 mod filters;
+mod fonts;
 mod free;
 mod information;
 mod labels;
@@ -148,6 +149,7 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 pub use boxes::{PageBoxes, SetPageBox};
+pub use fonts::ReadFonts;
 pub use information::SetInformation;
 pub use labels::SetPageLabels;
 pub use number::SetNumber;
@@ -1977,6 +1979,7 @@ craftkit_sdk::plugin_anchor!(
     InformationKind,
     AddObject,
     Preflight,
+    ReadFonts,
     AddStream,
     SetInformation,
     SetPageLabels,

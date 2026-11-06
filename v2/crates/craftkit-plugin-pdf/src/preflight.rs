@@ -10,11 +10,12 @@
 //!   wrong, and whether the tree can **fix** it.
 //!
 //! The rules that are here are the ones this tree can see in the
-//! **document**: the metadata and what it says, the actions a PDF/A
-//! file may not have, the annotations it may not have, and the
-//! additional actions it may not have. The rules about fonts, about
-//! colour and about encryption are not here — the tree checks them
-//! against the file, and this tree has a document and not a file.
+//! **document**: the metadata and what it says, the fonts and whether
+//! they are embedded, the actions a PDF/A file may not have, the
+//! annotations it may not have, and the additional actions it may not
+//! have. The rules about colour and about encryption are not here —
+//! the tree checks them against the file, and this tree has a
+//! document and not a file.
 
 use craftkit_derive::Command;
 
@@ -237,6 +238,12 @@ pub fn issues(document: &Document, level: Option<Level>) -> Vec<Issue> {
             }
         }
     }
+    // The **fonts**: a PDF/A file must have every font embedded.
+    for font in crate::fonts::fonts(document) {
+        if !font.embedded {
+            issue("6.2.11.4", format!("The font {} isn't embedded", font.base), false);
+        }
+    }
     // The **objects**: the actions and the annotations a PDF/A file
     // may not have, and the additional actions it may not have.
     for node in document.walk() {
@@ -311,6 +318,7 @@ impl Preflight {
                 None => Json::Null,
             },
             "output_intents": declared.output_intents.clone(),
+            "fonts": crate::fonts::fonts(document).iter().map(crate::fonts::Font::to_json).collect::<Vec<_>>(),
             "issues": issues
                 .iter()
                 .map(|issue| json!({
