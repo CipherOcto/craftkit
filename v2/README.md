@@ -3992,6 +3992,7 @@ so.
 | the **styles** of a document | **built.** A document may be asked what styles it holds — the kind, the base and the blocks that are in it (§555) | §555 |
 | the **information** of a file | **built.** The information dictionary says who wrote the file and what it is called, and it is found by the node or by the trailer (§556) | §556 |
 | the **exporting** of a sheet as a text of values | **built.** A range is written as a CSV — a cell is written as it is shown, and a field that holds the delimiter is quoted (§557) | §557 |
+| the **value** a field is calculated to hold | **built.** The simple way a field is calculated in is worked out — the values of the fields it names, put together in the way the script says (§558) | §558 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36421,3 +36422,57 @@ A sheet may be **exported** — the same shape the import reads.
   is what is written, because that is what the cell shows.
 - **The sheet is not exported whole**: the range is the one that was
   named, or the used range.
+
+## 558. The value a field is calculated to hold
+
+The simple way a field is calculated in is **worked out**.
+
+### What was built
+
+- The new command **`pdf.field.value`** gives the value a field is
+  calculated to hold:
+  - the **values of the fields it names**, put together in the way the
+    script says — a sum, a product, an average, a minimum or a
+    maximum;
+  - a field that is **not calculated** holds nothing, and the answer
+    says so;
+  - an **expression** is not worked out here, and the answer says so.
+- The rules:
+  - a field the script names that is **not there** is refused, and so
+    is a value that is **not a number**: a sum of two texts is not a
+    number;
+  - an **average of nothing** is refused: there is no average of no
+    numbers;
+  - a **product** and a **sum** of no numbers are zero, because there
+    is nothing to add and nothing to multiply.
+
+### What the port found
+
+- **The tree's calculate runs the arithmetic itself**: the tree's
+  calculate tab works the value out from the fields it names and
+  writes it into the field — here the value is **read** and not
+  written, so a form may be asked what it would show without the
+  form being changed.
+- **The tree's fields are named by their own names**: the fields a
+  calculation names are the fields of the form, and here they are the
+  **qualified** names — the name of the field and the names of its
+  parents — so a calculation may name a field of a family.
+
+### What it cost
+
+- **Five tests** in the pdf battery (`tests/calculatedvalue.rs`): a
+  field calculated to hold the sum of two others, a field that is not
+  calculated, an expression that is not worked out, a field the
+  script names that is not there, and a field that is not there.
+- **One new command** (`pdf.field.value`). The pdf battery now
+  carries **53** commands and the MCP server **752**.
+
+### What it does not settle
+
+- **The value is not written**: the field still holds what it held,
+  and the value is worked out again when it is asked for.
+- **The expression is not worked out**: there is no evaluator for the
+  simplified field notation here, and the answer says that plainly.
+- **The order of the calculation is not used**: a form may list the
+  fields that are calculated in the order they are calculated in
+  (§544), and this command does not follow that order.
