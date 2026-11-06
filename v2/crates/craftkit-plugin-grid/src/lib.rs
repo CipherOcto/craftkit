@@ -389,6 +389,7 @@ mod styles;
 mod tables;
 mod tabs;
 mod tabsorder;
+mod textcolumns;
 mod texts;
 mod textvalue;
 mod trigonometry;
@@ -453,6 +454,7 @@ pub use tables::{
 };
 pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
 pub use tabsorder::MoveSheet;
+pub use textcolumns::TextColumns;
 pub use validation::{CheckValidation, ClearValidation, SetValidation};
 pub use view::{FreezePanes, SetView, SetZoom, UnfreezePanes};
 pub use whatifs::WhatIf;
@@ -1776,6 +1778,7 @@ craftkit_sdk::plugin_anchor!(
     SetLink,
     SetNote,
     SortRange,
+    TextColumns,
     SetBorder,
     GetBorder,
     ClearBorder,
