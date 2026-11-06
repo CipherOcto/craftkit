@@ -3950,6 +3950,7 @@ so.
 | the **trailer** of a PDF file | **built.** The trailer is the file's last word, and it is kept in the document — and the preflight says when the file was encrypted (§513) | §513 |
 | the **alt text** of a picture | **built.** A picture says what it is, and an empty text takes the words away — and a picture that says nothing has no alt text (§514) | §514 |
 | the **accessibility** of a document | **built.** A document is checked and the issues are reported — an error, a warning or a tip, with the rule it breaks (§515) | §515 |
+| the **header row** of a table | **built.** A table says whether its first row is a header row, and the checker says when a table has none (§516) | §516 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33895,3 +33896,54 @@ magnifier, or with a reader who cannot see the picture at all. The
 - **Nothing is fixed**: the tree's issues carry a fix — a command and
   its parameters — and here an issue says what is wrong and stops
   there.
+
+## 516. The header row of a table
+
+A **header row** says what the columns of a table are, and it is the
+row a screen reader reads to know the names of the columns.
+
+### What was built
+
+- **One command** in the prose battery: `prose.table.header`. It says
+  whether the first row of a table is a header row, and the table's
+  own reading says it too — along with the rows and the columns of the
+  grid.
+- The **accessibility** checker now knows the rule `tableHeader`: a
+  table of two or more rows whose first row is not a header row is a
+  **warning** — nothing says what its columns are. A table of one row
+  is not such a table: there is nothing to name.
+
+### What the port found
+
+- **The tree's header row is a property of the row and not of the
+  table**: the tree's `table.repeatHeader` marks the first row as a
+  header, and the tree's checker asks whether the first row has the
+  mark. Here the table says it, because the table is the grid and the
+  rows are values in it — a row of a table here is a list of cells and
+  not a thing of its own.
+- **The tree's rule is about tables with rows**: the tree's checker
+  asks for a header row only when the table has two or more rows. Here
+  the same, and a table of one row is left alone.
+
+### What it cost
+
+- **Six tests** in the prose battery (`tests/headers.rs`): a table of
+  two rows having no header row and that being a warning, a table
+  with one row not being a table with rows to name, the first row of a
+  table being a header row, a table with a header row breaking
+  nothing, the header row being taken away and the warning coming
+  back, and a node that is not a table being refused.
+- **No new module**: the command grows the tables module. The prose
+  battery now carries **60** commands and the MCP server **715**.
+
+### What it does not settle
+
+- **The header row is not repeated across pages**: the tree's
+  `repeatHeader` also repeats the row on the next page, and here the
+  mark says what the row is and nothing more.
+- **The table has no alternative text**: the tree's checker says when
+  a table has no caption and no description, and here a table has
+  neither of them to have.
+- **The other table rules are not here**: the tree's checker says when
+  a row of a table is empty and when a column is empty, and here the
+  cells of a table are values that may be empty on purpose.
