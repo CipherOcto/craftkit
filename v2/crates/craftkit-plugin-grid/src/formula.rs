@@ -216,6 +216,31 @@ impl Anchor {
         }
     }
 
+    /// The anchor with the columns **deleted** at `at`.
+    ///
+    /// A reference whose column is **anchored** does not move. A
+    /// reference to the right of the columns that are deleted moves
+    /// left by the number of columns deleted, and a reference **in**
+    /// them cannot be written: `None` says the reference names a
+    /// column that is gone.
+    pub fn deleted_column(&self, at: u64, count: u64) -> Option<Anchor> {
+        if self.col_abs {
+            return Some(*self);
+        }
+        let col = self.cell.col as u64 + 1;
+        if col >= at && col < at + count {
+            return None;
+        }
+        if col >= at + count {
+            return Some(Anchor {
+                cell: CellRef { col: self.cell.col - count as u32, row: self.cell.row },
+                row_abs: self.row_abs,
+                col_abs: self.col_abs,
+            });
+        }
+        Some(*self)
+    }
+
     pub fn to_text(self) -> String {
         let mut text = String::new();
         if self.col_abs {
@@ -2720,6 +2745,53 @@ impl Expr {
         }
     }
 
+    /// The expression with the columns **deleted** at `at`.
+    ///
+    /// A reference that names **another sheet** does not move: the
+    /// columns of that sheet are not the columns that are deleted. A
+    /// reference that names this sheet — or names none — moves left
+    /// when it is to the right of the columns that are deleted, and
+    /// `None` says that a reference names a column that is gone.
+    pub fn deleted_column(&self, sheet: &str, at: u64, count: u64) -> Option<Expr> {
+        let names_this_sheet = |named: &Option<String>| match named {
+            None => true,
+            Some(name) => name.eq_ignore_ascii_case(sheet),
+        };
+        match self {
+            Expr::Cell { sheet: named, anchor } => {
+                if !names_this_sheet(named) {
+                    return Some(self.clone());
+                }
+                Some(Expr::Cell { sheet: named.clone(), anchor: anchor.deleted_column(at, count)? })
+            }
+            Expr::Range { sheet: named, start, end } => {
+                if !names_this_sheet(named) {
+                    return Some(self.clone());
+                }
+                Some(Expr::Range {
+                    sheet: named.clone(),
+                    start: start.deleted_column(at, count)?,
+                    end: end.deleted_column(at, count)?,
+                })
+            }
+            Expr::Name(name) => Some(Expr::Name(name.clone())),
+            Expr::Call(name, arguments) => Some(Expr::Call(
+                name.clone(),
+                arguments
+                    .iter()
+                    .map(|argument| argument.deleted_column(sheet, at, count))
+                    .collect::<Option<Vec<_>>>()?,
+            )),
+            Expr::Negate(inner) => Some(Expr::Negate(Box::new(inner.deleted_column(sheet, at, count)?))),
+            Expr::Binary(operator, left, right) => Some(Expr::Binary(
+                operator.clone(),
+                Box::new(left.deleted_column(sheet, at, count)?),
+                Box::new(right.deleted_column(sheet, at, count)?),
+            )),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) => Some(self.clone()),
+        }
+    }
+
     /// The formula's **text**: the expression written out.
     ///
     /// The tree's printer writes an expression back out, and a copied
@@ -2798,6 +2870,21 @@ pub fn insert_column_in_formula(text: &str, sheet: &str, at: u64, count: u64) ->
     let inserted = expression.inserted_column(sheet, at, count);
     let printed = inserted.to_text();
     if text.trim_start().starts_with('=') { Some(format!("={printed}")) } else { Some(printed) }
+}
+
+/// The formula's **text** with the columns **deleted** at `at`.
+///
+/// The text is parsed, the columns are deleted and the expression is
+/// printed. The answer is `Err` when a reference names a column that
+/// is gone: this tree has no `#REF!` yet, and a formula that names
+/// nothing is refused rather than written.
+pub fn delete_column_in_formula(text: &str, sheet: &str, at: u64, count: u64) -> Result<String, String> {
+    let expression = parse(text).map_err(|_| "the formula cannot be read".to_string())?;
+    let deleted = expression
+        .deleted_column(sheet, at, count)
+        .ok_or_else(|| "a formula names a cell in the columns that are deleted".to_string())?;
+    let printed = deleted.to_text();
+    Ok(if text.trim_start().starts_with('=') { format!("={printed}") } else { printed })
 }
 
 /// The precedence of an expression.
