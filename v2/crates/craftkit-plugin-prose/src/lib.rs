@@ -109,6 +109,7 @@ mod accessibility;
 mod bookmarks;
 mod characters;
 mod comments;
+pub mod contrast;
 mod editing;
 mod equations;
 mod finding;

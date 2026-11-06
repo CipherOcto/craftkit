@@ -24,6 +24,10 @@
 //!   columns are.
 //! - **docTitle** — a document with no title. It is a **tip**: nothing
 //!   says what the document is.
+//! - **contrast** — text that is hard to read. The measure is the
+//!   **contrast ratio** of the WCAG 2: four and a half for normal text
+//!   and three for large text. A ratio under three is a **warning**
+//!   and the rest is a **tip**.
 //!
 //! The issues come first as **errors**, then as warnings, then as
 //! tips, and the order of the document is kept within each kind.
@@ -83,21 +87,40 @@ fn text_of(node: &Node) -> String {
     node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string()
 }
 
+/// One **run** of a block: the words it covers, and how it is drawn.
+struct Run {
+    /// The words the run covers.
+    text: String,
+    /// The target of the link the run carries.
+    link: Option<String>,
+    /// The colour of the text, as `#rrggbb`.
+    colour: Option<String>,
+    /// The size of the text.
+    size: Option<f64>,
+    /// Whether the text is bold.
+    bold: bool,
+}
+
 /// The **runs** of a block, with the words they cover.
-fn runs_of(node: &Node) -> Vec<(String, Option<String>)> {
+fn runs_of(node: &Node) -> Vec<Run> {
     let characters: Vec<char> = text_of(node).chars().collect();
     let Some(runs) = node.data.get("runs").and_then(|runs| runs.as_array()) else {
         return Vec::new();
     };
-    let mut out: Vec<(String, Option<String>)> = Vec::new();
+    let mut out: Vec<Run> = Vec::new();
     let mut at = 0usize;
     for run in runs {
         let length = run.get("len").and_then(|len| len.as_u64()).unwrap_or(0) as usize;
         let end = at.saturating_add(length).min(characters.len());
         let covered: String = characters[at.min(characters.len())..end].iter().collect();
         at = end;
-        let target = run.get("link").and_then(|link| link.as_str()).map(|link| link.to_string());
-        out.push((covered, target));
+        out.push(Run {
+            text: covered,
+            link: run.get("link").and_then(|link| link.as_str()).map(|link| link.to_string()),
+            colour: run.get("colour").and_then(|colour| colour.as_str()).map(|colour| colour.to_string()),
+            size: run.get("size").and_then(|size| size.as_f64()),
+            bold: run.get("bold").and_then(|bold| bold.as_bool()).unwrap_or(false),
+        });
     }
     out
 }
@@ -169,17 +192,40 @@ pub fn issues_of(document: &Document, node: &Node) -> Vec<Issue> {
             });
         }
         // The **link words**: "click here" says nothing.
-        for (covered, target) in runs_of(block) {
-            if target.is_none() {
+        for run in runs_of(block) {
+            if run.link.is_none() {
                 continue;
             }
-            if covered.trim().to_lowercase() == CLICK_HERE {
+            if run.text.trim().to_lowercase() == CLICK_HERE {
                 issues.push(Issue {
                     kind: "tip",
                     rule: "linkText",
                     issue: "The words of a link say nothing about where it goes".to_string(),
                     place: block.id,
                 });
+            }
+        }
+        // The **contrast**: text that is hard to read.
+        for run in runs_of(block) {
+            if run.text.trim().is_empty() {
+                continue;
+            }
+            let Some(text) = &run.colour else { continue };
+            let Ok(colour) = craftkit_sdk::Colour::from_hex(text) else { continue };
+            let ratio = crate::contrast::contrast_ratio(&colour, &craftkit_sdk::Colour::WHITE);
+            let need = crate::contrast::needed(run.size, run.bold);
+            if ratio < need {
+                issues.push(Issue {
+                    kind: if crate::contrast::is_poor(ratio) { "warning" } else { "tip" },
+                    rule: "contrast",
+                    issue: format!(
+                        "The text is hard to read: the contrast is {ratio:.1}:1 and {need}:1 is needed"
+                    ),
+                    place: block.id,
+                });
+                // One issue for the block: the text is hard to read,
+                // and saying it twice says it no better.
+                break;
             }
         }
     }
