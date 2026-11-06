@@ -3976,6 +3976,7 @@ so.
 | the **images** of a file | **built.** An image may not ask to be interpolated, and it may not carry alternates — and the conversion clears both (§539) | §539 |
 | the **annotations** of a converted file | **built.** The conversion makes every annotation print and shown, and leaves a popup alone (§540) | §540 |
 | the **numbers** of a file | **built.** A file's numbers are numbers, and a whole one is taken as the whole one it is — a number that is not a whole one names no object (§541) | §541 |
+| the **encryption** of a file | **built.** A file says what it is encrypted with and what a person may do with it, and the permissions are said in words (§542) | §542 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35499,3 +35500,75 @@ file wrote them, so a whole number may arrive as a fraction.
 - **The encryption of a file is still read as a fact and not
   undone**: the numbers of an encrypted dictionary are read, and the
   bytes behind them are not decrypted (§542).
+
+## 542. The encryption of a file
+
+A file whose trailer names an **encryption** is a file whose strings
+and streams are scrambled, and its dictionary says what a person may
+do with it.
+
+### What was built
+
+- The new module `encrypt` reads the **encryption dictionary** of a
+  file:
+  - the **filter** — the standard one — and the **version** and the
+    **revision** of the scheme;
+  - the **length of the key**, in bits, and forty when the file does
+    not say;
+  - the **permissions**: the bits the file holds, and the same bits
+    in words — print, modify, copy, annotate, fill forms, extract
+    for accessibility, assemble, print in high quality;
+  - whether the **metadata** is encrypted as well, which it is
+    unless the file says otherwise;
+  - the way the **strings** and the way the **streams** are
+    scrambled — rc4, aes-128 or aes-256.
+- The command **`pdf.encrypt.read`** answers for the whole
+  dictionary or for **one entry** of it, by its key. A file that
+  names no encryption is **not encrypted**, and the answer says so.
+- The **rules**:
+  - the bits are numbered from the right, as the format numbers
+    them;
+  - two permissions are the same right as another: filling in the
+    forms of a file is the same right as modifying its annotations,
+    and assembling a file is the same right as modifying its
+    contents;
+  - a file whose **version is below four** is scrambled with rc4,
+    whatever its crypt filters say.
+
+### What the port found
+
+- **The tree reads the permissions as bits and says them in names**:
+  the tree's reader has a table of the bits and what each one means,
+  and this tree has the same table — the numbering from the right
+  is the tree's own rule, and the two permissions that share a right
+  are the tree's rule too.
+- **The tree's crypt filters say how the strings and the streams are
+  scrambled**: the tree names the method each filter holds, and here
+  the method is named in the tree's own words — rc4, aes-128,
+  aes-256.
+- **The tree's key length has a default and here it has the same
+  one**: forty bits when the dictionary does not say.
+
+### What it cost
+
+- **Eleven tests** in the pdf battery (`tests/encryption.rs`): a
+  file that is not encrypted, the filter and the version and the
+  revision, the length of the key, the permissions in words, the
+  permissions of a restricted file, the permissions of a typical
+  file, a file whose version is below four, a file with crypt
+  filters, the metadata that is encrypted as well, one entry by its
+  key, and a key that is not there.
+- **One new module** (`src/encrypt.rs`) and **one new command**
+  (`pdf.encrypt.read`). The pdf battery now carries **46** commands
+  and the MCP server **736**.
+
+### What it does not settle
+
+- **The bytes are not decrypted**: the file says it is encrypted and
+  this tree reads what it says — the strings and the streams behind
+  the encryption are still scrambled, and no password is asked for.
+- **The encryption is not created**: a file written by this tree is
+  a plain file, and the trailer's encryption is not written out.
+- **The owner password and the user password are not distinguished**:
+  the dictionary's `/O` and `/U` are read as entries, and the tree
+  does not say which of them a person would be asked for.
