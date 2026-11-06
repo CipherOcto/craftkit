@@ -40,7 +40,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session, Text};
 
 use crate::formula::{Area, CellRef, Cells, Value};
 
@@ -51,6 +51,9 @@ pub struct Table {
     pub name: String,
     /// The range it reaches.
     pub range: Area,
+    /// Whether the table has a **total row**: the row at the bottom
+    /// of it that holds the totals of the columns.
+    pub totals: bool,
 }
 
 impl Table {
@@ -59,6 +62,7 @@ impl Table {
         json!({
             "name": self.name,
             "range": self.range.to_text(),
+            "totals": self.totals,
         })
     }
 }
@@ -73,7 +77,8 @@ pub fn tables_of(node: &Node) -> Vec<Table> {
         let Some(name) = table.get("name").and_then(|name| name.as_str()) else { continue };
         let Some(range) = table.get("range").and_then(|range| range.as_str()) else { continue };
         let Some((_, area)) = crate::merges::parse_area(range) else { continue };
-        tables.push(Table { name: name.to_string(), range: area });
+        let totals = table.get("totals").and_then(|totals| totals.as_bool()).unwrap_or(false);
+        tables.push(Table { name: name.to_string(), range: area, totals });
     }
     tables
 }
@@ -141,6 +146,42 @@ fn fields_of(table: &Table, cells: &Cells) -> Result<Vec<(CellRef, String)>, Str
         fields.push((cell, header_text(cells, cell)?));
     }
     Ok(fields)
+}
+
+/// The **totals** of the columns of a table: the sum of the numbers
+/// of the rows under the header.
+///
+/// A table without a total row has no totals. A table with one takes
+/// its last row for the totals, and the rows above it are the data.
+/// A column with no numbers in it has **no total**: the answer is
+/// nothing and not a zero that means something else.
+fn totals_of(
+    table: &Table,
+    fields: &[(CellRef, String)],
+    cells: &Cells,
+) -> Vec<craftkit_sdk::serde_json::Value> {
+    if !table.totals {
+        return Vec::new();
+    }
+    let last = table.range.end.row;
+    let mut totals: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
+    for (cell, name) in fields {
+        let mut sum = 0.0;
+        let mut numbers = 0usize;
+        for row in table.range.start.row + 1..last {
+            let Some(entry) = cells.get(CellRef { col: cell.col, row }) else { continue };
+            let Some(Value::Number(number)) = &entry.value else { continue };
+            sum += *number;
+            numbers += 1;
+        }
+        let total = if numbers == 0 { craftkit_sdk::serde_json::Value::Null } else { json!(sum) };
+        totals.push(json!({
+            "name": name.clone(),
+            "column": CellRef::column_text(cell.col),
+            "total": total,
+        }));
+    }
+    totals
 }
 
 /// The **sheet** a command is about, and whether it is a sheet.
@@ -221,7 +262,7 @@ impl CreateTable {
         // The **header**: a row of text, because a field is named by
         // text.
         let cells = crate::cells_of(&node);
-        let table = Table { name: name.clone(), range: area };
+        let table = Table { name: name.clone(), range: area, totals: false };
         let fields =
             fields_of(&table, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
         let mut tables = tables;
@@ -290,6 +331,8 @@ impl ReadTableFields {
             "name": name,
             "range": table.range.to_text(),
             "rows": rows,
+            "totals": table.totals,
+            "sums": totals_of(&table, &fields, &cells),
             "fields": fields
                 .iter()
                 .map(|(cell, name)| json!({
@@ -299,6 +342,63 @@ impl ReadTableFields {
                 }))
                 .collect::<Vec<_>>(),
         })))
+    }
+}
+
+/// **Say** whether a table has a **total row**.
+///
+/// The total row is the row at the bottom of the table that holds the
+/// totals of the columns: the sum of the numbers of the rows above
+/// it. The totals are **derived** — they are worked out from the
+/// cells every time they are asked for — so a table that has one
+/// cannot have a total that is out of date with the cells.
+///
+/// The rules:
+///
+/// - a table with a total row and **no rows** under its header has
+///   nothing to total, and the total of nothing is nothing;
+/// - a column whose cells hold no numbers has **no total**: the
+///   answer is nothing and not a zero that means something else.
+#[derive(Command)]
+#[command(id = "grid.table.totals", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct SetTableTotals {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The name of the table.
+    pub name: Text,
+    /// Whether the table has a total row.
+    pub totals: Bool,
+}
+
+impl SetTableTotals {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.table.totals".to_string();
+        let sheet = self.sheet.0;
+        let node = sheet_of(session, &id, sheet)?;
+        let name = self.name.0.trim().to_string();
+        let mut tables = tables_of(&node);
+        let Some(table) = tables.iter_mut().find(|table| table.name == name) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no table `{name}` on the sheet"),
+            });
+        };
+        table.totals = self.totals.0;
+        let tables = tables;
+        let sheet_node = session.document_mut()?.node_mut(sheet);
+        let Some(sheet_node) = sheet_node else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        sheet_node.data["tables"] = tables_into(&tables);
+        Ok(Outcome::changed(if self.totals.0 {
+            format!("the table `{name}` has a total row")
+        } else {
+            format!("the table `{name}` has no total row")
+        })
+        .with_data(json!({ "sheet": sheet, "name": name, "totals": self.totals.0 })))
     }
 }
 
@@ -406,7 +506,7 @@ impl ResizeTable {
                 message: format!("there is no table `{name}` on the sheet"),
             });
         };
-        let resized = Table { name: name.clone(), range: area };
+        let resized = Table { name: name.clone(), range: area, totals: table.totals };
         let cells = crate::cells_of(&node);
         let fields =
             fields_of(&resized, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
