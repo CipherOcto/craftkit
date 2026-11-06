@@ -127,6 +127,7 @@
 
 mod annot;
 mod boxes;
+mod calculate;
 mod content;
 mod convert;
 mod encrypt;
@@ -158,6 +159,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 pub use annot::SetAnnotationFlags;
 pub use boxes::{PageBoxes, SetPageBox};
+pub use calculate::ReadCalculation;
 pub use convert::Convert;
 pub use encrypt::ReadEncryption;
 pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField, SetFlags, SetParent};
@@ -2050,6 +2052,7 @@ craftkit_sdk::plugin_anchor!(
     WriteIntent,
     SetAnnotationFlags,
     ReadEncryption,
+    ReadCalculation,
     SetField,
     SetFlags,
     SetParent,
