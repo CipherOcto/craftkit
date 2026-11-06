@@ -151,7 +151,7 @@ pub use eases::{EasyEase, ToggleHold};
 pub use effects::{
     AddEffect, DuplicateEffect, ListEffects, RemoveEffect, ReorderEffect, ResetEffect, ToggleEffect,
 };
-pub use expressions::{DeleteExpression, SetExpression};
+pub use expressions::{BakeExpression, DeleteExpression, SetExpression};
 use keys::keys_of;
 pub use keys::{RemoveKeyframe, SetAuto, SetContinuous, SetInterpolation, SetKeyframe, ValueAt};
 pub use markers::{AddMarker, MarkerKind, MarkersEvaluator, SetMarker};
@@ -745,6 +745,7 @@ craftkit_sdk::plugin_anchor!(
     EasyEase,
     ToggleHold,
     ValueAt,
+    BakeExpression,
     MaskKind,
     AddMask,
     RemoveMask,

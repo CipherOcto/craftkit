@@ -932,7 +932,7 @@ impl ValueAt {
 /// the curve between the two keyframes around it — the line, the hold
 /// or the bezier, as the keyframe it leaves says — and the earlier
 /// value when the values do not interpolate.
-fn value_at(keys: &[Key], frame: f64, spatial: bool) -> Option<serde_json::Value> {
+pub(crate) fn value_at(keys: &[Key], frame: f64, spatial: bool) -> Option<serde_json::Value> {
     let first = keys.first()?;
     let last = keys.last()?;
     if keys.len() == 1 || frame <= first.frame as f64 {
