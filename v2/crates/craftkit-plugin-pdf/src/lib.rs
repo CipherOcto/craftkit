@@ -135,6 +135,7 @@ mod free;
 mod information;
 mod labels;
 mod loader;
+mod metadata;
 mod number;
 mod objects;
 mod outline;
@@ -158,6 +159,7 @@ pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField,
 pub use fonts::ReadFonts;
 pub use information::SetInformation;
 pub use labels::SetPageLabels;
+pub use metadata::WriteMetadata;
 pub use number::SetNumber;
 pub use outline::{AddOutline, ReadOutline};
 pub use pages::RemovePage;
@@ -2008,6 +2010,7 @@ craftkit_sdk::plugin_anchor!(
     ReadWidgets,
     ReadTabOrder,
     SetTabs,
+    WriteMetadata,
     SetField,
     SetFlags,
     SetParent,
