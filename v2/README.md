@@ -3987,6 +3987,7 @@ so.
 | the **statistics** of a document | **built.** A document may be measured — the words, the characters with and without the spaces, the paragraphs — and a mark is not a word of its own (§550) | §550 |
 | the **numbering format** of a number | **built.** A number may be written in a named form — roman, letters, ordinal, cardinal — and a number that is too large for the form is refused (§551) | §551 |
 | the **replacing** of text in a sheet | **built.** What was found may be replaced — the case does not matter unless the search says it does, and a formula that does not parse afterwards is refused (§552) | §552 |
+| the **label** of the total row of a table | **built.** A table that gains a total row shows a label in it — the tree's own word is Total, and an empty label takes it away (§553) | §553 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36169,3 +36170,53 @@ A sheet may be searched — and what was found may be **replaced**.
   whole workbook is looked in only when no sheet is named.
 - **The text is not replaced in a cell that is empty**: there is
   nothing to replace in a cell that holds nothing.
+
+## 553. The label of the total row of a table
+
+A table that gains a total row shows a **label** in it.
+
+### What was built
+
+- A table may now carry the **label** of its total row: the text the
+  total row has in its first cell.
+- The new command **`grid.table.label`** says it, or reads it:
+  - a table that gains a total row shows the tree's own word —
+    **Total** — and the label may be said otherwise;
+  - an **empty** label takes the label away, and the total row shows
+    nothing in its first cell;
+  - a table with **no total row** has no label, and saying one is
+    refused: the row the label would sit in is not there;
+  - a table that is **not there** is refused.
+
+### What the port found
+
+- **The tree's label is a fact of the table and not of a cell**: the
+  tree keeps the label in the table — it is the first column's label
+  and the tree writes it into the total row — and here the label is a
+  field of the table, and the totals beside it are derived.
+- **The tree's word is "Total"**: the tree puts that word in the
+  first cell of the row it adds, and here the same — the label a
+  table shows when a person has not said another one.
+- **The tree's label belongs to the row and not to the column**: the
+  tree has a label for a column, and only the first column has one,
+  because the other columns hold totals; here the label is the
+  table's, and it is the text the total row shows.
+
+### What it cost
+
+- **Five tests** in the grid battery (`tests/tablelabel.rs`): the
+  label a table shows when it gains a total row, the label that may
+  be said, the empty label that takes it away, a label on a table
+  with no total row, and a table that is not there.
+- **One new command** (`grid.table.label`) and one field on the
+  table. The grid battery now carries **126** commands and the MCP
+  server **747**.
+
+### What it does not settle
+
+- **The label is not written into a cell**: the label is a fact of
+  the table, and the total row's cells hold the totals beside it.
+- **The label of a column is not there**: only the first cell of the
+  total row has a label, and the other columns hold their totals.
+- **The totals are not recalculated**: they are derived, and they
+  are worked out again when they are asked for.
