@@ -3958,6 +3958,7 @@ so.
 | the **alt text** of a table | **built.** A table says what it is, and an empty text takes the words away — and the checker says when a table has none (§521) | §521 |
 | the **empty row** and the **empty column** of a table | **built.** A row or a column with nothing in it looks like spacing, and the checker says which one (§522) | §522 |
 | the **fields** of a form | **built.** A field says what it is and what it holds, and a value the field cannot hold is refused — the options and the states are named (§523) | §523 |
+| the **name** of a field with a parent | **built.** A field may have a parent, and its name is then the two names joined with a dot — and a loop is refused (§524) | §524 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34350,3 +34351,59 @@ field says what it is, and what it holds.
   the caller says it is.
 - **The appearance of a field is not written**: the tree writes the
   look of a field, and here a field is what the file says it is.
+
+## 524. The name of a field with a parent
+
+A field may have a **parent**: the field it belongs to. The name of a
+field is then the name of its parent and its own, joined with a dot
+— the tree's **fully qualified name**.
+
+### What was built
+
+- **One command** in the pdf battery: `pdf.field.parent`. It puts a
+  field in a field, and it takes the parent away again.
+- The **name** of a field is now the **qualified name**: its own name
+  and the names of its parents, joined with a dot. The read says the
+  parent too.
+- The **rules**:
+  - the field and the parent must both be **fields**;
+  - a field may not be **its own** parent;
+  - a parent that is **below** the field would make a **loop**, and a
+    loop is **refused**;
+  - the chain of parents is **bounded**, and a cycle ends it, so that
+    a field that is its own ancestor still has a name.
+
+### What the port found
+
+- **The tree's qualified name comes from the parent chain and here it
+  comes from the same place**: the tree walks up the `/Parent` chain
+  and joins the names with a dot, and it breaks the chain when it has
+  walked far enough or when it has seen a field twice. Here the same,
+  and the chain is bounded in the same way.
+- **The tree's fields are a tree and here a field is an object**: the
+  tree's field gathers the widgets that belong to it — the kids with
+  a name are fields and the kids without one are widgets — and here a
+  child is a field of its own and says who its parent is.
+
+### What it cost
+
+- **Eight tests** in the pdf battery (`tests/fieldnames.rs`): a field
+  with a parent being named with both names, the parent of a field
+  being read, the parent being taken away, a field not being its own
+  parent, a parent below the field being refused, a node that is not a
+  field not being a parent, a cycle ending the name, and a field with
+  no name being named after its object.
+- **No new module**: the command grows the fields module. The pdf
+  battery now carries **36** commands and the MCP server **722**.
+
+### What it does not settle
+
+- **The children are not gathered into the parent**: the tree's parent
+  field holds the values of its children, and here each child says
+  what it holds for itself.
+- **The widgets of a field are not gathered**: the tree's field knows
+  the annotations that draw it, and here a widget is an annotation of
+  its own.
+- **The parent is not written into a file**: the tree's fields are
+  written with their parents, and here the parent is an entry of the
+  object and the writer does not know it.
