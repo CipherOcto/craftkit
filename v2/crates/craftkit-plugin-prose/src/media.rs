@@ -16,6 +16,10 @@
 //! on purpose — it is a rule, a flourish, a mark a reader may skip —
 //! and a decorative picture is not asked for words, because words
 //! would be wrong.
+//!
+//! And a picture may **float**: it sits beside the text instead of in
+//! the line of it, and a reader who cannot see it cannot tell where
+//! in the text it belongs.
 
 use craftkit_derive::Command;
 
@@ -104,6 +108,90 @@ impl SetDecorative {
             format!("the picture `{media}` is not decorative")
         })
         .with_data(json!({ "media": media, "decorative": decorative })))
+    }
+}
+
+/// The **placements** a picture may have: the tree's own two.
+const PLACEMENTS: [&str; 2] = ["inline", "floating"];
+
+/// The **placement** of a picture: `inline` or `floating`.
+///
+/// A picture with no placement is **inline**, because that is how a
+/// picture sits unless it says otherwise.
+pub fn placement_of(media: &Node) -> String {
+    media
+        .data
+        .get("placement")
+        .and_then(|placement| placement.as_str())
+        .map(|placement| placement.to_string())
+        .unwrap_or_else(|| "inline".to_string())
+}
+
+/// Whether a picture **floats**: it is not in the line of the text.
+pub fn is_floating(media: &Node) -> bool {
+    placement_of(media) == "floating"
+}
+
+/// **Say** where a picture **sits**.
+///
+/// A picture is either **inline** — in the line of the text, so a
+/// reader who cannot see it knows where it belongs — or **floating**
+/// beside it, which makes the reading order unclear.
+///
+/// The rules:
+///
+/// - a node that is **not a picture** is refused;
+/// - a placement that is **not a placement** is refused, and the
+///   refusal names the placements there are;
+/// - a placement that is **not said** leaves the picture as it was.
+#[derive(Command)]
+#[command(id = "prose.media.placement", area = "prose", layer = "prose", icon = "pencil", mutates, undoable)]
+pub struct SetPlacement {
+    /// The picture.
+    pub media: NodeRef,
+    /// Where the picture sits: `inline` or `floating`.
+    ///
+    /// Leave it out and the picture keeps the placement it has.
+    pub placement: Option<Text>,
+}
+
+impl SetPlacement {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "prose.media.placement".to_string();
+        let media = self.media.0;
+        let Some(node) = session.document().node(media).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{media}`"),
+            });
+        };
+        if node.kind != "prose.media" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{media}` is a `{}` and not a picture", node.kind),
+            });
+        }
+        let mut data = node.data.clone();
+        if let Some(placement) = &self.placement {
+            let placement = placement.0.trim().to_ascii_lowercase();
+            if !PLACEMENTS.contains(&placement.as_str()) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "`{placement}` is not a placement: the placements are {}",
+                        PLACEMENTS.join(", ")
+                    ),
+                });
+            }
+            data["placement"] = json!(placement);
+        }
+        let placement =
+            data.get("placement").and_then(|placement| placement.as_str()).unwrap_or("inline").to_string();
+        if let Some(node) = session.document_mut()?.node_mut(media) {
+            node.data = data;
+        }
+        Ok(Outcome::changed(format!("the picture `{media}` sits `{placement}`"))
+            .with_data(json!({ "media": media, "placement": placement })))
     }
 }
 

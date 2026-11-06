@@ -27,6 +27,9 @@
 //!   says what the document is.
 //! - **tableAltText** — a table that says nothing about itself. It is
 //!   a **warning**: nothing says what the table is.
+//! - **floating** — a picture that is not in the line of the text. It
+//!   is a **tip**: a reader who cannot see the picture cannot tell
+//!   where in the text it belongs.
 //! - **contrast** — text that is hard to read. The measure is the
 //!   **contrast ratio** of the WCAG 2: four and a half for normal text
 //!   and three for large text. A ratio under three is a **warning**
@@ -157,6 +160,19 @@ pub fn issues_of(document: &Document, node: &Node) -> Vec<Issue> {
                 kind: "error",
                 rule: "altText",
                 issue: format!("The picture `{}` has no alternative text", media.name),
+                place: media.id,
+            });
+        }
+        // A picture that **floats** is not in the line of the text,
+        // and the reading order is unclear.
+        if crate::media::is_floating(media) {
+            issues.push(Issue {
+                kind: "tip",
+                rule: "floating",
+                issue: format!(
+                    "The picture `{}` is not in line with the text, so its reading order is unclear",
+                    media.name
+                ),
                 place: media.id,
             });
         }

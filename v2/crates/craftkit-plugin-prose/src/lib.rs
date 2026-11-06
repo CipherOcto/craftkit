@@ -138,7 +138,7 @@ pub use equations::{AddEquation, SetEquation};
 pub use finding::{Find, Replace};
 pub use footnotes::{AddFootnote, ReadFootnotes};
 pub use links::ReadLinks;
-pub use media::{SetAlt, SetDecorative};
+pub use media::{SetAlt, SetDecorative, SetPlacement};
 pub use numbering::{AddList, ReadNumber, SetNumbering};
 pub use outline::{ReadOutline, ReadStyleLevel, SetStyleLevel};
 pub use page::{GetPage, SetPage};
@@ -423,6 +423,7 @@ impl MediaKind {
             },
             "alt": crate::media::alt_of(node).map(|alt| json!(alt)).unwrap_or(Json::Null),
             "decorative": crate::media::is_decorative(node),
+            "placement": crate::media::placement_of(node),
         }))
     }
 }
@@ -1018,6 +1019,7 @@ craftkit_sdk::plugin_anchor!(
     AddMedia,
     SetAlt,
     SetDecorative,
+    SetPlacement,
     SetTitle,
     SetHeader,
     SetTableAlt,
