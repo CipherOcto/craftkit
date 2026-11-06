@@ -154,6 +154,7 @@ mod remove;
 mod rotation;
 mod scripts;
 mod signatures;
+mod structure;
 mod tabs;
 mod trailer;
 mod validation;
@@ -186,6 +187,7 @@ pub use preflight::Preflight;
 pub use remove::RemoveObject;
 pub use rotation::{ReadRotation, RotatePage};
 pub use signatures::ReadSignatures;
+pub use structure::ReadStructure;
 pub use tabs::{ReadTabOrder, SetTabs};
 pub use trailer::ReadTrailer;
 pub use validation::ReadValidation;
@@ -2079,6 +2081,7 @@ craftkit_sdk::plugin_anchor!(
     ReadInformation,
     ReadDestinations,
     ReadSignatures,
+    ReadStructure,
     SetPageLabels,
     RemoveObject,
     SetNumber,
