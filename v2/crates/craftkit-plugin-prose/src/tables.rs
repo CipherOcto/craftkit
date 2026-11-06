@@ -25,7 +25,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session, Text};
 
 /// Whether the **first row** of a table is a **header row**.
 ///
@@ -34,6 +34,61 @@ use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session};
 /// that does not say is a table that does not say.
 pub fn has_a_header(node: &Node) -> bool {
     node.data.get("header").and_then(|header| header.as_bool()).unwrap_or(false)
+}
+
+/// The **alt text** of a table: what it says about itself.
+///
+/// A table that says nothing has no alt text, and the answer is
+/// nothing and not an empty text that means the same thing.
+pub fn alt_of(table: &Node) -> Option<String> {
+    table
+        .data
+        .get("alt")
+        .and_then(|alt| alt.as_str())
+        .map(|alt| alt.to_string())
+        .filter(|alt| !alt.trim().is_empty())
+}
+
+/// **Say** what a table is.
+#[derive(Command)]
+#[command(id = "prose.table.alt", area = "prose", layer = "prose", icon = "pencil", mutates, undoable)]
+pub struct SetTableAlt {
+    /// The table.
+    pub table: NodeRef,
+    /// The text that stands for it.
+    ///
+    /// An empty text takes the alt text away.
+    pub alt: Text,
+}
+
+impl SetTableAlt {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "prose.table.alt".to_string();
+        let table = self.table.0;
+        the_table(session, &id, table)?;
+        let alt = self.alt.0.trim().to_string();
+        let node = session.document_mut()?.node_mut(table);
+        let Some(node) = node else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{table}`"),
+            });
+        };
+        if alt.is_empty() {
+            // An **empty** value takes the fact away.
+            if let Some(map) = node.data.as_object_mut() {
+                map.remove("alt");
+            }
+        } else {
+            node.data["alt"] = json!(alt.clone());
+        }
+        Ok(Outcome::changed(if alt.is_empty() {
+            format!("the table `{table}` says nothing about itself")
+        } else {
+            format!("the table `{table}` says what it is")
+        })
+        .with_data(json!({ "table": table, "alt": alt })))
+    }
 }
 
 /// The **rows** of a table: how many there are.

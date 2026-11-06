@@ -147,7 +147,7 @@ pub use references::{AddReference, ReadReference, SetReference};
 pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
 pub use revisions::ReadRevisions;
 pub use styles::{ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
-pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell, SetHeader};
+pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell, SetHeader, SetTableAlt};
 pub use titles::SetTitle;
 
 /// The prose layer.
@@ -246,6 +246,7 @@ impl TableKind {
             "rows": rows,
             "columns": columns,
             "header": crate::tables::has_a_header(node),
+            "alt": crate::tables::alt_of(node).map(|alt| json!(alt)).unwrap_or(Json::Null),
         }))
     }
 }
@@ -1017,6 +1018,7 @@ craftkit_sdk::plugin_anchor!(
     SetAlt,
     SetTitle,
     SetHeader,
+    SetTableAlt,
     CheckAccessibility,
     AddParagraph,
     AddTable,

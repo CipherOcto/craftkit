@@ -24,6 +24,8 @@
 //!   columns are.
 //! - **docTitle** — a document with no title. It is a **tip**: nothing
 //!   says what the document is.
+//! - **tableAltText** — a table that says nothing about itself. It is
+//!   a **warning**: nothing says what the table is.
 //! - **contrast** — text that is hard to read. The measure is the
 //!   **contrast ratio** of the WCAG 2: four and a half for normal text
 //!   and three for large text. A ratio under three is a **warning**
@@ -177,6 +179,15 @@ pub fn issues_of(document: &Document, node: &Node) -> Vec<Issue> {
                 });
             }
             blank.clear();
+        }
+        // The **tables**: a table that says nothing about itself.
+        if block.kind == "prose.block.table" && crate::tables::alt_of(block).is_none() {
+            issues.push(Issue {
+                kind: "warning",
+                rule: "tableAltText",
+                issue: "The table has no alternative text, and nothing says what it is".to_string(),
+                place: block.id,
+            });
         }
         // The **tables**: a table with two or more rows says what
         // its columns are in a header row.
