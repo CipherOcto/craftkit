@@ -3971,6 +3971,7 @@ so.
 | the **tab order** of a form | **built.** A page says how its annotations are reached — in rows, in columns, or in the order it lists them — and the order is read (§534) | §534 |
 | the **tab order** of a page | **built.** The order a page's annotations are reached in may be said, and the order **annotations** takes the fact away (§535) | §535 |
 | the **XMP metadata** of a file | **built.** The packet that says what the file is is written from the information the file has, and the catalog names it (§536) | §536 |
+| the **output intent** of a file | **built.** The intent that says what the colours mean names an sRGB profile, and the profile is built in code (§537) | §537 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35194,3 +35195,66 @@ follows.
 - **The PDF/UA identification is not written**: the packet says the
   PDF/A part, and a file that follows PDF/UA says that in its own
   property.
+
+## 537. The output intent of a file
+
+A PDF/A file says what the colours on its pages mean with an **output
+intent**: a dictionary that names an ICC profile.
+
+### What was built
+
+- **One command** in the pdf battery: `pdf.intent.write`. It builds
+  the sRGB **profile in code**, writes it to a file of its own, makes
+  the intent that names it, and the catalog names the intent.
+- The **rules**:
+  - the profile is a **version 2** ICC profile: a header of a hundred
+    and twenty-eight bytes, a table of tags, and the tags themselves;
+  - the tags begin on **four-byte boundaries**, and the table says
+    where each one is and how long it is;
+  - the profile is **uncompressed**, and the file says how many colour
+    components it has: `N 3`;
+  - the intent says what it is with the names the file uses: `/S` is
+    `GTS_PDFA1`, `/Type` is `OutputIntent`;
+  - a path that is **empty** and a file with **no catalog** are
+    refused.
+
+### What the port found
+
+- **The tree's profile is built in code and here it is too**: the tree
+  makes the sRGB profile from the published primaries of
+  IEC 61966-2-1, adapted to D50, with the tone curve sampled at a
+  thousand and twenty-four points — and there is no profile file in
+  either tree. That matters here: a tree that holds no assets holds
+  no profile either, so the profile is code.
+- **The tree's profile says it is a display profile of RGB and here it
+  does too**: the header says the device class, the data colour space
+  and the connection space, and the tags carry the white point, the
+  three primaries and the tone curve.
+- **The tree's intent says its subtype with `/S` and this tree's own
+  checker did not**: the kit's rule for the output intent looked for
+  `/Subtype`, a name no PDF file has — the file says `/S`. The rule
+  now reads the name the file uses, and the tree's rule is the tree's
+  rule.
+- **The tree's fix keeps the intents the file already had and here it
+  does too**: the catalog's `/OutputIntents` is a list, and a second
+  intent joins the list rather than replacing it.
+
+### What it cost
+
+- **Six tests** in the pdf battery (`tests/intent.rs`): the profile
+  being well formed, the catalog naming the intent, the intent saying
+  what it is with the name the file uses, the checker stopping to say
+  the colour needs an output intent, a path that is empty being
+  refused, and a file with no catalog being refused.
+- **One new module**: `intent.rs`. The pdf battery now carries **44**
+  commands and the MCP server **734**.
+
+### What it does not settle
+
+- **The checker does not fix it by itself**: the tree's `convert` adds
+  the intent as part of the conversion, and here the intent is written
+  by its own command.
+- **Only the sRGB profile is here**: a file that follows another
+  colour space has no way to say so here.
+- **The profile is not checked**: the checker reads the intent and
+  believes it, and it does not open the profile to see what is inside.
