@@ -133,6 +133,7 @@ mod filters;
 mod fonts;
 mod free;
 mod information;
+mod intent;
 mod labels;
 mod loader;
 mod metadata;
@@ -158,6 +159,7 @@ pub use convert::Convert;
 pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField, SetFlags, SetParent};
 pub use fonts::ReadFonts;
 pub use information::SetInformation;
+pub use intent::WriteIntent;
 pub use labels::SetPageLabels;
 pub use metadata::WriteMetadata;
 pub use number::SetNumber;
@@ -2011,6 +2013,7 @@ craftkit_sdk::plugin_anchor!(
     ReadTabOrder,
     SetTabs,
     WriteMetadata,
+    WriteIntent,
     SetField,
     SetFlags,
     SetParent,

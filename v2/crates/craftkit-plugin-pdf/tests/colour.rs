@@ -62,7 +62,7 @@ fn a_pdfa_intent(session: &mut Session) {
         3,
         json!([
             ["Type", "OutputIntent"],
-            ["Subtype", "GTS_PDFA1"],
+            ["S", "GTS_PDFA1"],
             ["OutputConditionIdentifier", "sRGB"],
             ["DestOutputProfile", { "ref": [4, 0] }],
         ]),

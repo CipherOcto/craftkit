@@ -270,7 +270,9 @@ fn has_a_pdfa_intent(document: &Document) -> bool {
     intents.iter().any(|intent| {
         let Some(node) = node_of(document, intent) else { return false };
         let entries = entries_of(node);
-        name_of(&entries, "Subtype").as_deref() == Some("GTS_PDFA1")
+        // The **subtype** of the intent is `/S`, the name the file
+        // uses — not `/Subtype`, which no file has.
+        name_of(&entries, "S").as_deref() == Some("GTS_PDFA1")
             && entry(&entries, "DestOutputProfile").is_some()
     })
 }
