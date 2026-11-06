@@ -137,6 +137,7 @@ mod objects;
 mod outline;
 mod pages;
 mod predictors;
+mod preflight;
 mod remove;
 mod rotation;
 mod writer;
@@ -152,6 +153,7 @@ pub use labels::SetPageLabels;
 pub use number::SetNumber;
 pub use outline::{AddOutline, ReadOutline};
 pub use pages::RemovePage;
+pub use preflight::Preflight;
 pub use remove::RemoveObject;
 pub use rotation::{ReadRotation, RotatePage};
 
@@ -1974,6 +1976,7 @@ craftkit_sdk::plugin_anchor!(
     StreamKind,
     InformationKind,
     AddObject,
+    Preflight,
     AddStream,
     SetInformation,
     SetPageLabels,
