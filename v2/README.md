@@ -3990,6 +3990,7 @@ so.
 | the **label** of the total row of a table | **built.** A table that gains a total row shows a label in it — the tree's own word is Total, and an empty label takes it away (§553) | §553 |
 | the **deleting** of a style | **built.** A style that is not used may be taken away — the blocks that were in it are left as they are, and a style another style is based on is refused (§554) | §554 |
 | the **styles** of a document | **built.** A document may be asked what styles it holds — the kind, the base and the blocks that are in it (§555) | §555 |
+| the **information** of a file | **built.** The information dictionary says who wrote the file and what it is called, and it is found by the node or by the trailer (§556) | §556 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36314,3 +36315,60 @@ A document may be asked what **styles** it holds.
   one document.
 - **The styles are not in the order a person made them**: they are
   in the order the document holds them.
+
+## 556. The information of a file
+
+The **information dictionary** of a file says who wrote it, what it
+is called and when it was made.
+
+### What was built
+
+- The new command **`pdf.info.read`** finds the information dictionary
+  and reads it:
+  - the **title**, the **author**, the **subject**, the
+    **keywords**, the **creator**, the **producer** and the
+    **dates**;
+  - or **one entry** of it, by its key — a key the information does
+    not have is refused;
+  - a file that has no information dictionary has no information, and
+    the answer says so.
+- The information is found in **one of two ways**:
+  - a node of the kind `pdf.info` **names** the object — that is how
+    a document made in this tree says which object it is, and the
+    name is the **node** of the object;
+  - the **trailer** names it with `/Info`, which is what a file says,
+    and the name is the **number** of the object.
+- The **packet of XMP metadata** is now built from the same place, so
+  a file that was **loaded** may have its information written out —
+  before this, only a document made in this tree had any.
+
+### What the port found
+
+- **The tree's information is a table of its own and this tree's is a
+  dictionary of entries**: the tree's names are the PDF's names —
+  title, author, subject, keywords, creator — and here the entries
+  are the object's own, and the list is open.
+- **The tree's document properties are read on demand**: the tree
+  asks the document for its properties when it wants them, and here
+  the information is read from the object the file names rather than
+  from a table of its own.
+
+### What it cost
+
+- **Five tests** in the pdf battery (`tests/inforeading.rs`): the
+  information of a file, an entry the information does not have, one
+  entry by its key, a key the information does not have, and a file
+  with no information.
+- **One new command** (`pdf.info.read`) and one shared reading of the
+  information. The pdf battery now carries **52** commands and the
+  MCP server **750**.
+
+### What it does not settle
+
+- **The information is not written**: `pdf.info.set` says which
+  object is the information, and the entries of that object are the
+  object's own — there is no command that writes a title.
+- **The names are not all named**: the entries are listed as they
+  are, and the eight the tree names are named for the reader.
+- **The information is not of the trailer's own**: a file whose
+  trailer names no information has none, whatever its objects hold.
