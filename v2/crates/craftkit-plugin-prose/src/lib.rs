@@ -105,6 +105,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Relation, Session, Text};
 
+mod accessibility;
 mod bookmarks;
 mod characters;
 mod comments;
@@ -124,6 +125,7 @@ mod revisions;
 mod styles;
 mod tables;
 
+pub use accessibility::CheckAccessibility;
 pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
 pub use characters::FormatRun;
 pub use comments::{DeleteComment, GetComment, SetComment};
@@ -982,6 +984,7 @@ craftkit_sdk::plugin_anchor!(
     AddStyle,
     AddMedia,
     SetAlt,
+    CheckAccessibility,
     AddParagraph,
     AddTable,
     AddEquation,
