@@ -3969,6 +3969,7 @@ so.
 | the **decorative** picture | **built.** A picture may say nothing about itself on purpose, and the checker does not ask it for words (§532) | §532 |
 | the **placement** of a picture | **built.** A picture sits in the line of the text or floats beside it, and a floating one makes the reading order unclear (§533) | §533 |
 | the **tab order** of a form | **built.** A page says how its annotations are reached — in rows, in columns, or in the order it lists them — and the order is read (§534) | §534 |
+| the **tab order** of a page | **built.** The order a page's annotations are reached in may be said, and the order **annotations** takes the fact away (§535) | §535 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35065,3 +35066,61 @@ order they were made in: it is the order the **page** says.
   not here.
 - **The pages do not come from the page tree**: the tree's pages come
   from the tree of pages, and here they come from the document.
+
+## 535. The tab order of a page
+
+The order in which the annotations of a page are reached is a fact of
+the page, and it may be said.
+
+### What was built
+
+- **One command** in the pdf battery: `pdf.page.tabs`. It says the
+  order a page's annotations are reached in, and the reading of the
+  tab order says it too.
+- The **orders** are this tree's own names: `rows`, `columns`,
+  `structure` and `annotations`.
+- The **rules**:
+  - a node that is **not a page** is refused;
+  - an order that is **not an order** is refused, and the refusal
+    names the orders there are;
+  - an order that is **not said** leaves the page as it was;
+  - the order **annotations** takes the fact away — a page that says
+    nothing is reached in the annotation order, and a page that says
+    so has nothing to say.
+
+### What the port found
+
+- **The tree's order is a name in the page and here it is a name in
+  the page too**: the tree's editor writes `/Tabs R`, `/Tabs C` or
+  `/Tabs S` on the page, and takes the entry away for the annotation
+  order. Here the same three names are written, under this tree's own
+  words for them.
+- **The tree's editor sets the order of a list of pages and here it is
+  one page at a time**: the tree's command takes the pages it is to
+  set and sets them all. Here a command is about one thing, so the
+  order of a page is said on that page.
+- **The tree's annotation order takes the entry away and here it does
+  too**: the tree removes `/Tabs` when the order is the annotation
+  order, because a page that says nothing says the annotation order.
+
+### What it cost
+
+- **Seven tests** in the pdf battery (`tests/pagetabs.rs`): a page
+  being said to be reached in rows, the page saying the name the file
+  uses, the order annotations taking the fact away, an order that is
+  not an order being refused, an order that is not said leaving the
+  page as it was, a node that is not a page being refused, and a node
+  that is not there being refused.
+- **No new module**: the command grows the tabs module. The pdf
+  battery now carries **42** commands and the MCP server **732**.
+
+### What it does not settle
+
+- **The pages are not set together**: the tree's editor sets a list of
+  pages in one breath, and here a page is set on its own.
+- **The order is not read back from the file into the order**: the
+  order that is said is the order the page holds, and the reading of
+  the tab order works it out from the page.
+- **The structure order is still the annotation order**: the name is
+  written and the file reads it, but the structure of the document is
+  not here.
