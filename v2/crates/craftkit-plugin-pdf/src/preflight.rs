@@ -137,22 +137,22 @@ fn unescape(text: &str) -> String {
 
 /// The **entries** of a node's dictionary: the key and the value, in
 /// the order the file had them.
-fn entries_of(node: &Node) -> Vec<(String, Json)> {
+pub fn entries_of(node: &Node) -> Vec<(String, Json)> {
     crate::entries_of(&node.data)
 }
 
 /// The **entry** of a dictionary, by its key.
-fn entry<'a>(entries: &'a [(String, Json)], key: &str) -> Option<&'a Json> {
+pub fn entry<'a>(entries: &'a [(String, Json)], key: &str) -> Option<&'a Json> {
     entries.iter().find(|(name, _)| name == key).map(|(_, value)| value)
 }
 
 /// The **name** an entry says: the value of a name entry is a text.
-fn name_of(entries: &[(String, Json)], key: &str) -> Option<String> {
+pub fn name_of(entries: &[(String, Json)], key: &str) -> Option<String> {
     entry(entries, key)?.as_str().map(|text| text.to_string())
 }
 
 /// The **catalog** of the document: the object that says it is one.
-fn the_catalog(document: &Document) -> Option<&Node> {
+pub fn the_catalog(document: &Document) -> Option<&Node> {
     document.walk().find(|node| {
         node.kind == "pdf.object"
             && entries_of(node).iter().any(|(key, value)| key == "Type" && value.as_str() == Some("Catalog"))
@@ -165,7 +165,7 @@ fn number_of(node: &Node) -> Option<u64> {
 }
 
 /// The **node** a reference names: the node with that object number.
-fn node_of<'a>(document: &'a Document, value: &'a Json) -> Option<&'a Node> {
+pub fn node_of<'a>(document: &'a Document, value: &Json) -> Option<&'a Node> {
     let number = value.get("ref").and_then(|pair| pair.as_array())?.first()?;
     let number = number.as_u64()?;
     document.walk().find(|node| number_of(node) == Some(number))
@@ -204,7 +204,7 @@ pub fn declared(document: &Document) -> Declared {
 }
 
 /// Whether an object is an **action**: the tree's own rule.
-fn is_action(entries: &[(String, Json)]) -> bool {
+pub fn is_action(entries: &[(String, Json)]) -> bool {
     match name_of(entries, "Type") {
         Some(kind) => kind == "Action",
         None => !(entry(entries, "P").is_some() && entry(entries, "K").is_some()),
@@ -275,6 +275,17 @@ fn has_a_pdfa_intent(document: &Document) -> bool {
     })
 }
 
+/// The **action** a dictionary holds, when it is one that a PDF/A
+/// file may not have.
+///
+/// The answer is the name of the action — `JavaScript`, `Launch` and
+/// the rest of the tree's own list — and nothing when the dictionary
+/// is not one of them.
+pub fn forbidden_action(entries: &[(String, Json)]) -> Option<String> {
+    let action = name_of(entries, "S")?;
+    if FORBIDDEN_ACTIONS.contains(&action.as_str()) && is_action(entries) { Some(action) } else { None }
+}
+
 /// The **issues** the document has: the rules it breaks.
 pub fn issues(document: &Document, level: Option<Level>) -> Vec<Issue> {
     let mut issues: Vec<Issue> = Vec::new();
@@ -308,9 +319,32 @@ pub fn issues(document: &Document, level: Option<Level>) -> Vec<Issue> {
             issue("6.2.11.4", format!("The font {} isn't embedded", font.base), false);
         }
     }
-    // The **encryption**: a PDF/A file may not be encrypted.
+    // The **encryption**: a PDF/A file may not be encrypted. The tree
+    // can take the encryption away, because it decrypts the file when
+    // it opens it; this tree cannot, so the rule is not one it can
+    // fix.
     if crate::trailer::is_encrypted(document) {
-        issue("6.1.3", "The document is encrypted".to_string(), true);
+        issue("6.1.3", "The document is encrypted".to_string(), false);
+    }
+    // The **form**: it may not ask the viewer to make the
+    // appearances.
+    if let Some(catalog) = the_catalog(document) {
+        let entries = entries_of(catalog);
+        if let Some(form) = entry(&entries, "AcroForm") {
+            // The form is a dictionary of its own: either an object of
+            // the file, or a dictionary written inside the catalog.
+            let form = match node_of(document, form) {
+                Some(node) => entries_of(node),
+                None => crate::entries_of(form),
+            };
+            if form.iter().any(|(key, value)| key == "NeedAppearances" && value == &Json::Bool(true)) {
+                issue(
+                    "6.4.1",
+                    "The form asks viewers to make appearances (NeedAppearances)".to_string(),
+                    true,
+                );
+            }
+        }
     }
     // The **colour**: device colour needs a PDF/A output intent.
     let (rgb, cmyk) = device_colour(document);
