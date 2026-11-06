@@ -123,6 +123,7 @@ mod paragraph;
 mod references;
 mod resolving;
 mod revisions;
+mod statistics;
 mod styles;
 mod tables;
 mod titles;
@@ -146,6 +147,7 @@ pub use paragraph::{ReadBlockParagraph, ReadStyleParagraph, SetStyleParagraph};
 pub use references::{AddReference, ReadReference, SetReference};
 pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
 pub use revisions::ReadRevisions;
+pub use statistics::ReadStatistics;
 pub use styles::{ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
 pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell, SetHeader, SetTableAlt};
 pub use titles::SetTitle;
@@ -1021,6 +1023,7 @@ craftkit_sdk::plugin_anchor!(
     SetDecorative,
     SetPlacement,
     SetTitle,
+    ReadStatistics,
     SetHeader,
     SetTableAlt,
     CheckAccessibility,
