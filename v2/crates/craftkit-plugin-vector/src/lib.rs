@@ -77,12 +77,14 @@
 mod dashes;
 mod gradients;
 mod opacity;
+mod pathfinder;
 mod reshape;
 mod shapes;
 
 pub use dashes::DashPath;
 pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
 pub use opacity::{SetOpacity, fill_at, stroke_at};
+pub use pathfinder::{CropPaths, TrimPaths};
 pub use shapes::{AddLine, AddSpiral, AddStar};
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
@@ -2795,6 +2797,8 @@ craftkit_sdk::plugin_anchor!(
     UnitePaths,
     SubtractPaths,
     IntersectPaths,
+    CropPaths,
+    TrimPaths,
     SimplifyPath,
     OffsetPath,
     JoinPath,
