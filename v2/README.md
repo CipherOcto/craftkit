@@ -3973,6 +3973,7 @@ so.
 | the **XMP metadata** of a file | **built.** The packet that says what the file is is written from the information the file has, and the catalog names it (§536) | §536 |
 | the **output intent** of a file | **built.** The intent that says what the colours mean names an sRGB profile, and the profile is built in code (§537) | §537 |
 | the **flags** of an annotation | **built.** An annotation says whether it prints and whether it is hidden, and the checker says when it may not (§538) | §538 |
+| the **images** of a file | **built.** An image may not ask to be interpolated, and it may not carry alternates — and the conversion clears both (§539) | §539 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35324,3 +35325,59 @@ prints, whether it is hidden, whether it may be turned.
   asks for an appearance stream too, and here it does not.
 - **The checker does not fix it by itself**: the flags are said by
   their own command.
+
+## 539. The images of a file
+
+An image may not ask to be **interpolated**, and it may not carry
+**alternates** or **OPI information**.
+
+### What was built
+
+- The **checker** gained the rule **6.2.8**: an image that asks to
+  be interpolated, or that has alternates or OPI information, breaks
+  it — and each of the two is said in its own words.
+- The **conversion** clears them: the interpolation flag is cleared
+  and the alternates and the OPI information go away. The report says
+  how many images it changed.
+- The **rules**:
+  - an image is a **stream** that says it is one: `/Subtype` is
+    `/Image`;
+  - the interpolation is **cleared**, not taken away: the flag is
+    there and it is false, and a file that says nothing is not asking
+    for anything.
+
+### What the port found
+
+- **The tree's two rules are one clause and here they are one clause
+  too**: the tree's checker says *6.2.8* for the interpolation and
+  *6.2.8* for the alternates, in two sentences, and here the same.
+- **The tree's fix clears the interpolation and takes the alternates
+  away and here it does too**: the tree's conversion sets the
+  interpolation to false and removes the `/Alternates` and the `/OPI`
+  entries of every image it finds.
+- **The tree's fix counts the images it changed and here it does too**:
+  the report says how many, and an image that asked for nothing is not
+  counted, because nothing about it changed.
+
+### What it cost
+
+- **Seven tests** in the pdf battery (`tests/images.rs`): an image
+  that asks to be interpolated breaking the rule, an image with
+  alternates breaking the rule, an image with OPI information
+  breaking the rule, an image that asks for nothing breaking nothing,
+  the conversion clearing the interpolation, the conversion taking the
+  alternates and the OPI away, and the conversion saying what it
+  fixed.
+- **No new module**: the rule grows the preflight module and the fix
+  grows the convert module. The pdf battery now carries **45**
+  commands and the MCP server **735**.
+
+### What it does not settle
+
+- **The other image rules are not here**: the tree's checker also says
+  that a PostScript XObject is not allowed and that a stream may not
+  use LZW compression, and here they are not.
+- **The conversion does not write the metadata or the intent**: they
+  are written by their own commands (§536, §537).
+- **The embedded files are not marked**: the tree's conversion marks
+  the relationship of an embedded file, and here it does not.
