@@ -163,19 +163,17 @@ fn a_fill_that_makes_a_cell_read_itself_is_refused() {
     assert_eq!(formula_of(&session, sheet, "A2"), None, "and nothing was written");
 }
 
-/// A reference that would leave the sheet is refused: the tree writes
-/// `#REF!` there.
+/// A reference that would leave the sheet names the error: the tree
+/// writes `#REF!` there.
 #[test]
-fn a_reference_that_would_leave_the_sheet_is_refused() {
+fn a_reference_that_would_leave_the_sheet_names_the_error() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
     set_formula(&mut session, sheet, "A3", "=A1");
-    let error = session
+    session
         .execute("grid.range.fill", &json!({ "sheet": sheet, "from": "A3", "to": "A1:A3" }))
-        .expect_err("the fill is refused");
-    let message = error.to_string();
-    assert!(message.contains("leave the sheet"), "the refusal says why: {message}");
-    assert_eq!(formula_of(&session, sheet, "A2"), None, "and nothing was written");
+        .expect("the fill is done");
+    assert_eq!(formula_of(&session, sheet, "A2"), Some("=#REF!".to_string()), "the copy names the error");
 }
 
 /// The value of a copied formula is **derived**: it is computed from

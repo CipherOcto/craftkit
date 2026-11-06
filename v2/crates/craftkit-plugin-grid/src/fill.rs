@@ -759,15 +759,7 @@ impl FillRange {
                     })?;
                     let rows = cell.row as i64 - from.cell.row as i64;
                     let columns = cell.col as i64 - from.cell.col as i64;
-                    let moved =
-                        formula::shift(&expression, rows, columns).map_err(|error| EngineError::Failed {
-                            id: id.clone(),
-                            message: format!(
-                                "the formula in {} cannot be copied: {}",
-                                from.cell.to_text(),
-                                error.message
-                            ),
-                        })?;
+                    let moved = formula::shift(&expression, rows, columns);
                     let prefix = if text.trim_start().starts_with('=') { "=" } else { "" };
                     let copied = format!("{prefix}{}", moved.to_text());
                     writes.push(Write { cell: *cell, formula: Some(copied), value: None, format });

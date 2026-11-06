@@ -2622,31 +2622,37 @@ impl Expr {
     /// anchored moves with the cell that holds it. A reference that
     /// would leave the sheet is gone, and the expression is gone with
     /// it: `None` says that the formula cannot be moved.
-    pub fn shifted(&self, row_delta: i64, col_delta: i64) -> Option<Expr> {
+    /// The expression with its **relative references moved**.
+    ///
+    /// A reference that is **anchored** — the `$` before the letters or
+    /// before the number — does not move, and a reference that is not
+    /// anchored moves with the cell that holds it. A reference that
+    /// would leave the sheet becomes the **error** `#REF!`, which is
+    /// what the tree writes there.
+    pub fn shifted(&self, row_delta: i64, col_delta: i64) -> Expr {
         match self {
-            Expr::Cell { sheet, anchor } => {
-                Some(Expr::Cell { sheet: sheet.clone(), anchor: anchor.shifted(row_delta, col_delta)? })
+            Expr::Cell { sheet, anchor } => match anchor.shifted(row_delta, col_delta) {
+                Some(anchor) => Expr::Cell { sheet: sheet.clone(), anchor },
+                None => Expr::Error(REF_ERROR.to_string()),
+            },
+            Expr::Range { sheet, start, end } => {
+                match (start.shifted(row_delta, col_delta), end.shifted(row_delta, col_delta)) {
+                    (Some(start), Some(end)) => Expr::Range { sheet: sheet.clone(), start, end },
+                    _ => Expr::Error(REF_ERROR.to_string()),
+                }
             }
-            Expr::Range { sheet, start, end } => Some(Expr::Range {
-                sheet: sheet.clone(),
-                start: start.shifted(row_delta, col_delta)?,
-                end: end.shifted(row_delta, col_delta)?,
-            }),
-            Expr::Name(name) => Some(Expr::Name(name.clone())),
-            Expr::Call(name, arguments) => Some(Expr::Call(
+            Expr::Name(name) => Expr::Name(name.clone()),
+            Expr::Call(name, arguments) => Expr::Call(
                 name.clone(),
-                arguments
-                    .iter()
-                    .map(|argument| argument.shifted(row_delta, col_delta))
-                    .collect::<Option<Vec<_>>>()?,
-            )),
-            Expr::Negate(inner) => Some(Expr::Negate(Box::new(inner.shifted(row_delta, col_delta)?))),
-            Expr::Binary(operator, left, right) => Some(Expr::Binary(
+                arguments.iter().map(|argument| argument.shifted(row_delta, col_delta)).collect(),
+            ),
+            Expr::Negate(inner) => Expr::Negate(Box::new(inner.shifted(row_delta, col_delta))),
+            Expr::Binary(operator, left, right) => Expr::Binary(
                 operator.clone(),
-                Box::new(left.shifted(row_delta, col_delta)?),
-                Box::new(right.shifted(row_delta, col_delta)?),
-            )),
-            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => Some(self.clone()),
+                Box::new(left.shifted(row_delta, col_delta)),
+                Box::new(right.shifted(row_delta, col_delta)),
+            ),
+            Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => self.clone(),
         }
     }
 
@@ -2882,13 +2888,14 @@ pub fn rename_in_formula(text: &str, old: &str, new: &str) -> Option<String> {
 /// A formula's **text** with its relative references moved.
 ///
 /// The text is parsed, the references are moved and the expression is
-/// printed. A formula that does not parse, or a reference that would
-/// leave the sheet, is `None`: the formula cannot be moved.
+/// printed. A reference that would leave the sheet becomes the error
+/// `#REF!`. A formula that does not parse is `None`: a formula that
+/// cannot be read is not moved.
 pub fn shift_in_formula(text: &str, row_delta: i64, col_delta: i64) -> Option<String> {
     let expression = parse(text).ok()?;
-    let shifted = expression.shifted(row_delta, col_delta)?;
+    let shifted = expression.shifted(row_delta, col_delta);
     let printed = shifted.to_text();
-    if text.trim_start().starts_with('=') { Some(format!("={printed}")) } else { Some(printed) }
+    Some(if text.trim_start().starts_with('=') { format!("={printed}") } else { printed })
 }
 
 /// The formula's **text** with **rows inserted** at `at`.
@@ -3017,13 +3024,6 @@ fn sheet_prefix(sheet: &Option<String>) -> String {
 // The shift: a formula copied, and its references moved.
 // ---------------------------------------------------------------------------
 
-/// What went wrong when a formula was **shifted**.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ShiftError {
-    /// What went wrong, in words.
-    pub message: String,
-}
-
 /// Move a formula's **relative** references by `(dr, dc)`.
 ///
 /// The tree's `shift_relative`: the relative part of every reference
@@ -3031,42 +3031,32 @@ pub struct ShiftError {
 /// cell in every cell a formula is copied to, and `A1` is the cell to
 /// the right of the one it was written in.
 ///
-/// A reference that would leave the sheet is **refused**: the tree
-/// writes `#REF!` there and carries on, and here the whole copy is
-/// refused and the reference is named.
-pub fn shift(expression: &Expr, dr: i64, dc: i64) -> Result<Expr, ShiftError> {
+/// A reference that would leave the sheet becomes the **error**
+/// `#REF!`, which is what the tree writes there.
+pub fn shift(expression: &Expr, dr: i64, dc: i64) -> Expr {
     match expression {
-        Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => Ok(expression.clone()),
+        Expr::Number(_) | Expr::Text(_) | Expr::Bool(_) | Expr::Error(_) => expression.clone(),
         // A **name** does not move: it stands for a range and not for
         // a place, so there is nothing relative in it.
-        Expr::Name(_) => Ok(expression.clone()),
-        Expr::Cell { sheet, anchor } => {
-            let moved = anchor.moved(dr, dc).ok_or_else(|| ShiftError {
-                message: format!("the reference {} would leave the sheet", anchor.to_text()),
-            })?;
-            Ok(Expr::Cell { sheet: sheet.clone(), anchor: moved })
-        }
-        Expr::Range { sheet, start, end } => {
-            let start = start.moved(dr, dc).ok_or_else(|| ShiftError {
-                message: format!("the reference {} would leave the sheet", start.to_text()),
-            })?;
-            let end = end.moved(dr, dc).ok_or_else(|| ShiftError {
-                message: format!("the reference {} would leave the sheet", end.to_text()),
-            })?;
-            Ok(Expr::Range { sheet: sheet.clone(), start, end })
-        }
+        Expr::Name(_) => expression.clone(),
+        Expr::Cell { sheet, anchor } => match anchor.moved(dr, dc) {
+            Some(anchor) => Expr::Cell { sheet: sheet.clone(), anchor },
+            None => Expr::Error(REF_ERROR.to_string()),
+        },
+        Expr::Range { sheet, start, end } => match (start.moved(dr, dc), end.moved(dr, dc)) {
+            (Some(start), Some(end)) => Expr::Range { sheet: sheet.clone(), start, end },
+            _ => Expr::Error(REF_ERROR.to_string()),
+        },
         Expr::Call(name, arguments) => {
             let mut moved = Vec::new();
             for argument in arguments {
-                moved.push(shift(argument, dr, dc)?);
+                moved.push(shift(argument, dr, dc));
             }
-            Ok(Expr::Call(name.clone(), moved))
+            Expr::Call(name.clone(), moved)
         }
-        Expr::Negate(inner) => Ok(Expr::Negate(Box::new(shift(inner, dr, dc)?))),
-        Expr::Binary(operator, left, right) => Ok(Expr::Binary(
-            operator.clone(),
-            Box::new(shift(left, dr, dc)?),
-            Box::new(shift(right, dr, dc)?),
-        )),
+        Expr::Negate(inner) => Expr::Negate(Box::new(shift(inner, dr, dc))),
+        Expr::Binary(operator, left, right) => {
+            Expr::Binary(operator.clone(), Box::new(shift(left, dr, dc)), Box::new(shift(right, dr, dc)))
+        }
     }
 }

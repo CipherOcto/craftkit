@@ -290,7 +290,7 @@ fn expression_at(text: &str, first: CellRef, at: CellRef) -> Option<Expr> {
     }
     let dr = at.row as i64 - first.row as i64;
     let dc = at.col as i64 - first.col as i64;
-    formula::shift(&expression, dr, dc).ok()
+    Some(formula::shift(&expression, dr, dc))
 }
 
 /// The number a rule's formula says, in a sheet, at a cell.
