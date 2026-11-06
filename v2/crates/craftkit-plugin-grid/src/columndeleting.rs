@@ -319,6 +319,19 @@ pub fn delete_columns(sheet: &mut Node, name: &str, at: u64, count: u64) -> Resu
     if let Some(filter) = sheet.data.get("filter").cloned() {
         sheet.data["filter"] = moved_filter(&filter, at, count)?;
     }
+    // The **facts that name an area**: the conditional formats, the
+    // validations and the sparklines. A fact whose area is wholly in
+    // the columns that are deleted goes away with them, and a fact
+    // whose area covers part of them refuses.
+    for key in ["conditionals", "validations"] {
+        let Some(value) = sheet.data.get(key).cloned() else { continue };
+        let moved = crate::moving::moved_ranges(&value, crate::moving::Way::Columns, at, count, false)?;
+        sheet.data[key] = moved;
+    }
+    if let Some(value) = sheet.data.get("sparklines").cloned() {
+        let moved = crate::moving::moved_sparklines(&value, crate::moving::Way::Columns, at, count, false)?;
+        sheet.data["sparklines"] = moved;
+    }
     Ok(deleted)
 }
 

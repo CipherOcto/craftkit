@@ -39,7 +39,7 @@ use crate::formula::{Anchor, CellRef, MAX_ROWS};
 
 /// The keys of a sheet that this tree **moves** when rows are
 /// inserted.
-pub(crate) const MOVED: [&str; 12] = [
+pub(crate) const MOVED: [&str; 15] = [
     "cells",
     "borders",
     "notes",
@@ -52,6 +52,9 @@ pub(crate) const MOVED: [&str; 12] = [
     "print_area",
     "title_rows",
     "row_breaks",
+    "conditionals",
+    "validations",
+    "sparklines",
 ];
 
 /// The keys of a sheet that name **no row**, and so are left as they
@@ -236,6 +239,17 @@ pub fn insert_rows(sheet: &mut Node, name: &str, at: u64, count: u64) -> Result<
     // The **breaks** of the print.
     if let Some(breaks) = sheet.data.get("row_breaks").cloned() {
         sheet.data["row_breaks"] = moved_breaks(&breaks, at, count);
+    }
+    // The **facts that name an area**: the conditional formats, the
+    // validations and the sparklines.
+    for key in ["conditionals", "validations"] {
+        let Some(value) = sheet.data.get(key).cloned() else { continue };
+        let moved = crate::moving::moved_ranges(&value, crate::moving::Way::Rows, at, count, true)?;
+        sheet.data[key] = moved;
+    }
+    if let Some(value) = sheet.data.get("sparklines").cloned() {
+        let moved = crate::moving::moved_sparklines(&value, crate::moving::Way::Rows, at, count, true)?;
+        sheet.data["sparklines"] = moved;
     }
     Ok(moved_cells)
 }

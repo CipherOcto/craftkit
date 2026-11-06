@@ -363,6 +363,7 @@ mod logic;
 mod lookups;
 mod marks;
 mod merges;
+mod moving;
 mod namereading;
 mod names;
 mod notes;

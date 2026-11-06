@@ -236,21 +236,18 @@ fn a_sheet_that_holds_something_this_tree_cannot_move_is_refused() {
     let mut session = session();
     let (_workbook, sheet) = a_sheet(&mut session);
     session
-        .execute(
-            "grid.conditional.set",
-            &json!({
-                "sheet": sheet,
-                "range": "A1:A10",
-                "op": ">",
-                "value": "5",
-                "format": "general",
-            }),
-        )
-        .expect("the condition is set");
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1", "value": "name" }))
+        .expect("the header is written");
+    session
+        .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "B1", "value": "size" }))
+        .expect("the header is written");
+    session
+        .execute("grid.table.create", &json!({ "sheet": sheet, "name": "the table", "range": "A1:B2" }))
+        .expect("the table is made");
     let refused = session
         .execute("grid.column.delete", &json!({ "sheet": sheet, "column": "A" }))
         .expect_err("the delete is refused");
-    assert!(refused.to_string().contains("conditionals"), "the refusal says what it holds");
+    assert!(refused.to_string().contains("tables"), "the refusal says what it holds");
 }
 
 /// A **protected** sheet refuses.

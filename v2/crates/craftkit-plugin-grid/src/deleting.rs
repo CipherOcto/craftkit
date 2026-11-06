@@ -240,6 +240,19 @@ pub fn delete_rows(sheet: &mut Node, name: &str, at: u64, count: u64) -> Result<
     if let Some(breaks) = sheet.data.get("row_breaks").cloned() {
         sheet.data["row_breaks"] = moved_breaks(&breaks, at, count);
     }
+    // The **facts that name an area**: the conditional formats, the
+    // validations and the sparklines. A fact whose area is wholly in
+    // the rows that are deleted goes away with them, and a fact whose
+    // area covers part of them refuses.
+    for key in ["conditionals", "validations"] {
+        let Some(value) = sheet.data.get(key).cloned() else { continue };
+        let moved = crate::moving::moved_ranges(&value, crate::moving::Way::Rows, at, count, false)?;
+        sheet.data[key] = moved;
+    }
+    if let Some(value) = sheet.data.get("sparklines").cloned() {
+        let moved = crate::moving::moved_sparklines(&value, crate::moving::Way::Rows, at, count, false)?;
+        sheet.data["sparklines"] = moved;
+    }
     Ok(deleted)
 }
 
