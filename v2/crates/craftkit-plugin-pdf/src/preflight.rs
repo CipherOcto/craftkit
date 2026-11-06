@@ -11,11 +11,11 @@
 //!
 //! The rules that are here are the ones this tree can see in the
 //! **document**: the metadata and what it says, the fonts and whether
-//! they are embedded, the actions a PDF/A file may not have, the
+//! they are embedded, the colour the file paints in and the output
+//! intent it needs for it, the actions a PDF/A file may not have, the
 //! annotations it may not have, and the additional actions it may not
-//! have. The rules about colour and about encryption are not here —
-//! the tree checks them against the file, and this tree has a
-//! document and not a file.
+//! have. The rule about encryption is not here — the tree checks it
+//! against the file, and this tree has a document and not a file.
 
 use craftkit_derive::Command;
 
@@ -211,6 +211,70 @@ fn is_action(entries: &[(String, Json)]) -> bool {
     }
 }
 
+/// The **device colour** a document paints in: whether it paints in
+/// red, green and blue or in gray, and whether it paints in CMYK.
+///
+/// The colour is said in two ways: a dictionary that names a **device
+/// colour space** says it outright, and a **content stream** says it
+/// with the operators that set a colour — `rg` and `RG` for red,
+/// green and blue, `g` and `G` for gray, `k` and `K` for CMYK.
+fn device_colour(document: &Document) -> (bool, bool) {
+    let mut rgb_or_gray = false;
+    let mut cmyk = false;
+    for node in document.walk() {
+        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+            continue;
+        }
+        let entries = entries_of(node);
+        if let Some(space) = name_of(&entries, "ColorSpace") {
+            match space.as_str() {
+                "DeviceRGB" | "DeviceGray" => rgb_or_gray = true,
+                "DeviceCMYK" => cmyk = true,
+                _ => {}
+            }
+        }
+        if node.kind != "pdf.stream" {
+            continue;
+        }
+        // A **content stream** is a stream that is not an image and
+        // not a form: it holds the instructions of a page.
+        let kind = name_of(&entries, "Type");
+        let subtype = name_of(&entries, "Subtype");
+        let is_content = kind.is_none() && (subtype.is_none() || subtype.as_deref() == Some("Form"));
+        if !is_content {
+            continue;
+        }
+        let Ok(decoded) = crate::decoded_bytes(node, None, None, false, "pdf.preflight") else {
+            continue;
+        };
+        let Ok(operations) = crate::content::operations(&decoded.bytes) else { continue };
+        for operation in operations {
+            match operation.operator.as_str() {
+                "rg" | "RG" | "g" | "G" => rgb_or_gray = true,
+                "k" | "K" => cmyk = true,
+                _ => {}
+            }
+        }
+    }
+    (rgb_or_gray, cmyk)
+}
+
+/// Whether the document has a **PDF/A output intent**: an intent of
+/// the subtype `GTS_PDFA1` that names a profile.
+fn has_a_pdfa_intent(document: &Document) -> bool {
+    let Some(catalog) = the_catalog(document) else { return false };
+    let entries = entries_of(catalog);
+    let Some(intents) = entry(&entries, "OutputIntents").and_then(|intents| intents.as_array()) else {
+        return false;
+    };
+    intents.iter().any(|intent| {
+        let Some(node) = node_of(document, intent) else { return false };
+        let entries = entries_of(node);
+        name_of(&entries, "Subtype").as_deref() == Some("GTS_PDFA1")
+            && entry(&entries, "DestOutputProfile").is_some()
+    })
+}
+
 /// The **issues** the document has: the rules it breaks.
 pub fn issues(document: &Document, level: Option<Level>) -> Vec<Issue> {
     let mut issues: Vec<Issue> = Vec::new();
@@ -242,6 +306,18 @@ pub fn issues(document: &Document, level: Option<Level>) -> Vec<Issue> {
     for font in crate::fonts::fonts(document) {
         if !font.embedded {
             issue("6.2.11.4", format!("The font {} isn't embedded", font.base), false);
+        }
+    }
+    // The **colour**: device colour needs a PDF/A output intent.
+    let (rgb, cmyk) = device_colour(document);
+    if (rgb || cmyk) && !has_a_pdfa_intent(document) {
+        issue("6.2.3", "Device colour is used, but there is no PDF/A output intent".to_string(), !cmyk);
+        if cmyk {
+            issue(
+                "6.2.4.3",
+                "DeviceCMYK is used: it needs a CMYK output intent (not added automatically)".to_string(),
+                false,
+            );
         }
     }
     // The **objects**: the actions and the annotations a PDF/A file
@@ -307,6 +383,7 @@ impl Preflight {
         let document = session.document();
         let declared = declared(document);
         let issues = issues(document, level);
+        let (rgb, cmyk) = device_colour(document);
         let count = issues.len();
         Ok(Outcome::new(format!("the file breaks {count} rule(s)")).with_data(json!({
             "pdfa": match &declared.pdfa {
@@ -319,6 +396,10 @@ impl Preflight {
             },
             "output_intents": declared.output_intents.clone(),
             "fonts": crate::fonts::fonts(document).iter().map(crate::fonts::Font::to_json).collect::<Vec<_>>(),
+            "colour": {
+                "rgb": rgb,
+                "cmyk": cmyk,
+            },
             "issues": issues
                 .iter()
                 .map(|issue| json!({
