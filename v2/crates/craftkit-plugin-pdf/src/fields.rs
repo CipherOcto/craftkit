@@ -148,6 +148,54 @@ pub fn qualified_name(document: &Document, node: &Node) -> Option<String> {
     (!parts.is_empty()).then(|| parts.join("."))
 }
 
+/// The **rectangle** of a widget: where it is on the page.
+///
+/// The rectangle of the file is two corners, and they may be in
+/// either order, so the corners are put in order. A widget with no
+/// rectangle, or with one that is not four numbers, is at the
+/// **origin**.
+fn rect_of(entries: &[(String, Json)]) -> [f64; 4] {
+    let Some(rect) = entry(entries, "Rect").and_then(|rect| rect.as_array()) else {
+        return [0.0; 4];
+    };
+    let numbers: Vec<f64> = rect.iter().filter_map(|number| number.as_f64()).collect();
+    if numbers.len() != 4 {
+        return [0.0; 4];
+    }
+    [
+        numbers[0].min(numbers[2]),
+        numbers[1].min(numbers[3]),
+        numbers[0].max(numbers[2]),
+        numbers[1].max(numbers[3]),
+    ]
+}
+
+/// The **flags** of a widget: the annotation flags of the file.
+///
+/// The **locked** flag is the seventh, and the **hidden** flag is the
+/// first or the fifth — a widget that is hidden or that cannot be
+/// seen is not shown.
+fn widget_flags(entries: &[(String, Json)]) -> (bool, bool) {
+    let flags = entry(entries, "F").and_then(|flags| flags.as_f64()).unwrap_or(0.0);
+    if !flags.is_finite() {
+        return (false, false);
+    }
+    let bits = flags as i64;
+    (bits & 128 != 0, bits & (2 | 32) != 0)
+}
+
+/// The **on state** of a widget: the appearance that is not the off
+/// one.
+///
+/// A box that is ticked has two appearances — the one it shows and
+/// the one it shows when it is ticked — and the ticked one is the one
+/// that is not called `Off`.
+fn on_state_of(entries: &[(String, Json)]) -> Option<String> {
+    let appearance = entry(entries, "AP")?;
+    let (_, normal) = pairs_of(appearance).into_iter().find(|(key, _)| key == "N")?;
+    pairs_of(&normal).into_iter().map(|(key, _)| key).find(|key| key != "Off")
+}
+
 /// The **entries** of a node's dictionary.
 fn entries_of(node: &Node) -> Vec<(String, Json)> {
     crate::entries_of(&node.data)
@@ -873,6 +921,99 @@ impl ReadChildren {
                 "widgets": widgets,
             }),
         ))
+    }
+}
+
+/// **Say** the **widgets** of a field.
+///
+/// A widget is the field's appearance on a page: a kid of the field
+/// with no name. It says **where** it is, **what state** it shows,
+/// whether it is **locked**, and whether it is **hidden**.
+///
+/// The rules:
+///
+/// - a node that is **not a field** is refused;
+/// - the page of a widget is the page whose **annotations** hold it,
+///   and a widget that is on no page has no page;
+/// - the rectangle of a widget is **two corners in order**, and a
+///   widget with no rectangle, or with one that is not four numbers,
+///   is at the **origin**;
+/// - the **on state** — the appearance a ticked box shows — is said
+///   for a box and not for a field of any other kind.
+#[derive(Command)]
+#[command(id = "pdf.field.widgets", area = "pdf", layer = "pdf", icon = "list")]
+pub struct ReadWidgets {
+    /// The field.
+    pub field: NodeRef,
+}
+
+impl ReadWidgets {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.field.widgets".to_string();
+        let field = self.field.0;
+        let document = session.document();
+        let Some(node) = document.node(field).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{field}`"),
+            });
+        };
+        let Some(found) = field_of(document, &node) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{field}` is not a field"),
+            });
+        };
+        let mut widgets: Vec<Json> = Vec::new();
+        for kid in kids_of(&node) {
+            let Some(kid_node) = node_of_number(document, kid) else { continue };
+            let kid_entries = entries_of(kid_node);
+            // A kid with a **name** is a child and not a widget.
+            if entry(&kid_entries, "T").and_then(text_of).is_some() {
+                continue;
+            }
+            // The **page**: the page whose annotations hold the widget.
+            let page = document
+                .relations
+                .iter()
+                .find(|relation| {
+                    relation.kind == "ref"
+                        && relation.to == kid_node.id
+                        && relation
+                            .payload
+                            .get("key")
+                            .and_then(|key| key.as_str())
+                            .map(|key| key == "Annots")
+                            .unwrap_or(false)
+                })
+                .and_then(|relation| document.node(relation.from))
+                .map(object_of);
+            let (locked, hidden) = widget_flags(&kid_entries);
+            // The **on state** is for a box: a button that is not a
+            // push button.
+            let box_ = found.kind == FieldKind::Button && found.flags as u32 & (1 << 16) == 0;
+            widgets.push(json!({
+                "object": kid,
+                "id": kid_node.id,
+                "page": page.map(|page| json!(page)).unwrap_or(Json::Null),
+                "rect": json!(rect_of(&kid_entries)),
+                "state": entry(&kid_entries, "AS")
+                    .and_then(|state| state.as_str())
+                    .map(|state| json!(state))
+                    .unwrap_or(Json::Null),
+                "on_state": if box_ {
+                    on_state_of(&kid_entries).map(|state| json!(state)).unwrap_or(Json::Null)
+                } else {
+                    Json::Null
+                },
+                "locked": locked,
+                "hidden": hidden,
+            }));
+        }
+        Ok(Outcome::new(format!("the field `{field}` shows {} widget(s)", widgets.len())).with_data(json!({
+            "field": field,
+            "widgets": widgets,
+        })))
     }
 }
 

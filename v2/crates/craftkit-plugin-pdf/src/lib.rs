@@ -153,7 +153,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 
 pub use boxes::{PageBoxes, SetPageBox};
 pub use convert::Convert;
-pub use fields::{ReadChildren, ReadFields, ReadInherited, SetField, SetFlags, SetParent};
+pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField, SetFlags, SetParent};
 pub use fonts::ReadFonts;
 pub use information::SetInformation;
 pub use labels::SetPageLabels;
@@ -2003,6 +2003,7 @@ craftkit_sdk::plugin_anchor!(
     ReadFields,
     ReadInherited,
     ReadChildren,
+    ReadWidgets,
     SetField,
     SetFlags,
     SetParent,
