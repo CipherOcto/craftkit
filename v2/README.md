@@ -3989,6 +3989,7 @@ so.
 | the **replacing** of text in a sheet | **built.** What was found may be replaced — the case does not matter unless the search says it does, and a formula that does not parse afterwards is refused (§552) | §552 |
 | the **label** of the total row of a table | **built.** A table that gains a total row shows a label in it — the tree's own word is Total, and an empty label takes it away (§553) | §553 |
 | the **deleting** of a style | **built.** A style that is not used may be taken away — the blocks that were in it are left as they are, and a style another style is based on is refused (§554) | §554 |
+| the **styles** of a document | **built.** A document may be asked what styles it holds — the kind, the base and the blocks that are in it (§555) | §555 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36270,3 +36271,46 @@ A style that is not used may be **taken away**.
   styles a document holds.
 - **The styles of other kinds are not touched**: a style of any kind
   is deleted the same way, and the kind is not checked.
+
+## 555. The styles of a document
+
+A document may be asked what **styles** it holds.
+
+### What was built
+
+- The new command **`prose.style.list`** reads the styles of a
+  document, and gives each one:
+  - its **name** and **what it applies to** — the kind of style it is;
+  - the style it is **based on**, and its name;
+  - the **blocks** that are in it.
+- A node that is **not a document** is refused.
+
+### What the port found
+
+- **The tree's name manager lists the styles and what is in them**:
+  the tree's list gives every style its kind, its base and the text
+  that is in it, and here the same three things are given — the
+  blocks that are in the style instead of the text, because a block
+  is this tree's unit.
+- **The tree's styles are of a few kinds and this tree's list is
+  open**: the tree names the kinds it knows and refuses the others;
+  here the kind is whatever the style says, and the list shows it as
+  it is.
+
+### What it cost
+
+- **Four tests** in the prose battery (`tests/stylelist.rs`): the
+  styles of a document, the style a style is based on, the blocks
+  that are in a style, and a node that is not a document.
+- **One new command** (`prose.style.list`). The prose battery now
+  carries **69** commands and the MCP server **749**.
+
+### What it does not settle
+
+- **The character of a style is not in the list**: the style says
+  what it applies to and what it is based on, and its font and size
+  and colour are read by their own command.
+- **The styles of the whole program are not listed**: the list is of
+  one document.
+- **The styles are not in the order a person made them**: they are
+  in the order the document holds them.
