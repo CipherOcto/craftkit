@@ -82,113 +82,11 @@ pub enum Calculation {
     Unsupported(String),
 }
 
-/// The **arguments** of a call: the text of each one.
-fn arguments_of(script: &str, name: &str) -> Option<Vec<String>> {
-    let at = script.find(name)?;
-    let open = script[at..].find('(')? + at;
-    let mut depth = 0usize;
-    let mut quoted = false;
-    let mut escaped = false;
-    for (index, character) in script[open..].char_indices() {
-        if escaped {
-            escaped = false;
-            continue;
-        }
-        match character {
-            '\\' if quoted => escaped = true,
-            '"' => quoted = !quoted,
-            '(' if !quoted => depth += 1,
-            ')' if !quoted => {
-                depth -= 1;
-                if depth == 0 {
-                    let inside = &script[open + 1..open + index];
-                    return Some(split_arguments(inside));
-                }
-            }
-            _ => {}
-        }
-    }
-    None
-}
-
-/// The **arguments** of a call, split at the commas that are not
-/// inside a string or a bracket.
-fn split_arguments(text: &str) -> Vec<String> {
-    let mut arguments: Vec<String> = Vec::new();
-    let mut current = String::new();
-    let mut depth = 0usize;
-    let mut quoted = false;
-    let mut escaped = false;
-    for character in text.chars() {
-        if escaped {
-            current.push(character);
-            escaped = false;
-            continue;
-        }
-        match character {
-            '\\' if quoted => {
-                current.push(character);
-                escaped = true;
-            }
-            '"' => {
-                quoted = !quoted;
-                current.push(character);
-            }
-            '(' | '[' if !quoted => {
-                depth += 1;
-                current.push(character);
-            }
-            ')' | ']' if !quoted => {
-                depth = depth.saturating_sub(1);
-                current.push(character);
-            }
-            ',' if !quoted && depth == 0 => {
-                arguments.push(current.trim().to_string());
-                current = String::new();
-            }
-            _ => current.push(character),
-        }
-    }
-    if !current.trim().is_empty() {
-        arguments.push(current.trim().to_string());
-    }
-    arguments
-}
-
-/// The **text** a string holds: the file's own spelling of it.
-fn text_of(argument: &str) -> Option<String> {
-    let trimmed = argument.trim();
-    if !trimmed.starts_with('"') || !trimmed.ends_with('"') || trimmed.len() < 2 {
-        return None;
-    }
-    let inside = &trimmed[1..trimmed.len() - 1];
-    let mut text = String::new();
-    let mut escaped = false;
-    for character in inside.chars() {
-        if escaped {
-            match character {
-                'n' => text.push('\n'),
-                'r' => text.push('\r'),
-                't' => text.push('\t'),
-                other => text.push(other),
-            }
-            escaped = false;
-            continue;
-        }
-        if character == '\\' {
-            escaped = true;
-            continue;
-        }
-        text.push(character);
-    }
-    Some(text)
-}
-
 /// The **names** of the fields an argument lists: either an array of
 /// names, or one text that holds them separated by commas.
 fn names_of(argument: &str) -> Vec<String> {
     let trimmed = argument.trim();
-    if let Some(text) = text_of(trimmed) {
+    if let Some(text) = crate::scripts::text_of(trimmed) {
         return text.split(',').map(|name| name.trim().to_string()).filter(|name| !name.is_empty()).collect();
     }
     let Some(open) = trimmed.find('(') else { return Vec::new() };
@@ -196,7 +94,10 @@ fn names_of(argument: &str) -> Vec<String> {
     if close <= open {
         return Vec::new();
     }
-    split_arguments(&trimmed[open + 1..close]).into_iter().filter_map(|name| text_of(&name)).collect()
+    crate::scripts::split_arguments(&trimmed[open + 1..close])
+        .into_iter()
+        .filter_map(|name| crate::scripts::text_of(&name))
+        .collect()
 }
 
 /// The **calculation** a script says.
@@ -209,8 +110,8 @@ pub fn parse(script: &str) -> Calculation {
         let expression = script[start + 6..end].trim().to_string();
         return Calculation::Notation(expression);
     }
-    if let Some(arguments) = arguments_of(script, "AFSimple_Calculate") {
-        let Some(code) = arguments.first().and_then(|argument| text_of(argument)) else {
+    if let Some(arguments) = crate::scripts::arguments_of(script, "AFSimple_Calculate") {
+        let Some(code) = arguments.first().and_then(|argument| crate::scripts::text_of(argument)) else {
             return Calculation::Unsupported(script.to_string());
         };
         let Some(operation) = Operation::parse(&code) else {
@@ -224,68 +125,9 @@ pub fn parse(script: &str) -> Calculation {
     Calculation::Unsupported(script.to_string())
 }
 
-/// The **entries** of a node's dictionary.
-fn entries_of(node: &Node) -> Vec<(String, Json)> {
-    crate::entries_of(&node.data)
-}
-
-/// The **entry** of a dictionary, by its key.
-fn entry<'a>(entries: &'a [(String, Json)], key: &str) -> Option<&'a Json> {
-    entries.iter().find(|(name, _)| name == key).map(|(_, value)| value)
-}
-
-/// The **text** a value holds: the file's own spelling of a text.
-fn text_of_value(value: &Json) -> Option<String> {
-    match value {
-        Json::String(text) => Some(text.clone()),
-        Json::Object(map) => map.get("string").and_then(|text| text.as_str()).map(|text| text.to_string()),
-        _ => None,
-    }
-}
-
-/// The **node** an object number names.
-fn node_of_number(document: &Document, number: u64) -> Option<&Node> {
-    document.walk().find(|node| node.data.get("object").and_then(|found| found.as_u64()) == Some(number))
-}
-
-/// The **script** of a field: the calculate event of its additional
-/// actions, and the text of the action it names.
-fn script_of(document: &Document, node: &Node) -> Option<String> {
-    let entries = entries_of(node);
-    let actions = entry(&entries, "AA")?;
-    let actions = actions.get("entries")?.as_array()?;
-    let calculate = actions.iter().find_map(|pair| {
-        let pair = pair.as_array()?;
-        if pair.first()?.as_str()? != "C" {
-            return None;
-        }
-        pair.get(1)
-    })?;
-    // The action may be the dictionary itself, or a reference to it.
-    let action = match crate::number_of(calculate) {
-        Some(number) => {
-            let action = node_of_number(document, number)?;
-            entries_of(action)
-        }
-        None => {
-            let inside = calculate.get("entries")?.as_array()?;
-            inside
-                .iter()
-                .filter_map(|pair| {
-                    let pair = pair.as_array()?;
-                    let key = pair.first()?.as_str()?.to_string();
-                    Some((key, pair.get(1)?.clone()))
-                })
-                .collect()
-        }
-    };
-    let script = entry(&action, "JS")?;
-    text_of_value(script)
-}
-
 /// The **calculation** of a field.
 pub fn calculation_of(document: &Document, node: &Node) -> Calculation {
-    match script_of(document, node) {
+    match crate::scripts::script_of(document, node, "C") {
         Some(script) => parse(&script),
         None => Calculation::Nothing,
     }
