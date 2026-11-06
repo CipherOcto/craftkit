@@ -3978,6 +3978,7 @@ so.
 | the **numbers** of a file | **built.** A file's numbers are numbers, and a whole one is taken as the whole one it is — a number that is not a whole one names no object (§541) | §541 |
 | the **encryption** of a file | **built.** A file says what it is encrypted with and what a person may do with it, and the permissions are said in words (§542) | §542 |
 | the **calculation** of a field | **built.** A field may say how its value is worked out, and the simple way and the expression are read — a script that is not understood is said so (§543) | §543 |
+| the **form** of a file | **built.** The catalog names the form, and the form says which fields it has, whether the reader is to make the appearances and the order the calculated fields are calculated in (§544) | §544 |
 
 ### The list of things that are honestly not there: empty
 
@@ -35631,3 +35632,66 @@ carries a small script.
   that list is not read here.
 - **The script is not written**: a field's script may be said, and
   this tree only reads it.
+
+## 544. The form of a file
+
+A file with fields in it has an **interactive form**, and the catalog
+names it.
+
+### What was built
+
+- The new module `form` reads the **AcroForm dictionary** of the
+  catalog:
+  - the **fields** the form has — the objects it lists;
+  - whether the **appearances** are to be made by the reader
+    (`NeedAppearances`), which is what a file says when it has no
+    appearance streams of its own;
+  - the **default appearance** (`DA`) — the way a field's text looks
+    when the field says nothing;
+  - the **default resources** (`DR`);
+  - the **signature flags** (`SigFlags`);
+  - the **calculation order** (`CO`) — the fields that are calculated,
+    and the order they are calculated in.
+- The command **`pdf.form.read`** reads the form, or **one entry** of
+  it by its key. A file that names no form has no form, and the answer
+  says so.
+- The form may be written where it is used, or named by a reference,
+  and both are read the same way.
+
+### What the port found
+
+- **The tree's form is a dictionary in the catalog, and the tree's
+  own fields come from it**: the tree lists the fields the form has
+  and the tree's calculation order is the form's own list — the same
+  two facts this tree reads.
+- **The tree's calculated fields join the calculation order when
+  their script is said**: the tree adds the field to the list when a
+  calculate script is written and takes it away when the script is
+  taken away — so the list is the file's own statement of what is
+  calculated and in what order, and this tree reads that statement
+  rather than working it out.
+- **A file with no form is not a file with an empty form**: the tree
+  asks the catalog for the form and there is none, and this tree
+  answers "the file has no form" rather than an empty list.
+
+### What it cost
+
+- **Eight tests** in the pdf battery (`tests/form.rs`): the fields
+  the form lists, the appearances that are needed, the default
+  appearance, the signature flags, the calculation order, a file
+  without a form, one entry by its key, and a key the form does not
+  have.
+- **One new module** (`src/form.rs`) and **one new command**
+  (`pdf.form.read`). The pdf battery now carries **48** commands and
+  the MCP server **738**.
+
+### What it does not settle
+
+- **The fields of a document are found by looking at the whole
+  document**, and the form's own list is read beside them: a field
+  that is in the file and not in the form's list is still a field,
+  and this tree does not refuse it.
+- **The appearances are not made**: the form may say the reader is to
+  make them, and this tree reads that and draws nothing.
+- **The default resources are not used**: they are read as the pairs
+  they hold, and no field is drawn with them.
