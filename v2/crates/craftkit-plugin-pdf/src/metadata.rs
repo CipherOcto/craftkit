@@ -30,9 +30,7 @@ use crate::preflight::Level;
 /// The information node names the **node** of the object, the way the
 /// file's own writer reads it.
 fn the_information(document: &Document) -> Option<&Node> {
-    let info = document.walk().find(|node| node.kind == "pdf.info")?;
-    let id = info.data.get("object").and_then(|id| id.as_u64())?;
-    document.node(id)
+    crate::information::the_information(document)
 }
 
 /// The **text** an entry of the information holds.

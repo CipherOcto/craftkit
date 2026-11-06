@@ -172,7 +172,7 @@ pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField,
 pub use fonts::ReadFonts;
 pub use form::ReadForm;
 pub use format::ReadFormat;
-pub use information::SetInformation;
+pub use information::{ReadInformation, SetInformation};
 pub use intent::WriteIntent;
 pub use labels::SetPageLabels;
 pub use metadata::WriteMetadata;
@@ -2071,6 +2071,7 @@ craftkit_sdk::plugin_anchor!(
     SetParent,
     AddStream,
     SetInformation,
+    ReadInformation,
     SetPageLabels,
     RemoveObject,
     SetNumber,
