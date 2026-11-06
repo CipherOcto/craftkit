@@ -3937,6 +3937,7 @@ so.
 | the **facts** that name an area | **built.** A conditional format, a validation and a sparkline name an area of cells, and the area moves with the rows and the columns that are inserted or deleted — and an area that covers part of what is deleted refuses (§500) | §500 |
 | the **table** and the **pivot** that move | **built.** A table and a pivot name an area of cells, and the area moves with the rows and the columns that are inserted or deleted — and a pivot gathers by the letters of its columns, so those move with it (§501) | §501 |
 | the **chart** and the **name** that move | **built.** A chart reads a range and a name of the workbook stands for a range, and both move with the rows and the columns that are inserted or deleted — and nothing a sheet holds refuses an insert or a delete any more (§502) | §502 |
+| the **error** of a reference that is gone | **built.** A formula may hold the error `#REF!`, and a delete that orphans a reference writes it there — the tree's own spelling, and the correction of what §497 and §499 said (§503) | §503 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33056,3 +33057,81 @@ and both move with it.
   moved.
 - **The chart is not drawn**: this tree says what a chart reads, and
   not where it stands.
+
+## 503. The error of a reference that is gone
+
+A formula may name a cell that is not there, and the tree writes the
+error `#REF!` there. This tree wrote none: it refused the change
+instead. **This section is the correction** — §497, §499, §500 and
+§502 said that this tree has no `#REF!` yet, and that was true when
+they were written.
+
+### What was built
+
+- **No new command**: the formula language gains the **error**, and
+  the four commands that move things write it where a reference is
+  orphaned.
+- The formula language may now **hold an error**: `#REF!` is a thing a
+  formula may say, and a cell that holds one has the error as its
+  value.
+- An error **spreads**: a formula that has an error in it is an error,
+  and so is a function that has one among its arguments — the error is
+  the value of the cell.
+- A **delete** that orphans a reference writes the error:
+  - a reference to a cell that is deleted becomes `#REF!`;
+  - a **range** that loses its first row becomes `#REF!` — the range is
+    gone, and half a range is not a range;
+  - a **range** that loses a row in the middle **shrinks**: `SUM(A1:A4)`
+    with the second row deleted is `SUM(A1:A3)`.
+- And so a delete **no longer refuses** because of a formula. What
+  still refuses is a fact that is not a formula: a **merge** that
+  covers a deleted row, a **print area** that names one, a **filter**
+  of a deleted column.
+
+### What the port found
+
+- **The tree's engine knows `#REF!`** and the tree writes it where a
+  reference names a cell that is gone — and it writes it in the
+  *formula*, so the formula still reads as a formula. Here it is the
+  same: the formula is parsed, the reference is written as the error,
+  and the formula is printed again.
+- **The tree's error is a value and not a refusal**: a cell that holds
+  `#REF!` says that it holds an error, and the error is what the cell's
+  value is. This tree had errors already — `#NUM!` and `#VALUE!` — but
+  no way of **writing** one in a formula, so the only way to have an
+  error was to make a mistake.
+- **A range that loses its first row is gone, and a range that loses a
+  row in the middle is shorter**: both are the rules of a pair of
+  corners, and the tree's rules and this tree's rules are the same
+  here.
+
+### What it cost
+
+- **Eight tests** in the grid battery (`tests/referrors.rs`): a formula
+  holding an error, the value of a formula that holds an error, an
+  error in a formula making the whole formula an error, a function with
+  an error in it being an error, a range that loses its first row
+  naming the error, a range that loses a row in the middle shrinking, a
+  deleted column naming the error too, and the error of a reference
+  being the tree's own spelling.
+- **One module** (`formula`) grows the **error**: an expression may be
+  one, the parser reads one, the printer writes one and the engine
+  gives it as a value. The grid battery still carries **120** commands
+  and the MCP server **702**.
+- **Two tests** in the batteries of the row and the column now say that
+  a formula which names a deleted row **names the error**: they used to
+  say that the delete is refused, and that was true then and is not
+  true now.
+
+### What it does not settle
+
+- **§497, §499, §500 and §502 said that this tree had no `#REF!` yet.**
+  That was true when they were written; this section is the correction,
+  and a README that keeps a claim it has stopped believing is worse
+  than one that says when it stopped believing it.
+- **A copy that would leave the sheet is still refused**: the tree
+  writes `#REF!` there as well and carries on, and here the whole copy
+  is refused and the reference is named.
+- **The merge and the print area still refuse**: a fact that is not a
+  formula cannot be half-written, and there is no error value for a
+  merge.
