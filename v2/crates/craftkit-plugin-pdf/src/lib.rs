@@ -143,6 +143,7 @@ mod predictors;
 mod preflight;
 mod remove;
 mod rotation;
+mod tabs;
 mod trailer;
 mod writer;
 mod xref;
@@ -163,6 +164,7 @@ pub use pages::RemovePage;
 pub use preflight::Preflight;
 pub use remove::RemoveObject;
 pub use rotation::{ReadRotation, RotatePage};
+pub use tabs::ReadTabOrder;
 pub use trailer::ReadTrailer;
 
 /// The PDF layer.
@@ -2004,6 +2006,7 @@ craftkit_sdk::plugin_anchor!(
     ReadInherited,
     ReadChildren,
     ReadWidgets,
+    ReadTabOrder,
     SetField,
     SetFlags,
     SetParent,

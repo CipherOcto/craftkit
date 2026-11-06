@@ -154,7 +154,7 @@ pub fn qualified_name(document: &Document, node: &Node) -> Option<String> {
 /// either order, so the corners are put in order. A widget with no
 /// rectangle, or with one that is not four numbers, is at the
 /// **origin**.
-fn rect_of(entries: &[(String, Json)]) -> [f64; 4] {
+pub(crate) fn rect_of(entries: &[(String, Json)]) -> [f64; 4] {
     let Some(rect) = entry(entries, "Rect").and_then(|rect| rect.as_array()) else {
         return [0.0; 4];
     };
