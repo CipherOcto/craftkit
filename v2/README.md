@@ -3939,6 +3939,7 @@ so.
 | the **chart** and the **name** that move | **built.** A chart reads a range and a name of the workbook stands for a range, and both move with the rows and the columns that are inserted or deleted — and nothing a sheet holds refuses an insert or a delete any more (§502) | §502 |
 | the **error** of a reference that is gone | **built.** A formula may hold the error `#REF!`, and a delete that orphans a reference writes it there — the tree's own spelling, and the correction of what §497 and §499 said (§503) | §503 |
 | the **copy** that would leave the sheet | **built.** A formula may be copied into a cell that would put a reference outside the sheet, and the copy is done: the reference is written as the error, and the copy is not refused (§504) | §504 |
+| the **parent** of a page | **built.** A page may have a parent — the page it takes what it has not got of its own from — and the margins and the columns it does not have of its own are derived from it (§505) | §505 |
 
 ### The list of things that are honestly not there: empty
 
@@ -33197,3 +33198,68 @@ and carries on. This tree refused the copy.
   document may come from somewhere else.
 - **The rule of a validation moves with its cell** and may hold the
   error as well — the tree writes the error there too.
+
+## 505. The parent of a page
+
+A page may have a **parent**: the page it takes what it has not got
+of its own from. That is the tree's **master page**.
+
+### What was built
+
+- **Two commands** in the layout battery: `layout.page.parent` and
+  `layout.page.parent.clear`.
+- The margins and the columns of a page are **derived**:
+  - a page that has margins of its own keeps them;
+  - a page that has none takes the margins of the nearest parent that
+    has some;
+  - and the same is true of the **columns**.
+- So the **margin box** and the **column boxes** of a page are derived
+  from what it inherits, and they cannot be out of date.
+- The **rules**: the parent must be a **page**; a page may not be its
+  own parent; the parent may not be a **descendant** of the page,
+  because a page that is its own ancestor is a **loop**; and the chain
+  of parents is walked until it ends, and a chain that loops is
+  stopped — a document that says something impossible must not hang
+  the engine.
+
+### What the port found
+
+- **The tree's page inherits**: the tree's page has an **applied parent
+  spread**, and a page without margins or columns of its own follows
+  the parent page of that spread — and the parent page it follows is
+  the one of the spread that **matches the page's side**, so a left
+  page follows the left page and a right page follows the right one.
+  Here a page names the page it follows, and there is no side in the
+  rule: a page follows the page it names.
+- **The tree's inheritance is all or nothing**: the tree's page has a
+  flag that says whether its margins and columns are its own, and a
+  page with the flag off follows its parent in **both**. Here the
+  margins and the columns are followed **one at a time**: a page may
+  keep its own margins and follow the parent's columns.
+- **The tree's master pages are of their own kind** and are not
+  printed. Here a parent is an **ordinary page** that happens to have
+  followers — there is no second kind of page, and a page that is
+  followed is still a page of its spread.
+
+### What it cost
+
+- **Ten tests** in the layout battery (`tests/parents.rs`): a page
+  following another page, the margins of a page being its own if it
+  has them, a page taking the parent's margins, the columns being
+  inherited, the grandparent being followed, the parent being taken
+  away, a page not being its own parent, a loop of parents being
+  refused, a parent that is not a page being refused, and a page that
+  follows no page having no parent to take away.
+- **One new module** (`parents`). The layout battery now carries
+  **39** commands and the MCP server **704**.
+
+### What it does not settle
+
+- **A parent is an ordinary page**, and the tree's master pages are of
+  their own kind and are not printed — so a page that is followed here
+  is still a page of a spread.
+- **The inheritance is one at a time** and the tree's is all or
+  nothing.
+- **The parent is named and not chosen by the side**: the tree picks
+  the parent page of the spread that matches the page's side, and
+  here there is no side to pick by.
