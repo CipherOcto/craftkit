@@ -73,6 +73,8 @@ pub struct Field {
     pub flags: f64,
     /// The options a choice offers: the values it holds.
     pub options: Vec<String>,
+    /// The number of the object of the **parent** of the field.
+    pub parent: Option<u64>,
 }
 
 /// The **text** a value holds: the file's own spelling of a text.
@@ -82,6 +84,48 @@ pub fn text_of(value: &Json) -> Option<String> {
         Json::Object(map) => map.get("string").and_then(|text| text.as_str()).map(|text| text.to_string()),
         _ => None,
     }
+}
+
+/// The **object number** a reference names.
+fn number_of(value: &Json) -> Option<u64> {
+    value.get("ref").and_then(|pair| pair.as_array())?.first()?.as_u64()
+}
+
+/// The **node** an object number names.
+fn node_of_number(document: &Document, number: u64) -> Option<&Node> {
+    document.walk().find(|node| node.data.get("object").and_then(|found| found.as_u64()) == Some(number))
+}
+
+/// The **qualified name** of a field: its own name and the names of
+/// its parents, joined with a dot.
+///
+/// The chain is **bounded** and a **cycle** ends it, so that a field
+/// that is its own ancestor still has a name.
+pub fn qualified_name(document: &Document, node: &Node) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    let mut seen: Vec<u64> = Vec::new();
+    let mut current = Some(node.id);
+    while let Some(id) = current {
+        if parts.len() > 64 {
+            break;
+        }
+        let Some(found) = document.node(id) else { break };
+        let object = found.data.get("object").and_then(|number| number.as_u64()).unwrap_or(0);
+        if seen.contains(&object) {
+            break;
+        }
+        seen.push(object);
+        let entries = entries_of(found);
+        if let Some(name) = entry(&entries, "T").and_then(text_of) {
+            parts.push(name);
+        }
+        current = entry(&entries, "Parent")
+            .and_then(number_of)
+            .and_then(|number| node_of_number(document, number))
+            .map(|parent| parent.id);
+    }
+    parts.reverse();
+    (!parts.is_empty()).then(|| parts.join("."))
 }
 
 /// The **entries** of a node's dictionary.
@@ -156,10 +200,11 @@ pub fn fields_of(document: &Document) -> Vec<Field> {
             continue;
         };
         let object = node.data.get("object").and_then(|object| object.as_u64()).unwrap_or(0);
-        let name = match entry(&entries, "T").and_then(text_of) {
+        let name = match qualified_name(document, node) {
             Some(name) => name,
             None => format!("object {object}"),
         };
+        let parent = entry(&entries, "Parent").and_then(number_of);
         let value = entry(&entries, "V")
             .and_then(|value| text_of(value).or_else(|| value.as_str().map(|v| v.to_string())));
         let flags = entry(&entries, "Ff").and_then(|flags| flags.as_f64()).unwrap_or(0.0);
@@ -167,7 +212,7 @@ pub fn fields_of(document: &Document) -> Vec<Field> {
             Some(options) => options_of(options),
             None => Vec::new(),
         };
-        fields.push(Field { object, name, kind, value, flags, options });
+        fields.push(Field { object, name, kind, value, flags, options, parent });
     }
     fields
 }
@@ -218,6 +263,7 @@ impl ReadFields {
                     "value": field.value.clone().map(|value| json!(value)).unwrap_or(Json::Null),
                     "flags": field.flags,
                     "options": field.options.clone(),
+                    "parent": field.parent.map(|parent| json!(parent)).unwrap_or(Json::Null),
                 })
             })
             .collect();
@@ -312,5 +358,129 @@ impl SetField {
         node.data = data;
         Ok(Outcome::changed(format!("the field `{field}` holds `{value}`"))
             .with_data(json!({ "field": field, "value": value })))
+    }
+}
+
+/// **Put** a field in a field.
+///
+/// A field may have a **parent**: the field it belongs to. The name
+/// of a field is then the name of its parent and its own, joined with
+/// a dot — the tree's fully qualified name.
+///
+/// The **rules**:
+///
+/// - the field and the parent must both be **fields**;
+/// - a field may not be **its own** parent;
+/// - a parent that is **below** the field would make a **loop**, and
+///   a loop is refused.
+#[derive(Command)]
+#[command(id = "pdf.field.parent", area = "pdf", layer = "pdf", icon = "link", mutates, undoable)]
+pub struct SetParent {
+    /// The field.
+    pub field: NodeRef,
+    /// The field it belongs to.
+    ///
+    /// Leave it out and the field has no parent.
+    pub parent: Option<NodeRef>,
+}
+
+impl SetParent {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.field.parent".to_string();
+        let field = self.field.0;
+        let Some(node) = session.document().node(field).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{field}`"),
+            });
+        };
+        let Some(found) = field_of(session.document(), &node) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{field}` is not a field"),
+            });
+        };
+        let document = session.document();
+        match self.parent {
+            None => {
+                // The field has **no parent** any more.
+                let mut entries = entries_of(&node);
+                entries.retain(|(key, _)| key != "Parent");
+                let data = json!({
+                    "object": node.data.get("object").cloned().unwrap_or(Json::Null),
+                    "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+                });
+                let Some(node) = session.document_mut()?.node_mut(field) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no node `{field}`"),
+                    });
+                };
+                node.data = data;
+                Ok(Outcome::changed(format!("the field `{field}` has no parent now"))
+                    .with_data(json!({ "field": field, "parent": Json::Null })))
+            }
+            Some(parent) => {
+                if parent.0 == field {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the field `{field}` may not be its own parent"),
+                    });
+                }
+                let Some(parent_node) = document.node(parent.0).cloned() else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no node `{}`", parent.0),
+                    });
+                };
+                let Some(parent_field) = field_of(document, &parent_node) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{}` is not a field", parent.0),
+                    });
+                };
+                // The parent may not be **below** the field: that would
+                // be a loop.
+                let mut current = Some(parent_field.object);
+                let mut seen: Vec<u64> = Vec::new();
+                while let Some(object) = current {
+                    if seen.contains(&object) {
+                        break;
+                    }
+                    seen.push(object);
+                    if object == found.object {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "the field `{}` is below the field `{field}`, and that would be a loop",
+                                parent.0
+                            ),
+                        });
+                    }
+                    let Some(node) = node_of_number(document, object) else { break };
+                    let entries = entries_of(node);
+                    current = entry(&entries, "Parent").and_then(number_of);
+                }
+                let mut entries = entries_of(&node);
+                let value = json!({ "ref": [parent_field.object, 0] });
+                match entries.iter_mut().find(|(key, _)| key == "Parent") {
+                    Some(entry) => entry.1 = value,
+                    None => entries.push(("Parent".to_string(), value)),
+                }
+                let data = json!({
+                    "object": node.data.get("object").cloned().unwrap_or(Json::Null),
+                    "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+                });
+                let Some(node) = session.document_mut()?.node_mut(field) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no node `{field}`"),
+                    });
+                };
+                node.data = data;
+                Ok(Outcome::changed(format!("the field `{field}` is in the field `{}`", parent.0))
+                    .with_data(json!({ "field": field, "parent": parent.0 })))
+            }
+        }
     }
 }
