@@ -3957,6 +3957,7 @@ so.
 | the **contrast** of the text | **built.** The text is measured with the ratio of the WCAG 2 — four and a half for normal text and three for large text — and the checker says when it is hard to read (§520) | §520 |
 | the **alt text** of a table | **built.** A table says what it is, and an empty text takes the words away — and the checker says when a table has none (§521) | §521 |
 | the **empty row** and the **empty column** of a table | **built.** A row or a column with nothing in it looks like spacing, and the checker says which one (§522) | §522 |
+| the **fields** of a form | **built.** A field says what it is and what it holds, and a value the field cannot hold is refused — the options and the states are named (§523) | §523 |
 
 ### The list of things that are honestly not there: empty
 
@@ -34283,3 +34284,69 @@ are usually not data: they are **spacing** made with the return key.
 - **The rows of a table are not read out**: the tree's checker says
   which row and which column, and here the issue says so too — but
   nothing reads the cells of the table aloud.
+
+## 523. The fields of a form
+
+A form is made of **fields**: the places where a person writes. Each
+field says what it is, and what it holds.
+
+### What was built
+
+- **Two commands** in the pdf battery:
+  - `pdf.field.read` — the fields of the document: what each is
+    called, what it is, what it holds now, the flags that say how it
+    behaves, and the options a choice offers;
+  - `pdf.field.set` — what a field holds now.
+- The **three kinds** of field are the tree's own: a **text** field
+  (`Tx`) holds text, a **button** (`Btn`) holds a **state** — the box
+  that is ticked — and a **choice** (`Ch`) holds one of its
+  **options**.
+- The **rules**:
+  - a field's value must be one the field **can hold**: a choice
+    holds one of its options and a button holds one of its states,
+    and a value the field cannot hold is **refused**, with the options
+    or the states named;
+  - an **empty** value **takes the value away**;
+  - a field **without a name** is named by the number of its object,
+    so that it can be asked about.
+
+### What the port found
+
+- **The tree's field is a tree and here it is an object**: the tree's
+  field has a **fully qualified name** — `parent.child` — because the
+  tree's fields have children and a child's name is its parent's name
+  and its own. Here a field is an object of the file with a name of
+  its own, and a field without one is named after the object it is.
+- **The tree's value is a list and here it is one thing**: the tree
+  holds a list of values, because a field of a choice may hold more
+  than one of its options, and a radio group is a field with one
+  value for each button in it. Here a field holds one value, and the
+  rules say what that one may be.
+- **The tree's button is a state of an appearance**: the tree's
+  checkbox holds `Yes` or `Off`, and the states come from the
+  appearance of the widget. Here the states are read out of the
+  appearance too, and a button with no appearance has no states and
+  may not be pressed.
+
+### What it cost
+
+- **Nine tests** in the pdf battery (`tests/fields.rs`): the fields
+  of a form being read, the three kinds of field being told apart,
+  the options of a choice being read, a field without a name being
+  named by its object number, a text field taking any text, a choice
+  taking one of its options and nothing else, a button taking one of
+  its states and nothing else, an empty value taking the value away,
+  and a node that is not a field being refused.
+- **One new module** (`fields`). The pdf battery now carries **35**
+  commands and the MCP server **721**.
+
+### What it does not settle
+
+- **The fields are not merged with their children**: the tree's field
+  gathers the widgets that belong to it, and here a widget is an
+  annotation of its own.
+- **The value is not calculated**: the tree's fields calculate their
+  value with a script when one is given, and here the value is what
+  the caller says it is.
+- **The appearance of a field is not written**: the tree writes the
+  look of a field, and here a field is what the file says it is.
