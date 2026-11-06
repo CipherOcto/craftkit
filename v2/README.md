@@ -3999,6 +3999,7 @@ so.
 | the **signatures** of a file | **built.** A file may be signed — the byte range, the signer, the time and the way it was made are read, and the bytes are not checked (§562) | §562 |
 | the **structure** of a file | **built.** A tagged file carries a structure tree — the type of every element, its title, its alt text, its language and its children are read (§563) | §563 |
 | the **text** of a page | **built.** A page's content is read as the operators show it — the pieces of text, the operator that showed each one, and how its bytes were read (§564) | §564 |
+| the **attachments** of a file | **built.** A file may carry files of its own — the name, the description, the kind, the size and the bytes of each are read (§565) | §565 |
 
 ### The list of things that are honestly not there: empty
 
@@ -36819,3 +36820,72 @@ text**.
   it says and not where it is.
 - **The lines are not the file's**: a line break comes from the `'` and
   `"` operators and not from where the text falls on the page.
+
+## 565. The attachments of a file
+
+A file may carry **files of its own** — a note, a spreadsheet, another
+PDF — and a viewer shows them in a list of attachments.
+
+### What was built
+
+- The new command **`pdf.attachments.read`** reads the files a file
+  carries:
+  - the **name** — the Unicode one when the file gives one;
+  - the **description** — what the file says the attachment is about;
+  - the **kind** of file, as the file says it;
+  - the **size** the file says, and the **length of the bytes** — two
+    facts, and a file whose two do not agree is a file that says two
+    things;
+  - the **object** that holds the bytes, and the **node** that holds
+    them in the document.
+- The rules:
+  - a file that carries no file has **no attachments**, and the answer
+    says so;
+  - the name is the **Unicode** one (`/UF`) when the file gives one,
+    and the plain one (`/F`) otherwise;
+  - the bytes are the ones under `/EF`, and the `/UF` of `/EF` is
+    preferred over its `/F`;
+  - the **kids** of the name tree are read, up to **eight** levels
+    deep: a file with many attachments splits its name tree, and the
+    attachments are in the parts;
+  - an attachment may be asked for **by name**, and one that is not
+    there is refused.
+
+### What the port found
+
+- **The tree reads two kinds of attachment and this one reads one**:
+  the tree reads a file-level attachment, under `/Names /EmbeddedFiles`,
+  and a **FileAttachment annotation** — a paperclip drawn on a page
+  with a file behind it. Here the file-level one is read and the
+  annotation is not: an annotation is an annotation, and the tree
+  reads those elsewhere.
+- **The tree fetches the bytes when they are wanted**: the tree opens
+  the document again and pulls the bytes out of the stream, with a cap
+  of a gibibyte on what it will decompress. Here the bytes are already
+  in the document — the loader puts the bytes of every stream in a
+  file of its own — and the tree's `pdf.stream.decode` writes them
+  out.
+- **The tree's size falls back to the bytes**: the tree takes the
+  size from the parameters of the file, and when the file says no
+  size it uses the length of the stream. Here the size the file says
+  and the length of the bytes are two answers, and neither is a
+  fallback for the other.
+
+### What it cost
+
+- **Three tests** in the pdf battery (`tests/attachments.rs`): the
+  files a file carries, a file that carries nothing, and an
+  attachment asked for by name.
+- **One new module** (`src/attachments.rs`) and **one new command**
+  (`pdf.attachments.read`). The pdf battery now carries **58** commands
+  and the MCP server **761**.
+
+### What it does not settle
+
+- **The bytes are not written out**: the attachment names the node
+  that holds them, and the tree's `pdf.stream.decode` is what writes
+  them to a file.
+- **The annotation attachments are not read**: a paperclip drawn on a
+  page is an annotation, and its file is not read here.
+- **The times are not read**: the parameters of a file may say when it
+  was made and when it was changed, and neither is read here.
