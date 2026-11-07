@@ -4034,6 +4034,7 @@ so.
 | the **properties** of a document | **built.** A document may say who wrote it and what it is about — the built-in properties and the custom ones, and an empty value takes one away (§597) | §597 |
 | the **columns** of a page | **built.** A page may be printed in columns — how many, the space between them and the line down the middle, and the width of a column is worked out (§598) | §598 |
 | the **sources** of a document | **built.** A source may be said, a run may cite it, and the bibliography is worked out from the sources that are cited (§599) | §599 |
+| the **quotes** of a paragraph | **built.** The straight quotes of a paragraph may be made smart — the character before decides which one it is, and the runs do not move (§600) | §600 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39222,3 +39223,74 @@ report, a recording. A **citation** is a run that names one, and the
 - **The sources are not written into a file**: they are facts of the
   document node, and the format that saves a document does not yet
   carry them.
+
+## 600. The quotes of a paragraph
+
+A straight quote is a mark of the keyboard: it is the same whether it
+opens a saying or closes it. A **smart quote** is the mark of the
+book: “ and ” and ‘ and ’.
+
+### What was built
+
+- The new command **`prose.block.quotes`** makes the straight quotes
+  of a paragraph smart:
+  - the **character before** the quote decides which one it is: it is
+    an **opening** quote when there is nothing before it, when what is
+    before it is a **space** or any other space, or when it is an
+    **opening mark** — `(`, `[`, `{`, `<`, `—`, `–`, `«`, `‹`, `„` or
+    `‚`;
+  - two marks are the tree's own and are here as they are: a `"`
+    after a `‘` is an **opening** quote, and a `'` after a `“` is an
+    **opening** quote;
+  - a quote that is **already smart** is left alone.
+- The **runs** of the paragraph do not move: a straight quote and a
+  smart one are one character each, so the text keeps its length and
+  every run covers what it covered.
+- A paragraph that holds a **revision** is not touched: the tree
+  refuses to rewrite a tracked change, and so does this tree.
+
+### What the port found
+
+- **The tree does this as the user types, and this tree does it to a
+  paragraph.** The tree's AutoCorrect watches the keyboard and swaps
+  one character as it is typed — the tree knows where the caret is and
+  what is before it. Here a command is asked to make the quotes of a
+  paragraph smart, and the whole text is read and written again.
+- **The tree's rule is the character before, and it is this tree's
+  rule too.** The tree opens a quote when what is before it is
+  nothing, a space, or one of the opening marks, and the two marks
+  the tree adds for itself — a `"` after a `‘` and a `'` after a `“` —
+  are here as they are.
+- **The runs do not move, and that is a fact of the letters.** A
+  straight quote and a smart one are one character each, so the
+  lengths of the runs are the same before and after. The tree's
+  AutoCorrect never had to think of it: it changed one character in
+  place. Here the whole text is written again, and it still holds.
+- **The tree refuses to touch a tracked change, and so does this
+  tree** — the tree refuses it in its replace and here it is refused
+  in the quotes.
+- **The tree's AutoFormat has much more in it**: dashes that become
+  en dashes and em dashes, two spaces that become a full stop, a
+  `* ` that becomes a list, a line of dashes that becomes a border,
+  and a `+---+---+` that becomes a table. None of that is here.
+
+### What it cost
+
+- **Six tests** in the prose battery (`tests/quotes.rs`): the quote
+  that becomes smart, the quote after a space, the tree's own two
+  marks, the runs that do not move, the revision that is not touched,
+  and the node that is not a paragraph.
+- **One new command** (`prose.block.quotes`) in a new module
+  (`src/quotes.rs`). The prose battery now carries **90** commands and
+  the MCP server **809**.
+
+### What it does not settle
+
+- **The quotes are not made as the text is typed**: the command is
+  asked for, and nothing watches the keyboard.
+- **The other AutoFormat rules are not here**: the dashes, the two
+  spaces, the lists, the border lines and the tables of the tree are
+  not ported.
+- **The quotes are not the tree's whole AutoCorrect**: the tree's
+  spelling and its capitalisation of the first word after a full stop
+  are not here either.
