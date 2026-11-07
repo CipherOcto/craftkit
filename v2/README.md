@@ -4052,6 +4052,7 @@ so.
 | the **numbers stored as text** | **built.** The cells of a sheet that hold a number as text may be read — and turned into the numbers they stand for (§615) | §615 |
 | the **OTIO** read back | **built.** A timeline of OTIO may be read — the clips of its tracks become clips of a sequence, and the media of the file become items (§616) | §616 |
 | the **FCPXML** read back | **built.** A document of FCPXML may be read — the clips of its spine become clips of a sequence, and the media of the file become items (§617) | §617 |
+| the **edit decision list** read back | **built.** A list of cuts may be read — the events of the list become clips of a sequence, and its reels become items (§618) | §618 |
 
 ### The list of things that are honestly not there: empty
 
@@ -40505,3 +40506,84 @@ into a sequence again.
   a sequence is left out, and said.
 - **The transitions and the markers are not read**: they are left out,
   and said.
+
+## 618. The edit decision list read back
+
+The list of §609 can now be **read**: a file of cuts is made into a
+sequence again.
+
+### What was built
+
+- The new command **`film.import.edl`** reads an edit decision list
+  and makes the **sequence** it names:
+  - the file is read through a **bound** — at most **sixteen
+    mebibytes** — and a file that cannot be read is refused;
+  - a file that holds **no event** is refused: it is not a list of
+    cuts;
+  - the **rate** is the rate of the battery, 25 frames a second: an
+    EDL carries no rate of its own, and the tree takes the rate of
+    the media it reads;
+  - a **channel** is `V` for a video track, and `A`, `A1`, `AA` and
+    `An` for the audio ones — the tree's own rule: `AA` is **two**
+    audio channels of one event, and `B` is a video channel and an
+    audio one;
+  - the **media** of a reel is an **item** of a bin, named after the
+    reel, and the **clip** points at it — the same shape as a clip
+    made by hand;
+  - the **start** of a clip is the record in of its event, its
+    **length** is the record out less the record in, and the
+    **source** is the source in;
+  - a **dissolve** — an event that is not a cut — is left out, and
+    said: a dissolve is two cuts, and the tree writes it as two;
+  - the **title** of the list names the sequence, when no name is
+    given.
+- The **sequence** of an imported file now sits in a **bin of its
+  own** — `the film sequences` — and the media of the file sit in
+  `the film media`. A sequence is not a media, and a bin of media
+  that holds a sequence says otherwise. The three readers before it
+  (§614, §616, §617) do the same now.
+
+### What the port found
+
+- **The tree's reader takes the rate of the media.** An EDL carries
+  no rate of its own, and the tree asks for it — the rate is a
+  parameter of the reading, and the tree's own note says so. Here the
+  rate is the rate of the battery, and the frames of a timecode are
+  counted at it.
+- **The tree's `AA` is two audio channels of one event, and this
+  tree's writer names its second audio track `AA`.** The two mean
+  different things: the writer of §609 names a track, and the tree's
+  rule names a channel. The reader follows the tree's rule, so a list
+  of this tree with two audio tracks reads back as one event with two
+  channels — and the video track is unaffected.
+- **The tree's reader reads the `M2` lines, the black of a `BL` reel
+  and the comments** — a `* FROM CLIP NAME` says which clip a reel
+  stands for, and the tree's media is keyed by the reel **and** the
+  name. Here the reel is the name of the item, and nothing else is
+  read.
+- **The tree's reader reads the wipes and the keys** — an event that
+  is not a cut is a wipe or a key, and the tree makes one. Here every
+  event that is not a cut is left out, and said.
+
+### What it cost
+
+- **Seven tests** in the film battery (`tests/edlimport.rs`): the
+  list that is read, the clocks of a clip, the reel that is an item,
+  the audio channel, the dissolve that is left out and said, the file
+  that is not a list, and the **round trip** — a list this tree
+  wrote, read back into a sequence.
+- **One new command** (`film.import.edl`) in a new module
+  (`src/edlimport.rs`), and a change to the three readers before it:
+  the sequence of an imported file sits in a bin of its own. The film
+  battery now carries **85** commands and the MCP server **826**.
+
+### What it does not settle
+
+- **The rate is not read**: a list is read at 25 frames a second,
+  whatever it was written at, and a list of a film that runs at
+  twenty-four is off by a frame every second.
+- **The dissolves are not read**: an event that is not a cut is left
+  out, and said, and the two clips are butted together.
+- **The `M2` lines and the black are not read**: a reel that means
+  another reel is the reel it names, and a `BL` reel is an ordinary
+  one.
