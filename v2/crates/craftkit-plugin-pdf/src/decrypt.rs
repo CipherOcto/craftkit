@@ -70,11 +70,25 @@ impl DecryptFile {
             return Err(EngineError::Failed {
                 id: COMMAND.to_string(),
                 message: format!(
-                    "not supported yet: the file is encrypted with {}, and only RC4 is read here",
+                    "not supported yet: the strings are encrypted with {}, and only RC4 is read here",
                     scheme.strings
                 ),
             });
         }
+        // The **streams** may be scrambled with AES, and the key of an
+        // AES object is salted.
+        let aes = match scheme.streams.as_str() {
+            "rc4" => false,
+            "aes-128" => true,
+            other => {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!(
+                        "not supported yet: the streams are encrypted with {other}, and only RC4 and AES-128 are read here"
+                    ),
+                });
+            }
+        };
         let password = self.password.0.as_bytes().to_vec();
         let Some(key) = crate::crypt::opens(&password, &scheme) else {
             return Err(EngineError::Failed {
@@ -98,10 +112,11 @@ impl DecryptFile {
                 continue;
             }
             let generation = node.data.get("generation").and_then(|number| number.as_u64()).unwrap_or(0);
-            let object_key = crate::crypt::object_key(&key, number, generation);
+            let string_key = crate::crypt::object_key(&key, number, generation, false);
+            let stream_key = crate::crypt::object_key(&key, number, generation, aes);
             let entries: Vec<(String, Json)> = crate::entries_of(&node.data)
                 .into_iter()
-                .map(|(name, value)| (name, crate::crypt::scrambled(&value, &object_key)))
+                .map(|(name, value)| (name, crate::crypt::scrambled(&value, &string_key)))
                 .collect();
             let stream = match &node.stream {
                 Some(path) => {
@@ -115,7 +130,15 @@ impl DecryptFile {
                         message: format!("the stream's bytes cannot be read: {message}"),
                     })?;
                     streams += 1;
-                    Some(crate::crypt::rc4(&object_key, &bytes))
+                    Some(if aes {
+                        // The **vector**: the first sixteen bytes of the
+                        // stream are the vector the blocks are chained
+                        // from.
+                        let (vector, body) = bytes.split_at(bytes.len().min(16));
+                        crate::aes::decrypt(&stream_key, vector, body)
+                    } else {
+                        crate::crypt::rc4(&stream_key, &bytes)
+                    })
                 }
                 None => None,
             };

@@ -125,6 +125,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod aes;
 mod annot;
 mod appearance;
 mod attachments;

@@ -63,6 +63,9 @@ const LARGEST_OBJECT_KEY: usize = 16;
 /// The **times** the user's entry is scrambled again.
 const USER_ROUNDS: u8 = 19;
 
+/// The **salt**: the four bytes an AES object is keyed with.
+const SALT: &[u8; 4] = b"sAlT";
+
 /// The **shifts** of the rounds of **MD5**.
 const SHIFTS: [u32; 64] = [
     7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5,
@@ -220,13 +223,17 @@ pub fn file_key(password: &[u8], scheme: &Scheme) -> Vec<u8> {
 ///
 /// The key of an object is the hash of the key of the file and of the
 /// number of the object — and of the generation it has.
-pub fn object_key(key: &[u8], number: u64, generation: u64) -> Vec<u8> {
+pub fn object_key(key: &[u8], number: u64, generation: u64, aes: bool) -> Vec<u8> {
     let mut message: Vec<u8> = key.to_vec();
     message.push((number & 0xff) as u8);
     message.push(((number >> 8) & 0xff) as u8);
     message.push(((number >> 16) & 0xff) as u8);
     message.push((generation & 0xff) as u8);
     message.push(((generation >> 8) & 0xff) as u8);
+    if aes {
+        // The **salt**: the four bytes an AES object is keyed with.
+        message.extend_from_slice(SALT);
+    }
     let digest = md5(&message);
     let length = (key.len() + 5).min(LARGEST_OBJECT_KEY);
     digest[..length].to_vec()
@@ -396,6 +403,8 @@ pub struct Scheme {
     pub encrypt_metadata: bool,
     /// The way the strings are scrambled.
     pub strings: String,
+    /// The way the streams are scrambled.
+    pub streams: String,
     /// The owner's entry: thirty-two bytes.
     pub owner: Vec<u8>,
     /// The user's entry: thirty-two bytes.
@@ -438,6 +447,7 @@ pub fn scheme_of(document: &Document, command: &str) -> Result<Option<Scheme>, E
         permissions: encryption.permissions,
         encrypt_metadata: encryption.encrypt_metadata,
         strings: encryption.strings,
+        streams: encryption.streams,
         owner,
         user,
     }))

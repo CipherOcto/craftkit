@@ -353,6 +353,7 @@ impl EncryptFile {
             permissions: PERMISSIONS,
             encrypt_metadata: true,
             strings: "rc4".to_string(),
+            streams: "rc4".to_string(),
             owner: owner_entry.clone(),
             user: Vec::new(),
             identifier: identifier.clone(),
@@ -378,7 +379,7 @@ impl EncryptFile {
             if object.number == number {
                 continue;
             }
-            let object_key = crate::crypt::object_key(&key, object.number, 0);
+            let object_key = crate::crypt::object_key(&key, object.number, 0, false);
             object.entries = object
                 .entries
                 .iter()
