@@ -11,3 +11,10 @@ license.workspace = true
 # is the SDK's.
 craftkit-sdk = { workspace = true }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+# A battery, so that the test's catalogue holds more than the core's
+# commands: a catalogue of forty-nine commands is a catalogue, and a
+# test that proves the catalogue says what the registry says needs
+# more than one kind of command in it.
+craftkit-plugin-prose = { path = "../craftkit-plugin-prose" }

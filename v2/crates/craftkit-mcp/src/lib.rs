@@ -33,8 +33,17 @@
 //! line. A **notification** has no id and gets no answer.
 //!
 //! The methods are the ones a client uses: `initialize`, `ping`,
-//! `tools/list`, `tools/call`, and the `notifications/initialized`
+//! `tools/list`, `tools/call`, `resources/list`, `resources/read`,
+//! `resources/templates/list`, and the `notifications/initialized`
 //! notification.
+//!
+//! # The resources
+//!
+//! A tool **acts**; a resource **is**. The server serves both: the
+//! **command catalogue** and the **design the session holds**, and a
+//! **template** that names one node. The resources are in
+//! [`resources`], and they change nothing — they are the one part of
+//! this door that is not a command, because they are not a behaviour.
 
 #![deny(
     clippy::unwrap_used,
@@ -47,6 +56,8 @@
 #![forbid(unsafe_code)]
 
 use craftkit_sdk::serde_json::{Value as Json, json};
+pub mod resources;
+
 use craftkit_sdk::{Doc, EngineError, Outcome, Session};
 
 /// The protocol version this server speaks.
@@ -198,7 +209,7 @@ impl Server {
                 };
                 Ok(json!({
                     "protocolVersion": version,
-                    "capabilities": { "tools": {} },
+                    "capabilities": { "tools": {}, "resources": {} },
                     "serverInfo": {
                         "name": "craftkit",
                         "title": "craftkit",
@@ -215,6 +226,26 @@ impl Server {
             }
             "ping" => Ok(json!({})),
             "notifications/initialized" | "notifications/cancelled" => Ok(json!({})),
+            "resources/list" => Ok(json!({ "resources": resources::list_json() })),
+            "resources/templates/list" => Ok(json!({ "resourceTemplates": resources::templates_json() })),
+            "resources/read" => {
+                let Some(uri) = params.get("uri").and_then(Json::as_str) else {
+                    return Err((
+                        -32602,
+                        "`uri` is required and must be a string; call resources/list".to_string(),
+                    ));
+                };
+                match resources::read(uri, &self.session) {
+                    Ok((mime, body)) => Ok(json!({
+                        "contents": [{
+                            "uri": uri,
+                            "mimeType": mime,
+                            "text": body.to_string(),
+                        }]
+                    })),
+                    Err(error) => Err((error.code(), error.message())),
+                }
+            }
             "tools/list" => {
                 Ok(json!({ "tools": self.tools.iter().map(|tool| tool.to_json()).collect::<Vec<_>>() }))
             }

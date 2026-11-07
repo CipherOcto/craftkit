@@ -466,6 +466,7 @@ version = "0.2.0"
 name = "craftkit-mcp"
 version = "0.2.0"
 dependencies = [
+ "craftkit-plugin-prose",
  "craftkit-sdk",
  "serde_json",
 ]
