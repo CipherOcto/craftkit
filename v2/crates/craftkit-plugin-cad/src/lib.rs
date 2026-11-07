@@ -92,6 +92,7 @@ mod measurements;
 mod mirrors;
 mod modify;
 mod order;
+mod svgexport;
 
 pub use arcs::AddArc;
 pub use audits::AuditDrawing;
@@ -115,6 +116,7 @@ pub use measurements::{MeasureAngle, MeasureArea, MeasureLength, MeasureRadius};
 pub use mirrors::MirrorEntity;
 pub use modify::{MoveEntity, RemoveEntity, RotateEntity, ScaleEntity};
 pub use order::{BackwardEntity, BringToFront, ForwardEntity, ListEntities, SendToBack};
+pub use svgexport::ExportSvg;
 
 /// The CAD layer.
 ///
@@ -1110,6 +1112,7 @@ craftkit_sdk::plugin_anchor!(
     AddDrawing,
     ImportDxf,
     ExportDxf,
+    ExportSvg,
     AddLayer,
     AddBlock,
     AddLine,
