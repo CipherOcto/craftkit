@@ -4049,6 +4049,7 @@ so.
 | the **errors** of a sheet | **built.** The cells whose formula comes out as an error may be read — the error and the formula that gave it, worked out every time (§612) | §612 |
 | the **ALE** of a sequence | **built.** An Avid log exchange may be written — a tab-delimited clip log with a heading, the columns and a row for each clip (§613) | §613 |
 | the **ALE** read back | **built.** An Avid log exchange may be read — the media of the log become items and its rows become clips on a track of a sequence (§614) | §614 |
+| the **numbers stored as text** | **built.** The cells of a sheet that hold a number as text may be read — and turned into the numbers they stand for (§615) | §615 |
 
 ### The list of things that are honestly not there: empty
 
@@ -40272,3 +40273,77 @@ into a sequence again.
 - **The columns that are not read are not read**: the `Tape` and the
   `Tracks` of a row are not read, and a log with the tree's own
   metadata columns reads the six it knows and leaves the rest.
+
+## 615. The numbers stored as text
+
+A cell that holds the text `42` is not a number: it is a text that
+*reads* as one, and a spreadsheet application marks such a cell and
+offers to turn it into the number it stands for.
+
+### What was built
+
+- The new command **`grid.numbers.stored.as.text`** reads the cells
+  of a sheet that hold a number as text, and says which number each
+  of them stands for:
+  - the list is **derived**: every cell is looked at, every time, and
+    no flag is stored, so no flag can be stale;
+  - a cell with a **formula** is not one: the tree flags a
+    **constant** that would be a number if it were typed;
+  - a **text** is a number when it is a plain number — with a sign, a
+    currency sign, a percent sign and thousands separators as the
+    tree reads them, `$5` and `5%` but not `$5%` — and when it is a
+    number in **accounting parentheses**: `(5)` is `-5` and `$(5)` is
+    `(-5)`;
+  - a **date** is not a number here, and a **fraction** is not
+    either: the tree flags what would be a number if typed, and a
+    date is a date;
+  - a sheet with more than **ten thousand** such cells is **refused**:
+    the answer would be a wall, and the tree stops at ten thousand
+    and says nothing.
+- The new command **`grid.numbers.convert`** turns them into numbers:
+  - the cell holds the number it stood for, and it **keeps its
+    format**;
+  - a cell that is **locked** by the sheet's protection, or **covered**
+    by a merge, is not written — the refusal is the one every other
+    write of this tree gives;
+  - a sheet with more than ten thousand such cells is refused, and
+    nothing is written.
+
+### What the port found
+
+- **The tree's flag is a decoration, not a command.** The tree marks
+  the cell with a green corner and puts a warning button beside it
+  whose menu converts the cell; the reading itself is a helper in the
+  model. Here the list is a command of its own, and it answers for
+  the whole sheet.
+- **The tree's conversion takes a range.** Its command converts the
+  cells of the range that are asked for; here the conversion is over
+  the whole sheet, because the sheet is what the command names.
+- **The tree does not say what its conversion does with a locked
+  cell.** Here a locked cell, and a cell covered by a merge, is
+  refused — the rule every other write of this tree gives.
+- **The tree's flag is on the text of the cell and not on its
+  result.** A formula whose result reads as a number is not flagged,
+  and neither is here.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/storedtext.rs`): the text
+  that is a number, the number and the formula that are not, the
+  accounting parentheses, the derived list, the conversion, and the
+  node that is not a sheet.
+- **Two new commands** (`grid.numbers.stored.as.text` and
+  `grid.numbers.convert`) in a new module (`src/storedtext.rs`). The
+  grid battery now carries **133** commands and the MCP server
+  **823**.
+
+### What it does not settle
+
+- **The cell is not marked**: this tree has no cell decoration, and
+  the green corner of the tree's cell is not here. The list is the
+  command's answer, and nothing on the sheet says it.
+- **The conversion is not over a range**: it is over the whole sheet,
+  and a range of one cell is not a thing this command can be given.
+- **The tree's other background check is not here**: it marks the
+  cells whose formula comes out as an error, and that check is the
+  one of §612.
