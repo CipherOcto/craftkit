@@ -60,6 +60,23 @@ impl ReadClip {
         let track = crate::track_of(session, clip);
         let sequence = crate::sequence_of(session, clip);
         let item = session.document().relations_from(clip, Some("clip")).first().map(|relation| relation.to);
+        // The **nested clip**: the clips it holds, and the clip it is
+        // held by. Both are derived from the tree.
+        let members: Vec<u64> = node
+            .children
+            .iter()
+            .filter(|child| child.kind == "film.track")
+            .flat_map(|track| track.children.iter())
+            .filter(|child| child.kind == "film.clip")
+            .map(|child| child.id)
+            .collect();
+        let nested_in = track.and_then(|track| {
+            session
+                .document()
+                .walk()
+                .find(|node| node.kind == "film.clip" && node.children.iter().any(|child| child.id == track))
+                .map(|node| node.id)
+        });
         Ok(Outcome::new(format!("the clip `{clip}`")).with_data(json!({
             "id": clip,
             "name": name,
@@ -77,6 +94,9 @@ impl ReadClip {
             "track": track,
             "sequence": sequence,
             "item": item,
+            "nested": !members.is_empty(),
+            "members": members,
+            "nested_in": nested_in,
         })))
     }
 }
