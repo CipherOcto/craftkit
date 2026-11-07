@@ -4044,6 +4044,7 @@ so.
 | the **nested clip** in the **OTIO** | **built.** A nested clip is written out as a stack of the tracks it holds, and a sequence with one can be written at all (§607) | §607 |
 | the **nested clip** in the **FCPXML** | **built.** A nested clip is written out as a media that holds a sequence of the tracks it holds, and the clip points at that media (§608) | §608 |
 | the **nested clip** in the **EDL** | **built.** A nested clip has no tape and no file — its reel is `AX`, the tree's own rule, and its name is in a comment (§609) | §609 |
+| the **theme** of a document | **built.** A document may say the fonts of its headings and of its body, and the accent colour — and the theme is derived into every style that says nothing of its own (§610) | §610 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39919,3 +39920,79 @@ no file: its reel is `AX`, and its name is written in a comment.
 - **A nested clip is one event and not a list of its own**: the
   clips it holds are not in the list, and the tree's list says
   nothing of them either.
+
+## 610. The theme of a document
+
+A **theme** is the pair of fonts a document uses — the **major** font
+of the headings and the **minor** font of the body — and the **accent
+colour** the headings are drawn in.
+
+### What was built
+
+- The new command **`prose.document.theme`** says what the theme of a
+  document is, and reads it back:
+  - the **major** font, the font of the headings;
+  - the **minor** font, the font of the body;
+  - the **accent colour**, as `#rrggbb`.
+- The theme is **under** the styles, and it is **derived** into them:
+  - a style that says **no font** of its own takes the font of the
+    theme — the major font for a **heading** and the minor font for
+    the body;
+  - a **heading** that says **no colour** of its own takes the accent
+    colour;
+  - a style that says a font or a colour of its own keeps it.
+- A **heading** is a style whose name begins with `Heading`, and the
+  `Title` — the tree's rule for what a heading is.
+- A **font** is not nothing: a font that is empty is refused. A
+  **colour** is `#rrggbb`, and an **empty** colour takes the accent
+  away — the tree's rule for a colour.
+- A part that is **not named** keeps what it was, and the theme is in
+  the document's own reading.
+
+### What the port found
+
+- **The tree's theme is a catalogue and this tree's theme is a fact.**
+  The tree ships a list of themes — each with its name, its heading
+  font, its body font and its six accent colours — and
+  `design.theme` applies one of them, and `design.themes` lists
+  them. Here a theme is **what the document says**: the two fonts and
+  the accent colour are given, and nothing else is.
+- **The tree's theme is applied to the styles and this tree's theme
+  is under them.** The tree's `design.themeFonts` writes the fonts
+  into the styles themselves — the heading styles take the heading
+  font, the others the body font — and the styles keep those fonts
+  when the theme is changed. Here the theme is **under** the styles:
+  a style that says nothing of its own takes the theme's font, and a
+  theme that is changed is felt by every such style, while a style
+  that says a font of its own keeps it. The tree's way makes the
+  theme a thing that was applied once; this way makes it a thing
+  that is always there.
+- **The tree's accent colour is on the heading styles, and so is
+  this tree's** — but the tree writes it into the styles, and here it
+  is derived into them, so that a theme that is changed changes the
+  colour of the headings that say nothing of their own.
+- **The tree's theme is a fact of the document and so is this
+  tree's** — and the tree's `design.theme` also changes the
+  document's settings and its page colour. Here the theme is the
+  theme: the fonts and the accent, and nothing else.
+
+### What it cost
+
+- **Six tests** in the prose battery (`tests/theme.rs`): the theme
+  that is said, the style that takes the font of the theme, the
+  heading that takes the major font and the accent, the style that
+  says its own, the theme that is changed and is felt, and the theme
+  that is not one.
+- **One new command** (`prose.document.theme`) in a new module
+  (`src/theme.rs`). The prose battery now carries **98** commands and
+  the MCP server **817**.
+
+### What it does not settle
+
+- **There is no catalogue of themes**: the tree ships a list of
+  themes with their colours, and here the fonts and the accent are
+  given.
+- **The theme does not change the page**: the tree's theme also sets
+  the document's page colour, and here the page is its own.
+- **The theme is not in the file**: it is a fact of the document node
+  and the file carries it (§602), and nothing reads it but the styles.
