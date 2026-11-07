@@ -4006,6 +4006,7 @@ so.
 | the **marked content** of a tagged file | **built.** The text under each element of the structure tree is read — the marked content is found by its number and the text under it is read (§569) | §569 |
 | the **place** of the text on a page | **built.** A piece of text says where it begins — the origin of the text matrix, as the moves of the file put it (§570) | §570 |
 | the **transition** of a page | **built.** A page may say how it comes in — the kind of the transition, how long it takes and the way it moves (§571) | §571 |
+| the **reading** of an SVG file | **built.** An SVG file is read into the drawing — the paths, their colours and the place they are put (§572) | §572 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37261,3 +37262,71 @@ A page may say how it is to be **shown**.
   sound, and it is not read here.
 - **The order of the pages is not read**: a page may say what it
   follows, and that is not read here either.
+
+## 572. The reading of an SVG file
+
+An SVG file is a way of writing a drawing down, and it can be read
+back.
+
+### What was built
+
+- The new command **`vector.import.svg`** reads an SVG file into the
+  document:
+  - every **path** of the file, with the **fill**, the **stroke** and
+    its width, the **rule** that says what is inside, and the
+    **opacity**;
+  - the **place** of each path: the transform of the file, with the
+    file's own units turned into the tree's millimetres;
+  - and the elements the file holds that this tree does **not** read,
+    named in the answer.
+- The rules:
+  - a **pixel** is 25.4/96 of a millimetre: the file counts in
+    pixels and the tree counts in millimetres, and the file is scaled
+    into the tree's units;
+  - the world has **Y up** and an SVG file has Y down, so the drawing
+    is **turned over** and its bottom left corner stands at the tree's
+    origin;
+  - a **transform** is the place the drawing is put, and the transform
+    of a group is the transform of everything in it;
+  - a **shape**, a text, a gradient and any other element this tree
+    cannot read is **skipped**, and the answer says what it skipped;
+  - an **arc** is not read: an arc is a curve, and this tree does not
+    write a curve it cannot say;
+  - a file with **no path** in it is refused, and the refusal says
+    what it skipped.
+
+### What the port found
+
+- **The tree scales into points and this one into millimetres**: the
+  tree's document counts in points — seventy-two to the inch — and
+  the file counts in pixels — ninety-six to the inch — so the tree
+  scales by three quarters. Here the tree counts in millimetres, and
+  the file is scaled by 25.4/96.
+- **The tree reads the shapes and this one reads the paths**: the
+  tree's importer reads the rectangles, the circles, the ellipses, the
+  lines, the polylines and the polygons, and it reads the text and
+  the symbols and the CSS. Here only the paths are read, and the
+  shapes are skipped and named.
+- **The tree warns about what it left out and this one says what it
+  skipped**: the same rule — a file that says something this tree
+  cannot read says so — with a different word for it.
+
+### What it cost
+
+- **Six tests** in the vector battery (`tests/svgimport.rs`): the
+  paths of a file and where they are put, the fill and the stroke of
+  a path, a transform, an element that is skipped, a file with no
+  path, and a path that holds an arc.
+- **One new module** (`src/svgimport.rs`) and **one new command**
+  (`vector.import.svg`). The vector battery now carries **48** commands
+  and the MCP server **767**.
+
+### What it does not settle
+
+- **The shapes are not read**: a file whose drawing is made of
+  rectangles has no paths to read, and it is refused.
+- **The text is not read**: a file with words in it has the words
+  skipped.
+- **The gradients are not read**: a path filled with a gradient is
+  read with the colour of the fill it names and not with the
+  gradient.
