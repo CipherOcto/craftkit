@@ -24,14 +24,24 @@
 //!   shape as a clip made by hand.
 //! - A **gap** is a hole: the clips after it move along, because the
 //!   offsets of the text say where every clip stands.
-//! - A **transition**, a **marker** and a **nested media** are left
-//!   out, and said.
+//! - A **transition** of the spine is a transition of the track: it
+//!   joins the clip before it and the clip after it, and where it
+//!   sits on the cut says how it is **aligned** — the tree's own
+//!   three ways.
+//! - A **marker** of a clip of the spine is a marker of the sequence:
+//!   its name is the `value` of the element and its comment is its
+//!   `note`, a `chapter-marker` is a chapter and a `marker` is a
+//!   comment, and their colours are the tree's own — mango for a
+//!   chapter and blue for a comment.
+//! - A **nested media** is left out, and said.
 //!
 //! # What it does not do
 //!
 //! - The **time map** of a retimed clip is not read, and the **roles**
 //!   of the assets are not read: an asset is a media, and that is all
 //!   it is.
+//! - A **marker** of a connected clip is a marker of the clip, and
+//!   this tree has no such marker: it is left out, and said.
 
 use craftkit_derive::Command;
 
@@ -166,6 +176,23 @@ fn find_sequence(element: &Element, inside_media: bool) -> Option<&Element> {
     None
 }
 
+/// A **transition** of a track: the two clips it joins and where it
+/// sits on the cut.
+struct Transition {
+    /// The outgoing clip.
+    from: Option<u64>,
+    /// The incoming clip.
+    to: Option<u64>,
+    /// Where it sits on the timeline.
+    start: u64,
+    /// How long it is.
+    duration: u64,
+    /// How it sits on the cut: `center`, `start` or `end`.
+    align: String,
+    /// The kind of transition.
+    effect: String,
+}
+
 /// The **reader**: it makes the nodes of a sequence.
 struct Reader<'a> {
     session: &'a mut Session,
@@ -237,6 +264,48 @@ impl Reader<'_> {
         document.add_relation(relation);
         self.clips += 1;
         Ok(clip)
+    }
+
+    /// The **marker** of a sequence: a named place on its timeline.
+    ///
+    /// The tree's own rules: a marker that is a point is a marker of
+    /// no length, and FCPXML has no marker of no length — so a
+    /// marker of one frame or less is a marker of no length. A
+    /// chapter is a chapter and is mango, and a marker is a comment
+    /// and is blue.
+    fn marker(
+        &mut self,
+        sequence: u64,
+        start: u64,
+        duration: u64,
+        name: String,
+        comment: String,
+        chapter: bool,
+    ) -> Result<u64, EngineError> {
+        let duration = if duration <= 1 { 0 } else { duration };
+        let data = json!({
+            "start": start,
+            "duration": duration,
+            "name": name,
+            "comment": comment,
+            "color": if chapter { "Mango" } else { "Blue" },
+            "kind": if chapter { "Chapter" } else { "Comment" },
+        });
+        self.node(Some(sequence), name.clone(), "film.marker", data)
+    }
+
+    /// The **transition** of a track: it joins two clips.
+    fn transition(&mut self, track: u64, transition: Transition) -> Result<u64, EngineError> {
+        let name = format!("transition at {}", transition.start);
+        let data = json!({
+            "from": transition.from,
+            "to": transition.to,
+            "start": transition.start,
+            "duration": transition.duration,
+            "align": transition.align,
+            "effect": transition.effect,
+        });
+        self.node(Some(track), name, "film.transition", data)
     }
 }
 
@@ -335,8 +404,21 @@ impl ImportFcpxml {
         let mut end = 0u64;
         let mut tracks = 1usize;
         let mut lanes: Vec<(i64, u64)> = Vec::new();
+        // The **clips** of the spine, in the order they are on the
+        // timeline, and the **transitions** that sit between them.
+        let mut laid: Vec<(u64, u64, u64)> = Vec::new();
+        let mut transitions: Vec<(usize, &Element)> = Vec::new();
         if let Some(spine_element) = sequence.child("spine") {
-            for element in spine_element.children_named("clip") {
+            for element in spine_element.children.iter() {
+                if element.name == "transition" {
+                    // A transition is **between** two clips: it is
+                    // counted where it stands in the spine.
+                    transitions.push((laid.len(), element));
+                    continue;
+                }
+                if element.name != "clip" {
+                    continue;
+                }
                 let start = frames_of(element.attribute("offset").unwrap_or("0s"), rate);
                 let duration = frames_of(element.attribute("duration").unwrap_or("0s"), rate);
                 let source_in = frames_of(element.attribute("start").unwrap_or("0s"), rate);
@@ -347,7 +429,8 @@ impl ImportFcpxml {
                     continue;
                 }
                 let asset = assets.iter().find(|(other, _)| other == reference).map(|(_, asset)| asset);
-                reader.clip(spine, name, start, duration, source_in, asset)?;
+                let clip = reader.clip(spine, name, start, duration, source_in, asset)?;
+                laid.push((start, start + duration, clip));
                 end = end.max(start + duration);
                 // The **connected clips** over this one: the other
                 // tracks of the sequence.
@@ -389,21 +472,88 @@ impl ImportFcpxml {
                     reader.clip(*track, name, start + offset, duration, source_in, asset)?;
                     end = end.max(start + offset + duration);
                 }
-                // The **transitions**, the **markers** and the
-                // **nested media** are left out, and said.
+                // The **markers** of this clip: they are markers of
+                // the sequence, and they start where the clip starts
+                // plus what the element says.
+                for marker in element.children.iter() {
+                    if marker.name != "marker" && marker.name != "chapter-marker" {
+                        continue;
+                    }
+                    let offset = frames_of(marker.attribute("start").unwrap_or("0s"), rate);
+                    let duration = frames_of(marker.attribute("duration").unwrap_or("0s"), rate);
+                    let chapter = marker.name == "chapter-marker";
+                    let name = marker.attribute("value").unwrap_or_default().to_string();
+                    let comment = marker.attribute("note").unwrap_or_default().to_string();
+                    reader.marker(sequence_id, start + offset, duration, name, comment, chapter)?;
+                }
+                // A **transition** inside a clip is not a transition of
+                // the spine, and it is left out, and said.
                 for transition in element.children_named("transition") {
                     reader.said.push(format!(
-                        "the transition `{}` is left out",
+                        "the transition `{}` is inside a clip and it is left out",
                         transition.attribute("name").unwrap_or("a transition")
                     ));
                 }
-                for marker in element.children_named("marker") {
-                    reader.said.push(format!(
-                        "the marker `{}` is left out",
-                        marker.attribute("name").unwrap_or("a marker")
-                    ));
-                }
             }
+        }
+        // The **transitions** of the spine: each one joins the clip
+        // before it and the clip after it.
+        for (position, element) in transitions {
+            let start = frames_of(element.attribute("offset").unwrap_or("0s"), rate);
+            let duration = frames_of(element.attribute("duration").unwrap_or("0s"), rate);
+            if duration == 0 {
+                continue;
+            }
+            let previous = position.checked_sub(1).and_then(|index| laid.get(index));
+            let next = laid.get(position);
+            let from = previous.map(|(_, _, clip)| *clip);
+            let to = next.map(|(_, _, clip)| *clip);
+            if from.is_none() && to.is_none() {
+                continue;
+            }
+            // The two clips must be **next to each other**: a
+            // transition is over a cut, and a cut is where one clip
+            // ends and the next begins.
+            let joined = match (previous, next) {
+                (Some((_, end, _)), Some((start, _, _))) => end == start,
+                _ => true,
+            };
+            if !joined {
+                reader.said.push(format!(
+                    "the transition `{}` is not over a cut and it is left out",
+                    element.attribute("name").unwrap_or("a transition")
+                ));
+                continue;
+            }
+            // The **cut** the transition sits over: the start of the
+            // clip it comes into, or the end of the one it comes
+            // from.
+            let cut = next
+                .map(|(start, _, _)| *start)
+                .or_else(|| previous.map(|(_, end, _)| *end))
+                .unwrap_or(start);
+            // The **alignment** is the tree's own: one that starts at
+            // the cut starts at it, one that ends at it ends at it,
+            // and any other is centred on it.
+            let align = if cut == start {
+                "start"
+            } else if cut == start + duration {
+                "end"
+            } else {
+                "center"
+            };
+            // The **effect**: the name of the filter the transition
+            // names, or the name of the transition itself.
+            let effect = element
+                .child("filter-video")
+                .and_then(|filter| filter.attribute("name"))
+                .or_else(|| element.attribute("name"))
+                .unwrap_or("cross_dissolve")
+                .to_string();
+            reader.transition(
+                spine,
+                Transition { from, to, start, duration, align: align.to_string(), effect },
+            )?;
         }
         // The **length** of the sequence is what its tracks hold.
         if let Some(node) =

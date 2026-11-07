@@ -236,7 +236,10 @@ fn a_transition_of_another_track_is_left_out_and_said() {
     assert!(left_out[0].contains("left out"), "{left_out:?}");
 }
 
-/// **A marker is written inside the element it sits on.**
+/// **A marker is written inside the element it sits on** — in the
+/// tree's own form: the name is the `value` of the element, and a
+/// point is one frame long, because FCPXML has no marker of no
+/// length.
 #[test]
 fn a_marker_is_written_inside_its_element() {
     let mut session = session();
@@ -246,7 +249,35 @@ fn a_marker_is_written_inside_its_element() {
         .execute("film.marker.add", &json!({ "sequence": sequence, "start": 10, "name": "the mark" }))
         .expect("the marker is added");
     let text = xml_of(&mut session, sequence);
-    assert!(text.contains("<marker start=\"10/25s\" duration=\"0s\" name=\"the mark\"/>"), "{text}");
+    assert!(text.contains("<marker start=\"10/25s\" duration=\"1/25s\" value=\"the mark\"/>"), "{text}");
+}
+
+/// **A chapter is a chapter**, and it says so in the element it is
+/// written as.
+#[test]
+fn a_chapter_is_written_as_a_chapter() {
+    let mut session = session();
+    let (sequence, track) = a_timeline(&mut session, "the media");
+    a_clip(&mut session, track, sequence, 0, 125, 0);
+    session
+        .execute(
+            "film.marker.add",
+            &json!({
+                "sequence": sequence,
+                "start": 10,
+                "name": "the chapter",
+                "kind": "Chapter",
+                "comment": "the note",
+            }),
+        )
+        .expect("the chapter is added");
+    let text = xml_of(&mut session, sequence);
+    assert!(
+        text.contains(
+            "<chapter-marker start=\"10/25s\" duration=\"1/25s\" value=\"the chapter\" note=\"the note\"/>"
+        ),
+        "{text}"
+    );
 }
 
 /// **A clip that could not be made is not on the timeline.**

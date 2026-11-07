@@ -42,8 +42,10 @@
 //! - a **clip that is retimed** — sped up or reversed — carries a
 //!   `timeMap`, which says where the source goes;
 //! - the **transitions** of the spine are `transition` elements, and
-//!   the **markers** of the sequence are written inside the element
-//!   they sit on;
+//!   they come **before** the clip they come into — the cut leads
+//!   into that clip — and the **markers** of the sequence are written
+//!   inside the element they sit on, in the tree's own form: the name
+//!   is the `value` of the element and the comment is its `note`;
 //! - a **nested clip** — a clip that holds other clips — is a media
 //!   that holds a sequence of its own.
 //!
@@ -577,15 +579,15 @@ impl ExportFcpxml {
             for (index, transition) in transitions_of(spine).iter().enumerate() {
                 let resource = writer.effect(&transition.name);
                 let _ = index;
-                // The transition comes **after** the clip it comes
-                // into: it is the cut that follows that clip.
-                let after = elements
+                // The transition comes **before** the clip it comes
+                // into: it is the cut that leads into that clip, and
+                // the tree's own reader reads it there.
+                let before = elements
                     .iter()
                     .position(|element| element.clip == Some(transition.to))
-                    .map(|position| position + 1)
                     .unwrap_or(elements.len());
                 transitions.push((
-                    after,
+                    before,
                     format!(
                         "<transition name=\"{}\" offset=\"{}\" duration=\"{}\"><filter-video ref=\"{resource}\" name=\"{}\"/></transition>",
                         escape(&transition.name),
@@ -625,8 +627,24 @@ impl ExportFcpxml {
                         continue;
                     }
                 };
+            // The tree's own form of a marker: the name is the
+            // `value` of the element and the comment is its `note`,
+            // and a chapter is a `chapter-marker`.
+            let chapter = marker
+                .data
+                .get("kind")
+                .and_then(|kind| kind.as_str())
+                .map(|kind| kind.eq_ignore_ascii_case("Chapter"))
+                .unwrap_or(false);
+            let tag = if chapter { "chapter-marker" } else { "marker" };
+            let comment = marker.data.get("comment").and_then(|comment| comment.as_str()).unwrap_or_default();
+            let note =
+                if comment.is_empty() { String::new() } else { format!(" note=\"{}\"", escape(comment)) };
+            // FCPXML has no marker of no length: a point is written
+            // as one frame at the rate of the sequence.
+            let duration = if duration == 0 { 1 } else { duration };
             element.children.push(format!(
-                "<marker start=\"{}\" duration=\"{}\" name=\"{name}\"/>",
+                "<{tag} start=\"{}\" duration=\"{}\" value=\"{name}\"{note}/>",
                 time(start - element.start, rate),
                 time(duration, rate)
             ));
