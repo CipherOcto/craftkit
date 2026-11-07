@@ -43,12 +43,19 @@
 //!   `timeMap`, which says where the source goes;
 //! - the **transitions** of the spine are `transition` elements, and
 //!   the **markers** of the sequence are written inside the element
-//!   they sit on.
+//!   they sit on;
+//! - a **nested clip** — a clip that holds other clips — is a media
+//!   that holds a sequence of its own.
 //!
 //! The rules:
 //!
 //! - a clip with **no item** is refused: the list would name a source
-//!   that is not there;
+//!   that is not there — unless it is a **nested clip**, which plays
+//!   no media of its own;
+//! - a **nested clip** is a **media** that holds a sequence of the
+//!   tracks it holds, and the clip points at that media. The **spine**
+//!   of that sequence is the first of the tracks, and the others are
+//!   **left out**, and the answer says what was left out;
 //! - a **transition** on a track that is not the spine is **left out**,
 //!   and the answer says what was left out — the tree drops those too,
 //!   and here the dropping is said rather than done quietly;
@@ -295,6 +302,77 @@ impl Writer {
         resource
     }
 
+    /// The **media** of a **nested clip**: the tracks it holds,
+    /// written as a sequence of their own.
+    ///
+    /// The **spine** of that sequence is the first of the tracks; the
+    /// others are left out, and the answer says so.
+    fn nested_media(&mut self, document: &craftkit_sdk::Document, clip: &Node, format: &str) -> String {
+        let resource = self.id();
+        let tracks: Vec<std::sync::Arc<Node>> =
+            clip.children.iter().filter(|child| child.kind == "film.track").cloned().collect();
+        let duration = clip.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
+        let mut spine = String::new();
+        match tracks.first() {
+            Some(spine_track) => {
+                for track in tracks.iter().skip(1) {
+                    self.left_out.push(format!(
+                        "the track `{}` of the nested clip `{}` is not the spine of its media, and it is left out",
+                        track.name, clip.name
+                    ));
+                }
+                let mut at = 0u64;
+                for member in clips_of(spine_track) {
+                    let start = member.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
+                    let member_duration =
+                        member.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
+                    if start > at {
+                        spine.push_str(&format!(
+                            "          <gap name=\"Gap\" offset=\"{}\" start=\"{}\" duration=\"{}\"/>\n",
+                            time(at, self.rate),
+                            time(at, self.rate),
+                            time(start - at, self.rate)
+                        ));
+                    }
+                    let Some(item) = item_of(document, member.id) else {
+                        self.left_out.push(format!(
+                            "the clip `{}` of the nested clip `{}` has no item, and it is left out",
+                            member.name, clip.name
+                        ));
+                        at = start + member_duration;
+                        continue;
+                    };
+                    let asset = self.asset(&item);
+                    let source_in =
+                        member.data.get("source_in").and_then(|source| source.as_u64()).unwrap_or(0);
+                    spine.push_str(&format!(
+                        "          <clip ref=\"{asset}\" name=\"{}\" offset=\"{}\" start=\"{}\" duration=\"{}\"/>\n",
+                        escape(&member.name),
+                        time(start, self.rate),
+                        time(source_in, self.rate),
+                        time(member_duration, self.rate)
+                    ));
+                    at = start + member_duration;
+                }
+            }
+            None => {
+                self.left_out.push(format!(
+                    "the nested clip `{}` holds no track, and its media is written empty",
+                    clip.name
+                ));
+            }
+        }
+        let body = format!(
+            "      <sequence format=\"{format}\" duration=\"{}\" tcStart=\"0s\" tcFormat=\"NDF\">\n        <spine>\n{spine}        </spine>\n      </sequence>\n",
+            time(duration, self.rate)
+        );
+        self.resources.push(format!(
+            "    <media id=\"{resource}\" name=\"{}\">\n{body}    </media>\n",
+            escape(&clip.name)
+        ));
+        resource
+    }
+
     /// The **effect** of a transition.
     fn effect(&mut self, name: &str) -> String {
         if let Some((_, resource)) = self.effects.iter().find(|(other, _)| other == name) {
@@ -392,13 +470,20 @@ impl ExportFcpxml {
                         close: "gap".to_string(),
                     });
                 }
-                let Some(item) = item_of(document, clip.id) else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the clip `{}` has no item, and it has no source", clip.name),
-                    });
+                // A **nested clip** plays no media of its own: it is
+                // a media of the tracks it holds.
+                let resource = if clip.data.get("nested").and_then(|nested| nested.as_bool()).unwrap_or(false)
+                {
+                    writer.nested_media(document, clip.as_ref(), &format)
+                } else {
+                    let Some(item) = item_of(document, clip.id) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the clip `{}` has no item, and it has no source", clip.name),
+                        });
+                    };
+                    writer.asset(&item)
                 };
-                let resource = writer.asset(&item);
                 let source_in = clip.data.get("source_in").and_then(|source| source.as_u64()).unwrap_or(0);
                 let speed = clip.data.get("speed").and_then(|speed| speed.as_f64()).unwrap_or(1.0);
                 let reverse = clip.data.get("reverse").and_then(|reverse| reverse.as_bool()).unwrap_or(false);
