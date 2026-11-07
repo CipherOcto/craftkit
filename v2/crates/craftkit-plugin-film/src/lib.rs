@@ -193,6 +193,7 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 mod ale;
+mod aleimport;
 mod anchors;
 mod binreading;
 mod binremoval;
@@ -238,6 +239,7 @@ mod trim;
 mod workarea;
 
 pub use ale::ExportAle;
+pub use aleimport::ImportAle;
 pub use anchors::SynchroniseClip;
 pub use binreading::ReadBin;
 pub use binremoval::RemoveBin;
@@ -922,6 +924,7 @@ craftkit_sdk::plugin_anchor!(
     AddClip,
     ExportEdl,
     ExportAle,
+    ImportAle,
     ExportFcpxml,
     ExportOtio,
     ReadTimeline,
