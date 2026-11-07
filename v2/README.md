@@ -4066,6 +4066,7 @@ so.
 | the **blocks** of a DXF file | **built.** The blocks of a file become blocks of a drawing, and an insert names the block it puts in it (§629) | §629 |
 | the **transitions** and the **markers** of an FCPXML file | **built.** The transitions of the spine and the markers of its clips are read — and the writer is corrected to the tree's own form (§630) | §630 |
 | the **transitions** and the **markers** of an FCP7 file | **built.** The transitions of a track and the markers of the sequence are read, and the alignment is worked out the tree's way (§631) | §631 |
+| the **dissolves** and the **markers** of an EDL | **built.** A dissolve is a transition over the cut before it, and a `* LOC:` comment is a marker of the sequence (§632) | §632 |
 
 ### The list of things that are honestly not there: empty
 
@@ -41528,3 +41529,80 @@ way the tree works it out.
 - **The effects** of a clip item are not read, and neither are the
   **links** or the **labels** of the document.
 - **The bins** of the document are not made.
+
+## 632. The dissolves and the markers of an EDL
+
+The EDL of §617 may now carry its **dissolves** and its **markers**:
+a dissolve is a transition over the cut before it, and a marker is a
+place on the timeline.
+
+### What was built
+
+- The EDL **reader** reads a **dissolve** as what the tree reads it
+  as:
+  - a dissolve is an event that is not a cut, and it is a
+    **transition** over the cut before it: it joins the clip that ends
+    there and the clip that begins there;
+  - its **length** is the number the line carries;
+  - the **alignment** is the tree's own: it starts at the cut, and a
+    dissolve to **black** ends at it;
+  - the **effect** is the name the event gives — the `* EFFECT NAME:`
+    comment that belongs to it — and the tree's own default when it
+    gives none. A transition of an effect **this tree does not have**
+    is left out, and the answer says so.
+  - The other edits — a wipe, a key — are still left out, and said:
+    this tree has one transition, the tree's default, and it is a
+    dissolve.
+- The EDL **reader** reads the **markers** of the list:
+  - a marker is a `* LOC:` comment: the timecode is where it starts,
+    the rest is its name;
+  - its **colour** is the colour it names, in the tree's own words —
+    red is rose, cyan is teal, white is lavender and black is brown —
+    and **green** when it names none.
+- The **effect** of a transition now lives with the **transitions**,
+  where the tree's registry of effects would be: one list of the
+  effects this tree has, and the FCP7 reader and the EDL reader both
+  read it from there.
+
+### What the port found
+
+- **The tree's EDL writes a dissolve as two cuts**, and this tree's
+  reader read the second one as an event it could not read and left
+  it out. The tree's reader does not: it reads the pair as one
+  transition over the cut, with the length the line carries. The
+  reader here now does the same, and the note that said a dissolve
+  was left out is corrected in place.
+- **The tree's markers of an EDL come from the `* LOC:` comments**,
+  and their colours are the tree's own eight words, which are not the
+  names of the tree's labels: red is rose and white is lavender.
+  Here the colours are read in the tree's words and kept as the
+  tree's labels.
+- **The tree's effect name belongs to the event above it**, and not
+  to the whole file. Here the comment is read with the event it
+  follows, which is the tree's rule.
+- **The tree's dissolve to black extends the outgoing clip** through
+  the transition and says that the transition ends at the cut. Here
+  the alignment says it, and the clip is not extended: the model of
+  a clip in this tree is its own, and a transition does not change it.
+
+### What it cost
+
+- **Three tests** in the film battery (`tests/edlmarks.rs`): the
+  marker a `* LOC:` comment makes, the transition a dissolve makes,
+  and the transition of an effect this tree does not have.
+- **One test corrected** in the film battery (`tests/edlimport.rs`):
+  the test that said a dissolve is left out said something false
+  against the tree, and it now says that a dissolve is a transition
+  and that a wipe is left out.
+- **No new command**: the reader of §617 reads the dissolves and the
+  markers. The film battery still carries **86** commands and the MCP
+  server **831**.
+
+### What it does not settle
+
+- **A wipe and a key** are left out, and said: this tree has one
+  transition, the tree's default, and it is a dissolve.
+- **A dissolve to black does not extend the clip it comes from**,
+  though the tree's does: the transition ends at the cut and says so.
+- **The `M2` reel**, the `* FROM CLIP NAME` of a nested clip and the
+  **bins** of the list are still not read.
