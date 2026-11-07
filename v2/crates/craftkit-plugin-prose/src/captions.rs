@@ -96,58 +96,6 @@ fn text_of(name: &str, id: &str) -> Result<String, EngineError> {
     Ok(name.to_string())
 }
 
-/// A **number** written in a format: the tree's own four.
-fn number_of(number: u64, format: &str) -> String {
-    match format {
-        "roman" => roman(number).to_lowercase(),
-        "ALPHABETIC" => alphabetic(number, true),
-        "alphabetic" => alphabetic(number, false),
-        _ => number.to_string(),
-    }
-}
-
-/// A number in **roman** numerals.
-fn roman(number: u64) -> String {
-    let table = [
-        (1000, "M"),
-        (900, "CM"),
-        (500, "D"),
-        (400, "CD"),
-        (100, "C"),
-        (90, "XC"),
-        (50, "L"),
-        (40, "XL"),
-        (10, "X"),
-        (9, "IX"),
-        (5, "V"),
-        (4, "IV"),
-        (1, "I"),
-    ];
-    let mut left = number;
-    let mut out = String::new();
-    for (value, letters) in table {
-        while left >= value {
-            out.push_str(letters);
-            left -= value;
-        }
-    }
-    out
-}
-
-/// A number in **letters**: `a`, `b`, … `z`, `aa`, `ab`.
-fn alphabetic(number: u64, upper: bool) -> String {
-    let mut left = number.max(1);
-    let mut letters = Vec::new();
-    while left > 0 {
-        let rest = (left - 1) % 26;
-        letters.push((b'a' + rest as u8) as char);
-        left = (left - 1) / 26;
-    }
-    letters.reverse();
-    let letters: String = letters.into_iter().collect();
-    if upper { letters.to_uppercase() } else { letters }
-}
-
 /// The **captions** of a document, in order, each with the **number**
 /// it has — derived.
 pub fn captions_of(document: &Node) -> Json {
@@ -169,7 +117,7 @@ pub fn captions_of(document: &Node) -> Json {
             }
         };
         let mut caption = caption;
-        caption["number"] = json!(number_of(at, &format));
+        caption["number"] = json!(crate::numbers::of(at, &format));
         caption["block"] = json!(block.id);
         captions.push(caption);
     }

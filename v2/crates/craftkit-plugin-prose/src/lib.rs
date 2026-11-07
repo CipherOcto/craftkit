@@ -128,8 +128,10 @@ mod media;
 mod merges;
 mod numberformat;
 mod numbering;
+mod numbers;
 mod outline;
 mod page;
+mod pagenumbers;
 mod paragraph;
 mod properties;
 mod quotes;
@@ -168,8 +170,10 @@ pub use media::{SetAlt, SetDecorative, SetPlacement};
 pub use merges::{MergeCells, ReadMerges, SplitCell};
 pub use numberformat::NumberFormat;
 pub use numbering::{AddList, ReadNumber, SetNumbering};
+pub use numbers::of as number_in_format;
 pub use outline::{ReadOutline, ReadStyleLevel, SetStyleLevel};
 pub use page::{GetPage, SetPage};
+pub use pagenumbers::SetPageNumbers;
 pub use paragraph::{ReadBlockParagraph, ReadStyleParagraph, SetStyleParagraph};
 pub use properties::SetProperties;
 pub use quotes::SetQuotes;
@@ -1134,6 +1138,7 @@ craftkit_sdk::plugin_anchor!(
     SetList,
     SetStops,
     SetTheme,
+    SetPageNumbers,
     EndnoteKind,
     AddEndnote,
     ReadEndnotes,

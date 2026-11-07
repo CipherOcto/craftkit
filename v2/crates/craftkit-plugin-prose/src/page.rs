@@ -250,6 +250,10 @@ impl GetPage {
             "watermark": watermark,
             "borders": borders,
             "columns": columns,
+            // The **numbering** of the pages: the format the numbers
+            // are written in, the number the first page has, and the
+            // first page's number, which is derived.
+            "numbers": background.as_ref().map(|node| crate::pagenumbers::read_of(node)),
         })))
     }
 }
