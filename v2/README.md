@@ -4029,6 +4029,7 @@ so.
 | the **borders** of a page | **built.** A page may be drawn with a border — the style, the width and the colour of each of its four sides (§592) | §592 |
 | the **detail** of a group of a pivot | **built.** The rows that stand behind a group may be read — they are worked out from the range, and they cannot be out of date (§593) | §593 |
 | the **handler of revision six** | **built.** A file scrambled with AES-256 is opened — the key of the file is not the hash of the password, and the password is checked with a hardened hash (§594) | §594 |
+| the **encryption** of a file, made with AES-256 | **built.** A file of the handler of revision six may be made — the key of the file and the salts are worked out, and every string and stream has a vector of its own (§595) | §595 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38821,3 +38822,72 @@ PDF 2.0, written from ISO 32000-2:2020.
   at random, and nothing here draws anything at random.
 - **The permissions are not enforced**: they are read and checked
   against the file, and nothing acts on them.
+
+## 595. The encryption of a file, made with AES-256
+
+A file of the handler of **revision six**: the key of the file is
+worked out, the salts are worked out, and the strings and the streams
+are scrambled with AES-256.
+
+### What was built
+
+- The command **`pdf.file.encrypt`** takes the cipher **`aes-256`**
+  now, and a file of the handler of revision six is written:
+  - the file is of **revision six** and its key is of **256 bits**;
+  - the **key of the file** is worked out from the passwords and from
+    the file itself — from the numbers of its objects — and the
+    **salts** of the four entries are worked out the same way;
+  - the **user's entry** and the **owner's entry** are forty-eight
+    bytes each, and the two **encrypted entries** are thirty-two
+    bytes each: the key of the file comes out of them;
+  - the **permissions** are a block of sixteen bytes that is scrambled
+    with the key of the file, and it says that the file is a file of
+    this handler;
+  - the **strings and the streams** are scrambled with AES-256, and
+    every one of them has a **vector of its own**: the vector of a
+    string is worked out from the key, from the number of the object
+    and from the count of the strings before it, and the vector of a
+    stream is worked out from the key and from the number of the
+    object.
+- The same file and the same passwords always make the **same
+  file**: nothing here is drawn at random.
+
+### What the port found
+
+- **The specification draws the salts and the key at random, and this
+  tree works them out.** The handler of revision six says that the
+  key of the file and the four salts are drawn with a strong random
+  number generator. Here they are worked out from the passwords and
+  from the file, so that the same file and the same passwords always
+  make the same file — and a file made here is no stronger against a
+  search for the password than one made elsewhere. What makes that
+  search expensive is the **rounds of the hash**: sixty-four of them
+  and more, every guess.
+- **The tree's own rule is the same one.** The identifier of a file
+  scrambled with RC4 is worked out the same way (§578), and this is
+  that rule again with more things worked out.
+- **The tree's rules about a password do not fit this handler.** The
+  handler of revision four and before takes a password of thirty-two
+  bytes of PDFDocEncoding and pads it; this one takes a password of
+  UTF-8 up to a hundred and twenty-seven bytes and prepares it with
+  SASLprep — and that preparation is not here, so a password with a
+  letter outside ASCII is refused rather than guessed at (§594).
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/aes256writing.rs`): the
+  file made with AES-256 opened with the user's password, opened with
+  the owner's, the same file made twice, and a cipher that is not one
+  of the three.
+- **No new command**: the pdf battery still carries **67** commands
+  and the MCP server **798**.
+
+### What it does not settle
+
+- **The salts and the key of the file are not drawn at random**: they
+  are worked out, and a file made here is no stronger against a
+  search for the password than one made elsewhere.
+- **The preparation of the password is not here**: SASLprep is not
+  implemented, and a password with a letter outside ASCII is refused.
+- **The permissions are not enforced**: they are written into the
+  file, and nothing acts on them.
