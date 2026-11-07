@@ -4026,6 +4026,7 @@ so.
 | the **encryption** of a file, made with AES | **built.** A file may be scrambled with AES — the streams with AES and the strings with RC4, and the file says which is which (§589) | §589 |
 | the **autofit** of a row and of a column | **built.** A column may be made as wide as its text and a row as tall as it — the size is worked out from the text the cells hold (§590) | §590 |
 | the **background** of a page | **built.** A page may be painted with a colour and may carry a watermark — both facts of the document, and both may be taken away (§591) | §591 |
+| the **borders** of a page | **built.** A page may be drawn with a border — the style, the width and the colour of each of its four sides (§592) | §592 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38597,3 +38598,71 @@ carries: the tree's page background.
 - **The page's borders are not here**: the tree's `design.pageBorders`
   gives each side of the page a style, a width and a colour, and none
   of that is read or written here.
+
+## 592. The borders of a page
+
+A page drawn with a **border**: the style, the width and the colour
+of the border of each of its four sides. The tree's page borders.
+
+### What was built
+
+- The new command **`prose.page.borders`** sets the borders of the
+  page of a document:
+  - the **kind** is `box` — a border on every side — or `none`, and
+    every side takes no border at all;
+  - the **sides** may be named one by one: `top`, `bottom`, `left` or
+    `right`, and a side that is given **nothing** takes no border;
+  - the **style** is one of the tree's own eight — `single`,
+    `double`, `dotted`, `dashed`, `thick`, `triple`, `dotDash` and
+    `wave` — and a style that is not one of them is refused by name;
+  - the **width** is in points, from a **quarter** of a point to
+    **six**: the tree clamps a width to that range and says nothing,
+    and here a width outside it is refused;
+  - the **colour** is `#rrggbb`, a colour that is not one is refused,
+    and an **empty** colour takes the colour away, so that the border
+    has no colour of its own;
+  - a border is set **part by part**: a part that is not named leaves
+    the fact as it was, and a border that is new takes the tree's —
+    `single`, a point wide, and no colour of its own.
+- The command **`prose.page.get`** reads the page with them: the
+  **borders** of its sides, and a page with no border at all says
+  nothing.
+
+### What the port found
+
+- **The tree's page borders belong to a section and this one's belong
+  to the document.** The tree's `design.pageBorders` gives the borders
+  to the section the caret is in, or to every section of the document
+  when it is told to. Here a document has one page, and the borders
+  are the document's own.
+- **The tree clamps the width and this one refuses it.** The tree's
+  width is between a quarter of a point and six, and a width outside
+  it is brought back inside; here it is refused and the refusal says
+  which range the border has.
+- **The tree's border keeps the text away from it and this one does
+  not.** The tree's border has a **space** — twenty-four points
+  between the border and the text — and here that space is not a fact
+  at all.
+- **The tree's border has a style of its own for every side and this
+  one has the tree's styles too**: the eight names are the tree's and
+  they are here by name.
+
+### What it cost
+
+- **Seven tests** in the prose battery (`tests/borders.rs`): the
+  border on every side, the border set part by part, a side named, a
+  side that is given nothing, the kind `none`, a border that is not
+  one of the tree's, and a border that is not named.
+- **One new module** (`src/borders.rs`) and **one new command**
+  (`prose.page.borders`). The prose battery now carries **80**
+  commands and the MCP server **797**.
+
+### What it does not settle
+
+- **The border is not drawn**: it is a fact of the document, and
+  nothing here draws it on a page.
+- **The space between the border and the text is not here**: the
+  tree's border keeps the text twenty-four points away and this one
+  says nothing about it.
+- **The borders are not written out**: the tree writes them into its
+  own format, and this tree has no format of its own.
