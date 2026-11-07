@@ -171,6 +171,7 @@ mod tounicode;
 mod trailer;
 mod transitions;
 mod validation;
+mod widths;
 mod writer;
 mod xref;
 
