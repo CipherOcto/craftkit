@@ -4067,6 +4067,7 @@ so.
 | the **transitions** and the **markers** of an FCPXML file | **built.** The transitions of the spine and the markers of its clips are read — and the writer is corrected to the tree's own form (§630) | §630 |
 | the **transitions** and the **markers** of an FCP7 file | **built.** The transitions of a track and the markers of the sequence are read, and the alignment is worked out the tree's way (§631) | §631 |
 | the **dissolves** and the **markers** of an EDL | **built.** A dissolve is a transition over the cut before it, and a `* LOC:` comment is a marker of the sequence (§632) | §632 |
+| the **transitions** and the **markers** of an OTIO file | **built.** The transitions of a track and the markers of the stack are read — and the writer is corrected to write a transition once (§633) | §633 |
 
 ### The list of things that are honestly not there: empty
 
@@ -41606,3 +41607,85 @@ place on the timeline.
   though the tree's does: the transition ends at the cut and says so.
 - **The `M2` reel**, the `* FROM CLIP NAME` of a nested clip and the
   **bins** of the list are still not read.
+
+## 633. The transitions and the markers of an OTIO file
+
+The OTIO of §618 may now carry its **transitions** and its **markers**:
+they are read back, and a sequence that is written and read again is
+the same sequence.
+
+### What was built
+
+- The OTIO **reader** reads the **transitions** of a track:
+  - a transition joins the clip **before** it and the clip **after**
+    it, and it comes before the clip it comes into — the cut leads
+    into that clip;
+  - the **offsets** the text carries say how far it reaches on either
+    side of the cut, and they say where it sits: one that reaches
+    back over the cut only starts at it, one that reaches forward
+    over it only ends at it, and any other is centred on it — the
+    tree's own three ways;
+  - the **effect** is the name of the transition, or the kind of it,
+    and a transition of an effect **this tree does not have** is left
+    out, and the answer says so.
+- The OTIO **reader** reads the **markers** of the text:
+  - the markers of the **stack** of the tracks and the markers of the
+    **tracks** themselves are markers of the **sequence** — the tree's
+    own rule;
+  - a marker starts where its range starts and is as long as its
+    range;
+  - its **colour** is the colour it names, in the tree's own words —
+    red is rose, orange is mango, white is lavender — and green when
+    it names none.
+- The OTIO **writer** is **corrected**: it wrote every transition
+  **twice** — once before the clip it comes into and once after the
+  clip it comes from — and a transition with two sides is written
+  once, before the clip it comes into, which is the tree's own rule.
+- One test **corrected** in the film battery (`tests/otioimport.rs`):
+  the test that said a transition is left out said something false
+  against the tree, and it now says that a transition is read.
+
+### What the port found
+
+- **The tree's reader and the tree's writer agree on where a
+  transition stands**: before the clip it comes into, so that the
+  slots on either side of it are the clip it comes from and the clip
+  it comes into. This tree's writer stood it in both places — the
+  cut and the clip — because its model has no transition without an
+  incoming clip, and the two writes were the same transition twice.
+  The writer is corrected to the tree's rule.
+- **The tree's OTIO has ten colour words** — red, pink, orange,
+  yellow, green, cyan, blue, purple, black and white — and they are
+  not the names of the tree's labels: red is rose, orange is mango
+  and white is lavender. Here the colours are read in the tree's
+  words, and a name that is already a label is that label.
+- **The tree's markers live on the stack of the tracks**, and the
+  markers of a track are markers of the sequence too. Here both are
+  markers of the sequence.
+- **The tree's transition carries its alignment in its metadata**,
+  and works it out from the offsets when the metadata does not say.
+  Here the offsets say it, and the metadata is not read.
+
+### What it cost
+
+- **Three tests** in the film battery (`tests/otiomarks.rs`): the
+  transition that is read, the markers that are read, and the **round
+  trip** — a sequence that is written and read again.
+- **One test corrected** in the film battery (`tests/otioimport.rs`):
+  the test that said a transition is left out said something false
+  against the tree, and it now says that a transition is read.
+- **No new command**: the reader of §618 reads the transitions and
+  the markers, and the writer of §618 writes a transition once. The
+  film battery still carries **86** commands and the MCP server
+  **831**.
+
+### What it does not settle
+
+- **The metadata** of a transition is not read: the name of the
+  transition is the effect, and the alignment is worked out from the
+  offsets.
+- **The effects**, the **groups** and the **links** of the text are
+  not read.
+- **A transition with no incoming clip** cannot be written: this
+  tree's transition joins two clips, and the tree's own writer writes
+  one that has only an outgoing clip after that clip.
