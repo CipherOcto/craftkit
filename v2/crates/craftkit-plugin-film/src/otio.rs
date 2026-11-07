@@ -20,7 +20,9 @@
 //! - the **tracks** are the tracks of the sequence: the video ones
 //!   first, then the audio ones, and each says which kind it is;
 //! - the **children** of a track are its clips, with a **gap** for
-//!   every hole between them and a **transition** for every dissolve;
+//!   every hole between them and a **transition** for every dissolve
+//!   — and a transition comes **before** the clip it comes into,
+//!   because the cut leads into that clip;
 //! - a **clip** says where in its source it begins and how long it is,
 //!   and it points at the media it plays;
 //! - the **markers** of the sequence are on the stack of the tracks;
@@ -126,9 +128,7 @@ fn clips_of(track: &Node) -> Vec<std::sync::Arc<Node>> {
 
 /// A **transition** of a track: a dissolve over a cut.
 struct Transition {
-    /// The outgoing clip.
-    from: u64,
-    /// The incoming clip.
+    /// The incoming clip: the transition comes **before** it.
     to: u64,
     /// Where it sits on the timeline.
     start: u64,
@@ -143,9 +143,9 @@ fn transitions_of(track: &Node) -> Vec<Transition> {
     let mut transitions = Vec::new();
     for child in track.children.iter().filter(|child| child.kind == "film.transition") {
         let number = |name: &str| child.data.get(name).and_then(|value| value.as_u64());
-        let (Some(from), Some(to)) = (number("from"), number("to")) else { continue };
+        // A transition joins two clips, and both of them are named.
+        let (Some(_from), Some(to)) = (number("from"), number("to")) else { continue };
         transitions.push(Transition {
-            from,
             to,
             start: number("start").unwrap_or(0),
             duration: number("duration").unwrap_or(0),
@@ -278,19 +278,6 @@ fn track_of(
                 "enabled": enabled,
                 "media_references": { "DEFAULT_MEDIA": reference_of(&item, rate) },
                 "active_media_reference_key": "DEFAULT_MEDIA",
-                "metadata": {},
-            }));
-        }
-        for transition in
-            transitions.iter().filter(|transition| transition.from == clip.id && transition.to != clip.id)
-        {
-            let cut = start + duration;
-            children.push(json!({
-                "OTIO_SCHEMA": "Transition.1",
-                "name": transition.name,
-                "transition_type": "SMPTE_Dissolve",
-                "in_offset": time(cut.saturating_sub(transition.start), rate),
-                "out_offset": time((transition.start + transition.duration).saturating_sub(cut), rate),
                 "metadata": {},
             }));
         }

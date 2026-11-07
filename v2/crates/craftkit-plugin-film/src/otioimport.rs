@@ -22,14 +22,19 @@
 //!   the same shape as a clip that was made by hand.
 //! - A **nested** clip — a stack of tracks where a clip stands — is a
 //!   clip that holds tracks, as it is everywhere else in this tree.
-//! - A **transition** is left out, and said: a dissolve between two
-//!   clips is not a clip, and nothing here is written for it.
+//! - A **transition** is a transition over the cut before it: it
+//!   joins the clip before it and the clip after it, and where it
+//!   sits on the cut says how it is **aligned** — the tree's own
+//!   three ways, worked out from the offsets the text carries.
+//! - A **marker** is a marker of the sequence: the stack of the
+//!   tracks and the tracks themselves carry them, and the colour they
+//!   name is the tree's own colour.
 //!
 //! # What it does not do
 //!
-//! - The **markers**, the **effects**, the **groups** and the **links**
-//!   of the text are not read. Only the timeline, the tracks, the
-//!   clips and the media are.
+//! - The **effects**, the **groups** and the **links** of the text are
+//!   not read. Only the timeline, the tracks, the clips, the media,
+//!   the transitions and the markers are.
 
 use craftkit_derive::Command;
 
@@ -38,6 +43,30 @@ use craftkit_sdk::{EngineError, Outcome, Relation, Session, Text};
 
 /// The most an OTIO file may be, in bytes.
 const MAX_BYTES: u64 = 16 * 1024 * 1024;
+
+/// The **colour** a marker names, and the label of the tree's own it
+/// is.
+///
+/// The tree has its own words for the colours — red, pink, orange,
+/// yellow, green, cyan, blue, purple, black and white — and they are
+/// not the names of the tree's labels: red is rose and white is
+/// lavender. A name that is already a label is that label.
+fn colour_of(word: &str) -> Option<&'static str> {
+    let word = word.trim();
+    match word.to_ascii_uppercase().as_str() {
+        "RED" => Some("Rose"),
+        "PINK" | "MAGENTA" => Some("Magenta"),
+        "ORANGE" => Some("Mango"),
+        "YELLOW" => Some("Yellow"),
+        "GREEN" => Some("Green"),
+        "CYAN" => Some("Teal"),
+        "BLUE" => Some("Blue"),
+        "PURPLE" => Some("Purple"),
+        "BLACK" => Some("Brown"),
+        "WHITE" => Some("Lavender"),
+        _ => crate::labels::label_of(word),
+    }
+}
 
 /// The **schema** of a value: `Clip.2` is a `Clip`.
 fn schema_of(value: &Json) -> &str {
@@ -147,18 +176,26 @@ impl Reader<'_> {
     fn track_children(&mut self, children: &Json, track: u64) -> Result<u64, EngineError> {
         let Some(children) = children.as_array() else { return Ok(0) };
         let mut at = 0u64;
+        // The **clips** of the track, in order, and the
+        // **transitions** that sit between them: a transition is
+        // counted where it stands, and the clip it comes into is the
+        // one that follows it.
+        let mut laid: Vec<Option<u64>> = Vec::new();
+        let mut transitions: Vec<(usize, &Json, u64)> = Vec::new();
         for child in children {
             match schema_of(child) {
                 "Gap" => {
                     let (_, duration) = child.get("source_range").map(range_of).unwrap_or((0, 0));
                     at += duration;
+                    laid.push(None);
                 }
                 "Transition" => {
-                    self.said.push(format!("a transition (`{}`) is left out", name_of(child)));
+                    transitions.push((laid.len(), child, at));
                 }
                 "Stack" => {
                     let length = self.nested(child, at)?;
                     at += length;
+                    laid.push(None);
                 }
                 "Clip" => {
                     let (source_in, duration) = child.get("source_range").map(range_of).unwrap_or((0, 0));
@@ -188,13 +225,93 @@ impl Reader<'_> {
                     document.add_relation(relation);
                     self.clips += 1;
                     at += duration;
+                    laid.push(Some(clip));
                 }
                 other => {
                     self.said.push(format!("a `{other}` is left out"));
                 }
             }
         }
+        // The **transitions** of the track: each one joins the clip
+        // before it and the clip after it.
+        for (position, child, cut) in transitions {
+            let from = position.checked_sub(1).and_then(|index| laid.get(index)).copied().flatten();
+            let to = laid.get(position).copied().flatten();
+            if from.is_none() && to.is_none() {
+                continue;
+            }
+            // The **offsets** the text carries: how far the transition
+            // reaches on either side of the cut.
+            let inner = child.get("in_offset").map(frames_of).unwrap_or(0);
+            let outer = child.get("out_offset").map(frames_of).unwrap_or(0);
+            // The **alignment** is the tree's own: one that reaches
+            // back over the cut only starts at it, one that reaches
+            // forward over it only ends at it, and any other is
+            // centred on it.
+            let align = if inner == 0 {
+                "start"
+            } else if outer == 0 {
+                "end"
+            } else {
+                "center"
+            };
+            // The **effect**: the name of the transition, or the kind
+            // of it.
+            let name = name_of(child);
+            let kind = child.get("transition_type").and_then(|kind| kind.as_str()).unwrap_or_default();
+            let named = if name.is_empty() { kind } else { name };
+            let Some(effect) = crate::transitions::effect_of(named) else {
+                self.said.push(format!(
+                    "the transition `{named}` is not a transition this tree has, and it is left out"
+                ));
+                continue;
+            };
+            self.node(
+                Some(track),
+                format!("transition at {}", cut.saturating_sub(inner)),
+                "film.transition",
+                json!({
+                    "from": from,
+                    "to": to,
+                    "start": cut.saturating_sub(inner),
+                    "duration": inner + outer,
+                    "align": align,
+                    "effect": effect,
+                }),
+            )?;
+        }
         Ok(at)
+    }
+
+    /// The **markers** of a value: they are markers of the sequence.
+    fn markers(&mut self, value: &Json, sequence: u64) -> Result<(), EngineError> {
+        let Some(markers) = value.get("markers").and_then(|markers| markers.as_array()) else {
+            return Ok(());
+        };
+        for marker in markers {
+            let (start, duration) = marker.get("marked_range").map(range_of).unwrap_or((0, 0));
+            let name = name_of(marker).to_string();
+            let comment =
+                marker.get("comment").and_then(|comment| comment.as_str()).unwrap_or_default().to_string();
+            // The **colour** the marker names, and green when it names
+            // none.
+            let colour =
+                marker.get("color").and_then(|colour| colour.as_str()).and_then(colour_of).unwrap_or("Green");
+            self.node(
+                Some(sequence),
+                name.clone(),
+                "film.marker",
+                json!({
+                    "start": start,
+                    "duration": duration,
+                    "name": name,
+                    "comment": comment,
+                    "color": colour,
+                    "kind": "Comment",
+                }),
+            )?;
+        }
+        Ok(())
     }
 
     /// The **media** a clip plays: the path of its reference, the
@@ -386,9 +503,15 @@ impl ImportOtio {
                     json!({ "kind": kind }),
                 )?;
                 tracks += 1;
+                // The **markers** of the track are markers of the
+                // sequence.
+                reader.markers(child, sequence)?;
                 let length = reader.track_children(child.get("children").unwrap_or(&Json::Null), track)?;
                 end = end.max(length);
             }
+            // The **markers** of the stack of the tracks are markers of
+            // the sequence too.
+            reader.markers(stack, sequence)?;
         }
         // The **length** of the sequence is what its tracks hold.
         if let Some(node) =

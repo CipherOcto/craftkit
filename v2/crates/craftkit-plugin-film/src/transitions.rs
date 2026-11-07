@@ -112,7 +112,7 @@ const CROSS_DISSOLVE: &str = "cross_dissolve";
 pub fn effect_of(name: &str) -> Option<&'static str> {
     let name = name.trim().to_ascii_lowercase().replace([' ', '_'], "-");
     match name.as_str() {
-        "cross-dissolve" => Some(CROSS_DISSOLVE),
+        "cross-dissolve" | "smpte-dissolve" => Some(CROSS_DISSOLVE),
         _ => None,
     }
 }

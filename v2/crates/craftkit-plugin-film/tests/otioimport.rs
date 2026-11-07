@@ -220,17 +220,28 @@ fn a_file_that_is_not_otio_is_refused() {
     assert!(error.to_string().contains("has a path"), "the refusal says why: {error}");
 }
 
-/// A **transition** is left out, and said.
+/// A **transition** is a transition over the cut before it, and it is
+/// read as one.
 #[test]
-fn a_transition_is_left_out_and_said() {
+fn a_transition_is_read() {
     let mut session = session();
     let text = a_timeline_with(vec![a_transition(), a_clip("the beach", 50.0, 125.0)], "Video");
     let path = a_file("transition", &text);
     let outcome =
         session.execute("film.import.otio", &json!({ "path": path })).expect("the timeline is read");
     let left_out = outcome.data["left_out"].as_array().expect("the left out are a list");
-    assert_eq!(left_out.len(), 1, "the transition is said: {outcome:?}");
-    assert!(left_out[0].as_str().unwrap_or_default().contains("transition"), "and it is named");
+    assert!(left_out.is_empty(), "the transition is not left out: {outcome:?}");
+    let sequence = outcome.data["sequence"].as_u64().expect("the sequence has an id");
+    let node = session.document().node(sequence).expect("the sequence is there");
+    let track = node.children.iter().find(|child| child.kind == "film.track").expect("there is a track");
+    let transitions: Vec<Json> = track
+        .children
+        .iter()
+        .filter(|child| child.kind == "film.transition")
+        .map(|child| child.data.clone())
+        .collect();
+    assert_eq!(transitions.len(), 1, "there is one transition: {transitions:?}");
+    assert_eq!(transitions[0]["effect"], json!("cross_dissolve"), "and it is a dissolve: {transitions:?}");
 }
 
 /// The **media** of a clip is an item of the bin, with the file of the
