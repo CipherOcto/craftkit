@@ -4021,6 +4021,7 @@ so.
 | the **groups** of a drawing | **built.** A drawing may hold groups — a set of entities that belongs together, and that moves as one (§584) | §584 |
 | the **directories** of a test | **fixed.** The tests of one file no longer share a directory — every call makes a directory of its own, so that two tests beside each other do not take away each other's file (§585) | §585 |
 | the **nested clip** of a sequence | **built.** The clips of a sequence may be nested — a clip that holds a little timeline of its own, and that may be taken apart again (§586) | §586 |
+| the **work area** of a sequence | **built.** A sequence may have a work area — the range the editor is working in, and it may be taken away again (§587) | §587 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38279,3 +38280,64 @@ calls it a **compound clip**.
   out of it one at a time.
 - **A nested clip is not nested again**: a clip that is already
   nested is refused.
+
+## 587. The work area of a sequence
+
+The **work area** is the range of the sequence the editor is working
+in: an in point and an out point. The tree's work area.
+
+### What was built
+
+- The new command **`film.workarea.set`** sets the work area of a
+  sequence:
+  - the in point and the out point are **whole numbers of frames**,
+    and a frame that is not a whole number is refused by name;
+  - a frame **before the beginning of the timeline** is refused, and
+    so is a frame beyond a thousand million;
+  - the work area does not **end before it begins**: an out point
+    before the in point is refused, and the refusal says which frame
+    is where;
+  - the work area is **not moved**: it may lie beyond the end of the
+    sequence, and it is what the caller says it is.
+- The new command **`film.workarea.get`** reads the work area of a
+  sequence, and says how many frames long it is.
+- The new command **`film.workarea.clear`** takes the work area away:
+  an **empty** value takes it away, and a sequence that says nothing
+  has no work area.
+- A sequence with **no** work area and a work area of **one frame at
+  the start** are not the same thing: the first is no work area and
+  the answer says nothing, and the second is a work area of one
+  frame.
+
+### What the port found
+
+- **The tree moves the work area and this one does not.** The tree
+  brings a work area back to the end of the sequence when the
+  sequence is shorter than it; here the work area is a fact of the
+  sequence and it stays where it was put.
+- **The tree keeps the work area in its session** and it is gone when
+  the editor is closed. Here it is a fact of the sequence, and it is
+  saved with the sequence — the same finding the playhead brought.
+- **The tree shows the work area in a bar** of its own, and the bar
+  may be dragged. There is no bar here, and there is nothing to drag.
+
+### What it cost
+
+- **Six tests** in the film battery (`tests/workarea.rs`): the work
+  area set and read, a sequence with no work area, the work area
+  taken away, a work area that ends before it begins, a frame that is
+  not a whole number, and the work area of one sequence beside the
+  work area of another.
+- **One new module** (`src/workarea.rs`) and **three new commands**
+  (`film.workarea.set`, `film.workarea.get` and
+  `film.workarea.clear`). The film battery now carries **78**
+  commands and the MCP server **790**.
+
+### What it does not settle
+
+- **The work area is not moved**: it may lie beyond the end of the
+  sequence, and nothing brings it back.
+- **The work area is not a bar**: there is nothing to drag, and the
+  tree's work area bar is not here.
+- **The work area is not written out**: the tree saves it with the
+  project, and this tree has no project file of its own.
