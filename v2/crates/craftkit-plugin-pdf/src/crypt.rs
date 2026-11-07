@@ -260,6 +260,24 @@ pub fn user_entry(key: &[u8], identifier: &[u8], revision: i64) -> Vec<u8> {
     digest
 }
 
+/// The **user's entry** of a file that is **written**: what the file
+/// holds in its `/U`.
+///
+/// For a revision of three or more the entry is **thirty-two bytes**:
+/// the sixteen bytes of the hash, and sixteen bytes of padding after
+/// them. Only the first sixteen are read back — the padding is there
+/// so that the entry is the length the specification says, and what is
+/// in it is not a fact.
+pub fn user_entry_written(key: &[u8], identifier: &[u8], revision: i64) -> Vec<u8> {
+    let hash = user_entry(key, identifier, revision);
+    if revision < 3 {
+        return hash;
+    }
+    let mut entry = hash;
+    entry.extend_from_slice(&[0_u8; 16]);
+    entry
+}
+
 /// The **user's password** of a file, when the password given is the
 /// owner's.
 ///

@@ -216,6 +216,86 @@ pub fn decrypt(key: &[u8], vector: &[u8], bytes: &[u8]) -> Vec<u8> {
     out
 }
 
+/// **Shift** the rows of the state.
+fn shift_rows(state: &mut State) {
+    let original = *state;
+    for row in 1..4 {
+        for column in 0..4 {
+            state[row + 4 * column] = original[row + 4 * ((column + row) % 4)];
+        }
+    }
+}
+
+/// **Substitute** the bytes of the state.
+fn substitute(state: &mut State, table: &[u8; 256]) {
+    for byte in state.iter_mut() {
+        *byte = table[usize::from(*byte)];
+    }
+}
+
+/// **Mix** the columns of the state.
+fn mix_columns(state: &mut State) {
+    for column in 0..4 {
+        let at = column * 4;
+        let a = [state[at], state[at + 1], state[at + 2], state[at + 3]];
+        state[at] = product(a[0], 2) ^ product(a[1], 3) ^ a[2] ^ a[3];
+        state[at + 1] = a[0] ^ product(a[1], 2) ^ product(a[2], 3) ^ a[3];
+        state[at + 2] = a[0] ^ a[1] ^ product(a[2], 2) ^ product(a[3], 3);
+        state[at + 3] = product(a[0], 3) ^ a[1] ^ a[2] ^ product(a[3], 2);
+    }
+}
+
+/// The **encryption** of one block.
+fn encrypt_block(keys: &[[u8; BLOCK]; 11], block: &[u8; BLOCK], table: &[u8; 256]) -> State {
+    let mut state = *block;
+    add_key(&mut state, &keys[0]);
+    for key in keys.iter().take(10).skip(1) {
+        substitute(&mut state, table);
+        shift_rows(&mut state);
+        mix_columns(&mut state);
+        add_key(&mut state, key);
+    }
+    substitute(&mut state, table);
+    shift_rows(&mut state);
+    add_key(&mut state, &keys[10]);
+    state
+}
+
+/// The **encryption** of bytes under AES-128 in CBC mode.
+///
+/// The vector is the sixteen bytes the blocks are chained from, and
+/// what comes back is the **ciphertext**: the bytes that are written
+/// out after the vector.
+///
+/// The bytes are padded on the way in: the padding says how many bytes
+/// there are, and they are all that byte.
+pub fn encrypt(key: &[u8], vector: &[u8], bytes: &[u8]) -> Vec<u8> {
+    if key.len() != KEY || vector.len() != BLOCK {
+        return Vec::new();
+    }
+    let table = box_of();
+    let keys = round_keys(key, &table);
+    // The **padding**: there is always a byte of it, and a whole block
+    // of it when the bytes are already a whole block.
+    let count = BLOCK - bytes.len() % BLOCK;
+    let mut plain: Vec<u8> = bytes.to_vec();
+    plain.extend(std::iter::repeat_n(count as u8, count));
+    let mut out: Vec<u8> = Vec::with_capacity(plain.len());
+    let mut previous: State = [0; BLOCK];
+    previous.copy_from_slice(vector);
+    for chunk in plain.chunks(BLOCK) {
+        let mut block: State = [0; BLOCK];
+        block.copy_from_slice(chunk);
+        for index in 0..BLOCK {
+            block[index] ^= previous[index];
+        }
+        let cipher = encrypt_block(&keys, &block, &table);
+        out.extend_from_slice(&cipher);
+        previous = cipher;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::decrypt;
@@ -293,5 +373,40 @@ mod tests {
         ];
         let plain = decrypt(&key, &vector, &cipher);
         assert_eq!(plain, b"hello".to_vec());
+    }
+
+    #[test]
+    fn the_block_is_encrypted_the_way_the_specification_says() {
+        let key: Vec<u8> = (0..16).collect();
+        let keys = super::round_keys(&key, &super::box_of());
+        let plain: [u8; 16] =
+            [0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff];
+        let cipher = super::encrypt_block(&keys, &plain, &super::box_of());
+        assert_eq!(
+            cipher.to_vec(),
+            vec![
+                0x69, 0xc4, 0xe0, 0xd8, 0x6a, 0x7b, 0x04, 0x30, 0xd8, 0xcd, 0xb7, 0x80, 0x70, 0xb4, 0xc5,
+                0x5a
+            ]
+        );
+    }
+
+    #[test]
+    fn the_cipher_makes_what_openssl_made() {
+        let key: Vec<u8> = (0..16).collect();
+        let vector: Vec<u8> = (16..32).collect();
+        let cipher: Vec<u8> = vec![
+            0x32, 0xf6, 0xd6, 0xea, 0x1e, 0xc8, 0x87, 0x2d, 0xeb, 0xcc, 0xea, 0x85, 0x96, 0xd9, 0xc3, 0xc3,
+        ];
+        assert_eq!(super::encrypt(&key, &vector, b"hello"), cipher, "the bytes are the ones of openssl");
+    }
+
+    #[test]
+    fn what_the_cipher_makes_the_cipher_undoes() {
+        let key: Vec<u8> = (0..16).collect();
+        let vector: Vec<u8> = (16..32).collect();
+        let bytes: Vec<u8> = (0..40).collect();
+        let cipher = super::encrypt(&key, &vector, &bytes);
+        assert_eq!(decrypt(&key, &vector, &cipher), bytes, "the bytes come back as they were");
     }
 }

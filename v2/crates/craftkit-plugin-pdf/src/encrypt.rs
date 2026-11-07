@@ -263,8 +263,12 @@ impl ReadEncryption {
 ///
 /// A query of the document, and a file is written: the document itself
 /// is not changed. The file that is written is scrambled with the
-/// **standard security handler** of revision two, and the trailer names
-/// the object that holds the scramble.
+/// **standard security handler**, and the trailer names the object that
+/// holds the scramble.
+///
+/// The **cipher** says how the file is scrambled: the streams may be
+/// scrambled with **RC4** or with **AES**, and the strings are always
+/// scrambled with RC4.
 #[derive(Command)]
 #[command(id = "pdf.file.encrypt", area = "pdf", layer = "pdf", icon = "file")]
 pub struct EncryptFile {
@@ -277,6 +281,10 @@ pub struct EncryptFile {
     /// Leave it out and the owner is the user: the one password opens
     /// the file and owns it.
     pub owner: Option<Text>,
+    /// How the file is scrambled: `rc4` or `aes`.
+    ///
+    /// Leave it out and the streams are scrambled with RC4.
+    pub cipher: Option<Text>,
 }
 
 impl EncryptFile {
@@ -337,6 +345,23 @@ impl EncryptFile {
             Some(owner) => owner.0.as_bytes().to_vec(),
             None => password.clone(),
         };
+        // The **cipher**: how the streams are scrambled. The strings
+        // are always scrambled with RC4.
+        let aes = match self.cipher.as_ref().map(|cipher| cipher.0.trim().to_lowercase()) {
+            None => false,
+            Some(cipher) if cipher == "rc4" => false,
+            Some(cipher) if cipher == "aes" || cipher == "aes-128" => true,
+            Some(other) => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no cipher `{other}`: the ciphers are rc4 and aes"),
+                });
+            }
+        };
+        // The **revision** of the scheme and the **length** of its key
+        // follow the cipher.
+        let revision = if aes { AES_REVISION } else { RC4_REVISION };
+        let length_bits = if aes { AES_LENGTH_BITS } else { RC4_LENGTH_BITS };
         // The **identifier** of the file: sixteen bytes, and they are
         // worked out from the passwords and from the numbers of the
         // objects, so that the same file and the same password always
@@ -344,32 +369,41 @@ impl EncryptFile {
         let identifier = identifier_of(&password, &owner, &objects, root);
         // The **owner's entry**: the user's password under the owner's
         // own key.
-        let owner_entry = crate::crypt::owner_entry(&owner, &password, REVISION, LENGTH_BITS);
+        let owner_entry = crate::crypt::owner_entry(&owner, &password, revision, length_bits);
         // The **key of the file**, and the **user's entry** it makes.
         let scheme = crate::crypt::Scheme {
             number: 0,
-            revision: REVISION,
-            length_bits: LENGTH_BITS,
+            revision,
+            length_bits,
             permissions: PERMISSIONS,
             encrypt_metadata: true,
             strings: "rc4".to_string(),
-            streams: "rc4".to_string(),
+            streams: if aes { "aes-128".to_string() } else { "rc4".to_string() },
             owner: owner_entry.clone(),
             user: Vec::new(),
             identifier: identifier.clone(),
         };
         let key = crate::crypt::file_key(&password, &scheme);
-        let user_entry = crate::crypt::user_entry(&key, &identifier, REVISION);
+        let user_entry = crate::crypt::user_entry_written(&key, &identifier, revision);
         // The **encryption** is an object of the file of its own, and
         // its own words are not scrambled.
         let number = crate::free::the_next_number(document, 0);
         let mut entries: Vec<(String, Json)> = vec![
             ("Filter".to_string(), Json::String("Standard".to_string())),
-            ("V".to_string(), Json::Number((1).into())),
-            ("R".to_string(), Json::Number((REVISION).into())),
-            ("Length".to_string(), Json::Number((LENGTH_BITS).into())),
+            ("V".to_string(), Json::Number((if aes { 4 } else { 1 }).into())),
+            ("R".to_string(), Json::Number((revision).into())),
+            ("Length".to_string(), Json::Number((length_bits).into())),
             ("P".to_string(), Json::Number((PERMISSIONS).into())),
         ];
+        if aes {
+            // The **crypt filters**: the way the streams are scrambled
+            // and the way the strings are scrambled, and which of the
+            // two is used for what.
+            entries.push(("EncryptMetadata".to_string(), Json::Bool(true)));
+            entries.push(("CF".to_string(), aes_filters()));
+            entries.push(("StmF".to_string(), Json::String("StdCF".to_string())));
+            entries.push(("StrF".to_string(), Json::String("RW".to_string())));
+        }
         entries.push(("O".to_string(), text_of(&owner_entry)));
         entries.push(("U".to_string(), text_of(&user_entry)));
         objects.push(crate::writer::Object { number, entries, stream: None });
@@ -387,7 +421,18 @@ impl EncryptFile {
                 .collect();
             if let Some(bytes) = &object.stream {
                 streams += 1;
-                object.stream = Some(crate::crypt::rc4(&object_key, bytes));
+                object.stream = Some(if aes {
+                    // The key of an **AES** object is salted, and the
+                    // **vector** the blocks are chained from is the
+                    // first sixteen bytes of the stream.
+                    let stream_key = crate::crypt::object_key(&key, object.number, 0, true);
+                    let vector = vector_of(&stream_key, object.number);
+                    let mut body = vector.clone();
+                    body.extend_from_slice(&crate::aes::encrypt(&stream_key, &vector, bytes));
+                    body
+                } else {
+                    crate::crypt::rc4(&object_key, bytes)
+                });
             }
         }
         let free = crate::free::the_free(document);
@@ -417,11 +462,59 @@ impl EncryptFile {
     }
 }
 
-/// The **revision** of the scheme the file is scrambled with.
-const REVISION: i64 = 2;
+/// The **revision** of the scheme a file scrambled with RC4 holds.
+const RC4_REVISION: i64 = 2;
 
-/// The **length** of the key of the file, in bits.
-const LENGTH_BITS: i64 = 40;
+/// The **length** of the key of a file scrambled with RC4, in bits.
+const RC4_LENGTH_BITS: i64 = 40;
+
+/// The **revision** of the scheme a file scrambled with AES holds.
+const AES_REVISION: i64 = 4;
+
+/// The **length** of the key of a file scrambled with AES, in bits.
+const AES_LENGTH_BITS: i64 = 128;
+
+/// The **crypt filters** of a file scrambled with AES: the way the
+/// streams are scrambled, and the way the strings are scrambled.
+///
+/// The streams are scrambled with **AES** and the strings with **RC4**,
+/// and the file says which is which by naming the filters.
+fn aes_filters() -> Json {
+    json!({
+        "entries": [
+            [
+                "StdCF",
+                { "entries": [
+                    ["Type", "CryptFilter"],
+                    ["CFM", "AESV2"],
+                    ["AuthEvent", "DocOpen"],
+                    ["Length", 16],
+                ] },
+            ],
+            [
+                "RW",
+                { "entries": [
+                    ["Type", "CryptFilter"],
+                    ["CFM", "V2"],
+                    ["AuthEvent", "DocOpen"],
+                    ["Length", 16],
+                ] },
+            ],
+        ],
+    })
+}
+
+/// The **vector** an AES stream is chained from: sixteen bytes.
+///
+/// The vector is worked out from the key of the object and from the
+/// number of the object, so that the same file and the same password
+/// always make the same file. A file made elsewhere draws the vector
+/// at random.
+fn vector_of(key: &[u8], number: u64) -> Vec<u8> {
+    let mut message: Vec<u8> = key.to_vec();
+    message.extend_from_slice(&(number as u32).to_le_bytes());
+    crate::crypt::md5(&message).to_vec()
+}
 
 /// The **permissions** of the file: every right there is.
 const PERMISSIONS: i64 = -1;
