@@ -4025,6 +4025,7 @@ so.
 | the **playhead** and the **markers** | **built.** The playhead of a sequence moves to the marker that is next, and to the marker before it — and it does not move when there is none (§588) | §588 |
 | the **encryption** of a file, made with AES | **built.** A file may be scrambled with AES — the streams with AES and the strings with RC4, and the file says which is which (§589) | §589 |
 | the **autofit** of a row and of a column | **built.** A column may be made as wide as its text and a row as tall as it — the size is worked out from the text the cells hold (§590) | §590 |
+| the **background** of a page | **built.** A page may be painted with a colour and may carry a watermark — both facts of the document, and both may be taken away (§591) | §591 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38533,3 +38534,66 @@ text**: the tree's autofit, with the measure this tree has.
   font is as tall as a row of text in a smaller one.
 - **The fitting does not reveal a hidden row or column**, and it does
   not work on a range of them at once.
+
+## 591. The background of a page
+
+The **colour** a page is painted with, and the **watermark** it
+carries: the tree's page background.
+
+### What was built
+
+- The new command **`prose.page.background`** paints the page of a
+  document:
+  - the colour is **`#rrggbb`**, and a colour that is not one is
+    refused by name;
+  - an **empty** colour takes the colour of the page away, and the
+    page is then a page that is not painted.
+- The new command **`prose.page.watermark`** puts a watermark on the
+  page of a document:
+  - the text is what the watermark says, and an **empty** text takes
+    the watermark away;
+  - the text is at most **two hundred characters**, and a longer text
+    is refused and not shortened;
+  - a colour that is not said leaves the colour of the watermark as
+    it was, and a watermark that is made and given neither is the
+    tree's: **diagonal** and **grey** (`#c0c0c0`);
+  - a colour that is given and is not a colour is refused.
+- The command **`prose.page.get`** reads the page with them: the
+  **colour** it is painted with and the **watermark** it carries, and
+  a document that has neither says nothing.
+
+### What the port found
+
+- **The tree's page colour is a setting of the document and so is
+  this one.** The tree's `design.pageColor` puts the colour in the
+  settings of the document, and here it is a fact of the document
+  beside the page's size and its margins.
+- **The tree's watermark has more facts than this one.** The tree's
+  watermark carries a **font**, a **size**, whether it is **half
+  transparent**, and the box its text is stretched to fill. Here the
+  watermark carries its text, its colour and the way it runs.
+- **The tree takes a flag to take the watermark away and here an
+  empty text takes it away.** The tree's `design.watermark` takes
+  `remove`, and an empty text here does the same — and a watermark
+  that is changed and given no colour keeps the colour it has, which
+  is the tree's rule too.
+
+### What it cost
+
+- **Seven tests** in the prose battery (`tests/background.rs`): the
+  page painted with a colour, a colour that is not a colour, an empty
+  colour, the watermark, the watermark that keeps its colour, an
+  empty text, and a watermark that says too much.
+- **One new module** (`src/background.rs`) and **two new commands**
+  (`prose.page.background` and `prose.page.watermark`). The prose
+  battery now carries **79** commands and the MCP server **796**.
+
+### What it does not settle
+
+- **The watermark is not drawn**: it is a fact of the document, and
+  nothing here paints it on a page.
+- **The watermark has no font and no size**: the tree's watermark
+  names a font and a box, and here it says a text and a colour.
+- **The page's borders are not here**: the tree's `design.pageBorders`
+  gives each side of the page a style, a width and a colour, and none
+  of that is read or written here.
