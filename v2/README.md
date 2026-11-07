@@ -4010,6 +4010,7 @@ so.
 | the **JavaScript** of a file | **built.** The scripts a file holds are read — their names and their text — and they are not run (§573) | §573 |
 | the **running heads** of a document | **built.** A document may carry a header and a footer — the text that stands at the top and the bottom of every page (§574) | §574 |
 | the **Unicode map** of a font | **built.** The characters a font's codes stand for are read — the map a font carries, its characters and its ranges (§575) | §575 |
+| the **text** of a page, read through the map of its font | **built.** A page's text is read through the map of the font in use — the codes become the characters the map says, and the fonts of a page are read beside them (§576) | §576 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37505,3 +37506,72 @@ are not the characters.
   Unicode here, and the tree falls back to the encoding.
 - **The CID maps are not read**: a font that is not a Unicode font
   has no map here.
+
+## 576. The text of a page read through the map of its font
+
+A font's **codes** are the bytes it uses for its characters, and the
+map of the font says what each code stands for. §575 read the map.
+This applies it: the codes a page writes are read through the map of
+the font that is in use, and the text of the page is the characters
+the map says.
+
+### What was built
+
+- The command **`pdf.page.text`** now reads the text of a page
+  **through the map of the font in use**:
+  - the operator `Tf` says which font the text after it is shown in;
+  - a piece of text says which **font** it is shown in, and how its
+    bytes were read: `unicode` when the map read them, and `latin-1`,
+    `utf-16be` or `utf-16le` when it did not;
+  - a **code the map does not know** is read as the byte it is: the
+    byte is the truth there is;
+  - the codes of a font are **one byte or two**, and the code space of
+    the map says which.
+- The new command **`pdf.page.fonts`** reads the **fonts of a page**:
+  - the **name** the page gives each font, the font behind it, its
+    base font and its subtype;
+  - whether the font carries a **map**, and how many codes are in it.
+- The rules:
+  - a font with **no map** leaves the text as the bytes it is;
+  - the text under a **marked content** is read through the map too
+    (§569);
+  - a page's content **streams are read as one**: the font in use in
+    the first is the font in use in the second;
+  - the resources of the **parent** are not read: a page that takes
+    its fonts from the `/Pages` node above it is read as a page with
+    no fonts.
+
+### What the port found
+
+- **The tree reads a code through the font, and this one reads it
+  through the map.** The tree's layout asks the font for the character
+  of each code, and the font answers with its encoding when it has no
+  `/ToUnicode`. Here the map is the only thing that turns a code into
+  a character: a font with no map has no characters at all, and the
+  text stays as bytes.
+- **The tree knows the font of a piece, and this one now knows the
+  name of it.** The tree's piece carries the font it is drawn with and
+  the width the text takes. Here the piece carries the name of the
+  font and the way its bytes were read, and the width is still not
+  measured (§570).
+
+### What it cost
+
+- **Five tests** in the pdf battery (`tests/fonttext.rs`): the text
+  read through the map, a font with no map, a code the map does not
+  know, the fonts of a page, and the text under a marked content.
+- **One new module** (`src/pagefonts.rs`) and **one new command**
+  (`pdf.page.fonts`). The pdf battery now carries **65** commands and
+  the MCP server **774**.
+
+### What it does not settle
+
+- **The encoding of a font is not read**: a font with no map has no
+  Unicode here, and the tree falls back to the encoding.
+- **The CID maps are not read**: a font that is not a Unicode font
+  has no map here, and its codes stand for glyphs and not for
+  characters.
+- **The resources of the parent are not read**, and a font that the
+  content names but the page's resources do not hold has no map.
+- **The width of the text is not measured**: a piece says where it
+  begins and what it says, and not how much room it takes.
