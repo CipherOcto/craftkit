@@ -4013,6 +4013,7 @@ so.
 | the **text** of a page, read through the map of its font | **built.** A page's text is read through the map of the font in use — the codes become the characters the map says, and the fonts of a page are read beside them (§576) | §576 |
 | the **encryption** of a file, undone | **built.** An encrypted file is opened with a password — the strings and the streams are unscrambled with RC4, and the file is written out plain (§577) | §577 |
 | the **encryption** of a file, made | **built.** A file is encrypted with a password — the strings and the streams are scrambled with RC4, and the trailer names the object that holds the scramble (§578) | §578 |
+| the **compressed** objects of a file | **built.** The objects of an object stream are read into the document — the catalog, the pages and the page of a compressed file are nodes like any other (§579) | §579 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37741,3 +37742,66 @@ file is opened with a password and written out plain.
   identifier.
 - **The metadata is not treated apart**: the metadata of a file that
   is made is scrambled like everything else.
+
+## 579. The objects of an object stream are read into the document
+
+A file that compresses itself keeps its objects in an **object
+stream**: a stream of the file that holds other objects, so that they
+may be compressed together. The index of such a file says that those
+objects are there, and the stream holds them.
+
+### What was built
+
+- The **loader** reads the objects of every **object stream** of the
+  file and puts them in the document:
+  - an object stream says how many objects it holds (`/N`) and where
+    the first one begins (`/First`);
+  - the objects inside it are **nodes** of the document, like the
+    objects that are written in the file itself;
+  - the **references** they hold are **edges** of the document, like
+    any other reference;
+  - the **filter** and the **predictor** of the stream are undone
+    before the objects are read.
+- The rules:
+  - a stream that is not an object stream holds no compressed objects;
+  - an object stream that cannot be read holds none that this tree
+    can say: the file is loaded and the objects that are written in it
+    are there;
+  - a compressed object has the **generation zero**: the file does not
+    say otherwise.
+
+### What the port found
+
+- **The tree reads a compressed object when it is asked for it, and
+  this one reads them all at once.** The tree keeps the object streams
+  in a map and fetches an object out of one when a reference points at
+  it, so its document holds the *stream*. Here the loader reads every
+  object stream of the file when the file is loaded, and the
+  compressed objects are nodes of the document from the start.
+- **The tree keeps the compressed objects apart and this one does
+  not.** A compressed object is an object of the file like any other:
+  it has a number, a generation and a dictionary, and it may be
+  written out again as an object of its own.
+
+### What it cost
+
+- **Two tests** in the pdf battery (`tests/objectstreams.rs`): the
+  objects of an object stream are read into the document, and the
+  references of a compressed object are edges of the document. The
+  file in the test is a fixed file: the catalog, the pages and the
+  page live in an object stream, and the index of the file is a
+  cross-reference stream.
+- **No new command**: the loader *is* the command `pdf.file.load`, and
+  it now reads the whole file. The pdf battery still carries **67**
+  commands and the MCP server **776**.
+
+### What it does not settle
+
+- **The objects of an object stream are not written back into one**:
+  the writer writes plain objects, and a file this tree writes has no
+  object stream in it.
+- **The incremental save is not followed**: a file that has been saved
+  again has more than one table, and the newest one wins.
+- **A file that is compressed and encrypted at once is not read**: the
+  objects of the object stream are read from the bytes of the file,
+  and the bytes of an encrypted file are scrambled.
