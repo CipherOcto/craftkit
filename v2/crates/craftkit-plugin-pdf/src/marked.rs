@@ -318,7 +318,8 @@ fn text_under(document: &Document, page: u64, mcid: i64) -> Option<String> {
         (Some(start), Some(end)) => (start, end),
         _ => return None,
     };
-    let pieces = crate::pagetext::pieces_of(&operations[start..=end]);
+    let maps = crate::pagefonts::maps_of(document, page);
+    let pieces = crate::pagetext::pieces_of(&maps, &operations, start, end);
     let mut out = String::new();
     for piece in pieces {
         out.push_str(&piece.text);

@@ -112,7 +112,7 @@ fn descriptor_of<'a>(
 }
 
 /// The **font** a node is: what the node says about itself.
-fn font_of(document: &Document, node: &craftkit_sdk::Node) -> Option<Font> {
+pub(crate) fn font_of(document: &Document, node: &craftkit_sdk::Node) -> Option<Font> {
     let entries = entries_of(node);
     if !is_a_font(&entries) {
         return None;

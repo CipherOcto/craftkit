@@ -21,19 +21,27 @@
 //!   a move of more than a tenth of an em — is the space between two
 //!   words, and the answer puts one there.
 //! - **A string is bytes.** What the bytes mean depends on the font
-//!   that is in use, and this module does not read the fonts: a
-//!   string that begins with a byte-order mark is read as UTF-16 —
-//!   big-endian or little-endian, as the mark says — and any other
-//!   string is read as Latin-1, the byte's own value as a character.
-//!   The answer says which of the three it was.
+//!   that is in use: the bytes of a string are the **codes** of the
+//!   font, and a font that carries a **map** (§575) says what each code
+//!   stands for. A string shown in such a font is read through that
+//!   map, and the answer says it was read as `unicode`. A string shown
+//!   in a font with no map is read as the bytes it is: a string that
+//!   begins with a byte-order mark is read as UTF-16 — big-endian or
+//!   little-endian, as the mark says — and any other string is read as
+//!   Latin-1, the byte's own value as a character.
+//! - **The font in use is the one the file names.** The operator `Tf`
+//!   says which font the text after it is shown in, and the piece of
+//!   text says which font that was.
 //!
 //! # What it does not do
 //!
 //! - **The place of the text is not worked out.** A piece of text is
 //!   where it was shown, and the tree does not lay out a page.
-//! - **The fonts are not read.** The encoding of a font, its codes and
-//!   its differences are not here, so a text in a font that is not
-//!   UTF-16 is read as the bytes it is.
+//! - **The encoding of a font is not read.** A font with no map has no
+//!   Unicode here, and the tree falls back to the encoding.
+//! - **The resources of the parent are not read.** A page that takes
+//!   its fonts from the `/Pages` node above it is read as a page with
+//!   no fonts.
 
 use craftkit_derive::Command;
 
@@ -57,7 +65,7 @@ pub struct Piece {
     pub text: String,
     /// The operator that showed it.
     pub operator: String,
-    /// How the bytes were read: `utf-16be`, `utf-16le` or
+    /// How the bytes were read: `unicode`, `utf-16be`, `utf-16le` or
     /// `latin-1`.
     pub encoding: String,
     /// Whether the operator moved to the next line after it.
@@ -66,6 +74,8 @@ pub struct Piece {
     pub x: Option<f64>,
     /// Where the text **begins**: the origin of the text matrix.
     pub y: Option<f64>,
+    /// The **font** the text is shown in: the name the page gives it.
+    pub font: Option<String>,
 }
 
 impl Piece {
@@ -78,6 +88,7 @@ impl Piece {
             "line_break": self.break_after,
             "x": self.x.map(|x| json!(x)).unwrap_or(Json::Null),
             "y": self.y.map(|y| json!(y)).unwrap_or(Json::Null),
+            "font": self.font.clone().map(|font| json!(font)).unwrap_or(Json::Null),
         })
     }
 }
@@ -145,6 +156,10 @@ pub fn text_of_page(document: &Document, page: u64) -> Result<PageText, EngineEr
         one => vec![one],
     };
     let mut found = PageText::default();
+    // The content of a page is the content of its streams, one after
+    // the other: the font in use in the first is the font in use in
+    // the second.
+    let mut operations: Vec<crate::content::Operation> = Vec::new();
     for value in listed {
         let Some(stream) = crate::preflight::node_of(document, &value) else { continue };
         if stream.kind != "pdf.stream" {
@@ -152,13 +167,15 @@ pub fn text_of_page(document: &Document, page: u64) -> Result<PageText, EngineEr
         }
         found.streams += 1;
         let decoded = crate::decoded_bytes(stream, None, None, false, COMMAND)?;
-        let operations = crate::content::operations(&decoded.bytes).map_err(|error| EngineError::Failed {
+        let read = crate::content::operations(&decoded.bytes).map_err(|error| EngineError::Failed {
             id: COMMAND.to_string(),
             message: format!("the content of the page cannot be read: {error:?}"),
         })?;
-        let mut pieces = pieces_of(&operations);
-        found.pieces.append(&mut pieces);
+        operations.extend(read);
     }
+    let maps = crate::pagefonts::maps_of(document, page);
+    let last = operations.len().saturating_sub(1);
+    found.pieces = pieces_of(&maps, &operations, 0, last);
     Ok(found)
 }
 
@@ -252,15 +269,42 @@ fn numbers_of(operation: &crate::content::Operation) -> Vec<f64> {
     operation.operands.iter().filter_map(|operand| operand.as_f64()).collect()
 }
 
+/// The **font** an operation puts in use: the name the file gives it.
+fn font_named(operation: &crate::content::Operation) -> Option<String> {
+    let Json::String(name) = operation.operands.first()? else { return None };
+    Some(name.strip_prefix('/').unwrap_or(name).to_string())
+}
+
+/// The **map** of a font, by the name the page gives it.
+fn map_of<'a>(maps: &'a [(String, crate::tounicode::Map)], name: &str) -> Option<&'a crate::tounicode::Map> {
+    maps.iter().find(|(held, _)| held == name).map(|(_, map)| map)
+}
+
 /// The **pieces** of text a set of operations shows.
-pub(crate) fn pieces_of(operations: &[crate::content::Operation]) -> Vec<Piece> {
+///
+/// The pieces between `from` and `to` are the ones that are returned,
+/// but the whole of the operations is read: the font in use is the one
+/// the file says at the time, and a font named before the range is
+/// still in use inside it.
+pub(crate) fn pieces_of(
+    maps: &[(String, crate::tounicode::Map)],
+    operations: &[crate::content::Operation],
+    from: usize,
+    to: usize,
+) -> Vec<Piece> {
     let mut pieces: Vec<Piece> = Vec::new();
     // Text is shown inside a **text object**.
     let mut in_text = false;
     // The **place** of the text.
     let mut place = Place::NONE;
     let mut placed = false;
-    for operation in operations {
+    // The **font** in use, and the map that reads its codes.
+    let mut font: Option<String> = None;
+    for (index, operation) in operations.iter().enumerate() {
+        if index > to {
+            break;
+        }
+        let within = index >= from;
         match operation.operator.as_str() {
             "BT" => {
                 in_text = true;
@@ -268,6 +312,9 @@ pub(crate) fn pieces_of(operations: &[crate::content::Operation]) -> Vec<Piece> 
                 placed = false;
             }
             "ET" => in_text = false,
+            "Tf" => {
+                font = font_named(operation);
+            }
             "Tm" => {
                 let numbers = numbers_of(operation);
                 if numbers.len() == 6 {
@@ -306,7 +353,11 @@ pub(crate) fn pieces_of(operations: &[crate::content::Operation]) -> Vec<Piece> 
                 if !in_text {
                     continue;
                 }
-                let Some((text, encoding)) = operation.operands.last().and_then(string_of) else { continue };
+                let Some(bytes) = operation.operands.last().and_then(bytes_of) else { continue };
+                let (text, encoding) = read_through(map_of(maps, font.as_deref().unwrap_or("")), &bytes);
+                if !within {
+                    continue;
+                }
                 let (x, y) = place.origin();
                 pieces.push(Piece {
                     text,
@@ -315,6 +366,7 @@ pub(crate) fn pieces_of(operations: &[crate::content::Operation]) -> Vec<Piece> 
                     break_after: false,
                     x: placed.then_some(x),
                     y: placed.then_some(y),
+                    font: font.clone(),
                 });
             }
             "TJ" => {
@@ -324,8 +376,8 @@ pub(crate) fn pieces_of(operations: &[crate::content::Operation]) -> Vec<Piece> 
                 let Some(array) = operation.operands.last().and_then(|value| value.as_array()) else {
                     continue;
                 };
-                let (text, encoding) = shown(array);
-                if text.is_empty() {
+                let (text, encoding) = shown(array, map_of(maps, font.as_deref().unwrap_or("")));
+                if text.is_empty() || !within {
                     continue;
                 }
                 let (x, y) = place.origin();
@@ -336,13 +388,18 @@ pub(crate) fn pieces_of(operations: &[crate::content::Operation]) -> Vec<Piece> 
                     break_after: false,
                     x: placed.then_some(x),
                     y: placed.then_some(y),
+                    font: font.clone(),
                 });
             }
             "'" | "\"" => {
                 if !in_text {
                     continue;
                 }
-                let Some((text, encoding)) = operation.operands.last().and_then(string_of) else { continue };
+                let Some(bytes) = operation.operands.last().and_then(bytes_of) else { continue };
+                let (text, encoding) = read_through(map_of(maps, font.as_deref().unwrap_or("")), &bytes);
+                if !within {
+                    continue;
+                }
                 let (x, y) = place.origin();
                 pieces.push(Piece {
                     text,
@@ -351,6 +408,7 @@ pub(crate) fn pieces_of(operations: &[crate::content::Operation]) -> Vec<Piece> 
                     break_after: true,
                     x: placed.then_some(x),
                     y: placed.then_some(y),
+                    font: font.clone(),
                 });
             }
             _ => {}
@@ -363,13 +421,14 @@ pub(crate) fn pieces_of(operations: &[crate::content::Operation]) -> Vec<Piece> 
 ///
 /// The strings are shown one after the other, and a number below
 /// `-100` is the space between two words.
-fn shown(array: &[Json]) -> (String, String) {
+fn shown(array: &[Json], map: Option<&crate::tounicode::Map>) -> (String, String) {
     let mut text = String::new();
     let mut encoding = "latin-1".to_string();
     for item in array {
         match item {
             Json::String(_) => {
-                let Some((piece, kind)) = string_of(item) else { continue };
+                let Some(bytes) = bytes_of(item) else { continue };
+                let (piece, kind) = read_through(map, &bytes);
                 if kind != "latin-1" {
                     encoding = kind;
                 }
@@ -384,19 +443,30 @@ fn shown(array: &[Json]) -> (String, String) {
     (text, encoding)
 }
 
-/// A **string** of a content stream, and how its bytes were read.
+/// The **bytes** of a string of a content stream.
 ///
 /// The bytes of a PDF string are the string's characters, each one
-/// below 256, and what they mean depends on the font. A string that
-/// begins with a byte-order mark is UTF-16; any other string is
-/// Latin-1.
-fn string_of(value: &Json) -> Option<(String, String)> {
+/// below 256, and what they mean depends on the font.
+fn bytes_of(value: &Json) -> Option<Vec<u8>> {
     let Json::String(text) = value else { return None };
-    let bytes: Vec<u8> = text.chars().map(|character| character as u32 as u8).collect();
-    Some(decode_bytes(&bytes))
+    Some(text.chars().map(|character| character as u32 as u8).collect())
 }
 
 /// The **text** of a string's bytes, and how they were read.
+///
+/// A string shown in a font that carries a map is read **through** that
+/// map; any other string is read as the bytes it is.
+fn read_through(map: Option<&crate::tounicode::Map>, bytes: &[u8]) -> (String, String) {
+    match map {
+        Some(map) => (text_through(map, bytes), "unicode".to_string()),
+        None => decode_bytes(bytes),
+    }
+}
+
+/// The **text** of a string's bytes, and how they were read.
+///
+/// The bytes of a PDF string are bytes, and a string that begins with a
+/// byte-order mark is UTF-16; any other string is Latin-1.
 pub(crate) fn decode_bytes(bytes: &[u8]) -> (String, String) {
     if bytes.len() >= 2 && bytes[0] == 0xfe && bytes[1] == 0xff {
         let units: Vec<u16> = bytes[2..]
@@ -413,6 +483,34 @@ pub(crate) fn decode_bytes(bytes: &[u8]) -> (String, String) {
         return (String::from_utf16_lossy(&units), "utf-16le".to_string());
     }
     (bytes.iter().map(|byte| *byte as char).collect(), "latin-1".to_string())
+}
+
+/// The **text** of a string's bytes, read through the map of the
+/// font.
+///
+/// The bytes of a string are the **codes** of the font, and the map
+/// says what each code stands for. A code that is not in the map is
+/// read as the byte it is: a code the map does not know is a code
+/// this tree cannot say, and the byte is the truth there is.
+fn text_through(map: &crate::tounicode::Map, bytes: &[u8]) -> String {
+    let length = if map.code_length == 0 { 1 } else { map.code_length };
+    let mut out = String::new();
+    let mut at = 0usize;
+    while at < bytes.len() {
+        let code = if length == 2 {
+            let high = u16::from(bytes[at]);
+            let low = u16::from(*bytes.get(at + 1).unwrap_or(&0));
+            high * 256 + low
+        } else {
+            u16::from(bytes[at])
+        };
+        match map.text_of(code) {
+            Some(text) => out.push_str(text),
+            None => out.push(char::from(bytes[at])),
+        }
+        at += length;
+    }
+    out
 }
 
 /// **Read** the **text** of a page.

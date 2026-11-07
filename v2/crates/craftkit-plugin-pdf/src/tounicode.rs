@@ -118,12 +118,44 @@ fn tokens_of(body: &str) -> Vec<String> {
     tokens
 }
 
+/// The **map** of a font: its entries and the length of its codes.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Map {
+    /// The entries of the map.
+    pub entries: Vec<Entry>,
+    /// How many **bytes** a code of the font is: one for a simple font
+    /// and two for a font of composite fonts.
+    pub code_length: usize,
+}
+
+impl Map {
+    /// The **text** a code stands for.
+    pub fn text_of(&self, code: u16) -> Option<&str> {
+        self.entries.iter().find(|entry| entry.code == code).map(|entry| entry.text.as_str())
+    }
+}
+
 /// The **entries** of a CMap, and the lines it holds that this tree
 /// does not read.
-pub fn map_of(bytes: &[u8]) -> (Vec<Entry>, Vec<String>) {
+pub fn map_of(bytes: &[u8]) -> (Map, Vec<String>) {
     let text = String::from_utf8_lossy(bytes);
     let mut entries: Vec<Entry> = Vec::new();
     let mut skipped: Vec<String> = Vec::new();
+    let mut code_length = 0usize;
+    // The **code space**: the bytes a code of the font is.
+    if let Some(found) = text.find("begincodespacerange") {
+        let start = found + "begincodespacerange".len();
+        if let Some(end) = text[start..].find("endcodespacerange") {
+            let body = &text[start..start + end];
+            if let Some(token) = body.split_whitespace().next() {
+                let digits: String =
+                    token.chars().filter(|character| character.is_ascii_hexdigit()).collect();
+                if !digits.is_empty() && digits.len().is_multiple_of(2) {
+                    code_length = digits.len() / 2;
+                }
+            }
+        }
+    }
     for section in ["bfchar", "bfrange"] {
         let mut at = 0usize;
         while let Some(found) = text[at..].find(&format!("begin{section}")) {
@@ -187,11 +219,11 @@ pub fn map_of(bytes: &[u8]) -> (Vec<Entry>, Vec<String>) {
     }
     entries.sort_by_key(|entry| entry.code);
     entries.dedup_by_key(|entry| entry.code);
-    (entries, skipped)
+    (Map { entries, code_length }, skipped)
 }
 
 /// The **Unicode map** of a font: the characters its codes stand for.
-pub fn unicode_of(document: &Document, font: u64) -> Result<Option<Vec<Entry>>, EngineError> {
+pub fn unicode_of(document: &Document, font: u64) -> Result<Option<Map>, EngineError> {
     let Some(node) = document.node(font) else {
         return Err(EngineError::Failed {
             id: COMMAND.to_string(),
@@ -211,8 +243,8 @@ pub fn unicode_of(document: &Document, font: u64) -> Result<Option<Vec<Entry>>, 
         return Ok(None);
     }
     let decoded = crate::decoded_bytes(stream, None, None, false, COMMAND)?;
-    let (entries, _) = map_of(&decoded.bytes);
-    Ok(Some(entries))
+    let (map, _) = map_of(&decoded.bytes);
+    Ok(Some(map))
 }
 
 /// **Read** the **Unicode map** of a font.
@@ -241,8 +273,8 @@ impl ReadFontUnicode {
                 message: format!("the node `{font}` is a `{}` and not an object", node.kind),
             });
         }
-        let entries = unicode_of(session.document(), font)?;
-        let Some(entries) = entries else {
+        let map = unicode_of(session.document(), font)?;
+        let Some(map) = map else {
             return Ok(Outcome::new("the font has no Unicode map").with_data(json!({
                 "font": font,
                 "has_map": false,
@@ -250,7 +282,7 @@ impl ReadFontUnicode {
                 "count": 0,
             })));
         };
-        let listed: Vec<Json> = entries.iter().map(|entry| entry.to_json()).collect();
+        let listed: Vec<Json> = map.entries.iter().map(|entry| entry.to_json()).collect();
         let count = listed.len();
         Ok(Outcome::new(format!("the font has {count} mapped code(s)")).with_data(json!({
             "font": font,

@@ -151,6 +151,7 @@ mod number;
 mod objects;
 mod optional;
 mod outline;
+mod pagefonts;
 mod pages;
 mod pagetext;
 mod predictors;
