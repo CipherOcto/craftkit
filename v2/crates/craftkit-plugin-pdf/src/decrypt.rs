@@ -13,9 +13,10 @@
 //! - **The owner's password opens the file too.** The owner's entry
 //!   holds the user's password, and a password that is the owner's is
 //!   read as the owner's and the user's password is taken from it.
-//! - **A file scrambled with AES is not read.** The standard handler
-//!   of revision six and above uses AES, and this tree does not have
-//!   it: the command says so and does nothing.
+//! - **A file scrambled with AES is read**, and so is a file of the
+//!   handler of revision six: the strings and the streams of that one
+//!   are scrambled with AES-256, and the key of the file is the key of
+//!   every object.
 //! - **The strings of the encryption are not scrambled.** The owner's
 //!   entry and the user's entry are the file's own words, and they are
 //!   left as they are.
@@ -66,7 +67,11 @@ impl DecryptFile {
                 message: "the file is not encrypted".to_string(),
             });
         };
-        if scheme.strings != "rc4" {
+        // The **handler of revision six** is a different animal: the
+        // strings and the streams are scrambled with AES-256, and the
+        // key of the file is the key of every object.
+        let revision_six = scheme.revision >= 6;
+        if !revision_six && scheme.strings != "rc4" {
             return Err(EngineError::Failed {
                 id: COMMAND.to_string(),
                 message: format!(
@@ -80,21 +85,27 @@ impl DecryptFile {
         let aes = match scheme.streams.as_str() {
             "rc4" => false,
             "aes-128" => true,
+            "aes-256" => true,
             other => {
                 return Err(EngineError::Failed {
                     id: COMMAND.to_string(),
                     message: format!(
-                        "not supported yet: the streams are encrypted with {other}, and only RC4 and AES-128 are read here"
+                        "not supported yet: the streams are encrypted with {other}, and only RC4 and AES are read here"
                     ),
                 });
             }
         };
         let password = self.password.0.as_bytes().to_vec();
-        let Some(key) = crate::crypt::opens(&password, &scheme) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the password does not open the file".to_string(),
-            });
+        let key = if revision_six {
+            crate::revision6::opens_of_revision_six(&self.password.0, &scheme, COMMAND)?
+        } else {
+            let Some(key) = crate::crypt::opens(&password, &scheme) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the password does not open the file".to_string(),
+                });
+            };
+            key
         };
         // The **objects** of the file, unscrambled.
         let mut objects: Vec<crate::writer::Object> = Vec::new();
@@ -112,11 +123,28 @@ impl DecryptFile {
                 continue;
             }
             let generation = node.data.get("generation").and_then(|number| number.as_u64()).unwrap_or(0);
-            let string_key = crate::crypt::object_key(&key, number, generation, false);
-            let stream_key = crate::crypt::object_key(&key, number, generation, aes);
+            // The **key of the object**: of revision six every object
+            // has the key of the file itself.
+            let string_key = if revision_six {
+                key.clone()
+            } else {
+                crate::crypt::object_key(&key, number, generation, false)
+            };
+            let stream_key = if revision_six {
+                key.clone()
+            } else {
+                crate::crypt::object_key(&key, number, generation, aes)
+            };
             let entries: Vec<(String, Json)> = crate::entries_of(&node.data)
                 .into_iter()
-                .map(|(name, value)| (name, crate::crypt::scrambled(&value, &string_key)))
+                .map(|(name, value)| {
+                    let value = if revision_six {
+                        crate::crypt::scrambled_with_aes(&value, &string_key)
+                    } else {
+                        crate::crypt::scrambled(&value, &string_key)
+                    };
+                    (name, value)
+                })
                 .collect();
             let stream = match &node.stream {
                 Some(path) => {

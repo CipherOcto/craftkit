@@ -382,6 +382,9 @@ impl EncryptFile {
             owner: owner_entry.clone(),
             user: Vec::new(),
             identifier: identifier.clone(),
+            owner_encrypted: Vec::new(),
+            user_encrypted: Vec::new(),
+            permissions_block: Vec::new(),
         };
         let key = crate::crypt::file_key(&password, &scheme);
         let user_entry = crate::crypt::user_entry_written(&key, &identifier, revision);

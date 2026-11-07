@@ -23,9 +23,13 @@
 //! - **The owner's password opens the file too.** The owner's entry
 //!   holds the user's password, and a password that is the owner's is
 //!   read as the owner's and the user's password is taken from it.
-//! - **A file scrambled with AES is not read.** The standard handler
-//!   of revision six and above uses AES, and this tree does not have
-//!   it.
+//! - **The handler of revision six is in a module of its own.** The
+//!   key of a file of that revision is not the hash of the password,
+//!   and the password is checked with a hardened hash that takes many
+//!   rounds to come out: that is the module `revision6`, and this one
+//!   holds the handler of the revisions before it.
+//! - **A file scrambled with AES is read** (`§1340`), and so is a file
+//!   of revision six (`§1354`).
 //!
 //! # What it does not do
 //!
@@ -362,6 +366,53 @@ pub fn bytes_of(value: &Json) -> Option<Vec<u8>> {
     Some(text.chars().map(|character| character as u32 as u8).collect())
 }
 
+/// The **value** with its strings scrambled with **AES**.
+///
+/// The strings of a file of revision six are scrambled with AES-256
+/// in CBC mode, and the first sixteen bytes of the string are the
+/// vector the blocks are chained from.
+pub fn scrambled_with_aes(value: &Json, key: &[u8]) -> Json {
+    match value {
+        Json::Object(map) => {
+            if let Some(Json::String(text)) = map.get("string") {
+                let bytes: Vec<u8> = text.chars().map(|character| character as u32 as u8).collect();
+                if bytes.len() < 16 {
+                    // A string too short to hold a vector is not a
+                    // scrambled one.
+                    return value.clone();
+                }
+                let (vector, body) = bytes.split_at(16);
+                let plain = crate::aes::decrypt(key, vector, body);
+                let text: String = plain.iter().map(|byte| *byte as char).collect();
+                let mut out = Map::new();
+                out.insert("string".to_string(), Json::String(text));
+                return Json::Object(out);
+            }
+            if let Some(Json::Array(pairs)) = map.get("entries") {
+                let mut out = Map::new();
+                let pairs: Vec<Json> = pairs
+                    .iter()
+                    .map(|pair| match pair.as_array() {
+                        Some(pair) => {
+                            Json::Array(pair.iter().map(|item| scrambled_with_aes(item, key)).collect())
+                        }
+                        None => pair.clone(),
+                    })
+                    .collect();
+                out.insert("entries".to_string(), Json::Array(pairs));
+                return Json::Object(out);
+            }
+            let mut out = Map::new();
+            for (name, item) in map {
+                out.insert(name.clone(), scrambled_with_aes(item, key));
+            }
+            Json::Object(out)
+        }
+        Json::Array(items) => Json::Array(items.iter().map(|item| scrambled_with_aes(item, key)).collect()),
+        other => other.clone(),
+    }
+}
+
 /// The **value** with its strings scrambled.
 ///
 /// The strings of an object are scrambled under the key of the object,
@@ -430,6 +481,15 @@ pub struct Scheme {
     /// The **identifier** of the file: the first half of the pair the
     /// trailer holds.
     pub identifier: Vec<u8>,
+    /// The owner's **encrypted** entry: the key of the file under the
+    /// owner's own key. It is thirty-two bytes.
+    pub owner_encrypted: Vec<u8>,
+    /// The user's **encrypted** entry: the key of the file under the
+    /// user's own key. It is thirty-two bytes.
+    pub user_encrypted: Vec<u8>,
+    /// The **permissions** of the file, as the block the specification
+    /// holds: sixteen bytes.
+    pub permissions_block: Vec<u8>,
 }
 
 /// The **scheme** of a file: its encryption, read from the document.
@@ -457,6 +517,21 @@ pub fn scheme_of(document: &Document, command: &str) -> Result<Option<Scheme>, E
         entries.iter().find(|(key, _)| key == "O").and_then(|(_, value)| bytes_of(value)).unwrap_or_default();
     let user =
         entries.iter().find(|(key, _)| key == "U").and_then(|(_, value)| bytes_of(value)).unwrap_or_default();
+    let owner_encrypted = entries
+        .iter()
+        .find(|(key, _)| key == "OE")
+        .and_then(|(_, value)| bytes_of(value))
+        .unwrap_or_default();
+    let user_encrypted = entries
+        .iter()
+        .find(|(key, _)| key == "UE")
+        .and_then(|(_, value)| bytes_of(value))
+        .unwrap_or_default();
+    let permissions_block = entries
+        .iter()
+        .find(|(key, _)| key == "Perms")
+        .and_then(|(_, value)| bytes_of(value))
+        .unwrap_or_default();
     Ok(Some(Scheme {
         number,
         identifier: identifier_of(document),
@@ -468,6 +543,9 @@ pub fn scheme_of(document: &Document, command: &str) -> Result<Option<Scheme>, E
         streams: encryption.streams,
         owner,
         user,
+        owner_encrypted,
+        user_encrypted,
+        permissions_block,
     }))
 }
 
