@@ -4036,6 +4036,7 @@ so.
 | the **sources** of a document | **built.** A source may be said, a run may cite it, and the bibliography is worked out from the sources that are cited (§599) | §599 |
 | the **quotes** of a paragraph | **built.** The straight quotes of a paragraph may be made smart — the character before decides which one it is, and the runs do not move (§600) | §600 |
 | the **captions** of a document | **built.** A paragraph may be a caption — the label, the text and the format of its number, and the number itself is worked out (§601) | §601 |
+| the **facts** of a document in the **file** | **built.** The payload of a node is carried by the file — the properties, the sources and the captions survive a round trip, and so does the oldest version that keeps them (§602) | §602 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39056,14 +39057,12 @@ puts in it — the project, the client, the number of the ticket.
 
 ### What it does not settle
 
-- **The properties are not written into a file**: they are facts of
-  the document node, and the format that saves a document does not yet
-  carry them.
 - **A custom property holds a text only**: the tree's may hold other
   kinds of value, and a number is refused here by name.
-- **The properties are not read by anything else**: the header, the
-  footer and the title of a document are read by their own commands,
-  and nothing puts the author's name in the header.
+- **Nothing reads the properties but their own command**: the file
+  carries them (§602), and the header, the footer and the title of a
+  document are read by their own commands, and nothing puts the
+  author's name in the header.
 
 ## 598. The columns of a page
 
@@ -39221,9 +39220,9 @@ report, a recording. A **citation** is a run that names one, and the
   themselves rather than a list of lines.
 - **A citation is not a citation in the text**: it names a source, and
   it does not write `(Author, 2026)` where the reader sees it.
-- **The sources are not written into a file**: they are facts of the
-  document node, and the format that saves a document does not yet
-  carry them.
+- **Nothing reads the sources but the bibliography**: the file carries
+  them (§602), and no other command of this battery knows what a
+  source is.
 
 ## 600. The quotes of a paragraph
 
@@ -39370,3 +39369,68 @@ the captions that carry that label.
   tree's restart of the numbering at each chapter is not here.
 - **The caption is not a field**: nothing else may refer to it, and
   the tree's cross-reference to a numbered item is not here.
+
+## 602. The facts of a document, and the file that carries them
+
+The properties, the sources, the captions, the columns, the fields and
+the borders of a document are facts of its nodes — they are in the
+**payload** — and the payload is carried by the file.
+
+### What was built
+
+- The new test file of the prose battery (`tests/saving.rs`) says so:
+  - a document that carries **every fact this battery has added to a
+    document** — the properties and the custom properties, the
+    sources, the caption, the columns, the field, the borders and the
+    background — is written to a file and read back, and **every fact
+    is the same**;
+  - the **oldest** version of the file that loses nothing keeps them
+    as well: the document is written at each version of the family
+    and read back, and the first version whose round trip gives the
+    same document back is the one — and the facts are in it.
+- **Two notes of this README were wrong, and they are corrected
+  here.** §597 said that the properties of a document were not
+  written into a file, and §599 said the same of the sources. They
+  are written: the payload of a node is carried by the file, in every
+  version of it. The two notes now say what is true — that nothing
+  reads those facts but their own commands.
+
+### What the port found
+
+- **The core does not know what the payload means, and that is what
+  makes the facts free.** The core carries a node's payload without
+  reading it, and the file carries it too, "so a document written by
+  a program that had the plugin is still readable by one that has
+  it". So a new fact — the properties, the sources, the captions —
+  needed **no new version of the file**: it went into the payload,
+  and the file carried it. Every fact of this battery since the
+  paragraphs has been free in this way, and this arc is the test that
+  says it out loud.
+- **The oldest version that loses nothing keeps the facts.** The file
+  is written at each version of the family and read back, and the
+  first version whose round trip gives the same document back is the
+  one. The payload is in every version of the file, so the oldest
+  keeps the facts — and a program that knows only the oldest can read
+  a document that says everything this battery knows.
+- **The file keeps what it does not understand.** A field this
+  program does not know is written back as it was, so a document
+  written by a program with a newer plugin is not made poorer by
+  being read here.
+
+### What it cost
+
+- **Two tests** in the prose battery (`tests/saving.rs`): the facts
+  that survive the file, and the oldest version that keeps them.
+- **No new command**: the prose battery still carries **92** commands
+  and the MCP server **811**.
+
+### What it does not settle
+
+- **Nothing reads the facts but their own commands**: the file carries
+  the properties and the sources, and nothing puts the author's name
+  in the header.
+- **The file is the tree's own**: the format of craftkit is what
+  carries the facts, and the tree's own file formats do not.
+- **A fact of a document is not a fact of a file**: the properties of
+  a document and the properties of a saved file are the same here,
+  and in the tree they are not.
