@@ -4058,6 +4058,7 @@ so.
 | the **revision** of a document | **built.** A document may say who touched it last and how many times it has been revised — and a revision of zero takes the revision away (§621) | §621 |
 | the **resources** of the MCP server | **built.** The MCP server serves the protocol's other half — the command catalogue and the design, and a template that names one node (§622) | §622 |
 | the **prompts** of the MCP server | **built.** The MCP server serves the protocol's third part — the workflows it offers, with their arguments and their live suggestions (§623) | §623 |
+| the **reader of an XML text** | **built.** One reader of XML for the whole tree — it is the SDK's, and the film and the vector batteries read with it (§624) | §624 |
 
 ### The list of things that are honestly not there: empty
 
@@ -40467,7 +40468,8 @@ into a sequence again.
   the attributes and the text, with the five entities of XML, and it
   refuses a text it does not understand rather than guessing. It is
   **public**, because a reader of a text is a thing other batteries may
-  want.
+  want. It lives in the **SDK** now — it is `craftkit_sdk::xml` — for
+  the reason of §624.
 
 ### What the port found
 
@@ -40921,3 +40923,67 @@ which act — and now it has the third: **prompts**, which say.
 - **A prompt does not act**: it says what to do, and the tool call
   that does it is a separate thing — the tree's rule, and this
   server's.
+
+## 624. One reader of an XML text
+
+Two batteries grew a reader of XML, and they did not read the same
+text the same way. There is now **one**.
+
+### What was built
+
+- The XML reader is **the SDK's**: `craftkit_sdk::xml`. It reads the
+  elements, the attributes and the text, with the five entities of
+  XML, and it refuses a text it does not understand rather than
+  guessing.
+- The **film battery** reads with it: the FCPXML reader of §617 and
+  the FCP7 reader of §619.
+- The **vector battery** reads with it: the SVG reader of old, which
+  had a reader of its own.
+- The vector's reader had two habits the shared one does not:
+  - it read the **entities** of a file by hand, and only four of the
+    five: the shared reader reads `&apos;` as well;
+  - it **tolerated** a tag closed by the wrong tag, and the shared
+    reader refuses it. A file that is not well formed is not a file
+    this tree reads.
+- The shared reader has one thing the vector's had: the **text** of
+  an element, and a **number** read out of an attribute.
+
+### What the port found
+
+- **The vector battery already had a reader.** The reader of §617 was
+  the second one in the tree: the vector battery had carried one
+  since its SVG import was written. Two readers of XML meant two
+  answers to the question "what does this file say" — and they
+  differed, on the entities and on what is refused.
+- **The tree's own reader is a library's** — the tree reads its XML
+  with `roxmltree`, and this tree has no such library. One reader of
+  this tree's own is the answer to that, and it is now in the place
+  every battery can reach: the SDK.
+- **The vector's reader was lenient on purpose.** It skipped the
+  closing tag of the level above and carried on, so a file with a
+  stray tag still gave its paths. The shared reader is strict, and a
+  file that is not well formed is refused: the tree's rule is that a
+  document says what it says or it is not read.
+
+### What it cost
+
+- **Five tests** in the SDK (`tests/xml.rs`): the text that is read,
+  the entities and the refusals, the text of an element and the
+  number of an attribute, the strictness, and the finding of an
+  element.
+- The two tests of the reader that the film battery's file carried
+  moved to the SDK's file, where the reader now lives.
+- **No new command**: a reader is not a command. The kit still has
+  **827** commands and the MCP server **827** tools.
+
+### What it does not settle
+
+- **The reader is not a namespace-aware parser**: an element's name is
+  its name, with its prefix — `svg:path` is `svg:path` and not
+  `path`. Nothing in this tree needs the difference yet.
+- **The reader does not validate a file**: it reads what is
+  well formed, and it does not say whether the drawing an SVG file
+  holds is a drawing.
+- **The tree's own XML library is not here**: this tree reads XML with
+  its own reader, and a file that the library would accept and this
+  reader would not is a file this tree refuses.
