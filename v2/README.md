@@ -4042,6 +4042,7 @@ so.
 | the **full stop** of a paragraph | **built.** The two spaces at the end of a paragraph may become a full stop and a space, and the runs do not move (§605) | §605 |
 | the **endnotes** of a document | **built.** A note may belong to the end of the document instead of the foot of the page — a kind of its own, and numbered apart from the footnotes (§606) | §606 |
 | the **nested clip** in the **OTIO** | **built.** A nested clip is written out as a stack of the tracks it holds, and a sequence with one can be written at all (§607) | §607 |
+| the **nested clip** in the **FCPXML** | **built.** A nested clip is written out as a media that holds a sequence of the tracks it holds, and the clip points at that media (§608) | §608 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39781,3 +39782,72 @@ because OTIO has no references.
 - **The nesting is not read back**: the OTIO of this tree is written
   and not read, and a stack that comes in from another program is
   not a nested clip of this tree.
+
+## 608. The nested clip in the FCPXML
+
+A **nested clip** — a clip that holds other clips — is written out as
+a **media** that holds a sequence of the tracks it holds, and the clip
+that stands for it points at that media.
+
+### What was built
+
+- The FCPXML of a sequence now writes a **nested clip** as a `media`
+  resource:
+  - the media holds a **sequence** of its own, whose **spine** is the
+    first of the tracks the nested clip holds, and the clips on it are
+    written as they are anywhere else, with a **gap** for every hole;
+  - the sequence lasts as long as the nested clip does;
+  - the clip in the spine of the sequence points at that media.
+- A track of a nested clip that is **not the spine** of its media is
+  **left out**, and the answer says what was left out — the tree drops
+  those too, and here the dropping is said rather than done quietly.
+- Before this arc, a sequence with a nested clip **could not be
+  written out at all**: the export refused a clip with no item, and a
+  nested clip plays no media of its own, so it has no item. The
+  refusal is still there for a clip that is not nested.
+
+### What the port found
+
+- **The tree's nested sequence is a media resource and a `ref-clip`,
+  and so is this tree's nested clip.** The tree writes the whole
+  nested sequence as a `<media>` in the resources, with the sequence's
+  own storyline inside it, and the clip that points at it is a
+  `ref-clip`. Here the media holds a sequence of the tracks the
+  nested clip holds, and the clip that points at it is a `clip` — the
+  element this tree writes for every clip.
+- **The tree's nested sequence has every track and this tree's nested
+  clip has one spine.** The tree's nested sequence is a whole
+  sequence, with its own tracks, and all of them are written. Here a
+  nested clip holds **tracks** — the ones the clips it holds came
+  from — and the media holds the first of them as its spine; the
+  others are left out and the answer says so.
+- **The tree's nested sequence has settings of its own** — its frame
+  rate, its drop frame, its start timecode and its audio layout —
+  because it is a sequence. Here the media takes the format of the
+  sequence around it, and the nested clip has no settings of its own.
+- **The tree warns about a recursive nested sequence** — a compound
+  clip that holds itself — and writes nothing for it. Here the
+  nesting cannot be recursive: a clip that is already nested is not
+  nested again, so there is nothing to warn about.
+
+### What it cost
+
+- **Three tests** in the film battery (`tests/fcpxml_nested.rs`): the
+  nested clip that is written as a media, the track that is not the
+  spine and is left out, and the clip that is not nested and is still
+  an asset.
+- **No new command**: the film battery still carries **80** commands
+  and the MCP server **816**. The change is in the writer of the
+  FCPXML.
+
+### What it does not settle
+
+- **The other tracks of a nested clip are not written**: only the
+  first is the spine of the media, and the others are left out and
+  said so.
+- **The media of a nested clip has no settings of its own**: it takes
+  the format of the sequence around it, and the tree's nested
+  sequence has a rate and a drop frame of its own.
+- **The FCPXML is not read back**: the media of a nested clip is
+  written, and a media that comes in from another program is not a
+  nested clip of this tree.
