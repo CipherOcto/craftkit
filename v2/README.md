@@ -4053,6 +4053,7 @@ so.
 | the **OTIO** read back | **built.** A timeline of OTIO may be read — the clips of its tracks become clips of a sequence, and the media of the file become items (§616) | §616 |
 | the **FCPXML** read back | **built.** A document of FCPXML may be read — the clips of its spine become clips of a sequence, and the media of the file become items (§617) | §617 |
 | the **edit decision list** read back | **built.** A list of cuts may be read — the events of the list become clips of a sequence, and its reels become items (§618) | §618 |
+| the **FCP7** read back | **built.** A document of FCP7 XML may be read — the clip items of its tracks become clips of a sequence, and its files become items (§619) | §619 |
 
 ### The list of things that are honestly not there: empty
 
@@ -40587,3 +40588,67 @@ sequence again.
 - **The `M2` lines and the black are not read**: a reel that means
   another reel is the reel it names, and a `BL` reel is an ordinary
   one.
+
+## 619. The FCP7 read back
+
+The `xmeml` dialect of a final cut of the seven may now be **read**:
+a document of it is made into a sequence.
+
+### What was built
+
+- The new command **`film.import.fcp7`** reads an FCP7 XML document
+  and makes the **sequence** it names:
+  - the file is read through a **bound** — at most **sixteen
+    mebibytes** — and a file that cannot be read is refused;
+  - a file that is **not FCP7 XML** is refused: its root is not
+    `xmeml`, or it holds no **sequence** with media in it — the tree's
+    own refusals;
+  - the **rate** of the sequence is the rate of the document: the
+    `timebase` of its rate, and a rate that is **NTSC** is the tree's
+    own rational one — `30000/1001` and the rest;
+  - a **video** track is a video track and an **audio** track is an
+    audio one, and a clip item of one is a clip of that track;
+  - the **media** of a clip item is an **item** of a bin, with the
+    name and the file of the `file` element, and the **clip** points
+    at it — the same shape as a clip made by hand;
+  - the **start** of a clip is the `start` of its clip item, its
+    **length** is the `out` less the `in`, and the **source** is the
+    `in`.
+
+### What the port found
+
+- **The tree's reader makes the bins of the document.** A document
+  has `project`s, `bin`s and `children`, and the tree walks them and
+  makes a bin for each. Here the bins of the document are not made:
+  the media go into one bin and the sequence into another.
+- **The tree's reader reads the master clips of the bins**, and the
+  media of a clip item is the master clip it names. Here every clip
+  item gets an item of its own, so two clip items of one file are two
+  items.
+- **The tree's reader reads everything else of the dialect** — the
+  markers, the effects, the links, the labels, the transitions, the
+  filters, the generators, the `pproTicksIn` of a tick-exact source.
+  None of it is read here.
+- **The tree's reader resolves the links of the document** and unions
+  the clip items that name each other, so that a video clip and the
+  audio beside it are one group. Here every clip item is a clip of
+  its own track, and the link is not read.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/fcp7import.rs`): the
+  document that is read, the clocks of a clip, the rate and the NTSC
+  rate, the media that is an item, and the file that is not a
+  document.
+- **One new command** (`film.import.fcp7`) in a new module
+  (`src/fcp7import.rs`). The film battery now carries **86** commands
+  and the MCP server **827**.
+
+### What it does not settle
+
+- **The bins of the document are not made**: the media of a document
+  go into one bin, and the sequence into another.
+- **The markers and the effects are not read**: a clip item with a
+  marker is a clip, and the marker is not there.
+- **The links are not read**: a clip item that is linked to another
+  one is a clip, and the link is not there.
