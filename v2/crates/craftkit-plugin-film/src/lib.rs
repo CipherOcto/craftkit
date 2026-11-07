@@ -202,6 +202,7 @@ mod edits;
 mod edl;
 mod edlimport;
 mod enabling;
+mod fcp7import;
 mod fcpxml;
 mod fcpxmlimport;
 mod gaps;
@@ -252,6 +253,7 @@ pub use edits::{NextEdit, PrevEdit, Razor};
 pub use edl::ExportEdl;
 pub use edlimport::ImportEdl;
 pub use enabling::EnableClip;
+pub use fcp7import::ImportFcp7;
 pub use fcpxml::ExportFcpxml;
 pub use fcpxmlimport::ImportFcpxml;
 pub use gaps::CloseGap;
@@ -935,6 +937,7 @@ craftkit_sdk::plugin_anchor!(
     ImportAle,
     ExportFcpxml,
     ImportFcpxml,
+    ImportFcp7,
     ExportOtio,
     ImportOtio,
     ReadTimeline,
