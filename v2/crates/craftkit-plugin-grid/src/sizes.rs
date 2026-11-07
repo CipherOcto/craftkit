@@ -29,9 +29,12 @@
 //!   — `2:5`, `2:2,4:5` — and its dialogue asks for all of them. Here
 //!   a size is for **one** row or **one** column, and a size for many
 //!   is many sizes: one command and one row each.
-//! - **The tree's autofit is not here.** The tree may measure the text
-//!   of a cell and make the row or the column the size of the text, and
-//!   that is a **measurement** of a font this tree does not have.
+//! - **The tree's autofit measures a font and this one counts.** The
+//!   tree may measure the text of a cell and make the row or the
+//!   column the size of the text, and that is a **measurement** of a
+//!   font. Here the text is counted — the width of a column is the
+//!   width of its longest line, and the height of a row is the height
+//!   of its lines (the module `autofit`).
 
 use craftkit_derive::Command;
 

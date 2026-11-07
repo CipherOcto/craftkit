@@ -322,6 +322,7 @@
 #![forbid(unsafe_code)]
 
 mod arithmetic;
+mod autofit;
 mod bonds;
 mod borders;
 mod cashflows;
@@ -407,6 +408,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+pub use autofit::{AutofitColumn, AutofitRow};
 pub use borders::{ClearBorder, GetBorder, SetBorder};
 pub use cellread::ReadCell;
 pub use charts::{AddChart, ReadChart, RemoveChart, SetChart};
