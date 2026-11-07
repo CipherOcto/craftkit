@@ -4048,6 +4048,7 @@ so.
 | the **numbering** of the pages | **built.** A document may say the format the page numbers are written in and the number the first page has, and the first page's number is derived (§611) | §611 |
 | the **errors** of a sheet | **built.** The cells whose formula comes out as an error may be read — the error and the formula that gave it, worked out every time (§612) | §612 |
 | the **ALE** of a sequence | **built.** An Avid log exchange may be written — a tab-delimited clip log with a heading, the columns and a row for each clip (§613) | §613 |
+| the **ALE** read back | **built.** An Avid log exchange may be read — the media of the log become items and its rows become clips on a track of a sequence (§614) | §614 |
 
 ### The list of things that are honestly not there: empty
 
@@ -40191,9 +40192,83 @@ tab-delimited text with three sections, the **heading**, the
 
 ### What it does not settle
 
-- **The log is not read back**: the text is written and not read, and
-  the tree reads its own ALE files.
+- **The log was not read back** when this section was written: the text
+  was written and not read. It is read back now (§614).
 - **The metadata columns are not here**: the items of this tree carry
   no metadata, so a log has six columns and not twelve.
 - **The heading does not know the media**: the height and the audio
   rate are the tree's defaults, and a log of a 720p film says `1080`.
+
+## 614. The ALE read back
+
+The log of §613 can now be **read**: a file of media names is made
+into a sequence again.
+
+### What was built
+
+- The new command **`film.import.ale`** reads an Avid log exchange and
+  makes the **sequence** it names:
+  - the file is read through a **bound** — at most **sixteen
+    mebibytes** — and a file that cannot be read, or that is not a
+    text, is refused;
+  - a file that is **not an ALE** is refused: the text has no
+    `Heading` section, or no `Column` section — the tree's own
+    refusals;
+  - the line ends are **CR LF**, **CR** or **LF** — the tree's own
+    rule;
+  - the **rate** of the sequence is the `FPS` of the heading: a rate
+    that is near one of the tree's common rates is that rate, and any
+    other is worked out as a fraction of a thousand — the tree's own
+    rule. A log with no `FPS` has the battery's default rate of 25;
+  - the **media** of a row is an **item** of a bin, with the row's
+    name and its `Source File`, and the **clip** points at it with a
+    relation — the same shape as a clip made by hand;
+  - the **source** of a clip is the row's `Start`, and its length is
+    the row's `End` less its `Start`;
+  - the clips are laid **end to end**: a log says what media there is,
+    and it does not say where it goes;
+  - a row whose **start** or **end** cannot be read is **left out**,
+    and so is a row that ends before it begins;
+  - the sequence takes the **name** it is given, or the name of the
+    file.
+
+### What the port found
+
+- **The tree reads the log and stops there.** The tree's reader
+  parses the three sections and gives the range of a row, and the
+  tree has no command that turns a log into a project — the reading
+  is there for the tree's own tests. Here the reading goes the whole
+  way: the media are items, the rows are clips, and the clips are on
+  a track of a sequence.
+- **The tree's reader needs the heading's `FPS` to read a row** — its
+  range is `None` without one. Here a log with no `FPS` has the
+  battery's default rate of 25, and its rows are read at that rate.
+- **The tree's `End` is exclusive and it never goes backwards**: it
+  holds a row whose end is before its start to at least one frame.
+  Here such a row is left out, because a clip of no length is not a
+  clip.
+- **The tree's rate is a float and this tree's is a fraction.** The
+  tree reads `23.976` as a float; a rate that is not a whole number
+  of frames a second cannot be one exactly, and the rate here is
+  `24000/1001` — the frames of a second are worked out from it.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/aleimport.rs`): the log
+  that becomes a sequence, the source that is the row's start, the
+  file that is not a log, the row that cannot be read, and the rate
+  that is worked out.
+- **One new command** (`film.import.ale`) in a new module
+  (`src/aleimport.rs`). The film battery now carries **82** commands
+  and the MCP server **821**.
+
+### What it does not settle
+
+- **The media of the log are not opened**: the rows name files, and
+  the items carry the names of the files. Nothing probes them.
+- **The clips are not placed**: they are laid end to end, because a
+  log has no column for where a clip goes. The timecodes of a row
+  are the **source**, and they are where the clip plays *from*.
+- **The columns that are not read are not read**: the `Tape` and the
+  `Tracks` of a row are not read, and a log with the tree's own
+  metadata columns reads the six it knows and leaves the rest.
