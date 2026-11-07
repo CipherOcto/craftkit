@@ -4063,6 +4063,7 @@ so.
 | the **DXF** written out | **built.** A drawing may be written as a DXF file — its layers become the table of the file and its entities become the entities of the file (§626) | §626 |
 | the **SVG** of a drawing | **built.** A drawing may be written as a picture — the extents of a block become the box of an SVG, and the world is turned over for it (§627) | §627 |
 | the **SVG** read back | **built.** A picture file of SVG may be read — the shapes of the page become entities of a drawing, and the page's Y is turned over (§628) | §628 |
+| the **blocks** of a DXF file | **built.** The blocks of a file become blocks of a drawing, and an insert names the block it puts in it (§629) | §629 |
 
 ### The list of things that are honestly not there: empty
 
@@ -41300,3 +41301,68 @@ drawing again.
   the origin of the drawing, and a picture written by §627 and read
   back by this is a drawing of the same shape with the margin of the
   picture gone.
+
+## 629. The blocks of a DXF file
+
+A drawing file of DXF may now carry its **blocks**: the blocks of a
+file become blocks of the drawing, and an **insert** is an instance of
+one of them.
+
+### What was built
+
+- The DXF **reader** reads the `BLOCKS` section of a file:
+  - a **block** of the file is a block of the drawing, and the
+    entities in it are entities of that block;
+  - the blocks are **made first**, so that an insert may name one of
+    them;
+  - the **model's own record** is the model space, and the entities
+    of the model space are the entities of the `ENTITIES` section —
+    the tree's own writer puts them there — so the record's entities
+    are read only when the file has no entities of its own;
+  - an **insert** is an instance of a block: the instance and its
+    definition are two things, and the reference between them is an
+    **edge** that says which block is inserted;
+  - an insert of a block the file does not define is **skipped**, and
+    the answer says what it skipped — an insert of nothing is an
+    insert of nothing.
+- The answer says how many **blocks** the drawing has, as well as how
+  many entities it holds.
+
+### What the port found
+
+- **The tree's blocks carry handles**, and every entity of a block
+  carries one too: the block's own handle, its owner, and the
+  entities' handles. A handle is a fact of the file — a name a
+  program can refer to — and this tree keeps no handles: the
+  entities of a block are in the block, and that is where they are.
+- **The tree writes the model space as a block and the paper spaces
+  as blocks too**, and the drawing's entities are inserted into the
+  model space rather than living in it. Here the model's entities
+  live in the model space, which is the tree's own name for the
+  block a drawing's entities live in (§625).
+- **The tree's writer writes blocks with their base point, their
+  flags and their description.** Here a block is a name and its
+  entities, and the base point of a block is not read: the tree's
+  entities carry their own points.
+- **The tree's reader reads the layout of a file**, and the paper
+  spaces of a file are places entities live. Here a file's other
+  layouts are not read.
+
+### What it cost
+
+- **Three tests** in the cad battery (`tests/dxfblocks.rs`): the
+  blocks of a file and the insert that names one, the insert of a
+  block that is not there, and the entities of the model's own
+  record.
+- **No new command**: the reader of §625 reads the blocks as well.
+  The cad battery still carries **49** commands and the MCP server
+  **831**.
+
+### What it does not settle
+
+- **The handles are not kept**, so an entity of a file that refers to
+  another by its handle is not read.
+- **The base point of a block is not read**, and neither is the
+  scale, the rotation or the array of an insert.
+- **The text, the dimensions, the hatches and the splines** of a
+  file are still not read.
