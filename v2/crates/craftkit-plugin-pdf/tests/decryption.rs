@@ -26,8 +26,15 @@ fn session() -> Session {
 }
 
 /// A directory of this test's own, so that the files do not mix.
+///
+/// Every call makes a **directory of its own**: the tests of one file
+/// run beside each other, and a directory that two of them shared
+/// would be taken away by the second one under the first.
 fn directory(name: &str) -> String {
-    let path = std::env::temp_dir().join(format!("craftkit-v2-decryption-{name}-{}", std::process::id()));
+    static COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let number = COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let path =
+        std::env::temp_dir().join(format!("craftkit-v2-decryption-{name}-{}-{number}", std::process::id()));
     let _ = std::fs::remove_dir_all(&path);
     std::fs::create_dir_all(&path).expect("the directory is made");
     path.to_string_lossy().to_string()
