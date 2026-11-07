@@ -4016,6 +4016,7 @@ so.
 | the **compressed** objects of a file | **built.** The objects of an object stream are read into the document — the catalog, the pages and the page of a compressed file are nodes like any other (§579) | §579 |
 | a file scrambled with **AES** | **built.** A file whose streams are scrambled with AES-128 is opened with a password — the strings with RC4 and the streams with AES (§580) | §580 |
 | the **index** of a document | **built.** A document may be marked with index entries — the index gathers them under the letters of the alphabet, and names the blocks they are on (§581) | §581 |
+| the **array** of an entity | **built.** An entity may be arrayed — in a grid of rows and columns, or about a centre — and the copies are entities of their own (§582) | §582 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37957,3 +37958,70 @@ gathers the marks into an index that is **derived**.
 - **Every occurrence is not marked**: the tree's mark may mark the
   first whole-word match of a word in every paragraph of the document,
   and here one mark is on one block.
+
+## 582. The array of an entity
+
+An array is a set of the **items** of an entity: the entity itself and
+its copies, put in a grid or about a centre.
+
+### What was built
+
+- The new command **`cad.entity.array.rectangular`** arrays an entity
+  in a **grid**:
+  - the **rows** and the **columns** say how many items the array
+    holds, and the entity is the first of them;
+  - the **row spacing** and the **column spacing** say how far apart
+    the items stand;
+  - the copies are in the same **block** and on the same **layer** as
+    the entity they are copies of.
+- The new command **`cad.entity.array.polar`** arrays an entity **about
+  a centre**:
+  - the **count** says how many items the array holds, and the entity
+    is the first of them;
+  - the **angle** the array goes through is a whole turn when it is
+    not said;
+  - the copies may be **turned** with the array;
+  - the **centre** of an item is the centre of the entity, turned about
+    the centre of the array.
+- The rules:
+  - a count that is **not a whole number**, or that is less than one,
+    is refused: there is no such thing as half a row;
+  - an array may not be **endless**: a thousand items is the most an
+    array may hold;
+  - the copies are named after the entity they are copies of — the
+    second item is `name 2` and the third is `name 3`.
+
+### What the port found
+
+- **The tree's array is a thing of its own and this one is not.** The
+  tree's array is a block that holds the items, and it may be edited
+  as one: the rows and the columns may be changed and the items follow.
+  Here the items are entities of the block and nothing holds them
+  together.
+- **The tree's array is associative and this one is not.** The tree
+  moves the sources into a block of their own and the array is a
+  reference to it, so that the sources may be edited and every item
+  follows. Here the copies are copies: they are entities of their own
+  and the entity they were copied from does not feel it.
+- **The tree's array may go along a path and this one may not.** The
+  tree has a third kind of array, along a curve, and it may have
+  levels — copies of copies, one layer above the other. Here there are
+  two kinds and no levels.
+
+### What it cost
+
+- **Five tests** in the cad battery (`tests/arrays.rs`): the grid, the
+  array about a centre, the copies turned with it, a count that is not
+  a whole number, and an array that is endless.
+- **One new module** (`src/arrays.rs`) and **two new commands**
+  (`cad.entity.array.rectangular` and `cad.entity.array.polar`). The
+  cad battery now carries **42** commands and the MCP server **780**.
+
+### What it does not settle
+
+- **The array is not a thing**: the items are entities of the block,
+  and there is nothing that holds them together.
+- **The levels are not there**: a copy of a copy, one layer above the
+  other, is not made.
+- **The array is not drawn**: the tree draws a preview of the array
+  while it is made, and there is no drawing here.
