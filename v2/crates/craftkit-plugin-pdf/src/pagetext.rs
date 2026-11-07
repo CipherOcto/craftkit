@@ -62,6 +62,10 @@ pub struct Piece {
     pub encoding: String,
     /// Whether the operator moved to the next line after it.
     pub break_after: bool,
+    /// Where the text **begins**: the origin of the text matrix.
+    pub x: Option<f64>,
+    /// Where the text **begins**: the origin of the text matrix.
+    pub y: Option<f64>,
 }
 
 impl Piece {
@@ -72,6 +76,8 @@ impl Piece {
             "operator": self.operator.clone(),
             "encoding": self.encoding.clone(),
             "line_break": self.break_after,
+            "x": self.x.map(|x| json!(x)).unwrap_or(Json::Null),
+            "y": self.y.map(|y| json!(y)).unwrap_or(Json::Null),
         })
     }
 }
@@ -195,21 +201,121 @@ pub(crate) fn operations_of_page(
     Ok(operations)
 }
 
+/// The **place** of the text: the matrices that say where it is.
+///
+/// The **text matrix** says where the text is, and the **line matrix**
+/// says where the line is; the text of a piece begins at the origin of
+/// the text matrix.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Place {
+    /// The text matrix: `a b c d e f`.
+    text: [f64; 6],
+    /// The line matrix: `a b c d e f`.
+    line: [f64; 6],
+    /// The **leading**: how far a line is from the one before it.
+    leading: f64,
+    /// The **rise**: how far the text is above the line it is on.
+    rise: f64,
+}
+
+impl Place {
+    /// A place where nothing has been said yet.
+    const NONE: Place = Place {
+        text: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        line: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+        leading: 0.0,
+        rise: 0.0,
+    };
+
+    /// The origin of the text: where the text **begins**.
+    fn origin(&self) -> (f64, f64) {
+        (self.text[4], self.text[5] + self.rise)
+    }
+
+    /// Move the **line** by a distance, and put the text on it.
+    fn move_to(&mut self, dx: f64, dy: f64) {
+        let line = self.line;
+        self.line = [
+            line[0],
+            line[1],
+            line[2],
+            line[3],
+            dx * line[0] + dy * line[2] + line[4],
+            dx * line[1] + dy * line[3] + line[5],
+        ];
+        self.text = self.line;
+    }
+}
+
+/// The **numbers** an operation was given.
+fn numbers_of(operation: &crate::content::Operation) -> Vec<f64> {
+    operation.operands.iter().filter_map(|operand| operand.as_f64()).collect()
+}
+
 /// The **pieces** of text a set of operations shows.
 pub(crate) fn pieces_of(operations: &[crate::content::Operation]) -> Vec<Piece> {
     let mut pieces: Vec<Piece> = Vec::new();
     // Text is shown inside a **text object**.
     let mut in_text = false;
+    // The **place** of the text.
+    let mut place = Place::NONE;
+    let mut placed = false;
     for operation in operations {
         match operation.operator.as_str() {
-            "BT" => in_text = true,
+            "BT" => {
+                in_text = true;
+                place = Place::NONE;
+                placed = false;
+            }
             "ET" => in_text = false,
+            "Tm" => {
+                let numbers = numbers_of(operation);
+                if numbers.len() == 6 {
+                    place.text = [numbers[0], numbers[1], numbers[2], numbers[3], numbers[4], numbers[5]];
+                    place.line = place.text;
+                    placed = true;
+                }
+            }
+            "Td" | "TD" => {
+                let numbers = numbers_of(operation);
+                if numbers.len() == 2 {
+                    if operation.operator == "TD" {
+                        place.leading = -numbers[1];
+                    }
+                    place.move_to(numbers[0], numbers[1]);
+                    placed = true;
+                }
+            }
+            "T*" => {
+                place.move_to(0.0, -place.leading);
+                placed = true;
+            }
+            "TL" => {
+                let numbers = numbers_of(operation);
+                if let Some(leading) = numbers.first() {
+                    place.leading = *leading;
+                }
+            }
+            "Ts" => {
+                let numbers = numbers_of(operation);
+                if let Some(rise) = numbers.first() {
+                    place.rise = *rise;
+                }
+            }
             "Tj" => {
                 if !in_text {
                     continue;
                 }
                 let Some((text, encoding)) = operation.operands.last().and_then(string_of) else { continue };
-                pieces.push(Piece { text, operator: "Tj".to_string(), encoding, break_after: false });
+                let (x, y) = place.origin();
+                pieces.push(Piece {
+                    text,
+                    operator: "Tj".to_string(),
+                    encoding,
+                    break_after: false,
+                    x: placed.then_some(x),
+                    y: placed.then_some(y),
+                });
             }
             "TJ" => {
                 if !in_text {
@@ -222,18 +328,29 @@ pub(crate) fn pieces_of(operations: &[crate::content::Operation]) -> Vec<Piece> 
                 if text.is_empty() {
                     continue;
                 }
-                pieces.push(Piece { text, operator: "TJ".to_string(), encoding, break_after: false });
+                let (x, y) = place.origin();
+                pieces.push(Piece {
+                    text,
+                    operator: "TJ".to_string(),
+                    encoding,
+                    break_after: false,
+                    x: placed.then_some(x),
+                    y: placed.then_some(y),
+                });
             }
             "'" | "\"" => {
                 if !in_text {
                     continue;
                 }
                 let Some((text, encoding)) = operation.operands.last().and_then(string_of) else { continue };
+                let (x, y) = place.origin();
                 pieces.push(Piece {
                     text,
                     operator: operation.operator.clone(),
                     encoding,
                     break_after: true,
+                    x: placed.then_some(x),
+                    y: placed.then_some(y),
                 });
             }
             _ => {}
