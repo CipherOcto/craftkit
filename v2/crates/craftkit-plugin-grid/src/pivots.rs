@@ -587,6 +587,114 @@ impl ReadPivot {
     }
 }
 
+/// **Read** the rows that stand behind a **group** of a pivot.
+///
+/// The group is the key of the row field, and the rows are the rows
+/// of the range that hold it. The detail is **derived**: it is worked
+/// out from the range every time it is asked for, and it cannot be
+/// out of date.
+#[derive(Command)]
+#[command(id = "grid.pivot.detail", area = "grid", layer = "grid", icon = "grid")]
+pub struct ReadPivotDetail {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The name of the pivot.
+    pub name: Text,
+    /// The group: the key of the row field.
+    pub group: Text,
+}
+
+impl ReadPivotDetail {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.pivot.detail".to_string();
+        let sheet = self.sheet.0;
+        let node = sheet_of(session, &id, sheet)?;
+        let name = self.name.0.trim().to_string();
+        let pivots = pivots_of(&node);
+        let pivot = pivot_of(&pivots, &name, &id)?;
+        let cells = crate::cells_of(&node);
+        let book = crate::book_of(session.document());
+        let sheet_name = node.name.clone();
+        let group = self.group.0.trim().to_string();
+
+        // The **value** of a cell: what it holds, or what its formula
+        // computes.
+        let value_at = |cell: CellRef| -> Value {
+            match cells.get(cell) {
+                Some(entry) => match (&entry.value, &entry.formula) {
+                    (Some(value), _) => value.clone(),
+                    (None, Some(_)) => book.value_of(&sheet_name, cell),
+                    (None, None) => Value::Empty,
+                },
+                None => Value::Empty,
+            }
+        };
+
+        // The **rows** that stand behind the group.
+        let mut rows: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
+        for row in pivot.range.start.row + 1..=pivot.range.end.row {
+            let key = value_at(CellRef { col: pivot.row_field, row });
+            if key_text(&key) != group {
+                continue;
+            }
+            let column_key = match pivot.column_field {
+                Some(column) => value_at(CellRef { col: column, row }),
+                None => Value::Empty,
+            };
+            // The **number** of the row: the cell of the value field
+            // holds a number, or nothing.
+            let value = match pivot.value_field {
+                Some(column) => {
+                    let cell = CellRef { col: column, row };
+                    let value = value_at(cell);
+                    match value {
+                        Value::Empty => Value::Empty,
+                        Value::Number(number) => Value::Number(number),
+                        Value::Text(_) => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!(
+                                    "the cell {} holds text, and a number cannot be put together with a text",
+                                    cell.to_text()
+                                ),
+                            });
+                        }
+                        Value::Bool(_) | Value::Error(_) => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!(
+                                    "the cell {} does not hold a number, and a number cannot be put together with it",
+                                    cell.to_text()
+                                ),
+                            });
+                        }
+                    }
+                }
+                None => Value::Empty,
+            };
+            let mut held = craftkit_sdk::serde_json::Map::new();
+            held.insert("row".to_string(), json!(row + 1));
+            held.insert("key".to_string(), key_of(&key));
+            held.insert("column".to_string(), key_of(&column_key));
+            held.insert("value".to_string(), value.to_json());
+            rows.push(craftkit_sdk::serde_json::Value::Object(held));
+        }
+        if rows.is_empty() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no group `{group}` in the pivot `{name}`"),
+            });
+        }
+        let count = rows.len();
+        Ok(Outcome::new(format!("the group `{group}` stands for {count} row(s)")).with_data(json!({
+            "sheet": sheet,
+            "name": name,
+            "group": group,
+            "rows": rows,
+        })))
+    }
+}
+
 /// **Take away** a pivot of a sheet.
 ///
 /// The cells it read stay where they are: a pivot is a fact of the
