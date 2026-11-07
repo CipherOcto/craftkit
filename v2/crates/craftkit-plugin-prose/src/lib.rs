@@ -109,6 +109,7 @@ mod accessibility;
 mod background;
 mod bookmarks;
 mod borders;
+mod captions;
 mod characters;
 mod columns;
 mod comments;
@@ -143,6 +144,7 @@ pub use accessibility::CheckAccessibility;
 pub use background::{SetBackground, SetWatermark};
 pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
 pub use borders::SetBorders;
+pub use captions::{ReadCaptions, SetCaption};
 pub use characters::FormatRun;
 pub use columns::SetColumns;
 pub use comments::{DeleteComment, GetComment, SetComment};
@@ -1092,6 +1094,8 @@ craftkit_sdk::plugin_anchor!(
     ReadSources,
     ReadBibliography,
     SetQuotes,
+    SetCaption,
+    ReadCaptions,
     AddField,
     SetField,
     ReadFields,
