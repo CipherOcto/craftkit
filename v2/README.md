@@ -4002,6 +4002,7 @@ so.
 | the **attachments** of a file | **built.** A file may carry files of its own — the name, the description, the kind, the size and the bytes of each are read (§565) | §565 |
 | the **layers** of a file | **built.** A file may hold layers — the name of each, its intent, and whether it is shown when the file is opened (§566) | §566 |
 | the **appearance** of a field is written | **built.** A field may be given a drawing of its own — the value in the box of the widget, with the font and the size the field says (§567) | §567 |
+| the **writing** of a drawing as an SVG file | **built.** A drawing is written as an SVG file — the paths, their colours and the box they are in (§568) | §568 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37024,3 +37025,69 @@ own**.
 - **The size is not made to fit**: a field whose default appearance
   says a size of zero is refused, and the tree does not shrink the
   text to fit the box.
+
+## 568. The writing of a drawing as an SVG file
+
+A drawing is a set of paths, and an **SVG file** is a way of writing
+a drawing down.
+
+### What was built
+
+- The new command **`vector.export.svg`** writes the document's paths
+  as an SVG file:
+  - every path is a `<path>` element, with its **data** — where it
+    goes and what it does;
+  - the **fill**, the **stroke**, the **width** of the stroke, the
+    **corners** and the **ends**, the **dash** and the **opacity** are
+    the attributes of the element;
+  - a path filled with a **gradient** names a gradient in the file's
+    `defs`, and the gradient is written with its stops.
+- The rules:
+  - the **box** of the drawing is the box of all its paths, and the
+    file says it in its `width` and its `height`;
+  - the world has **Y up** and an SVG file has Y down, so the paths
+    are written in a group that **turns them over**, and the box of
+    the file is the box of the world turned over with them;
+  - the **transform** of a path is **baked** into it: the path is
+    written where it is, and not with a matrix on it;
+  - the **appearance** wins over the path's own colours, the way the
+    tree draws it;
+  - a drawing with **no path** is refused: a file with nothing in it
+    is not a drawing.
+
+### What the port found
+
+- **The tree writes the transform and this one bakes it**: the tree
+  writes `transform="matrix(a b c d e f)"` on the element, so the file
+  keeps the path as it was drawn and says where it is put. Here the
+  transform is baked into the path's data, and the file says nothing
+  about the transform.
+- **The tree's file has an artboard and this one has a box**: the
+  tree's view box is the artboard — `0 0` and the size of the page —
+  and a path that is outside it is outside the drawing. Here the box
+  of the file is the box of all the paths, and the paths are the
+  drawing.
+- **The tree writes more than paths**: the tree writes text, images,
+  symbols and the `<use>` that shares them, patterns and CSS. Here
+  the file holds paths and nothing else.
+- **The tree reads SVG back**: the tree has an importer as well as an
+  exporter, and a drawing may be written and read again. Here the
+  file is written and nothing reads it.
+
+### What it cost
+
+- **Four tests** in the vector battery (`tests/svgexport.rs`): the
+  drawing that is written, the box of the file, the fill and the
+  stroke of a path, and a drawing with no path.
+- **One new module** (`src/svgexport.rs`) and **one new command**
+  (`vector.export.svg`). The vector battery now carries **47** commands
+  and the MCP server **764**.
+
+### What it does not settle
+
+- **The text is not written**: a drawing that holds text is written
+  without it, and the text is not in the file.
+- **The file is not read back**: the tree has an importer for SVG, and
+  this one has not.
+- **The blend modes are not written**: a path that mixes with what is
+  under it is written as an ordinary path.
