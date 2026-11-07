@@ -4040,6 +4040,7 @@ so.
 | the **dashes** of a paragraph | **built.** The pairs of hyphens of a paragraph may be made into en dashes and em dashes, and the runs are rewritten with the text (§603) | §603 |
 | the **list** a paragraph begins | **built.** A paragraph that begins with `1. ` or `* ` becomes an item of a list — the marker is taken away and the runs are rewritten with it (§604) | §604 |
 | the **full stop** of a paragraph | **built.** The two spaces at the end of a paragraph may become a full stop and a space, and the runs do not move (§605) | §605 |
+| the **endnotes** of a document | **built.** A note may belong to the end of the document instead of the foot of the page — a kind of its own, and numbered apart from the footnotes (§606) | §606 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39641,3 +39642,73 @@ and the second space says so.
 - **The rule is only at the end of the paragraph**: the tree's rule
   fires wherever the caret is, and here the two spaces must be the
   last two characters.
+
+## 606. The endnotes of a document
+
+An **endnote** is a note that belongs to the **end** of the document,
+where a footnote belongs to the foot of the page. The text that points
+at it is a **reference** — a run that names the endnote — and the
+**number** of an endnote is derived and is counted **apart** from the
+footnotes.
+
+### What was built
+
+- The new kind **`prose.endnote`**: a note, and a kind of its own.
+- The new commands:
+  - **`prose.endnote.add`** puts an endnote in a document;
+  - **`prose.block.endnotes`** reads the endnotes of a block, each
+    one with the **number** it has and what it says.
+- A run may carry an **endnote**: the node it names. A run that names
+  a node that is not an endnote is refused, and so is a run that
+  names nothing.
+- The **number** of an endnote is **derived**: it is where the
+  endnote is referenced in the document, and the first reference of
+  an endnote gives it its number. The endnotes are counted **apart**
+  from the footnotes, as the tree counts them apart: an endnote that
+  is the first endnote is `1` even when three footnotes came before
+  it.
+
+### What the port found
+
+- **The tree has one kind of note with a flag, and this tree has two
+  kinds.** The tree's note settings say `kind: footnote | endnote`,
+  and a note is a note with a flag on it. Here the kinds are open —
+  "a new kind of block is a new kind" — so an endnote is a kind of
+  its own, `prose.endnote`, and a run that names a footnote as an
+  endnote is refused by name.
+- **The tree counts the two apart and so does this tree.** The tree's
+  notes are numbered in two series, and an endnote is `i` while the
+  footnotes are `1`, `2`, `3`. Here the two counters are apart, and
+  the number is derived from the order of the references.
+- **The tree's note options have nothing to say here.** The tree's
+  settings say where a note is printed (`pageBottom`, `beneathText`,
+  `sectEnd`, `docEnd`), what format its number is in, what number it
+  starts at, and whether it starts again on each page. Here the
+  number is **derived** from the order of the references, so a start
+  and a restart have nothing to work on, and where a note is printed
+  is a matter of a layout that this tree does not have.
+- **The tree can turn a footnote into an endnote and back.** The
+  tree's `references.noteType` swaps the two kinds of note in the
+  document. Here the kinds are apart: a note of one kind is not a
+  note of the other, and there is nothing to swap.
+
+### What it cost
+
+- **Four tests** in the prose battery (`tests/endnotes.rs`): the run
+  that points at an endnote, the endnotes that are counted apart from
+  the footnotes, the run that names no endnote, and the endnote that
+  is a node of its own kind.
+- **Two new commands** (`prose.endnote.add` and `prose.block.endnotes`)
+  and **one new kind** (`prose.endnote`), in a new module
+  (`src/endnotes.rs`). The prose battery now carries **97** commands
+  and the MCP server **816**.
+
+### What it does not settle
+
+- **The note options are not here**: the position of a note, the
+  format of its number, the number it starts at and the restart are
+  the tree's, and the number of a note is derived here.
+- **A footnote cannot be turned into an endnote**: the kinds are
+  apart, and the tree's swap is not here.
+- **The endnotes are not printed at the end of anything**: this tree
+  has no layout, and a note is a node and a number.
