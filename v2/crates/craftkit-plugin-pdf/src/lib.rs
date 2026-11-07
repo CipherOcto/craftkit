@@ -161,6 +161,7 @@ mod signatures;
 mod structure;
 mod tabs;
 mod trailer;
+mod transitions;
 mod validation;
 mod writer;
 mod xref;
@@ -198,6 +199,7 @@ pub use signatures::ReadSignatures;
 pub use structure::ReadStructure;
 pub use tabs::{ReadTabOrder, SetTabs};
 pub use trailer::ReadTrailer;
+pub use transitions::ReadTransition;
 pub use validation::ReadValidation;
 
 /// The PDF layer.
@@ -2095,6 +2097,7 @@ craftkit_sdk::plugin_anchor!(
     ReadLayers,
     WriteAppearance,
     ReadMarked,
+    ReadTransition,
     SetPageLabels,
     RemoveObject,
     SetNumber,
