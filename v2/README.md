@@ -4005,6 +4005,7 @@ so.
 | the **writing** of a drawing as an SVG file | **built.** A drawing is written as an SVG file — the paths, their colours and the box they are in (§568) | §568 |
 | the **marked content** of a tagged file | **built.** The text under each element of the structure tree is read — the marked content is found by its number and the text under it is read (§569) | §569 |
 | the **place** of the text on a page | **built.** A piece of text says where it begins — the origin of the text matrix, as the moves of the file put it (§570) | §570 |
+| the **transition** of a page | **built.** A page may say how it comes in — the kind of the transition, how long it takes and the way it moves (§571) | §571 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37207,3 +37208,56 @@ A piece of text is somewhere on the page, and the file says where.
 - **The rise is not the baseline**: the rise moves the text up, and
   the answer says where the text begins and not where the letters
   stand on the line.
+
+## 571. The transition of a page
+
+A page may say how it is to be **shown**.
+
+### What was built
+
+- The new command **`pdf.page.transition`** reads the transition of a
+  page:
+  - the **kind** of the transition, as the file says it;
+  - how long it takes, in **seconds**;
+  - the **way** it moves — `In`, `Out` or nothing;
+  - the **dimension** it moves along — `H`, `V` or nothing;
+  - the **angle** of a slide, in degrees;
+  - and the **duration** of the page itself: how long the page is to
+    be shown before the reader turns it.
+- The rules:
+  - a page with **no transition** has none, and the answer says so;
+  - the kind is read **as the file says it**: a file may name a
+    transition this tree has not heard of, and the name is the fact;
+  - a `/Trans` that is **not a dictionary** is refused: the page says
+    something this tree cannot read, and saying nothing is better
+    than saying half of it.
+
+### What the port found
+
+- **The tree's `Trans` is an action and not a transition**: the tree
+  knows the action that goes to a three-dimensional view, and it
+  lists it among the actions a file may hold. The transition of a
+  page is a different thing with the same name, and the tree does
+  not read it.
+- **The tree draws the page and not the way it comes in**: a
+  transition is a thing a reader sees over time, and the tree
+  renders one page at a time. Here the transition is read as the fact
+  it is, and nothing is shown.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/transitions.rs`): the
+  transition of a page, a page with no transition, a kind the tree
+  has not heard of, and a transition that is not a dictionary.
+- **One new module** (`src/transitions.rs`) and **one new command**
+  (`pdf.page.transition`). The pdf battery now carries **62** commands
+  and the MCP server **766**.
+
+### What it does not settle
+
+- **The transition is not shown**: the answer says how a page comes in
+  and nothing is drawn over it.
+- **The sound of a transition is not read**: a transition may carry a
+  sound, and it is not read here.
+- **The order of the pages is not read**: a page may say what it
+  follows, and that is not read here either.
