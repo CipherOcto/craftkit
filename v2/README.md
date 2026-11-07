@@ -4035,6 +4035,7 @@ so.
 | the **columns** of a page | **built.** A page may be printed in columns — how many, the space between them and the line down the middle, and the width of a column is worked out (§598) | §598 |
 | the **sources** of a document | **built.** A source may be said, a run may cite it, and the bibliography is worked out from the sources that are cited (§599) | §599 |
 | the **quotes** of a paragraph | **built.** The straight quotes of a paragraph may be made smart — the character before decides which one it is, and the runs do not move (§600) | §600 |
+| the **captions** of a document | **built.** A paragraph may be a caption — the label, the text and the format of its number, and the number itself is worked out (§601) | §601 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39294,3 +39295,78 @@ book: “ and ” and ‘ and ’.
 - **The quotes are not the tree's whole AutoCorrect**: the tree's
   spelling and its capitalisation of the first word after a full stop
   are not here either.
+
+## 601. The captions of a document
+
+A **caption** names a thing: "Table 3 — the sales of the year",
+"Figure 1 — the bridge". The **label** is what the thing is called —
+`Table`, `Figure`, `Equation` — and the **number** is the count of
+the captions that carry that label.
+
+### What was built
+
+- The new commands of the **captions** of a document:
+  - **`prose.block.caption`** says what a paragraph captions — the
+    **label**, the **text** and the **format** of its number;
+  - **`prose.document.captions`** reads the captions of a document,
+    each one with the **number** it has.
+- The **label** is at most **40** characters long, and it holds no
+  quote, no backslash and no control character — the tree's own rule.
+  An empty label is the tree's label, `Figure`.
+- The **format** of the number is one of the tree's own: `arabic`,
+  `roman`, `alphabetic` and `ALPHABETIC`. A format that is not one of
+  them is refused by name, and the spelling decides: `alphabetic` and
+  `ALPHABETIC` are two formats and not one.
+- The **number** of a caption is **derived**: it is the count of the
+  captions that carry the same label, in the order of the document. It
+  is worked out every time, so it cannot be out of date, and a
+  caption that is taken away renumbers the ones after it.
+- A block that is **not a paragraph** may not be a caption.
+
+### What the port found
+
+- **The tree's caption is a field and this tree's caption is a
+  paragraph that is marked.** The tree writes the caption as a
+  paragraph of the `Caption` style holding a `SEQ` field — the
+  number is the result of that field — and the tree renumbers every
+  `SEQ` field of the document when anything moves. Here the caption
+  is a fact of the paragraph, and its number is **derived** from the
+  order of the captions: there is no field to renumber and no result
+  that can be out of date. That is the third time a number is derived
+  in this battery — the number of a footnote and the number of a list
+  — and the third time the answer has been the same.
+- **The tree's label is joined into one word for its field and this
+  tree's label is left alone.** The tree's `SEQ` identifier is one
+  word, so a label of "Line Chart" becomes `Line_Chart` in the
+  field. Here the label is what it is written.
+- **The tree's chapter numbers are not here.** The tree's caption may
+  carry a chapter number — a `STYLEREF` field and a separator, one of
+  `-`, `.`, `:`, `—` or `–` — and the caption is numbered within the
+  chapter. Here a caption is numbered within its label and nothing
+  else.
+- **The tree's format is a switch on the field and this tree's is a
+  fact of the caption.** The tree's `\* ARABIC` switch says how the
+  number is written, and the tree has four: arabic, roman, alphabetic
+  and ALPHABETIC. Here the format is said once and the number is
+  written in it.
+
+### What it cost
+
+- **Five tests** in the prose battery (`tests/captions.rs`): the
+  caption and its number, the labels that are numbered apart, the
+  number in its format, the caption that is not one, and the empty
+  label that is the tree's.
+- **Two new commands** (`prose.block.caption` and
+  `prose.document.captions`) in a new module (`src/captions.rs`).
+  The prose battery now carries **92** commands and the MCP server
+  **811**.
+
+### What it does not settle
+
+- **The caption does not go beside the thing it captions**: the tree
+  puts it under the table or over the picture, and here a paragraph
+  is a caption wherever it stands.
+- **The caption has no chapter number** and no separator, and the
+  tree's restart of the numbering at each chapter is not here.
+- **The caption is not a field**: nothing else may refer to it, and
+  the tree's cross-reference to a numbered item is not here.
