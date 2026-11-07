@@ -4011,6 +4011,7 @@ so.
 | the **running heads** of a document | **built.** A document may carry a header and a footer — the text that stands at the top and the bottom of every page (§574) | §574 |
 | the **Unicode map** of a font | **built.** The characters a font's codes stand for are read — the map a font carries, its characters and its ranges (§575) | §575 |
 | the **text** of a page, read through the map of its font | **built.** A page's text is read through the map of the font in use — the codes become the characters the map says, and the fonts of a page are read beside them (§576) | §576 |
+| the **encryption** of a file, undone | **built.** An encrypted file is opened with a password — the strings and the streams are unscrambled with RC4, and the file is written out plain (§577) | §577 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37575,3 +37576,85 @@ the map says.
   content names but the page's resources do not hold has no map.
 - **The width of the text is not measured**: a piece says where it
   begins and what it says, and not how much room it takes.
+
+## 577. An encrypted file is opened with a password
+
+A file whose trailer names an **encryption** is a file whose strings
+and streams are scrambled. The encryption dictionary says how, and the
+command `pdf.encrypt.read` reads it. This undoes the scramble: the
+file is opened with a password and written out plain.
+
+### What was built
+
+- The new command **`pdf.file.decrypt`** opens an encrypted file with
+  a password and writes it out plain:
+  - the **user's password** opens the file, and the **owner's
+    password** opens it too: the owner's entry holds the user's
+    password;
+  - the **strings** of every object are unscrambled, and so are the
+    **bytes** of every stream;
+  - the file that is written holds no encryption, and holds every
+    object of the old one but the encryption itself;
+  - an object now keeps the **generation** it has, because the key of
+    an object is worked out with it.
+- The rules:
+  - a password that does **not open** the file is refused: the file
+    holds the user's entry, and the entry is worked out from the
+    password;
+  - a file that is **not encrypted** is refused;
+  - a file scrambled with **AES** is refused by name: only **RC4** is
+    read here;
+  - the strings of the **encryption** are not unscrambled: they are
+    the file's own words.
+- The **standard security handler** of revision two and of revision
+  three is the one that is read:
+  - the key of the file is the **hash** (MD5) of the padded password,
+    of the owner's entry, of the permissions and of the file's
+    identifier — and, from revision three, that hash is hashed again
+    **fifty** times;
+  - the key of an object is the hash of the key of the file and of the
+    number and the generation of the object;
+  - the scramble itself is **RC4**;
+  - a password is padded to **thirty-two** bytes, and the user's entry
+    is scrambled **nineteen** times over.
+
+### What the port found
+
+- **The tree opens a file with a password and this one writes a new
+  one.** The tree's session takes the password when the file is
+  opened, and the document is decrypted as it is read. Here the
+  document is already loaded and the command writes a plain copy of
+  it.
+- **The tree has AES and this one does not.** The tree's crypt layer
+  knows RC4, AES-128 and AES-256; it reads the key length of a
+  revision of four from the crypt filter and fixes it at 256 bits for
+  a revision of five. Here only RC4 is read, and a file scrambled
+  with AES is refused by name.
+- **The tree keeps the parts of a file that are not encrypted apart.**
+  The encryption dictionary itself, the trailer's identifier, the
+  objects of an object stream and the metadata of a file that says it
+  is not scrambled are not encrypted in the tree. Here the encryption
+  is left as it is and the rest is unscrambled.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/decryption.rs`): the file
+  opened with the user's password, the file opened with the owner's
+  password, a password that does not open the file, and a file that is
+  not encrypted. The encrypted file in the test is a fixed file,
+  scrambled by hand with RC4, and it is not a file this tree wrote.
+- **One new module** (`src/decrypt.rs`) and **one new command**
+  (`pdf.file.decrypt`). The pdf battery now carries **66** commands
+  and the MCP server **775**.
+
+### What it does not settle
+
+- **AES is not read**: a file scrambled with AES-128 or with AES-256
+  is refused, and this tree has no AES of its own.
+- **A file is not encrypted again**: the command undoes the scramble
+  and does not make one, and the tree makes both.
+- **The permissions are not enforced**: the bits the file holds are
+  read (`pdf.encrypt.read`) and nothing is refused on their account.
+- **The objects of an object stream are not carried over**: the
+  loader does not read them into the document, and the file that is
+  written does not have them.
