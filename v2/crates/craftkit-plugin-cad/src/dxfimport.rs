@@ -17,6 +17,15 @@
 //!   section, and they go into the block the tree names
 //!   `*Model_Space` — the tree's own name for the block a drawing's
 //!   entities live in.
+//! - The **blocks** of the file's `BLOCKS` section are blocks of the
+//!   drawing, and their entities are entities of their block. The
+//!   model's own record is the model space, and its entities are the
+//!   entities of the `ENTITIES` section — the tree's own writer puts
+//!   them there — so they are read only when the file has none of
+//!   its own.
+//! - An **insert** is an instance of a block, and the instance and
+//!   its definition are two things: the reference between them is an
+//!   **edge**, and it says which block is inserted.
 //! - The **numbers** of a file are the file's own numbers: the tree
 //!   does not scale them on the way in, and the unit a file declares
 //!   is a fact of the file, not of the drawing.
@@ -24,13 +33,14 @@
 //!   layer **made**, because an entity on a layer the drawing does
 //!   not have is an entity on nothing.
 //! - An entity this tree cannot read is **skipped**, and the answer
-//!   says what it skipped.
+//!   says what it skipped. So is an insert of a block the file does
+//!   not define: an insert of nothing is an insert of nothing.
 //!
 //! # What it does not do
 //!
-//! - The **blocks**, the **inserts**, the **text**, the **dimensions**
-//!   and the **hatches** of a file are not read, and the **handles**
-//!   are not kept.
+//! - The **text**, the **dimensions**, the **hatches** and the
+//!   **splines** of a file are not read, and the **handles** are not
+//!   kept.
 
 use craftkit_derive::Command;
 
@@ -165,6 +175,122 @@ fn text_of(tags: &[Tag], code: i64) -> Option<String> {
     tags.iter().find(|tag| tag.code == code).map(|tag| tag.value.clone())
 }
 
+/// One **record** of a section: its kind and its tags.
+type Record = (String, Vec<Tag>);
+
+/// The **blocks** of a file: its `BLOCK` records, with the entities
+/// that are in them.
+fn blocks_of(body: &[Tag]) -> Vec<(String, Vec<Record>)> {
+    let records = records_of(body);
+    let mut blocks: Vec<(String, Vec<Record>)> = Vec::new();
+    let mut at = 0usize;
+    while at < records.len() {
+        let (kind, tags) = &records[at];
+        if kind != "BLOCK" {
+            at += 1;
+            continue;
+        }
+        let name = text_of(tags, 2).unwrap_or_default();
+        let mut entities: Vec<Record> = Vec::new();
+        let mut cursor = at + 1;
+        while cursor < records.len() && records[cursor].0 != "ENDBLK" {
+            entities.push(records[cursor].clone());
+            cursor += 1;
+        }
+        blocks.push((name, entities));
+        at = cursor + 1;
+    }
+    blocks
+}
+
+/// The **state** of an import: the layers, the blocks and the counts
+/// of what has been read.
+struct Import {
+    /// The layers of the drawing, by name.
+    layers: Vec<(String, u64)>,
+    /// The blocks of the drawing, by name.
+    blocks: Vec<(String, u64)>,
+    /// The entities that have been read, by kind.
+    counts: Vec<(String, usize)>,
+}
+
+/// **Add** an entity of a file to a block of the drawing.
+///
+/// The layer of the entity is the layer the file names, and a layer
+/// the file does not define is **made**.
+fn add_entity(
+    session: &mut Session,
+    import: &mut Import,
+    drawing: u64,
+    block: u64,
+    kind: &str,
+    tags: &[Tag],
+) -> Result<Option<u64>, EngineError> {
+    let Some((entity_kind, geometry)) = geometry_of(kind, tags) else {
+        return Ok(None);
+    };
+    let plain = entity_kind.trim_start_matches("cad.entity.").to_string();
+    // An **insert** names the block it inserts, and the block is
+    // found by its name.
+    let inserts = if entity_kind == "cad.entity.insert" {
+        let Some(name) = text_of(tags, 2) else { return Ok(None) };
+        let Some((_, target)) = import.blocks.iter().find(|(block, _)| *block == name) else {
+            return Ok(None);
+        };
+        Some((*target, name))
+    } else {
+        None
+    };
+    let count = match import.counts.iter_mut().find(|(name, _)| *name == plain) {
+        Some((_, count)) => {
+            *count += 1;
+            *count
+        }
+        None => {
+            import.counts.push((plain.clone(), 1));
+            1
+        }
+    };
+    let entity = session.document_mut()?.add_node_with_under(
+        Some(block),
+        format!("{plain} {count}"),
+        &entity_kind,
+        None,
+        json!({ "geometry": geometry }),
+    );
+    // The **layer** of the entity: a relation, as it is everywhere
+    // else in this tree.
+    if let Some(layer_name) = text_of(tags, 8) {
+        let layer = match import.layers.iter().find(|(name, _)| *name == layer_name) {
+            Some((_, layer)) => *layer,
+            None => {
+                let layer = session.document_mut()?.add_node_with_under(
+                    Some(drawing),
+                    layer_name.clone(),
+                    "cad.layer",
+                    None,
+                    json!({ "color": Json::Null }),
+                );
+                import.layers.push((layer_name.clone(), layer));
+                layer
+            }
+        };
+        let relation = Relation::with_payload(
+            entity,
+            layer,
+            craftkit_sdk::layer::ON_LAYER,
+            json!({ "layer": layer_name }),
+        );
+        session.document_mut()?.add_relation(relation);
+    }
+    // The **block** an insert inserts: an edge, and it says which.
+    if let Some((target, name)) = inserts {
+        let relation = Relation::with_payload(entity, target, "cad.inserts", json!({ "block": name }));
+        session.document_mut()?.add_relation(relation);
+    }
+    Ok(Some(entity))
+}
+
 /// The **geometry** of an entity, as this tree holds it.
 ///
 /// The answer is the kind of the entity and its geometry, and `None`
@@ -221,6 +347,12 @@ fn geometry_of(kind: &str, tags: &[Tag]) -> Option<(String, Json)> {
                     "end": end,
                 }),
             ))
+        }
+        "INSERT" => {
+            // An **insert** is an instance of a block, and where it
+            // is put is the point of the record.
+            let at = point_of(tags, 10, 20)?;
+            Some(("cad.entity.insert".to_string(), json!({ "at": { "x": at.0, "y": at.1 } })))
         }
         "LWPOLYLINE" => {
             let mut points: Vec<Json> = Vec::new();
@@ -302,7 +434,7 @@ impl ImportDxf {
         };
         // The **drawing**, its **layers** and its **block**.
         let drawing = session.document_mut()?.add_node_under(None, name.clone(), "cad.drawing", None);
-        let mut layers: Vec<(String, u64)> = Vec::new();
+        let mut import = Import { layers: Vec::new(), blocks: Vec::new(), counts: Vec::new() };
         for (layer_name, color) in sections
             .iter()
             .find(|(name, _)| name == "TABLES")
@@ -317,7 +449,7 @@ impl ImportDxf {
                 None,
                 json!({ "color": color }),
             );
-            layers.push((layer_name, layer));
+            import.layers.push((layer_name, layer));
         }
         let block = session.document_mut()?.add_node_with_under(
             Some(drawing),
@@ -326,65 +458,59 @@ impl ImportDxf {
             None,
             json!({}),
         );
-        // The **entities**.
-        let mut entities = 0usize;
-        let mut skipped: Vec<String> = Vec::new();
-        let mut counts: Vec<(String, usize)> = Vec::new();
-        for (kind, tags) in sections
+        import.blocks.push((MODEL_SPACE.to_string(), block));
+        let entity_records = sections
             .iter()
             .find(|(name, _)| name == "ENTITIES")
             .map(|(_, body)| records_of(body))
-            .unwrap_or_default()
-        {
-            let Some((entity_kind, geometry)) = geometry_of(&kind, &tags) else {
-                skipped.push(kind.clone());
+            .unwrap_or_default();
+        // The **blocks** of the file. They are made first, so that an
+        // insert may name one of them.
+        let file_blocks = sections
+            .iter()
+            .find(|(name, _)| name == "BLOCKS")
+            .map(|(_, body)| blocks_of(body))
+            .unwrap_or_default();
+        let mut made_blocks: Vec<(u64, Vec<Record>)> = Vec::new();
+        for (name, block_entities) in &file_blocks {
+            if name == MODEL_SPACE {
+                // The model's own record is the model space, and the
+                // entities of the model space are the entities of the
+                // `ENTITIES` section — the tree's own writer puts
+                // them there. A file that keeps them in the record
+                // instead is read when it has none of its own.
+                if entity_records.is_empty() {
+                    made_blocks.push((block, block_entities.clone()));
+                }
                 continue;
-            };
-            let plain = entity_kind.trim_start_matches("cad.entity.").to_string();
-            let count = match counts.iter_mut().find(|(name, _)| *name == plain) {
-                Some((_, count)) => {
-                    *count += 1;
-                    *count
-                }
-                None => {
-                    counts.push((plain.clone(), 1));
-                    1
-                }
-            };
-            let name = format!("{plain} {count}");
-            let entity = session.document_mut()?.add_node_with_under(
-                Some(block),
-                name,
-                &entity_kind,
-                None,
-                json!({ "geometry": geometry }),
-            );
-            // The **layer** of the entity: a relation, as it is
-            // everywhere else in this tree.
-            if let Some(layer_name) = text_of(&tags, 8) {
-                let layer = match layers.iter().find(|(name, _)| *name == layer_name) {
-                    Some((_, layer)) => *layer,
-                    None => {
-                        let layer = session.document_mut()?.add_node_with_under(
-                            Some(drawing),
-                            layer_name.clone(),
-                            "cad.layer",
-                            None,
-                            json!({ "color": Json::Null }),
-                        );
-                        layers.push((layer_name.clone(), layer));
-                        layer
-                    }
-                };
-                let relation = Relation::with_payload(
-                    entity,
-                    layer,
-                    craftkit_sdk::layer::ON_LAYER,
-                    json!({ "layer": layer_name }),
-                );
-                session.document_mut()?.add_relation(relation);
             }
-            entities += 1;
+            let made = session.document_mut()?.add_node_with_under(
+                Some(drawing),
+                name.clone(),
+                "cad.block",
+                None,
+                json!({}),
+            );
+            import.blocks.push((name.clone(), made));
+            made_blocks.push((made, block_entities.clone()));
+        }
+        // The **entities** of the file's `ENTITIES` section.
+        let mut entities = 0usize;
+        let mut skipped: Vec<String> = Vec::new();
+        for (kind, tags) in &entity_records {
+            match add_entity(session, &mut import, drawing, block, kind, tags)? {
+                Some(_) => entities += 1,
+                None => skipped.push(kind.clone()),
+            }
+        }
+        // The **entities** of the blocks.
+        for (made, block_entities) in &made_blocks {
+            for (kind, tags) in block_entities {
+                match add_entity(session, &mut import, drawing, *made, kind, tags)? {
+                    Some(_) => entities += 1,
+                    None => skipped.push(kind.clone()),
+                }
+            }
         }
         let units = sections
             .iter()
@@ -399,7 +525,8 @@ impl ImportDxf {
             "path": path,
             "drawing": drawing,
             "block": block,
-            "layers": layers.len(),
+            "layers": import.layers.len(),
+            "blocks": import.blocks.len(),
             "entities": entities,
             "units": units,
             "skipped": skipped,
