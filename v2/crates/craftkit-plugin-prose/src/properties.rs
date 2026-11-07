@@ -28,7 +28,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
 
 /// The longest **name** a custom property may have.
 pub const MAX_NAME: usize = 255;
@@ -37,7 +37,8 @@ pub const MAX_NAME: usize = 255;
 pub const MAX_VALUE: usize = 1024 * 1024;
 
 /// The properties a document **says** of itself, besides the title.
-pub const BUILT_INS: [&str; 5] = ["author", "subject", "keywords", "comments", "category"];
+pub const BUILT_INS: [&str; 7] =
+    ["author", "subject", "keywords", "comments", "category", "last_modified_by", "revision"];
 
 /// The **properties** of a document, as they are kept.
 pub fn properties_of(node: &Node) -> Json {
@@ -117,6 +118,14 @@ pub struct SetProperties {
     pub comments: Option<Text>,
     /// The category it is in.
     pub category: Option<Text>,
+    /// Who touched it last.
+    ///
+    /// An empty name takes the name away.
+    pub last_modified_by: Option<Text>,
+    /// How many times it has been revised.
+    ///
+    /// A whole number, and a revision of zero takes the revision away.
+    pub revision: Option<Number>,
     /// The **custom** properties: a list of pairs, each a name and a
     /// value.
     ///
@@ -149,6 +158,7 @@ impl SetProperties {
             ("keywords", self.keywords.as_ref().map(|value| value.0.as_str())),
             ("comments", self.comments.as_ref().map(|value| value.0.as_str())),
             ("category", self.category.as_ref().map(|value| value.0.as_str())),
+            ("last_modified_by", self.last_modified_by.as_ref().map(|value| value.0.as_str())),
         ];
         for (name, value) in given {
             let Some(value) = value else { continue };
@@ -159,6 +169,25 @@ impl SetProperties {
                         map.remove(name);
                     }
                 }
+            }
+        }
+        // The **revision** is a whole number, and a revision of zero
+        // is no revision at all: the tree's rule, that nothing means
+        // nothing.
+        if let Some(revision) = self.revision {
+            let number = revision.0;
+            if !number.is_finite() || number.fract() != 0.0 || number < 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a revision is a whole number, and {number} is not"),
+                });
+            }
+            if number == 0.0 {
+                if let Some(map) = properties.as_object_mut() {
+                    map.remove("revision");
+                }
+            } else {
+                properties["revision"] = json!(number as u64);
             }
         }
         // The **custom** properties that are named.

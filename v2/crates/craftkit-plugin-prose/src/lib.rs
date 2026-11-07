@@ -223,6 +223,8 @@ impl DocumentKind {
             "keywords": crate::properties::properties_of(node).get("keywords").cloned().unwrap_or(Json::Null),
             "comments": crate::properties::properties_of(node).get("comments").cloned().unwrap_or(Json::Null),
             "category": crate::properties::properties_of(node).get("category").cloned().unwrap_or(Json::Null),
+            "last_modified_by": crate::properties::properties_of(node).get("last_modified_by").cloned().unwrap_or(Json::Null),
+            "revision": crate::properties::properties_of(node).get("revision").cloned().unwrap_or(Json::Null),
             "custom": crate::properties::custom_of(node),
             "theme": crate::theme::theme_of(node),
             "blocks": node.children.iter().filter(|child| child.kind.starts_with("prose.block.")).count(),
