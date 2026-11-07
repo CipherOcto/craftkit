@@ -138,6 +138,7 @@ mod revisions;
 mod running;
 mod sources;
 mod statistics;
+mod stops;
 mod styles;
 mod tables;
 mod titles;
@@ -175,6 +176,7 @@ pub use revisions::ReadRevisions;
 pub use running::{ReadRunningFooter, ReadRunningHeader, SetRunningFooter, SetRunningHeader};
 pub use sources::{ReadBibliography, ReadSources, RemoveSource, SetSource};
 pub use statistics::ReadStatistics;
+pub use stops::SetStops;
 pub use styles::{DeleteStyle, ListStyles, ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
 pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell, SetHeader, SetTableAlt};
 pub use titles::SetTitle;
@@ -1100,6 +1102,7 @@ craftkit_sdk::plugin_anchor!(
     SetQuotes,
     SetDashes,
     SetList,
+    SetStops,
     SetCaption,
     ReadCaptions,
     AddField,
