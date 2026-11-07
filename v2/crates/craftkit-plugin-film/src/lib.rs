@@ -202,6 +202,7 @@ mod edits;
 mod edl;
 mod enabling;
 mod fcpxml;
+mod fcpxmlimport;
 mod gaps;
 mod hold;
 mod inserting;
@@ -238,6 +239,7 @@ mod tracks;
 mod transitions;
 mod trim;
 mod workarea;
+pub mod xml;
 
 pub use ale::ExportAle;
 pub use aleimport::ImportAle;
@@ -249,6 +251,7 @@ pub use edits::{NextEdit, PrevEdit, Razor};
 pub use edl::ExportEdl;
 pub use enabling::EnableClip;
 pub use fcpxml::ExportFcpxml;
+pub use fcpxmlimport::ImportFcpxml;
 pub use gaps::CloseGap;
 pub use hold::{DeleteHold, SetHold};
 pub use inserting::InsertClip;
@@ -928,6 +931,7 @@ craftkit_sdk::plugin_anchor!(
     ExportAle,
     ImportAle,
     ExportFcpxml,
+    ImportFcpxml,
     ExportOtio,
     ImportOtio,
     ReadTimeline,
