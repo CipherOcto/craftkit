@@ -4064,6 +4064,7 @@ so.
 | the **SVG** of a drawing | **built.** A drawing may be written as a picture — the extents of a block become the box of an SVG, and the world is turned over for it (§627) | §627 |
 | the **SVG** read back | **built.** A picture file of SVG may be read — the shapes of the page become entities of a drawing, and the page's Y is turned over (§628) | §628 |
 | the **blocks** of a DXF file | **built.** The blocks of a file become blocks of a drawing, and an insert names the block it puts in it (§629) | §629 |
+| the **transitions** and the **markers** of an FCPXML file | **built.** The transitions of the spine and the markers of its clips are read — and the writer is corrected to the tree's own form (§630) | §630 |
 
 ### The list of things that are honestly not there: empty
 
@@ -41366,3 +41367,90 @@ one of them.
   scale, the rotation or the array of an insert.
 - **The text, the dimensions, the hatches and the splines** of a
   file are still not read.
+
+## 630. The transitions and the markers of an FCPXML file
+
+The FCPXML of §619 may now carry its **transitions** and its
+**markers**: they are read back, and a sequence that is written and
+read again is the same sequence.
+
+### What was built
+
+- The FCPXML **reader** reads the **transitions** of the spine:
+  - a transition is **between** two clips: it joins the clip before
+    it and the clip after it, and the reference between them is the
+    pair the transition names;
+  - the **alignment** is the tree's own three ways, worked out from
+    where the transition sits: one that starts at the cut starts at
+    it, one that ends at the cut ends at it, and any other is
+    centred on it;
+  - the **effect** is the name of the filter the transition names,
+    or the name of the transition itself;
+  - a transition that is not over a **cut** — two clips that are not
+    next to each other — is **left out**, and the answer says so: a
+    transition joins two clips that are next to each other, and it may
+    not be over anything else.
+- The FCPXML **reader** reads the **markers** of a clip of the spine:
+  they are markers of the sequence, and they start where the clip
+  starts plus what the element says;
+  - the **name** of a marker is the `value` of the element and its
+    **comment** is the `note` — the tree's own form;
+  - a `chapter-marker` is a **chapter** and a `marker` is a
+    **comment**, and their colours are the tree's own: mango for a
+    chapter and blue for a comment;
+  - a marker of one frame or less is a marker of **no length**:
+    FCPXML has no marker of no length, so a point is a point.
+- The FCPXML **writer** is **corrected** in two places, and both were
+  false against the tree:
+  - a marker is written in the tree's own form — the name is the
+    `value` of the element, the comment is its `note`, a chapter is a
+    `chapter-marker`, and a point is one frame long — and not in a
+    form of this tree's own;
+  - a transition is written **before** the clip it comes into, because
+    the cut leads into that clip, and not after it.
+
+### What the port found
+
+- **The tree's reader and the tree's writer agree, and this tree's
+  did not.** The tree writes a transition before the clip it comes
+  into and reads it there; this tree wrote it after the clip and
+  read it there too — so the two agreed with each other and with
+  neither the tree nor the file. The writer is corrected to the
+  tree's rule, and the reader reads the tree's rule.
+- **The tree's marker has a name, a comment, a kind and a colour,
+  and FCPXML spells them differently**: the name is the `value` and
+  the comment is the `note`, and the kind and the colour are the
+  tree's own — a `chapter-marker` is a chapter and is mango. This
+  tree's writer had a form of its own for the marker, and it is
+  corrected.
+- **The tree's markers are the markers of the sequence or the
+  markers of the clip**: a marker on a clip of the spine is a marker
+  of the sequence, and a marker on a connected clip is a marker of
+  that clip. This tree has no marker of a clip, so the second is left
+  out and said.
+- **The tree's transitions are read with their alignment worked out
+  from the cut**, and not from a field the file carries: the file
+  says where the transition is, and the alignment is what that means.
+  Here the alignment is worked out the same way.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/fcpxmlmarks.rs`): the
+  transition that is read, the markers that are read, the chapter
+  that is a chapter, and the **round trip** — a sequence that is
+  written and read again.
+- **No new command**: the reader of §619 reads the transitions and
+  the markers, and the writer of §619 writes them in the tree's own
+  form. The film battery still carries **86** commands and the MCP
+  server **831**.
+
+### What it does not settle
+
+- **A marker of a connected clip** is a marker of the clip, and this
+  tree has no such marker: it is left out, and said.
+- **The effects** of a transition are not resolved: the name of the
+  filter is kept as it is written, and the registry of effects the
+  tree has is not here.
+- **The transitions of the other tracks** are not read: a transition
+  on a track that is not the spine is not read, as it was not
+  written.
