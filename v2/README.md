@@ -4060,6 +4060,7 @@ so.
 | the **prompts** of the MCP server | **built.** The MCP server serves the protocol's third part — the workflows it offers, with their arguments and their live suggestions (§623) | §623 |
 | the **reader of an XML text** | **built.** One reader of XML for the whole tree — it is the SDK's, and the film and the vector batteries read with it (§624) | §624 |
 | the **DXF** read back | **built.** A drawing file of DXF may be read — the entities of its ENTITIES section become entities of a drawing, and its layers become layers (§625) | §625 |
+| the **DXF** written out | **built.** A drawing may be written as a DXF file — its layers become the table of the file and its entities become the entities of the file (§626) | §626 |
 
 ### The list of things that are honestly not there: empty
 
@@ -41070,3 +41071,67 @@ drawing.
 - **The drawing's header is not kept**: the unit a file declares is
   said in the answer and nowhere else, and the rest of the header —
   the extents, the linetypes, the styles — is not read at all.
+
+## 626. The DXF written out
+
+The drawing of §625 can now be **written**: a drawing is made into a
+drawing file again.
+
+### What was built
+
+- The new command **`cad.export.dxf`** writes a drawing as a DXF
+  file:
+  - the file is written where the caller says, and the answer says
+    how many entities it holds and what it left out;
+  - the file is a DXF: the `HEADER`, the `TABLES` with the layers,
+    the `ENTITIES` and the `EOF`;
+  - the **version** is the tree's own — `AC1032` — and the **units**
+    are millimetres, which is what the tree's new drawings say;
+  - the **colour** of a layer is its index, and a layer that is off
+    has a **negative** colour: the tree's own way of saying it;
+  - the **flags** of a layer are the tree's own: one is frozen, four
+    is locked;
+  - the **angles** of an arc are **degrees**, because a file counts
+    in degrees and this tree counts in radians;
+  - an entity this tree cannot write is **left out**, and the answer
+    says what it left out.
+- The entities that are written: `LINE`, `CIRCLE`, `ARC` and
+  `LWPOLYLINE`, with the **layer** of each — the relation says it.
+
+### What the port found
+
+- **The tree's writer is a whole CAD implementation.** It writes the
+  forty header variables, the tables of every kind, the blocks with
+  their handles, the objects and the layouts, and it writes a file
+  that a CAD application opens. This writer writes the header, the
+  layers and the entities, and it writes a file that this tree reads
+  back.
+- **The tree writes the model space as a block and the paper spaces
+  as blocks too**, and the drawing's entities are inserted into the
+  model space. Here the entities of one block — the model space, or
+  the first block of a drawing that has no model space — are the
+  entities of the file.
+- **The tree's writer writes a layer that is off with a negative
+  colour**, and the flags carry the frozen and the locked. Here the
+  same, and the tree's own linetype goes in beside them.
+
+### What it cost
+
+- **Five tests** in the cad battery (`tests/dxfexport.rs`): the file
+  that is written, the layers that are the table, the entity that
+  cannot be written, the node that is not a drawing, and the **round
+  trip** — a drawing that is written and read again.
+- **One new command** (`cad.export.dxf`) in a new module
+  (`src/dxfexport.rs`). The cad battery now carries **47** commands
+  and the MCP server **829**.
+
+### What it does not settle
+
+- **The blocks of a drawing are not written as blocks**: one block's
+  entities are the file's entities, and the rest of the drawing is
+  not in the file.
+- **The header is small**: the version and the units are written, and
+  the tree's forty header variables are not.
+- **The tables are one**: the layers are written, and the tree's
+  linetypes, its text styles, its dimension styles and its viewports
+  are not.
