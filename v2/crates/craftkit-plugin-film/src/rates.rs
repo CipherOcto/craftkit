@@ -71,6 +71,25 @@ pub fn rate_of(text: &str) -> Result<(i64, i64), String> {
     Ok((num, den))
 }
 
+/// The rate a **number of frames a second** says.
+///
+/// The tree's own rates are the ones it has, and a rate that is near
+/// one of them is that one — `23.976` is `24000/1001`. Any other
+/// rate is worked out as a fraction of a thousand, because a rate
+/// that is not a whole number of frames a second cannot be one
+/// exactly.
+pub fn rate_from_float(fps: f64) -> (i64, i64) {
+    if !fps.is_finite() || fps <= 0.0 {
+        return (25, 1);
+    }
+    for (_, num, den) in RATES {
+        if ((num as f64 / den as f64) - fps).abs() < 0.005 {
+            return (num, den);
+        }
+    }
+    ((fps * 1000.0).round() as i64, 1000)
+}
+
 /// The **length** of a sequence in frames: the end of the longest of
 /// its tracks.
 ///
