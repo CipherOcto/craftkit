@@ -4069,6 +4069,7 @@ so.
 | the **dissolves** and the **markers** of an EDL | **built.** A dissolve is a transition over the cut before it, and a `* LOC:` comment is a marker of the sequence (§632) | §632 |
 | the **transitions** and the **markers** of an OTIO file | **built.** The transitions of a track and the markers of the stack are read — and the writer is corrected to write a transition once (§633) | §633 |
 | the **place** of the text of a page | **built.** The text of a page says where it is — the text matrix, turned by the transform of the page (§634) | §634 |
+| the **width** of the text of a page | **built.** The text of a page says how wide it is — the widths of the font, the spacings, and the advance of the text (§635) | §635 |
 
 ### The list of things that are honestly not there: empty
 
@@ -41747,3 +41748,70 @@ text matrix of the text, turned by the transform of the page.
   page is a separate fact of the page, and it is not applied here.
 - **A redaction** is still not made: the place of the text is the
   first half of it, and the half that removes the text is not here.
+
+## 635. The width of the text of a page
+
+The text of a PDF page may now say **how wide it is**: the width is
+the advance of the text, and the text moves on by it.
+
+### What was built
+
+- A new module (**`src/widths.rs`**) reads the **widths of a font**:
+  - a simple font says them in `/Widths`, an array that begins at the
+    font's `/FirstChar`, and a code the font has no width for takes
+    the font's `/MissingWidth`;
+  - a font of many codes says them in `/W`, and the width of a code
+    it does not say is the font's `/DW` — a thousand when the font
+    says nothing;
+  - the **codes** of a font of many codes are two bytes long;
+  - a font with no widths has **no widths**: the width of its text
+    is not known, and the answer says so rather than guessing.
+- The PDF **page text** works out the **advance** of the text, by the
+  tree's own rule:
+  - the width of each code, the size of the font, the character
+    spacing, and the word spacing of a space;
+  - the text **moves on** by the advance, and the line it is on stays
+    where it is — the tree's own rule for the text matrix;
+  - a number in a `TJ` array moves the pen by its thousandths of the
+    size, and the text after it is where the pen is;
+  - the **width** of a piece of text is the distance it goes along
+    its own line, in the page's own space.
+
+### What the port found
+
+- **The tree's redaction measures the text glyph by glyph**, with the
+  font's own widths, and it moves the pen by the advance of each
+  glyph as it goes. This tree's reader of the text had no widths at
+  all: it gave every piece of a line the **same** place, because the
+  text matrix never moved on. The places were wrong whenever a page
+  showed two pieces on one line, and they are right now.
+- **The tree's advance is in the text space** — the width of the
+  glyphs times the size of the font, plus the character spacing and
+  the word spacing — and the **width** of the text is in the glyph
+  space, which is the text space without the size. Here the two are
+  kept apart: the advance moves the pen, and the width is the
+  distance on the page.
+- **The tree falls back to the metrics of the standard fourteen
+  fonts** when a font names one and gives no widths. This tree does
+  not: a font with no widths has no widths, and the text of it has
+  no width.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/textwidths.rs`): the
+  width that is the width of the codes, the text that moves on, the
+  font with no widths, and the spacings.
+- **No new command**: the text of a page says how wide it is. The
+  pdf battery still carries **66** commands and the MCP server
+  **831**.
+
+### What it does not settle
+
+- **The standard fourteen fonts** are not measured: a font that
+  names one and gives no widths has no widths here.
+- **The height of the text** is not worked out: the ascent and the
+  descent of the font are not read, so a piece of text has a place
+  and a width and no box.
+- **A redaction** is still not made: the place and the width of the
+  text are the first half of it, and the half that removes the text
+  is not here.
