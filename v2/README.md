@@ -4065,6 +4065,7 @@ so.
 | the **SVG** read back | **built.** A picture file of SVG may be read — the shapes of the page become entities of a drawing, and the page's Y is turned over (§628) | §628 |
 | the **blocks** of a DXF file | **built.** The blocks of a file become blocks of a drawing, and an insert names the block it puts in it (§629) | §629 |
 | the **transitions** and the **markers** of an FCPXML file | **built.** The transitions of the spine and the markers of its clips are read — and the writer is corrected to the tree's own form (§630) | §630 |
+| the **transitions** and the **markers** of an FCP7 file | **built.** The transitions of a track and the markers of the sequence are read, and the alignment is worked out the tree's way (§631) | §631 |
 
 ### The list of things that are honestly not there: empty
 
@@ -41454,3 +41455,76 @@ read again is the same sequence.
 - **The transitions of the other tracks** are not read: a transition
   on a track that is not the spine is not read, as it was not
   written.
+
+## 631. The transitions and the markers of an FCP7 file
+
+The FCP7 of §619 may now carry its **transitions** and its **markers**:
+they are read back, and what the file does not say is worked out the
+way the tree works it out.
+
+### What was built
+
+- The FCP7 **reader** reads the **markers** of the sequence:
+  - the `in` of a marker is where it starts and the `out` less the
+    `in` is how long it is;
+  - its **name** and its **comment** are the ones it carries;
+  - its **colour** is the colour it names — the tree's own labels —
+    and **green** when it names none.
+- The FCP7 **reader** reads the **transitions** of a track:
+  - a transition is a `transitionitem`: it starts and ends where the
+    file says;
+  - it joins the **clip that ends in it** and the **clip that begins
+    in it**, and a cut needs both sides to meet: when they do not,
+    one of them is not part of the transition — the tree's own rule,
+    and the tree's own `start-black` and `end-black` say which;
+  - the **alignment** is the tree's own three ways: `center`, `start`
+    and `end`, worked out from where the transition sits when the
+    file does not say;
+  - the **effect** is the name of the effect, or its id, and a
+    transition of an effect **this tree does not have** is left out,
+    and the answer says so: this tree has one transition, the tree's
+    default, and a file that names another one has a transition this
+    tree cannot hold.
+- The **markers of a clip** are markers of that clip, and this tree
+  has no marker of a clip: they are **left out**, and said. So are
+  the markers of a **media**.
+
+### What the port found
+
+- **The tree's FCP7 has a registry of transitions**, and it maps a
+  name to an effect — with a warning for a name it does not know.
+  This tree has one transition, the tree's default, and the names of
+  the file are read against it: a name it does not have is a
+  transition this tree cannot hold, and it is said rather than
+  quietly kept under another name.
+- **The tree's alignment has two more words than this tree's**:
+  `start-black` and `end-black` are the tree's own, and they say
+  something about the *material* of the clips and not only about
+  where the transition sits. Here they are read as `start` and `end`,
+  and the clip they leave out is the clip the tree leaves out.
+- **The tree's markers of a clip item are the markers of the clip**,
+  and the tree's markers of a master clip are the markers of the
+  **media**. This tree's markers are the markers of a sequence, so
+  the other two are left out and said.
+- **The tree's marker colour is a label of the tree's own**, and a
+  marker that names no colour is green. Here the colour is the
+  label the file names, and it is green when the file names none.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/fcp7marks.rs`): the
+  markers of the sequence, the markers of a clip that are left out,
+  the transition that is read, and the transition of an effect this
+  tree does not have.
+- **No new command**: the reader of §619 reads the transitions and
+  the markers. The film battery still carries **86** commands and the
+  MCP server **831**.
+
+### What it does not settle
+
+- **The markers of a clip** and the markers of a **media** are left
+  out, and said: this tree has one kind of marker and it is the
+  marker's of a sequence.
+- **The effects** of a clip item are not read, and neither are the
+  **links** or the **labels** of the document.
+- **The bins** of the document are not made.
