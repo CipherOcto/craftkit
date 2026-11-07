@@ -344,6 +344,7 @@ mod depreciation;
 mod distributions;
 mod duplicates;
 mod engineering;
+mod errors;
 mod exporting;
 mod fill;
 mod filters;
@@ -419,6 +420,7 @@ pub use conditional::{CheckConditional, ClearConditional, SetConditional};
 pub use criteria::Condition;
 pub use deleting::DeleteRow;
 pub use duplicates::RemoveDuplicates;
+pub use errors::SheetErrors;
 pub use exporting::ExportCsv;
 use fill::FillRange;
 pub use filters::{ClearFilter, FilteredRows, SetFilter, SetFilterGroups};
@@ -1826,6 +1828,7 @@ craftkit_sdk::plugin_anchor!(
     RemoveSheet,
     SetCell,
     SetFormula,
+    SheetErrors,
     SetName,
     DeleteName,
     SetMerge,
