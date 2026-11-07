@@ -128,6 +128,7 @@ mod outline;
 mod page;
 mod paragraph;
 mod properties;
+mod quotes;
 mod references;
 mod resolving;
 mod revisions;
@@ -161,6 +162,7 @@ pub use outline::{ReadOutline, ReadStyleLevel, SetStyleLevel};
 pub use page::{GetPage, SetPage};
 pub use paragraph::{ReadBlockParagraph, ReadStyleParagraph, SetStyleParagraph};
 pub use properties::SetProperties;
+pub use quotes::SetQuotes;
 pub use references::{AddReference, ReadReference, SetReference};
 pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
 pub use revisions::ReadRevisions;
@@ -1089,6 +1091,7 @@ craftkit_sdk::plugin_anchor!(
     RemoveSource,
     ReadSources,
     ReadBibliography,
+    SetQuotes,
     AddField,
     SetField,
     ReadFields,
