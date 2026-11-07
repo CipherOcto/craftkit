@@ -1,9 +1,15 @@
 //! A small **XML** reader.
 //!
-//! FCPXML is an XML text, and reading it needs a reader that knows
-//! what an element is. This one is small and it is **strict about
-//! what it accepts**: it reads elements, attributes and text, and it
-//! refuses a text it does not understand rather than guessing.
+//! Several things in this kit are XML: FCPXML, FCP7's `xmeml`, SVG.
+//! Reading one needs a reader that knows what an element is, and a
+//! kit with a reader in each of them has a reader that reads one text
+//! three ways. This one is small and it is **strict about what it
+//! accepts**: it reads elements, attributes and text, and it refuses a
+//! text it does not understand rather than guessing.
+//!
+//! It lives here because it is shared: a plugin that reads XML reads
+//! it with this reader, and the rules of XML are the same wherever the
+//! text came from.
 //!
 //! The rules:
 //!
@@ -16,10 +22,10 @@
 //!   text that is deep cannot make the reader deep in the stack.
 
 /// The most elements may be **deep**.
-pub(crate) const MAX_DEPTH: usize = 64;
+const MAX_DEPTH: usize = 64;
 
 /// The most characters a text may have.
-pub(crate) const MAX_CHARS: usize = 4_000_000;
+const MAX_CHARS: usize = 4_000_000;
 
 /// An **element**: a name, its attributes, its children and its text.
 pub struct Element {
@@ -37,6 +43,11 @@ impl Element {
     /// The **attribute** of that name, when the element has it.
     pub fn attribute(&self, name: &str) -> Option<&str> {
         self.attributes.iter().find(|(key, _)| key == name).map(|(_, value)| value.as_str())
+    }
+
+    /// The **number** an attribute holds, when it holds one.
+    pub fn number(&self, name: &str) -> Option<f64> {
+        self.attribute(name).and_then(|value| value.trim().parse::<f64>().ok())
     }
 
     /// The **child** of that name, when the element has one.

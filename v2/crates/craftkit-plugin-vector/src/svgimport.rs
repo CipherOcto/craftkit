@@ -21,6 +21,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::json;
+use craftkit_sdk::xml::Element;
 use craftkit_sdk::{
     Colour, EngineError, Fill, FillRule, FormatValue, Outcome, Path, Point, Segment, Session, Text,
 };
@@ -35,206 +36,6 @@ const PIXEL: f64 = 25.4 / 96.0;
 
 /// The most bytes an SVG file may hold.
 const MAX_BYTES: u64 = 16 * 1024 * 1024;
-
-/// One **element** of an SVG file.
-#[derive(Debug, Clone, PartialEq, Default)]
-struct Element {
-    /// The name of the element.
-    name: String,
-    /// Its attributes, in the order the file had them.
-    attributes: Vec<(String, String)>,
-    /// The elements inside it.
-    children: Vec<Element>,
-}
-
-impl Element {
-    /// The **attribute** of the element, by its name.
-    fn attribute(&self, name: &str) -> Option<&str> {
-        self.attributes.iter().find(|(key, _)| key == name).map(|(_, value)| value.as_str())
-    }
-
-    /// The **number** of an attribute.
-    fn number(&self, name: &str) -> Option<f64> {
-        self.attribute(name).and_then(|value| value.trim().parse::<f64>().ok())
-    }
-}
-
-/// The most **deep** a file may nest its elements.
-const MAX_DEPTH: usize = 64;
-
-/// The **elements** of an SVG file, read from its text.
-///
-/// The reader is small and says what it cannot read: a file that is
-/// not XML is refused, and the text between the elements is ignored —
-/// this tree reads the drawing and not the words around it.
-fn read_elements(text: &str) -> Result<Vec<Element>, String> {
-    let bytes: Vec<char> = text.chars().collect();
-    let mut at = 0usize;
-    read_level(&bytes, &mut at, 0)
-}
-
-/// The **elements** at one level of the file.
-fn read_level(bytes: &[char], at: &mut usize, depth: usize) -> Result<Vec<Element>, String> {
-    if depth > MAX_DEPTH {
-        return Err("the file nests its elements deeper than the tree reads".to_string());
-    }
-    let mut elements: Vec<Element> = Vec::new();
-    loop {
-        // The next **tag**.
-        while let Some(byte) = bytes.get(*at) {
-            if *byte == '<' {
-                break;
-            }
-            *at += 1;
-        }
-        if *at >= bytes.len() {
-            break;
-        }
-        match bytes.get(*at + 1) {
-            // A **comment**, a **declaration** or a **doctype**: not the
-            // drawing.
-            Some('!') | Some('?') => {
-                let end = if bytes.get(*at + 1) == Some(&'?') { "?>" } else { ">" };
-                *at = match find(bytes, *at, end) {
-                    Some(at) => at + end.chars().count(),
-                    None => bytes.len(),
-                };
-                continue;
-            }
-            // The **closing** tag of the level above.
-            Some('/') => {
-                *at = match find(bytes, *at, ">") {
-                    Some(at) => at + 1,
-                    None => bytes.len(),
-                };
-                break;
-            }
-            _ => {}
-        }
-        let (mut element, closed) = read_tag(bytes, at)?;
-        if !closed {
-            element.children = read_level(bytes, at, depth + 1)?;
-        }
-        elements.push(element);
-    }
-    Ok(elements)
-}
-
-/// One **tag**: its name, its attributes, and whether it closes
-/// itself.
-fn read_tag(bytes: &[char], at: &mut usize) -> Result<(Element, bool), String> {
-    let mut cursor = *at + 1;
-    let name = read_name(bytes, &mut cursor);
-    if name.is_empty() {
-        return Err("a tag has no name".to_string());
-    }
-    let mut attributes: Vec<(String, String)> = Vec::new();
-    let mut closed = false;
-    loop {
-        skip_space(bytes, &mut cursor);
-        match bytes.get(cursor) {
-            None => return Err(format!("the tag `{name}` is never closed")),
-            Some('>') => {
-                cursor += 1;
-                break;
-            }
-            Some('/') if bytes.get(cursor + 1) == Some(&'>') => {
-                cursor += 2;
-                closed = true;
-                break;
-            }
-            Some('/') => {
-                cursor += 1;
-            }
-            Some(_) => {
-                let key = read_name(bytes, &mut cursor);
-                if key.is_empty() {
-                    cursor += 1;
-                    continue;
-                }
-                skip_space(bytes, &mut cursor);
-                if bytes.get(cursor) != Some(&'=') {
-                    attributes.push((key, String::new()));
-                    continue;
-                }
-                cursor += 1;
-                skip_space(bytes, &mut cursor);
-                let value = read_value(bytes, &mut cursor);
-                attributes.push((key, value));
-            }
-        }
-    }
-    *at = cursor;
-    Ok((Element { name, attributes, children: Vec::new() }, closed))
-}
-
-/// Where a **text** is, from a place onwards.
-fn find(bytes: &[char], from: usize, text: &str) -> Option<usize> {
-    let needle: Vec<char> = text.chars().collect();
-    let mut at = from;
-    while at + needle.len() <= bytes.len() {
-        if bytes[at..at + needle.len()] == needle[..] {
-            return Some(at);
-        }
-        at += 1;
-    }
-    None
-}
-
-/// The **space** of a text.
-fn skip_space(bytes: &[char], at: &mut usize) {
-    while let Some(byte) = bytes.get(*at) {
-        if byte.is_whitespace() {
-            *at += 1;
-            continue;
-        }
-        break;
-    }
-}
-
-/// The **name** of a tag or of an attribute.
-fn read_name(bytes: &[char], at: &mut usize) -> String {
-    let mut name = String::new();
-    while let Some(byte) = bytes.get(*at) {
-        if byte.is_whitespace() || *byte == '=' || *byte == '>' || *byte == '/' {
-            break;
-        }
-        name.push(*byte);
-        *at += 1;
-    }
-    name
-}
-
-/// The **value** of an attribute: a text in quotes.
-fn read_value(bytes: &[char], at: &mut usize) -> String {
-    let quote = match bytes.get(*at) {
-        Some('"') => '"',
-        Some('\'') => '\'',
-        _ => {
-            let mut value = String::new();
-            while let Some(byte) = bytes.get(*at) {
-                if byte.is_whitespace() || *byte == '>' {
-                    break;
-                }
-                value.push(*byte);
-                *at += 1;
-            }
-            return value;
-        }
-    };
-    *at += 1;
-    let mut value = String::new();
-    while let Some(byte) = bytes.get(*at) {
-        if *byte == quote {
-            *at += 1;
-            break;
-        }
-        value.push(*byte);
-        *at += 1;
-    }
-    // The **entities** a file may write.
-    value.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"")
-}
 
 /// A **token** of path data.
 #[derive(Debug, Clone, PartialEq)]
@@ -796,15 +597,24 @@ impl ImportSvg {
                 message: format!("the file cannot be read: {message}"),
             },
         )?;
-        let roots = read_elements(&text).map_err(|reason| EngineError::Failed {
+        let parsed = craftkit_sdk::xml::parse(&text).map_err(|reason| EngineError::Failed {
             id: COMMAND.to_string(),
             message: format!("the file is not an SVG file: {reason}"),
         })?;
-        let Some(root) = roots.iter().find(|element| element.name == "svg") else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the file holds no `svg` element".to_string(),
-            });
+        // The **root** of the file: the `svg` element itself, or the
+        // first one inside it, for a file that wraps its drawing.
+        let root = if parsed.name == "svg" {
+            &parsed
+        } else {
+            match parsed.find("svg") {
+                Some(found) => found,
+                None => {
+                    return Err(EngineError::Failed {
+                        id: COMMAND.to_string(),
+                        message: "the file holds no `svg` element".to_string(),
+                    });
+                }
+            }
         };
         // The **box** of the file, and the turn of the world.
         let (x, y, width, height) = read_box(root).unwrap_or((0.0, 0.0, 0.0, 0.0));

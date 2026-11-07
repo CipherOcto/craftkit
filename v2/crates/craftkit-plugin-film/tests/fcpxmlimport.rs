@@ -3,7 +3,6 @@
 //! The clips of the spine are clips on the first track of a sequence,
 //! and the media of the file are items.
 
-use craftkit_plugin_film::xml;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
 
@@ -237,29 +236,4 @@ fn a_document_this_tree_wrote_is_read_back() {
     assert_eq!(clip.data["start"], json!(0), "the clip begins at the start: {clip:?}");
     assert_eq!(clip.data["duration"], json!(125), "and lasts as long as before");
     assert_eq!(clip.data["source_in"], json!(50), "and plays from the same place in the media");
-}
-
-/// The **XML reader** reads the elements, the attributes and the text.
-#[test]
-fn the_xml_reader_reads_a_text() {
-    let root = xml::parse(
-        "<?xml version=\"1.0\"?>\n<!DOCTYPE fcpxml>\n<!-- a comment -->\n<fcpxml version=\"1.9\"><sequence name=\"the film\"><spine/></sequence></fcpxml>",
-    )
-    .expect("the text is read");
-    assert_eq!(root.name, "fcpxml", "the root is the element");
-    assert_eq!(root.attribute("version"), Some("1.9"), "and it has its attributes");
-    let sequence = root.child("sequence").expect("there is a sequence");
-    assert_eq!(sequence.attribute("name"), Some("the film"), "with its own attributes");
-    assert!(sequence.child("spine").is_some(), "and its children");
-}
-
-/// The **XML reader** reads the entities, and refuses a text that is
-/// not XML.
-#[test]
-fn the_xml_reader_reads_the_entities_and_refuses_the_rest() {
-    let root = xml::parse("<a name=\"the &amp; the &lt;beach&gt;\"/>").expect("the text is read");
-    assert_eq!(root.attribute("name"), Some("the & the <beach>"), "the entities are read");
-    assert!(xml::parse("<a name=\"unfinished>").is_err(), "a text that is not XML is refused");
-    assert!(xml::parse("<a></b>").is_err(), "and so is a text that is closed wrongly");
-    assert!(xml::parse("not xml at all").is_err(), "and so is a text with no element");
 }

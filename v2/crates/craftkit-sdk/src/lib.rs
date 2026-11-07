@@ -96,6 +96,7 @@ pub mod stream;
 pub mod taskcmds;
 pub mod tasks;
 pub mod view;
+pub mod xml;
 
 pub use anchor::{Anchored, PluginAnchor};
 pub use appearance::{AddAppearance, AppearanceKind, SetAppearance};

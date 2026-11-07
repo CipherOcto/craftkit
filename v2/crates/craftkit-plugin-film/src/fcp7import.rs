@@ -35,7 +35,7 @@ use craftkit_derive::Command;
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Outcome, Relation, Session, Text};
 
-use crate::xml::Element;
+use craftkit_sdk::xml::Element;
 
 /// The most an FCP7 file may be, in bytes.
 const MAX_BYTES: u64 = 16 * 1024 * 1024;
@@ -142,7 +142,7 @@ impl ImportFcp7 {
             id: id.clone(),
             message: "the file is not a text".to_string(),
         })?;
-        let root = crate::xml::parse(&text).map_err(|message| EngineError::Failed {
+        let root = craftkit_sdk::xml::parse(&text).map_err(|message| EngineError::Failed {
             id: id.clone(),
             message: format!("the file is not FCP7 XML: {message}"),
         })?;

@@ -241,7 +241,6 @@ mod tracks;
 mod transitions;
 mod trim;
 mod workarea;
-pub mod xml;
 
 pub use ale::ExportAle;
 pub use aleimport::ImportAle;
