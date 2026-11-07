@@ -4015,6 +4015,7 @@ so.
 | the **encryption** of a file, made | **built.** A file is encrypted with a password — the strings and the streams are scrambled with RC4, and the trailer names the object that holds the scramble (§578) | §578 |
 | the **compressed** objects of a file | **built.** The objects of an object stream are read into the document — the catalog, the pages and the page of a compressed file are nodes like any other (§579) | §579 |
 | a file scrambled with **AES** | **built.** A file whose streams are scrambled with AES-128 is opened with a password — the strings with RC4 and the streams with AES (§580) | §580 |
+| the **index** of a document | **built.** A document may be marked with index entries — the index gathers them under the letters of the alphabet, and names the blocks they are on (§581) | §581 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37883,3 +37884,76 @@ the scheme says so in its crypt filters.
   scrambled with RC4 (§578).
 - **The metadata is not treated apart**: the metadata of a file
   scrambled with AES is scrambled like everything else.
+
+## 581. The index of a document
+
+An index is the list of the **entries** a document has been marked
+with. The tree marks a place in the text with an entry field and
+gathers the entries into an index field; this marks a **block** and
+gathers the marks into an index that is **derived**.
+
+### What was built
+
+- The new command **`prose.index.mark`** marks a block with an
+  **entry**, and the entry may have a **subentry** under it:
+  - a mark is a **pair** — the entry and the subentry — and a mark
+    with no subentry is the entry itself;
+  - the same mark twice is **one mark**: a block marked with an entry
+    twice is a block marked with it once;
+  - an entry that says **nothing** takes every mark of the block away:
+    an entry that is not said is not an entry, and it takes the marks
+    with it;
+  - an entry is at most two hundred characters long.
+- The new command **`prose.index.read`** reads the **index** of a
+  document, and the index is **derived** — it is the marks of the
+  blocks, gathered:
+  - an entry that begins with a **letter** is under that letter,
+    uppercased, and an entry that begins with anything else is under
+    that character;
+  - the **letters come first**: the groups of the letters are in the
+    alphabet's order, and the groups of the other characters come
+    after them;
+  - the entries under a letter are in the alphabet's order too;
+  - an entry names the **blocks** it is marked on, and a subentry
+    names the blocks of its own.
+
+### What the port found
+
+- **The tree marks a place in the text and this one marks a block.**
+  The tree's entry is an inline object hidden in the paragraph, with
+  the words it covers; here the mark is the block's own payload, and
+  it says which entry the block is marked with.
+- **The tree's index is a field and this one is derived.** The tree
+  inserts an index field into the document and keeps it up to date as
+  the document changes; here the index is read from the marks when it
+  is asked for, and there is nothing to keep up to date.
+- **The tree's index carries the page and this one carries the
+  block.** The tree lays the document out and writes the page every
+  entry is on under it. There is no layout here, and the entry names
+  the block it is on — which is the truth this tree can say.
+
+### What it cost
+
+- **Six tests** in the prose battery (`tests/index.rs`): the block
+  marked with an entry, the entries gathered under their letters, the
+  same mark twice, the empty entry that takes the marks away, the
+  subentry under its entry, and a node that is not a document.
+- **One new module** (`src/index.rs`) and **two new commands**
+  (`prose.index.mark` and `prose.index.read`). The prose battery now
+  carries **77** commands and the MCP server **778**.
+
+### What it does not settle
+
+- **The index is not laid out**: there are no columns, no page
+  numbers and no leaders, and the index is a list of the entries and
+  the blocks they are on.
+- **The marks are not seen**: the text of a block does not say that it
+  is marked, and the mark is a fact of the payload and not of the
+  words.
+- **The cross-reference of an entry is not read**: the tree's mark may
+  carry a cross-reference — a "See …" — and a bookmark of a page
+  range, and a bold or an italic page number, and none of that is
+  here.
+- **Every occurrence is not marked**: the tree's mark may mark the
+  first whole-word match of a word in every paragraph of the document,
+  and here one mark is on one block.
