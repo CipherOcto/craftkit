@@ -4038,6 +4038,7 @@ so.
 | the **captions** of a document | **built.** A paragraph may be a caption — the label, the text and the format of its number, and the number itself is worked out (§601) | §601 |
 | the **facts** of a document in the **file** | **built.** The payload of a node is carried by the file — the properties, the sources and the captions survive a round trip, and so does the oldest version that keeps them (§602) | §602 |
 | the **dashes** of a paragraph | **built.** The pairs of hyphens of a paragraph may be made into en dashes and em dashes, and the runs are rewritten with the text (§603) | §603 |
+| the **list** a paragraph begins | **built.** A paragraph that begins with `1. ` or `* ` becomes an item of a list — the marker is taken away and the runs are rewritten with it (§604) | §604 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39505,3 +39506,76 @@ book: an *en dash* — `–` — between two things, and an *em dash* — `—`
   into an en dash, and this tree leaves it alone.
 - **The lines of hyphens are not a border**: `---` is left as it is,
   and the tree makes a border of it.
+
+## 604. The list a paragraph begins
+
+A paragraph that begins with `1. ` or `* ` says what it is: it is an
+item of a list, and the marker is not part of its words.
+
+### What was built
+
+- The new command **`prose.block.list`** makes the list a paragraph
+  begins:
+  - the **markers** are the tree's own: `* `, `- ` and `> ` make a
+    bullet, and `1. `, `1) `, `a. `, `a) `, `A. `, `i. ` and `I. `
+    make a numbered list;
+  - the **marker is taken away** from the words of the paragraph, and
+    the **runs** are rewritten with it: they cover the words that are
+    left;
+  - a **bullet** joins the bullet list of that kind that the document
+    already has, so that a list of bullets is one list; a **numbered**
+    list always starts a new one, as the tree's does;
+  - a paragraph that is **already in a list** is refused — a block is
+    in one list;
+  - a paragraph that does **not begin** with a marker is refused by
+    name.
+- The list is a **node** and the paragraph's place in it is a
+  **relation**, exactly as a list made by `prose.list.add` is: the
+  **label** beside the paragraph is derived, so the numbering follows
+  the paragraphs.
+
+### What the port found
+
+- **The tree's rule is the tree's rule here.** The tree watches the
+  keyboard, and the moment the space after the marker is typed the
+  paragraph becomes an item of a list and the marker goes away. Here
+  a command is asked for, and the marker is taken away from the words
+  of a paragraph that begins with one.
+- **The tree's two markers of two characters are not here.** The tree
+  draws `-> ` and `=> ` as arrow bullets. A bullet of this tree is
+  **one character** — the tree's own rule for a bullet of its own —
+  and so those two markers are refused by name.
+- **The tree's bullets join a list and the tree's numbers do not.**
+  The tree's `* ` finds the bullet list of that kind that the
+  document has and joins it, and a `1. ` always starts numbering
+  again at one. Here the same: a bullet joins the list that is there
+  and a numbered list always starts a new one.
+- **The tree's paragraph keeps its style and this tree's paragraph
+  keeps its own.** The tree gives the paragraph the `ListParagraph`
+  style unless it is a heading, so that "1. " in a Heading 1 gives a
+  numbered Heading 1. Here the list is a relation and not a style,
+  and a paragraph that is on a style stays on it.
+- **The runs move with the text, for the third time.** The marker is
+  three characters and it goes away, so every boundary of the runs
+  moves back by three, and the run that covered the marker alone is
+  dropped. That is what the replace does and what the dashes do.
+
+### What it cost
+
+- **Six tests** in the prose battery (`tests/autolists.rs`): the
+  numbered marker, the markers of the tree, the bullet that joins the
+  list that is there, the runs that are rewritten with the text, the
+  paragraph that begins with nothing, and the node that is not a
+  paragraph.
+- **One new command** (`prose.block.list`) in a new module
+  (`src/autolists.rs`). The prose battery now carries **94** commands
+  and the MCP server **813**.
+
+### What it does not settle
+
+- **The list is not made as the text is typed**: the command is asked
+  for, and nothing watches the keyboard.
+- **The two markers of two characters are not here**: `-> ` and `=> `
+  are refused, because a bullet of this tree is one character.
+- **The paragraph does not take the `ListParagraph` style**: the list
+  is a relation, and the styles of a document are its own.
