@@ -114,6 +114,7 @@ mod comments;
 pub mod contrast;
 mod editing;
 mod equations;
+mod fields;
 mod finding;
 mod footnotes;
 mod index;
@@ -144,6 +145,7 @@ pub use editing::{
     MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
 };
 pub use equations::{AddEquation, SetEquation};
+pub use fields::{AddField, ReadFields, SetField, UnlinkField};
 pub use finding::{Find, Replace};
 pub use footnotes::{AddFootnote, ReadFootnotes};
 pub use links::ReadLinks;
@@ -230,6 +232,7 @@ macro_rules! block_kind {
                     "text": node.data.get("text").cloned().unwrap_or(Json::Null),
                     "runs": runs_with_text(node),
                     "words": words_of(&text),
+                    "fields": crate::fields::fields_with_result(node),
                 }))
             }
         }
@@ -996,6 +999,7 @@ impl BlocksEvaluator {
                     "kind": block.kind,
                     "text": crate::references::text_of(document, block),
                     "runs": runs_with_text(block),
+                    "fields": crate::fields::fields_with_result(block),
                     "style": style,
                 }));
             }
@@ -1056,6 +1060,10 @@ craftkit_sdk::plugin_anchor!(
     SetEquation,
     PutOnStyle,
     SetRuns,
+    AddField,
+    SetField,
+    ReadFields,
+    UnlinkField,
     SetStyleCharacter,
     SetStyleParagraph,
     SetStyleLevel,
