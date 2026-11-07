@@ -4062,6 +4062,7 @@ so.
 | the **DXF** read back | **built.** A drawing file of DXF may be read — the entities of its ENTITIES section become entities of a drawing, and its layers become layers (§625) | §625 |
 | the **DXF** written out | **built.** A drawing may be written as a DXF file — its layers become the table of the file and its entities become the entities of the file (§626) | §626 |
 | the **SVG** of a drawing | **built.** A drawing may be written as a picture — the extents of a block become the box of an SVG, and the world is turned over for it (§627) | §627 |
+| the **SVG** read back | **built.** A picture file of SVG may be read — the shapes of the page become entities of a drawing, and the page's Y is turned over (§628) | §628 |
 
 ### The list of things that are honestly not there: empty
 
@@ -41214,3 +41215,88 @@ A drawing can now be **shown**: a drawing is made into a picture file.
   as blocks, and an insert is not drawn as the block it refers to.
 - **No window, no transparency, no filled areas**: the picture is the
   drawing's outlines, in the kit's colours.
+
+## 628. The SVG read back
+
+The picture of §627 can now be **read**: a picture file is made into a
+drawing again.
+
+### What was built
+
+- The new command **`cad.import.svg`** reads an SVG file and makes
+  the drawing it names:
+  - the file is read through a **bound** — sixteen mebibytes — and a
+    file that is not an SVG file is **refused**;
+  - the **page** of the file is the root's `viewBox`, and the **size**
+    of the page is the root's `width`: the millimetres a user unit
+    holds are the width in millimetres over the width of the view
+    box, and the tree's own units are the ones used — 96 pixels to
+    the inch, 72 points to the inch, 6 picas to the inch, 25.4
+    millimetres to the inch, 10 millimetres to the centimetre;
+  - the **origin** is the bottom left of the page, and the **Y of the
+    page is turned over**, because a page has its Y down and this
+    tree's world has it up;
+  - the **shapes** that are read are the tree's own: `line`, `circle`,
+    `ellipse`, `rect`, `polyline`, `polygon` and `path`, with the
+    path commands `M L H V C S Q T Z`, absolute and relative;
+  - a **curve** is a run of straight segments — sixteen of them — for
+    the drawing model of this tree has no curve of its own to put one
+    in, and a polyline is what a curve becomes;
+  - the **entities** go into the block the tree names `*Model_Space`,
+    and they are on a layer of their own;
+  - what the tree does not read is **left out**, and the answer says
+    what it left out.
+- The **XML** is read with the reader of the kit (§624), and the file
+  is read with the reader of the kit's files.
+
+### What the port found
+
+- **The tree's reader is a reader of a *drawing*, and not of a
+  picture.** It reads the W3C subset that drawing tools emit, and
+  what it does not read it names: the CSS class rules, the `use`
+  references, the fills, the gradients and the hatch patterns, the
+  text, the embedded raster images, the rounded corners of a
+  rectangle, and the arcs of an ellipse under a transform that
+  stretches them. Here the same names are used for the same
+  things, and the list is shorter.
+- **The tree's reader reads a transform**, and it reads one in every
+  form: a matrix, a translate, a scale, a rotate and a skew. Here an
+  element that carries a transform is **left out**, and the answer
+  says so — a drawing that is in the wrong place is worse than a
+  drawing that is not there.
+- **The tree reads an arc**, and it flattens it into short segments
+  when a transform stretches it. Here an arc in a path is not read:
+  a path that holds one is left out, and the answer says so. The
+  arc of an **entity** — the `cad.entity.arc` of this tree — is a
+  first-class thing, and the arc of a path is not.
+- **The tree's reader reads the fills**, and it makes a layer of
+  them. The drawing model of this tree draws outlines, so a fill is
+  not a fact here and is not read.
+- **The tree reads a page in millimetres**, and it puts the top left
+  of the page at the origin with the Y pointing up. The numbers are
+  the same: the origin is the bottom left of the page, because a
+  number of millimetres that grows upwards is a number of millimetres
+  in this tree's world.
+
+### What it cost
+
+- **Seven tests** in the cad battery (`tests/svgimport.rs`): the
+  picture that is read, the turn of the page's Y, the units of a
+  page, the path and the curve in it, the path of relative commands,
+  what is left out, and the file that is not a picture.
+- **One new command** (`cad.import.svg`) in a new module
+  (`src/svgimport.rs`). The cad battery now carries **49** commands
+  and the MCP server **831**.
+
+### What it does not settle
+
+- **An arc in a path is not read**, and a path that holds one is
+  left out whole.
+- **A transform is not applied**, and an element that carries one is
+  left out with everything under it.
+- **The fills, the gradients, the styles and the text** are not read:
+  the drawing model of this tree draws outlines.
+- **The picture is not the drawing**: the page of the file becomes
+  the origin of the drawing, and a picture written by §627 and read
+  back by this is a drawing of the same shape with the margin of the
+  picture gone.
