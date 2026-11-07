@@ -103,6 +103,20 @@ impl Align {
 /// it is not here, so this tree has the one the tree's default names.
 const CROSS_DISSOLVE: &str = "cross_dissolve";
 
+/// The **effect** a transition names, when it names one this tree
+/// has.
+///
+/// The tree has a **registry** of transitions and a file may name any
+/// of them. This tree has the one the tree's default names, and a
+/// name it does not have is a transition this tree cannot hold.
+pub fn effect_of(name: &str) -> Option<&'static str> {
+    let name = name.trim().to_ascii_lowercase().replace([' ', '_'], "-");
+    match name.as_str() {
+        "cross-dissolve" => Some(CROSS_DISSOLVE),
+        _ => None,
+    }
+}
+
 /// The **span** of a clip: where it starts and how long it is.
 fn span_of(session: &Session, clip: u64) -> Option<(u64, u64)> {
     let node = session.document().node(clip)?;

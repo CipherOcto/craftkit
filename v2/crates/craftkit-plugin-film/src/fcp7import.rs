@@ -123,24 +123,6 @@ fn sequence_of(root: &Element) -> Option<&Element> {
     None
 }
 
-/// The **transition** this tree has, and the name it goes by in a
-/// file.
-///
-/// The tree has a registry of transitions; this tree has the one the
-/// tree's default names, and a file that names another one has a
-/// transition this tree cannot hold.
-const CROSS_DISSOLVE: &str = "cross_dissolve";
-
-/// The **effect** a transition names, when it names one this tree
-/// has.
-fn effect_of(name: &str) -> Option<&'static str> {
-    let name = name.trim().to_ascii_lowercase().replace([' ', '_'], "-");
-    match name.as_str() {
-        "cross-dissolve" => Some(CROSS_DISSOLVE),
-        _ => None,
-    }
-}
-
 /// **Read** an FCP7 document and make the **sequence** it names.
 ///
 /// The media of the document are items, and the clip items of its
@@ -367,7 +349,7 @@ impl ImportFcp7 {
                         .or_else(|| effect_element.and_then(|effect| effect.child("effectid")))
                         .map(|name| name.text.trim().to_string())
                         .unwrap_or_else(|| "Cross Dissolve".to_string());
-                    let Some(effect) = effect_of(&name) else {
+                    let Some(effect) = crate::transitions::effect_of(&name) else {
                         left_out.push(format!(
                             "the transition `{name}` is not a transition this tree has, and it is left out"
                         ));

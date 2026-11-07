@@ -4,7 +4,7 @@
 //! The events of the list are clips on the tracks of a sequence, and
 //! the reels of the list are items.
 
-use craftkit_sdk::serde_json::json;
+use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Ecosystem, Session};
 
 /// The battery's **anchor**: the one name that keeps its commands
@@ -124,16 +124,44 @@ fn an_audio_channel_makes_an_audio_track() {
     assert_eq!(audio, vec!["the audio 1", "the audio 2"], "the two channels are two tracks");
 }
 
-/// A **dissolve** is not a cut: it is left out, and said.
+/// A **dissolve** is not a cut: it is a **transition** over the cut
+/// before it, and it is read as one.
 #[test]
-fn a_dissolve_is_left_out_and_said() {
+fn a_dissolve_is_a_transition_over_the_cut() {
     let mut session = session();
     let mut text = a_list();
     text.push_str("003  BEACH    V     D    025 00:00:05:00 00:00:10:00 00:00:10:00 00:00:15:00\n");
     let path = a_file("dissolve", &text);
     let outcome = session.execute("film.import.edl", &json!({ "path": path })).expect("the list is read");
     let left_out = outcome.data["left_out"].as_array().expect("the left out are a list");
-    assert_eq!(left_out.len(), 1, "the dissolve is said: {outcome:?}");
+    assert!(left_out.is_empty(), "the dissolve is not left out: {outcome:?}");
+    let sequence = outcome.data["sequence"].as_u64().expect("the sequence has an id");
+    let tracks = the_tracks(&session, sequence);
+    let video = tracks.iter().find(|track| track.data["kind"] == json!("video")).expect("there is a video");
+    let transitions: Vec<Json> = video
+        .children
+        .iter()
+        .filter(|child| child.kind == "film.transition")
+        .map(|child| child.data.clone())
+        .collect();
+    assert_eq!(transitions.len(), 1, "there is one transition: {transitions:?}");
+    assert_eq!(transitions[0]["duration"], json!(25), "it is twenty-five frames long: {transitions:?}");
+    assert_eq!(transitions[0]["start"], json!(250), "and it starts at the cut: {transitions:?}");
+    assert_eq!(transitions[0]["align"], json!("start"), "and it starts at the cut: {transitions:?}");
+    assert_eq!(transitions[0]["effect"], json!("cross_dissolve"), "and it is a dissolve: {transitions:?}");
+}
+
+/// An edit that is **not a cut and not a dissolve** — a wipe, a key —
+/// is left out, and said.
+#[test]
+fn an_edit_that_is_neither_a_cut_nor_a_dissolve_is_left_out() {
+    let mut session = session();
+    let mut text = a_list();
+    text.push_str("003  BEACH    V     W    025 00:00:05:00 00:00:10:00 00:00:10:00 00:00:15:00\n");
+    let path = a_file("wipe", &text);
+    let outcome = session.execute("film.import.edl", &json!({ "path": path })).expect("the list is read");
+    let left_out = outcome.data["left_out"].as_array().expect("the left out are a list");
+    assert_eq!(left_out.len(), 1, "the edit is said: {outcome:?}");
     assert!(left_out[0].as_str().unwrap_or_default().contains("not a cut"), "and it is named");
 }
 

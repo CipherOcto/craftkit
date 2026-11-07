@@ -24,14 +24,20 @@
 //! - The **start** of a clip is the record in of its event, its
 //!   **length** is the record out less the record in, and the
 //!   **source** is the source in.
-//! - A **dissolve** — an event that is not a cut — is left out, and
-//!   said: a dissolve is two cuts, and the tree writes it as two.
+//! - A **dissolve** is an event that is not a cut: it is a
+//!   **transition** over the cut before it, it joins the clip that
+//!   ends there and the clip that begins there, and its length is the
+//!   number the line carries. The other edits — a wipe, a key — are
+//!   left out, and said.
+//! - A **marker** is a `* LOC:` comment: the timecode is where it
+//!   starts, the colour it names is the tree's own colour, and the
+//!   rest is its name.
 //!
 //! # What it does not do
 //!
 //! - The **comments** of the tree — the `M2` reel of a file, the black
 //!   of a `BL` reel, the `* FROM CLIP NAME` of a nested clip — are not
-//!   read.
+//!   read, and the **bins** of the list are not made.
 
 use craftkit_derive::Command;
 
@@ -99,12 +105,41 @@ fn frames_of(text: &str, per_second: u64) -> Option<u64> {
     Some(((hours * 60 + minutes) * 60 + seconds) * per_second.max(1) + frames)
 }
 
+/// The **colour** a marker names, and the label of the tree's own it
+/// is.
+fn colour_of(word: &str) -> Option<&'static str> {
+    match word.trim().to_ascii_uppercase().as_str() {
+        "RED" => Some("Rose"),
+        "GREEN" => Some("Green"),
+        "BLUE" => Some("Blue"),
+        "CYAN" => Some("Teal"),
+        "MAGENTA" => Some("Magenta"),
+        "YELLOW" => Some("Yellow"),
+        "WHITE" => Some("Lavender"),
+        "BLACK" => Some("Brown"),
+        _ => None,
+    }
+}
+
+/// One **clip** of a track: the clip itself, where it starts and
+/// where it ends.
+type Placed = (u64, u64, u64);
+
+/// The **clips** of every track: the track and its clips.
+type TrackClips = (u64, Vec<Placed>);
+
 /// An **event** of the list: a cut, and where it came from and where
 /// it sits.
 struct Event {
     reel: String,
     channels: Vec<Channel>,
     cut: bool,
+    /// The **kind** of edit: `C` is a cut and `D` is a dissolve.
+    edit: char,
+    /// The **length** of a dissolve, in frames.
+    length: u64,
+    /// The **name** of the effect, when the event names one.
+    effect: Option<String>,
     source_in: u64,
     record_in: u64,
     record_out: u64,
@@ -125,13 +160,12 @@ fn event_of(line: &str, per_second: u64) -> Option<Event> {
     let channels = channels_of(tokens[2])?;
     let middle = &tokens[3..last - 4];
     let first = middle.first()?.to_ascii_uppercase();
-    let cut = match first.as_str() {
-        "C" => true,
-        // A **dissolve** and the other edits are not cuts: they are
-        // left out, and said.
-        _ => false,
-    };
-    Some(Event { reel, channels, cut, source_in, record_in, record_out })
+    // The **kind** of edit, and the length of a dissolve: the second
+    // number of the line.
+    let edit = first.chars().next().unwrap_or('C');
+    let length = middle.get(1).and_then(|length| length.parse::<u64>().ok()).unwrap_or(0);
+    let cut = edit == 'C';
+    Some(Event { reel, channels, cut, edit, length, effect: None, source_in, record_in, record_out })
 }
 
 /// **Read** an edit decision list and make the **sequence** it names.
@@ -170,6 +204,9 @@ impl ImportEdl {
         let mut title = String::new();
         let mut events: Vec<Event> = Vec::new();
         let mut said: Vec<String> = Vec::new();
+        // The **markers** of the list: where they start, what they are
+        // called and what colour they are.
+        let mut markers: Vec<(u64, String, String)> = Vec::new();
         for line in text.lines() {
             let line = line.trim();
             if line.is_empty() {
@@ -183,11 +220,36 @@ impl ImportEdl {
                 continue;
             }
             if line.starts_with('*') {
+                // The **comments** of the event above: a marker, and
+                // the name of an effect.
+                let comment = line.trim_start_matches('*').trim();
+                if let Some(rest) = comment.strip_prefix("LOC:") {
+                    let mut parts = rest.split_whitespace();
+                    let Some(timecode) = parts.next() else { continue };
+                    let Some(start) = frames_of(timecode, per_second) else { continue };
+                    let rest: Vec<&str> = parts.collect();
+                    let (colour, name) = match rest.split_first() {
+                        Some((colour, name)) if colour_of(colour).is_some() => {
+                            (colour_of(colour).unwrap_or("Green").to_string(), name.join(" "))
+                        }
+                        _ => ("Green".to_string(), rest.join(" ")),
+                    };
+                    markers.push((start, name, colour));
+                } else if let Some(rest) = comment.strip_prefix("EFFECT NAME:") {
+                    // The comment belongs to the **event above** it.
+                    if let Some(event) = events.last_mut() {
+                        event.effect = Some(rest.trim().to_string());
+                    }
+                }
                 continue;
             }
             match event_of(line, per_second) {
                 Some(event) => {
-                    if !event.cut {
+                    // A **dissolve** is a transition over the cut
+                    // before it, and it is kept. The other edits — a
+                    // wipe, a key — are not cuts, and they are left
+                    // out, and said.
+                    if !event.cut && event.edit != 'D' {
                         said.push(format!(
                             "the edit of the reel `{}` is not a cut, and it is left out",
                             event.reel
@@ -248,6 +310,9 @@ impl ImportEdl {
         let mut clips = 0usize;
         let mut reels: Vec<(String, u64)> = Vec::new();
         let mut number = 0u64;
+        // The **clips** of every track, for the dissolves to name the
+        // clip they come from.
+        let mut track_clips: Vec<TrackClips> = Vec::new();
         for event in &events {
             let duration = event.record_out.saturating_sub(event.record_in);
             if duration == 0 {
@@ -314,7 +379,69 @@ impl ImportEdl {
                 session.document_mut()?.add_relation(relation);
                 clips += 1;
                 end = end.max(event.record_out);
+                // A **dissolve** is a transition over the cut before
+                // this clip: it joins the clip that ends there and
+                // this one.
+                if event.edit == 'D' {
+                    // The **clip** the dissolve comes from: the one
+                    // that ends where this one begins.
+                    let from = track_clips
+                        .iter()
+                        .find(|(other, _)| *other == track)
+                        .map(|(_, clips)| clips)
+                        .unwrap_or(&Vec::new())
+                        .iter()
+                        .filter(|(_, start, end)| *end == event.record_in && *start < event.record_in)
+                        .max_by_key(|(_, start, _)| *start)
+                        .map(|(clip, _, _)| *clip);
+                    // The **effect**: the name the event gives, or
+                    // the tree's own default.
+                    let name = event.effect.clone().unwrap_or_else(|| "Cross Dissolve".to_string());
+                    let Some(effect) = crate::transitions::effect_of(&name) else {
+                        said.push(format!(
+                            "the transition `{name}` is not a transition this tree has, and it is left out"
+                        ));
+                        continue;
+                    };
+                    let align = if event.reel.eq_ignore_ascii_case("BL") { "end" } else { "start" };
+                    session.document_mut()?.add_node_with_under(
+                        Some(track),
+                        format!("transition at {}", event.record_in),
+                        "film.transition",
+                        None,
+                        json!({
+                            "from": from,
+                            "to": clip,
+                            "start": event.record_in,
+                            "duration": event.length,
+                            "align": align,
+                            "effect": effect,
+                        }),
+                    );
+                }
+                match track_clips.iter_mut().find(|(other, _)| *other == track) {
+                    Some((_, clips)) => clips.push((clip, event.record_in, event.record_out)),
+                    None => track_clips.push((track, vec![(clip, event.record_in, event.record_out)])),
+                }
             }
+        }
+        // The **markers** of the list: they are markers of the
+        // sequence.
+        for (start, name, colour) in &markers {
+            session.document_mut()?.add_node_with_under(
+                Some(sequence),
+                name.clone(),
+                "film.marker",
+                None,
+                json!({
+                    "start": start,
+                    "duration": 0,
+                    "name": name,
+                    "comment": "",
+                    "color": colour,
+                    "kind": "Comment",
+                }),
+            );
         }
         // The **length** of the sequence is what its tracks hold.
         if let Some(node) = session.document_mut().ok().and_then(|document| document.node_mut(sequence)) {
@@ -327,6 +454,7 @@ impl ImportEdl {
             "sequence": sequence,
             "title": title,
             "clips": clips,
+            "markers": markers.len(),
             "rate": { "num": num, "den": den },
             "left_out": said,
         })))
