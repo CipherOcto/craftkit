@@ -81,6 +81,7 @@ mod pathfinder;
 mod reshape;
 mod shapes;
 mod svgexport;
+mod svgimport;
 
 pub use dashes::DashPath;
 pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
@@ -88,6 +89,7 @@ pub use opacity::{SetOpacity, fill_at, stroke_at};
 pub use pathfinder::{CropPaths, DividePaths, MergePaths, TrimPaths};
 pub use shapes::{AddLine, AddSpiral, AddStar};
 pub use svgexport::ExportSvg;
+pub use svgimport::ImportSvg;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
 use craftkit_sdk::{
@@ -2787,6 +2789,7 @@ craftkit_sdk::plugin_anchor!(
     VectorPathKind,
     VectorTool,
     ExportSvg,
+    ImportSvg,
     AddRectangle,
     AddEllipse,
     ReadGradient,
