@@ -4014,6 +4014,7 @@ so.
 | the **encryption** of a file, undone | **built.** An encrypted file is opened with a password — the strings and the streams are unscrambled with RC4, and the file is written out plain (§577) | §577 |
 | the **encryption** of a file, made | **built.** A file is encrypted with a password — the strings and the streams are scrambled with RC4, and the trailer names the object that holds the scramble (§578) | §578 |
 | the **compressed** objects of a file | **built.** The objects of an object stream are read into the document — the catalog, the pages and the page of a compressed file are nodes like any other (§579) | §579 |
+| a file scrambled with **AES** | **built.** A file whose streams are scrambled with AES-128 is opened with a password — the strings with RC4 and the streams with AES (§580) | §580 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37805,3 +37806,80 @@ objects are there, and the stream holds them.
 - **A file that is compressed and encrypted at once is not read**: the
   objects of the object stream are read from the bytes of the file,
   and the bytes of an encrypted file are scrambled.
+
+## 580. A file scrambled with AES is opened
+
+§577 undid the scramble of a file, and it undid it with **RC4**. A file
+of revision four or above may be scrambled with **AES** instead, and
+the scheme says so in its crypt filters.
+
+### What was built
+
+- The **cipher** of AES is here (the module `aes`):
+  - the **substitution box** is worked out and not written down: the
+    box of the specification is a table of two hundred and fifty-six
+    bytes, and this tree works it out of the field;
+  - the **round keys** are worked out of the key;
+  - the **blocks** are undone the other way: the rows are shifted, the
+    bytes are substituted, the columns are mixed and the key is added;
+  - the **padding** is taken off when it is padding: the last byte
+    says how many bytes there are, and every one of them must be that
+    byte.
+- The command **`pdf.file.decrypt`** opens a file whose streams are
+  scrambled with **AES**:
+  - the file's scheme says so in its **crypt filters**: the method
+    `AESV2` is AES with a key of 128 bits;
+  - the **strings** of such a file are still scrambled with RC4 and
+    the **streams** with AES, and the two are read apart;
+  - the key of an AES object is **salted**: the four bytes `sAlT` go
+    into the hash of the key of the object;
+  - the **vector** is the first sixteen bytes of the stream.
+- The rules:
+  - a file whose strings are scrambled with something else is refused;
+  - a file whose streams are scrambled with **AES-256** is refused:
+    only RC4 and AES-128 are read here;
+  - a key that is not sixteen bytes and a vector that is not sixteen
+    bytes are no key and no vector: the answer is empty.
+
+### What the port found
+
+- **The tree reads AES-128 and AES-256 and this one reads AES-128.**
+  The tree's crypt layer knows three methods — RC4, AES-128 and
+  AES-256 — and it reads a revision of six, whose key is not the
+  password at all but a hash of it and of the file. Here AES-128 is
+  here and AES-256 is refused by name.
+- **The tree's strings and streams may be scrambled apart, and so may
+  they here.** A file may say that its strings are RC4 and its streams
+  are AES, and the tree reads the two apart; here the crypt filters
+  are read and the two are read apart too.
+- **The tree's AES has a vector of its own and this one has the
+  file's.** The tree derives the vector of an AES file from a SHA-256
+  of the key, the object and the content, so that a save is
+  reproducible and no vector is ever used twice. Here the vector is
+  the one the file holds, at the front of the stream — which is what
+  the specification says.
+
+### What it cost
+
+- **Three tests** in the pdf battery (`tests/aes.rs`): the AES file
+  opened with the user's password, the AES file opened with the
+  owner's password, and a password that does not open it. The file in
+  the test is a fixed file, scrambled with AES-128, and it is not a
+  file this tree wrote.
+- **Six tests** of the cipher itself (in `src/aes.rs`): the box of the
+  specification, the round keys of the specification, the block of the
+  specification, the rows and the columns, and a cipher that undoes a
+  block another implementation scrambled.
+- **One new module** (`src/aes.rs`) and **no new command**: the
+  command `pdf.file.decrypt` opens a file that is scrambled with AES.
+  The pdf battery still carries **67** commands and the MCP server
+  **776**.
+
+### What it does not settle
+
+- **AES-256 is not read**: a file scrambled with AES-256 — a revision
+  of six — is refused, and this tree has no AES-256 of its own.
+- **A file is not encrypted with AES**: the file that is made is
+  scrambled with RC4 (§578).
+- **The metadata is not treated apart**: the metadata of a file
+  scrambled with AES is scrambled like everything else.
