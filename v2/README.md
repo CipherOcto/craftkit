@@ -4043,6 +4043,7 @@ so.
 | the **endnotes** of a document | **built.** A note may belong to the end of the document instead of the foot of the page — a kind of its own, and numbered apart from the footnotes (§606) | §606 |
 | the **nested clip** in the **OTIO** | **built.** A nested clip is written out as a stack of the tracks it holds, and a sequence with one can be written at all (§607) | §607 |
 | the **nested clip** in the **FCPXML** | **built.** A nested clip is written out as a media that holds a sequence of the tracks it holds, and the clip points at that media (§608) | §608 |
+| the **nested clip** in the **EDL** | **built.** A nested clip has no tape and no file — its reel is `AX`, the tree's own rule, and its name is in a comment (§609) | §609 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39851,3 +39852,70 @@ that stands for it points at that media.
 - **The FCPXML is not read back**: the media of a nested clip is
   written, and a media that comes in from another program is not a
   nested clip of this tree.
+
+## 609. The nested clip in the EDL
+
+A **nested clip** — a clip that holds other clips — has no tape and
+no file: its reel is `AX`, and its name is written in a comment.
+
+### What was built
+
+- The EDL of a sequence now writes a **nested clip**:
+  - the **reel** of the event is `AX`, the tree's own rule: a nested
+    sequence has no tape and no file, so its reel is `AX` in every
+    reel mode;
+  - the **name** of the nested clip is written in a comment —
+    `* FROM CLIP NAME: the nest` — because the reel `AX` says nothing
+    of it.
+- The **dissolve** into or out of a nested clip uses the same reel,
+  so a cut that runs into a nested clip is written with `AX` as well.
+- Before this arc, a sequence with a nested clip **could not be
+  written out at all**: the list refused a clip with no item, and a
+  nested clip plays no media of its own, so it has no item. The
+  refusal is still there for a clip that is not nested.
+
+### What the port found
+
+- **The tree's rule is the tree's rule here.** The tree writes a
+  nested sequence to an EDL as one source with the reel `AX` — in
+  every reel mode, whether the list names the reels after the clips,
+  after the files or always `AX` — because a nested sequence has
+  neither a tape nor a file. Here the same: the reel of a nested clip
+  is `AX`.
+- **The tree's name of the nested clip is in a comment, and here it
+  is too.** The tree writes `* FROM CLIP NAME:` before an event, and
+  for a nested clip that comment is the only thing that says which
+  clip it is. Here the comment is written for a **nested clip** and
+  not for every clip: the reel of an ordinary clip says its name
+  already, and the tree's comment for it says the same thing twice.
+- **The tree's list is a list of sources and this tree's list is a
+  list of sources.** The tree's EDL has a reel, a channel, an edit
+  and four timecodes, and a nested clip is one event among them. Here
+  the same: a nested clip is one event, with the reel `AX` and the
+  timings of the clip.
+- **The tree's reel modes are not here**: the tree can name the reels
+  after the clips or after the files, and it keeps them apart. Here
+  the reel is the name of the item in eight characters, and the
+  nested clip's is `AX`.
+
+### What it cost
+
+- **Three tests** in the film battery (`tests/edl_nested.rs`): the
+  nested clip with the reel `AX`, the name of the nested clip in a
+  comment, and the clip that is not nested and has the reel of its
+  item.
+- **No new command**: the film battery still carries **80** commands
+  and the MCP server **816**. The change is in the writer of the
+  EDL.
+
+### What it does not settle
+
+- **The comment is written for a nested clip only**: the tree writes
+  the name of every clip in a comment, and here only the name that
+  the reel cannot carry is written.
+- **The reel modes are not here**: the tree can name the reels after
+  the clips or after the files, and here the reel is the name of the
+  item.
+- **A nested clip is one event and not a list of its own**: the
+  clips it holds are not in the list, and the tree's list says
+  nothing of them either.
