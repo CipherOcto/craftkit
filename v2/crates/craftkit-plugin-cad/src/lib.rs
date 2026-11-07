@@ -82,6 +82,7 @@ mod constraints;
 mod copies;
 mod curves;
 mod dimensions;
+mod dxfexport;
 mod dxfimport;
 mod editable;
 mod groups;
@@ -103,6 +104,7 @@ use craftkit_sdk::{
 };
 pub use curves::{AddEllipse, AddPolyline};
 pub use dimensions::{AddDimension, DimensionKind, SetDimensionText};
+pub use dxfexport::ExportDxf;
 pub use dxfimport::ImportDxf;
 pub use layersettings::{
     FreezeLayer, ListLayers, LockLayer, SetLayerColor, SetLayerFill, SetLayerLinetype, SetLayerLineweight,
@@ -1107,6 +1109,7 @@ craftkit_sdk::plugin_anchor!(
     DimensionKind,
     AddDrawing,
     ImportDxf,
+    ExportDxf,
     AddLayer,
     AddBlock,
     AddLine,
