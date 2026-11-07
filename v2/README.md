@@ -4019,6 +4019,7 @@ so.
 | the **array** of an entity | **built.** An entity may be arrayed — in a grid of rows and columns, or about a centre — and the copies are entities of their own (§582) | §582 |
 | the **constraints** of a drawing | **built.** A drawing may hold constraints — the entities are constrained to one another, and whether each constraint holds is worked out from the geometry (§583) | §583 |
 | the **groups** of a drawing | **built.** A drawing may hold groups — a set of entities that belongs together, and that moves as one (§584) | §584 |
+| the **directories** of a test | **fixed.** The tests of one file no longer share a directory — every call makes a directory of its own, so that two tests beside each other do not take away each other's file (§585) | §585 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38161,3 +38162,47 @@ one.
 - **The group is not written out**: the tree saves the groups in the
   drawing's own dictionary, and this tree has no dictionary of its
   own.
+
+## 585. The directories of a test
+
+The tests of one file run beside each other, and each of them wrote
+its files into a directory of its own — but two of the tests of a file
+named their directory the same, and the second one took the directory
+away under the first. The test then failed for a reason that had
+nothing to do with the thing it was testing.
+
+### What was built
+
+- Every call for a directory now makes a **directory of its own**: the
+  name is the one the caller asked for, and the **count** of the calls
+  made so far is added to it.
+- Two files of the pdf battery were fixed this way:
+  `tests/decryption.rs` and `tests/writtenappearance.rs`.
+- The race was **not** in the code the battery runs: the commands
+  behaved the same way before and after, and only the tests around
+  them changed.
+
+### What the port found
+
+- **The port carries its own tests and the tree carries none of
+  these.** The tree's tests are its own business and are not in the
+  port; the directories the port's tests write into are the port's
+  own affair, and the tree says nothing about them.
+- **The tree's tests do not share a machine.** They are the tree's
+  own, they run where the tree runs, and nothing in them has to
+  survive another tree's test beside it.
+
+### What it cost
+
+- **Two test files** changed (`tests/decryption.rs` and
+  `tests/writtenappearance.rs`) and no command was added: the pdf
+  battery still carries **67** commands and the MCP server **785**.
+
+### What it does not settle
+
+- **The failure was not hunted**: the tree's rule is that a test
+  that failed once and never again is not hunted for, and the fix
+  here is the one the failure named.
+- **The other test files are not changed**: they name their
+  directories apart, and a file that names two of them the same would
+  fail the same way.
