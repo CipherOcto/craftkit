@@ -4050,6 +4050,7 @@ so.
 | the **ALE** of a sequence | **built.** An Avid log exchange may be written — a tab-delimited clip log with a heading, the columns and a row for each clip (§613) | §613 |
 | the **ALE** read back | **built.** An Avid log exchange may be read — the media of the log become items and its rows become clips on a track of a sequence (§614) | §614 |
 | the **numbers stored as text** | **built.** The cells of a sheet that hold a number as text may be read — and turned into the numbers they stand for (§615) | §615 |
+| the **OTIO** read back | **built.** A timeline of OTIO may be read — the clips of its tracks become clips of a sequence, and the media of the file become items (§616) | §616 |
 
 ### The list of things that are honestly not there: empty
 
@@ -40347,3 +40348,81 @@ offers to turn it into the number it stands for.
 - **The tree's other background check is not here**: it marks the
   cells whose formula comes out as an error, and that check is the
   one of §612.
+
+## 616. The OTIO read back
+
+The timeline of §607 can now be **read**: a file of OTIO is made
+into a sequence again.
+
+### What was built
+
+- The new command **`film.import.otio`** reads an OTIO file and makes
+  the **sequence** it names:
+  - the file is read through a **bound** — at most **sixteen
+    mebibytes** — and a file that cannot be read is refused;
+  - a file that is **not OTIO** is refused: it is not a JSON text, or
+    it holds no **timeline** — the tree's own refusal;
+  - the **rate** of the sequence is the rate of the timeline's
+    `global_start_time`, and a timeline with none has the rate of the
+    first time in it, and a timeline with no time at all has the
+    default rate of the battery — the tree's own rule;
+  - a **track** whose kind is `Audio` is an audio track, and every
+    other track is a video one — the tree's own rule;
+  - a **gap** is a hole: the clips after it move along;
+  - the **media** of a clip is an **item** of a bin, with the name and
+    the file of the clip's reference, and the **clip** points at it —
+    the same shape as a clip made by hand;
+  - a **nested** clip — a stack of tracks where a clip stands — is a
+    clip that holds tracks, as it is everywhere else in this tree;
+  - a **transition** is left out, and said: a dissolve between two
+    clips is not a clip, and nothing here is written for it.
+
+### What the port found
+
+- **The tree's reader reads the whole of a tree and this one reads a
+  timeline.** The tree walks a document for every timeline in it and
+  makes a sequence of each; here the first timeline of the file is
+  the one that is made.
+- **The tree's reader keeps the tree's own metadata** — the settings
+  of a sequence, its label, its timecode, the volume of its master,
+  its effects — and reads them out of the `filmcraft` metadata of
+  the text. Here the text says what the document says and nothing
+  else, so the sequence takes its name and its rate and nothing more.
+- **The tree's reader knows a track's mute, its solo, its lock and
+  its channels.** Here a track has a kind and a name.
+- **The tree's reader makes the media of a file one item**: it keys
+  the media by its path, so two clips of one file are one item and
+  they both point at it. Here every clip gets an item of its own, so
+  two clips of one file are two items.
+- **The tree's reader reads the markers, the effects, the groups and
+  the links of a text, and this one does not.** A warp is read, and a
+  hold is read as a speed of zero, and everything else of an effect is
+  left out.
+
+### What it cost
+
+- **Eight tests** in the film battery (`tests/otioimport.rs`): the
+  timeline that is read, the rate, the gap, the audio track, the file
+  that is not a timeline, the transition that is left out and said,
+  the media that is an item, and the **round trip** — a timeline this
+  tree wrote, read back into a sequence.
+- **One new command** (`film.import.otio`) in a new module
+  (`src/otioimport.rs`), and one shared helper in `src/rates.rs` — the
+  rate of a number of frames a second, which the log of §614 now
+  uses as well. The film battery now carries **83** commands and the
+  MCP server **824**.
+
+### What it does not settle
+
+- **The media of the file is not probed**: the items carry the names
+  and the paths of the references, and nothing opens them.
+- **The paths are not resolved against a folder**: the tree resolves
+  a relative path against the folder of the file, and here the path
+  of the reference is the path of the item.
+- **The markers and the effects are not read**: a marker of the
+  timeline is left out, and so is everything of an effect but its
+  warp.
+- **The groups and the links are not read**: a timeline with a group
+  of clips in it has the clips, and the group is not there.
+- **The transitions are not read**: a dissolve between two clips is
+  left out, and said, and the two clips are butted together.
