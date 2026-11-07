@@ -4027,6 +4027,7 @@ so.
 | the **autofit** of a row and of a column | **built.** A column may be made as wide as its text and a row as tall as it — the size is worked out from the text the cells hold (§590) | §590 |
 | the **background** of a page | **built.** A page may be painted with a colour and may carry a watermark — both facts of the document, and both may be taken away (§591) | §591 |
 | the **borders** of a page | **built.** A page may be drawn with a border — the style, the width and the colour of each of its four sides (§592) | §592 |
+| the **detail** of a group of a pivot | **built.** The rows that stand behind a group may be read — they are worked out from the range, and they cannot be out of date (§593) | §593 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38666,3 +38667,64 @@ of the border of each of its four sides. The tree's page borders.
   says nothing about it.
 - **The borders are not written out**: the tree writes them into its
   own format, and this tree has no format of its own.
+
+## 593. The detail of a group of a pivot
+
+The **rows** that stand behind a group of a pivot: the tree's
+`data.showDetail`, the command that opens a group and shows what it
+is made of.
+
+### What was built
+
+- The new command **`grid.pivot.detail`** reads the rows that stand
+  behind a **group** of a pivot:
+  - the group is the **key of the row field**, and the rows are the
+    rows of the pivot's range that hold it;
+  - each row says the **row** it is, the **key** it holds, the
+    **column** it is in when the pivot has a column field, and the
+    **number** the pivot puts together;
+  - the rows come in the **order of the range**;
+  - a group that is **not one of the pivot's** is refused by name,
+    and so is a pivot that is not there;
+  - a cell of the value field that holds **text** is refused, as it
+    is when the pivot is read: a number cannot be put together with a
+    text.
+- The detail is **derived**: it is worked out from the range every
+  time it is asked for, so it cannot be out of date — and it follows
+  the cells, exactly as the summary does.
+
+### What the port found
+
+- **The tree opens a group and this tree reads it.** The tree's
+  `data.showDetail` expands a group of the pivot table in the window
+  and puts the rows of the source range under it. Here the rows are
+  an answer and nothing is expanded: the detail is asked for by name.
+- **The tree's detail is a thing of the window and this one's is a
+  fact of the sheet.** The tree keeps the open group in the state of
+  its window, and it is gone when the window is closed. Here there is
+  nothing to keep: the detail is worked out when it is asked for.
+- **The tree's detail names the rows by their labels and this one
+  names them by their row.** The tree shows the values of the source
+  columns under the group; here each row says the row it is, the key
+  it holds, its column and its number.
+
+### What it cost
+
+- **Five tests** in the grid battery (`tests/pivotdetail.rs`): the
+  rows behind a group, the detail following the cells, the column of
+  each row, a group that is not one of the pivot's, and a value that
+  is text.
+- **One new command** (`grid.pivot.detail`) in the pivot module
+  (`src/pivots.rs`). The grid battery now carries **130** commands and
+  the MCP server **798**.
+
+### What it does not settle
+
+- **The group is not opened**: the tree expands the group in its
+  window and here the rows are an answer.
+- **The detail does not name the columns of the source range**: it
+  says the row, the key, the column and the number, and the tree
+  shows every column of the row.
+- **The detail of a pivot with no value field is not worked out**: the
+  rows are the rows of the group and their numbers are nothing, as
+  they are in the summary.
