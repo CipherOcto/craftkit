@@ -4028,6 +4028,7 @@ so.
 | the **background** of a page | **built.** A page may be painted with a colour and may carry a watermark — both facts of the document, and both may be taken away (§591) | §591 |
 | the **borders** of a page | **built.** A page may be drawn with a border — the style, the width and the colour of each of its four sides (§592) | §592 |
 | the **detail** of a group of a pivot | **built.** The rows that stand behind a group may be read — they are worked out from the range, and they cannot be out of date (§593) | §593 |
+| the **handler of revision six** | **built.** A file scrambled with AES-256 is opened — the key of the file is not the hash of the password, and the password is checked with a hardened hash (§594) | §594 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38728,3 +38729,95 @@ is made of.
 - **The detail of a pivot with no value field is not worked out**: the
   rows are the rows of the group and their numbers are nothing, as
   they are in the summary.
+
+## 594. The handler of revision six
+
+A file scrambled with **AES-256**: the standard security handler of
+PDF 2.0, written from ISO 32000-2:2020.
+
+### What was built
+
+- The new module **`revision6`** (`src/revision6.rs`) is the handler
+  itself:
+  - the **hardened hash** of the specification: the input is hashed,
+    and then sixty-four times over the bytes are scrambled with
+    AES-128 — keyed with the first sixteen bytes of the hash and
+    chained from the next sixteen — and the hash that comes out is
+    hashed again, and **the hash that is used is the one the scrambled
+    bytes name**: their first sixteen, taken as a number, divided by
+    three;
+  - the rounds go on **until the last byte of the scrambled bytes
+    says they may stop**, and the specification says that is usually
+    between sixty-five and eighty rounds;
+  - the **key of the file** comes out of the file's own encrypted
+    entries: the user's entry for the user's password and the owner's
+    for the owner's, and the owner's hash is worked out with the
+    user's entry beside it;
+  - the **permissions** are checked: the block the file holds is
+    scrambled with the key of the file, and the bytes nine to eleven
+    of it spell `adb`, and the first four are the permissions the
+    file says;
+  - the **password is prepared** before it is used: the specification
+    asks for **SASLprep**, and that is a set of rules about the
+    letters of the world that this tree does not have. A password of
+    plain ASCII is its own preparation — the rules leave it as it is —
+    and a password with **any other letter is refused**, and a
+    password of more than a hundred and twenty-seven bytes is refused
+    too.
+- The module **`aes`** may now work with a key of **256 bits**, and
+  with bytes that are **not padded**: the handler of revision six
+  needs both, and the module has them.
+- The module **`sha2`** is new (`src/sha2.rs`): **SHA-256**,
+  **SHA-384** and **SHA-512**, checked against the vectors of the
+  standard.
+- The command **`pdf.file.decrypt`** opens a file of revision six:
+  the strings and the streams are scrambled with AES-256, and the key
+  of the file is the key of **every** object — there is no key of an
+  object here, and no salt.
+
+### What the port found
+
+- **The key of the file is not the hash of the password.** The handler
+  of revision six keeps the key of the file in the file, in two
+  entries that only the password opens; the handler of revision four
+  and before works the other way round — the key is the hash of the
+  password, and the file's entries are worked out from the key.
+- **The password is checked with a hash that takes many rounds.** The
+  hardened hash is there to make a search for the password expensive,
+  and it is sixty-four rounds and more of it.
+- **The tree's rules about a password do not fit this handler.** The
+  handler of revision four and before takes a password of thirty-two
+  bytes of PDFDocEncoding and pads it; the handler of revision six
+  takes a password of UTF-8 up to a hundred and twenty-seven bytes
+  and prepares it with SASLprep — and that preparation is not here,
+  so a password with a letter outside ASCII is refused rather than
+  guessed at.
+- **Every object has the same key.** The handler of revision four
+  works out a key for each object from the key of the file and the
+  number of the object; the handler of revision six does not, and
+  every string and every stream is scrambled with the key of the file
+  itself.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/revision6.rs`): the file
+  opened with the user's password, the file opened with the owner's,
+  a password that does not open it, and a password with a letter
+  outside ASCII.
+- **Six unit tests**: three in the module `sha2` (the hashes of the
+  standard, the hash of nothing, and the hash of a million bytes) and
+  three more in the module `aes` (the block of 256 bits, the cipher
+  of 256 bits, and a key that is not a key).
+- **No new command**: the pdf battery still carries **67** commands
+  and the MCP server **798**.
+
+### What it does not settle
+
+- **A file of revision six is not made here**: the tree opens one and
+  does not write one.
+- **The preparation of the password is not here**: SASLprep is not
+  implemented, and a password with a letter outside ASCII is refused.
+- **The salts are not made**: the handler of revision six draws them
+  at random, and nothing here draws anything at random.
+- **The permissions are not enforced**: they are read and checked
+  against the file, and nothing acts on them.
