@@ -4061,6 +4061,7 @@ so.
 | the **reader of an XML text** | **built.** One reader of XML for the whole tree — it is the SDK's, and the film and the vector batteries read with it (§624) | §624 |
 | the **DXF** read back | **built.** A drawing file of DXF may be read — the entities of its ENTITIES section become entities of a drawing, and its layers become layers (§625) | §625 |
 | the **DXF** written out | **built.** A drawing may be written as a DXF file — its layers become the table of the file and its entities become the entities of the file (§626) | §626 |
+| the **SVG** of a drawing | **built.** A drawing may be written as a picture — the extents of a block become the box of an SVG, and the world is turned over for it (§627) | §627 |
 
 ### The list of things that are honestly not there: empty
 
@@ -41135,3 +41136,81 @@ drawing file again.
 - **The tables are one**: the layers are written, and the tree's
   linetypes, its text styles, its dimension styles and its viewports
   are not.
+
+## 627. The SVG of a drawing
+
+A drawing can now be **shown**: a drawing is made into a picture file.
+
+### What was built
+
+- The new command **`cad.export.svg`** writes a drawing as an SVG
+  file:
+  - the file is written where the caller says, and the answer says
+    how many entities it holds and what it left out;
+  - the file is an SVG: the `svg` root, the `viewBox`, the white
+    ground and the elements;
+  - the **box** of the picture is the **extents** of the drawing with
+    a **margin** of two percent of the larger side — the tree's own
+    margin, so that nothing stands on the edge;
+  - the **world is turned over**: the tree's world has Y up and an
+    SVG's Y down, so the drawing is flipped and its top left corner
+    stands at the origin of the picture;
+  - the **stroke** is the larger side of the box over **1500**, and
+    the **decimals** are the tree's own — at least six, and more when
+    the stroke would lose its leading digits;
+  - the **width** of the picture is **1600** pixels and its height
+    follows the box;
+  - the **colour** of an entity is the **kit's** colour (§103): its
+    own appearance if it has one, else the appearance of the layer it
+    is on, else black;
+  - a **closed** polyline is a path that comes back to where it began,
+    and an open one is a polyline;
+  - an entity this tree cannot draw is **left out**, and the answer
+    says what it left out.
+- The entities that are drawn: a **line** is a path, a **circle** is a
+  circle, an **arc** is an arc, and a **polyline** is a polyline.
+
+### What the port found
+
+- **The tree's SVG is a picture of a rendering, not of a drawing.**
+  The tree builds a *display list* first — the polygons and the
+  polylines the screen would show — and the SVG is written from that
+  list. A curve in the tree is therefore a run of short straight
+  segments in the file, and a point is a filled circle whose radius
+  is the stroke. Here the picture is written from the drawing's own
+  entities, and an arc is an arc: the file says `A` and the viewer
+  draws the curve.
+- **The tree's picture is of a *space*, not of a whole drawing.** It
+  may be asked for a window, and then the `viewBox` is that window
+  and there is no margin. Here the picture is of one block of a
+  drawing — the model space, or the first block of a drawing that has
+  no model space — and the box is always the extents with the
+  margin.
+- **The tree's colour is the colour the *renderer* chose**, against a
+  white ground, and a transparent primitive carries an `opacity`. The
+  colour of a thing in this tree is the kit's (§103), which is one
+  rule for every battery, and there is no transparency to carry here:
+  an entity's colour is a colour and not an alpha.
+- **The tree writes a filled triangle as a filled path**, and the
+  picture of a solid area is the area. The drawing model of this tree
+  has no filled areas — it has outlines — so the picture here is
+  strokes, and a closed outline is a closed outline.
+
+### What it cost
+
+- **Seven tests** in the cad battery (`tests/svgexport.rs`): the file
+  that is written, the box and the turn of the world, the decimals of
+  the rule, the closed polyline, the colour of a layer, the entity
+  that cannot be drawn, and the node that is not a drawing.
+- **One new command** (`cad.export.svg`) in a new module
+  (`src/svgexport.rs`). The cad battery now carries **48** commands
+  and the MCP server **830**.
+
+### What it does not settle
+
+- **The tree also reads an SVG back** into a drawing, and this does
+  not: a picture written here is a picture, and nothing reads it.
+- **Only one block is drawn.** The blocks of a drawing are not drawn
+  as blocks, and an insert is not drawn as the block it refers to.
+- **No window, no transparency, no filled areas**: the picture is the
+  drawing's outlines, in the kit's colours.
