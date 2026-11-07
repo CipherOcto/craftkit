@@ -4037,6 +4037,7 @@ so.
 | the **quotes** of a paragraph | **built.** The straight quotes of a paragraph may be made smart — the character before decides which one it is, and the runs do not move (§600) | §600 |
 | the **captions** of a document | **built.** A paragraph may be a caption — the label, the text and the format of its number, and the number itself is worked out (§601) | §601 |
 | the **facts** of a document in the **file** | **built.** The payload of a node is carried by the file — the properties, the sources and the captions survive a round trip, and so does the oldest version that keeps them (§602) | §602 |
+| the **dashes** of a paragraph | **built.** The pairs of hyphens of a paragraph may be made into en dashes and em dashes, and the runs are rewritten with the text (§603) | §603 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39269,10 +39270,11 @@ book: “ and ” and ‘ and ’.
 - **The tree refuses to touch a tracked change, and so does this
   tree** — the tree refuses it in its replace and here it is refused
   in the quotes.
-- **The tree's AutoFormat has much more in it**: dashes that become
-  en dashes and em dashes, two spaces that become a full stop, a
-  `* ` that becomes a list, a line of dashes that becomes a border,
-  and a `+---+---+` that becomes a table. None of that is here.
+- **The tree's AutoFormat has much more in it**: two spaces that
+  become a full stop, a `* ` that becomes a list, a line of dashes
+  that becomes a border, and a `+---+---+` that becomes a table.
+  None of that is here. The **dashes** that become en dashes and em
+  dashes are here (§603).
 
 ### What it cost
 
@@ -39434,3 +39436,72 @@ the borders of a document are facts of its nodes — they are in the
 - **A fact of a document is not a fact of a file**: the properties of
   a document and the properties of a saved file are the same here,
   and in the tree they are not.
+
+## 603. The dashes of a paragraph
+
+Two hyphens are a mark of the keyboard; a **dash** is the mark of the
+book: an *en dash* — `–` — between two things, and an *em dash* — `—`
+— inside a word.
+
+### What was built
+
+- The new command **`prose.block.dashes`** makes the dashes of a
+  paragraph typographic:
+  - a pair of hyphens with **no space before it** is an **em dash**:
+    `word--word` becomes `word—word`;
+  - a pair of hyphens with a **space before it** and a **space after
+    it** is an **en dash**: `word -- word` becomes `word – word`;
+  - a run of **three or more** hyphens is a line and not a dash, and
+    it is left alone — those are the lines a border is made of;
+  - a pair of hyphens at the **end** of the text is left alone: there
+    is nothing after it and it says nothing.
+- The **runs** of the paragraph are rewritten with the text, because
+  two hyphens become one dash and the text is one character shorter.
+  A run that covers no words after the change is dropped.
+- A paragraph with a **revision** in it is not touched.
+
+### What the port found
+
+- **The tree's two rules are these two rules.** The tree turns
+  `word -- word` into an en dash and `word--word` into an em dash,
+  and it does it as the user types: the two characters are deleted and
+  one is put in their place, and the caret moves. Here the whole text
+  is read and written again, and the tree's rule for what counts as a
+  space — a space before the pair and a space after it — is the rule
+  here too.
+- **Two hyphens become one character here, and the runs must be
+  rewritten with the text.** The tree's formatting is a property of
+  each character, so the characters that are gone take their
+  formatting with them and nothing else has to be said. Here a run is
+  an **interval** with a length, and a length that does not change
+  would cover the wrong words — so every boundary of the runs moves
+  back by the number of the dashes before it. That is the second
+  time in this battery that a change of the text has moved the runs
+  with it (the replace does it too).
+- **The tree's third rule is not here.** The tree also turns a spaced
+  single hyphen into an en dash — and it does it by deleting the
+  hyphen *and the space that follows it*, so the words after it are
+  left against the dash. This tree does not port a rule that changes
+  the words: the single hyphen is left alone.
+- **The tree's lines of hyphens are a rule of their own** — `---` and
+  `___` and `===` become a bottom border — and this tree has no
+  border rule, so a run of three or more hyphens is left alone.
+
+### What it cost
+
+- **Six tests** in the prose battery (`tests/dashes.rs`): the em
+  dash, the en dash, the line of hyphens, the runs that are rewritten
+  with the text, the revision that is not touched, and the node that
+  is not a paragraph.
+- **One new command** (`prose.block.dashes`) in a new module
+  (`src/dashes.rs`). The prose battery now carries **93** commands and
+  the MCP server **812**.
+
+### What it does not settle
+
+- **The dashes are not made as the text is typed**: the command is
+  asked for, and nothing watches the keyboard.
+- **The single hyphen is not a dash**: the tree turns `word - word`
+  into an en dash, and this tree leaves it alone.
+- **The lines of hyphens are not a border**: `---` is left as it is,
+  and the tree makes a border of it.
