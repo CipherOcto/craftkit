@@ -4059,6 +4059,7 @@ so.
 | the **resources** of the MCP server | **built.** The MCP server serves the protocol's other half — the command catalogue and the design, and a template that names one node (§622) | §622 |
 | the **prompts** of the MCP server | **built.** The MCP server serves the protocol's third part — the workflows it offers, with their arguments and their live suggestions (§623) | §623 |
 | the **reader of an XML text** | **built.** One reader of XML for the whole tree — it is the SDK's, and the film and the vector batteries read with it (§624) | §624 |
+| the **DXF** read back | **built.** A drawing file of DXF may be read — the entities of its ENTITIES section become entities of a drawing, and its layers become layers (§625) | §625 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38189,7 +38190,8 @@ one.
   members.
 - **One new module** (`src/groups.rs`) and **three new commands**
   (`cad.group.add`, `cad.group.list` and `cad.group.move`). The cad
-  battery now carries **46** commands and the MCP server **785**.
+  battery now carries **45** commands (the figure before this one counted the
+  evaluator `cad.extents` as a command) and the MCP server **785**.
 
 ### What it does not settle
 
@@ -40987,3 +40989,84 @@ text the same way. There is now **one**.
 - **The tree's own XML library is not here**: this tree reads XML with
   its own reader, and a file that the library would accept and this
   reader would not is a file this tree refuses.
+
+## 625. The DXF read back
+
+A drawing file may now be **read**: a file of DXF is made into a
+drawing.
+
+### What was built
+
+- The new command **`cad.import.dxf`** reads a DXF file and makes the
+  **drawing** it names:
+  - the file is read through a **bound** — at most **sixteen
+    mebibytes** — and a file that cannot be read is refused;
+  - a file that is **not DXF** is refused: a line that is not a group
+    code is not a DXF file, and so is a file that ends in the middle
+    of a tag, and so is a file with no section in it;
+  - the **layers** of the drawing are the `LAYER` records of the
+    file's tables, with their colour indices;
+  - the **entities** are the records of the file's `ENTITIES` section,
+    and they go into the block the tree names `*Model_Space` — the
+    tree's own name for the block a drawing's entities live in;
+  - the **numbers** of a file are the file's own numbers: the tree
+    does not scale them on the way in, and the unit a file declares
+    is a fact of the file and not of the drawing;
+  - an entity that names a layer the file does not define gets that
+    layer **made**, because an entity on a layer the drawing does not
+    have is an entity on nothing;
+  - an entity this tree cannot read is **skipped**, and the answer
+    says what it skipped.
+- The entities that are read: `LINE`, `CIRCLE`, `ARC` and
+  `LWPOLYLINE`. The **degrees** of a file are **radians** here, and an
+  arc goes **counter-clockwise**: an end that is before the start is
+  the next turn round.
+- The **layer** of an entity is a relation, as it is everywhere else
+  in this tree.
+
+### What the port found
+
+- **The tree's DXF reader is a whole CAD implementation.** It reads
+  the blocks, the inserts, the text, the dimensions, the hatches, the
+  tables, the leaders, the splines, the objects and the handles, and
+  it has a **budget** of four million tags. This reader reads the
+  four entity kinds above and the layers, and it says what it
+  skipped.
+- **The tree keeps the unit in the header and does not scale on the
+  way in.** A DXF file declares `$INSUNITS`, and the tree keeps it as
+  a fact of the file; this reader says it in the answer and keeps it
+  nowhere, because this tree's drawing has no header.
+- **The tree's model space is a block named `*Model_Space`.** Its
+  layout tab is named `Model`, and the two are different names for
+  different things. The block is what the entities live in, and the
+  block is what this tree makes.
+- **The tree's layers carry more than a name**: a linetype, a
+  lineweight, a colour, a transparency, a description, a plot style
+  and the flags that freeze a layer, lock it and turn it off. Here a
+  layer carries its name and its colour index.
+
+### What it cost
+
+- **Eight tests** in the cad battery (`tests/dxfimport.rs`): the file
+  that is read, the layers of the file, the layer of an entity, the
+  circle and the arc, the polyline, the entity that cannot be read,
+  the file that is not a DXF file, and the units of the file.
+- **One new command** (`cad.import.dxf`) in a new module
+  (`src/dxfimport.rs`). The cad battery now carries **46** commands
+  and the MCP server **828**.
+- The count of the cad battery in the groups section (§ earlier) was
+  **one too many**: it counted the evaluator `cad.extents` as a
+  command. It is corrected there.
+
+### What it does not settle
+
+- **The blocks and the inserts are not read**: a file that puts
+  another block in the model space has its block ignored, and the
+  entities that came with it are not there.
+- **The text, the dimensions and the hatches are not read**: they are
+  skipped, and said.
+- **The handles are not kept**: an entity is named by its kind and a
+  number, and the handle a file gives it is not kept.
+- **The drawing's header is not kept**: the unit a file declares is
+  said in the answer and nowhere else, and the rest of the header —
+  the extents, the linetypes, the styles — is not read at all.
