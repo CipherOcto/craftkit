@@ -4004,6 +4004,7 @@ so.
 | the **appearance** of a field is written | **built.** A field may be given a drawing of its own — the value in the box of the widget, with the font and the size the field says (§567) | §567 |
 | the **writing** of a drawing as an SVG file | **built.** A drawing is written as an SVG file — the paths, their colours and the box they are in (§568) | §568 |
 | the **marked content** of a tagged file | **built.** The text under each element of the structure tree is read — the marked content is found by its number and the text under it is read (§569) | §569 |
+| the **place** of the text on a page | **built.** A piece of text says where it begins — the origin of the text matrix, as the moves of the file put it (§570) | §570 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37157,3 +37158,52 @@ it says **where** each of those is on the page in its marked content.
   its text and not its rows and cells.
 - **The text is not measured**: the text under a marked content is
   read as the file spells it, and the width of it is not worked out.
+
+## 570. The place of the text on a page
+
+A piece of text is somewhere on the page, and the file says where.
+
+### What was built
+
+- The answer of **`pdf.page.text`** now says **where** each piece of
+  text begins: the origin of the **text matrix**, as the file's moves
+  put it.
+- The rules:
+  - the **matrix** (`Tm`) puts the text where it says;
+  - a **move** (`Td`, `TD`) puts the next text below or beside the
+    last, and the **`*`** puts it on the next line;
+  - the **leading** (`TL`) says how far a line is from the one before
+    it, and the **rise** (`Ts`) says how far the text is above the
+    line it is on;
+  - text that the file does **not place** has no place: the answer
+    says nothing rather than a number it did not read.
+
+### What the port found
+
+- **The tree's text is glyphs and the place of a glyph is its box**:
+  the tree reads every glyph with the four numbers of its box, worked
+  out from the widths of the font and the size of the text. Here the
+  place is the **origin** — where the text begins — and the box of the
+  text is not worked out at all.
+- **The tree's places are exact and this one is where the pen was**:
+  the tree's renderer knows where every glyph stands, because it
+  measures the text it draws. Here the place is where the pen was
+  left, and the width of the text is not measured, so two pieces of
+  text side by side have the **same** place.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/places.rs`): the place of
+  a text, a move, a second piece, and a text that is not placed.
+- **No new command**: the pdf battery still carries **61** commands
+  and the MCP server **765**.
+
+### What it does not settle
+
+- **The width of the text is not measured**: a piece says where it
+  begins and not how long it is.
+- **The rotation of the text is not read**: the matrix may turn the
+  text, and the place is where it begins and not how it lies.
+- **The rise is not the baseline**: the rise moves the text up, and
+  the answer says where the text begins and not where the letters
+  stand on the line.
