@@ -390,6 +390,7 @@ mod sorting;
 mod sparklines;
 mod special;
 mod statistics;
+mod storedtext;
 mod styles;
 mod tables;
 mod tabs;
@@ -457,6 +458,7 @@ pub use sheetreading::ReadSheet;
 pub use sizes::{SetColumnWidth, SetRowHeight};
 pub use sorting::SortRange;
 pub use sparklines::{ReadSparkline, RemoveSparkline, SetSparkline};
+pub use storedtext::{NumbersConvert, NumbersStoredAsText};
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
 pub use tables::{
     CreateTable, ReadTableFields, ReadTables, RemoveTable, RenameTable, ResizeTable, SetTableColumnWay,
@@ -1829,6 +1831,8 @@ craftkit_sdk::plugin_anchor!(
     SetCell,
     SetFormula,
     SheetErrors,
+    NumbersStoredAsText,
+    NumbersConvert,
     SetName,
     DeleteName,
     SetMerge,
