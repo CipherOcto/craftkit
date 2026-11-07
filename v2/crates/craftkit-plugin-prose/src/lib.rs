@@ -114,6 +114,7 @@ mod characters;
 mod columns;
 mod comments;
 pub mod contrast;
+mod dashes;
 mod editing;
 mod equations;
 mod fields;
@@ -148,6 +149,7 @@ pub use captions::{ReadCaptions, SetCaption};
 pub use characters::FormatRun;
 pub use columns::SetColumns;
 pub use comments::{DeleteComment, GetComment, SetComment};
+pub use dashes::SetDashes;
 pub use editing::{
     MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
 };
@@ -1094,6 +1096,7 @@ craftkit_sdk::plugin_anchor!(
     ReadSources,
     ReadBibliography,
     SetQuotes,
+    SetDashes,
     SetCaption,
     ReadCaptions,
     AddField,

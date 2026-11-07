@@ -22,13 +22,8 @@ fn ecosystem() -> Ecosystem {
 /// A session over the battery's own contributions.
 fn a_session() -> (Session, Ecosystem) {
     let first = ecosystem();
-    let session = Session::with_formats(
-        first.commands,
-        first.kinds,
-        first.formats,
-        first.migrations,
-        first.evaluators,
-    );
+    let session =
+        Session::with_formats(first.commands, first.kinds, first.formats, first.migrations, first.evaluators);
     (session, ecosystem())
 }
 
@@ -71,10 +66,7 @@ fn a_full_document(session: &mut Session) -> (u64, u64) {
         )
         .expect("the field is added");
     session
-        .execute(
-            "prose.page.borders",
-            &json!({ "document": document, "kind": "box", "style": "double" }),
-        )
+        .execute("prose.page.borders", &json!({ "document": document, "kind": "box", "style": "double" }))
         .expect("the borders are set");
     session
         .execute("prose.page.background", &json!({ "document": document, "colour": "#112233" }))
@@ -98,7 +90,11 @@ fn newest(ecosystem: &Ecosystem) -> &craftkit_sdk::format::FormatSpec {
 }
 
 /// The facts of a document, as they are read back from a file.
-fn facts_of(document: &craftkit_sdk::Document, document_id: u64, block_id: u64) -> (String, String, String, String) {
+fn facts_of(
+    document: &craftkit_sdk::Document,
+    document_id: u64,
+    block_id: u64,
+) -> (String, String, String, String) {
     let node = document.node(document_id).expect("the document is in the document");
     let block = document.node(block_id).expect("the paragraph is in the document");
     (
@@ -135,13 +131,9 @@ fn the_oldest_format_that_loses_nothing_keeps_the_facts() {
     let (mut session, ecosystem) = a_session();
     let (document_id, block_id) = a_full_document(&mut session);
     let before = facts_of(session.document(), document_id, block_id);
-    let (written, version) = write_document_oldest(
-        session.document(),
-        &ecosystem.formats,
-        &ecosystem.migrations,
-        "craftkit",
-    )
-    .expect("some version keeps everything");
+    let (written, version) =
+        write_document_oldest(session.document(), &ecosystem.formats, &ecosystem.migrations, "craftkit")
+            .expect("some version keeps everything");
     assert!(version >= 1, "the version is one of the tree's: {version}");
     let read_back = read_document(&written, &ecosystem.formats, &ecosystem.migrations)
         .expect("the document is read back");
