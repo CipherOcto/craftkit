@@ -4020,6 +4020,7 @@ so.
 | the **constraints** of a drawing | **built.** A drawing may hold constraints — the entities are constrained to one another, and whether each constraint holds is worked out from the geometry (§583) | §583 |
 | the **groups** of a drawing | **built.** A drawing may hold groups — a set of entities that belongs together, and that moves as one (§584) | §584 |
 | the **directories** of a test | **fixed.** The tests of one file no longer share a directory — every call makes a directory of its own, so that two tests beside each other do not take away each other's file (§585) | §585 |
+| the **nested clip** of a sequence | **built.** The clips of a sequence may be nested — a clip that holds a little timeline of its own, and that may be taken apart again (§586) | §586 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38206,3 +38207,75 @@ nothing to do with the thing it was testing.
 - **The other test files are not changed**: they name their
   directories apart, and a file that names two of them the same would
   fail the same way.
+
+## 586. The nested clip of a sequence
+
+A **nested clip** is a clip that holds other clips: a little timeline
+of its own, standing on a track of the sequence around it. The tree
+calls it a **compound clip**.
+
+### What was built
+
+- The new command **`film.clip.nest`** nests the clips of a sequence
+  into a clip of their own:
+  - the clips must be of **one** sequence — a clip of one sequence
+    cannot be nested with a clip of another, because there is nowhere
+    to put the clip that would hold them;
+  - a clip that holds **nothing** is refused: there is nothing to
+    hold;
+  - a nested clip holds at most **sixty-four** clips;
+  - a clip that is **already nested** is refused: it is nested once;
+  - the tracks of the clips must not be **locked** — a locked track
+    cannot be edited, and a clip taken off it is an edit;
+  - the clip that is made stands on the track of the **earliest** of
+    the clips it holds, and it lasts from there to the end of the
+    last of them;
+  - it holds a **track** for each track the clips came from, and each
+    of those tracks remembers the track it came from;
+  - the clips inside it start at the beginning of the nest: the first
+    clip starts at frame zero of the nested clip, and the others
+    where they were;
+  - the nested clip plays **no media of its own** — it plays the
+    clips it holds, and what it lasts is the span of them.
+- The new command **`film.clip.ungroup`** takes a nested clip apart:
+  the clips go back to the tracks they came from, at the places they
+  had inside it, and a clip that would land on another one is
+  **refused**.
+- The command **`film.clip.get`** now says whether a clip is a
+  nested one, which clips it holds, and which nested clip a clip is
+  held by.
+
+### What the port found
+
+- **The tree closes the gap and this one does not.** The tree pushes
+  the clips after the nested one along the track, so that nothing is
+  cut; here the gap the clips leave is a gap, and the tree's own
+  commands for gaps and for rippling are there to close it.
+- **The tree's compound clip is a sequence of its own.** It has a
+  playhead, it is written out, and it may be nested in another one.
+  Here a nested clip is a clip that holds tracks: it has no item, no
+  playhead and no place in a file.
+- **The tree's compound clip is edited.** Clips are moved into it and
+  out of it, one at a time, and the compound is a sequence the editor
+  works in. Here the clips go in and come out as a whole — nest and
+  ungroup are two commands and there is no editing in between.
+
+### What it cost
+
+- **Seven tests** in the film battery (`tests/nesting.rs`): the clips
+  nested, the clips of two tracks nested, a clip that holds nothing,
+  the clips of two sequences, a locked track, the nested clip taken
+  apart, and a clip that holds no clips.
+- **One new module** (`src/nesting.rs`) and **two new commands**
+  (`film.clip.nest` and `film.clip.ungroup`). The film battery now
+  carries **75** commands and the MCP server **787**.
+
+### What it does not settle
+
+- **The clips after the nested one do not move**: the gap is a gap.
+- **A nested clip is not a sequence**: it has no item of its own, no
+  playhead, and it is not written out.
+- **A nested clip is not edited**: a clip may not be moved into it or
+  out of it one at a time.
+- **A nested clip is not nested again**: a clip that is already
+  nested is refused.
