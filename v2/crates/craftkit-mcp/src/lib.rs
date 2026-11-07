@@ -34,8 +34,17 @@
 //!
 //! The methods are the ones a client uses: `initialize`, `ping`,
 //! `tools/list`, `tools/call`, `resources/list`, `resources/read`,
-//! `resources/templates/list`, and the `notifications/initialized`
+//! `resources/templates/list`, `prompts/list`, `prompts/get`,
+//! `completion/complete`, and the `notifications/initialized`
 //! notification.
+//!
+//! # The prompts
+//!
+//! A tool **acts**; a resource **is**; a prompt **says**. The server
+//! serves the protocol's third part too: the **workflows** a client
+//! offers a person as a slash command. A prompt names a command, and
+//! the message is built from the registry, so a prompt cannot
+//! describe a command differently from the tools.
 //!
 //! # The resources
 //!
@@ -56,6 +65,7 @@
 #![forbid(unsafe_code)]
 
 use craftkit_sdk::serde_json::{Value as Json, json};
+pub mod prompts;
 pub mod resources;
 
 use craftkit_sdk::{Doc, EngineError, Outcome, Session};
@@ -225,7 +235,51 @@ impl Server {
                 }))
             }
             "ping" => Ok(json!({})),
+            // The tree's `shutdown` answers, and the caller stops: the
+            // server has nothing to close, because it holds no socket
+            // and no file.
+            "shutdown" => Ok(json!({})),
             "notifications/initialized" | "notifications/cancelled" => Ok(json!({})),
+            "prompts/list" => Ok(json!({ "prompts": prompts::list_json(&self.session) })),
+            "completion/complete" => {
+                let Some(reference) = params.get("ref") else {
+                    return Err((-32602, "`ref` is required; it names a prompt".to_string()));
+                };
+                let Some(argument) = params.get("argument") else {
+                    return Err((
+                        -32602,
+                        "`argument` is required; it names the argument and what has been typed".to_string(),
+                    ));
+                };
+                let Some(argument_name) = argument.get("name").and_then(Json::as_str) else {
+                    return Err((-32602, "`argument.name` is required and must be a string".to_string()));
+                };
+                let typed = argument.get("value").and_then(Json::as_str).unwrap_or("");
+                let Some(name) = reference.get("name").and_then(Json::as_str) else {
+                    return Err((
+                        -32602,
+                        "`ref.name` is required for a prompt; call prompts/list".to_string(),
+                    ));
+                };
+                match prompts::complete(name, argument_name, typed, &self.session) {
+                    Ok(suggestions) => Ok(suggestions.to_json()),
+                    Err(error) => Err((error.code(), error.message())),
+                }
+            }
+            "prompts/get" => {
+                let Some(name) = params.get("name").and_then(Json::as_str) else {
+                    return Err((
+                        -32602,
+                        "`name` is required and must be a string; call prompts/list".to_string(),
+                    ));
+                };
+                let arguments =
+                    params.get("arguments").cloned().unwrap_or_else(|| Json::Object(Default::default()));
+                match prompts::message(name, &arguments, &self.session) {
+                    Ok(message) => Ok(message),
+                    Err(error) => Err((error.code(), error.message())),
+                }
+            }
             "resources/list" => Ok(json!({ "resources": resources::list_json() })),
             "resources/templates/list" => Ok(json!({ "resourceTemplates": resources::templates_json() })),
             "resources/read" => {
