@@ -125,6 +125,7 @@ mod paragraph;
 mod references;
 mod resolving;
 mod revisions;
+mod running;
 mod statistics;
 mod styles;
 mod tables;
@@ -151,6 +152,7 @@ pub use paragraph::{ReadBlockParagraph, ReadStyleParagraph, SetStyleParagraph};
 pub use references::{AddReference, ReadReference, SetReference};
 pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
 pub use revisions::ReadRevisions;
+pub use running::{ReadRunningFooter, ReadRunningHeader, SetRunningFooter, SetRunningHeader};
 pub use statistics::ReadStatistics;
 pub use styles::{DeleteStyle, ListStyles, ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
 pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell, SetHeader, SetTableAlt};
@@ -183,6 +185,8 @@ impl DocumentKind {
     fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
         Some(json!({
             "title": crate::titles::title_of(node).map(|title| json!(title)).unwrap_or(Json::Null),
+            "header": crate::running::header_of(node).map(|header| json!(header)).unwrap_or(Json::Null),
+            "footer": crate::running::footer_of(node).map(|footer| json!(footer)).unwrap_or(Json::Null),
             "blocks": node.children.iter().filter(|child| child.kind.starts_with("prose.block.")).count(),
             "styles": node.children.iter().filter(|child| child.kind == "prose.style").count(),
             "media": node.children.iter().filter(|child| child.kind == "prose.media").count(),
@@ -1027,6 +1031,10 @@ craftkit_sdk::plugin_anchor!(
     SetDecorative,
     SetPlacement,
     SetTitle,
+    SetRunningHeader,
+    ReadRunningHeader,
+    SetRunningFooter,
+    ReadRunningFooter,
     ReadStatistics,
     DeleteStyle,
     MergeCells,
