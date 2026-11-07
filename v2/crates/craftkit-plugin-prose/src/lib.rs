@@ -114,6 +114,7 @@ mod editing;
 mod equations;
 mod finding;
 mod footnotes;
+mod index;
 mod links;
 mod media;
 mod merges;
