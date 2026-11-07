@@ -4033,6 +4033,7 @@ so.
 | the **fields** of a block | **built.** A field may be put on a paragraph — it covers words, it says what it is, and its result is worked out from the text (§596) | §596 |
 | the **properties** of a document | **built.** A document may say who wrote it and what it is about — the built-in properties and the custom ones, and an empty value takes one away (§597) | §597 |
 | the **columns** of a page | **built.** A page may be printed in columns — how many, the space between them and the line down the middle, and the width of a column is worked out (§598) | §598 |
+| the **sources** of a document | **built.** A source may be said, a run may cite it, and the bibliography is worked out from the sources that are cited (§599) | §599 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39132,3 +39133,92 @@ drawn down the middle.
   them.
 - **The columns are not unequal**: the tree's wide-and-narrow columns
   are not here, and every column is the same width.
+
+## 599. The sources of a document, and the citations of them
+
+A **source** is a thing a document points at: a book, an article, a
+report, a recording. A **citation** is a run that names one, and the
+**bibliography** is the list of the sources that are cited.
+
+### What was built
+
+- The new commands of the **sources** of a document:
+  - **`prose.document.source.set`** says what a source is, and
+    changes the source that has the tag;
+  - **`prose.document.source.remove`** takes a source away;
+  - **`prose.document.source.read`** reads the sources of a document;
+  - **`prose.document.bibliography`** reads the **bibliography** — the
+    sources that are cited, in the order they are first cited.
+- The **kind** of a source is one of the tree's own: `book`,
+  `bookSection`, `article`, `periodical`, `website`,
+  `electronicsource`, `report`, `conference`, `case`, `art`, `film`,
+  `interview`, `patent`, `performance`, `soundrecording`, `standard`,
+  `thesis` and `misc`. A kind that is not one of them is refused by
+  name.
+- A source has a **title**, and a source with no title is refused.
+  The **author** is a text of at most **256** characters and the
+  **year** a text of at most **32**, and the **tag** that names the
+  source is at most **64** characters long.
+- A source that is **not given a tag** is given one: the first three
+  letters of the first author and the last two digits of the year,
+  with `1`, `2`… added while the tag is taken — the tree's own rule.
+- A **run** may carry a **citation**: the tag of a source. A tag that
+  names no source is refused, and the run is not set.
+- The sources live in the **payload** of the document — they are
+  numerous and they hold nothing — and the **bibliography** is
+  **derived**: it is worked out from the sources and the citations
+  every time, so it cannot be out of date.
+
+### What the port found
+
+- **The tree makes the tag the same way this tree does.** The tree's
+  tag for a new source is the first three alphanumerics of the first
+  author's name — `Src` when there is no author — and the last two
+  digits of the year, with `1`, `2`… added while the tag is taken.
+  Here the author is a text and not a list of names, so the first
+  author is the one before the first comma.
+- **The tree's tag is the identity of the source, and so is this
+  tree's.** The tree's "edit source" keeps the source's place in the
+  list and refreshes its citations, and a source with a tag that is
+  already there is the same source. Here a source whose tag is there
+  is changed: the parts that are named change and the parts that are
+  not named keep what they were.
+- **The tree's author is structured and this tree's is a text.** The
+  tree's author is a list of names, each with a last name and a first
+  name, and the tree's styles read them. Here an author is a text as
+  it is written, and nothing reads it but the eye.
+- **The tree's citation is an object in the text and this tree's is
+  a run.** The tree's citation is an inline object that carries the
+  tag and is written out as `(Author, 2026)` by the style that is
+  chosen. Here a citation is a **run** that carries the tag — beside
+  the footnote and the link that a run already carries — and the
+  bibliography is a list of the sources themselves.
+- **The tree has a bibliography and this tree has one too, but it is
+  derived.** The tree's bibliography is written out in a **style** —
+  APA, MLA, Chicago and the rest — and the style decides the order,
+  the punctuation and the numbering. Here the style is not here: the
+  bibliography is the sources that are cited, in the order they are
+  cited, and every one of them is whole.
+
+### What it cost
+
+- **Six tests** in the prose battery (`tests/sources.rs`): the source
+  that is given a tag, the source that is changed by its tag, the
+  source that is not one, the run that carries a citation, the
+  bibliography that is derived, and the source that is taken away.
+- **Four new commands** (`prose.document.source.set`,
+  `prose.document.source.remove`, `prose.document.source.read` and
+  `prose.document.bibliography`) in a new module (`src/sources.rs`).
+  The prose battery now carries **89** commands and the MCP server
+  **808**.
+
+### What it does not settle
+
+- **The bibliography is not written out**: it has no style, no
+  punctuation and no numbering, and it is a list of the sources
+  themselves rather than a list of lines.
+- **A citation is not a citation in the text**: it names a source, and
+  it does not write `(Author, 2026)` where the reader sees it.
+- **The sources are not written into a file**: they are facts of the
+  document node, and the format that saves a document does not yet
+  carry them.
