@@ -132,6 +132,7 @@ mod references;
 mod resolving;
 mod revisions;
 mod running;
+mod sources;
 mod statistics;
 mod styles;
 mod tables;
@@ -164,6 +165,7 @@ pub use references::{AddReference, ReadReference, SetReference};
 pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
 pub use revisions::ReadRevisions;
 pub use running::{ReadRunningFooter, ReadRunningHeader, SetRunningFooter, SetRunningHeader};
+pub use sources::{ReadBibliography, ReadSources, RemoveSource, SetSource};
 pub use statistics::ReadStatistics;
 pub use styles::{DeleteStyle, ListStyles, ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
 pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell, SetHeader, SetTableAlt};
@@ -953,6 +955,17 @@ impl SetRuns {
                     }
                 }
             }
+            // A run may carry a **citation**: the source it points
+            // at. The tag must name a source of the document.
+            if let Some(citation) = run.get("citation") {
+                let Some(citation) = citation.as_str() else {
+                    return Err(EngineError::Failed {
+                        id: "prose.block.runs".to_string(),
+                        message: "a citation is the tag of a source".to_string(),
+                    });
+                };
+                crate::sources::check_citation(session, block, citation, "prose.block.runs")?;
+            }
             // A run may carry a **link**: the target it points at.
             // The target is a text and it is bounded; whether it may
             // be opened is said by the reading of the links.
@@ -1072,6 +1085,10 @@ craftkit_sdk::plugin_anchor!(
     SetRuns,
     SetProperties,
     SetColumns,
+    SetSource,
+    RemoveSource,
+    ReadSources,
+    ReadBibliography,
     AddField,
     SetField,
     ReadFields,
