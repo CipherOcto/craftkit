@@ -117,6 +117,7 @@ mod comments;
 pub mod contrast;
 mod dashes;
 mod editing;
+mod endnotes;
 mod equations;
 mod fields;
 mod finding;
@@ -156,6 +157,7 @@ pub use dashes::SetDashes;
 pub use editing::{
     MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
 };
+pub use endnotes::{AddEndnote, EndnoteKind, ReadEndnotes};
 pub use equations::{AddEquation, SetEquation};
 pub use fields::{AddField, ReadFields, SetField, UnlinkField};
 pub use finding::{Find, Replace};
@@ -965,6 +967,31 @@ impl SetRuns {
                     }
                 }
             }
+            // A run may carry an **endnote**: the note it points at.
+            if let Some(endnote) = run.get("endnote") {
+                let Some(endnote) = endnote.as_u64() else {
+                    return Err(EngineError::Failed {
+                        id: "prose.block.runs".to_string(),
+                        message: "an endnote is a note".to_string(),
+                    });
+                };
+                let found = session.document().node(endnote);
+                match found {
+                    Some(node) if node.kind == "prose.endnote" => {}
+                    Some(node) => {
+                        return Err(EngineError::Failed {
+                            id: "prose.block.runs".to_string(),
+                            message: format!("the node `{endnote}` is a `{}` and not an endnote", node.kind),
+                        });
+                    }
+                    None => {
+                        return Err(EngineError::Failed {
+                            id: "prose.block.runs".to_string(),
+                            message: format!("there is no endnote `{endnote}`"),
+                        });
+                    }
+                }
+            }
             // A run may carry a **citation**: the source it points
             // at. The tag must name a source of the document.
             if let Some(citation) = run.get("citation") {
@@ -1103,6 +1130,9 @@ craftkit_sdk::plugin_anchor!(
     SetDashes,
     SetList,
     SetStops,
+    EndnoteKind,
+    AddEndnote,
+    ReadEndnotes,
     SetCaption,
     ReadCaptions,
     AddField,

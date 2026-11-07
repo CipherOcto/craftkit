@@ -18,25 +18,29 @@ use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Session, Text};
 /// The most characters a footnote may have.
 pub const MAX_TEXT: usize = 32_767;
 
-/// The **numbers** of the footnotes of a document, by the footnote.
+/// The **numbers** of the notes of a document, by the note.
 ///
 /// They are **derived**: the document is walked in order and the first
-/// reference of a footnote gives it its number.
-fn numbers(document: &Document) -> std::collections::BTreeMap<u64, u32> {
+/// reference of a note gives it its number. The **footnotes** and the
+/// **endnotes** are counted apart, as the tree counts them apart.
+pub fn numbers(document: &Document) -> std::collections::BTreeMap<u64, u32> {
     let mut numbers: std::collections::BTreeMap<u64, u32> = std::collections::BTreeMap::new();
-    let mut next = 1u32;
+    let mut next_footnote = 1u32;
+    let mut next_endnote = 1u32;
     for node in document.walk().filter(|node| node.kind == "prose.document") {
         for block in node.children.iter().filter(|child| child.kind.starts_with("prose.block.")) {
             let Some(runs) = block.data.get("runs").and_then(|runs| runs.as_array()) else { continue };
             for run in runs {
-                let Some(footnote) = run.get("footnote").and_then(|footnote| footnote.as_u64()) else {
-                    continue;
-                };
-                if numbers.contains_key(&footnote) {
-                    continue;
+                // The **footnotes** and the **endnotes** are counted
+                // apart, as the tree counts them apart.
+                for (key, next) in [("footnote", &mut next_footnote), ("endnote", &mut next_endnote)] {
+                    let Some(note) = run.get(key).and_then(|note| note.as_u64()) else { continue };
+                    if numbers.contains_key(&note) {
+                        continue;
+                    }
+                    numbers.insert(note, *next);
+                    *next = next.saturating_add(1);
                 }
-                numbers.insert(footnote, next);
-                next = next.saturating_add(1);
             }
         }
     }
