@@ -78,6 +78,7 @@
 mod arcs;
 mod arrays;
 mod audits;
+mod constraints;
 mod copies;
 mod curves;
 mod dimensions;
