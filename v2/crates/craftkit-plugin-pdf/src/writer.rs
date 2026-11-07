@@ -49,6 +49,20 @@ pub struct Object {
     pub stream: Option<Vec<u8>>,
 }
 
+/// The **trailer** of a file: what its last word says.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Trailer {
+    /// The number of the object that is the file's **root**.
+    pub root: u64,
+    /// The number of the object that holds the file's **information**.
+    pub info: Option<u64>,
+    /// The number of the object that holds the file's **encryption**.
+    pub encrypt: Option<u64>,
+    /// The **identifier** of the file: the hex of its bytes. The file
+    /// holds two of them, and they are the same.
+    pub identifier: Option<String>,
+}
+
 /// Write the **objects** as a file.
 ///
 /// The root is the object that is the file's **catalog** — the one the
@@ -58,7 +72,8 @@ pub struct Object {
 /// has a row for each of them, and the row says the number is free and
 /// the generation it gets if it is used again. The number zero is free
 /// as well, and the table says so in its first row.
-pub fn write(objects: &[Object], free: &[Free], root: u64, info: Option<u64>) -> Result<Vec<u8>, Error> {
+pub fn write(objects: &[Object], free: &[Free], trailer: &Trailer) -> Result<Vec<u8>, Error> {
+    let root = trailer.root;
     if objects.iter().all(|object| object.number != root) {
         return Err(Error::Malformed(format!("the file has no object {root} to be its root")));
     }
@@ -117,12 +132,24 @@ pub fn write(objects: &[Object], free: &[Free], root: u64, info: Option<u64>) ->
     }
     // The **information** of the file: the object the trailer names,
     // when there is one.
-    let info = match info {
+    let info = match trailer.info {
         Some(info) => format!("/Info {info} 0 R "),
         None => String::new(),
     };
+    // The **encryption**: the object that holds it, when the file has
+    // one.
+    let encrypt = match trailer.encrypt {
+        Some(encrypt) => format!("/Encrypt {encrypt} 0 R "),
+        None => String::new(),
+    };
+    // The **identifier**: the pair of strings the file holds.
+    let identifier = match &trailer.identifier {
+        Some(identifier) => format!("/ID [<{identifier}> <{identifier}>] "),
+        None => String::new(),
+    };
     file.extend_from_slice(
-        format!("trailer\n<< /Size {size} /Root {root} 0 R {info}>>\nstartxref\n").as_bytes(),
+        format!("trailer\n<< /Size {size} /Root {root} 0 R {info}{encrypt}{identifier}>>\nstartxref\n")
+            .as_bytes(),
     );
     file.extend_from_slice(table_at.to_string().as_bytes());
     file.extend_from_slice(b"\n%%EOF\n");
@@ -229,9 +256,23 @@ fn escape_name(text: &str) -> String {
 }
 
 /// A **text**, with the characters that may not be in a string escaped.
+///
+/// The characters of a string are its **bytes**: a string of a file is
+/// Latin-1 unless it says otherwise, and a character above the Latin-1
+/// range is written as the UTF-8 bytes of itself.
 fn escape_text(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
-    for byte in text.bytes() {
+    for character in text.chars() {
+        let code = character as u32;
+        if code > 0xff {
+            // A character **above** the Latin-1 range: its UTF-8 bytes.
+            let mut buffer = [0u8; 4];
+            for byte in character.encode_utf8(&mut buffer).as_bytes() {
+                out.push_str(&format!("\\{byte:03o}"));
+            }
+            continue;
+        }
+        let byte = code as u8;
         match byte {
             b'(' => out.push_str("\\("),
             b')' => out.push_str("\\)"),

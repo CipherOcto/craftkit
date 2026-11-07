@@ -132,6 +132,7 @@ mod boxes;
 mod calculate;
 mod content;
 mod convert;
+mod crypt;
 mod decrypt;
 mod destinations;
 mod encrypt;
@@ -1792,7 +1793,8 @@ impl WriteFile {
             .and_then(|object| session.document().node(object))
             .and_then(|node| node.data.get("object").and_then(|number| number.as_u64()));
         let free = free::the_free(session.document());
-        let file = writer::write(&objects, &free, root, info).map_err(|error| EngineError::Failed {
+        let trailer = writer::Trailer { root, info, encrypt: None, identifier: None };
+        let file = writer::write(&objects, &free, &trailer).map_err(|error| EngineError::Failed {
             id: "pdf.file.write".to_string(),
             message: format!("the file cannot be written: {error:?}"),
         })?;
