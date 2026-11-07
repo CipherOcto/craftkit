@@ -4068,6 +4068,7 @@ so.
 | the **transitions** and the **markers** of an FCP7 file | **built.** The transitions of a track and the markers of the sequence are read, and the alignment is worked out the tree's way (§631) | §631 |
 | the **dissolves** and the **markers** of an EDL | **built.** A dissolve is a transition over the cut before it, and a `* LOC:` comment is a marker of the sequence (§632) | §632 |
 | the **transitions** and the **markers** of an OTIO file | **built.** The transitions of a track and the markers of the stack are read — and the writer is corrected to write a transition once (§633) | §633 |
+| the **place** of the text of a page | **built.** The text of a page says where it is — the text matrix, turned by the transform of the page (§634) | §634 |
 
 ### The list of things that are honestly not there: empty
 
@@ -41689,3 +41690,60 @@ the same sequence.
 - **A transition with no incoming clip** cannot be written: this
   tree's transition joins two clips, and the tree's own writer writes
   one that has only an outgoing clip after that clip.
+
+## 634. The place of the text of a page
+
+The text of a PDF page may now say **where it is**: the place is the
+text matrix of the text, turned by the transform of the page.
+
+### What was built
+
+- The PDF **page text** works out the **place** of every piece of
+  text, by the tree's own rule:
+  - the **rendering matrix** is the size and the scale of the font,
+    the rise, the text matrix, and then the transform of the page;
+  - the **transform of the page** is the `cm` operator, the `q` and
+    `Q` that keep it, and the page's own `/Matrix` — the transform
+    the page begins with;
+  - the text matrix is the tree's own: `Tm` sets it, `Td` and `TD`
+    move it, `T*` moves it down the leading, and `BT` puts it back.
+- The **matrix** of a PDF is now a thing of the tree's own, in the
+  content module where the tree keeps it: `a b c d e f`, the
+  row-vector convention, and `then` is the order things happen in.
+
+### What the port found
+
+- **The tree's redaction reads the text through the rendering
+  matrix**, and it reads the transform of the page with it: the
+  `cm` operator, the `q` and `Q` that keep it, and the page's own
+  `/Matrix`. This tree's reader of the text had the text matrix and
+  the rise, and it had no transform — so the place it gave was the
+  place in the text space and not the place on the page. The place is
+  the place on the page now, and it is the tree's rule.
+- **The tree's matrix is a row-vector matrix**, and `then` is the
+  order: `self` first, and then the other. The two conventions give
+  the same answer for a translation and a different one for a
+  rotation, so the tree's is the one here.
+- **The tree's redaction measures the width of the text** with the
+  font's own widths, and this tree does not: what is worked out here
+  is where the text **begins**, and the width is the font's business.
+
+### What it cost
+
+- **Five tests** in the pdf battery (`tests/textplaces.rs`): the
+  place that is the text matrix, the transform that moves the text,
+  the transform that is kept and put back, the matrix of the page,
+  and the rise that moves the text up.
+- **No new command**: the text of a page says where the text is. The
+  pdf battery still carries **66** commands and the MCP server
+  **831**.
+
+### What it does not settle
+
+- **The width of the text** is not worked out: the font's own widths
+  are the font's business, and a piece of text is where it begins.
+- **The marked content** of a page is read with the same rules, and
+  so is the text of a page that is **rotated**: the rotation of a
+  page is a separate fact of the page, and it is not applied here.
+- **A redaction** is still not made: the place of the text is the
+  first half of it, and the half that removes the text is not here.
