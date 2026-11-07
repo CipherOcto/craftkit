@@ -204,3 +204,107 @@ fn the_permissions_are_right(key: Vec<u8>, scheme: &Scheme, command: &str) -> Re
     }
     Ok(key)
 }
+
+/// The **entries** of a file of revision six, and the key of the file.
+pub struct Made {
+    /// The owner's entry: forty-eight bytes.
+    pub owner: Vec<u8>,
+    /// The user's entry: forty-eight bytes.
+    pub user: Vec<u8>,
+    /// The owner's encrypted entry: thirty-two bytes.
+    pub owner_encrypted: Vec<u8>,
+    /// The user's encrypted entry: thirty-two bytes.
+    pub user_encrypted: Vec<u8>,
+    /// The permissions of the file: sixteen bytes.
+    pub permissions: Vec<u8>,
+    /// The key of the file: thirty-two bytes.
+    pub key: Vec<u8>,
+}
+
+/// Eight **bytes** worked out from a name and from what the file is.
+///
+/// The salts of the handler of revision six are drawn at random by the
+/// specification. Here they are **worked out** — from the passwords
+/// and from the file itself — so that the same file and the same
+/// passwords always make the same file. A file made here is no
+/// stronger against a search for the password than one made elsewhere,
+/// and the rounds of the hash are what make that search expensive.
+fn eight(name: &str, material: &[u8]) -> Vec<u8> {
+    let mut message: Vec<u8> = name.as_bytes().to_vec();
+    message.extend_from_slice(material);
+    crate::sha2::sha256(&message)[0..8].to_vec()
+}
+
+/// The **key of the file**, worked out from the passwords and from the
+/// file itself.
+fn the_key(name: &str, material: &[u8]) -> Vec<u8> {
+    let mut message: Vec<u8> = name.as_bytes().to_vec();
+    message.extend_from_slice(material);
+    crate::sha2::sha256(&message)[0..KEY].to_vec()
+}
+
+/// **Make** the entries of a file of revision six.
+///
+/// The **seed** is what the file is made of — the numbers of its
+/// objects — and it is beside the passwords in everything that is
+/// worked out.
+pub fn make_of_revision_six(
+    user: &str,
+    owner: &str,
+    permissions: i64,
+    encrypt_metadata: bool,
+    seed: &[u8],
+    command: &str,
+) -> Result<Made, EngineError> {
+    let user_bytes = password_bytes(user, command)?;
+    let owner_bytes = password_bytes(owner, command)?;
+    // The **material** everything is worked out from.
+    let mut material: Vec<u8> = Vec::new();
+    material.extend_from_slice(&user_bytes);
+    material.extend_from_slice(&owner_bytes);
+    material.extend_from_slice(seed);
+    // The **key of the file**.
+    let key = the_key("the key of the file", &material);
+    // The **salts**.
+    let user_validation = eight("the user's validation salt", &material);
+    let user_salt = eight("the user's key salt", &material);
+    let owner_validation = eight("the owner's validation salt", &material);
+    let owner_salt = eight("the owner's key salt", &material);
+    // The **user's entry** and the user's encrypted entry.
+    let mut input: Vec<u8> = user_bytes.clone();
+    input.extend_from_slice(&user_validation);
+    let hash = hash_of_revision_six(&user_bytes, &input, None);
+    let mut user_entry: Vec<u8> = hash.to_vec();
+    user_entry.extend_from_slice(&user_validation);
+    user_entry.extend_from_slice(&user_salt);
+    let mut input: Vec<u8> = user_bytes.clone();
+    input.extend_from_slice(&user_salt);
+    let intermediate = hash_of_revision_six(&user_bytes, &input, None);
+    let user_encrypted = crate::aes::encrypt_raw(&intermediate, &[0_u8; VECTOR], &key);
+    // The **owner's entry** and the owner's encrypted entry: the
+    // user's entry is beside them.
+    let mut input: Vec<u8> = owner_bytes.clone();
+    input.extend_from_slice(&owner_validation);
+    input.extend_from_slice(&user_entry);
+    let hash = hash_of_revision_six(&owner_bytes, &input, Some(&user_entry));
+    let mut owner_entry: Vec<u8> = hash.to_vec();
+    owner_entry.extend_from_slice(&owner_validation);
+    owner_entry.extend_from_slice(&owner_salt);
+    let mut input: Vec<u8> = owner_bytes.clone();
+    input.extend_from_slice(&owner_salt);
+    input.extend_from_slice(&user_entry);
+    let intermediate = hash_of_revision_six(&owner_bytes, &input, Some(&user_entry));
+    let owner_encrypted = crate::aes::encrypt_raw(&intermediate, &[0_u8; VECTOR], &key);
+    // The **permissions**: the bits of the file, whether the metadata
+    // is scrambled, the three letters that say that this is a file of
+    // this handler, and four bytes that are ignored.
+    let mut block = [0_u8; 16];
+    let mut bits = permissions as u32;
+    bits |= 0xffff_ffff;
+    block[0..4].copy_from_slice(&bits.to_le_bytes());
+    block[4..8].copy_from_slice(&[0xff, 0xff, 0xff, 0xff]);
+    block[8] = if encrypt_metadata { b'T' } else { b'F' };
+    block[9..12].copy_from_slice(b"adb");
+    let permissions = crate::aes::encrypt_ecb(&key, &block);
+    Ok(Made { owner: owner_entry, user: user_entry, owner_encrypted, user_encrypted, permissions, key })
+}

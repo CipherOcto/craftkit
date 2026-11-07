@@ -345,97 +345,181 @@ impl EncryptFile {
             Some(owner) => owner.0.as_bytes().to_vec(),
             None => password.clone(),
         };
+        // The **owner** as text: the handler of revision six takes a
+        // password as it is written, and not as bytes.
+        let owner_text = match &self.owner {
+            Some(owner) => owner.0.clone(),
+            None => self.password.0.clone(),
+        };
         // The **cipher**: how the streams are scrambled. The strings
-        // are always scrambled with RC4.
-        let aes = match self.cipher.as_ref().map(|cipher| cipher.0.trim().to_lowercase()) {
+        // are always scrambled with RC4 — until the handler of
+        // revision six, where everything is scrambled with AES-256.
+        let cipher = self.cipher.as_ref().map(|cipher| cipher.0.trim().to_lowercase());
+        let revision_six = matches!(cipher.as_deref(), Some("aes-256") | Some("aes256"));
+        let aes = match cipher.as_deref() {
             None => false,
-            Some(cipher) if cipher == "rc4" => false,
-            Some(cipher) if cipher == "aes" || cipher == "aes-128" => true,
+            Some("rc4") => false,
+            Some("aes") | Some("aes-128") => true,
+            Some("aes-256") | Some("aes256") => true,
             Some(other) => {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("there is no cipher `{other}`: the ciphers are rc4 and aes"),
+                    message: format!("there is no cipher `{other}`: the ciphers are rc4, aes and aes-256"),
                 });
             }
         };
         // The **revision** of the scheme and the **length** of its key
         // follow the cipher.
-        let revision = if aes { AES_REVISION } else { RC4_REVISION };
-        let length_bits = if aes { AES_LENGTH_BITS } else { RC4_LENGTH_BITS };
+        let revision = if revision_six {
+            SIX_REVISION
+        } else if aes {
+            AES_REVISION
+        } else {
+            RC4_REVISION
+        };
+        let length_bits = if revision_six {
+            SIX_LENGTH_BITS
+        } else if aes {
+            AES_LENGTH_BITS
+        } else {
+            RC4_LENGTH_BITS
+        };
         // The **identifier** of the file: sixteen bytes, and they are
         // worked out from the passwords and from the numbers of the
         // objects, so that the same file and the same password always
         // make the same file.
         let identifier = identifier_of(&password, &owner, &objects, root);
-        // The **owner's entry**: the user's password under the owner's
-        // own key.
-        let owner_entry = crate::crypt::owner_entry(&owner, &password, revision, length_bits);
-        // The **key of the file**, and the **user's entry** it makes.
-        let scheme = crate::crypt::Scheme {
-            number: 0,
-            revision,
-            length_bits,
-            permissions: PERMISSIONS,
-            encrypt_metadata: true,
-            strings: "rc4".to_string(),
-            streams: if aes { "aes-128".to_string() } else { "rc4".to_string() },
-            owner: owner_entry.clone(),
-            user: Vec::new(),
-            identifier: identifier.clone(),
-            owner_encrypted: Vec::new(),
-            user_encrypted: Vec::new(),
-            permissions_block: Vec::new(),
-        };
-        let key = crate::crypt::file_key(&password, &scheme);
-        let user_entry = crate::crypt::user_entry_written(&key, &identifier, revision);
         // The **encryption** is an object of the file of its own, and
         // its own words are not scrambled.
         let number = crate::free::the_next_number(document, 0);
-        let mut entries: Vec<(String, Json)> = vec![
-            ("Filter".to_string(), Json::String("Standard".to_string())),
-            ("V".to_string(), Json::Number((if aes { 4 } else { 1 }).into())),
-            ("R".to_string(), Json::Number((revision).into())),
-            ("Length".to_string(), Json::Number((length_bits).into())),
-            ("P".to_string(), Json::Number((PERMISSIONS).into())),
-        ];
-        if aes {
-            // The **crypt filters**: the way the streams are scrambled
-            // and the way the strings are scrambled, and which of the
-            // two is used for what.
-            entries.push(("EncryptMetadata".to_string(), Json::Bool(true)));
-            entries.push(("CF".to_string(), aes_filters()));
-            entries.push(("StmF".to_string(), Json::String("StdCF".to_string())));
-            entries.push(("StrF".to_string(), Json::String("RW".to_string())));
-        }
-        entries.push(("O".to_string(), text_of(&owner_entry)));
-        entries.push(("U".to_string(), text_of(&user_entry)));
-        objects.push(crate::writer::Object { number, entries, stream: None });
-        // The **objects** are scrambled under the key of each one.
         let mut streams = 0usize;
-        for object in objects.iter_mut() {
-            if object.number == number {
-                continue;
+        if revision_six {
+            // The **seed**: the numbers of the objects, beside the
+            // passwords in everything that is worked out, so that the
+            // same file and the same passwords always make the same
+            // file.
+            let mut seed: Vec<u8> = Vec::new();
+            for object in &objects {
+                seed.extend_from_slice(&(object.number as u32).to_le_bytes());
             }
-            let object_key = crate::crypt::object_key(&key, object.number, 0, false);
-            object.entries = object
-                .entries
-                .iter()
-                .map(|(name, value)| (name.clone(), crate::crypt::scrambled(value, &object_key)))
-                .collect();
-            if let Some(bytes) = &object.stream {
-                streams += 1;
-                object.stream = Some(if aes {
-                    // The key of an **AES** object is salted, and the
-                    // **vector** the blocks are chained from is the
-                    // first sixteen bytes of the stream.
-                    let stream_key = crate::crypt::object_key(&key, object.number, 0, true);
-                    let vector = vector_of(&stream_key, object.number);
+            let made = crate::revision6::make_of_revision_six(
+                &self.password.0,
+                &owner_text,
+                PERMISSIONS,
+                true,
+                &seed,
+                &id,
+            )?;
+            let entries: Vec<(String, Json)> = vec![
+                ("Filter".to_string(), Json::String("Standard".to_string())),
+                ("V".to_string(), Json::Number((5).into())),
+                ("R".to_string(), Json::Number((SIX_REVISION).into())),
+                ("Length".to_string(), Json::Number((SIX_LENGTH_BITS).into())),
+                ("P".to_string(), Json::Number((PERMISSIONS).into())),
+                ("EncryptMetadata".to_string(), Json::Bool(true)),
+                ("CF".to_string(), six_filters()),
+                ("StmF".to_string(), Json::String("StdCF".to_string())),
+                ("StrF".to_string(), Json::String("StdCF".to_string())),
+                ("O".to_string(), text_of(&made.owner)),
+                ("U".to_string(), text_of(&made.user)),
+                ("OE".to_string(), text_of(&made.owner_encrypted)),
+                ("UE".to_string(), text_of(&made.user_encrypted)),
+                ("Perms".to_string(), text_of(&made.permissions)),
+            ];
+            objects.push(crate::writer::Object { number, entries, stream: None });
+            // The **objects** are scrambled with the key of the file:
+            // every object has that key, and there is no key of an
+            // object here.
+            for object in objects.iter_mut() {
+                if object.number == number {
+                    continue;
+                }
+                let mut counter: u64 = 0;
+                object.entries = object
+                    .entries
+                    .iter()
+                    .map(|(name, value)| {
+                        (name.clone(), scrambled_with_aes_made(value, &made.key, object.number, &mut counter))
+                    })
+                    .collect();
+                if let Some(bytes) = &object.stream {
+                    streams += 1;
+                    // The **vector**: the first sixteen bytes of the
+                    // stream are the vector the blocks are chained
+                    // from.
+                    let vector = vector_of_revision_six(&made.key, object.number, b"stream");
                     let mut body = vector.clone();
-                    body.extend_from_slice(&crate::aes::encrypt(&stream_key, &vector, bytes));
-                    body
-                } else {
-                    crate::crypt::rc4(&object_key, bytes)
-                });
+                    body.extend_from_slice(&crate::aes::encrypt(&made.key, &vector, bytes));
+                    object.stream = Some(body);
+                }
+            }
+        } else {
+            // The **owner's entry**: the user's password under the owner's
+            // own key.
+            let owner_entry = crate::crypt::owner_entry(&owner, &password, revision, length_bits);
+            // The **key of the file**, and the **user's entry** it makes.
+            let scheme = crate::crypt::Scheme {
+                number: 0,
+                revision,
+                length_bits,
+                permissions: PERMISSIONS,
+                encrypt_metadata: true,
+                strings: "rc4".to_string(),
+                streams: if aes { "aes-128".to_string() } else { "rc4".to_string() },
+                owner: owner_entry.clone(),
+                user: Vec::new(),
+                identifier: identifier.clone(),
+                owner_encrypted: Vec::new(),
+                user_encrypted: Vec::new(),
+                permissions_block: Vec::new(),
+            };
+            let key = crate::crypt::file_key(&password, &scheme);
+            let user_entry = crate::crypt::user_entry_written(&key, &identifier, revision);
+            let mut entries: Vec<(String, Json)> = vec![
+                ("Filter".to_string(), Json::String("Standard".to_string())),
+                ("V".to_string(), Json::Number((if aes { 4 } else { 1 }).into())),
+                ("R".to_string(), Json::Number((revision).into())),
+                ("Length".to_string(), Json::Number((length_bits).into())),
+                ("P".to_string(), Json::Number((PERMISSIONS).into())),
+            ];
+            if aes {
+                // The **crypt filters**: the way the streams are scrambled
+                // and the way the strings are scrambled, and which of the
+                // two is used for what.
+                entries.push(("EncryptMetadata".to_string(), Json::Bool(true)));
+                entries.push(("CF".to_string(), aes_filters()));
+                entries.push(("StmF".to_string(), Json::String("StdCF".to_string())));
+                entries.push(("StrF".to_string(), Json::String("RW".to_string())));
+            }
+            entries.push(("O".to_string(), text_of(&owner_entry)));
+            entries.push(("U".to_string(), text_of(&user_entry)));
+            objects.push(crate::writer::Object { number, entries, stream: None });
+            // The **objects** are scrambled under the key of each one.
+            for object in objects.iter_mut() {
+                if object.number == number {
+                    continue;
+                }
+                let object_key = crate::crypt::object_key(&key, object.number, 0, false);
+                object.entries = object
+                    .entries
+                    .iter()
+                    .map(|(name, value)| (name.clone(), crate::crypt::scrambled(value, &object_key)))
+                    .collect();
+                if let Some(bytes) = &object.stream {
+                    streams += 1;
+                    object.stream = Some(if aes {
+                        // The key of an **AES** object is salted, and the
+                        // **vector** the blocks are chained from is the
+                        // first sixteen bytes of the stream.
+                        let stream_key = crate::crypt::object_key(&key, object.number, 0, true);
+                        let vector = vector_of(&stream_key, object.number);
+                        let mut body = vector.clone();
+                        body.extend_from_slice(&crate::aes::encrypt(&stream_key, &vector, bytes));
+                        body
+                    } else {
+                        crate::crypt::rc4(&object_key, bytes)
+                    });
+                }
             }
         }
         let free = crate::free::the_free(document);
@@ -477,6 +561,14 @@ const AES_REVISION: i64 = 4;
 /// The **length** of the key of a file scrambled with AES, in bits.
 const AES_LENGTH_BITS: i64 = 128;
 
+/// The **revision** of the scheme a file of the handler of revision
+/// six holds.
+const SIX_REVISION: i64 = 6;
+
+/// The **length** of the key of a file of the handler of revision six,
+/// in bits.
+const SIX_LENGTH_BITS: i64 = 256;
+
 /// The **crypt filters** of a file scrambled with AES: the way the
 /// streams are scrambled, and the way the strings are scrambled.
 ///
@@ -517,6 +609,84 @@ fn vector_of(key: &[u8], number: u64) -> Vec<u8> {
     let mut message: Vec<u8> = key.to_vec();
     message.extend_from_slice(&(number as u32).to_le_bytes());
     crate::crypt::md5(&message).to_vec()
+}
+
+/// The **vector** of the handler of revision six: sixteen bytes, and
+/// it is worked out from the key of the file, from the number of the
+/// object and from what it is for — so that the strings of an object
+/// and its stream are not chained from the same vector.
+fn vector_of_revision_six(key: &[u8], number: u64, what: &[u8]) -> Vec<u8> {
+    let mut message: Vec<u8> = key.to_vec();
+    message.extend_from_slice(&(number as u32).to_le_bytes());
+    message.extend_from_slice(what);
+    crate::crypt::md5(&message).to_vec()
+}
+
+/// The **crypt filters** of a file of the handler of revision six: one
+/// way of scrambling, and it is used for the streams and for the
+/// strings alike.
+fn six_filters() -> Json {
+    json!({
+        "entries": [
+            [
+                "StdCF",
+                { "entries": [
+                    ["Type", "CryptFilter"],
+                    ["CFM", "AESV3"],
+                    ["AuthEvent", "DocOpen"],
+                    ["Length", 32],
+                ] },
+            ],
+        ],
+    })
+}
+
+/// The **value** with its strings scrambled with **AES**.
+///
+/// The strings of a file of the handler of revision six are scrambled
+/// with AES-256 in CBC mode, and the first sixteen bytes of the
+/// string are the vector the blocks are chained from.
+fn scrambled_with_aes_made(value: &Json, key: &[u8], number: u64, counter: &mut u64) -> Json {
+    match value {
+        Json::Object(map) => {
+            if let Some(Json::String(text)) = map.get("string") {
+                let bytes: Vec<u8> = text.chars().map(|character| character as u32 as u8).collect();
+                let vector = vector_of_revision_six(key, number, &counter.to_le_bytes());
+                *counter += 1;
+                let mut body = vector.clone();
+                body.extend_from_slice(&crate::aes::encrypt(key, &vector, &bytes));
+                let text: String = body.iter().map(|byte| *byte as char).collect();
+                let mut out = craftkit_sdk::serde_json::Map::new();
+                out.insert("string".to_string(), Json::String(text));
+                return Json::Object(out);
+            }
+            if let Some(Json::Array(pairs)) = map.get("entries") {
+                let mut out = craftkit_sdk::serde_json::Map::new();
+                let pairs: Vec<Json> = pairs
+                    .iter()
+                    .map(|pair| match pair.as_array() {
+                        Some(pair) => Json::Array(
+                            pair.iter()
+                                .map(|item| scrambled_with_aes_made(item, key, number, counter))
+                                .collect(),
+                        ),
+                        None => pair.clone(),
+                    })
+                    .collect();
+                out.insert("entries".to_string(), Json::Array(pairs));
+                return Json::Object(out);
+            }
+            let mut out = craftkit_sdk::serde_json::Map::new();
+            for (name, item) in map {
+                out.insert(name.clone(), scrambled_with_aes_made(item, key, number, counter));
+            }
+            Json::Object(out)
+        }
+        Json::Array(items) => Json::Array(
+            items.iter().map(|item| scrambled_with_aes_made(item, key, number, counter)).collect(),
+        ),
+        other => other.clone(),
+    }
 }
 
 /// The **permissions** of the file: every right there is.

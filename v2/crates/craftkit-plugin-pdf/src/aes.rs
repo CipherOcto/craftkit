@@ -271,6 +271,27 @@ pub fn decrypt_ecb(key: &[u8], bytes: &[u8]) -> Vec<u8> {
     out
 }
 
+/// The **encryption** of bytes under AES in ECB mode, and **no
+/// padding**: every block stands alone.
+pub fn encrypt_ecb(key: &[u8], bytes: &[u8]) -> Vec<u8> {
+    if !is_a_key(key) {
+        return Vec::new();
+    }
+    let table = box_of();
+    let keys = round_keys(key, &table);
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    for chunk in bytes.chunks(BLOCK) {
+        if chunk.len() < BLOCK {
+            break;
+        }
+        let mut block: State = [0; BLOCK];
+        block.copy_from_slice(chunk);
+        let cipher = encrypt_block(&keys, &block, &table);
+        out.extend_from_slice(&cipher);
+    }
+    out
+}
+
 /// **Shift** the rows of the state.
 fn shift_rows(state: &mut State) {
     let original = *state;
