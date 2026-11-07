@@ -239,12 +239,17 @@ impl GetPage {
         let colour = background.as_ref().and_then(|node| crate::background::background_of(node));
         let watermark = background.as_ref().and_then(|node| crate::background::watermark_of(node));
         let borders = background.as_ref().and_then(|node| crate::borders::borders_of(node));
+        // The **columns** of the page: how many there are, the space
+        // between them, the line that may be drawn down the middle,
+        // and the width of a column, which is derived.
+        let columns = background.as_ref().map(|node| crate::columns::columns_of(node));
         Ok(Outcome::new(format!("the page of the document `{document}`")).with_data(json!({
             "document": document,
             "page": stored,
             "colour": colour,
             "watermark": watermark,
             "borders": borders,
+            "columns": columns,
         })))
     }
 }

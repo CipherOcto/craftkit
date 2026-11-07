@@ -110,6 +110,7 @@ mod background;
 mod bookmarks;
 mod borders;
 mod characters;
+mod columns;
 mod comments;
 pub mod contrast;
 mod editing;
@@ -141,6 +142,7 @@ pub use background::{SetBackground, SetWatermark};
 pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
 pub use borders::SetBorders;
 pub use characters::FormatRun;
+pub use columns::SetColumns;
 pub use comments::{DeleteComment, GetComment, SetComment};
 pub use editing::{
     MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
@@ -1069,6 +1071,7 @@ craftkit_sdk::plugin_anchor!(
     PutOnStyle,
     SetRuns,
     SetProperties,
+    SetColumns,
     AddField,
     SetField,
     ReadFields,
