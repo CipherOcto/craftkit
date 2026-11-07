@@ -38,10 +38,13 @@
 //!   of the media and warns. Here it is **refused**: a list that
 //!   names a source that is not there is a list that is wrong;
 //! - a clip with **no item** has no reel and no source, and the list
-//!   is refused;
+//!   is refused — unless it is a **nested clip**, which has no tape
+//!   and no file: its reel is `AX`, the tree's own rule, and its name
+//!   is written in a comment;
 //! - the **reel** is the name of the item, in **eight characters** —
 //!   the tree's rule — with everything that is not a letter or a digit
-//!   turned into an underscore.
+//!   turned into an underscore. A **nested clip** has no item, and its
+//!   reel is `AX` and its name is in a comment.
 
 use craftkit_derive::Command;
 
@@ -82,6 +85,31 @@ fn reel_of(name: &str) -> String {
     }
     let reel = reel.trim_matches('_').to_string();
     if reel.is_empty() { "REEL".to_string() } else { reel }
+}
+
+/// The **reel** of a clip: the name of its item, in eight
+/// characters — or `AX` for a **nested clip**, which has no tape and
+/// no file, the tree's own rule.
+fn the_reel(document: &craftkit_sdk::Document, clip: &Node, id: &str) -> Result<String, EngineError> {
+    if clip.data.get("nested").and_then(|nested| nested.as_bool()).unwrap_or(false) {
+        return Ok("AX".to_string());
+    }
+    let Some(item) = item_of(document, clip.id) else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the clip `{}` has no item, and it has no reel", clip.name),
+        });
+    };
+    Ok(reel_of(&item.name))
+}
+
+/// The **comment** of a clip: the name of a nested clip, whose reel
+/// is `AX` and says nothing of it.
+fn the_comment(clip: &Node) -> Option<String> {
+    if clip.data.get("nested").and_then(|nested| nested.as_bool()).unwrap_or(false) {
+        return Some(format!("* FROM CLIP NAME: {}", clip.name));
+    }
+    None
 }
 
 /// The **channel** of a track: `V` for a video track, and the tree's
@@ -219,12 +247,10 @@ impl ExportEdl {
                 track.children.iter().filter(|child| child.kind == "film.clip").collect();
             clips.sort_by_key(|clip| start_of(clip));
             for clip in &clips {
-                let Some(item) = item_of(document, clip.id) else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the clip `{}` has no item, and it has no reel", clip.name),
-                    });
-                };
+                // The **reel** of the clip, and the **comment** that
+                // says which clip it is when the reel does not.
+                let reel = the_reel(document, clip, &id)?;
+                let comment = the_comment(clip);
                 let start = start_of(clip);
                 let duration = clip.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
                 let source_in = source_of(clip);
@@ -256,12 +282,7 @@ impl ExportEdl {
                             message: format!("the clip `{}` has no item, and it has no reel", clip.name),
                         });
                     };
-                    let Some(outgoing_item) = item_of(document, outgoing.id) else {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: format!("the clip `{}` has no item, and it has no reel", outgoing.name),
-                        });
-                    };
+                    let outgoing_reel = the_reel(document, outgoing, &id)?;
                     // The **cut**: the source of the outgoing clip at
                     // the cut, and the source of the incoming one.
                     let cut_source = source_of(outgoing) + into.start.saturating_sub(start_of(outgoing));
@@ -270,9 +291,12 @@ impl ExportEdl {
                     // The **first line** is the cut itself: the
                     // outgoing clip, a cut of no length at the point
                     // the dissolve begins.
+                    if let Some(comment) = &comment {
+                        lines.push(comment.clone());
+                    }
                     lines.push(format!(
                         "{number:03}  {:<MAX_REEL$} {:<4} {:<8} {} {} {} {}",
-                        reel_of(&outgoing_item.name),
+                        outgoing_reel,
                         channel,
                         "C",
                         timecode(cut_source, per_second),
@@ -284,7 +308,7 @@ impl ExportEdl {
                     // incoming clip, and how long the dissolve is.
                     lines.push(format!(
                         "{number:03}  {:<MAX_REEL$} {:<4} {:<4} {:<3} {} {} {} {}",
-                        reel_of(&item.name),
+                        reel,
                         channel,
                         "D",
                         format!("{:03}", into.duration),
@@ -296,9 +320,12 @@ impl ExportEdl {
                     continue;
                 }
                 number += 1;
+                if let Some(comment) = &comment {
+                    lines.push(comment.clone());
+                }
                 lines.push(format!(
                     "{number:03}  {:<MAX_REEL$} {:<4} {:<8} {} {} {} {}",
-                    reel_of(&item.name),
+                    reel,
                     channel,
                     "C",
                     timecode(source_in, per_second),
