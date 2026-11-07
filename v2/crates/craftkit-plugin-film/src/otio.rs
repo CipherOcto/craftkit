@@ -24,13 +24,18 @@
 //! - a **clip** says where in its source it begins and how long it is,
 //!   and it points at the media it plays;
 //! - the **markers** of the sequence are on the stack of the tracks;
+//! - a **nested clip** — a clip that holds other clips — is a stack of
+//!   the tracks it holds;
 //! - the **times** are rational: a rate and a value, and the value is
 //!   the number of frames.
 //!
 //! The rules:
 //!
 //! - a clip with **no item** is refused: the text would point at a
-//!   source that is not there;
+//!   source that is not there — unless it is a **nested clip**, which
+//!   plays no media of its own;
+//! - a **nested clip** is a `Stack` of the tracks it holds, and the
+//!   tracks are written in full: OTIO has no references;
 //! - a clip that is **retimed** carries a `LinearTimeWarp`, and a
 //!   clip that is **held** carries a `FreezeFrame`.
 //!
@@ -214,6 +219,124 @@ fn effects_of(clip: &Node) -> Vec<Json> {
     Vec::new()
 }
 
+/// The **track** as OTIO writes it: its clips, with a **gap** for
+/// every hole between them and a **transition** for every dissolve.
+fn track_of(
+    document: &craftkit_sdk::Document,
+    track: &Node,
+    rate: (i64, i64),
+    id: &str,
+) -> Result<Json, EngineError> {
+    let audio = is_audio(track);
+    let transitions = transitions_of(track);
+    let mut children: Vec<Json> = Vec::new();
+    let mut at = 0u64;
+    for clip in clips_of(track) {
+        let start = clip.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
+        let duration = clip.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
+        if start > at {
+            children.push(json!({
+                "OTIO_SCHEMA": "Gap.1",
+                "name": "",
+                "source_range": range(0, start - at, rate),
+                "effects": Vec::<Json>::new(),
+                "markers": Vec::<Json>::new(),
+                "enabled": true,
+                "metadata": {},
+            }));
+        }
+        for transition in transitions.iter().filter(|transition| transition.to == clip.id) {
+            let cut = start;
+            children.push(json!({
+                "OTIO_SCHEMA": "Transition.1",
+                "name": transition.name,
+                "transition_type": "SMPTE_Dissolve",
+                "in_offset": time(cut.saturating_sub(transition.start), rate),
+                "out_offset": time((transition.start + transition.duration).saturating_sub(cut), rate),
+                "metadata": {},
+            }));
+        }
+        // A **nested clip** is a stack of the tracks it holds, and it
+        // plays no media of its own.
+        if clip.data.get("nested").and_then(|nested| nested.as_bool()).unwrap_or(false) {
+            children.push(stack_of(document, clip.as_ref(), rate, id)?);
+        } else {
+            let Some(item) = item_of(document, clip.id) else {
+                return Err(EngineError::Failed {
+                    id: id.to_string(),
+                    message: format!("the clip `{}` has no item, and it has no source", clip.name),
+                });
+            };
+            let source_in = clip.data.get("source_in").and_then(|source| source.as_u64()).unwrap_or(0);
+            let enabled = clip.data.get("enabled").and_then(|enabled| enabled.as_bool()).unwrap_or(true);
+            children.push(json!({
+                "OTIO_SCHEMA": "Clip.2",
+                "name": clip.name,
+                "source_range": range(source_in, duration, rate),
+                "effects": effects_of(&clip),
+                "markers": Vec::<Json>::new(),
+                "enabled": enabled,
+                "media_references": { "DEFAULT_MEDIA": reference_of(&item, rate) },
+                "active_media_reference_key": "DEFAULT_MEDIA",
+                "metadata": {},
+            }));
+        }
+        for transition in
+            transitions.iter().filter(|transition| transition.from == clip.id && transition.to != clip.id)
+        {
+            let cut = start + duration;
+            children.push(json!({
+                "OTIO_SCHEMA": "Transition.1",
+                "name": transition.name,
+                "transition_type": "SMPTE_Dissolve",
+                "in_offset": time(cut.saturating_sub(transition.start), rate),
+                "out_offset": time((transition.start + transition.duration).saturating_sub(cut), rate),
+                "metadata": {},
+            }));
+        }
+        at = start + duration;
+    }
+    let enabled = track.data.get("enabled").and_then(|enabled| enabled.as_bool()).unwrap_or(true);
+    Ok(json!({
+        "OTIO_SCHEMA": "Track.1",
+        "name": track.name,
+        "kind": if audio { "Audio" } else { "Video" },
+        "children": children,
+        "source_range": Json::Null,
+        "effects": Vec::<Json>::new(),
+        "markers": Vec::<Json>::new(),
+        "enabled": enabled,
+        "metadata": {},
+    }))
+}
+
+/// The **stack** of a nested clip: the tracks it holds, written in
+/// full, because OTIO has no references.
+fn stack_of(
+    document: &craftkit_sdk::Document,
+    clip: &Node,
+    rate: (i64, i64),
+    id: &str,
+) -> Result<Json, EngineError> {
+    let mut children: Vec<Json> = Vec::new();
+    for track in clip.children.iter().filter(|child| child.kind == "film.track") {
+        children.push(track_of(document, track.as_ref(), rate, id)?);
+    }
+    let source_in = clip.data.get("source_in").and_then(|source| source.as_u64()).unwrap_or(0);
+    let duration = clip.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
+    let enabled = clip.data.get("enabled").and_then(|enabled| enabled.as_bool()).unwrap_or(true);
+    Ok(json!({
+        "OTIO_SCHEMA": "Stack.1",
+        "name": clip.name,
+        "children": children,
+        "source_range": range(source_in, duration, rate),
+        "effects": Vec::<Json>::new(),
+        "markers": Vec::<Json>::new(),
+        "enabled": enabled,
+        "metadata": {},
+    }))
+}
+
 /// The **text** of the OTIO of a sequence.
 ///
 /// The text is derived from the sequence as it is now, and it is
@@ -245,82 +368,7 @@ impl ExportOtio {
         let document = session.document();
         let mut tracks: Vec<Json> = Vec::new();
         for track in tracks_of(&node) {
-            let audio = is_audio(track.as_ref());
-            let transitions = transitions_of(track.as_ref());
-            let mut children: Vec<Json> = Vec::new();
-            let mut at = 0u64;
-            for clip in clips_of(track.as_ref()) {
-                let start = clip.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
-                let duration = clip.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
-                if start > at {
-                    children.push(json!({
-                        "OTIO_SCHEMA": "Gap.1",
-                        "name": "",
-                        "source_range": range(0, start - at, rate),
-                        "effects": Vec::<Json>::new(),
-                        "markers": Vec::<Json>::new(),
-                        "enabled": true,
-                        "metadata": {},
-                    }));
-                }
-                for transition in transitions.iter().filter(|transition| transition.to == clip.id) {
-                    let cut = start;
-                    children.push(json!({
-                        "OTIO_SCHEMA": "Transition.1",
-                        "name": transition.name,
-                        "transition_type": "SMPTE_Dissolve",
-                        "in_offset": time(cut.saturating_sub(transition.start), rate),
-                        "out_offset": time((transition.start + transition.duration).saturating_sub(cut), rate),
-                        "metadata": {},
-                    }));
-                }
-                let Some(item) = item_of(document, clip.id) else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the clip `{}` has no item, and it has no source", clip.name),
-                    });
-                };
-                let source_in = clip.data.get("source_in").and_then(|source| source.as_u64()).unwrap_or(0);
-                let enabled = clip.data.get("enabled").and_then(|enabled| enabled.as_bool()).unwrap_or(true);
-                children.push(json!({
-                    "OTIO_SCHEMA": "Clip.2",
-                    "name": clip.name,
-                    "source_range": range(source_in, duration, rate),
-                    "effects": effects_of(&clip),
-                    "markers": Vec::<Json>::new(),
-                    "enabled": enabled,
-                    "media_references": { "DEFAULT_MEDIA": reference_of(&item, rate) },
-                    "active_media_reference_key": "DEFAULT_MEDIA",
-                    "metadata": {},
-                }));
-                for transition in transitions
-                    .iter()
-                    .filter(|transition| transition.from == clip.id && transition.to != clip.id)
-                {
-                    let cut = start + duration;
-                    children.push(json!({
-                        "OTIO_SCHEMA": "Transition.1",
-                        "name": transition.name,
-                        "transition_type": "SMPTE_Dissolve",
-                        "in_offset": time(cut.saturating_sub(transition.start), rate),
-                        "out_offset": time((transition.start + transition.duration).saturating_sub(cut), rate),
-                        "metadata": {},
-                    }));
-                }
-                at = start + duration;
-            }
-            let enabled = track.data.get("enabled").and_then(|enabled| enabled.as_bool()).unwrap_or(true);
-            tracks.push(json!({
-                "OTIO_SCHEMA": "Track.1",
-                "name": track.name,
-                "kind": if audio { "Audio" } else { "Video" },
-                "children": children,
-                "source_range": Json::Null,
-                "effects": Vec::<Json>::new(),
-                "markers": Vec::<Json>::new(),
-                "enabled": enabled,
-                "metadata": {},
-            }));
+            tracks.push(track_of(document, track.as_ref(), rate, &id)?);
         }
         let markers: Vec<Json> = markers_of(&node)
             .iter()

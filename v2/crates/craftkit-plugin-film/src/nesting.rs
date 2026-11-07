@@ -33,7 +33,8 @@
 //!   along; here the gap is a gap, and the tree's own commands for
 //!   gaps and for rippling are there to close it.
 //! - **A nested clip is not a sequence.** It has no item of its own,
-//!   and it is not written out.
+//!   and it is written out as a **stack** of the tracks it holds
+//!   (§1367).
 
 use craftkit_derive::Command;
 
