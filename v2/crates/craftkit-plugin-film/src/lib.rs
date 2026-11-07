@@ -234,6 +234,7 @@ mod trackremoval;
 mod tracks;
 mod transitions;
 mod trim;
+mod workarea;
 
 pub use anchors::SynchroniseClip;
 pub use binreading::ReadBin;
