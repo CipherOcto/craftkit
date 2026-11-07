@@ -4022,6 +4022,7 @@ so.
 | the **directories** of a test | **fixed.** The tests of one file no longer share a directory — every call makes a directory of its own, so that two tests beside each other do not take away each other's file (§585) | §585 |
 | the **nested clip** of a sequence | **built.** The clips of a sequence may be nested — a clip that holds a little timeline of its own, and that may be taken apart again (§586) | §586 |
 | the **work area** of a sequence | **built.** A sequence may have a work area — the range the editor is working in, and it may be taken away again (§587) | §587 |
+| the **playhead** and the **markers** | **built.** The playhead of a sequence moves to the marker that is next, and to the marker before it — and it does not move when there is none (§588) | §588 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38341,3 +38342,56 @@ in: an in point and an out point. The tree's work area.
   tree's work area bar is not here.
 - **The work area is not written out**: the tree saves it with the
   project, and this tree has no project file of its own.
+
+## 588. The playhead and the markers
+
+The tree's `markers.goNext` and `markers.goPrev`: the playhead goes to
+the marker that is next, and to the one before.
+
+### What was built
+
+- The new command **`film.marker.next`** moves the playhead of a
+  sequence to the **next** marker: the first marker that is after the
+  frame the playhead is at.
+- The new command **`film.marker.previous`** moves it to the **marker
+  before**: the last marker that is before the frame the playhead is
+  at.
+- A sequence with **no** marker after the playhead is **refused**,
+  and so is a sequence with no marker before it — and the playhead
+  does not move when the move is refused.
+- The markers are the **sequence's own**, and the playhead of one
+  sequence is not the playhead of another.
+
+### What the port found
+
+- **The tree's playhead is the state of the editor and this one's is a
+  fact of the sequence.** The tree's `markers.goNext` moves the
+  playhead of the editor, and the playhead is gone when the editor is
+  closed. Here the playhead is the sequence's own frame (the module
+  `playhead`), and so the markers and the playhead are both facts of
+  the document and the move is a change of one of them.
+- **The tree's markers are a list on the sequence and this tree's are
+  nodes under it.** The tree sorts its list by the place of each
+  marker; here the markers are nodes and the order is worked out when
+  it is needed.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/markernavigation.rs`):
+  the playhead to the next marker, the playhead to the marker before,
+  a sequence with no marker after, a sequence with no marker before,
+  and the markers of one sequence beside the playhead of another.
+- **Two new commands** (`film.marker.next` and `film.marker.previous`)
+  in the markers module (`src/markers.rs`). The film battery now
+  carries **80** commands and the MCP server **792**.
+- The note in the markers module that said the playhead was not a
+  thing here was **out of date**, and it was corrected: the playhead
+  came to the sequence later, and these two commands are the tree's
+  navigation.
+
+### What it does not settle
+
+- **The tree's other marker commands are not here**: there is no
+  `goToIn`, no `goToOut`, and no going to a marker by its name.
+- **The marker at the playhead's own frame is not the next marker**:
+  the next marker is the first one that is after the playhead.
