@@ -22,8 +22,10 @@
 
 use craftkit_sdk::serde_json::Value as Json;
 
+use crate::filters;
 use crate::free::Free;
 use crate::objects::{self, Error as ObjectsError};
+use crate::predictors;
 use crate::xref::{self, Error as XrefError};
 
 /// Why a file could not be **loaded**.
@@ -140,7 +142,73 @@ pub fn load(bytes: &[u8]) -> Result<File, Error> {
             references,
         });
     }
+    // The **compressed** objects: the ones that live in an object
+    // stream. The table says they are there, and the stream holds
+    // them.
+    let limits = filters::Limits::default();
+    let mut compressed: Vec<Loaded> = Vec::new();
+    for object in &loaded {
+        compressed.extend(compressed_of(object, &limits));
+    }
+    loaded.extend(compressed);
     Ok(File { objects: loaded, free, trailer })
+}
+
+/// The **compressed** objects of an object stream.
+///
+/// An object stream is a stream of the file that holds other objects:
+/// its dictionary says how many there are (`/N`) and where the first
+/// one begins (`/First`), and its bytes are the objects themselves.
+///
+/// A stream that is not an object stream holds no compressed objects,
+/// and a stream that cannot be read holds none that this tree can say.
+fn compressed_of(object: &Loaded, limits: &filters::Limits) -> Vec<Loaded> {
+    let mut out: Vec<Loaded> = Vec::new();
+    if !is_an_object_stream(&object.entries) {
+        return out;
+    }
+    let Some(raw) = &object.stream else { return out };
+    let Some(count) = number_of(&object.entries, "N") else { return out };
+    let Some(first) = number_of(&object.entries, "First") else { return out };
+    let Ok(count) = usize::try_from(count) else { return out };
+    let Ok(first) = usize::try_from(first) else { return out };
+    // The **bytes**: the filter is undone, and then the predictor.
+    let names = filters::filter_of(&object.entries).unwrap_or_default();
+    let Ok(bytes) = filters::decode_named(&names, raw, limits) else { return out };
+    let bytes = match predictors::spec_of(&object.entries) {
+        Ok(Some(spec)) => predictors::undo(&bytes, &spec).unwrap_or(bytes),
+        _ => bytes,
+    };
+    let Ok(objects) = objects::object_stream(&bytes, count, first) else { return out };
+    for object in objects {
+        let mut entries: Vec<(String, Json)> = Vec::new();
+        for (key, value) in objects::pairs_of(&object.value) {
+            // The **kit's** spelling of a key: no slash in front.
+            let key = key.strip_prefix('/').unwrap_or(key.as_str()).to_string();
+            entries.push((key, value));
+        }
+        let mut references: Vec<Reference> = Vec::new();
+        for (key, value) in &entries {
+            references_of(&key.clone(), value, &mut references);
+        }
+        out.push(Loaded { number: object.number, generation: 0, entries, stream: None, references });
+    }
+    out
+}
+
+/// Whether an object is an **object stream**.
+fn is_an_object_stream(entries: &[(String, Json)]) -> bool {
+    entries.iter().any(|(key, value)| key == "Type" && value.as_str() == Some("ObjStm"))
+}
+
+/// The **number** an entry holds.
+fn number_of(entries: &[(String, Json)], key: &str) -> Option<u64> {
+    let (_, value) = entries.iter().find(|(name, _)| name == key)?;
+    let number = value.as_f64()?;
+    if !number.is_finite() || number < 0.0 || number.fract() != 0.0 {
+        return None;
+    }
+    Some(number as u64)
 }
 
 /// The **references** a value holds.
