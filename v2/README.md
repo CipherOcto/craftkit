@@ -4045,6 +4045,7 @@ so.
 | the **nested clip** in the **FCPXML** | **built.** A nested clip is written out as a media that holds a sequence of the tracks it holds, and the clip points at that media (§608) | §608 |
 | the **nested clip** in the **EDL** | **built.** A nested clip has no tape and no file — its reel is `AX`, the tree's own rule, and its name is in a comment (§609) | §609 |
 | the **theme** of a document | **built.** A document may say the fonts of its headings and of its body, and the accent colour — and the theme is derived into every style that says nothing of its own (§610) | §610 |
+| the **numbering** of the pages | **built.** A document may say the format the page numbers are written in and the number the first page has, and the first page's number is derived (§611) | §611 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39996,3 +39997,73 @@ colour** the headings are drawn in.
   the document's page colour, and here the page is its own.
 - **The theme is not in the file**: it is a fact of the document node
   and the file carries it (§602), and nothing reads it but the styles.
+
+## 611. The numbering of the pages
+
+The **format** the page numbers are written in, and the number the
+**first** page has.
+
+### What was built
+
+- The new command **`prose.page.numbers`** says how the pages of a
+  document are numbered:
+  - the **format** is one of the tree's own: `decimal`,
+    `lowerRoman`, `upperRoman`, `lowerLetter` or `upperLetter`;
+  - the **start** is the number the first page has, and it is from
+    **one** to **a hundred thousand**.
+- The **first** page's number is **derived**: it is the start, written
+  in the format — `iv` for a start of four and a format of
+  `lowerRoman`.
+- The numbering is read with the page: `prose.page.get` answers with
+  the format, the start and the first page's number.
+- A part that is **not named** keeps what it was, and a start outside
+  the range is **refused** — the tree clamps it and says nothing.
+- The **number in a format** is now in one place: a small module
+  writes a number in roman numerals or in letters, and the captions
+  (§601) and the page numbers share it.
+
+### What the port found
+
+- **The tree clamps the start and this tree refuses it.** The tree's
+  `layout.pageNumberFormat` takes a start and writes
+  `n.min(100_000)` — a start of a million becomes a hundred
+  thousand, and the tree says nothing. Here a start outside one to a
+  hundred thousand is refused by name, and the numbering is left as it
+  was.
+- **The tree's format is read from the file and this tree's is
+  refused by name.** The tree's `NumFormat::from_ooxml` takes any
+  word and turns it into a format it knows, so a format that is not
+  one of them becomes the default rather than an error. Here the
+  five formats are the list, and a format that is not one of them is
+  refused with the list in the message.
+- **The tree's "the pages number on from the section before" is not
+  here.** The tree's start may be `null`, and that means the numbering
+  goes on from the section before — and this tree has no sections, so
+  there is no section before to go on from. The start here is a
+  number and nothing else.
+- **The tree's numbering belongs to a section and this tree's
+  belongs to a document** — the same answer as the columns (§598) and
+  the borders (§592): a page of a document is a fact of the document.
+
+### What it cost
+
+- **Five tests** in the prose battery (`tests/pagenumbers.rs`): the
+  pages that are numbered in decimal, the first page that is derived
+  in the format, the formats of the tree, the start outside the range,
+  and the format that is not one.
+- **One new command** (`prose.page.numbers`) in a new module
+  (`src/pagenumbers.rs`), and a small shared module
+  (`src/numbers.rs`) that writes a number in a format for the
+  captions and the page numbers alike. The prose battery now carries
+  **99** commands and the MCP server **818**.
+
+### What it does not settle
+
+- **The numbering of a page is not derived**: this tree has no layout,
+  so the number of the second page is not known — only the first
+  page's number is, because it is the start.
+- **The numbering is not of a section**: it is of the document, and a
+  document that needs two sets of page numbers cannot have them.
+- **The numbering is not written into the page's fields**: a `PAGE`
+  field (§596) would show the number of the page it is on, and there
+  is no page to count here.
