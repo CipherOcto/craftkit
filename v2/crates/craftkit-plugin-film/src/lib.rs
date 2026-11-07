@@ -192,6 +192,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+mod ale;
 mod anchors;
 mod binreading;
 mod binremoval;
@@ -236,6 +237,7 @@ mod transitions;
 mod trim;
 mod workarea;
 
+pub use ale::ExportAle;
 pub use anchors::SynchroniseClip;
 pub use binreading::ReadBin;
 pub use binremoval::RemoveBin;
@@ -919,6 +921,7 @@ craftkit_sdk::plugin_anchor!(
     AddTrack,
     AddClip,
     ExportEdl,
+    ExportAle,
     ExportFcpxml,
     ExportOtio,
     ReadTimeline,
