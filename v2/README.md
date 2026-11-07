@@ -4057,6 +4057,7 @@ so.
 | the **messages** of a validation rule | **built.** A rule may say what a host shows when a value does not pass it — the title, the message and the style of the error (§620) | §620 |
 | the **revision** of a document | **built.** A document may say who touched it last and how many times it has been revised — and a revision of zero takes the revision away (§621) | §621 |
 | the **resources** of the MCP server | **built.** The MCP server serves the protocol's other half — the command catalogue and the design, and a template that names one node (§622) | §622 |
+| the **prompts** of the MCP server | **built.** The MCP server serves the protocol's third part — the workflows it offers, with their arguments and their live suggestions (§623) | §623 |
 
 ### The list of things that are honestly not there: empty
 
@@ -40843,3 +40844,80 @@ client that only wanted to *read* had nothing to read with.
   the relations.
 - **A resource is not a command**: nothing here calls a resource, and
   a client that wants a document to change must call a tool.
+
+## 623. The prompts of the MCP server
+
+The protocol has three parts. The server had the first — **tools**,
+which act — and now it has the third: **prompts**, which say.
+
+### What was built
+
+- The server serves the protocol's third part:
+  - `prompts/list` lists every workflow the server offers;
+  - `prompts/get` gives one prompt's message, with its arguments
+    substituted;
+  - `completion/complete` answers what an argument may be — the
+    **suggestions**, filtered by what the caller has typed.
+- A prompt **names a command**, and the message is built from the
+  registry: the id, the label and the description come from the same
+  `CommandSpec` the tools use. A prompt cannot describe a command
+  differently from the tools, because there is only one copy of the
+  description.
+- A prompt whose command is **not in the registry** is **not
+  advertised**: an instruction that names a command the tree does not
+  have is broken, and it is broken silently — the agent follows it and
+  calls something that is not there.
+- The **suggestions** are live: the command ids come from the
+  registry and the node ids from the session, read now. A fixed list
+  would be a copy of the truth, and a copy goes stale the day a node
+  is renamed.
+- The **cap** of a hundred suggestions is applied **after** the
+  filter, so the count the client is told is the count of everything
+  that matched.
+- A **value that looks like a placeholder** is left alone: the
+  template is read once, and what is put in it is not read again.
+- Four prompts: `new-document`, `add-paragraph`, `plan-the-document`
+  and `undo-the-last`.
+- The server also answers the tree's **`shutdown`**: it answers, and
+  the caller stops.
+
+### What the port found
+
+- **The tree's prompts are about its own node graph** — three of them,
+  each one a step of making a design: add a node, set a property, key
+  it over time. This tree's documents are not node graphs, so its
+  prompts name the commands this tree has: two of the core's and two
+  of the prose battery's.
+- **The tree's `prompts/list` advertises every prompt it has.** The
+  tree's prompts name commands that are always there, so the filter
+  never has to run. Here a battery is optional, so a prompt of a
+  battery that is not linked in is **not advertised** — the list holds
+  the prompts whose command is in the registry.
+- **The tree's suggestions come from four catalogues**: the kinds of
+  node, the command ids, the nodes of the design and its **property
+  paths**. This tree's document has no property paths — a node's
+  payload is its own — so there are two catalogues here.
+- **The tree had a bug in the substitution and fixed it.** A caller's
+  value that looked like a placeholder was filled in again, and the
+  registry's own words were substituted into the caller's text. The
+  fix is here from the start: the template is read once.
+
+### What it cost
+
+- **Seven tests** in the MCP crate (`tests/prompts.rs`): the list, the
+  message that comes from the registry, the arguments and their
+  defaults, the prompt that cannot be fetched, the live suggestions,
+  the value that looks like a placeholder, and the shutdown.
+- **One module** (`src/prompts.rs`) and **no new command**: a prompt
+  is not a command. The kit still has **827** commands and the MCP
+  server **827** tools.
+
+### What it does not settle
+
+- **The prompts are few**: four of them, and two of those are about
+  one battery. The tree's three are about the whole of its tree.
+- **The property paths are not a catalogue**: this tree's document has
+  no property paths, so nothing suggests one.
+- **A prompt does not act**: it says what to do, and the tool call
+  that does it is a separate thing — the tree's rule, and this
+  server's.
