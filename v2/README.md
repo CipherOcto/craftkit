@@ -4009,6 +4009,7 @@ so.
 | the **reading** of an SVG file | **built.** An SVG file is read into the drawing — the paths, their colours and the place they are put (§572) | §572 |
 | the **JavaScript** of a file | **built.** The scripts a file holds are read — their names and their text — and they are not run (§573) | §573 |
 | the **running heads** of a document | **built.** A document may carry a header and a footer — the text that stands at the top and the bottom of every page (§574) | §574 |
+| the **Unicode map** of a font | **built.** The characters a font's codes stand for are read — the map a font carries, its characters and its ranges (§575) | §575 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37448,3 +37449,59 @@ its top and a **footer** at its bottom.
   draws it at the top of a page.
 - **The header is not a block**: it has no style and no runs, and a
   word in it cannot be bold.
+
+## 575. The Unicode map of a font
+
+A font's **codes** are the bytes it uses for its characters, and they
+are not the characters.
+
+### What was built
+
+- The new command **`pdf.font.unicode`** reads the map a font
+  carries:
+  - every **code** of the font and the **text** it stands for;
+  - the **characters** of the map and the **ranges** of the map, and
+    the range with a list gives each code its own text.
+- The rules:
+  - a font with **no map** has no Unicode, and the answer says so;
+  - the text of a code is read as **UTF-16**, the way a CMap writes
+    it, and a code that stands for two characters stands for two
+    characters;
+  - a **range** with one text gives that text to every code in it;
+  - a line the CMap does not have is **skipped**, and the answer says
+    what it skipped;
+  - the **CID** maps — the codes of a font that is not a Unicode font
+    — are not read: they stand for glyphs and not for characters.
+
+### What the port found
+
+- **The tree falls back to the encoding and this one does not**: the
+  tree reads the `/ToUnicode` of a font, and when a font has none it
+  reads the encoding of the font — the base encoding and the
+  differences — and the code stands for the character that encoding
+  says. Here a font with no map has no Unicode, and the codes of such
+  a font stand for nothing this tree can say.
+- **The tree maps a glyph and this one maps a code**: the tree's map
+  is from the glyph it draws to the character it stands for, and the
+  glyph is what the layout knows. Here the map is from the byte the
+  content stream writes to the character it stands for, which is the
+  map before the glyph is made.
+
+### What it cost
+
+- **Two tests** in the pdf battery (`tests/tounicode.rs`): the map of
+  a font — its characters, its range and its range with a list — and a
+  font with no map.
+- **One new module** (`src/tounicode.rs`) and **one new command**
+  (`pdf.font.unicode`). The pdf battery now carries **64** commands
+  and the MCP server **773**.
+
+### What it does not settle
+
+- **The map is not used to read the text of a page**: the text of a
+  page is still read as the bytes it is, and the map of the font is
+  read beside it and not applied to it.
+- **The encoding of a font is not read**: a font with no map has no
+  Unicode here, and the tree falls back to the encoding.
+- **The CID maps are not read**: a font that is not a Unicode font
+  has no map here.
