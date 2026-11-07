@@ -132,6 +132,7 @@ mod boxes;
 mod calculate;
 mod content;
 mod convert;
+mod decrypt;
 mod destinations;
 mod encrypt;
 mod fields;
@@ -1628,7 +1629,7 @@ impl LoadFile {
         for object in &objects {
             let entries: Vec<serde_json::Value> =
                 object.entries.iter().map(|(key, value)| serde_json::json!([key, value])).collect();
-            let data = serde_json::json!({ "object": object.number, "entries": entries });
+            let data = serde_json::json!({ "object": object.number, "generation": object.generation, "entries": entries });
             let has_stream = object.stream.is_some();
             let name = if has_stream {
                 format!("stream {}", object.number)
