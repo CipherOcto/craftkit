@@ -4032,6 +4032,7 @@ so.
 | the **encryption** of a file, made with AES-256 | **built.** A file of the handler of revision six may be made — the key of the file and the salts are worked out, and every string and stream has a vector of its own (§595) | §595 |
 | the **fields** of a block | **built.** A field may be put on a paragraph — it covers words, it says what it is, and its result is worked out from the text (§596) | §596 |
 | the **properties** of a document | **built.** A document may say who wrote it and what it is about — the built-in properties and the custom ones, and an empty value takes one away (§597) | §597 |
+| the **columns** of a page | **built.** A page may be printed in columns — how many, the space between them and the line down the middle, and the width of a column is worked out (§598) | §598 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39060,3 +39061,74 @@ puts in it — the project, the client, the number of the ticket.
 - **The properties are not read by anything else**: the header, the
   footer and the title of a document are read by their own commands,
   and nothing puts the author's name in the header.
+
+## 598. The columns of a page
+
+A page may be printed in **columns**: two side by side, or three, or
+twelve. Between them there is a **space**, and there may be a **line**
+drawn down the middle.
+
+### What was built
+
+- The new command **`prose.page.columns`** sets the columns of the
+  page of a document:
+  - the **count** is from **one** to **twelve**;
+  - the **space** between the columns is in **points**, from **zero**
+    to **three hundred**;
+  - the **separator** is the line drawn between the columns.
+- The **width of a column** is **derived**: the room the text has on
+  the page, less the spaces between the columns, shared out. It is
+  worked out every time, so it follows the page when the page is
+  changed.
+- The columns are a **fact of the document**, like the borders and
+  the background, and they are read with the page: `prose.page.get`
+  answers with the count, the space, the separator and the width.
+- Columns that **do not fit** on the page are refused, and the page
+  is left as it was.
+
+### What the port found
+
+- **The tree's columns belong to a section, and this tree has no
+  sections.** The tree's command asks where the columns go —
+  `section`, `document`, `forward` or `selection` — and a selection
+  of text becomes a section of its own, with a continuous break at
+  each end of it. Here the columns are a fact of the document, and
+  there is nowhere else for them to go.
+- **The tree clamps the space and this tree refuses it.** The tree's
+  page setup says that a gap is clamped to zero–three hundred points
+  and the count to one–twelve, and its columns command refuses a
+  count outside one to twelve and clamps the space. Here both are
+  refused by name, and the page is left as it was.
+- **The tree's default space is thirty-six points** — half an inch —
+  and that is the space a page has here when it is not given one.
+- **The width of a column is derived in both trees, and the tree also
+  lets it be given.** The tree's dialog takes the widths of unequal
+  columns, and its presets — a wide column and a narrow one — make
+  two columns that are not alike. Here every column is the same
+  width, and that width is worked out from the page and the space.
+- **The tree's column is a fact of a section and this one's is a fact
+  of a document** — and the tree's sections are a thing this tree has
+  not got. That is the second time a page of a document has come up
+  in this port (§592, the borders) and the second time the answer
+  has been the same: a page is a fact of the document.
+
+### What it cost
+
+- **Seven tests** in the prose battery (`tests/columns.rs`): the page
+  that has one column, the count that is from one to twelve, the
+  space that is outside the range, the width that is derived, the
+  separator, the columns that do not fit, and the node that is not a
+  document.
+- **One new command** (`prose.page.columns`) in a new module
+  (`src/columns.rs`). The prose battery now carries **85** commands
+  and the MCP server **804**.
+
+### What it does not settle
+
+- **The columns are not laid out**: the width of a column is worked
+  out, but nothing puts the text into it.
+- **The columns are not of a section**: they are of the document, and
+  a document that needs two sets of columns on two pages cannot have
+  them.
+- **The columns are not unequal**: the tree's wide-and-narrow columns
+  are not here, and every column is the same width.
