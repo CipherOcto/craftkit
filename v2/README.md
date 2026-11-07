@@ -4039,6 +4039,7 @@ so.
 | the **facts** of a document in the **file** | **built.** The payload of a node is carried by the file — the properties, the sources and the captions survive a round trip, and so does the oldest version that keeps them (§602) | §602 |
 | the **dashes** of a paragraph | **built.** The pairs of hyphens of a paragraph may be made into en dashes and em dashes, and the runs are rewritten with the text (§603) | §603 |
 | the **list** a paragraph begins | **built.** A paragraph that begins with `1. ` or `* ` becomes an item of a list — the marker is taken away and the runs are rewritten with it (§604) | §604 |
+| the **full stop** of a paragraph | **built.** The two spaces at the end of a paragraph may become a full stop and a space, and the runs do not move (§605) | §605 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39579,3 +39580,64 @@ item of a list, and the marker is not part of its words.
   are refused, because a bullet of this tree is one character.
 - **The paragraph does not take the `ListParagraph` style**: the list
   is a relation, and the styles of a document are its own.
+
+## 605. The full stop of a paragraph
+
+The tree's AutoCorrect turns **two spaces** into a **full stop**: a
+paragraph that ends with two spaces after a word ends with a full stop
+and one space instead — the writer pressed the key twice by accident,
+and the second space says so.
+
+### What was built
+
+- The new command **`prose.block.stops`** makes the full stop of a
+  paragraph:
+  - the text must **end** with two spaces, and the word before them
+    must end with a **letter or a digit** or with a **closing mark**:
+    `)`, `]`, `}`, `"`, `'`, `”`, `’`, `»` or `›`;
+  - the **first** of the two spaces becomes the full stop, and the
+    second stays: "word  " becomes "word. ";
+  - the text does **not change length**, and so the **runs** do not
+    move: a space and a full stop are one character each;
+  - a paragraph that holds a **revision** is not touched.
+
+### What the port found
+
+- **The tree's rule is the tree's rule here.** The tree watches the
+  keyboard, and the second space after a word turns the first into a
+  full stop. The tree's own refusals are here too: two spaces that
+  are not after a word are refused — at the start of a paragraph,
+  after other punctuation, after a third space, and after a tab.
+- **The tree's rule is about the text before the caret and this
+  tree's is about the whole text.** The tree's rule fires at the
+  moment the space is typed, so it sees the text up to the caret; here
+  the text must *end* with the two spaces, because a command is asked
+  for and there is no caret in this tree.
+- **The text does not change length, so the runs do not move.** A
+  space and a full stop are one character each — the same thing the
+  smart quotes are (§600), and the opposite of the dashes (§603) and
+  the marker of a list (§604), which take a character away.
+- **The tree's period takes the formatting of the space it
+  replaces**, and here the runs are not moved at all — so the period
+  is covered by the run that the space was in, which is the same
+  thing said another way.
+
+### What it cost
+
+- **Five tests** in the prose battery (`tests/stops.rs`): the two
+  spaces that become a full stop, the closing marks, the two spaces
+  that are refused, the runs that do not move, and the revision and
+  the document that are refused.
+- **One new command** (`prose.block.stops`) in a new module
+  (`src/stops.rs`). The prose battery now carries **95** commands and
+  the MCP server **814**.
+
+### What it does not settle
+
+- **The full stop is not made as the text is typed**: the command is
+  asked for, and nothing watches the keyboard.
+- **The capital of the first word of a sentence is not made**: the
+  tree's AutoCorrect capitalises it, and that is not here.
+- **The rule is only at the end of the paragraph**: the tree's rule
+  fires wherever the caret is, and here the two spaces must be the
+  last two characters.
