@@ -4051,6 +4051,7 @@ so.
 | the **ALE** read back | **built.** An Avid log exchange may be read — the media of the log become items and its rows become clips on a track of a sequence (§614) | §614 |
 | the **numbers stored as text** | **built.** The cells of a sheet that hold a number as text may be read — and turned into the numbers they stand for (§615) | §615 |
 | the **OTIO** read back | **built.** A timeline of OTIO may be read — the clips of its tracks become clips of a sequence, and the media of the file become items (§616) | §616 |
+| the **FCPXML** read back | **built.** A document of FCPXML may be read — the clips of its spine become clips of a sequence, and the media of the file become items (§617) | §617 |
 
 ### The list of things that are honestly not there: empty
 
@@ -40426,3 +40427,81 @@ into a sequence again.
   of clips in it has the clips, and the group is not there.
 - **The transitions are not read**: a dissolve between two clips is
   left out, and said, and the two clips are butted together.
+
+## 617. The FCPXML read back
+
+The document of §608 can now be **read**: a file of FCPXML is made
+into a sequence again.
+
+### What was built
+
+- The new command **`film.import.fcpxml`** reads an FCPXML file and
+  makes the **sequence** it names:
+  - the file is read through a **bound** — at most **sixteen
+    mebibytes** — and a file that cannot be read is refused;
+  - a file that is **not FCPXML** is refused: it is not XML, or its
+    root is not `fcpxml`, or it holds no **sequence** — the tree's
+    own refusals;
+  - the **rate** of the sequence is the rate of its **format**: the
+    `frameDuration` of the format is the length of a frame in seconds,
+    and the frames of a second are the rate of the format. A sequence
+    with no format has the default rate of the battery;
+  - the **spine** is the first video track of the sequence, and the
+    other tracks are **connected clips**: they sit over the spine, on
+    a **lane** — the video lanes count up from one and the audio lanes
+    count down from minus one — the tree's own rule;
+  - the **media** of a clip is an **item** of a bin, with the name and
+    the file of the asset, and the **clip** points at it — the same
+    shape as a clip made by hand;
+  - a **gap** is a hole: the clips after it move along, because the
+    offsets of the text say where every clip stands;
+  - a **transition**, a **marker** and a **nested media** are left
+    out, and said.
+- A small **XML reader** (`src/xml.rs`) reads the text: the elements,
+  the attributes and the text, with the five entities of XML, and it
+  refuses a text it does not understand rather than guessing. It is
+  **public**, because a reader of a text is a thing other batteries may
+  want.
+
+### What the port found
+
+- **The tree reads its XML with a library and this tree has none.**
+  The tree's reader is a few lines over an XML library it brings with
+  it; here the XML reader is a few hundred lines of this tree's own,
+  and it is the only one in the tree.
+- **The tree's reader reads the roles of the assets.** An asset of
+  the tree says whether it is video, audio or both, and the tree
+  makes a clip of the video on the video track and a clip of the
+  audio on the audio track. Here an asset is a media, and the clip is
+  one clip.
+- **The tree's reader reads the time map of a retimed clip**, and the
+  tree's reader reads the **roles** of the assets of a nested media.
+  Neither is read here: a retimed clip plays at the speed of one.
+- **The tree's reader reads the gap of a connected clip and leaves
+  it out**, and so does this one, though here a gap of the spine is
+  not written either: the offsets of the text say where every clip
+  stands, and a hole is a hole.
+- **The tree's reader has a limit of tracks**, and it warns when a
+  lane is past it. Here every lane of the text is a track.
+
+### What it cost
+
+- **Eight tests** in the film battery (`tests/fcpxmlimport.rs`): the
+  document that is read, the rate, the media, the lane, the file that
+  is not a document, the **round trip** — a document this tree wrote,
+  read back into a sequence — and the two tests of the XML reader.
+- **One new command** (`film.import.fcpxml`) in a new module
+  (`src/fcpxmlimport.rs`), and the XML reader beside it
+  (`src/xml.rs`). The film battery now carries **84** commands and the
+  MCP server **825**.
+
+### What it does not settle
+
+- **The roles of the assets are not read**: an asset is a media, and
+  a file with a video role and an audio role has one clip.
+- **The time map is not read**: a retimed clip plays at the speed of
+  one, and where its source goes is not read.
+- **The nested media is not read**: a clip that plays a media holding
+  a sequence is left out, and said.
+- **The transitions and the markers are not read**: they are left out,
+  and said.
