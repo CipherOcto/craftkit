@@ -4041,6 +4041,7 @@ so.
 | the **list** a paragraph begins | **built.** A paragraph that begins with `1. ` or `* ` becomes an item of a list — the marker is taken away and the runs are rewritten with it (§604) | §604 |
 | the **full stop** of a paragraph | **built.** The two spaces at the end of a paragraph may become a full stop and a space, and the runs do not move (§605) | §605 |
 | the **endnotes** of a document | **built.** A note may belong to the end of the document instead of the foot of the page — a kind of its own, and numbered apart from the footnotes (§606) | §606 |
+| the **nested clip** in the **OTIO** | **built.** A nested clip is written out as a stack of the tracks it holds, and a sequence with one can be written at all (§607) | §607 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39712,3 +39713,71 @@ footnotes.
   apart, and the tree's swap is not here.
 - **The endnotes are not printed at the end of anything**: this tree
   has no layout, and a note is a node and a number.
+
+## 607. The nested clip in the OTIO
+
+A **nested clip** — a clip that holds other clips — is written out as
+a **stack** of the tracks it holds, and the tracks are written in full,
+because OTIO has no references.
+
+### What was built
+
+- The OTIO of a sequence now writes a **nested clip** as a
+  `Stack.1`:
+  - the **children** of the stack are the **tracks** the nested clip
+    holds, written as `Track.1` objects, and the clips on them are
+    written as they are anywhere else;
+  - the stack says **where** the nested clip begins and **how long**
+    it is, in a `source_range`;
+  - the **name** of the nested clip is the name of the stack.
+- Before this arc, a sequence with a nested clip **could not be
+  written out at all**: the export refused a clip with no item, and a
+  nested clip plays no media of its own, so it has no item. The
+  refusal is still there for a clip that is not nested and has no
+  item — the text would point at a source that is not there.
+- The tree's own note in the module `nesting` — "a nested clip is not
+  written out" — was **false** after this arc, and it is corrected.
+
+### What the port found
+
+- **The tree's nested sequence is a `Stack` in a track, and so is
+  this tree's nested clip.** OTIO has no schema for a group: a stack
+  inside a track *is* the nesting, and the tree writes it that way.
+- **The tree's nested sequence is a sequence and this tree's nested
+  clip is a clip.** The tree's compound clip holds a whole sequence,
+  with its own tracks, its own markers and its own settings. Here a
+  nested clip holds **tracks** — the ones the clips it holds came
+  from — and it has no item of its own. So the stack here holds
+  tracks and not a timeline of its own, and it has no markers.
+- **The tree writes every use of a nested sequence in full, and it
+  bounds that.** OTIO has no references, so a compound clip that
+  holds three uses of another, ten deep, is three to the tenth copies
+  — the tree bounds the extra output at twenty-five thousand clips and
+  writes the rest as gaps, with a warning. Here a nested clip holds
+  its tracks and the nesting cannot be recursive — a clip that is
+  already nested is not nested again — so the bound has nothing to
+  hold.
+- **The tree's export writes the tree's own metadata beside every
+  object**, and the stack of a nested sequence carries it. Here the
+  text says what the document says and nothing else.
+
+### What it cost
+
+- **Three tests** in the film battery (`tests/otio_nested.rs`): the
+  nested clip that is written as a stack, the stack that says what
+  the nested clip lasts, and the clip that is not nested and is still
+  a clip.
+- **No new command**: the film battery still carries **80** commands
+  and the MCP server **816**. The change is in the writer of the
+  OTIO, which now writes a track and a stack with the same code.
+
+### What it does not settle
+
+- **The stack holds no markers and no settings of its own**: the
+  tree's nested sequence is a whole sequence, and this one is a clip
+  that holds tracks.
+- **The FCPXML is not changed**: a nested clip is written in the OTIO
+  and not in the FCPXML, and the tree writes both.
+- **The nesting is not read back**: the OTIO of this tree is written
+  and not read, and a stack that comes in from another program is
+  not a nested clip of this tree.
