@@ -4018,6 +4018,7 @@ so.
 | the **index** of a document | **built.** A document may be marked with index entries — the index gathers them under the letters of the alphabet, and names the blocks they are on (§581) | §581 |
 | the **array** of an entity | **built.** An entity may be arrayed — in a grid of rows and columns, or about a centre — and the copies are entities of their own (§582) | §582 |
 | the **constraints** of a drawing | **built.** A drawing may hold constraints — the entities are constrained to one another, and whether each constraint holds is worked out from the geometry (§583) | §583 |
+| the **groups** of a drawing | **built.** A drawing may hold groups — a set of entities that belongs together, and that moves as one (§584) | §584 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38098,3 +38099,65 @@ every edit. Here the constraint is a **fact** of the drawing, and
 - **The constraint is not between points of the entities**: the tree
   may constrain the start of one line to the middle of another, and
   here a constraint is between whole entities.
+
+## 584. The groups of a drawing
+
+A group is a set of the entities of a drawing: it says that these
+entities belong together, and the drawing may be asked about them as
+one.
+
+### What was built
+
+- The new command **`cad.group.add`** makes a **group** of entities:
+  - the group stands in a **block** and has a **name**;
+  - a group has at least one **member**, and a member that is not an
+    entity is refused;
+  - the same entity twice is one member: a group is a set;
+  - a group holds at most a thousand members.
+- The new command **`cad.group.list`** reads the **groups** of a
+  drawing: their names and their members.
+- The new command **`cad.group.move`** moves the **members** of a
+  group: every member of the group goes by the vector, and the moving
+  of the group is derived from the members it holds.
+- The rules:
+  - a group without a name is refused: the tree's group may be
+    unnamed and is then called `*A1` and `*A2`, and here a group is
+    named;
+  - a group of nothing is not a group.
+
+### What the port found
+
+- **The tree's group may be edited and this one may not.** The tree's
+  `groupedit` adds a member, takes one away and renames the group,
+  and a group with no members goes away of its own accord. Here the
+  members are the relations the group holds, and there is no editing
+  of them.
+- **The tree's group is a set of handles and this one is a set of
+  relations.** The tree keeps the members in the drawing's own
+  dictionary and saves them as group objects; here the members are
+  the relations the group holds, and they are read from the drawing.
+- **The tree's group is picked by a selection and this one is named
+  by the caller.** The tree's group takes the selection and gives the
+  group an unnamed name when it is not given one; here the members are
+  named and the group is named too.
+
+### What it cost
+
+- **Five tests** in the cad battery (`tests/groups.rs`): the group
+  made of two entities, the groups of a drawing read, the members
+  moving together, a group without a name, and a group without
+  members.
+- **One new module** (`src/groups.rs`) and **three new commands**
+  (`cad.group.add`, `cad.group.list` and `cad.group.move`). The cad
+  battery now carries **46** commands and the MCP server **785**.
+
+### What it does not settle
+
+- **A group is not edited**: a member may not be added to a group
+  that stands, and a group with no members does not go away.
+- **A group is not a block**: the tree's group may be drawn and
+  picked as one thing, and here the members are entities of the block
+  and the group stands beside them.
+- **The group is not written out**: the tree saves the groups in the
+  drawing's own dictionary, and this tree has no dictionary of its
+  own.
