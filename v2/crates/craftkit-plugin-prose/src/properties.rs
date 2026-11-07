@@ -224,7 +224,7 @@ impl SetProperties {
         } else {
             node.data["custom_properties"] = custom.clone();
         }
-        let mut properties = properties_of(&node);
+        let mut properties = properties_of(node);
         if let Some(map) = properties.as_object_mut() {
             for name in BUILT_INS {
                 if !map.contains_key(name) {

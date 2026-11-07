@@ -4031,6 +4031,7 @@ so.
 | the **handler of revision six** | **built.** A file scrambled with AES-256 is opened — the key of the file is not the hash of the password, and the password is checked with a hardened hash (§594) | §594 |
 | the **encryption** of a file, made with AES-256 | **built.** A file of the handler of revision six may be made — the key of the file and the salts are worked out, and every string and stream has a vector of its own (§595) | §595 |
 | the **fields** of a block | **built.** A field may be put on a paragraph — it covers words, it says what it is, and its result is worked out from the text (§596) | §596 |
+| the **properties** of a document | **built.** A document may say who wrote it and what it is about — the built-in properties and the custom ones, and an empty value takes one away (§597) | §597 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38977,3 +38978,85 @@ number of a page.
 - **Two fields may not nest**: a field inside a field is refused as an
   overlap, and the tree's range fields — a field that begins and
   ends around other content — are not here.
+
+## 597. The properties of a document
+
+A document says more than its title: who wrote it, what it is about,
+the words a search looks for, and the **custom** properties a firm
+puts in it — the project, the client, the number of the ticket.
+
+### What was built
+
+- The new command **`prose.document.properties`** says what a
+  document is of itself, and reads it back:
+  - the **built-in** properties: the `author`, the `subject`, the
+    `keywords`, the `comments` and the `category`;
+  - the **custom** properties: a list of pairs, each a **name** and a
+    **value**, kept in the payload of the document.
+- A property that is **not named** keeps what it was, and a property
+  that is named with an **empty** value **takes it away**: a document
+  that has no author and a document whose author was taken away are
+  the same document.
+- A custom property is taken away by a **null** and by an **empty**
+  value.
+- A **name** is at most **255** characters long and it may not be
+  empty, and a **value** is at most **one mebibyte**. A name is
+  matched **without regard to case**, as the tree's is, and a name
+  that is already there keeps the spelling it has.
+- The **title** is not one of these: it has its own command
+  (`prose.document.title`).
+- The properties are **derived**: they are read out of the document,
+  and they are in the document's own reading.
+
+### What the port found
+
+- **The tree keeps the properties in the file, and this tree keeps
+  them in the document.** The tree's properties are the core of a
+  file: they are written with the file and read from it. Here they
+  are facts of the document node, beside the title, the header and
+  the footer — the same place the title was already in.
+- **The tree keeps an empty string and this tree takes the property
+  away.** The tree's `file.properties` copies the string it is given,
+  and a document with an empty author has an author whose name is
+  nothing. Here an empty value takes the fact away, as the title
+  already does (§ the title's own rule): a document that has no
+  author and a document whose author was taken away are the same
+  document.
+- **The tree takes a custom property away by a null alone, and this
+  tree takes it away by an empty value too.** The tree's rule is the
+  one that has to be portable — a file written elsewhere may hold an
+  empty value — and this tree follows the rule that a fact and the
+  absence of a fact are told apart the same way everywhere.
+- **The tree's names are matched without regard to case, and so are
+  this tree's** — but the tree *renames* a property by sending the old
+  spelling as a null and the new one with its value. Here the
+  removals are done first for the same reason, so that a spelling
+  that is only a different case does not leave two properties behind.
+- **The tree's command sets and reads in one go, and this tree's does
+  too** — but the tree's answer is the whole core of the file, and
+  this tree's answer is the properties of the document and nothing
+  else. The title is not in it, because the title has its own
+  command.
+
+### What it cost
+
+- **Seven tests** in the prose battery (`tests/properties.rs`): the
+  properties that are said, the empty value that takes one away, the
+  custom property and the two ways of taking it away, the name that is
+  matched without regard to case, the custom property that is not
+  one, the node that is not a document, and the properties in the
+  document's own reading.
+- **One new command** (`prose.document.properties`) in a new module
+  (`src/properties.rs`). The prose battery now carries **84** commands
+  and the MCP server **803**.
+
+### What it does not settle
+
+- **The properties are not written into a file**: they are facts of
+  the document node, and the format that saves a document does not yet
+  carry them.
+- **A custom property holds a text only**: the tree's may hold other
+  kinds of value, and a number is refused here by name.
+- **The properties are not read by anything else**: the header, the
+  footer and the title of a document are read by their own commands,
+  and nothing puts the author's name in the header.
