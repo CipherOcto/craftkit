@@ -78,6 +78,14 @@ pub(crate) fn chain_of(document: &craftkit_sdk::Document, style: u64) -> Vec<u64
 /// that the nearer style wins.
 pub fn effective_character(document: &craftkit_sdk::Document, style: u64) -> Json {
     let mut character = craftkit_sdk::serde_json::Map::new();
+    // The **theme** is under everything: the font a style does not
+    // say of its own is the theme's, and so is the accent colour of
+    // a heading.
+    if let Some(theme) = crate::theme::character_of_theme(document, style).as_object().cloned() {
+        for (key, value) in theme {
+            character.insert(key, value);
+        }
+    }
     for id in chain_of(document, style) {
         let Some(node) = document.node(id) else { continue };
         let Some(map) = character_of(node).as_object().cloned() else { continue };

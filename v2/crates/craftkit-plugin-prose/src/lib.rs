@@ -142,6 +142,7 @@ mod statistics;
 mod stops;
 mod styles;
 mod tables;
+mod theme;
 mod titles;
 
 pub use accessibility::CheckAccessibility;
@@ -181,6 +182,7 @@ pub use statistics::ReadStatistics;
 pub use stops::SetStops;
 pub use styles::{DeleteStyle, ListStyles, ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
 pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell, SetHeader, SetTableAlt};
+pub use theme::SetTheme;
 pub use titles::SetTitle;
 
 /// The prose layer.
@@ -218,6 +220,7 @@ impl DocumentKind {
             "comments": crate::properties::properties_of(node).get("comments").cloned().unwrap_or(Json::Null),
             "category": crate::properties::properties_of(node).get("category").cloned().unwrap_or(Json::Null),
             "custom": crate::properties::custom_of(node),
+            "theme": crate::theme::theme_of(node),
             "blocks": node.children.iter().filter(|child| child.kind.starts_with("prose.block.")).count(),
             "styles": node.children.iter().filter(|child| child.kind == "prose.style").count(),
             "media": node.children.iter().filter(|child| child.kind == "prose.media").count(),
@@ -1130,6 +1133,7 @@ craftkit_sdk::plugin_anchor!(
     SetDashes,
     SetList,
     SetStops,
+    SetTheme,
     EndnoteKind,
     AddEndnote,
     ReadEndnotes,
