@@ -161,6 +161,7 @@ mod scripts;
 mod signatures;
 mod structure;
 mod tabs;
+mod tounicode;
 mod trailer;
 mod transitions;
 mod validation;
@@ -200,6 +201,7 @@ pub use rotation::{ReadRotation, RotatePage};
 pub use signatures::ReadSignatures;
 pub use structure::ReadStructure;
 pub use tabs::{ReadTabOrder, SetTabs};
+pub use tounicode::ReadFontUnicode;
 pub use trailer::ReadTrailer;
 pub use transitions::ReadTransition;
 pub use validation::ReadValidation;
@@ -2101,6 +2103,7 @@ craftkit_sdk::plugin_anchor!(
     ReadMarked,
     ReadTransition,
     ReadScripts,
+    ReadFontUnicode,
     SetPageLabels,
     RemoveObject,
     SetNumber,
