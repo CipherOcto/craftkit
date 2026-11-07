@@ -4046,6 +4046,7 @@ so.
 | the **nested clip** in the **EDL** | **built.** A nested clip has no tape and no file — its reel is `AX`, the tree's own rule, and its name is in a comment (§609) | §609 |
 | the **theme** of a document | **built.** A document may say the fonts of its headings and of its body, and the accent colour — and the theme is derived into every style that says nothing of its own (§610) | §610 |
 | the **numbering** of the pages | **built.** A document may say the format the page numbers are written in and the number the first page has, and the first page's number is derived (§611) | §611 |
+| the **errors** of a sheet | **built.** The cells whose formula comes out as an error may be read — the error and the formula that gave it, worked out every time (§612) | §612 |
 
 ### The list of things that are honestly not there: empty
 
@@ -40067,3 +40068,63 @@ The **format** the page numbers are written in, and the number the
 - **The numbering is not written into the page's fields**: a `PAGE`
   field (§596) would show the number of the page it is on, and there
   is no page to count here.
+
+## 612. The errors of a sheet
+
+A formula that cannot be worked out — a division by zero, a text
+where a number was wanted, a reference to a sheet that is not there —
+is an **error**, and the cell that holds it says so.
+
+### What was built
+
+- The new command **`grid.errors`** reads the errors of a sheet: every
+  cell whose formula comes out as an **error**, with the error it
+  says and the **formula** that gave it.
+- The errors are **derived**: every formula is computed, every time,
+  and the ones that come out as errors are listed. No value is
+  stored, so no error can be stale — and a formula that is fixed is
+  no longer an error.
+- A cell with **no formula** is not an error: it holds what it
+  holds.
+- A sheet with more than **ten thousand** errors is **refused**: the
+  answer would be a wall, and the tree stops at ten thousand and says
+  nothing.
+
+### What the port found
+
+- **The tree's command answers with two lists and this tree's answers
+  with one.** The tree's `formulas.errorChecking` returns the cells
+  with an error *and* the cells that are **circular** — the cells
+  the engine found themselves in a cycle. Here a cycle is caught when
+  the values are computed, and the cell that closes it says so in its
+  error; there is no list of them.
+- **The tree stops at ten thousand and this tree refuses.** The tree's
+  loop breaks when it has ten thousand errors and answers with those,
+  and the answer does not say that there were more. Here the sheet is
+  refused by name, so an agent is never handed a list that is not
+  the whole of it.
+- **The tree's error carries the formula with a `=` and this tree's
+  carries the formula as it was written.** The tree's answer holds
+  `"="` and the text of the formula; here the formula is the text
+  that was set, which is what the cell holds.
+
+### What it cost
+
+- **Four tests** in the grid battery (`tests/errors.rs`): the formula
+  that fails, the cell that is fine, the errors that are derived, and
+  the node that is not a sheet.
+- **One new command** (`grid.errors`) in a new module
+  (`src/errors.rs`). The grid battery now carries **131** commands and
+  the MCP server **819**.
+
+### What it does not settle
+
+- **The circular cells are not listed**: the cells that are in a cycle
+  are caught when the values are computed, and the cell that closes
+  the cycle says so, but there is no list of them as the tree has.
+- **The errors of a workbook are not listed at once**: the command
+  reads one sheet, and the tree's command reads every sheet of the
+  workbook.
+- **The checks of the tree's error checking are not here**: the tree
+  also finds the formulas that are inconsistent and the numbers that
+  are stored as text, and neither is here.
