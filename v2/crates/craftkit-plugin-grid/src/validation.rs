@@ -22,9 +22,11 @@
 //!   being typed; the formula engine here cannot see a value that is
 //!   not in a cell yet, and a rule that cannot be checked is not a
 //!   rule.
-//! - **The tree's error style is not here**: the tree's rule says
-//!   whether a bad value is an error, a warning or a note, and that is
-//!   about a host's message and not about the rule.
+//! - **The tree's error style is here, and it is about a host's
+//!   message**: the tree's rule says whether a bad value is an error,
+//!   a warning or a note, and that is about what a host says and not
+//!   about the rule itself. The style is carried by the rule, and the
+//!   check says which style a failure has.
 
 use craftkit_derive::Command;
 
@@ -143,6 +145,49 @@ impl Operator {
         ["between", "notBetween", "equal", "notEqual", "greater", "less", "greaterOrEqual", "lessOrEqual"];
 }
 
+/// The most a **message** of a rule may be long, in characters.
+const MAX_MESSAGE: usize = 255;
+
+/// The **style** of the message a host gives when a value does not
+/// pass a rule.
+///
+/// The tree's own styles: `stop` refuses the value, `warning` warns
+/// and lets it through, and `information` says it and lets it
+/// through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Style {
+    /// The value is refused.
+    Stop,
+    /// The value is allowed, and a warning is given.
+    Warning,
+    /// The value is allowed, and a note is given.
+    Information,
+}
+
+impl Style {
+    /// The style a name says, if it is one.
+    pub fn parse(name: &str) -> Option<Style> {
+        Some(match name {
+            "stop" => Style::Stop,
+            "warning" => Style::Warning,
+            "information" => Style::Information,
+            _ => return None,
+        })
+    }
+
+    /// The name of the style.
+    pub fn name(self) -> &'static str {
+        match self {
+            Style::Stop => "stop",
+            Style::Warning => "warning",
+            Style::Information => "information",
+        }
+    }
+
+    /// The styles, for the message that refuses one.
+    pub const NAMES: [&'static str; 3] = ["stop", "warning", "information"];
+}
+
 /// A **validation rule**: a kind, an operator and the formulas that
 /// go with it, over a range of cells.
 #[derive(Debug, Clone, PartialEq)]
@@ -159,6 +204,26 @@ pub struct Rule {
     pub formula2: Option<String>,
     /// Whether a blank is allowed: the tree's default is that it is.
     pub allow_blank: bool,
+    /// Whether the list of a **list** rule is shown as a dropdown in
+    /// the cell: the tree's default is that it is.
+    pub in_cell_dropdown: bool,
+    /// The title of the **input message**: what a host shows when the
+    /// cell is chosen.
+    pub input_title: String,
+    /// The **input message** itself.
+    pub input_message: String,
+    /// Whether the input message is shown at all: the tree's default
+    /// is that it is.
+    pub show_input: bool,
+    /// The title of the **error message**.
+    pub error_title: String,
+    /// The **error message** itself.
+    pub error_message: String,
+    /// The **style** of the error: the tree's own three.
+    pub error_style: Style,
+    /// Whether the error message is shown at all: the tree's default
+    /// is that it is.
+    pub show_error: bool,
 }
 
 impl Rule {
@@ -171,6 +236,14 @@ impl Rule {
             "formula1": self.formula1,
             "formula2": self.formula2,
             "allow_blank": self.allow_blank,
+            "dropdown": self.in_cell_dropdown,
+            "input_title": self.input_title,
+            "input_message": self.input_message,
+            "show_input": self.show_input,
+            "error_title": self.error_title,
+            "error_message": self.error_message,
+            "error_style": self.error_style.name(),
+            "show_error": self.show_error,
         })
     }
 
@@ -178,6 +251,12 @@ impl Rule {
     pub fn from_json(value: &craftkit_sdk::serde_json::Value) -> Option<Rule> {
         let kind = Kind::parse(value.get("kind")?.as_str()?)?;
         let operator = Operator::parse(value.get("operator")?.as_str()?)?;
+        let style = value
+            .get("error_style")
+            .and_then(|style| style.as_str())
+            .map(|style| Style::parse(style).unwrap_or(Style::Stop))
+            .unwrap_or(Style::Stop);
+        let text = |name: &str| value.get(name).and_then(|text| text.as_str()).unwrap_or("").to_string();
         Some(Rule {
             range: value.get("range")?.as_str()?.to_string(),
             kind,
@@ -185,6 +264,14 @@ impl Rule {
             formula1: value.get("formula1").and_then(|text| text.as_str()).unwrap_or("").to_string(),
             formula2: value.get("formula2").and_then(|text| text.as_str()).map(|text| text.to_string()),
             allow_blank: value.get("allow_blank").and_then(|blank| blank.as_bool()).unwrap_or(true),
+            in_cell_dropdown: value.get("dropdown").and_then(|dropdown| dropdown.as_bool()).unwrap_or(true),
+            input_title: text("input_title"),
+            input_message: text("input_message"),
+            show_input: value.get("show_input").and_then(|show| show.as_bool()).unwrap_or(true),
+            error_title: text("error_title"),
+            error_message: text("error_message"),
+            error_style: style,
+            show_error: value.get("show_error").and_then(|show| show.as_bool()).unwrap_or(true),
         })
     }
 }
@@ -442,6 +529,21 @@ pub struct SetValidation {
     pub formula2: Option<Text>,
     /// Whether a blank is allowed. The tree's default is that it is.
     pub ignore_blank: Option<Bool>,
+    /// Whether the list of a **list** rule is shown as a dropdown in
+    /// the cell. The tree's default is that it is.
+    pub dropdown: Option<Bool>,
+    /// The title of the **input message**: what a host shows when the
+    /// cell is chosen.
+    pub input_title: Option<Text>,
+    /// The **input message** itself.
+    pub input_message: Option<Text>,
+    /// The title of the **error message**.
+    pub error_title: Option<Text>,
+    /// The **error message** itself.
+    pub error_message: Option<Text>,
+    /// The **style** of the error: `stop`, `warning` or `information`.
+    /// The tree's default is `stop`.
+    pub error_style: Option<Text>,
 }
 
 impl SetValidation {
@@ -480,6 +582,33 @@ impl SetValidation {
                 message: "a list validation needs `formula1`".to_string(),
             });
         }
+        // The **style** of the error: the tree's own three, and an
+        // unknown one is refused.
+        let style_name = self.error_style.as_ref().map(|style| style.0.trim().to_string());
+        let error_style = match &style_name {
+            Some(name) => Style::parse(name).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("unknown error style `{name}` ({})", Style::NAMES.join(", ")),
+            })?,
+            None => Style::Stop,
+        };
+        // The **messages** are short: a host shows them, and a host
+        // has room for a sentence.
+        let message = |text: &Option<Text>, what: &str| -> Result<String, EngineError> {
+            let Some(text) = text else { return Ok(String::new()) };
+            let text = text.0.trim().to_string();
+            if text.chars().count() > MAX_MESSAGE {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the {what} is more than {MAX_MESSAGE} characters long"),
+                });
+            }
+            Ok(text)
+        };
+        let input_title = message(&self.input_title, "input title")?;
+        let input_message = message(&self.input_message, "input message")?;
+        let error_title = message(&self.error_title, "error title")?;
+        let error_message = message(&self.error_message, "error message")?;
         let rule = Rule {
             range: self.range.0.trim().to_string(),
             kind,
@@ -487,6 +616,14 @@ impl SetValidation {
             formula1,
             formula2: self.formula2.as_ref().map(|formula| formula.0.trim().to_string()),
             allow_blank: self.ignore_blank.map(|blank| blank.0).unwrap_or(true),
+            in_cell_dropdown: self.dropdown.map(|dropdown| dropdown.0).unwrap_or(true),
+            input_title,
+            input_message,
+            show_input: true,
+            error_title,
+            error_message,
+            error_style,
+            show_error: true,
         };
         // The **range** must be a range: a rule over nothing is a rule
         // over no cells.
@@ -601,14 +738,23 @@ impl CheckValidation {
         match check(&book, &name, &rules, cell, &input, system) {
             None => Ok(Outcome::new(format!("the value passes the rules of {}", cell.to_text()))
                 .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "ok": true }))),
-            Some((rule, message)) => Ok(Outcome::new("the value does not pass the rules".to_string())
-                .with_data(json!({
+            Some((rule, message)) => {
+                // The **style** of the failure is the tree's own: a
+                // `stop` refuses the value, and a `warning` or an
+                // `information` lets it through with a message.
+                let style = rule.error_style;
+                let said = if rule.error_message.is_empty() { message } else { rule.error_message.clone() };
+                Ok(Outcome::new("the value does not pass the rules".to_string()).with_data(json!({
                     "sheet": sheet,
                     "cell": cell.to_text(),
                     "ok": false,
-                    "message": message,
+                    "style": style.name(),
+                    "refused": style == Style::Stop,
+                    "title": rule.error_title,
+                    "message": said,
                     "rule": rule.to_json(),
-                }))),
+                })))
+            }
         }
     }
 }
