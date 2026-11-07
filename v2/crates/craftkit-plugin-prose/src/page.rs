@@ -232,9 +232,17 @@ impl GetPage {
         };
         let mut stored = page.to_json();
         stored["landscape"] = json!(page.is_landscape());
+        // The **background** of the page: the colour it is painted
+        // with, and the watermark it carries. Both are facts of the
+        // document, and a document that has neither says nothing.
+        let background = session.document().node(document);
+        let colour = background.as_ref().and_then(|node| crate::background::background_of(node));
+        let watermark = background.as_ref().and_then(|node| crate::background::watermark_of(node));
         Ok(Outcome::new(format!("the page of the document `{document}`")).with_data(json!({
             "document": document,
             "page": stored,
+            "colour": colour,
+            "watermark": watermark,
         })))
     }
 }
