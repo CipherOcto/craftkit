@@ -4003,6 +4003,7 @@ so.
 | the **layers** of a file | **built.** A file may hold layers — the name of each, its intent, and whether it is shown when the file is opened (§566) | §566 |
 | the **appearance** of a field is written | **built.** A field may be given a drawing of its own — the value in the box of the widget, with the font and the size the field says (§567) | §567 |
 | the **writing** of a drawing as an SVG file | **built.** A drawing is written as an SVG file — the paths, their colours and the box they are in (§568) | §568 |
+| the **marked content** of a tagged file | **built.** The text under each element of the structure tree is read — the marked content is found by its number and the text under it is read (§569) | §569 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37091,3 +37092,68 @@ a drawing down.
   this one has not.
 - **The blend modes are not written**: a path that mixes with what is
   under it is written as an ordinary path.
+
+## 569. The marked content of a tagged file
+
+A tagged file says what its content **is** in its structure tree, and
+it says **where** each of those is on the page in its marked content.
+
+### What was built
+
+- The new command **`pdf.marked.read`** reads the **marked content**
+  of a tagged file — every element of the structure tree with the text
+  under it:
+  - what the element **is**, its **title**, its **alternative text**
+    and its **language**;
+  - the **page** it is on;
+  - the **text** under it.
+- The rules:
+  - a file that is **not tagged** has no marked content, and the
+    answer says so;
+  - the marked content is found by its **number** (`MCID`), and the
+    text under it is read from the page's content;
+  - the properties of a marked content may be **written where they
+    are used** — a dictionary with an `MCID` in it — or they may be
+    the **name** of a list of properties, and the list is in the page's
+    resources;
+  - an element that says **no page** has no text: the content cannot
+    be looked for without knowing where to look;
+  - the tree is read from its **root down**, and the walk is
+    **bounded**.
+
+### What the port found
+
+- **The tree reads the content and not the text**: the tree's
+  accessibility crate looks under the marked content for the things
+  it checks — the image of a figure, the rows of a table, the address
+  of a link — and each is checked against the tree. Here the text
+  under the marked content is what is read, and the image of a figure
+  is not looked for.
+- **The tree knows an artifact is not content**: the tree reads a
+  marked content that names itself an artifact and skips it, because
+  an artifact is decoration and not the content of the file. Here a
+  marked content that no element points at is not read either, and
+  the rule is the same.
+- **The tree's element carries what it is made of and this one
+  carries its text**: the tree's element may hold the image, the
+  table and the link, and the checks are made against them. Here the
+  element holds its text and nothing else.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/marked.rs`): the text
+  under each element, the properties that are named, a file that is
+  not tagged, and an element asked for by kind.
+- **One new module** (`src/marked.rs`) and **one new command**
+  (`pdf.marked.read`). The pdf battery now carries **61** commands and
+  the MCP server **765**.
+
+### What it does not settle
+
+- **The image of a figure is not read**: an element that points at a
+  picture is read with the text under it, and the picture is not
+  looked for.
+- **The table of an element is not read**: a table element carries
+  its text and not its rows and cells.
+- **The text is not measured**: the text under a marked content is
+  read as the file spells it, and the width of it is not worked out.
