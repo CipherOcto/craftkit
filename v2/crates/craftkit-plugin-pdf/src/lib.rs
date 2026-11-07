@@ -144,6 +144,7 @@ mod information;
 mod intent;
 mod labels;
 mod loader;
+mod marked;
 mod metadata;
 mod number;
 mod objects;
@@ -183,6 +184,7 @@ pub use format::ReadFormat;
 pub use information::{ReadInformation, SetInformation};
 pub use intent::WriteIntent;
 pub use labels::SetPageLabels;
+pub use marked::ReadMarked;
 pub use metadata::WriteMetadata;
 pub use number::SetNumber;
 pub use optional::ReadLayers;
@@ -2092,6 +2094,7 @@ craftkit_sdk::plugin_anchor!(
     ReadAttachments,
     ReadLayers,
     WriteAppearance,
+    ReadMarked,
     SetPageLabels,
     RemoveObject,
     SetNumber,

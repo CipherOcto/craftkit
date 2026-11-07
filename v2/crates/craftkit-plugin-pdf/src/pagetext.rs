@@ -156,8 +156,47 @@ pub fn text_of_page(document: &Document, page: u64) -> Result<PageText, EngineEr
     Ok(found)
 }
 
+/// The **operations** of a page: the content of every stream it has,
+/// in the order the page holds them.
+pub(crate) fn operations_of_page(
+    document: &Document,
+    page: u64,
+) -> Result<Vec<crate::content::Operation>, EngineError> {
+    let Some(node) = document.node(page) else {
+        return Err(EngineError::Failed {
+            id: COMMAND.to_string(),
+            message: format!("there is no node `{page}`"),
+        });
+    };
+    let entries = crate::entries_of(&node.data);
+    let Some(contents) = entries.iter().find(|(key, _)| key == "Contents").map(|(_, value)| value.clone())
+    else {
+        // A page with no content has no operations. That is not a
+        // failure: it is a page that says nothing.
+        return Ok(Vec::new());
+    };
+    let listed: Vec<Json> = match contents {
+        Json::Array(list) => list,
+        one => vec![one],
+    };
+    let mut operations: Vec<crate::content::Operation> = Vec::new();
+    for value in listed {
+        let Some(stream) = crate::preflight::node_of(document, &value) else { continue };
+        if stream.kind != "pdf.stream" {
+            continue;
+        }
+        let decoded = crate::decoded_bytes(stream, None, None, false, COMMAND)?;
+        let found = crate::content::operations(&decoded.bytes).map_err(|error| EngineError::Failed {
+            id: COMMAND.to_string(),
+            message: format!("the content of the page cannot be read: {error:?}"),
+        })?;
+        operations.extend(found);
+    }
+    Ok(operations)
+}
+
 /// The **pieces** of text a set of operations shows.
-fn pieces_of(operations: &[crate::content::Operation]) -> Vec<Piece> {
+pub(crate) fn pieces_of(operations: &[crate::content::Operation]) -> Vec<Piece> {
     let mut pieces: Vec<Piece> = Vec::new();
     // Text is shown inside a **text object**.
     let mut in_text = false;
