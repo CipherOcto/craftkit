@@ -126,6 +126,7 @@ mod numbering;
 mod outline;
 mod page;
 mod paragraph;
+mod properties;
 mod references;
 mod resolving;
 mod revisions;
@@ -156,6 +157,7 @@ pub use numbering::{AddList, ReadNumber, SetNumbering};
 pub use outline::{ReadOutline, ReadStyleLevel, SetStyleLevel};
 pub use page::{GetPage, SetPage};
 pub use paragraph::{ReadBlockParagraph, ReadStyleParagraph, SetStyleParagraph};
+pub use properties::SetProperties;
 pub use references::{AddReference, ReadReference, SetReference};
 pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
 pub use revisions::ReadRevisions;
@@ -194,6 +196,12 @@ impl DocumentKind {
             "title": crate::titles::title_of(node).map(|title| json!(title)).unwrap_or(Json::Null),
             "header": crate::running::header_of(node).map(|header| json!(header)).unwrap_or(Json::Null),
             "footer": crate::running::footer_of(node).map(|footer| json!(footer)).unwrap_or(Json::Null),
+            "author": crate::properties::properties_of(node).get("author").cloned().unwrap_or(Json::Null),
+            "subject": crate::properties::properties_of(node).get("subject").cloned().unwrap_or(Json::Null),
+            "keywords": crate::properties::properties_of(node).get("keywords").cloned().unwrap_or(Json::Null),
+            "comments": crate::properties::properties_of(node).get("comments").cloned().unwrap_or(Json::Null),
+            "category": crate::properties::properties_of(node).get("category").cloned().unwrap_or(Json::Null),
+            "custom": crate::properties::custom_of(node),
             "blocks": node.children.iter().filter(|child| child.kind.starts_with("prose.block.")).count(),
             "styles": node.children.iter().filter(|child| child.kind == "prose.style").count(),
             "media": node.children.iter().filter(|child| child.kind == "prose.media").count(),
@@ -1060,6 +1068,7 @@ craftkit_sdk::plugin_anchor!(
     SetEquation,
     PutOnStyle,
     SetRuns,
+    SetProperties,
     AddField,
     SetField,
     ReadFields,
