@@ -200,6 +200,7 @@ mod binremoval;
 mod clipreading;
 mod edits;
 mod edl;
+mod edlimport;
 mod enabling;
 mod fcpxml;
 mod fcpxmlimport;
@@ -249,6 +250,7 @@ pub use binremoval::RemoveBin;
 pub use clipreading::ReadClip;
 pub use edits::{NextEdit, PrevEdit, Razor};
 pub use edl::ExportEdl;
+pub use edlimport::ImportEdl;
 pub use enabling::EnableClip;
 pub use fcpxml::ExportFcpxml;
 pub use fcpxmlimport::ImportFcpxml;
@@ -928,6 +930,7 @@ craftkit_sdk::plugin_anchor!(
     AddTrack,
     AddClip,
     ExportEdl,
+    ImportEdl,
     ExportAle,
     ImportAle,
     ExportFcpxml,

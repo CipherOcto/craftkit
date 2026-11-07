@@ -307,8 +307,11 @@ impl ImportFcpxml {
         };
         // The **bin** the media goes in, and the **sequence**.
         let bin = session.document_mut()?.add_node_under(None, format!("{name} media"), "film.bin", None);
+        // The **bin** the sequence goes in: a sequence is not a media.
+        let sequences =
+            session.document_mut()?.add_node_under(None, format!("{name} sequences"), "film.bin", None);
         let sequence_id = session.document_mut()?.add_node_with_under(
-            Some(bin),
+            Some(sequences),
             name.clone(),
             "film.item",
             None,
@@ -414,6 +417,7 @@ impl ImportFcpxml {
             .with_data(json!({
                 "path": path,
                 "bin": bin,
+                "sequence_bin": sequences,
                 "sequence": sequence_id,
                 "tracks": tracks,
                 "clips": clips,

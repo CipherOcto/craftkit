@@ -194,6 +194,9 @@ impl ImportAle {
         };
         // The **bin** the media goes in.
         let bin = session.document_mut()?.add_node_under(None, format!("{name} media"), "film.bin", None);
+        // The **bin** the sequence goes in: a sequence is not a media.
+        let sequences =
+            session.document_mut()?.add_node_under(None, format!("{name} sequences"), "film.bin", None);
         // The **sequence** itself, and the **track** of the clips.
         let mut rows: Vec<(u64, u64, usize)> = Vec::new();
         for index in 0..ale.rows.len() {
@@ -210,7 +213,7 @@ impl ImportAle {
         }
         let total: u64 = rows.iter().map(|(_, duration, _)| duration).sum();
         let sequence = session.document_mut()?.add_node_with_under(
-            Some(bin),
+            Some(sequences),
             name.clone(),
             "film.item",
             None,
@@ -269,6 +272,7 @@ impl ImportAle {
         Ok(Outcome::changed(format!("the log of `{path}` made {count} clip(s)")).with_data(json!({
             "path": path,
             "bin": bin,
+                "sequence_bin": sequences,
             "sequence": sequence,
             "track": track,
             "clips": clips,
