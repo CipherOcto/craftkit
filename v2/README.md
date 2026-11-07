@@ -4008,6 +4008,7 @@ so.
 | the **transition** of a page | **built.** A page may say how it comes in — the kind of the transition, how long it takes and the way it moves (§571) | §571 |
 | the **reading** of an SVG file | **built.** An SVG file is read into the drawing — the paths, their colours and the place they are put (§572) | §572 |
 | the **JavaScript** of a file | **built.** The scripts a file holds are read — their names and their text — and they are not run (§573) | §573 |
+| the **running heads** of a document | **built.** A document may carry a header and a footer — the text that stands at the top and the bottom of every page (§574) | §574 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37386,3 +37387,64 @@ when the file is opened.
   are read elsewhere, and the program behind them is not read at all.
 - **The scripts are not checked**: a script that would fail is read
   like any other, because this tree does not run it and cannot say.
+
+## 574. The running heads of a document
+
+A document is printed on pages, and a page may carry a **header** at
+its top and a **footer** at its bottom.
+
+### What was built
+
+- The new commands **`prose.document.header`** and
+  **`prose.document.footer`** say what a document carries at the top
+  and at the bottom of every page, and **`prose.document.header.read`**
+  and **`prose.document.footer.read`** read them back.
+- The rules:
+  - the header and the footer are **facts of the document**, the way
+    the title is: they are what the document says it carries, and
+    they are not blocks of the document — they do not stand in the
+    flow of the text;
+  - an **empty** text **takes the running head away**: a document
+    that has no header and a document whose header was taken away are
+    the same document;
+  - a node that is **not a document** may not have a header or a
+    footer;
+  - the running head is **not a paragraph**, and it has no style of
+    its own here.
+
+### What the port found
+
+- **The tree's headers belong to a section and there are three of
+  them**: the tree has a header for the ordinary page, one for the
+  first page and one for the even pages, and a section that says
+  nothing takes them from the section before it. Here a document has
+  one header, and a section is not a thing this tree has.
+- **The tree's header is a story and this one is a text**: the tree's
+  header is a part of the document with its own paragraphs and its
+  own styles, and a reader's list of the stories a reader sees
+  includes it. Here the header is a text, and it is not in the flow
+  of the document and cannot be a block of it.
+- **The tree's header may hold a field and this one holds a text**:
+  the tree's header can carry a page number that the layout works
+  out. Here the running head is what it says, and a page number in it
+  is words and not a number the layout knows.
+
+### What it cost
+
+- **Four tests** in the prose battery (`tests/running.rs`): a header
+  that is set and read back, an empty header that takes it away, a
+  footer that is set and read back, and a node that is not a document.
+- **One new module** (`src/running.rs`) and **four new commands**
+  (`prose.document.header`, `prose.document.header.read`,
+  `prose.document.footer`, `prose.document.footer.read`). The prose
+  battery now carries **75** commands and the MCP server **772**.
+
+### What it does not settle
+
+- **The first page is not different**: the tree's header may be one
+  thing on the first page and another on the rest, and here there is
+  one header for every page.
+- **The header is not laid out**: the text is carried and nothing
+  draws it at the top of a page.
+- **The header is not a block**: it has no style and no runs, and a
+  word in it cannot be bold.
