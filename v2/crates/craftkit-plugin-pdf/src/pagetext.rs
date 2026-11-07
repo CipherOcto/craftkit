@@ -35,8 +35,12 @@
 //!
 //! # What it does not do
 //!
-//! - **The place of the text is not worked out.** A piece of text is
-//!   where it was shown, and the tree does not lay out a page.
+//! - **The place of the text is worked out.** The text matrix of the
+//!   text, turned by the **transform of the page** — the `cm`
+//!   operator, the `q` and `Q` that keep it, and the page's own
+//!   `/Matrix` — is the place the text is at. The tree's own rule, and
+//!   the tree does not lay out a page: what is not worked out is the
+//!   **width** of the text, which is the font's own business.
 //! - **The encoding of a font is not read.** A font with no map has no
 //!   Unicode here, and the tree falls back to the encoding.
 //! - **The resources of the parent are not read.** A page that takes
@@ -175,8 +179,31 @@ pub fn text_of_page(document: &Document, page: u64) -> Result<PageText, EngineEr
     }
     let maps = crate::pagefonts::maps_of(document, page);
     let last = operations.len().saturating_sub(1);
-    found.pieces = pieces_of(&maps, &operations, 0, last);
+    found.pieces = pieces_with(&maps, &operations, 0, last, matrix_of(document, &entries));
     Ok(found)
+}
+
+/// The **transform** a page begins with: its own `/Matrix`.
+///
+/// The tree's own rule: the page's matrix is the transform the page
+/// begins with, and a page that says nothing begins with the one that
+/// changes nothing.
+fn matrix_of(document: &Document, entries: &[(String, Json)]) -> crate::content::Matrix {
+    let Some((_, value)) = entries.iter().find(|(key, _)| key == "Matrix") else {
+        return crate::content::Matrix::IDENTITY;
+    };
+    let numbers: Vec<f64> = match value {
+        Json::Array(list) => list.iter().filter_map(|number| number.as_f64()).collect(),
+        other => match crate::preflight::node_of(document, other) {
+            Some(node) => node
+                .data
+                .as_array()
+                .map(|list| list.iter().filter_map(|number| number.as_f64()).collect())
+                .unwrap_or_default(),
+            None => Vec::new(),
+        },
+    };
+    crate::content::Matrix::from_numbers(&numbers).unwrap_or(crate::content::Matrix::IDENTITY)
 }
 
 /// The **operations** of a page: the content of every stream it has,
@@ -233,6 +260,10 @@ struct Place {
     leading: f64,
     /// The **rise**: how far the text is above the line it is on.
     rise: f64,
+    /// The **size** of the font in use.
+    size: f64,
+    /// The **scale** of the text: how wide it is, in hundredths.
+    scale: f64,
 }
 
 impl Place {
@@ -242,11 +273,21 @@ impl Place {
         line: [1.0, 0.0, 0.0, 1.0, 0.0, 0.0],
         leading: 0.0,
         rise: 0.0,
+        size: 0.0,
+        scale: 1.0,
     };
 
     /// The origin of the text: where the text **begins**.
-    fn origin(&self) -> (f64, f64) {
-        (self.text[4], self.text[5] + self.rise)
+    ///
+    /// The **rendering matrix** is the tree's own: the size and the
+    /// scale of the font, the rise, the text matrix, and then the
+    /// transform of the page.
+    fn origin(&self, ctm: &crate::content::Matrix) -> (f64, f64) {
+        let rendering = crate::content::Matrix([self.size * self.scale, 0.0, 0.0, self.size, 0.0, self.rise])
+            .then(&crate::content::Matrix(self.text))
+            .then(ctm);
+        let [.., e, f] = rendering.0;
+        (e, f)
     }
 
     /// Move the **line** by a distance, and put the text on it.
@@ -292,12 +333,28 @@ pub(crate) fn pieces_of(
     from: usize,
     to: usize,
 ) -> Vec<Piece> {
+    pieces_with(maps, operations, from, to, crate::content::Matrix::IDENTITY)
+}
+
+/// The **pieces** of text, with the **transform of the page** the page
+/// begins with.
+pub(crate) fn pieces_with(
+    maps: &[(String, crate::tounicode::Map)],
+    operations: &[crate::content::Operation],
+    from: usize,
+    to: usize,
+    start: crate::content::Matrix,
+) -> Vec<Piece> {
     let mut pieces: Vec<Piece> = Vec::new();
     // Text is shown inside a **text object**.
     let mut in_text = false;
     // The **place** of the text.
     let mut place = Place::NONE;
     let mut placed = false;
+    // The **transform of the page**: the `q` and `Q` keep it, and the
+    // `cm` changes it.
+    let mut ctm = start;
+    let mut stack: Vec<crate::content::Matrix> = Vec::new();
     // The **font** in use, and the map that reads its codes.
     let mut font: Option<String> = None;
     for (index, operation) in operations.iter().enumerate() {
@@ -314,6 +371,30 @@ pub(crate) fn pieces_of(
             "ET" => in_text = false,
             "Tf" => {
                 font = font_named(operation);
+                let numbers = numbers_of(operation);
+                if let Some(size) = numbers.first() {
+                    place.size = *size;
+                }
+            }
+            "Tz" => {
+                let numbers = numbers_of(operation);
+                if let Some(scale) = numbers.first() {
+                    place.scale = scale / 100.0;
+                }
+            }
+            "q" => {
+                stack.push(ctm);
+            }
+            "Q" => {
+                if let Some(saved) = stack.pop() {
+                    ctm = saved;
+                }
+            }
+            "cm" => {
+                let numbers = numbers_of(operation);
+                if let Some(matrix) = crate::content::Matrix::from_numbers(&numbers) {
+                    ctm = matrix.then(&ctm);
+                }
             }
             "Tm" => {
                 let numbers = numbers_of(operation);
@@ -358,7 +439,7 @@ pub(crate) fn pieces_of(
                 if !within {
                     continue;
                 }
-                let (x, y) = place.origin();
+                let (x, y) = place.origin(&ctm);
                 pieces.push(Piece {
                     text,
                     operator: "Tj".to_string(),
@@ -380,7 +461,7 @@ pub(crate) fn pieces_of(
                 if text.is_empty() || !within {
                     continue;
                 }
-                let (x, y) = place.origin();
+                let (x, y) = place.origin(&ctm);
                 pieces.push(Piece {
                     text,
                     operator: "TJ".to_string(),
@@ -400,7 +481,7 @@ pub(crate) fn pieces_of(
                 if !within {
                     continue;
                 }
-                let (x, y) = place.origin();
+                let (x, y) = place.origin(&ctm);
                 pieces.push(Piece {
                     text,
                     operator: operation.operator.clone(),

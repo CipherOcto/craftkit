@@ -22,6 +22,41 @@
 
 use craftkit_sdk::serde_json::{Map, Value as Json};
 
+/// A **matrix**: `a b c d e f`, the affine map of a PDF.
+///
+/// The row-vector convention of the tree: a point is a row, the
+/// matrix is multiplied on the right, and `then` is the order things
+/// happen in — `self` first, and then the other.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Matrix(pub [f64; 6]);
+
+impl Matrix {
+    /// The matrix that changes nothing.
+    pub const IDENTITY: Matrix = Matrix([1.0, 0.0, 0.0, 1.0, 0.0, 0.0]);
+
+    /// The **matrix** six numbers make, when there are six of them.
+    pub fn from_numbers(numbers: &[f64]) -> Option<Matrix> {
+        if numbers.len() != 6 {
+            return None;
+        }
+        Some(Matrix([numbers[0], numbers[1], numbers[2], numbers[3], numbers[4], numbers[5]]))
+    }
+
+    /// `self` and then `then`: the order things happen in.
+    pub fn then(&self, then: &Matrix) -> Matrix {
+        let [a, b, c, d, e, f] = self.0;
+        let [a2, b2, c2, d2, e2, f2] = then.0;
+        Matrix([
+            a * a2 + b * c2,
+            a * b2 + b * d2,
+            c * a2 + d * c2,
+            c * b2 + d * d2,
+            e * a2 + f * c2 + e2,
+            e * b2 + f * d2 + f2,
+        ])
+    }
+}
+
 /// Why a content stream could not be **read**.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
