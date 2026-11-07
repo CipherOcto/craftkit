@@ -4055,6 +4055,7 @@ so.
 | the **edit decision list** read back | **built.** A list of cuts may be read — the events of the list become clips of a sequence, and its reels become items (§618) | §618 |
 | the **FCP7** read back | **built.** A document of FCP7 XML may be read — the clip items of its tracks become clips of a sequence, and its files become items (§619) | §619 |
 | the **messages** of a validation rule | **built.** A rule may say what a host shows when a value does not pass it — the title, the message and the style of the error (§620) | §620 |
+| the **revision** of a document | **built.** A document may say who touched it last and how many times it has been revised — and a revision of zero takes the revision away (§621) | §621 |
 
 ### The list of things that are honestly not there: empty
 
@@ -40717,3 +40718,58 @@ host **shows** when a value does not pass it.
 - **The tree's custom rule is not here**: a formula that says yes or
   no about the value being typed cannot be checked, because the
   formula engine here cannot see a value that is not in a cell yet.
+
+## 621. The revision of a document
+
+A document may say who touched it last, and how many times it has
+been revised.
+
+### What was built
+
+- The properties of a document (§598) carry two more facts, the
+  tree's own:
+  - the **last modified by**: the name of whoever touched it last,
+    with the same rules as the author — an empty name takes the name
+    away;
+  - the **revision**: how many times it has been revised. A revision
+    is a **whole number**, and a revision that is not one — a
+    fraction, or a negative — is **refused**. A revision of **zero**
+    takes the revision away: nothing means nothing.
+- The **document** says what it is: the evaluator's answer carries
+  the last modified by and the revision beside the author and the
+  subject.
+
+### What the port found
+
+- **The tree's revision is a number it counts, and the tree's times
+  are written by the application.** The tree keeps a `revision` that
+  goes up on every save, and a `created` and a `modified` that the
+  application writes. Here the revision is a **fact the document
+  says**, because nothing here counts a save: a document that was
+  saved three times and a document that says it was revised three
+  times are the same document to this tree.
+- **The tree's times are not here.** The tree's `created` and
+  `modified` are filetimes the application writes, and this tree has
+  no clock of its own — a date that a document says would be a date
+  that nobody wrote.
+
+### What it cost
+
+- **Four tests** in the prose battery (`tests/revision.rs`): the
+  document that says who and how many times, the revision of zero and
+  the empty name, the revision that is not a whole number, and the
+  property that is not named keeping what it was.
+- **No new command**: the properties of a document gain two facts,
+  and the two commands that set them and read the document say them.
+  The prose battery carries **99** commands and the MCP server
+  **827**.
+
+### What it does not settle
+
+- **The times are not here**: a document says no created and no
+  modified, and the tree's two filetimes are not ported.
+- **The revision is not counted**: nothing here counts a save, and
+  the revision is what the document says it is.
+- **The tree's other settings are not here**: the tree's document
+  carries a compatibility mode and an attached template, and neither
+  is a fact this tree keeps.
