@@ -4024,6 +4024,7 @@ so.
 | the **work area** of a sequence | **built.** A sequence may have a work area — the range the editor is working in, and it may be taken away again (§587) | §587 |
 | the **playhead** and the **markers** | **built.** The playhead of a sequence moves to the marker that is next, and to the marker before it — and it does not move when there is none (§588) | §588 |
 | the **encryption** of a file, made with AES | **built.** A file may be scrambled with AES — the streams with AES and the strings with RC4, and the file says which is which (§589) | §589 |
+| the **autofit** of a row and of a column | **built.** A column may be made as wide as its text and a row as tall as it — the size is worked out from the text the cells hold (§590) | §590 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38461,3 +38462,74 @@ four, with the crypt filters that say which is which.
   file is the same file every time.
 - **The permissions are not enforced**: the bits the file holds say
   what a person may do with it, and nothing here acts on them.
+
+## 590. The autofit of a row and of a column
+
+A column made **as wide as its text** and a row made **as tall as its
+text**: the tree's autofit, with the measure this tree has.
+
+### What was built
+
+- The new command **`grid.column.autofit`** makes a column as wide as
+  the text it holds:
+  - the width of a column is the width of its **longest line**: the
+    text of a cell may be more than one line long, and the widest of
+    the lines is the one that counts;
+  - the text is **counted** and not measured with a font, and a
+    **character of room** is added beside it: the tree measures the
+    text with a font and works out a width in points, and here the
+    width is in characters and the text is counted;
+  - a cell **under a merge** is not measured: the merge is the width
+    of the column and not its text, and the cell that holds the merge
+    is not measured either;
+  - a column that holds **no text** is **left as it is**: there is
+    nothing to measure, and a width that is not worked out is not a
+    width.
+- The new command **`grid.row.autofit`** makes a row as tall as the
+  text it holds: the row is as tall as the most lines any of its
+  cells holds, and a line is as high as the **default height of a
+  row**, which is fifteen points.
+- A row that holds **no text** is left as it is, and a **column** that
+  is not a column and a **row** that is not counted from one are
+  refused by name.
+
+### What the port found
+
+- **The tree measures a font and this one counts.** The tree's
+  autofit asks the front end for the width of the text, and the engine
+  falls back on an average of the widths of the glyphs of the default
+  font. Here there is no font to measure: the text is counted, and
+  the width is in characters — the same shape and a different measure.
+- **The tree's row autofit is a request and this one is a size.** The
+  tree hands the row to the layout and the layout works out the
+  height; here the height is worked out and put on the row.
+- **The tree's autofit reveals the rows and columns it fits**, because
+  in the tree a hidden row has no size at all. Here the hiding is a
+  fact of its own — a row that is hidden is still a row that has a
+  height — and the fitting does not touch it.
+- **The tree's autofit works on a range of rows or columns at once**
+  (`2:5`, `2:2,4:5`) and its dialogue asks for all of them. Here a
+  size is for **one** row or **one** column, as every other size is.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/autofit.rs`): the column
+  as wide as its text, the widest line of the column, a column with no
+  text, a cell under a merge, the row as tall as its text, a row with
+  no text, and a column that is not a column.
+- **One new module** (`src/autofit.rs`) and **two new commands**
+  (`grid.column.autofit` and `grid.row.autofit`). The grid battery now
+  carries **129** commands and the MCP server **794**.
+- The note in the module `sizes` that said the tree's autofit was not
+  here was **out of date** once this arc was written, and it was
+  corrected.
+
+### What it does not settle
+
+- **The text is not measured with a font**: the width of a column is
+  the number of characters of its longest line, and a narrow letter
+  and a wide one are the same width.
+- **The size of the font is not counted**: a row of text in a larger
+  font is as tall as a row of text in a smaller one.
+- **The fitting does not reveal a hidden row or column**, and it does
+  not work on a range of them at once.
