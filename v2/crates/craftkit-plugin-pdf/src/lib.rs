@@ -142,6 +142,7 @@ mod format;
 mod free;
 mod information;
 mod intent;
+mod javascript;
 mod labels;
 mod loader;
 mod marked;
@@ -184,6 +185,7 @@ pub use form::ReadForm;
 pub use format::ReadFormat;
 pub use information::{ReadInformation, SetInformation};
 pub use intent::WriteIntent;
+pub use javascript::ReadScripts;
 pub use labels::SetPageLabels;
 pub use marked::ReadMarked;
 pub use metadata::WriteMetadata;
@@ -2098,6 +2100,7 @@ craftkit_sdk::plugin_anchor!(
     WriteAppearance,
     ReadMarked,
     ReadTransition,
+    ReadScripts,
     SetPageLabels,
     RemoveObject,
     SetNumber,
