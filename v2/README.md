@@ -4007,6 +4007,7 @@ so.
 | the **place** of the text on a page | **built.** A piece of text says where it begins — the origin of the text matrix, as the moves of the file put it (§570) | §570 |
 | the **transition** of a page | **built.** A page may say how it comes in — the kind of the transition, how long it takes and the way it moves (§571) | §571 |
 | the **reading** of an SVG file | **built.** An SVG file is read into the drawing — the paths, their colours and the place they are put (§572) | §572 |
+| the **JavaScript** of a file | **built.** The scripts a file holds are read — their names and their text — and they are not run (§573) | §573 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37330,3 +37331,58 @@ back.
 - **The gradients are not read**: a path filled with a gradient is
   read with the colour of the fill it names and not with the
   gradient.
+
+## 573. The JavaScript of a file
+
+A file may hold **scripts**: little programs a reader's program runs
+when the file is opened.
+
+### What was built
+
+- The new command **`pdf.scripts.read`** reads the scripts a file
+  holds:
+  - the **name** of the script, as the file says it;
+  - the **text** of the script.
+- The rules:
+  - a file that holds **no script** has none, and the answer says so;
+  - a script is **read and not run**: this tree reads what a file
+    says, and it does not run what a file says, and a program in a
+    file is a program and not a fact;
+  - the **kids** of the name tree are read, up to **eight** levels
+    deep: a file with many scripts splits its name tree;
+  - a script that is **not a stream** is skipped, and the answer says
+    what it skipped;
+  - a script may be asked for **by name**, and one that is not there is
+    refused.
+
+### What the port found
+
+- **The tree runs the scripts and this one reads them**: the tree has
+  a JavaScript engine — a sandbox with no file, no network and no
+  timer — and the object model Acrobat describes, and it runs a
+  file's scripts and says what they did. Here a script is read: a
+  program in a file is a program and not a fact, and this tree does
+  not run what a file says.
+- **The tree's scripts are the field's as well as the file's**: the
+  tree runs the format, the keystroke, the validate and the calculate
+  scripts of a field, and the scripts of the document. Here the
+  document's scripts are read and the field's events are read
+  elsewhere (§1306), and neither is run.
+
+### What it cost
+
+- **Three tests** in the pdf battery (`tests/javascript.rs`): the
+  scripts of a file, a file that holds no script, and a script asked
+  for by name.
+- **One new module** (`src/javascript.rs`) and **one new command**
+  (`pdf.scripts.read`). The pdf battery now carries **63** commands and
+  the MCP server **768**.
+
+### What it does not settle
+
+- **The scripts are not run**: the answer says what a file holds and
+  nothing happens.
+- **The scripts of a field are not read here**: the events of a field
+  are read elsewhere, and the program behind them is not read at all.
+- **The scripts are not checked**: a script that would fail is read
+  like any other, because this tree does not run it and cannot say.
