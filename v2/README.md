@@ -4047,6 +4047,7 @@ so.
 | the **theme** of a document | **built.** A document may say the fonts of its headings and of its body, and the accent colour — and the theme is derived into every style that says nothing of its own (§610) | §610 |
 | the **numbering** of the pages | **built.** A document may say the format the page numbers are written in and the number the first page has, and the first page's number is derived (§611) | §611 |
 | the **errors** of a sheet | **built.** The cells whose formula comes out as an error may be read — the error and the formula that gave it, worked out every time (§612) | §612 |
+| the **ALE** of a sequence | **built.** An Avid log exchange may be written — a tab-delimited clip log with a heading, the columns and a row for each clip (§613) | §613 |
 
 ### The list of things that are honestly not there: empty
 
@@ -40128,3 +40129,71 @@ is an **error**, and the cell that holds it says so.
 - **The checks of the tree's error checking are not here**: the tree
   also finds the formulas that are inconsistent and the numbers that
   are stored as text, and neither is here.
+
+## 613. The ALE of a sequence
+
+An **ALE** — an Avid log exchange — is a **clip log**: a
+tab-delimited text with three sections, the **heading**, the
+**columns** and the **data**.
+
+### What was built
+
+- The new command **`film.export.ale`** writes the log of a
+  sequence:
+  - the **heading**: `FIELD_DELIM TABS`, `VIDEO_FORMAT 1080`,
+    `AUDIO_FORMAT 48khz` and the `FPS` of the sequence;
+  - the **columns**: `Name`, `Tracks`, `Start`, `End`, `Tape` and
+    `Source File`;
+  - the **data**: one row for each clip of the timeline — the name
+    of the media it plays, the channel it is on, the timecodes of
+    its **source**, the reel and the file.
+- The lines end with **CR LF** — Avid's own, and the tree's rule.
+- A value holds **no tab** and **no line break**: they are turned
+  into spaces — the tree's rule.
+- The **start** and the **end** of a row are the timecodes of the
+  **source** of the clip, not of the timeline — the tree's rule.
+- An **audio** track is numbered `A1`, `A2` and so on; a video one is
+  `V`.
+- A clip with **no item** is left out: it plays no media, and the
+  log holds media.
+
+### What the port found
+
+- **The tree's log is of the media and this tree's log is of the
+  clips.** The tree writes a row for each media item of the project,
+  with the media's own timecodes and the media's own name. Here a row
+  is a clip of the timeline, and the row names the media the clip
+  plays — the source timecodes and the file are the media's, and the
+  channel is the clip's.
+- **The tree's six metadata columns are not here.** The tree's log
+  ends with `Description`, `Scene`, `Take`, `Shot`, `Log Note` and
+  `Comment`, and they hold the metadata of the media. The items of
+  this tree carry no metadata, and a column that would always be
+  empty is not written.
+- **The tree's heading knows the height of the video and the rate of
+  the audio**, because it probes the media. This tree knows neither,
+  and the heading says `1080` and `48khz` — the tree's own defaults
+  for a media it knows nothing about — and the `FPS` is the rate of
+  the sequence.
+- **The tree's `Tape` is the metadata of the media and this tree's is
+  the name of the media in eight characters** — the same reel the
+  edit decision list writes (§609), so a log and a list name the same
+  tape the same way.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/ale.rs`): the three
+  sections of the log, the row that is a clip of the timeline, the
+  audio channel that is numbered, and the value that holds no tab.
+- **One new command** (`film.export.ale`) in a new module
+  (`src/ale.rs`). The film battery now carries **81** commands and
+  the MCP server **820**.
+
+### What it does not settle
+
+- **The log is not read back**: the text is written and not read, and
+  the tree reads its own ALE files.
+- **The metadata columns are not here**: the items of this tree carry
+  no metadata, so a log has six columns and not twelve.
+- **The heading does not know the media**: the height and the audio
+  rate are the tree's defaults, and a log of a 720p film says `1080`.
