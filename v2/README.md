@@ -4023,6 +4023,7 @@ so.
 | the **nested clip** of a sequence | **built.** The clips of a sequence may be nested — a clip that holds a little timeline of its own, and that may be taken apart again (§586) | §586 |
 | the **work area** of a sequence | **built.** A sequence may have a work area — the range the editor is working in, and it may be taken away again (§587) | §587 |
 | the **playhead** and the **markers** | **built.** The playhead of a sequence moves to the marker that is next, and to the marker before it — and it does not move when there is none (§588) | §588 |
+| the **encryption** of a file, made with AES | **built.** A file may be scrambled with AES — the streams with AES and the strings with RC4, and the file says which is which (§589) | §589 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38395,3 +38396,68 @@ the marker that is next, and to the one before.
   `goToIn`, no `goToOut`, and no going to a marker by its name.
 - **The marker at the playhead's own frame is not the next marker**:
   the next marker is the first one that is after the playhead.
+
+## 589. The encryption of a file, made with AES
+
+A file whose **streams** are scrambled with AES and whose **strings**
+are scrambled with RC4: the standard security handler of revision
+four, with the crypt filters that say which is which.
+
+### What was built
+
+- The command **`pdf.file.encrypt`** now takes a **cipher**, and the
+  cipher says how the file is scrambled:
+  - the cipher is **`rc4`** or **`aes`**, and a cipher that is
+    neither is refused by name — and nothing is written;
+  - the cipher left out is **RC4**, and the file is as it was;
+  - a file scrambled with **AES** is of **revision four** and its key
+    is of **128 bits**, and the file says which is which by naming
+    the **crypt filters**: `/StdCF` for the streams, which are
+    scrambled with AES, and `/RW` for the strings, which are scrambled
+    with RC4;
+  - the **vector** a stream is chained from is worked out from the key
+    of the object and from the number of the object, so that the same
+    file and the same password always make the same file.
+- The module **`aes`** may now **make** bytes as well as undo them:
+  the forward cipher, and the padding that says how many bytes there
+  are.
+- The **user's entry** of a file of revision three or more is now
+  **thirty-two bytes**: the sixteen bytes of the hash, and sixteen
+  bytes of padding after them. Only the first sixteen are read back,
+  and the padding is zeros.
+
+### What the port found
+
+- **The strings of a file scrambled with AES are scrambled with
+  RC4.** The tree says so in its crypt filters, and the two ways are
+  named apart; here the same, and a file made here is read by the
+  tree's own reader and by another implementation.
+- **The tree draws the vector at random** and here it is worked out
+  from the key and the number of the object. The file is the same
+  file every time, and a file made here is no safer against one who
+  knows the password.
+- **The tree's entry of revision four is thirty-two bytes long** and
+  only its first sixteen are read back; the padding is there so that
+  the entry is the length the specification says.
+
+### What it cost
+
+- **Five tests** in the pdf battery (`tests/aesencrypting.rs`): the
+  file another implementation made is opened, the file made here is
+  opened again, the owner's password opens it, a cipher that is not
+  one of the two, and a file made without a cipher is still scrambled
+  with RC4.
+- **Three unit tests** in the module `aes` (`src/aes.rs`): the block
+  is encrypted the way the specification says, the cipher makes what
+  openssl made, and what the cipher makes the cipher undoes.
+- **No new command**: the pdf battery still carries **67** commands
+  and the MCP server **792**.
+
+### What it does not settle
+
+- **The file is not made with AES-256**: the revision six of the
+  handler is not here, and a file of that revision is refused by name.
+- **The vector is not drawn at random**: it is worked out, and the
+  file is the same file every time.
+- **The permissions are not enforced**: the bits the file holds say
+  what a person may do with it, and nothing here acts on them.
