@@ -4054,6 +4054,7 @@ so.
 | the **FCPXML** read back | **built.** A document of FCPXML may be read — the clips of its spine become clips of a sequence, and the media of the file become items (§617) | §617 |
 | the **edit decision list** read back | **built.** A list of cuts may be read — the events of the list become clips of a sequence, and its reels become items (§618) | §618 |
 | the **FCP7** read back | **built.** A document of FCP7 XML may be read — the clip items of its tracks become clips of a sequence, and its files become items (§619) | §619 |
+| the **messages** of a validation rule | **built.** A rule may say what a host shows when a value does not pass it — the title, the message and the style of the error (§620) | §620 |
 
 ### The list of things that are honestly not there: empty
 
@@ -40652,3 +40653,67 @@ a document of it is made into a sequence.
   marker is a clip, and the marker is not there.
 - **The links are not read**: a clip item that is linked to another
   one is a clip, and the link is not there.
+
+## 620. The messages of a validation rule
+
+A rule that says what may be typed into a range may also say what a
+host **shows** when a value does not pass it.
+
+### What was built
+
+- The rule of a validation now carries the tree's own **messages**:
+  - the **input title** and the **input message**: what a host shows
+    when the cell is chosen;
+  - the **error title** and the **error message**: what a host shows
+    when a value does not pass;
+  - the **style** of the error — the tree's own three: `stop` refuses
+    the value, `warning` warns and lets it through, and
+    `information` says it and lets it through;
+  - the **dropdown** of a list rule: whether the list is shown in the
+    cell. The tree's default is that it is.
+- The command **`grid.validation.set`** takes them, and the check
+  (`grid.validation.check`) says which **style** a failure has, and
+  the **title** and the **message** of the rule.
+- The **bounds**: a message is at most **255 characters** long, and
+  one that is longer is refused — a host shows it, and a host has
+  room for a sentence.
+- The **unknown style** is refused: `stop`, `warning` and
+  `information` are the styles there are.
+
+### What the port found
+
+- **The tree's rule carries nine more facts than the rule here did.**
+  The tree's validation holds the range, the kind, the operator, the
+  two formulas and the blank, and then it holds the dropdown, the
+  input title, the input message, whether the input message is shown,
+  the error title, the error message, the error style and whether the
+  error message is shown.
+- **The tree's style is about a host, and not about the rule.** The
+  tree's shell refuses the edit when the rule of the cell is a
+  `stop`, and shows a toast when it is a `warning`; here nothing types
+  a value into a cell, so the style is carried and the check says it,
+  and says whether the value is refused.
+- **The tree's input message is shown when the cell is chosen**, and
+  not when the value fails. Here the input message is carried by the
+  rule and is read with it; there is no caret to choose a cell with.
+
+### What it cost
+
+- **Four tests** in the grid battery (`tests/validationmessages.rs`):
+  the messages of a rule, the default style, the unknown style and
+  the message that is too long, and the dropdown of a list rule.
+- **No new command**: the rule of a validation gains the tree's
+  messages, and the two commands that make and check a rule say them.
+  The grid battery carries **133** commands and the MCP server
+  **827**.
+
+### What it does not settle
+
+- **The messages are not shown**: this tree has no host that shows a
+  message, and the check says what the rule says and nothing more.
+- **The style does not refuse anything**: a `stop` is said to refuse
+  a value, and the value is not refused here — nothing types a value
+  into a cell.
+- **The tree's custom rule is not here**: a formula that says yes or
+  no about the value being typed cannot be checked, because the
+  formula engine here cannot see a value that is not in a cell yet.
