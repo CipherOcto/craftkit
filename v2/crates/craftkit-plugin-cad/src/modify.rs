@@ -104,7 +104,7 @@ pub(crate) fn moved(kind: &str, geometry: &Json, dx: f64, dy: f64) -> Option<Jso
 }
 
 /// The **geometry** of an entity, turned about a point.
-fn turned(kind: &str, geometry: &Json, about: (f64, f64), degrees: f64) -> Option<Json> {
+pub(crate) fn turned(kind: &str, geometry: &Json, about: (f64, f64), degrees: f64) -> Option<Json> {
     let mut out = geometry.clone();
     let angle = degrees.to_radians();
     let (sin, cos) = angle.sin_cos();

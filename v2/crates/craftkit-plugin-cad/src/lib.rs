@@ -76,6 +76,7 @@
 #![forbid(unsafe_code)]
 
 mod arcs;
+mod arrays;
 mod audits;
 mod copies;
 mod curves;
@@ -550,7 +551,7 @@ fn point_in(geometry: &Json, name: &str) -> Option<Point> {
 /// They are **derived**, and they are computed from the geometry in the
 /// payload: the numbers are the payload's and the library's, and the
 /// core has no unit and no opinion.
-fn extents_of(node: &Node) -> Json {
+pub(crate) fn extents_of(node: &Node) -> Json {
     let Some(geometry) = node.data.get("geometry") else { return Json::Null };
     let mut lowest = (f64::INFINITY, f64::INFINITY);
     let mut highest = (f64::NEG_INFINITY, f64::NEG_INFINITY);
@@ -576,7 +577,7 @@ fn extents_of(node: &Node) -> Json {
 /// A line has two, a circle has its centre and a point on it, an arc
 /// has a centre and two ends, a text has its insertion point, and an
 /// insert has its insertion point.
-fn points_of(geometry: &Json) -> Vec<(f64, f64)> {
+pub(crate) fn points_of(geometry: &Json) -> Vec<(f64, f64)> {
     let mut points = Vec::new();
     let read = |value: &Json, points: &mut Vec<(f64, f64)>| {
         let Some(x) = value.get("x").and_then(|x| x.as_f64()) else { return };
