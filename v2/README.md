@@ -4017,6 +4017,7 @@ so.
 | a file scrambled with **AES** | **built.** A file whose streams are scrambled with AES-128 is opened with a password — the strings with RC4 and the streams with AES (§580) | §580 |
 | the **index** of a document | **built.** A document may be marked with index entries — the index gathers them under the letters of the alphabet, and names the blocks they are on (§581) | §581 |
 | the **array** of an entity | **built.** An entity may be arrayed — in a grid of rows and columns, or about a centre — and the copies are entities of their own (§582) | §582 |
+| the **constraints** of a drawing | **built.** A drawing may hold constraints — the entities are constrained to one another, and whether each constraint holds is worked out from the geometry (§583) | §583 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38015,7 +38016,7 @@ its copies, put in a grid or about a centre.
   a whole number, and an array that is endless.
 - **One new module** (`src/arrays.rs`) and **two new commands**
   (`cad.entity.array.rectangular` and `cad.entity.array.polar`). The
-  cad battery now carries **42** commands and the MCP server **780**.
+  cad battery now carries **41** commands and the MCP server **780**.
 
 ### What it does not settle
 
@@ -38025,3 +38026,75 @@ its copies, put in a grid or about a centre.
   other, is not made.
 - **The array is not drawn**: the tree draws a preview of the array
   while it is made, and there is no drawing here.
+
+## 583. The constraints of a drawing
+
+A constraint says that two entities of a drawing stand in some
+relation to one another. The tree's constraint is a solver: it moves
+the geometry until the constraint holds, and it moves it again after
+every edit. Here the constraint is a **fact** of the drawing, and
+**whether it holds is derived**.
+
+### What was built
+
+- The new command **`cad.constraint.add`** adds a **constraint**
+  between two entities:
+  - the kinds are `coincident`, `parallel`, `perpendicular`,
+    `horizontal`, `vertical`, `tangent`, `concentric` and `equal` —
+    and a kind that is not one of those is refused by name;
+  - a constraint is between **two** entities, and one that names the
+    same entity twice is refused;
+  - the constraint is a **relation** from one entity to the other,
+    and it says what kind it is.
+- The new command **`cad.constraint.list`** reads the **constraints**
+  of a drawing, and for each one says whether it holds:
+  - the two lines are **parallel** when their directions are, and
+    **perpendicular** when their directions are at right angles;
+  - a line is **horizontal** when its ends are level and
+    **vertical** when they are upright;
+  - two entities are **coincident** when an end of one stands on an
+    end of the other, **concentric** when their centres are one, and
+    **equal** when they are as long as one another;
+  - two circles are **tangent** when the distance between their
+    centres is the sum of their radii;
+  - a constraint whose geometry cannot be read is **unknown**, and
+    unknown is not the same as false.
+
+### What the port found
+
+- **The tree solves the constraint and this one records it.** The
+  tree's solver moves the geometry until the constraint holds, and it
+  moves it again after every edit, so that the drawing is always the
+  way the constraints say. Here the constraint says what the drawing
+  means and the drawing is as it is — and the answer says whether the
+  constraint holds as it stands.
+- **The tree counts the degrees of freedom and this one does not.**
+  The tree counts how many things the constraints still leave free and
+  shows them in the constraint bar; here the constraints are counted
+  and nothing else.
+- **The tree has dimensional constraints and this one has not.** The
+  tree's distance and angle constraints carry a number that the
+  solver keeps true; here every constraint here is a relation between
+  two entities and none of them carries a number.
+
+### What it cost
+
+- **Five tests** in the cad battery (`tests/constraints.rs`): the
+  constraint added and the line that holds, the constraint that does
+  not hold, the constraints of a drawing read, a kind that is not a
+  constraint, and a constraint between one entity.
+- **One new module** (`src/constraints.rs`) and **two new commands**
+  (`cad.constraint.add` and `cad.constraint.list`). The cad battery now
+  carries **43** commands and the MCP server **782**.
+
+### What it does not settle
+
+- **The geometry is not moved**: the constraint is a fact and the
+  drawing is as it is.
+- **The degrees of freedom are not counted**, and the constraint bar
+  is not here.
+- **The dimensional constraints are not here**: a constraint that
+  carries a number — a distance, an angle — is not read.
+- **The constraint is not between points of the entities**: the tree
+  may constrain the start of one line to the middle of another, and
+  here a constraint is between whole entities.
