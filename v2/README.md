@@ -4030,6 +4030,7 @@ so.
 | the **detail** of a group of a pivot | **built.** The rows that stand behind a group may be read — they are worked out from the range, and they cannot be out of date (§593) | §593 |
 | the **handler of revision six** | **built.** A file scrambled with AES-256 is opened — the key of the file is not the hash of the password, and the password is checked with a hardened hash (§594) | §594 |
 | the **encryption** of a file, made with AES-256 | **built.** A file of the handler of revision six may be made — the key of the file and the salts are worked out, and every string and stream has a vector of its own (§595) | §595 |
+| the **fields** of a block | **built.** A field may be put on a paragraph — it covers words, it says what it is, and its result is worked out from the text (§596) | §596 |
 
 ### The list of things that are honestly not there: empty
 
@@ -38891,3 +38892,88 @@ are scrambled with AES-256.
   implemented, and a password with a letter outside ASCII is refused.
 - **The permissions are not enforced**: they are written into the
   file, and nothing acts on them.
+
+## 596. The fields of a block
+
+A **field**: a piece of a paragraph that says something on its own —
+the date, the title of the document, the name of the author, the
+number of a page.
+
+### What was built
+
+- The new commands of the **fields** of a block:
+  - **`prose.block.field.add`** puts a field on a paragraph: it says
+    where the field **begins** and where it **ends**, in characters,
+    and it says **what the field is** with its code — `DATE`,
+    `TITLE`, `FILENAME`;
+  - **`prose.block.field.set`** changes a field — its code, or whether
+    it is **locked**;
+  - **`prose.block.field.read`** reads the fields of a block, each one
+    with the **result** it covers;
+  - **`prose.block.field.unlink`** takes a field away.
+- A field is an **interval over the text of its block**, and its
+  **result is derived**: the words between its two ends are worked out
+  every time, and they are never written down, so a result cannot be
+  out of date and it follows the text when the text is rewritten.
+- A field is **named by the character it begins at**, and two fields
+  may not cover the same words: a field that covers words another
+  field covers is refused, and the block is left as it was.
+- The **code** may not be empty, and it is at most **4096**
+  characters long. A code that is longer is refused.
+- A **locked** field is not changed and not unlinked: both are
+  refused, and the field is as it was.
+- The fields of a block are **derived** too: they are read out of the
+  block, they are in the block's own reading, and they are in the
+  plan the evaluator makes.
+
+### What the port found
+
+- **The tree keeps the result beside the code, and this tree derives
+  it.** The tree's field carries the instruction *and* a cached
+  result, and the cached result is what the field shows until the
+  fields are updated. Here the words a field covers *are* its result,
+  and they are worked out every time — so a field cannot show a
+  result its text does not say, and there is nothing to update. That
+  is the rule of the **runs** of a paragraph again — the same shape
+  as "derived values are derived", with the derived thing being the
+  result of a field.
+- **The tree's field is an object in the text, and this tree's field
+  is an interval.** The tree's field stands in the text as one
+  placeholder character, and the result is *beside* it. Here the field
+  covers the words themselves. The difference shows when a field is
+  unlinked: the tree rewrites the text and puts the result in the
+  field's place, and here the text does not change at all — the words
+  were already there, and what is taken away is the field.
+- **The tree's lock keeps a result across an update, and this tree
+  has no update.** So the lock is said here as a **refusal**: a locked
+  field may not be changed and may not be unlinked. It is the same
+  promise with nothing behind it but the refusal.
+- **The tree's field is chosen in the window, and this tree's field
+  is named.** The tree's fields live in the selection: `fields.setCode`
+  works on "the selected field". Here a field is named by the
+  character it begins at, so a command says exactly which field it
+  means, and a field that is not there is refused by name.
+
+### What it cost
+
+- **Nine tests** in the prose battery (`tests/fields.rs`): the field
+  and its result, the result following the text, the field named by
+  where it begins, two fields over the same words, the locked field,
+  the unlinking that leaves the words alone, the fields that are not
+  one, the field that is not there, and the fields in the plan.
+- **Four new commands** (`prose.block.field.add`, `prose.block.field.set`,
+  `prose.block.field.read` and `prose.block.field.unlink`) in a new
+  module (`src/fields.rs`). The prose battery now carries **83**
+  commands and the MCP server **802**.
+
+### What it does not settle
+
+- **The result is not computed**: this tree has no layout, so it does
+  not know what `DATE` is today. The words a field covers are its
+  result, and nothing works it out.
+- **The lock does not keep a result across an update**, because there
+  is no update: it is a refusal to change and to unlink, and nothing
+  else.
+- **Two fields may not nest**: a field inside a field is refused as an
+  overlap, and the tree's range fields — a field that begins and
+  ends around other content — are not here.
