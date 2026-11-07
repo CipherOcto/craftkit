@@ -108,6 +108,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem
 mod accessibility;
 mod background;
 mod bookmarks;
+mod borders;
 mod characters;
 mod comments;
 pub mod contrast;
@@ -136,6 +137,7 @@ mod titles;
 pub use accessibility::CheckAccessibility;
 pub use background::{SetBackground, SetWatermark};
 pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
+pub use borders::SetBorders;
 pub use characters::FormatRun;
 pub use comments::{DeleteComment, GetComment, SetComment};
 pub use editing::{

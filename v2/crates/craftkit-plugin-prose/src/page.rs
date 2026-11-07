@@ -238,11 +238,13 @@ impl GetPage {
         let background = session.document().node(document);
         let colour = background.as_ref().and_then(|node| crate::background::background_of(node));
         let watermark = background.as_ref().and_then(|node| crate::background::watermark_of(node));
+        let borders = background.as_ref().and_then(|node| crate::borders::borders_of(node));
         Ok(Outcome::new(format!("the page of the document `{document}`")).with_data(json!({
             "document": document,
             "page": stored,
             "colour": colour,
             "watermark": watermark,
+            "borders": borders,
         })))
     }
 }
