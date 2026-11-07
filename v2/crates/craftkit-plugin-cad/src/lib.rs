@@ -93,6 +93,7 @@ mod mirrors;
 mod modify;
 mod order;
 mod svgexport;
+mod svgimport;
 
 pub use arcs::AddArc;
 pub use audits::AuditDrawing;
@@ -117,6 +118,7 @@ pub use mirrors::MirrorEntity;
 pub use modify::{MoveEntity, RemoveEntity, RotateEntity, ScaleEntity};
 pub use order::{BackwardEntity, BringToFront, ForwardEntity, ListEntities, SendToBack};
 pub use svgexport::ExportSvg;
+pub use svgimport::ImportSvg;
 
 /// The CAD layer.
 ///
@@ -1113,6 +1115,7 @@ craftkit_sdk::plugin_anchor!(
     ImportDxf,
     ExportDxf,
     ExportSvg,
+    ImportSvg,
     AddLayer,
     AddBlock,
     AddLine,
