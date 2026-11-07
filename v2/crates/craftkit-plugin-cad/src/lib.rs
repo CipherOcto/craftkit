@@ -83,6 +83,7 @@ mod copies;
 mod curves;
 mod dimensions;
 mod editable;
+mod groups;
 mod layersettings;
 mod linetypes;
 mod measurements;
