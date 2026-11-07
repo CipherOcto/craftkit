@@ -23,11 +23,13 @@
 //!   is a **node** under the sequence, and the place is in its
 //!   payload, so that a marker is a thing in the tree and not a row
 //!   in a list.
-//! - **The tree's playhead commands are not here.** The tree's
-//!   `markers.goNext` and `markers.goPrev` move the playhead to the
-//!   next marker, and the playhead is the state of the editor and not
-//!   a fact of the document. Here the markers are facts and the
-//!   playhead is not a thing at all.
+//! - **The tree's playhead is the state of the editor and this one's
+//!   is a fact of the sequence.** The tree's `markers.goNext` and
+//!   `markers.goPrev` move the playhead of the editor, and the
+//!   playhead is gone when the editor is closed. Here the playhead is
+//!   the sequence's own frame (the module `playhead`), and the two
+//!   commands that move it to a marker are here: `film.marker.next`
+//!   and `film.marker.previous`.
 //!
 //! # What it does not do
 //!
@@ -330,6 +332,111 @@ impl ClearMarkers {
         }
         Ok(Outcome::changed(format!("the markers of the sequence `{sequence}` are taken away"))
             .with_data(serde_json::json!({ "sequence": sequence, "markers": markers })))
+    }
+}
+
+/// The **markers** of a sequence, in the order of their places.
+fn markers_of(session: &Session, sequence: u64) -> Vec<(u64, u64)> {
+    let Some(node) = session.document().node(sequence) else { return Vec::new() };
+    let mut markers: Vec<(u64, u64)> = node
+        .children
+        .iter()
+        .filter(|child| child.kind == "film.marker")
+        .map(|child| {
+            let start = child.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
+            (start, child.id)
+        })
+        .collect();
+    markers.sort_by_key(|(start, _)| *start);
+    markers
+}
+
+/// **Move the playhead to the next marker** of a sequence.
+///
+/// The markers are facts of the sequence and the playhead is a fact of
+/// the sequence too, and so the place of the next one is worked out
+/// and put.
+#[derive(Command)]
+#[command(id = "film.marker.next", area = "film", layer = "film", icon = "flag", mutates, undoable)]
+pub struct NextMarker {
+    /// The sequence.
+    pub sequence: NodeRef,
+}
+
+impl NextMarker {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "film.marker.next".to_string();
+        let sequence = self.sequence.0;
+        let Some(node) = session.document().node(sequence) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{sequence}`"),
+            });
+        };
+        if node.kind != "film.item" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{sequence}` is a `{}` and not a sequence", node.kind),
+            });
+        }
+        let playhead = crate::playhead::playhead_of(node);
+        let markers = markers_of(session, sequence);
+        let Some((start, marker)) = markers.iter().find(|(start, _)| *start > playhead).copied() else {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("there is no marker after frame {playhead}"),
+            });
+        };
+        let Some(node) = session.document_mut()?.node_mut(sequence) else {
+            return Err(EngineError::Failed { id, message: format!("there is no sequence `{sequence}`") });
+        };
+        node.data["playhead"] = serde_json::json!(start);
+        Ok(Outcome::changed(format!("the playhead is at frame {start}"))
+            .with_data(serde_json::json!({ "sequence": sequence, "marker": marker, "frame": start })))
+    }
+}
+
+/// **Move the playhead to the marker before** the one it is at.
+///
+/// The marker before the playhead is the last one that is before it,
+/// and a sequence with no marker before the playhead is **refused**.
+#[derive(Command)]
+#[command(id = "film.marker.previous", area = "film", layer = "film", icon = "flag", mutates, undoable)]
+pub struct PreviousMarker {
+    /// The sequence.
+    pub sequence: NodeRef,
+}
+
+impl PreviousMarker {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "film.marker.previous".to_string();
+        let sequence = self.sequence.0;
+        let Some(node) = session.document().node(sequence) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{sequence}`"),
+            });
+        };
+        if node.kind != "film.item" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{sequence}` is a `{}` and not a sequence", node.kind),
+            });
+        }
+        let playhead = crate::playhead::playhead_of(node);
+        let markers = markers_of(session, sequence);
+        let Some((start, marker)) = markers.iter().rev().find(|(start, _)| *start < playhead).copied() else {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("there is no marker before frame {playhead}"),
+            });
+        };
+        let Some(node) = session.document_mut()?.node_mut(sequence) else {
+            return Err(EngineError::Failed { id, message: format!("there is no sequence `{sequence}`") });
+        };
+        node.data["playhead"] = serde_json::json!(start);
+        Ok(Outcome::changed(format!("the playhead is at frame {start}"))
+            .with_data(serde_json::json!({ "sequence": sequence, "marker": marker, "frame": start })))
     }
 }
 
