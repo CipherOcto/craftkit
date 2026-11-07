@@ -4012,6 +4012,7 @@ so.
 | the **Unicode map** of a font | **built.** The characters a font's codes stand for are read — the map a font carries, its characters and its ranges (§575) | §575 |
 | the **text** of a page, read through the map of its font | **built.** A page's text is read through the map of the font in use — the codes become the characters the map says, and the fonts of a page are read beside them (§576) | §576 |
 | the **encryption** of a file, undone | **built.** An encrypted file is opened with a password — the strings and the streams are unscrambled with RC4, and the file is written out plain (§577) | §577 |
+| the **encryption** of a file, made | **built.** A file is encrypted with a password — the strings and the streams are scrambled with RC4, and the trailer names the object that holds the scramble (§578) | §578 |
 
 ### The list of things that are honestly not there: empty
 
@@ -37658,3 +37659,85 @@ file is opened with a password and written out plain.
 - **The objects of an object stream are not carried over**: the
   loader does not read them into the document, and the file that is
   written does not have them.
+
+## 578. A file is encrypted with a password
+
+§577 undid the scramble of a file. This makes one.
+
+### What was built
+
+- The new command **`pdf.file.encrypt`** encrypts the document with a
+  password and writes it out:
+  - the **strings** of every object and the **bytes** of every stream
+    are scrambled;
+  - the **encryption** is an object of the file of its own, and the
+    trailer names it;
+  - the **owner's entry** and the **user's entry** are worked out from
+    the passwords, and the user's entry is what a password is checked
+    against;
+  - the **owner's password** may be given apart from the user's, and
+    when it is not given the owner is the user;
+  - the **identifier** of the file is sixteen bytes worked out from the
+    passwords and from the numbers of the objects, so that the same
+    file and the same password always make the same file.
+- The rules:
+  - the file is scrambled with the **standard security handler of
+    revision two** and with **RC4**, and the key is **forty** bits;
+  - the **permissions** are every right there is, and the file says
+    so;
+  - the strings of the **encryption** are not scrambled: they are the
+    file's own words.
+- The **handler** is now a module of its own (`crypt`): the hash, the
+  scramble, the key of the file and the key of an object. Both
+  commands use it — the one that undoes the scramble (§577) and the
+  one that makes it.
+
+### What the port found
+
+- **The tree makes a file and this one makes one too, but with less
+  of it.** The tree's crypt layer writes RC4, AES-128 and AES-256, and
+  it writes a revision of six when the file asks for one. Here the
+  file is written with RC4 and a revision of two, and the AES is not
+  here.
+- **The tree's AES has a deterministic vector.** The tree derives the
+  initialisation vector of an AES file from a SHA-256 of the key, the
+  object and the content, so that a save is reproducible and no vector
+  is ever used twice. Here there is no AES and no vector: the
+  identifier of the file is worked out from the passwords and the
+  numbers of the objects instead.
+- **The tree keeps the user's password when the owner's opened the
+  file.** The tree's session holds the user's password — taken out of
+  the owner's entry — so that the parts of it that want the user's
+  password may have it. Here the owner's password opens the file and
+  the user's password is worked out of it for the check, and it is not
+  kept.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/encrypting.rs`): the file
+  encrypted and opened again with the password, the file opened with
+  the owner's password, a password that does not open it, and the
+  permissions of the file that was made.
+- **One new module** (`src/crypt.rs`) — the standard security handler,
+  taken out of the module that undoes the scramble so that the module
+  that makes it may use it — and **one new command**
+  (`pdf.file.encrypt`). The pdf battery now carries **67** commands
+  and the MCP server **776**.
+- The **writer** takes a **trailer** of its own now: the root, the
+  information, the encryption and the identifier. And a string of a
+  file is written as its **bytes**: a character of a string is one
+  byte of the file, and a character above the Latin-1 range is written
+  as the UTF-8 bytes of itself.
+
+### What it does not settle
+
+- **AES is not made**: the file is written with RC4 and a revision of
+  two, and a file that wants AES is not made here.
+- **The permissions are always every right**: a file may be made with
+  fewer rights, and this command does not do it.
+- **The identifier is worked out and not drawn**: it comes from the
+  passwords and the numbers of the objects, and two files that hold the
+  same objects and are made with the same password hold the same
+  identifier.
+- **The metadata is not treated apart**: the metadata of a file that
+  is made is scrambled like everything else.
