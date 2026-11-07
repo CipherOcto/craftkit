@@ -4056,6 +4056,7 @@ so.
 | the **FCP7** read back | **built.** A document of FCP7 XML may be read — the clip items of its tracks become clips of a sequence, and its files become items (§619) | §619 |
 | the **messages** of a validation rule | **built.** A rule may say what a host shows when a value does not pass it — the title, the message and the style of the error (§620) | §620 |
 | the **revision** of a document | **built.** A document may say who touched it last and how many times it has been revised — and a revision of zero takes the revision away (§621) | §621 |
+| the **resources** of the MCP server | **built.** The MCP server serves the protocol's other half — the command catalogue and the design, and a template that names one node (§622) | §622 |
 
 ### The list of things that are honestly not there: empty
 
@@ -40773,3 +40774,72 @@ been revised.
 - **The tree's other settings are not here**: the tree's document
   carries a compatibility mode and an attached template, and neither
   is a fact this tree keeps.
+
+## 622. The resources of the MCP server
+
+The MCP server had **tools** and nothing else: a tool *acts*, and a
+client that only wanted to *read* had nothing to read with.
+
+### What was built
+
+- The server serves the protocol's other half:
+  - `resources/list` lists every resource the server serves;
+  - `resources/read` reads one, by its URI;
+  - `resources/templates/list` lists the URIs with a variable in
+    them;
+  - `initialize` says so: the handshake now advertises the
+    `resources` capability beside the `tools` one.
+- Two **resources**:
+  - `craftkit://commands` — the **command catalogue**: every command
+    with its label, its area and its **typed parameters**. It is the
+    content the tools are built from, so it cannot drift from them;
+  - `craftkit://design` — the **design the session holds**: its nodes
+    with their kinds and their names, and the relations between them.
+- One **template**: `craftkit://node/{id}` — one node of the design,
+  with its name, its kind and its payload.
+- A URI that names nothing is refused with the MCP's own code
+  (`-32002`), and a read with no URI is a bad request (`-32602`).
+- A resource **reads**: it changes no state, leaves no undo entry and
+  writes no file.
+
+### What the port found
+
+- **The tree's resources and the tree's tools say the same thing.**
+  The tree's `craftkit://commands` holds exactly what its `_commands`
+  tool holds, because both are built from the one registry. Here the
+  tool list is the registry itself, and the resource is the same
+  registry read as a catalogue: id, label, area, doc and the typed
+  parameters.
+- **The tree's design resource holds far more** — the name of the
+  design, its rate, its range, its playhead, whether it has unsaved
+  changes, how deep the undo is, and the plan. Here the design is the
+  nodes and the relations, because those are the facts this tree's
+  document holds.
+- **The tree's node template names a node by a word** — `n12` — and
+  this tree's nodes are numbered, so the template says `node/{id}`
+  and the id is a number.
+
+### What it cost
+
+- **Seven tests** in the MCP crate (`tests/resources.rs`): the list,
+  the catalogue, the design, the template, the URI that names nothing,
+  the handshake, and the reading that changes nothing.
+- **One module** (`src/resources.rs`) and **no new command**: a
+  resource is not a command, and the kit still has **827** commands
+  and the MCP server **827** tools.
+- The MCP crate gained a **dev-dependency** on the prose battery, so
+  that the catalogue in the test holds more than the core's commands:
+  a catalogue of forty-nine commands is a catalogue, and a test that
+  proves the catalogue says what the registry says needs more than one
+  kind of command in it.
+
+### What it does not settle
+
+- **The prompts are not here**: the protocol's third part —
+  `prompts/list` and `prompts/get`, the workflows a client offers a
+  person as a slash command — is not served yet.
+- **The design resource does not hold a plan**: the tree's resource
+  carries the plan of the design, and this one carries the nodes and
+  the relations.
+- **A resource is not a command**: nothing here calls a resource, and
+  a client that wants a document to change must call a tool.
