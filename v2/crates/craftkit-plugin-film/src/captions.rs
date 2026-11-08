@@ -420,7 +420,7 @@ pub struct ReadCaptions {
 }
 
 /// The **formats** of a caption file this tree reads.
-pub const FORMATS: [&str; 2] = ["subrip", "webvtt"];
+pub const FORMATS: [&str; 3] = ["subrip", "webvtt", "stl"];
 
 impl ReadCaptions {
     fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
@@ -435,6 +435,7 @@ impl ReadCaptions {
         let format = match named.as_deref() {
             None | Some("") | Some("subrip") | Some("srt") => "subrip",
             Some("webvtt") | Some("vtt") => "webvtt",
+            Some("stl") => "stl",
             Some(other) => {
                 return Err(EngineError::Failed {
                     id: id.clone(),
@@ -449,6 +450,22 @@ impl ReadCaptions {
             craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(|message| {
                 EngineError::Failed { id: id.clone(), message: format!("the file cannot be read: {message}") }
             })?;
+        if format == "stl" {
+            // An STL file is **binary**: its bytes are the file.
+            let (cues, warnings) = crate::stl::cues_of(&bytes).map_err(|message| EngineError::Failed {
+                id: id.clone(),
+                message: format!("{message}: `{path}`"),
+            })?;
+            let read = crate::stl::cues_as_json(&cues);
+            return Ok(Outcome::new(format!("`{path}` holds {} cue(s)", cues.len())).with_data(json!({
+                "path": path,
+                "format": format,
+                "cues": read,
+                "blocks": Vec::<Json>::new(),
+                "warnings": warnings,
+                "count": cues.len(),
+            })));
+        }
         let text = decode(&bytes);
         let (cues, blocks, warnings) = if format == "webvtt" {
             let document = vtt_cues(&text).map_err(|message| EngineError::Failed {
