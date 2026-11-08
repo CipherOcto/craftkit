@@ -4110,6 +4110,7 @@ so.
 | the **layers** of a layout are the kit's layers | **built.** The edge is the kit's, so a locked layer locks what is on it and a hidden layer hides it (§674) | §674 |
 | the **pages** of a spread deleted and moved | **built.** A page may be deleted and moved — the tree's rule that a document keeps one page, and the pages close up (§675) | §675 |
 | the **caption track** of a sequence | **built.** A sequence may carry a caption track — the tree's formats, and the cues of a track never overlap (§676) | §676 |
+| a caption file **imported** as a caption track | **built.** The cues of a file become a track — snapped to the frames of the sequence, and an overlap is refused (§677) | §677 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -44265,5 +44266,62 @@ A **sequence** may now carry a **caption track**, and the track holds
 - **The tree's style and position of a cue are not here**, and neither
   is its language: the track carries the language `en` and nothing
   else says it.
+
+---
+
+## 677. A caption file is imported as a caption track
+
+A **caption file** may now be imported: its cues become a **caption
+track** of a sequence, snapped to the frames of that sequence.
+
+### What was built
+
+- A caption file is imported as a **new caption track** of a sequence,
+  and the rules are the tree's own:
+  - the cues of the file are **snapped to the frames** of the sequence.
+  - the track is **named after the file**, unless a name is given, and
+    it goes to the **front** of the sequence.
+  - the cues of the file that **overlap each other** are an error of
+    the project, and the whole import is refused: the sequence is
+    left as it was.
+  - a sequence with **no rate** has no frames, and the import is
+    refused.
+- A new command (**`film.caption.import`**) imports the file.
+
+### What the port found
+
+- **The tree's import makes a new caption track** in the active
+  sequence — and a new sequence when none is open — and it is one
+  undo step. Here the sequence is named, and the track is made in it.
+- **The tree snaps the cues to the frames of the sequence** when it
+  imports them: a cue of a caption file is in the ticks of the
+  sequence, and the frames are what the timeline is made of. Here the
+  cues of a file are in **milliseconds** — the unit of the format —
+  and they are snapped to the frames of the rate of the sequence.
+- **The tree checks the project after the import**, and a project with
+  captions that overlap is not a project; so the tree's import fails
+  as a whole. Here the overlap is caught before anything is made, and
+  the import is refused with the two times that overlap in the
+  refusal.
+- **The tree's reader warns about the cues it skips**, and the
+  warnings of the reader are in the answer of the import.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/captionimport.rs`): the
+  imported track and the snapped frames, the name of the track, the
+  refused file, and the sequence with no rate.
+- **One command**. The film battery now carries **95** commands and
+  the MCP server **880**.
+
+### What it does not settle
+
+- **The import does not make a sequence.** The tree makes one when
+  none is open, and here the sequence is named.
+- **The cues of the file are not edited by the import.** The tree's
+  import may place the cues, and the tree's captions may be moved
+  afterwards; here the cues are made as the file says them.
+- **Only the two formats of the reader are here**: a SubRip file and a
+  WebVTT file, and the tree's other five are not.
 
 ---
