@@ -253,7 +253,8 @@ pub use binreading::ReadBin;
 pub use binremoval::RemoveBin;
 pub use captions::ReadCaptions;
 pub use captiontracks::{
-    AddCaption, AddCaptionTrack, ImportCaptions, ReadCaptions as ReadCaptionTrack, RemoveCaption,
+    AddCaption, AddCaptionTrack, ExportCaptions, ImportCaptions, ReadCaptions as ReadCaptionTrack,
+    RemoveCaption,
 };
 pub use clipreading::ReadClip;
 pub use edits::{NextEdit, PrevEdit, Razor};

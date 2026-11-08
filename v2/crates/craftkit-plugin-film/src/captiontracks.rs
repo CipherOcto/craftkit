@@ -449,3 +449,118 @@ impl ImportCaptions {
         ))
     }
 }
+
+/// **Export** the cues of a caption track as a caption file.
+///
+/// The tree's own rule: the captions of a track are written back as a
+/// caption file, and the times of the track are the times of the
+/// sequence they are on — the frames of the timeline are the
+/// milliseconds of the file.
+#[derive(Command)]
+#[command(id = "film.captions.export", area = "film", layer = "film", icon = "plus", mutates, undoable)]
+pub struct ExportCaptions {
+    /// The caption track.
+    pub track: NodeRef,
+    /// The file to write.
+    pub path: Text,
+    /// The format of the file: `subrip` when it is not given.
+    pub format: Option<Text>,
+}
+
+impl ExportCaptions {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let command = "film.captions.export";
+        let track = self.track.0;
+        let node = the_track(session, command, track)?;
+        // The **sequence** the track is on, and its **rate**: the
+        // frames of the track are the milliseconds of the file.
+        let sequence = session
+            .document()
+            .walk()
+            .find(|node| node.children.iter().any(|child| child.id == track))
+            .map(|node| node.id);
+        let rate = sequence
+            .and_then(|sequence| session.document().node(sequence))
+            .and_then(|node| node.data.get("rate").cloned())
+            .unwrap_or(Json::Null);
+        let (Some(num), Some(den)) =
+            (rate.get("num").and_then(|num| num.as_i64()), rate.get("den").and_then(|den| den.as_i64()))
+        else {
+            return Err(EngineError::Failed {
+                id: command.to_string(),
+                message: "the sequence has no rate, and the times are not known".to_string(),
+            });
+        };
+        if num <= 0 || den <= 0 {
+            return Err(EngineError::Failed {
+                id: command.to_string(),
+                message: "the rate of the sequence is not a rate".to_string(),
+            });
+        }
+        // The **cues** of the track, in the order they start in, and
+        // their times in milliseconds.
+        let cues = cues_of(node);
+        let cues: Vec<crate::captions::Cue> = cues
+            .into_iter()
+            .map(|(_, start, end, text)| crate::captions::Cue {
+                start: milliseconds_of(start, num, den),
+                end: milliseconds_of(end, num, den),
+                text,
+            })
+            .collect();
+        // The **file** is written.
+        let named = self.format.as_ref().map(|format| format.0.trim().to_ascii_lowercase());
+        let format = match named.as_deref() {
+            None | Some("") | Some("subrip") | Some("srt") => "subrip",
+            Some("webvtt") | Some("vtt") => "webvtt",
+            Some(other) => {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!(
+                        "`{other}` is not a format of a caption file: the formats are {}",
+                        crate::captions::FORMATS.join(", ")
+                    ),
+                });
+            }
+        };
+        let path = self.path.0.trim().to_string();
+        if path.is_empty() {
+            return Err(EngineError::Failed {
+                id: command.to_string(),
+                message: "a file has a path".to_string(),
+            });
+        }
+        let written = if format == "webvtt" {
+            let cues: Vec<crate::captions::VttCue> = cues
+                .iter()
+                .map(|cue| crate::captions::VttCue {
+                    start: cue.start,
+                    end: cue.end,
+                    id: None,
+                    settings: String::new(),
+                    speaker: None,
+                    text: cue.text.clone(),
+                })
+                .collect();
+            crate::captions::write_vtt(&cues, &[])
+        } else {
+            crate::captions::write_subrip(&cues)
+        };
+        std::fs::write(&path, written.as_bytes()).map_err(|error| EngineError::Failed {
+            id: command.to_string(),
+            message: format!("the file cannot be written: {error}"),
+        })?;
+        Ok(Outcome::changed(format!("`{path}` was written with {} cue(s)", cues.len())).with_data(json!({
+            "track": track,
+            "path": path,
+            "format": format,
+            "count": cues.len(),
+            "bytes": written.len(),
+        })))
+    }
+}
+
+/// The **milliseconds** a number of frames is, at a rate.
+fn milliseconds_of(frames: i64, num: i64, den: i64) -> i64 {
+    (frames * den * 1000 + num / 2) / num
+}
