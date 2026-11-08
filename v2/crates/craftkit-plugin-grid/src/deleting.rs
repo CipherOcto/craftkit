@@ -174,7 +174,7 @@ pub fn delete_rows(sheet: &mut Node, name: &str, at: u64, count: u64) -> Result<
     sheet.data["cells"] = crate::cells_into(&moved);
     // The maps of cells: the borders, the notes, the links and the
     // pictures.
-    for key in ["borders", "notes", "links", "pictures"] {
+    for key in ["borders", "notes", "comments", "links", "pictures"] {
         let Some(value) = sheet.data.get(key).cloned() else { continue };
         let moved = moved_cells_map(&value, at, count)?;
         sheet.data[key] = moved;

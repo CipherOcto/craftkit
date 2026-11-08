@@ -235,6 +235,7 @@ impl SortRange {
         }
         let mut notes = crate::notes::notes_of(node);
         let mut links = crate::links::links_of(node);
+        let mut comments = crate::comments::comments_of(node);
         // The **rows** that move: what each cell of a row holds. They
         // are gathered first, because a row that moves may stand where
         // another row was, and a row that was there is still to be
@@ -242,6 +243,9 @@ impl SortRange {
         let columns: Vec<u32> = (area.start.col..=area.end.col).collect();
         let mut contents: Vec<Vec<Option<crate::formula::Cell>>> = Vec::new();
         let mut carried: Vec<(String, crate::notes::Note, Option<crate::links::Link>)> = Vec::new();
+        // The **comments** travel with the row they describe, as the
+        // notes do.
+        let mut carried_comments: Vec<(String, crate::comments::Comment)> = Vec::new();
         for row in body.start.row..=body.end.row {
             let mut line = Vec::new();
             for column in &columns {
@@ -250,6 +254,9 @@ impl SortRange {
                 let text = cell.to_text();
                 if let Some(note) = notes.get(&text) {
                     carried.push((text.clone(), note.clone(), links.get(&text).cloned()));
+                }
+                if let Some(comment) = comments.get(&text) {
+                    carried_comments.push((text.clone(), comment.clone()));
                 }
             }
             contents.push(line);
@@ -316,6 +323,19 @@ impl SortRange {
                 links.insert(to, link);
             }
         }
+        // The **comment** travels with the row it describes.
+        for (address, comment) in carried_comments {
+            let Some(cell) = CellRef::parse(&address) else { continue };
+            let source_row = cell.row;
+            let Some(place) = order.iter().position(|source| body.start.row + *source as u32 == source_row)
+            else {
+                continue;
+            };
+            let destination_row = body.start.row + place as u32;
+            let to = CellRef { col: cell.col, row: destination_row }.to_text();
+            comments.remove(&address);
+            comments.insert(to, comment);
+        }
         let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed {
                 id: id.clone(),
@@ -325,6 +345,7 @@ impl SortRange {
         node.data["cells"] = crate::cells_into(&cells);
         node.data["notes"] = crate::notes::notes_into(&notes);
         node.data["links"] = crate::links::links_into(&links);
+        node.data["comments"] = crate::comments::comments_into(&comments);
         Ok(Outcome::changed(format!("sorted {name}!{}", area.to_text())).with_data(json!({
             "sheet": sheet,
             "range": area.to_text(),

@@ -44,10 +44,11 @@ use crate::formula::{Anchor, CellRef, MAX_COLS};
 
 /// The keys of a sheet that this tree **moves** when columns are
 /// inserted.
-pub(crate) const MOVED: [&str; 18] = [
+pub(crate) const MOVED: [&str; 19] = [
     "cells",
     "borders",
     "notes",
+    "comments",
     "links",
     "pictures",
     "merges",
@@ -267,7 +268,7 @@ pub fn insert_columns(sheet: &mut Node, name: &str, at: u64, count: u64) -> Resu
     sheet.data["cells"] = crate::cells_into(&moved);
     // The maps of cells: the borders, the notes, the links and the
     // pictures.
-    for key in ["borders", "notes", "links", "pictures"] {
+    for key in ["borders", "notes", "comments", "links", "pictures"] {
         let Some(value) = sheet.data.get(key).cloned() else { continue };
         let moved = moved_cells_map(&value, at, count)?;
         sheet.data[key] = moved;
