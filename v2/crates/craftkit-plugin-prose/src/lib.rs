@@ -116,6 +116,7 @@ mod characters;
 mod citestyles;
 mod columns;
 mod comments;
+mod contents;
 pub mod contrast;
 mod dashes;
 mod editing;

@@ -258,6 +258,21 @@ fn numbering_of(document: &Document, block: u64) -> Option<(u64, usize)> {
 ///
 /// The label is **derived**: it is the counters of the list and the
 /// text of the level.
+/// The **number** a block shows, when it is in a list that counts.
+///
+/// The tree's own rule: a list that writes a bullet has no number in
+/// a table of contents, and neither has a block that is in no list.
+pub fn number_of(document: &Document, block: u64) -> Option<String> {
+    let (list, level) = numbering_of(document, block)?;
+    let kind = document.node(list)?.data.get("kind").and_then(|kind| kind.as_str())?.to_string();
+    let levels = levels_for(&kind);
+    let level = levels.get(level)?;
+    if level.format == Format::Bullet {
+        return None;
+    }
+    label_of(document, block)
+}
+
 pub fn label_of(document: &Document, block: u64) -> Option<String> {
     let (list, level) = numbering_of(document, block)?;
     let kind = document.node(list)?.data.get("kind").and_then(|kind| kind.as_str())?.to_string();
