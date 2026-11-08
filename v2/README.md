@@ -4098,6 +4098,7 @@ so.
 | the **items** of a date field grouped | **built.** The items of a date field may be grouped by the year, the quarter, the month or the day — the tree's own labels (§661) | §661 |
 | the **values** of a pivot shown in another way | **built.** The values may be a share of a total, a running total, or the place of a value among its siblings (§662) | §662 |
 | the **subtotals** of a pivot | **built.** The total of a group of the rows may be a line of its own, at the top of the group or at the bottom (§663) | §663 |
+| the **table of figures** of a document | **built.** The captions that carry one label are read as a table — the tree's label, identifier and entry rules (§664) | §664 |
 
 ### The list of things that are honestly not there: empty
 
@@ -43483,5 +43484,73 @@ of its own: at the top of the group or at the bottom of it.
   range of cells, and here it is a line of a summary that is read.
 - **The values of a subtotal are not shown in another way**: they are
   shown the way the pivot shows its values.
+
+---
+
+## 664. The table of figures of a document
+
+The **table of figures** of a document may now be read: the list of
+the captions that carry one label — the figures of a document, the
+tables of a document, the equations of a document.
+
+### What was built
+
+- The **table of figures** of a document is now read, and it is
+  **derived**: it is read out of the captions, and it cannot be out of
+  date.
+  - the **label** names the captions the table is of. It is the
+    tree's label, `Figure`, when it is not given, and a label that
+    says nothing is that label too.
+  - the **identifier** of a label is the tree's: a label holds no
+    quote, no backslash and no control character, it is at most
+    **40** characters long, and its words are joined with an
+    underscore. So `Photo Plate` and `Photo_Plate` are one label.
+  - the **entries** are the captions that carry the label, in the
+    order of the document.
+  - the **number** of an entry is the number of its caption, and a
+    caption that names a chapter has the whole number — the chapter
+    and the number together.
+  - the **entry** shows the label and the number, and the text of the
+    caption after them. A table asked **not to carry the label** shows
+    the text of the caption alone, which is the tree's own rule.
+- A new command (**`prose.document.figures`**) reads the table.
+
+### What the port found
+
+- **The tree's table of figures is a field in the document**, and its
+  entries are paragraphs in the body that are rebuilt when the
+  document changes. Here it is read, and not stored — as the index
+  (§601) and the bibliography (§653) are read.
+- **The tree's entry is the whole text of the caption paragraph**,
+  and the tree's table without the label is that text with the label
+  and the number taken off it. Here the caption is two facts — the
+  label and the number in one, the text in another — so the entry is
+  put together here rather than taken apart.
+- **The tree's label is a SEQ identifier**: the words of the label are
+  joined with underscores, and a label with a quote or a backslash in
+  it has those taken out. The same rule is here, so a label of one's
+  own may be written with spaces or with underscores.
+- **The tree's table of figures ends every entry with the page** the
+  caption is on, and it carries a tab leader and a right-aligned
+  page number.
+
+### What it cost
+
+- **Six tests** in the prose battery (`tests/figures.rs`): the table of
+  one label, the default label, a label that says nothing, a
+  multi-word label, the table without the label, and the empty table.
+- **One command**. The prose battery now carries **106** commands and
+  the MCP server **853**.
+
+### What it does not settle
+
+- **The table is not laid out.** The tree's entries carry the page,
+  the tab leader and the right-aligned page number, and there is no
+  layout here, so there is no page to show.
+- **The table is not in the document.** The tree's is a field with the
+  entries under it, and here it is read and not stored.
+- **The label is not checked against the document.** A label that no
+  caption carries gives an empty table, and that is the tree's own
+  behaviour.
 
 ---
