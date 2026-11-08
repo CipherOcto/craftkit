@@ -78,6 +78,16 @@ impl Aggregate {
 /// with the numbers they hold.
 type Group = (Value, Vec<(Value, Vec<Value>)>);
 
+/// A **filter** of a pivot: the field it filters by and the items it
+/// keeps.
+#[derive(Debug, Clone)]
+pub struct Filter {
+    /// The column it filters by.
+    pub field: u32,
+    /// The **items** it keeps, as they are written.
+    pub selected: Vec<String>,
+}
+
 /// A **pivot** of a sheet.
 #[derive(Debug, Clone)]
 pub struct Pivot {
@@ -99,6 +109,9 @@ pub struct Pivot {
     /// Whether the **grand total of the columns** is there: the line at
     /// the bottom that totals the columns.
     pub grand_totals_cols: bool,
+    /// The **filter** of the pivot: the rows whose field is not
+    /// selected are left out of it.
+    pub filter: Option<Filter>,
 }
 
 impl Pivot {
@@ -113,6 +126,13 @@ impl Pivot {
             "aggregate": self.aggregate.to_text(),
             "grand_totals_rows": self.grand_totals_rows,
             "grand_totals_cols": self.grand_totals_cols,
+            "filter": match &self.filter {
+                Some(filter) => json!({
+                    "field": CellRef::column_text(filter.field),
+                    "selected": filter.selected.clone(),
+                }),
+                None => craftkit_sdk::serde_json::Value::Null,
+            },
         })
     }
 }
@@ -143,6 +163,15 @@ pub fn pivots_of(node: &Node) -> Vec<Pivot> {
             pivot.get("grand_totals_rows").and_then(|held| held.as_bool()).unwrap_or(true);
         let grand_totals_cols =
             pivot.get("grand_totals_cols").and_then(|held| held.as_bool()).unwrap_or(true);
+        let filter = pivot.get("filter").and_then(|filter| filter.as_object()).and_then(|filter| {
+            let field =
+                filter.get("field").and_then(|field| field.as_str()).and_then(CellRef::column_index)?;
+            let selected: Vec<String> =
+                filter.get("selected").and_then(|selected| selected.as_array()).map(|selected| {
+                    selected.iter().filter_map(|item| item.as_str().map(|item| item.to_string())).collect()
+                })?;
+            Some(Filter { field, selected })
+        });
         pivots.push(Pivot {
             name: name.to_string(),
             range: area,
@@ -152,6 +181,7 @@ pub fn pivots_of(node: &Node) -> Vec<Pivot> {
             aggregate,
             grand_totals_rows,
             grand_totals_cols,
+            filter,
         });
     }
     pivots
@@ -414,6 +444,7 @@ impl CreatePivot {
             // The tree's own defaults.
             grand_totals_rows: true,
             grand_totals_cols: true,
+            filter: None,
         };
         pivots.push(pivot);
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
@@ -487,6 +518,105 @@ impl SetGrandTotals {
     }
 }
 
+/// **Say** which **items** of a field a pivot keeps.
+///
+/// The tree's own rules: the field is a column of the range the pivot
+/// reads, the items are the labels as they are written, an empty list
+/// is refused, and no list at all keeps every item.
+#[derive(Command)]
+#[command(id = "grid.pivot.filter", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct SetPivotFilter {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The name of the pivot.
+    pub name: Text,
+    /// The column it filters by: `C`.
+    pub field: Text,
+    /// The items it keeps.
+    ///
+    /// Without it, every item is kept.
+    pub selected: Option<craftkit_sdk::serde_json::Value>,
+}
+
+impl SetPivotFilter {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.pivot.filter".to_string();
+        let sheet = self.sheet.0;
+        let node = sheet_of(session, &id, sheet)?;
+        let name = self.name.0.trim().to_string();
+        let mut pivots = pivots_of(&node);
+        let Some(pivot) = pivots.iter_mut().find(|pivot| pivot.name == name) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the sheet `{sheet}` has no pivot called `{name}`"),
+            });
+        };
+        let field = self.field.0.trim().to_string();
+        let Some(field) = CellRef::column_index(&field) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("`{field}` is not a column"),
+            });
+        };
+        if field < pivot.range.start.col || field > pivot.range.end.col {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the column {} is not in the range {} of the pivot",
+                    CellRef::column_text(field),
+                    pivot.range.to_text()
+                ),
+            });
+        }
+        // The **items**: a list of labels, one label, or nothing at
+        // all — and a list that is empty is refused.
+        let selected: Option<Vec<String>> = match &self.selected {
+            None | Some(craftkit_sdk::serde_json::Value::Null) => None,
+            Some(craftkit_sdk::serde_json::Value::String(item)) => Some(vec![item.clone()]),
+            Some(craftkit_sdk::serde_json::Value::Array(items)) => {
+                if items.is_empty() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "at least one item must be selected".to_string(),
+                    });
+                }
+                Some(
+                    items
+                        .iter()
+                        .map(|item| match item {
+                            craftkit_sdk::serde_json::Value::String(text) => text.clone(),
+                            craftkit_sdk::serde_json::Value::Null => "(blank)".to_string(),
+                            other => other.to_string(),
+                        })
+                        .collect(),
+                )
+            }
+            Some(_) => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the items that are kept are a list of labels".to_string(),
+                });
+            }
+        };
+        pivot.filter = selected.map(|selected| Filter { field, selected });
+        let filter = pivot.filter.clone();
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["pivots"] = pivots_into(&pivots);
+        }
+        Ok(Outcome::changed(format!("the items of the pivot `{name}` are chosen")).with_data(json!({
+            "sheet": sheet,
+            "name": name,
+            "filter": match &filter {
+                Some(filter) => json!({
+                    "field": CellRef::column_text(filter.field),
+                    "selected": filter.selected.clone(),
+                }),
+                None => craftkit_sdk::serde_json::Value::Null,
+            },
+        })))
+    }
+}
+
 /// **Read** the summary of a pivot.
 ///
 /// The summary is derived: it is worked out now, from the cells of the
@@ -530,6 +660,14 @@ impl ReadPivot {
         // field.
         let mut groups: Vec<Group> = Vec::new();
         for row in pivot.range.start.row + 1..=pivot.range.end.row {
+            // The **filter**: a row whose field is not selected is left
+            // out of the pivot. The tree's own rule.
+            if let Some(filter) = &pivot.filter {
+                let held = key_text(&value_at(CellRef { col: filter.field, row }));
+                if !filter.selected.contains(&held) {
+                    continue;
+                }
+            }
             let key = value_at(CellRef { col: pivot.row_field, row });
             let column_key = match pivot.column_field {
                 Some(column) => value_at(CellRef { col: column, row }),
@@ -694,6 +832,13 @@ impl ReadPivot {
             "aggregate": pivot.aggregate.to_text(),
             "grand_totals_rows": pivot.grand_totals_rows,
             "grand_totals_cols": pivot.grand_totals_cols,
+            "filter": match &pivot.filter {
+                Some(filter) => json!({
+                    "field": CellRef::column_text(filter.field),
+                    "selected": filter.selected.clone(),
+                }),
+                None => craftkit_sdk::serde_json::Value::Null,
+            },
             "grand_total": grand_total,
             "columns": columns.iter().map(key_of).collect::<Vec<_>>(),
             "rows": rows,
