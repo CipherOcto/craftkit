@@ -216,6 +216,152 @@ pub fn scan(session: &Session) -> Vec<(String, usize)> {
         .collect()
 }
 
+/// The **categories** that are the annotations of a page: the comments,
+/// the attachments and the links.
+///
+/// These are the categories that are taken away by taking the
+/// annotations away.
+pub const ANNOTATION_CATEGORIES: [&str; 3] = ["Comments", "Attachments", "LinksActionsScripts"];
+
+/// Whether an annotation is a **comment**: the tree's own rule.
+///
+/// A comment is an annotation that is none of a link, a widget, a
+/// pop-up, an attachment or a mark.
+fn is_a_comment(subtype: &str) -> bool {
+    !matches!(subtype, "Link" | "Widget" | "Popup" | "FileAttachment" | "Redact")
+}
+
+/// Whether an annotation is **taken away** by a category.
+///
+/// The tree's own rules: a comment is a comment, an attachment is an
+/// attachment, and the links are the links.
+fn taken_by(subtype: &str, category: &str) -> bool {
+    match category {
+        "Comments" => is_a_comment(subtype),
+        "Attachments" => subtype == "FileAttachment",
+        "LinksActionsScripts" => subtype == "Link",
+        _ => false,
+    }
+}
+
+/// Take the **annotations** of a category away from the pages.
+///
+/// The tree's own rules: the pop-ups of the annotations that are gone
+/// go with them, and the actions of the annotations that stay are
+/// taken away when the links are.
+fn remove_annotations(session: &mut Session, category: &str) -> Result<usize, EngineError> {
+    // The **plan**, gathered before anything is changed: the page, the
+    // annotations that are gone, and the annotations whose actions go.
+    let mut plan: Vec<Vec<u64>> = Vec::new();
+    let mut actions: Vec<u64> = Vec::new();
+    {
+        let document = session.document();
+        let pages = pages_of(document);
+        for page in &pages {
+            let annotations = annotations_of(document, *page);
+            let mut doomed: Vec<u64> = Vec::new();
+            for (id, subtype) in &annotations {
+                if taken_by(subtype, category) {
+                    doomed.push(*id);
+                }
+            }
+            // The **pop-ups** of the annotations that are gone.
+            for (id, subtype) in &annotations {
+                if subtype != "Popup" || doomed.contains(id) {
+                    continue;
+                }
+                let parent =
+                    document.node(*id).map(|node| crate::entries_of(&node.data)).and_then(|entries| {
+                        entries.iter().find(|(key, _)| key == "Parent").map(|(_, value)| value.clone())
+                    });
+                let Some(parent) = parent else { continue };
+                let Some(number) = crate::number_of(&parent) else { continue };
+                let owner = document
+                    .walk()
+                    .find(|node| crate::the_number_of(node) == Some(number))
+                    .map(|node| node.id);
+                if let Some(owner) = owner
+                    && doomed.contains(&owner)
+                {
+                    doomed.push(*id);
+                }
+            }
+            // The **actions** of the annotations that stay are taken
+            // away with the links: the tree's own rule.
+            if category == "LinksActionsScripts" {
+                for (id, _) in &annotations {
+                    if !doomed.contains(id) {
+                        actions.push(*id);
+                    }
+                }
+            }
+            plan.push(doomed);
+        }
+    }
+    // Now the **change**: the annotations that are gone, and then the
+    // actions of the ones that stay.
+    let mut removed = 0usize;
+    for doomed in &plan {
+        for id in doomed {
+            if session.document_mut()?.remove_node(*id) {
+                removed += 1;
+            }
+        }
+    }
+    for id in actions {
+        let Some(node) = session.document().node(id) else { continue };
+        let entries = crate::entries_of(&node.data);
+        let kept: Vec<(String, Json)> =
+            entries.iter().filter(|(key, _)| key != "AA" && key != "A").cloned().collect();
+        if kept.len() == entries.len() {
+            continue;
+        }
+        let data = json!({
+            "object": node.data.get("object").cloned().unwrap_or(Json::Null),
+            "entries": crate::pairs_of(&kept),
+        });
+        if let Some(node) = session.document_mut()?.node_mut(id) {
+            node.data = data;
+        }
+    }
+    Ok(removed)
+}
+
+/// The **hidden information** of a file is taken away.
+///
+/// A change: the annotations of the category are gone from the
+/// document, and the pop-ups that belong to them go with them.
+#[derive(Command)]
+#[command(id = "pdf.hidden.remove", area = "pdf", layer = "pdf", icon = "remove", mutates, undoable)]
+pub struct RemoveHidden {
+    /// The category to take away: `Comments`, `Attachments` or
+    /// `LinksActionsScripts`.
+    pub category: craftkit_sdk::Text,
+}
+
+impl RemoveHidden {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let category = self.category.0.trim().to_string();
+        if !CATEGORIES.contains(&category.as_str()) {
+            return Err(EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("there is no category called `{category}`"),
+            });
+        }
+        if !ANNOTATION_CATEGORIES.contains(&category.as_str()) {
+            return Err(EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("not supported yet: the {category} is not taken away yet"),
+            });
+        }
+        let removed = remove_annotations(session, &category)?;
+        Ok(Outcome::changed(format!("{removed} annotation(s) taken away")).with_data(json!({
+            "category": category,
+            "removed": removed,
+        })))
+    }
+}
+
 /// The **hidden information** of a file is counted.
 ///
 /// A query: it does not change the document. A file that hides nothing
