@@ -4104,6 +4104,7 @@ so.
 | the **cues** of a WebVTT file | **built.** The cues of a WebVTT file are read — the identifier, the settings, the voice and the blocks (§668) | §668 |
 | the **box** of a redaction drawn into the page | **built.** A box in the fill colour of the mark is drawn where the mark was — black when no colour is given (§669) | §669 |
 | the **table of contents** of a document | **built.** The headings of a document are read as a table of contents — the tree's levels, the text and the number (§670) | §670 |
+| a caption file **written** | **built.** The cues are written as a caption file — the tree's numbering, the clock and the blocks (§671) | §671 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -43920,5 +43921,58 @@ with the level each of them is at.
   entries under it, and here it is read and not stored.
 - **A heading of a style that has no level of its own is in the table
   when its base has one**: that is the tree's rule, and it is here.
+
+---
+
+## 671. A caption file is written
+
+A caption file may now be **written**: the cues are given and the file
+is written, with the tree's own writers.
+
+### What was built
+
+- A caption file is written, and the rules are the tree's own:
+  - the cues of a **SubRip** file are **numbered from one**, and the
+    clock of a cue is written with a comma. A blank line inside the
+    text of a cue is **dropped** — a blank line would end the cue.
+  - the cues of a **WebVTT** file keep their **identifier**, their
+    **settings** and their **voice**: the file begins with the
+    signature, the blocks come before the cues, and an arrow in the
+    text is written so that it is not an arrow.
+- The cues come from **outside**, so they are read carefully: the
+  times are whole milliseconds, a cue ends after it starts, and the
+  texts are not longer than **4096** characters. There may be at most
+  **10 000** cues.
+- A new command (**`film.captions.write`**) writes the file.
+
+### What the port found
+
+- **The tree writes the captions of the project**, and the project
+  holds them. This tree has no caption track yet, so the cues are
+  given to the command and the file is written.
+- **The tree's writer is strict and its reader is forgiving**: the
+  writer renumbers from one and rounds to the millisecond, while the
+  reader takes what real files contain. The same is here: what is
+  written is read back as the cues that were written.
+- **The tree's writer keeps the blocks of a WebVTT file** — the
+  notes, the styles and the regions — and here the blocks are given
+  with the cues.
+
+### What it cost
+
+- **Six tests** in the film battery (`tests/captionwrite.rs`): the
+  SubRip file, the dropped blank line, the WebVTT file, the arrow,
+  the round trip, and the refused cue.
+- **One command**. The film battery now carries **88** commands and
+  the MCP server **862**.
+
+### What it does not settle
+
+- **The cues are not kept.** They are given to the command, and the
+  file is written.
+- **There is no caption track in a sequence**: the tree's captions are
+  a track of the project, and the cues of a project are not here yet.
+- **Nothing is drawn on the picture.** The tree's captions may be
+  burned in, and there is no rendering of them here.
 
 ---
