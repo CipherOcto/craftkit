@@ -4095,6 +4095,7 @@ so.
 | the **grand totals** of a pivot | **built.** The grand total of the rows is the column at the right and the grand total of the columns is the line at the bottom — the tree's own two (§658) | §658 |
 | the **items** of a pivot that are kept | **built.** A pivot may be filtered: the rows whose field is not selected are left out of it (§659) | §659 |
 | the **order** of the items of a pivot | **built.** The items may be in the tree's own order, from the last to the first, or in the order of the source (§660) | §660 |
+| the **items** of a date field grouped | **built.** The items of a date field may be grouped by the year, the quarter, the month or the day — the tree's own labels (§661) | §661 |
 
 ### The list of things that are honestly not there: empty
 
@@ -43310,5 +43311,61 @@ the last to the first, or in the order of the source.
   so does this one.
 - **The order of the columns** is the order of the column field, and
   the order of the rows is the order of the row field.
+
+---
+
+## 661. The items of a date field are grouped
+
+The items of a **date field** of a pivot may now be **grouped**: by the
+year, the quarter, the month or the day.
+
+### What was built
+
+- The items of a **date field** of a pivot may now be grouped:
+  - the **groupings** are the tree's own: `years`, `quarters`, `months`
+    and `days` — and a grouping that is not one of them is refused by
+    name.
+  - the **labels** are the tree's own: `2024` for the year, `Qtr1` for
+    the quarter, `Jan` for the month and `5-Jan` for the day.
+  - a value that is **not a date** is left as it is: the tree's own
+    rule, and only a number that is a date is grouped.
+  - the field is one of the **two the pivot gathers by**, and a field
+    that is not one of them is refused by name.
+- The **summary** of a pivot gathers the items of the grouped field by
+  their group, and says the grouping.
+- A new command (**`grid.pivot.group`**) says how the items are
+  grouped.
+
+### What the port found
+
+- **The tree's month names are the short ones**: a pivot writes `Jan`
+  and `15-Jan`, and not `January` and `15-January`. The tree has two
+  sets of month names — the long ones for a cell and the short ones
+  for a pivot — and this tree has the long ones in its dates and now
+  the short ones in its pivot.
+- **The tree's day is the day of the month and the month of the year
+  is left out**: `15-Jan` and not `15-Jan-2024`. So the days of two
+  years are one group, and the tree's own rule is that the days are
+  grouped by the day and the month.
+- **The tree's grouping is of the items of a field and not of the
+  summary**: the pivot table shows the groups. Here the summary is
+  gathered by the group, and it is derived every time.
+
+### What it cost
+
+- **Three tests** in the grid battery (`tests/pivotgroup.rs`): the four
+  groupings, the value that is not a date, and the refusals.
+- **One command**. The grid battery now carries **138** commands and
+  the MCP server **850**.
+
+### What it does not settle
+
+- **The tree groups a field of the axis and this tree groups one
+  field**: the tree's pivot may group every field of both axes.
+- **The year of a day is not in the label**: the tree's own rule, and
+  the days of two years are one group here as they are there.
+- **The grouping of a date that is a text is not here**: the tree
+  groups a number that is a date and not a text that looks like one,
+  and so does this one.
 
 ---
