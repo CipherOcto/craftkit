@@ -4113,6 +4113,7 @@ so.
 | a caption file **imported** as a caption track | **built.** The cues of a file become a track — snapped to the frames of the sequence, and an overlap is refused (§677) | §677 |
 | the **cues** of an EBU STL file | **built.** The subtitles of an STL file are read — the tree's blocks, its rate and its ISO 6937 letters (§678) | §678 |
 | the **cues** of a caption track exported | **built.** The cues of a track are written as a caption file — the frames of the track are the milliseconds of the file (§679) | §679 |
+| the **bookmarks** of a layout document | **built.** A bookmark names a page — the tree's page, its name and its refusals (§680) | §680 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -44450,5 +44451,60 @@ file.
   file, and it does not here.
 - **The tree's writer of a track writes the blocks of a WebVTT file**
   that the track kept; the cues of a track here carry no blocks.
+
+---
+
+## 680. The bookmarks of a layout document
+
+A **bookmark** may now be put on a page of a layout document: it names
+the page, and the bookmarks of a document are its own list.
+
+### What was built
+
+- The **bookmarks** of a layout document, and the rules are the tree's
+  own:
+  - a bookmark names a **page**, and the page is counted from one. A
+    page that is not there is refused by name.
+  - the **name** of a bookmark is not empty, and a bookmark that is
+    added without one is called `Bookmark N`, where N is the number of
+    the bookmarks there are and one.
+  - a bookmark may be **renamed** and **deleted**.
+- A new kind (`layout.bookmark`) and four new commands:
+  `layout.bookmark.add`, `layout.bookmark.rename`,
+  `layout.bookmark.delete` and `layout.document.bookmarks`.
+
+### What the port found
+
+- **The tree's bookmark names a page**, and the tree's pages are
+  counted across the whole document. Here the pages of a document are
+  the pages of its spreads, in the order the spreads stand in, and the
+  page of a bookmark is counted the same way.
+- **The tree's commands take the index of a bookmark** in the list of
+  the document — `bookmark.rename` takes an index and a name, and
+  `bookmark.delete` takes an index. Here a bookmark is a **node**, and
+  the commands take that node: a bookmark that is not there is
+  refused by name, and the tree's "no bookmark N" refusal has no
+  index to name.
+- **The tree's bookmark has children**, and the tree's bookmarks are a
+  tree of them. No command of the tree fills those children, and here
+  a bookmark has none.
+
+### What it cost
+
+- **Five tests** in the layout battery (`tests/bookmarks.rs`): the
+  bookmark and its page, the refused page, the name that is given by
+  itself, the renamed bookmark, and the deleted bookmark.
+- **Four commands**. The layout battery now carries **60** commands and
+  the MCP server **885**.
+
+### What it does not settle
+
+- **A bookmark names a page and nothing else.** The tree's bookmark
+  may point at a place in a page as well, and a link to it may be
+  written into the document; there is no link to a bookmark here.
+- **The tree's bookmarks are exported as the outline of a PDF**, and
+  nothing writes a PDF here.
+- **The names of the bookmarks are not checked against each other**,
+  as they are not in the tree: two bookmarks may have one name.
 
 ---
