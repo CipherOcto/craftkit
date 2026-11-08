@@ -4080,6 +4080,7 @@ so.
 | the **hidden information** of a file counted | **built.** The nine categories the tree names are counted — the metadata, the attachments, the comments, the fields, the hidden text, the layers that are off, the bookmarks, the links and the scripts (§643) | §643 |
 | the **hidden information** of a file taken away | **built.** The comments, the attachments and the links are gone from the document, with the actions of the annotations that stay (§644) | §644 |
 | the **case** of the text of a paragraph | **built.** The text is changed in the tree's five ways, and the runs move with the text (§645) | §645 |
+| the **chapter** of a caption | **built.** A caption names the chapter it is in, and its number is counted again at each chapter (§646) | §646 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39411,8 +39412,9 @@ the captions that carry that label.
 - **The caption does not go beside the thing it captions**: the tree
   puts it under the table or over the picture, and here a paragraph
   is a caption wherever it stands.
-- **The caption has no chapter number** and no separator, and the
-  tree's restart of the numbering at each chapter is not here.
+- **The caption has a chapter number** and a separator, and the
+  tree's restart of the numbering at each chapter is here now
+  (§646). What is not here is the number of the heading itself.
 - **The caption is not a field**: nothing else may refer to it, and
   the tree's cross-reference to a numbered item is not here.
 
@@ -42403,5 +42405,60 @@ ways the tree changes it are the five ways here.
 - **The Turkish and the Azerbaijani letters** are not the tree's: the
   tree changes the case of a letter differently when its run is
   Turkish, and this tree has no runs that are.
+
+---
+
+## 646. The chapter of a caption
+
+A caption may now name the **chapter** it is in: the number of the
+caption is counted again at each chapter, and the caption says the
+chapter it is in.
+
+### What was built
+
+- A caption may name a **chapter** and a **separator**:
+  - the chapter is the **level of a heading**, one to nine — the
+    tree's own levels;
+  - the separator is one of the tree's five: `-`, `.`, `:`, an em
+    dash or an en dash;
+  - a level that is not one of the tree's nine and a separator that is
+    not one of the tree's five are **refused by name**.
+- The **number** of a caption is counted again at **each chapter** —
+  the tree's own rule:
+  - the chapter of a caption is the count of the headings of that
+    level before it;
+  - the number of a caption that names a chapter is counted from the
+    last heading of that level;
+  - the caption says the **whole** of it: "2-1" is the second chapter
+    and the first caption in it.
+
+### What the port found
+
+- **The tree's restart is the epoch of the caption**: the number is
+  counted again when the chapter changes, and only for a caption that
+  names a chapter — a caption that names none keeps the count it had.
+  That is the tree's rule.
+- **The tree's chapter number is the number of the heading**, or its
+  count when the heading is not numbered. Here the headings are not
+  numbered, so the count is the number.
+
+### What it cost
+
+- **Four tests** in the prose battery (`tests/captionchapters.rs`): the
+  chapter a caption is in, the number that is counted again, the
+  separator, and the chapter that is refused.
+- **No new command**: the caption says what it is. The prose battery
+  still carries **100** commands and the MCP server **840**.
+
+### What it does not settle
+
+- **The caption does not go beside the thing it captions**: the tree
+  puts it under the table or over the picture, and here a paragraph is
+  a caption wherever it stands.
+- **The number of the heading** is not read: the chapter is the count
+  of the headings, and a heading that a list numbers says nothing
+  about its number here.
+- **The cross-reference** to a numbered item is not here: nothing else
+  may refer to the caption.
 
 ---
