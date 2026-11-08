@@ -83,6 +83,60 @@ type Group = (Value, Vec<(Value, Vec<Value>)>);
 const MONTHS: [&str; 12] =
     ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+/// The way the values of a pivot are **shown**.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShowAs {
+    /// The value itself.
+    Normal,
+    /// The share of the **grand total**.
+    PercentOfGrandTotal,
+    /// The share of the total of the **column**.
+    PercentOfColumnTotal,
+    /// The share of the total of the **row**.
+    PercentOfRowTotal,
+    /// The sum of the values up to this one.
+    RunningTotal,
+    /// The place of the value among its **siblings**: the largest is
+    /// one.
+    Rank,
+}
+
+impl ShowAs {
+    /// The way a name says, if it is **one of the tree's**.
+    ///
+    /// The tree's own names: `normal` and `none` are one way,
+    /// `percentOfGrandTotal`, `percentOfColumnTotal` and
+    /// `percentOfRowTotal` are the shares, and `runningTotal` and
+    /// `rank` are the last two.
+    pub fn parse(name: &str) -> Option<ShowAs> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "normal" | "none" => Some(ShowAs::Normal),
+            "percentofgrandtotal" => Some(ShowAs::PercentOfGrandTotal),
+            "percentofcolumntotal" => Some(ShowAs::PercentOfColumnTotal),
+            "percentofrowtotal" => Some(ShowAs::PercentOfRowTotal),
+            "runningtotal" => Some(ShowAs::RunningTotal),
+            "rank" => Some(ShowAs::Rank),
+            _ => None,
+        }
+    }
+
+    /// The name of the way.
+    pub fn to_text(self) -> &'static str {
+        match self {
+            ShowAs::Normal => "normal",
+            ShowAs::PercentOfGrandTotal => "percentOfGrandTotal",
+            ShowAs::PercentOfColumnTotal => "percentOfColumnTotal",
+            ShowAs::PercentOfRowTotal => "percentOfRowTotal",
+            ShowAs::RunningTotal => "runningTotal",
+            ShowAs::Rank => "rank",
+        }
+    }
+}
+
+/// The **raw** rows of a summary: the key of the group, the values of
+/// every column and the total of the row.
+type Raw = (craftkit_sdk::serde_json::Value, Vec<(String, Option<f64>)>, Option<f64>);
+
 /// The **grouping** of the items of a date field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DateGroup {
@@ -194,6 +248,8 @@ pub struct Pivot {
     pub sort: Option<(u32, Sort)>,
     /// The **grouping** of a date field: the field and the grouping.
     pub group: Option<(u32, DateGroup)>,
+    /// The way the values are **shown**.
+    pub show_as: ShowAs,
 }
 
 impl Pivot {
@@ -227,6 +283,7 @@ impl Pivot {
                 }
                 None => craftkit_sdk::serde_json::Value::Null,
             },
+            "show_as": self.show_as.to_text(),
         })
     }
 }
@@ -277,6 +334,11 @@ pub fn pivots_of(node: &Node) -> Vec<Pivot> {
             let by = group.get("by").and_then(|by| by.as_str()).and_then(DateGroup::parse)?;
             Some((field, by))
         });
+        let show_as = pivot
+            .get("show_as")
+            .and_then(|show| show.as_str())
+            .and_then(ShowAs::parse)
+            .unwrap_or(ShowAs::Normal);
         pivots.push(Pivot {
             name: name.to_string(),
             range: area,
@@ -289,6 +351,7 @@ pub fn pivots_of(node: &Node) -> Vec<Pivot> {
             filter,
             sort,
             group,
+            show_as,
         });
     }
     pivots
@@ -576,6 +639,7 @@ impl CreatePivot {
             filter: None,
             sort: None,
             group: None,
+            show_as: ShowAs::Normal,
         };
         pivots.push(pivot);
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
@@ -900,6 +964,60 @@ impl SetPivotGroup {
     }
 }
 
+/// **Say** how the values of a pivot are **shown**.
+///
+/// The tree's own ways: `normal`, `percentOfGrandTotal`,
+/// `percentOfColumnTotal`, `percentOfRowTotal`, `runningTotal` and
+/// `rank` — and a way that is not one of them is refused by name.
+#[derive(Command)]
+#[command(id = "grid.pivot.showas", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct SetPivotShowAs {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The name of the pivot.
+    pub name: Text,
+    /// The way the values are shown.
+    ///
+    /// `normal` — the default — `percentOfGrandTotal`,
+    /// `percentOfColumnTotal`, `percentOfRowTotal`, `runningTotal` or
+    /// `rank`.
+    pub show_as: Text,
+}
+
+impl SetPivotShowAs {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.pivot.showas".to_string();
+        let sheet = self.sheet.0;
+        let node = sheet_of(session, &id, sheet)?;
+        let name = self.name.0.trim().to_string();
+        let mut pivots = pivots_of(&node);
+        let Some(pivot) = pivots.iter_mut().find(|pivot| pivot.name == name) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the sheet `{sheet}` has no pivot called `{name}`"),
+            });
+        };
+        let show = self.show_as.0.trim().to_string();
+        let Some(show) = ShowAs::parse(&show) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the way `{show}` is not one of this tree's: it is one of normal, percentOfGrandTotal, percentOfColumnTotal, percentOfRowTotal, runningTotal, rank"
+                ),
+            });
+        };
+        pivot.show_as = show;
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["pivots"] = pivots_into(&pivots);
+        }
+        Ok(Outcome::changed(format!("the values of the pivot `{name}` are shown")).with_data(json!({
+            "sheet": sheet,
+            "name": name,
+            "show_as": show.to_text(),
+        })))
+    }
+}
+
 /// **Read** the summary of a pivot.
 ///
 /// The summary is derived: it is worked out now, from the cells of the
@@ -1053,13 +1171,14 @@ impl ReadPivot {
 
         // The **summary**: a row for every group, and a column for
         // every column of the spread.
-        let mut rows = Vec::new();
+        //
+        // The **raw** values first: the way the values are shown is
+        // worked out from them.
+        let mut raw: Vec<Raw> = Vec::new();
         for key in &keys {
             let Some((_, group)) = groups.iter().find(|(name, _)| name == key) else { continue };
-            let mut row = craftkit_sdk::serde_json::Map::new();
-            row.insert("key".to_string(), key_of(key));
             if pivot.column_field.is_some() {
-                let mut values = craftkit_sdk::serde_json::Map::new();
+                let mut values: Vec<(String, Option<f64>)> = Vec::new();
                 let mut total_numbers: Vec<Value> = Vec::new();
                 for column in &columns {
                     let numbers: Vec<Value> = match group.iter().find(|(name, _)| name == column) {
@@ -1067,30 +1186,114 @@ impl ReadPivot {
                         None => Vec::new(),
                     };
                     total_numbers.extend(numbers.iter().cloned());
-                    let value = match put_together(&numbers) {
-                        Some(number) => json!(number),
-                        None => json!(null),
-                    };
-                    values.insert(key_text(column), value);
+                    values.push((key_text(column), put_together(&numbers)));
                 }
-                let total = match put_together(&total_numbers) {
-                    Some(number) => json!(number),
-                    None => json!(null),
-                };
-                row.insert("values".to_string(), craftkit_sdk::serde_json::Value::Object(values));
-                if pivot.grand_totals_rows {
-                    row.insert("total".to_string(), total);
-                }
+                let total = put_together(&total_numbers);
+                raw.push((key_of(key), values, total));
             } else {
                 let numbers: Vec<Value> = match group.first() {
                     Some((_, numbers)) => numbers.clone(),
                     None => Vec::new(),
                 };
-                let value = match put_together(&numbers) {
-                    Some(number) => json!(number),
-                    None => json!(null),
+                raw.push((key_of(key), Vec::new(), put_together(&numbers)));
+            }
+        }
+
+        // The **totals of the columns** and the **total of everything**:
+        // the tree's own, and they are worked out from the raw numbers
+        // whether they are shown or not.
+        let mut column_totals: Vec<(String, Option<f64>)> = Vec::new();
+        let mut all: Vec<Value> = Vec::new();
+        for column in &columns {
+            let numbers: Vec<Value> = groups
+                .iter()
+                .flat_map(|(_, group)| {
+                    group
+                        .iter()
+                        .find(|(name, _)| name == column)
+                        .map(|(_, numbers)| numbers.clone())
+                        .unwrap_or_default()
+                })
+                .collect();
+            all.extend(numbers.iter().cloned());
+            column_totals.push((key_text(column), put_together(&numbers)));
+        }
+        let everything = put_together(&all);
+
+        // The **way the values are shown**: the tree's own rules.
+        let show = pivot.show_as;
+        let ratio = |value: Option<f64>, total: Option<f64>| -> craftkit_sdk::serde_json::Value {
+            match (value, total) {
+                (Some(_), Some(0.0)) => json!("#DIV/0!"),
+                (Some(value), Some(total)) => json!(value / total),
+                (Some(value), None) => json!(value),
+                (None, _) => craftkit_sdk::serde_json::Value::Null,
+            }
+        };
+        // The **running** sums, one for every column and one for the
+        // totals of the rows.
+        let mut running: Vec<f64> = vec![0.0; column_totals.len()];
+        let mut running_total = 0.0;
+        let mut rows = Vec::new();
+        for (key, values, total) in &raw {
+            let mut row = craftkit_sdk::serde_json::Map::new();
+            row.insert("key".to_string(), key.clone());
+            let mut shown_values = craftkit_sdk::serde_json::Map::new();
+            for (at, (column, value)) in values.iter().enumerate() {
+                let shown_value = match show {
+                    ShowAs::Normal => match value {
+                        Some(number) => json!(number),
+                        None => craftkit_sdk::serde_json::Value::Null,
+                    },
+                    ShowAs::PercentOfGrandTotal => ratio(*value, everything),
+                    ShowAs::PercentOfColumnTotal => {
+                        ratio(*value, column_totals.get(at).and_then(|(_, total)| *total))
+                    }
+                    ShowAs::PercentOfRowTotal => ratio(*value, *total),
+                    ShowAs::RunningTotal => {
+                        running[at] += value.unwrap_or(0.0);
+                        json!(running[at])
+                    }
+                    ShowAs::Rank => {
+                        let me = value.unwrap_or(0.0);
+                        let rank = 1 + raw
+                            .iter()
+                            .filter(|(_, values, _)| {
+                                values.get(at).and_then(|(_, value)| *value).is_some_and(|other| other > me)
+                            })
+                            .count();
+                        json!(rank as f64)
+                    }
                 };
-                row.insert("value".to_string(), value);
+                shown_values.insert(column.clone(), shown_value);
+            }
+            // The **total of the row**, shown the way the tree shows it:
+            // the total of a row is a cell of the grand column, and the
+            // grand column is the whole of the pivot.
+            let shown_total = match show {
+                ShowAs::Normal => match total {
+                    Some(number) => json!(number),
+                    None => craftkit_sdk::serde_json::Value::Null,
+                },
+                ShowAs::PercentOfGrandTotal | ShowAs::PercentOfColumnTotal => ratio(*total, everything),
+                ShowAs::PercentOfRowTotal => ratio(*total, *total),
+                ShowAs::RunningTotal => {
+                    running_total += total.unwrap_or(0.0);
+                    json!(running_total)
+                }
+                ShowAs::Rank => {
+                    let me = total.unwrap_or(0.0);
+                    let rank = 1 + raw.iter().filter(|(_, _, other)| other.unwrap_or(0.0) > me).count();
+                    json!(rank as f64)
+                }
+            };
+            if pivot.column_field.is_some() {
+                row.insert("values".to_string(), craftkit_sdk::serde_json::Value::Object(shown_values));
+                if pivot.grand_totals_rows {
+                    row.insert("total".to_string(), shown_total);
+                }
+            } else {
+                row.insert("value".to_string(), shown_total);
             }
             rows.push(craftkit_sdk::serde_json::Value::Object(row));
         }
@@ -1098,31 +1301,19 @@ impl ReadPivot {
         // The **grand total of the columns**: the line at the bottom
         // that totals the columns, and the total of everything.
         let grand_total = if pivot.grand_totals_cols {
-            let mut column_totals = craftkit_sdk::serde_json::Map::new();
-            let mut all: Vec<Value> = Vec::new();
-            for column in &columns {
-                let numbers: Vec<Value> = groups
-                    .iter()
-                    .flat_map(|(_, group)| {
-                        group
-                            .iter()
-                            .find(|(name, _)| name == column)
-                            .map(|(_, numbers)| numbers.clone())
-                            .unwrap_or_default()
-                    })
-                    .collect();
-                all.extend(numbers.iter().cloned());
-                let value = match put_together(&numbers) {
+            let mut totals = craftkit_sdk::serde_json::Map::new();
+            for (column, value) in &column_totals {
+                let value = match value {
                     Some(number) => json!(number),
-                    None => json!(null),
+                    None => craftkit_sdk::serde_json::Value::Null,
                 };
-                column_totals.insert(key_text(column), value);
+                totals.insert(column.clone(), value);
             }
-            let total = match put_together(&all) {
+            let total = match everything {
                 Some(number) => json!(number),
-                None => json!(null),
+                None => craftkit_sdk::serde_json::Value::Null,
             };
-            json!({ "columns": craftkit_sdk::serde_json::Value::Object(column_totals), "total": total })
+            json!({ "columns": craftkit_sdk::serde_json::Value::Object(totals), "total": total })
         } else {
             craftkit_sdk::serde_json::Value::Null
         };
@@ -1131,6 +1322,7 @@ impl ReadPivot {
             "sheet": sheet,
             "name": name,
             "aggregate": pivot.aggregate.to_text(),
+            "show_as": show.to_text(),
             "grand_totals_rows": pivot.grand_totals_rows,
             "grand_totals_cols": pivot.grand_totals_cols,
             "filter": match &pivot.filter {
