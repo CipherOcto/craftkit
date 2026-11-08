@@ -65,6 +65,34 @@ impl Matrix {
             e * b2 + f * d2 + f2,
         ])
     }
+
+    /// Where a **point** ends up after this matrix.
+    ///
+    /// The tree's own rule: the row-vector convention of the
+    /// specification, so a point is a row and the matrix is on the
+    /// left of it.
+    pub fn apply(&self, x: f64, y: f64) -> (f64, f64) {
+        let [a, b, c, d, e, f] = self.0;
+        (a * x + c * y + e, b * x + d * y + f)
+    }
+
+    /// The **box** a rectangle takes after this matrix.
+    ///
+    /// The tree's own rule: the four corners of the rectangle are
+    /// turned, and the box that holds them is the answer — a matrix
+    /// that turns turns the box with it.
+    pub fn bbox(&self, rectangle: [f64; 4]) -> [f64; 4] {
+        let [x0, y0, x1, y1] = rectangle;
+        let points = [self.apply(x0, y0), self.apply(x1, y0), self.apply(x0, y1), self.apply(x1, y1)];
+        let mut box_ = [f64::MAX, f64::MAX, f64::MIN, f64::MIN];
+        for (x, y) in points {
+            box_[0] = box_[0].min(x);
+            box_[1] = box_[1].min(y);
+            box_[2] = box_[2].max(x);
+            box_[3] = box_[3].max(y);
+        }
+        box_
+    }
 }
 
 /// Why a content stream could not be **read**.

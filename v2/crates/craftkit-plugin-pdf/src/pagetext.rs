@@ -81,6 +81,10 @@ pub struct Piece {
     /// How **wide** the text is, along its own line, in the page's
     /// own space.
     pub width: Option<f64>,
+    /// The **box** the text takes: from the descent of the font to its
+    /// ascent, in the page's own space. The four numbers are the left,
+    /// the bottom, the right and the top of it.
+    pub bounds: Option<[f64; 4]>,
     /// The **font** the text is shown in: the name the page gives it.
     pub font: Option<String>,
 }
@@ -96,6 +100,7 @@ impl Piece {
             "x": self.x.map(|x| json!(x)).unwrap_or(Json::Null),
             "y": self.y.map(|y| json!(y)).unwrap_or(Json::Null),
             "width": self.width.map(|width| json!(width)).unwrap_or(Json::Null),
+            "box": self.bounds.map(|box_| json!(box_)).unwrap_or(Json::Null),
             "font": self.font.clone().map(|font| json!(font)).unwrap_or(Json::Null),
         })
     }
@@ -186,8 +191,12 @@ pub fn text_of_page(document: &Document, page: u64) -> Result<PageText, EngineEr
         .into_iter()
         .filter_map(|(name, font)| crate::widths::widths_of(document, font).map(|widths| (name, widths)))
         .collect();
+    let metrics: Vec<(String, crate::metrics::Metrics)> = crate::pagefonts::fonts_of(document, page)
+        .into_iter()
+        .map(|(name, font)| (name, crate::metrics::metrics_of(document, font)))
+        .collect();
     let last = operations.len().saturating_sub(1);
-    found.pieces = pieces_with(&maps, &operations, 0, last, matrix_of(document, &entries), &widths);
+    found.pieces = pieces_with(&maps, &operations, 0, last, matrix_of(document, &entries), &widths, &metrics);
     Ok(found)
 }
 
@@ -309,6 +318,25 @@ impl Place {
         (e, f, width)
     }
 
+    /// The **box** the text takes: from the descent of the font to
+    /// its ascent.
+    ///
+    /// The tree's own rule: the rectangle the glyphs take in the text
+    /// space, and the rendering matrix turns it into the page's own
+    /// space.
+    fn box_of(
+        &self,
+        ctm: &crate::content::Matrix,
+        glyph: Option<f64>,
+        metrics: &crate::metrics::Metrics,
+    ) -> Option<[f64; 4]> {
+        let glyph = glyph?;
+        let rendering = crate::content::Matrix([self.size * self.scale, 0.0, 0.0, self.size, 0.0, self.rise])
+            .then(&crate::content::Matrix(self.text))
+            .then(ctm);
+        Some(rendering.bbox([0.0, metrics.descent, glyph, metrics.ascent]))
+    }
+
     /// Move the **text** by a distance, and leave the line where it
     /// is.
     ///
@@ -395,7 +423,7 @@ pub(crate) fn pieces_of(
     from: usize,
     to: usize,
 ) -> Vec<Piece> {
-    pieces_with(maps, operations, from, to, crate::content::Matrix::IDENTITY, &[])
+    pieces_with(maps, operations, from, to, crate::content::Matrix::IDENTITY, &[], &[])
 }
 
 /// The **pieces** of text, with the **transform of the page** the page
@@ -407,6 +435,7 @@ pub(crate) fn pieces_with(
     to: usize,
     start: crate::content::Matrix,
     widths: &[(String, crate::widths::Widths)],
+    metrics: &[(String, crate::metrics::Metrics)],
 ) -> Vec<Piece> {
     let mut pieces: Vec<Piece> = Vec::new();
     // Text is shown inside a **text object**.
@@ -422,6 +451,8 @@ pub(crate) fn pieces_with(
     let mut font: Option<String> = None;
     // The **widths** of the font in use: how wide its codes are.
     let mut font_widths: Option<&crate::widths::Widths> = None;
+    // The **metrics** of the font in use: how tall its glyphs are.
+    let mut font_metrics = crate::metrics::Metrics::FALLBACK;
     for (index, operation) in operations.iter().enumerate() {
         if index > to {
             break;
@@ -438,6 +469,11 @@ pub(crate) fn pieces_with(
                 font = font_named(operation);
                 font_widths =
                     widths.iter().find(|(name, _)| Some(name) == font.as_ref()).map(|(_, widths)| widths);
+                font_metrics = metrics
+                    .iter()
+                    .find(|(name, _)| Some(name) == font.as_ref())
+                    .map(|(_, metrics)| *metrics)
+                    .unwrap_or(crate::metrics::Metrics::FALLBACK);
                 let numbers = numbers_of(operation);
                 if let Some(size) = numbers.first() {
                     place.size = *size;
@@ -520,6 +556,7 @@ pub(crate) fn pieces_with(
                 }
                 let advance = advance_of(font_widths, &bytes, place.size, place.spacing, place.word_spacing);
                 let (x, y, width) = place.origin(&ctm, advance.map(|(_, glyph)| glyph));
+                let box_ = place.box_of(&ctm, advance.map(|(_, glyph)| glyph), &font_metrics);
                 if let Some((advance, _)) = advance {
                     place.advance_by(advance * place.scale);
                 }
@@ -531,6 +568,7 @@ pub(crate) fn pieces_with(
                     x: placed.then_some(x),
                     y: placed.then_some(y),
                     width: placed.then_some(width).flatten(),
+                    bounds: placed.then_some(box_).flatten(),
                     font: font.clone(),
                 });
             }
@@ -549,6 +587,7 @@ pub(crate) fn pieces_with(
                 // it by v thousandths of the size, and a string shows
                 // text and moves it on by the width of the text.
                 let mut glyph_advance = 0.0;
+                let beginning = place;
                 for item in array {
                     if let Json::String(_) = item {
                         let Some(bytes) = bytes_of(item) else { continue };
@@ -567,7 +606,8 @@ pub(crate) fn pieces_with(
                         place.advance_by(move_by * place.scale);
                     }
                 }
-                let (x, y, width) = place.origin(&ctm, Some(glyph_advance));
+                let (x, y, width) = beginning.origin(&ctm, Some(glyph_advance));
+                let box_ = beginning.box_of(&ctm, Some(glyph_advance), &font_metrics);
                 pieces.push(Piece {
                     text,
                     operator: "TJ".to_string(),
@@ -576,6 +616,7 @@ pub(crate) fn pieces_with(
                     x: placed.then_some(x),
                     y: placed.then_some(y),
                     width: placed.then_some(width).flatten(),
+                    bounds: placed.then_some(box_).flatten(),
                     font: font.clone(),
                 });
             }
@@ -590,6 +631,7 @@ pub(crate) fn pieces_with(
                 }
                 let advance = advance_of(font_widths, &bytes, place.size, place.spacing, place.word_spacing);
                 let (x, y, width) = place.origin(&ctm, advance.map(|(_, glyph)| glyph));
+                let box_ = place.box_of(&ctm, advance.map(|(_, glyph)| glyph), &font_metrics);
                 if let Some((advance, _)) = advance {
                     place.advance_by(advance * place.scale);
                 }
@@ -601,6 +643,7 @@ pub(crate) fn pieces_with(
                     x: placed.then_some(x),
                     y: placed.then_some(y),
                     width: placed.then_some(width).flatten(),
+                    bounds: placed.then_some(box_).flatten(),
                     font: font.clone(),
                 });
             }

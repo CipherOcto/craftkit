@@ -150,6 +150,7 @@ mod labels;
 mod loader;
 mod marked;
 mod metadata;
+mod metrics;
 mod number;
 mod objects;
 mod optional;

@@ -135,6 +135,9 @@ impl ReadPageFonts {
         for (name, font) in fonts_of(document, page) {
             let described = document.node(font).and_then(|node| crate::fonts::font_of(document, node));
             let map = crate::tounicode::unicode_of(document, font).ok().flatten();
+            // How **tall** the font's glyphs are: the metrics of the
+            // font, and the tree's own rule when the font says nothing.
+            let metrics = crate::metrics::metrics_of(document, font);
             listed.push(json!({
                 "name": name,
                 "font": font,
@@ -142,6 +145,8 @@ impl ReadPageFonts {
                 "subtype": described.as_ref().map(|font| font.subtype.clone()).unwrap_or_default(),
                 "has_map": map.is_some(),
                 "codes": map.as_ref().map(|map| map.entries.len()).unwrap_or(0),
+                "ascent": metrics.ascent,
+                "descent": metrics.descent,
             }));
         }
         let count = listed.len();
