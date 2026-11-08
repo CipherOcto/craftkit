@@ -4100,6 +4100,7 @@ so.
 | the **subtotals** of a pivot | **built.** The total of a group of the rows may be a line of its own, at the top of the group or at the bottom (§663) | §663 |
 | the **table of figures** of a document | **built.** The captions that carry one label are read as a table — the tree's label, identifier and entry rules (§664) | §664 |
 | the **comment** on a cell | **built.** A comment on a cell is a thread — the comment, the replies to it, and whether it is resolved (§665) | §665 |
+| the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
 
@@ -43616,5 +43617,78 @@ to it, and whether the thread is **resolved**.
   the file's comments part, and here they live in the sheet.
 - **The comment is not shown and hidden.** The tree's comment may be
   shown and hidden; here it is read.
+
+---
+
+## 666. The cues of a SubRip file
+
+The **cues** of a **SubRip** file may now be read: the pieces of text
+and the times they are on the screen.
+
+### What was built
+
+- The **cues** of a SubRip file are read, and the rules are the tree's
+  own:
+  - the **timing line** of a cue is `start --> end`, and what follows
+    the end is the settings of the cue. The clock is `HH:MM:SS,mmm` or
+    `MM:SS,mmm` — the hours may be left out — the mark may be a comma
+    or a point, the fraction may be one to nine digits long, the
+    minutes and the seconds are below sixty, and the hours are at most
+    9999.
+  - the **index** of a cue is a line of digits, and it may be left
+    out. A cue begins at a timing line, or at an index line that is
+    followed by a timing line.
+  - the **text** of a cue runs to the end of the line, the blank line,
+    the next timing line, or the next index line that is followed by a
+    timing line.
+  - a cue whose **end is not after its start** is skipped, and the
+    answer says so.
+  - a file that has **no cue** and holds something is not a SubRip
+    file, and that is refused by name. A file that holds nothing is a
+    file with no cues.
+- The **bytes** of the file are read the tree's way: a mark of the
+  byte order is taken off, UTF-16 with a mark of the byte order is
+  read, and a file that is neither UTF-8 nor UTF-16 is read as
+  **Windows-1252**.
+- The **line endings** of a file may be a line feed, a carriage
+  return and a line feed, or a carriage return alone.
+- A cue is a pair of **milliseconds** — the unit of the format
+  itself — and the clock is said as well.
+- The most a caption file may be is **16 MiB**.
+- A new command (**`film.captions.read`**) reads the cues.
+
+### What the port found
+
+- **The tree has seven caption formats** — SubRip, WebVTT, Scenarist
+  SCC, MacCaption MCC, EBU STL, TTML and DFXP — and they are one
+  battery. Here there is one: SubRip.
+- **The tree's times are ticks** (254 016 000 000 of them a second),
+  and a cue keeps the fraction of its clock exactly. Here a cue is in
+  **milliseconds**, the unit of the format itself, and a fraction
+  finer than a millisecond is rounded to the nearest one.
+- **The tree's reader is forgiving** — a mark of the byte order,
+  UTF-16, Windows-1252, the three line endings, missing indexes, a
+  point for the mark, short fractions, missing hours, and cues that
+  are not separated by a blank line. The same reader is here.
+- **The tree's cues carry more**: a name, a position and a style. A
+  cue here is the text and the two times.
+
+### What it cost
+
+- **Seven tests** in the film battery (`tests/captions.rs`): the cues,
+  the file that is not a SubRip file, the empty file, the skipped cue,
+  the bytes, the line endings, and the file that real files look like.
+- **One command**. The film battery now carries **87** commands and
+  the MCP server **859**.
+
+### What it does not settle
+
+- **The cues are not kept.** The tree's captions are a track in the
+  project, and here the cues are read out of a file and are not
+  stored.
+- **The tree's other six formats are not here**: WebVTT, Scenarist
+  SCC, MacCaption MCC, EBU STL, TTML and DFXP.
+- **The cues are not laid out and not burned in.** The tree's captions
+  are drawn on the picture, and nothing draws them here.
 
 ---
