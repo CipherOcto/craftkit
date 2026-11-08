@@ -711,7 +711,7 @@ impl Book {
 ///
 /// The tree's rule: the sample variance needs two numbers and the
 /// population one needs one, and a set too small is `#DIV/0!`.
-fn variance(numbers: &[f64], sample: bool) -> Result<f64, String> {
+pub(crate) fn variance(numbers: &[f64], sample: bool) -> Result<f64, String> {
     if sample {
         if numbers.len() < 2 {
             return Err("#DIV/0!".to_string());

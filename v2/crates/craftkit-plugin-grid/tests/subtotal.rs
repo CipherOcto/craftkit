@@ -119,18 +119,16 @@ fn the_other_functions_work() {
     assert_eq!(value_of(&mut session, sheet, "B4"), json!(10.0), "and the smallest");
 }
 
-/// A function number this tree does **not** have is refused, and the
-/// refusal says what the numbers are.
+/// The **sample** deviation needs two numbers, and one is `#DIV/0!`.
 #[test]
-fn a_function_number_that_is_not_one_is_refused() {
+fn the_sample_deviation_of_one_number_is_refused() {
     let mut session = session();
     let (_workbook, sheet) = a_workbook(&mut session);
     a_number(&mut session, sheet, "A1", 1.0);
     a_formula(&mut session, sheet, "B1", "=SUBTOTAL(7,A1:A1)");
     let value = value_of(&mut session, sheet, "B1");
     let text = value.to_string();
-    assert!(text.contains("the function number 7 is not one this tree has"), "the error says so: {text}");
-    assert!(text.contains("9 (SUM)"), "and it says what the numbers are");
+    assert!(text.contains("#DIV/0!"), "the error says so: {text}");
 }
 
 /// A function number that is **not a number at all** is refused.

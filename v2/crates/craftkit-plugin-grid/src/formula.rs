@@ -2333,10 +2333,10 @@ impl Book {
     /// - a row a **filter** hides is left out, whatever the function
     ///   number. This tree has no filter, so there is no such row.
     ///
-    /// And the functions the tree names that this tree does not have
-    /// are refused: `PRODUCT`, `STDEV`, `STDEVP`, `VAR` and `VARP` are
-    /// not here, and a subtotal that names one is an error that says
-    /// so.
+    /// And the tree's **eleven** functions are all here: `AVERAGE`,
+    /// `COUNT`, `COUNTA`, `MAX`, `MIN`, `PRODUCT`, `STDEV`, `STDEVP`,
+    /// `SUM`, `VAR` and `VARP`. A function number that is not one of
+    /// them is an error that says so.
     fn subtotal(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
         if arguments.len() < 2 {
             return Value::Error("a subtotal is a function number and a range".to_string());
@@ -2364,10 +2364,15 @@ impl Book {
             3 => "COUNTA",
             4 => "MAX",
             5 => "MIN",
+            6 => "PRODUCT",
+            7 => "STDEV",
+            8 => "STDEVP",
             9 => "SUM",
+            10 => "VAR",
+            11 => "VARP",
             other => {
                 return Value::Error(format!(
-                    "the function number {other} is not one this tree has: the numbers are 1 (AVERAGE), 2 (COUNT), 3 (COUNTA), 4 (MAX), 5 (MIN) and 9 (SUM)"
+                    "the function number {other} is not one this tree has: the numbers are 1 (AVERAGE), 2 (COUNT), 3 (COUNTA), 4 (MAX), 5 (MIN), 6 (PRODUCT), 7 (STDEV), 8 (STDEVP), 9 (SUM), 10 (VAR) and 11 (VARP)"
                 ));
             }
         };
@@ -2462,6 +2467,26 @@ impl Book {
                 .unwrap_or(Value::Empty),
             "COUNT" => Value::Number(numbers.len() as f64),
             "COUNTA" => Value::Number((numbers.len() + plain.len()) as f64),
+            "PRODUCT" => {
+                // The tree's `PRODUCT` of nothing is nothing.
+                if numbers.is_empty() { Value::Number(0.0) } else { Value::Number(numbers.iter().product()) }
+            }
+            "STDEV" => match crate::statistics::variance(&numbers, true) {
+                Ok(variance) => Value::Number(variance.sqrt()),
+                Err(message) => Value::Error(message),
+            },
+            "STDEVP" => match crate::statistics::variance(&numbers, false) {
+                Ok(variance) => Value::Number(variance.sqrt()),
+                Err(message) => Value::Error(message),
+            },
+            "VAR" => match crate::statistics::variance(&numbers, true) {
+                Ok(variance) => Value::Number(variance),
+                Err(message) => Value::Error(message),
+            },
+            "VARP" => match crate::statistics::variance(&numbers, false) {
+                Ok(variance) => Value::Number(variance),
+                Err(message) => Value::Error(message),
+            },
             _ => Value::Error(format!("there is no function `{function}`")),
         }
     }
