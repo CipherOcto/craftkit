@@ -4100,6 +4100,7 @@ so.
 | the **subtotals** of a pivot | **built.** The total of a group of the rows may be a line of its own, at the top of the group or at the bottom (§663) | §663 |
 | the **table of figures** of a document | **built.** The captions that carry one label are read as a table — the tree's label, identifier and entry rules (§664) | §664 |
 | the **comment** on a cell | **built.** A comment on a cell is a thread — the comment, the replies to it, and whether it is resolved (§665) | §665 |
+| the **comments** of a sheet moved with its cells | **built.** The comments move with the cells when a column or a row is inserted or deleted (§667) | §667 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -43690,5 +43691,54 @@ and the times they are on the screen.
   SCC, MacCaption MCC, EBU STL, TTML and DFXP.
 - **The cues are not laid out and not burned in.** The tree's captions
   are drawn on the picture, and nothing draws them here.
+
+---
+
+## 667. The comments of a sheet move with its cells
+
+A **comment** that is on a cell now moves with that cell when a column
+or a row is inserted or deleted, when the sheet is sorted, and it goes
+with the cell when the cell is deleted.
+
+### What was built
+
+- The **comments** of a sheet are moved with the cells:
+  - a column **inserted** moves the comments of the cells to its
+    right, and a column **deleted** moves the comments of the cells to
+    its right and takes the comments of the cells that are gone.
+  - a row **inserted** moves the comments of the cells below it, and
+    a row **deleted** moves the comments of the cells below it and
+    takes the comments of the cells that are gone.
+  - a **sort** moves the comments with the rows they describe, as it
+    moves the notes.
+  - a sheet that holds something this tree does not know how to move
+    is still **refused**, and the refusal says what it holds.
+
+### What the port found
+
+- **The tree moves the comments with the cells.** A comment belongs to
+  a cell, and a cell that moves takes its comment with it — the
+  tree's own rule, and the tree's own refusal when it cannot move
+  something.
+- **This tree knew how to move the notes and not the comments**,
+  because there were no comments. A sheet with a comment on it
+  refused to have a column deleted, and the refusal named the very
+  thing it did not know.
+
+### What it cost
+
+- **Three tests** in the grid battery (`tests/commentmoving.rs`): the
+  inserted column, the deleted cell, and the sort. Two more tests
+  that were already there caught the gap.
+- **No new command**: the columns and the rows that move now carry
+  the comments with them.
+
+### What it does not settle
+
+- **The comments of a sheet that is filtered are not moved**: a filter
+  hides the rows, and the comments of the hidden rows stay where they
+  are.
+- **The comments are not written to a file.** The tree keeps them in
+  the file's comments part, and here they live in the sheet.
 
 ---
