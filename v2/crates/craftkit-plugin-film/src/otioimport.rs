@@ -142,6 +142,9 @@ struct Reader<'a> {
     number: u64,
     clips: usize,
     said: Vec<String>,
+    /// The **folder** of the file that is read: a path that is
+    /// relative is relative to it.
+    base: Option<String>,
 }
 
 impl Reader<'_> {
@@ -331,8 +334,12 @@ impl Reader<'_> {
         match schema_of(&reference) {
             "ExternalReference" => {
                 let url = reference.get("target_url").and_then(|url| url.as_str()).unwrap_or_default();
-                let path = url.strip_prefix("file://").unwrap_or(url);
-                (path.to_string(), length, false)
+                // The **path** the reference names: a file URL is a
+                // path in disguise, and a relative path is relative to
+                // the folder of the file that names it -- the tree's
+                // own rules.
+                let path = crate::paths::resolve_path(url, self.base.as_deref());
+                (path, length, false)
             }
             _ => (String::new(), length, true),
         }
@@ -481,7 +488,14 @@ impl ImportOtio {
                 "rate": { "num": rate.0, "den": rate.1 },
             }),
         );
-        let mut reader = Reader { session, bin, number: 0, clips: 0, said: Vec::new() };
+        let mut reader = Reader {
+            session,
+            bin,
+            number: 0,
+            clips: 0,
+            said: Vec::new(),
+            base: crate::paths::folder_of(&path),
+        };
         let mut end = 0u64;
         let mut tracks = 0usize;
         if let Some(stack) = stack_of(timeline)

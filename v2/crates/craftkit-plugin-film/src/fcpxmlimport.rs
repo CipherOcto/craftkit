@@ -103,15 +103,18 @@ struct Asset {
 }
 
 /// The **assets** of the resources, by their id.
-fn assets_of(resources: Option<&Element>) -> Vec<(String, Asset)> {
+fn assets_of(resources: Option<&Element>, base: Option<&str>) -> Vec<(String, Asset)> {
     let mut assets = Vec::new();
     let Some(resources) = resources else { return assets };
     for asset in resources.children_named("asset") {
         let Some(id) = asset.attribute("id") else { continue };
+        // The **path** the media names: a file URL is a path in
+        // disguise, and a relative path is relative to the folder of
+        // the file that names it -- the tree's own rules.
         let path = asset
             .child("media-rep")
             .and_then(|rep| rep.attribute("src"))
-            .map(|src| src.strip_prefix("file://").unwrap_or(src).to_string())
+            .map(|src| crate::paths::resolve_path(src, base))
             .unwrap_or_default();
         assets.push((
             id.to_string(),
@@ -357,7 +360,7 @@ impl ImportFcpxml {
         };
         let resources = root.child("resources");
         let formats = formats_of(resources);
-        let assets = assets_of(resources);
+        let assets = assets_of(resources, crate::paths::folder_of(&path).as_deref());
         let rate = rate_of(sequence.attribute("format"), &formats);
         // The **name** of the sequence.
         let name = match &self.name {

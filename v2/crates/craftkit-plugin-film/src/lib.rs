@@ -222,6 +222,7 @@ mod naming;
 mod nesting;
 mod otio;
 mod otioimport;
+mod paths;
 mod playhead;
 mod project;
 mod rates;
