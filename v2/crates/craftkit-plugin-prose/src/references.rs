@@ -18,6 +18,23 @@
 //!   and nothing is not a text of zero characters and a half;
 //! - the text of a block that is **not** a reference is the text it
 //!   stores.
+//!
+//! # The kinds of target
+//!
+//! A reference points at a **bookmark** — the tree's own default — or
+//! at a **caption**:
+//!
+//! - `figure`, `table` and `equation` are the three labels of the
+//!   tree, and `label:<Name>` is a label of the person's own;
+//! - the target of a caption is its **number** or its **text**, and
+//!   the text of the caption may begin with it;
+//! - a caption that is pointed at is shown as its **text**, or as its
+//!   **number** when the reference says so — and the number of a
+//!   caption that names a chapter is the whole number, the chapter and
+//!   the number together;
+//! - a kind of target that is not one of the tree's is refused **by
+//!   name**, and so is a way of showing a reference that is not one of
+//!   the tree's two.
 
 use craftkit_derive::Command;
 
@@ -43,13 +60,61 @@ pub fn target_of(document: &craftkit_sdk::Document, block: u64) -> Option<u64> {
 ///
 /// For a reference it is the text of the block it points at, and it is
 /// **derived**: it is worked out every time, and it is never stored.
+/// A reference that shows a **number** shows the number of the caption
+/// it points at.
 pub fn text_of(document: &craftkit_sdk::Document, block: &Node) -> Json {
     if block.kind != REFERENCE_KIND {
         return block.data.get("text").cloned().unwrap_or(Json::Null);
     }
     let Some(target) = target_of(document, block.id) else { return Json::Null };
     let Some(node) = document.node(target) else { return Json::Null };
-    node.data.get("text").cloned().unwrap_or(Json::Null)
+    if shows_a_number(block) {
+        return number_of(document, block, target);
+    }
+    match crate::captions::caption_of(node) {
+        Some(caption) => caption.get("text").cloned().unwrap_or(Json::Null),
+        None => node.data.get("text").cloned().unwrap_or(Json::Null),
+    }
+}
+
+/// Whether a reference shows the **number** of what it points at.
+fn shows_a_number(block: &Node) -> bool {
+    block.data.get("show").and_then(|show| show.as_str()) == Some("number")
+}
+
+/// The **number** of the caption a reference points at.
+///
+/// The tree's own rules: the number of a caption is derived from the
+/// captions of the document, and a caption that names a chapter has
+/// the whole number — the chapter and the number together. And the
+/// tree's number of a caption is the **label and the number** together:
+/// the tree reads it out of the text of the caption, where the label
+/// and the number are one piece of text, and here they are two facts
+/// of the caption, so they are put together the same way.
+fn number_of(document: &craftkit_sdk::Document, block: &Node, target: u64) -> Json {
+    let Some(node) = document_of(document, block.id) else { return Json::Null };
+    let captions = crate::captions::captions_of(document, node);
+    let Some(caption) = captions.as_array().and_then(|captions| {
+        captions.iter().find(|caption| caption.get("block").and_then(|held| held.as_u64()) == Some(target))
+    }) else {
+        return Json::Null;
+    };
+    let label = caption.get("label").and_then(|label| label.as_str()).unwrap_or(crate::captions::DEFAULT_LABEL);
+    let number = match caption.get("full").and_then(|full| full.as_str()) {
+        Some(full) if !full.is_empty() => full.to_string(),
+        _ => match caption.get("number").and_then(|number| number.as_str()) {
+            Some(number) => number.to_string(),
+            None => return Json::Null,
+        },
+    };
+    Json::String(format!("{label} {number}"))
+}
+
+/// The **document** a block is in.
+fn document_of(document: &craftkit_sdk::Document, block: u64) -> Option<&Node> {
+    document
+        .walk()
+        .find(|node| node.kind == "prose.document" && node.children.iter().any(|child| child.id == block))
 }
 
 /// The block of a document that carries a **bookmark** of that name.
@@ -61,6 +126,74 @@ fn bookmarked(document: &craftkit_sdk::Document, parent: u64, name: &str) -> Opt
         .filter(|child| child.kind.starts_with("prose.block."))
         .find(|child| crate::bookmarks::bookmark_of(child).as_deref() == Some(name))
         .map(|child| child.id)
+}
+
+/// The **label** a kind of target names, if it names one.
+///
+/// The tree's own kinds: the three labels of the tree — `figure`,
+/// `table` and `equation` — and `label:<Name>` for a label of the
+/// person's own. A kind that is not one of them is refused by name.
+fn label_of(to: &str, id: &str) -> Result<Option<String>, EngineError> {
+    let to = to.trim();
+    if to.is_empty() || to.eq_ignore_ascii_case("bookmark") {
+        return Ok(None);
+    }
+    if let Some(label) = to.strip_prefix("label:") {
+        return Ok(Some(crate::captions::label_of(label, id)?));
+    }
+    match to.to_ascii_lowercase().as_str() {
+        "figure" => Ok(Some("Figure".to_string())),
+        "table" => Ok(Some("Table".to_string())),
+        "equation" => Ok(Some("Equation".to_string())),
+        _ => Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!(
+                "the target `{to}` is not one of this tree's: it is one of bookmark, figure, table, equation, label:<Name>"
+            ),
+        }),
+    }
+}
+
+/// The **ways** a reference may show what it points at.
+const SHOWS: [&str; 2] = ["text", "number"];
+
+/// The way a reference shows what it points at: `text` when it is not
+/// said, and a way that is not one of the tree's two is refused by
+/// name.
+fn show_of(show: Option<String>, id: &str) -> Result<String, EngineError> {
+    let Some(show) = show else { return Ok("text".to_string()) };
+    let show = show.to_ascii_lowercase();
+    if !SHOWS.contains(&show.as_str()) {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!(
+                "the way of showing `{show}` is not one of this tree's: it is one of text, number"
+            ),
+        });
+    }
+    Ok(show)
+}
+
+/// The **caption** of a document that a target names.
+///
+/// The tree's own rule: the target is the **number** of the caption
+/// or its **text**, and the text of the caption may begin with it.
+fn captioned(document: &craftkit_sdk::Document, parent: u64, label: &str, target: &str) -> Option<u64> {
+    let node = document.node(parent)?;
+    let captions = crate::captions::captions_of(document, node);
+    let captions = captions.as_array()?;
+    let caption = captions.iter().find(|caption| {
+        let held =
+            caption.get("label").and_then(|held| held.as_str()).unwrap_or(crate::captions::DEFAULT_LABEL);
+        if held != label {
+            return false;
+        }
+        let text = caption.get("text").and_then(|text| text.as_str()).unwrap_or_default();
+        let number = caption.get("number").and_then(|number| number.as_str()).unwrap_or_default();
+        let full = caption.get("full").and_then(|full| full.as_str()).unwrap_or_default();
+        number == target || full == target || text == target || text.starts_with(target)
+    })?;
+    caption.get("block").and_then(|block| block.as_u64())
 }
 
 /// **Add** a cross-reference to a document.
@@ -79,8 +212,18 @@ fn bookmarked(document: &craftkit_sdk::Document, parent: u64, name: &str) -> Opt
 pub struct AddReference {
     /// The document it goes in.
     pub document: NodeRef,
-    /// The **bookmark** it points at.
+    /// The **bookmark** it points at — or the **number** or the
+    /// **text** of the caption it points at.
     pub target: Text,
+    /// What it points at.
+    ///
+    /// `bookmark` — the default — `figure`, `table`, `equation`, or
+    /// `label:<Name>` for a label of the person's own.
+    pub to: Option<Text>,
+    /// How it shows what it points at.
+    ///
+    /// `text` — the default — or `number`.
+    pub show: Option<Text>,
 }
 
 impl AddReference {
@@ -106,25 +249,45 @@ impl AddReference {
                 message: "a reference points at a bookmark, and a bookmark has a name".to_string(),
             });
         }
-        let Some(target) = bookmarked(session.document(), document, &name) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no bookmark `{name}` in the document"),
-            });
+        let to = self.to.as_ref().map(|to| to.0.trim().to_string()).unwrap_or_default();
+        let label = label_of(&to, &id)?;
+        let show = show_of(self.show.as_ref().map(|show| show.0.trim().to_string()), &id)?;
+        let (target, payload) = match &label {
+            None => {
+                if show == "number" {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a bookmark has no number, and only a caption has one".to_string(),
+                    });
+                }
+                let Some(target) = bookmarked(session.document(), document, &name) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no bookmark `{name}` in the document"),
+                    });
+                };
+                (target, json!({ "bookmark": name.clone() }))
+            }
+            Some(label) => {
+                let Some(target) = captioned(session.document(), document, label, &name) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no caption of the label `{label}` that is `{name}`"),
+                    });
+                };
+                (target, json!({ "caption": name.clone(), "label": label.clone() }))
+            }
         };
         let block = session.document_mut()?.add_node_with_under(
             Some(document),
             name.clone(),
             REFERENCE_KIND,
             None,
-            json!({ "target": name.clone() }),
+            json!({ "target": name.clone(), "to": to, "show": show }),
         );
-        session.document_mut()?.add_relation(craftkit_sdk::Relation::with_payload(
-            block,
-            target,
-            REFERENCES,
-            json!({ "bookmark": name.clone() }),
-        ));
+        session
+            .document_mut()?
+            .add_relation(craftkit_sdk::Relation::with_payload(block, target, REFERENCES, payload));
         Ok(Outcome::changed(format!("the document references `{name}`"))
             .with_data(json!({ "block": block, "target": target, "bookmark": name })))
     }
@@ -146,8 +309,18 @@ impl AddReference {
 pub struct SetReference {
     /// The reference.
     pub block: NodeRef,
-    /// The **bookmark** it points at.
+    /// The **bookmark** it points at — or the **number** or the
+    /// **text** of the caption it points at.
     pub target: Text,
+    /// What it points at.
+    ///
+    /// `bookmark` — the default — `figure`, `table`, `equation`, or
+    /// `label:<Name>` for a label of the person's own.
+    pub to: Option<Text>,
+    /// How it shows what it points at.
+    ///
+    /// `text` — the default — or `number`.
+    pub show: Option<Text>,
 }
 
 impl SetReference {
@@ -185,24 +358,46 @@ impl SetReference {
                 message: format!("the reference `{block}` is in no document"),
             });
         };
-        let Some(target) = bookmarked(session.document(), document, &name) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no bookmark `{name}` in the document"),
-            });
+        let to = self.to.as_ref().map(|to| to.0.trim().to_string()).unwrap_or_default();
+        let label = label_of(&to, &id)?;
+        let show = show_of(self.show.as_ref().map(|show| show.0.trim().to_string()), &id)?;
+        let (target, payload) = match &label {
+            None => {
+                if show == "number" {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a bookmark has no number, and only a caption has one".to_string(),
+                    });
+                }
+                let Some(target) = bookmarked(session.document(), document, &name) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no bookmark `{name}` in the document"),
+                    });
+                };
+                (target, json!({ "bookmark": name.clone() }))
+            }
+            Some(label) => {
+                let Some(target) = captioned(session.document(), document, label, &name) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no caption of the label `{label}` that is `{name}`"),
+                    });
+                };
+                (target, json!({ "caption": name.clone(), "label": label.clone() }))
+            }
         };
         session
             .document_mut()?
             .remove_relations(|relation| relation.kind == REFERENCES && relation.from == block);
         if let Some(node) = session.document_mut()?.node_mut(block) {
             node.data["target"] = json!(name.clone());
+            node.data["to"] = json!(to);
+            node.data["show"] = json!(show);
         }
-        session.document_mut()?.add_relation(craftkit_sdk::Relation::with_payload(
-            block,
-            target,
-            REFERENCES,
-            json!({ "bookmark": name.clone() }),
-        ));
+        session
+            .document_mut()?
+            .add_relation(craftkit_sdk::Relation::with_payload(block, target, REFERENCES, payload));
         Ok(Outcome::changed(format!("the reference points at `{name}`"))
             .with_data(json!({ "block": block, "target": target, "bookmark": name })))
     }

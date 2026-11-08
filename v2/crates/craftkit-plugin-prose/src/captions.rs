@@ -72,7 +72,7 @@ fn format_of(name: &str, id: &str) -> Result<&'static str, EngineError> {
 
 /// The **label** a name says: no quote, no backslash and no control
 /// character, as the tree's.
-fn label_of(name: &str, id: &str) -> Result<String, EngineError> {
+pub fn label_of(name: &str, id: &str) -> Result<String, EngineError> {
     let label = name.trim();
     if label.chars().count() > MAX_LABEL {
         return Err(EngineError::Failed {
