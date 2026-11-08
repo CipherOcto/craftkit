@@ -4082,6 +4082,7 @@ so.
 | the **case** of the text of a paragraph | **built.** The text is changed in the tree's five ways, and the runs move with the text (§645) | §645 |
 | the **chapter** of a caption | **built.** A caption names the chapter it is in, and its number is counted again at each chapter (§646) | §646 |
 | the **path** of a media file | **built.** The path a reference names is worked out — a file URL is a path, and a relative path is relative to the folder of the file (§647) | §647 |
+| the **notes** of a document converted | **built.** A footnote becomes an endnote, an endnote becomes a footnote, and the references change with them (§648) | §648 |
 
 ### The list of things that are honestly not there: empty
 
@@ -42508,5 +42509,55 @@ is worked out by the tree's own rules.
   EDL are names and not paths.
 - **The paths are not written the other way**: the tree writes a path
   as a file URL when it writes a file, and that is not here.
+
+---
+
+## 648. The notes of a document are converted
+
+The **notes** of a document may now be **converted**: a footnote
+becomes an endnote, an endnote becomes a footnote, and the two swap.
+
+### What was built
+
+- A new module (**`src/notes.rs`**) converts the **notes** of a
+  document by the tree's own rules:
+  - `endnote`: the **footnotes** become endnotes;
+  - `footnote`: the **endnotes** become footnotes;
+  - `swap`: the footnotes become endnotes and the endnotes become
+    footnotes;
+  - a note that changes is **the same note**: it keeps its text and
+    its place, and only its kind changes;
+  - the **reference** to a note changes with it: a run that points at
+    a footnote that became an endnote points at an endnote;
+  - a way that is **not one of the tree's three** is refused by name.
+- A new command (**`prose.notes.convert`**) converts the notes of a
+  document, and answers how many notes and how many references
+  changed.
+
+### What the port found
+
+- **The tree swaps the styles of the notes as well** — the style of the
+  text of a footnote becomes the style of the text of an endnote — and
+  this tree has no such styles: a note is a node of a kind, and the
+  kind is what changes.
+- **The tree's reference is an object in the text** and this tree's
+  is a **run** that carries the note it points at; the reference
+  changes with the note either way.
+
+### What it cost
+
+- **Four tests** in the prose battery (`tests/notes.rs`): the
+  footnotes that become endnotes, the endnotes that become footnotes,
+  the swap, and the way that is refused.
+- **One command** (`prose.notes.convert`). The prose battery now
+  carries **101** commands and the MCP server **841**.
+
+### What it does not settle
+
+- **The styles of the notes** are not swapped: the tree's styles of a
+  footnote and of an endnote are two styles, and this tree has no
+  styles for the notes.
+- **The numbering** of the notes is not touched: the tree counts the
+  footnotes and the endnotes apart, and so does this tree.
 
 ---
