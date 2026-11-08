@@ -4089,6 +4089,7 @@ so.
 | the **parts** of a source | **built.** The publisher, the place, the journal, the volume, the pages and the address are said, and a part that is said empty is not there (§652) | §652 |
 | the **bibliography** of a document written | **built.** The entries of the sources are written in the style of the document — the template, the names, the order and the numbering are the tree's own (§653) | §653 |
 | a cross-reference to a **caption** | **built.** A cross-reference points at a caption and shows its number — the label and the number, derived (§654) | §654 |
+| the **subtotal** naming the tree's eleven functions | **built.** A subtotal names the tree's eleven functions — the product, the deviation and the variance included (§655) | §655 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24014,10 +24015,11 @@ hiding of a row (§345) is what makes it mean something.
   not Excel's, and the tree's comment says so.
 - A **nested subtotal** — a cell whose own formula holds a
   `SUBTOTAL(` — is left out, in both forms.
-- The function numbers that this tree has are `1` (AVERAGE), `2`
-  (COUNT), `3` (COUNTA), `4` (MAX), `5` (MIN) and `9` (SUM). A number
-  that names a function this tree does not have is **refused**, and the
-  refusal says what the numbers are.
+- The function numbers that this tree has are the tree's **eleven**:
+  `1` (AVERAGE), `2` (COUNT), `3` (COUNTA), `4` (MAX), `5` (MIN), `6`
+  (PRODUCT), `7` (STDEV), `8` (STDEVP), `9` (SUM), `10` (VAR) and `11`
+  (VARP) (§655). A number outside them is **refused**, and the refusal
+  says what the numbers are.
 - A subtotal may read **two ranges** and it may read a **name**.
 
 ### What the port found
@@ -24028,11 +24030,12 @@ hiding of a row (§345) is what makes it mean something.
   as well. Excel does the opposite for the rows hidden by hand. This
   tree ports the tree: the hundred-and-more form leaves the hidden rows
   out and the plain form does not.
-- **The tree's eleven function numbers are not all here.** The tree's
-  `SUBTOTAL` can be a `PRODUCT`, a `STDEV`, a `STDEVP`, a `VAR` or a
-  `VARP` — and this tree has none of those functions, so a subtotal
-  that names one is refused and says so. The functions of this tree
-  are the six the numbers stand for.
+- **The tree's eleven function numbers were not all here** when this
+  section was written, and the note said that this tree had none of
+  the five functions the other numbers stand for. That was wrong about
+  this tree: the functions *were* here — `PRODUCT`, `STDEV`, `STDEVP`,
+  `VAR` and `VARP` are functions of this tree — and only the subtotal
+  did not name them. They are all named now (§655).
 - **The tree's nested rule is a rule about the formula's text.** The
   tree leaves out a cell whose formula **contains** `SUBTOTAL(` or
   `AGGREGATE(` — anywhere in it, even inside a word — and so does
@@ -24043,9 +24046,9 @@ hiding of a row (§345) is what makes it mean something.
 
 - **Ten tests** in the grid battery (`tests/subtotal.rs`): a subtotal
   summing a range, the hundred-and-more form leaving the hidden rows
-  out, a nested subtotal being left out, the other functions working, a
-  function number that is not one being refused, a function number out
-  of range being refused, a subtotal with no range being refused, a
+  out, a nested subtotal being left out, the other functions working,
+  the sample deviation of one number being refused, a function number
+  out of range being refused, a subtotal with no range being refused, a
   subtotal reading two ranges, a subtotal reading a name, and the
   subtotal being saved.
 - **The formula engine learned the hidden rows.** The book carries the
@@ -42961,5 +42964,63 @@ shows.
   own, and the tree's is an object in the text.
 - **The hidden bookmark of the tree** — `_Ref…` — is not made, and
   nothing points at it.
+
+---
+
+## 655. The subtotal names the tree's eleven functions
+
+A **subtotal** may now be any of the tree's **eleven** functions: the
+product, the deviation and the variance are named as well as the sum,
+the count, the average and the largest.
+
+### What was built
+
+- The **subtotal** of a range names the tree's **eleven** functions:
+  - `1` AVERAGE, `2` COUNT, `3` COUNTA, `4` MAX, `5` MIN, `6` PRODUCT,
+    `7` STDEV, `8` STDEVP, `9` SUM, `10` VAR and `11` VARP. The
+    tree's own eleven.
+  - the hundred-and-more form (`101` to `111`) is the same function
+    with the rows hidden **by hand** left out as well. The tree's own
+    rule.
+  - the **sample** and the **whole**: `STDEV` and `VAR` are of a
+    sample and `STDEVP` and `VARP` are of the whole, and a set that is
+    too small is `#DIV/0!`. The tree's own rule, and this tree's own
+    rule for the variance.
+  - the **product** of nothing is nothing, as this tree's `PRODUCT` is.
+- A function number outside the eleven is still **refused**, and the
+  refusal says what the numbers are.
+
+### What the port found
+
+- **The note that said the tree's other functions were not here was
+  wrong about this tree.** The functions *were* here — `PRODUCT`,
+  `STDEV`, `STDEVP`, `VAR` and `VARP` are functions of this tree, in
+  the arithmetic and in the statistics — and only the **subtotal** did
+  not name them. So the subtotal was the one place where the tree's
+  own function numbers were missing, and it is not missing any now.
+  The note is corrected in place (§346).
+- **The subtotal computes the aggregate itself**: it does not call the
+  function it names, and it collects the numbers of the ranges first
+  and leaves out what it leaves out — the rows a filter hides, the
+  rows hidden by hand in the hundred-and-more form, and a cell that
+  holds a nested subtotal.
+
+### What it cost
+
+- **Four tests** in the grid battery (`tests/subtotals.rs`): the
+  eleven functions, the spread, the hundred-and-more form, and the
+  function number that is refused.
+- **No new command**: `SUBTOTAL` is a function and not a command, so
+  the grid battery still carries **133** commands and the MCP server
+  **845**.
+
+### What it does not settle
+
+- **The tree's `AGGREGATE` is not here**: it is the tree's other
+  function over a range, with its own options.
+- **The subtotal does not call the functions it names**: it computes
+  the aggregate itself, and the two ways may one day differ.
+- **The tree's filter is not here**, and so the rows a filter hides
+  are not a thing this tree knows.
 
 ---
