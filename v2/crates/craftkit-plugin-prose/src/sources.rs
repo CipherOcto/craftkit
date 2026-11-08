@@ -149,7 +149,7 @@ pub fn check_citation(session: &Session, block: u64, tag: &str, id: &str) -> Res
 
 /// The **citations** of a document: the tags of the sources that are
 /// cited, in the order they are first cited.
-fn cited_of(session: &Session, document: u64) -> Vec<String> {
+pub fn cited_of(session: &Session, document: u64) -> Vec<String> {
     let Some(node) = session.document().node(document) else { return Vec::new() };
     let mut cited: Vec<String> = Vec::new();
     for block in node.children.iter().filter(|child| child.kind.starts_with("prose.block.")) {

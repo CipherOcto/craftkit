@@ -157,7 +157,7 @@ pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
 pub use borders::SetBorders;
 pub use captions::{ReadCaptions, SetCaption};
 pub use characters::FormatRun;
-pub use citestyles::{ListCitationStyles, ReadCitationStyle, SetCitationStyle};
+pub use citestyles::{ListCitationStyles, ReadCitation, ReadCitationStyle, SetCitationStyle};
 pub use columns::SetColumns;
 pub use comments::{DeleteComment, GetComment, SetComment};
 pub use dashes::SetDashes;
@@ -1145,6 +1145,7 @@ craftkit_sdk::plugin_anchor!(
     SetStops,
     SetTheme,
     ListCitationStyles,
+    ReadCitation,
     SetCitationStyle,
     ReadCitationStyle,
     SetPageNumbers,

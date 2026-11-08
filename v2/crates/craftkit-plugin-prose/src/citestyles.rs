@@ -18,16 +18,19 @@
 //!   the tree's own rule, and the refusal names the styles there are.
 //! - A document that names **no** style cites by **APA**: the tree's
 //!   own default.
+//! - The **citation** of a source is **derived**: it is worked out from
+//!   the source and the style of the document every time, and it is
+//!   never written down, so it cannot be out of date.
 //!
 //! # What it does not do
 //!
-//! - **The citations are not written**: a style says how a citation
-//!   would be written, and the citation itself is another thing.
 //! - **The bibliography is not written**: the entries of a style are
-//!   another thing too.
+//!   another thing.
 //! - **The names of the authors are not written**: the tree's styles
 //!   each write an author's name in their own way, and that is the
-//!   writing of an entry.
+//!   writing of an entry. A citation names the **surnames**.
+//! - **The citation is not put into the text**: a citation is said, and
+//!   putting it into a paragraph is another thing.
 
 use craftkit_derive::Command;
 
@@ -37,12 +40,26 @@ use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
 /// How a style cites **in the text**.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cite {
-    /// The author and the year, and the pages.
-    AuthorDate,
+    /// The author and the year, and the pages: the year is written
+    /// after the author, and the pages after the year.
+    AuthorDate {
+        /// What is written between the author and the year.
+        year_sep: &'static str,
+        /// What is written between the year and the pages.
+        pages_sep: &'static str,
+    },
     /// The author and the pages.
     AuthorPage,
     /// A number, in brackets or in parentheses.
-    Number,
+    Number {
+        /// What opens the number.
+        open: &'static str,
+        /// What closes the number.
+        close: &'static str,
+        /// What is written between the number and the pages, when the
+        /// style writes pages at all.
+        pages_sep: Option<&'static str>,
+    },
 }
 
 /// How a style **orders** its bibliography.
@@ -67,6 +84,8 @@ pub struct Style {
     pub aliases: &'static [&'static str],
     /// How the style cites in the text.
     pub cite: Cite,
+    /// The word that joins two authors.
+    pub and: &'static str,
     /// How the style orders its bibliography.
     pub order: Order,
     /// From how many authors the style says **et al.** instead of
@@ -81,7 +100,8 @@ pub const STYLES: [Style; 12] = [
     Style {
         name: "APA",
         aliases: &["apa"],
-        cite: Cite::AuthorDate,
+        cite: Cite::AuthorDate { year_sep: ", ", pages_sep: ", p. " },
+        and: "&",
         order: Order::Author,
         et_al_from: 3,
         bib_title: "References",
@@ -89,7 +109,8 @@ pub const STYLES: [Style; 12] = [
     Style {
         name: "Chicago",
         aliases: &["chicago"],
-        cite: Cite::AuthorDate,
+        cite: Cite::AuthorDate { year_sep: " ", pages_sep: ", " },
+        and: "and",
         order: Order::Author,
         et_al_from: 3,
         bib_title: "References",
@@ -97,7 +118,8 @@ pub const STYLES: [Style; 12] = [
     Style {
         name: "GB/T 7714",
         aliases: &["gb"],
-        cite: Cite::Number,
+        cite: Cite::Number { open: "[", close: "]", pages_sep: Some(", ") },
+        and: "and",
         order: Order::Cited,
         et_al_from: 3,
         bib_title: "References",
@@ -105,7 +127,8 @@ pub const STYLES: [Style; 12] = [
     Style {
         name: "GOST (name sort)",
         aliases: &["gost", "gostname"],
-        cite: Cite::Number,
+        cite: Cite::Number { open: "[", close: "]", pages_sep: Some(", p. ") },
+        and: "and",
         order: Order::Author,
         et_al_from: 3,
         bib_title: "References",
@@ -113,7 +136,8 @@ pub const STYLES: [Style; 12] = [
     Style {
         name: "GOST (title sort)",
         aliases: &["gosttitle"],
-        cite: Cite::Number,
+        cite: Cite::Number { open: "[", close: "]", pages_sep: Some(", p. ") },
+        and: "and",
         order: Order::Title,
         et_al_from: 3,
         bib_title: "References",
@@ -121,7 +145,8 @@ pub const STYLES: [Style; 12] = [
     Style {
         name: "Harvard (Anglia)",
         aliases: &["harvard"],
-        cite: Cite::AuthorDate,
+        cite: Cite::AuthorDate { year_sep: ", ", pages_sep: ", p. " },
+        and: "and",
         order: Order::Author,
         et_al_from: 4,
         bib_title: "References",
@@ -129,7 +154,8 @@ pub const STYLES: [Style; 12] = [
     Style {
         name: "IEEE",
         aliases: &["ieee"],
-        cite: Cite::Number,
+        cite: Cite::Number { open: "[", close: "]", pages_sep: None },
+        and: "and",
         order: Order::Cited,
         et_al_from: 3,
         bib_title: "References",
@@ -137,7 +163,8 @@ pub const STYLES: [Style; 12] = [
     Style {
         name: "ISO 690 (author-date)",
         aliases: &["iso690"],
-        cite: Cite::AuthorDate,
+        cite: Cite::AuthorDate { year_sep: " ", pages_sep: ", p. " },
+        and: "and",
         order: Order::Author,
         et_al_from: 4,
         bib_title: "References",
@@ -145,7 +172,8 @@ pub const STYLES: [Style; 12] = [
     Style {
         name: "ISO 690 (numerical)",
         aliases: &["iso690num", "iso690nmerical"],
-        cite: Cite::Number,
+        cite: Cite::Number { open: "(", close: ")", pages_sep: Some(", p. ") },
+        and: "and",
         order: Order::Cited,
         et_al_from: 4,
         bib_title: "References",
@@ -154,6 +182,7 @@ pub const STYLES: [Style; 12] = [
         name: "MLA",
         aliases: &["mla"],
         cite: Cite::AuthorPage,
+        and: "and",
         order: Order::Author,
         et_al_from: 3,
         bib_title: "Works Cited",
@@ -161,7 +190,8 @@ pub const STYLES: [Style; 12] = [
     Style {
         name: "SIST02",
         aliases: &["sist"],
-        cite: Cite::Number,
+        cite: Cite::Number { open: "(", close: ")", pages_sep: Some(", p. ") },
+        and: "and",
         order: Order::Cited,
         et_al_from: 3,
         bib_title: "References",
@@ -169,7 +199,8 @@ pub const STYLES: [Style; 12] = [
     Style {
         name: "Turabian",
         aliases: &["turabian"],
-        cite: Cite::AuthorDate,
+        cite: Cite::AuthorDate { year_sep: " ", pages_sep: ", " },
+        and: "and",
         order: Order::Author,
         et_al_from: 4,
         bib_title: "Bibliography",
@@ -205,6 +236,11 @@ pub fn names() -> Vec<&'static str> {
     STYLES.iter().map(|style| style.name).collect()
 }
 
+/// Whether a style **numbers** its citations: the tree's own rule.
+pub fn numbered(style: &Style) -> bool {
+    matches!(style.cite, Cite::Number { .. })
+}
+
 /// The style a **document** cites by.
 ///
 /// A document that names no style cites by APA: the tree's own
@@ -214,16 +250,86 @@ pub fn style_of(node: &Node) -> &'static Style {
     find(name).unwrap_or(&STYLES[0])
 }
 
+/// The **authors** of a source: the surname and the first name of each.
+///
+/// The tree's own rule: the authors are separated by a semicolon, and
+/// an author is written "surname, first name" — and when it is not, the
+/// last word of it is the surname.
+pub fn authors_of(author: &str) -> Vec<(String, String)> {
+    author
+        .split(';')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(|part| match part.split_once(',') {
+            Some((last, first)) => (last.trim().to_string(), first.trim().to_string()),
+            None => match part.rsplit_once(' ') {
+                Some((first, last)) => (last.trim().to_string(), first.trim().to_string()),
+                None => (part.to_string(), String::new()),
+            },
+        })
+        .collect()
+}
+
+/// The **citation** of a source, in a style.
+///
+/// The tree's own rules:
+/// - the **who** is the surnames of the authors: one surname is said
+///   alone, two are joined by the word of the style, and from as many
+///   authors as the style says **et al.** the first surname and "et
+///   al." are said instead;
+/// - a source with **no author** is cited by its **title**;
+/// - the citation is then written the way the style writes it: the
+///   author and the year, the author and the pages, or the number of
+///   the source.
+pub fn cite_of(source: &Json, style: &Style, number: usize, pages: &str) -> String {
+    let author = source.get("author").and_then(|author| author.as_str()).unwrap_or_default();
+    let title = source.get("title").and_then(|title| title.as_str()).unwrap_or_default();
+    let year = source.get("year").and_then(|year| year.as_str()).unwrap_or_default();
+    let authors = authors_of(author);
+    let surnames: Vec<&str> = authors.iter().map(|(last, _)| last.as_str()).collect();
+    let who = match surnames.as_slice() {
+        [] => title.to_string(),
+        [one] => (*one).to_string(),
+        [first, ..] if surnames.len() >= style.et_al_from.max(2) => format!("{first} et al."),
+        [a, b] => format!("{a} {} {b}", style.and),
+        [init @ .., last] => format!("{} {} {last}", init.join(", "), style.and),
+    };
+    match style.cite {
+        Cite::AuthorPage if pages.is_empty() => format!("({who})"),
+        Cite::AuthorPage => format!("({who} {pages})"),
+        Cite::AuthorDate { year_sep, .. } if pages.is_empty() => format!("({who}{year_sep}{year})"),
+        Cite::AuthorDate { year_sep, pages_sep } => format!("({who}{year_sep}{year}{pages_sep}{pages})"),
+        Cite::Number { open, close, pages_sep: Some(sep) } if !pages.is_empty() => {
+            format!("{open}{number}{sep}{pages}{close}")
+        }
+        Cite::Number { open, close, .. } => format!("{open}{number}{close}"),
+    }
+}
+
 /// A style, as it is reported.
 fn to_json(style: &Style) -> Json {
     json!({
         "name": style.name,
         "aliases": style.aliases.to_vec(),
         "cite": match style.cite {
-            Cite::AuthorDate => json!("author-date"),
+            Cite::AuthorDate { .. } => json!("author-date"),
             Cite::AuthorPage => json!("author-page"),
-            Cite::Number => json!("number"),
+            Cite::Number { .. } => json!("number"),
         },
+        "cite_format": match style.cite {
+            Cite::AuthorDate { year_sep, pages_sep } => json!({ "year": year_sep, "pages": pages_sep }),
+            Cite::AuthorPage => json!({}),
+            Cite::Number { open, close, pages_sep } => json!({
+                "open": open,
+                "close": close,
+                "pages": match pages_sep {
+                    Some(sep) => json!(sep),
+                    None => Json::Null,
+                },
+            }),
+        },
+        "numbered": numbered(style),
+        "and": style.and,
         "order": match style.order {
             Order::Author => json!("author"),
             Order::Title => json!("title"),
@@ -342,5 +448,76 @@ impl ReadCitationStyle {
         let style = style_of(&node);
         Ok(Outcome::new(format!("the document `{document}` cites by `{}`", style.name))
             .with_data(json!({ "document": document, "style": to_json(style) })))
+    }
+}
+
+/// **Read** the **citation** of a source, in the style of its
+/// document.
+///
+/// A query: it does not change the document. The citation is
+/// **derived**: it is worked out from the source and the style of the
+/// document every time, so it cannot be out of date.
+#[derive(Command)]
+#[command(id = "prose.document.citation", area = "prose", layer = "prose", icon = "list")]
+pub struct ReadCitation {
+    /// The document the source belongs to.
+    pub document: NodeRef,
+    /// The tag that names the source.
+    pub tag: Text,
+    /// The pages of the source that are cited.
+    pub pages: Option<Text>,
+}
+
+impl ReadCitation {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "prose.document.citation".to_string();
+        let document = self.document.0;
+        let Some(node) = session.document().node(document).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{document}`"),
+            });
+        };
+        if node.kind != "prose.document" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+            });
+        }
+        let tag = self.tag.0.trim().to_string();
+        let sources = crate::sources::sources_of(&node);
+        let Some(source) = sources.iter().find(|source| {
+            source.get("tag").and_then(|held| held.as_str()).map(|held| held == tag).unwrap_or(false)
+        }) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no source with the tag `{tag}`"),
+            });
+        };
+        let style = style_of(&node);
+        // The **number** of the source: where it stands in the order
+        // the sources are cited, and the tree's own rule for a source
+        // that is not cited yet — it stands after the ones that are.
+        let cited = crate::sources::cited_of(session, document);
+        let number = match cited.iter().position(|held| *held == tag) {
+            Some(at) => at + 1,
+            None => cited.len() + 1,
+        };
+        let pages = self.pages.as_ref().map(|pages| pages.0.trim().to_string()).unwrap_or_default();
+        let citation = cite_of(source, style, number, &pages);
+        Ok(Outcome::new(format!("the source `{tag}` is cited as `{citation}`")).with_data(json!({
+            "document": document,
+            "tag": tag,
+            "style": style.name,
+            "number": match numbered(style) {
+                true => json!(number),
+                false => Json::Null,
+            },
+            "pages": match pages.is_empty() {
+                true => Json::Null,
+                false => json!(pages),
+            },
+            "citation": citation,
+        })))
     }
 }
