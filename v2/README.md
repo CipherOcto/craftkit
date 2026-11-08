@@ -4096,6 +4096,7 @@ so.
 | the **items** of a pivot that are kept | **built.** A pivot may be filtered: the rows whose field is not selected are left out of it (§659) | §659 |
 | the **order** of the items of a pivot | **built.** The items may be in the tree's own order, from the last to the first, or in the order of the source (§660) | §660 |
 | the **items** of a date field grouped | **built.** The items of a date field may be grouped by the year, the quarter, the month or the day — the tree's own labels (§661) | §661 |
+| the **values** of a pivot shown in another way | **built.** The values may be a share of a total, a running total, or the place of a value among its siblings (§662) | §662 |
 
 ### The list of things that are honestly not there: empty
 
@@ -43367,5 +43368,68 @@ year, the quarter, the month or the day.
 - **The grouping of a date that is a text is not here**: the tree
   groups a number that is a date and not a text that looks like one,
   and so does this one.
+
+---
+
+## 662. The values of a pivot are shown in another way
+
+The values of a pivot may now be **shown** in another way: as a share
+of a total, as a running total, or as the place of a value among its
+siblings.
+
+### What was built
+
+- The values of a pivot may now be **shown** in another way:
+  - the **ways** are the tree's own: `normal`, `percentOfGrandTotal`,
+    `percentOfColumnTotal`, `percentOfRowTotal`, `runningTotal` and
+    `rank` — and a way that is not one of them is refused by name.
+  - a **share** is a fraction and not a percentage: the value over the
+    total, the tree's own rule. A division by nothing is `#DIV/0!`.
+  - a **running total** is the sum of the values up to this one, in
+    the order the rows are in.
+  - the **place** of a value is one and the largest is one: the number
+    of the values that are greater, and one more.
+  - the **total of a row** is shown the way the tree shows it: the
+    total of a row is a cell of the grand column, and the grand column
+    is the whole of the pivot. So the share of the grand total of a
+    row is the row's share of everything, and the share of the row of a
+    row is the whole of it.
+- The **summary** of a pivot says the way its values are shown.
+- A new command (**`grid.pivot.showas`**) says the way.
+
+### What the port found
+
+- **The tree's share is a fraction and not a percentage**: the tree's
+  `ratio` divides one number by another and gives the fraction, and a
+  division by nothing is the tree's own `#DIV/0!`. Here it is the
+  same.
+- **The tree's place is one and the largest is one**: the number of
+  the values that are **greater** — and not the number of the values
+  that are smaller — and one more. So the first of three values that
+  are equal is one.
+- **The tree's running total is of the raw values**: it sums the
+  values of the rows up to this one and not the values as they are
+  shown, so the running total of a running total is the running total.
+- **The tree's totals are cells of the pivot and not a sum of the
+  cells**: the total of a row is a cell of the grand column, and the
+  grand column is the whole of the pivot. So the share of the column
+  of a row's total is the row's share of everything.
+
+### What it cost
+
+- **Three tests** in the grid battery (`tests/pivotshowas.rs`): the
+  share of the grand total, the other ways, and the refusal.
+- **One command**. The grid battery now carries **139** commands and
+  the MCP server **851**.
+
+### What it does not settle
+
+- **The tree may show the values of every value field in its own way**:
+  it has one way here, and one value field.
+- **The number format of the tree's values is not here**: the tree
+  writes a share with a format of its own, and this tree writes the
+  number.
+- **The running total of the tree is of the first row field**: here
+  the rows are the groups and there is one row field.
 
 ---
