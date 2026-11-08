@@ -4097,6 +4097,7 @@ so.
 | the **order** of the items of a pivot | **built.** The items may be in the tree's own order, from the last to the first, or in the order of the source (§660) | §660 |
 | the **items** of a date field grouped | **built.** The items of a date field may be grouped by the year, the quarter, the month or the day — the tree's own labels (§661) | §661 |
 | the **values** of a pivot shown in another way | **built.** The values may be a share of a total, a running total, or the place of a value among its siblings (§662) | §662 |
+| the **subtotals** of a pivot | **built.** The total of a group of the rows may be a line of its own, at the top of the group or at the bottom (§663) | §663 |
 
 ### The list of things that are honestly not there: empty
 
@@ -43431,5 +43432,56 @@ siblings.
   number.
 - **The running total of the tree is of the first row field**: here
   the rows are the groups and there is one row field.
+
+---
+
+## 663. The subtotals of a pivot
+
+The **subtotal** of a group of the rows of a pivot may now be a line
+of its own: at the top of the group or at the bottom of it.
+
+### What was built
+
+- The **subtotal** of a group of the rows may now be a line of its own:
+  - the **modes** are the tree's own: `none`, `top` and `bottom` — and
+    a mode that is not one of them is refused by name.
+  - the **line** carries the name of the group and the word "Total" —
+    "ann Total" — and it is the total of the group. The tree's own
+    rule.
+  - the line is **marked**: it says that it is a subtotal, so a reader
+    may tell it from a group.
+- The **summary** of a pivot says where the subtotals are.
+- A new command (**`grid.pivot.subtotals`**) says where they are.
+
+### What the port found
+
+- **The tree's subtotal is a line of the table and not a value of a
+  cell**: the tree's pivot is written out, and the subtotal is a line
+  of it with the label of the group and the word "Total". Here the
+  summary is read, and the subtotal is a line of the summary.
+- **The tree's pivot has the subtotals on by default and at the top**:
+  the tree's own default. This tree's pivot has **one** row field, so
+  a subtotal line would be the line of the group again — and the
+  default here is `none`, and the modes are the tree's own.
+- **The tree's subtotal of a group is the total of the group and not
+  the sum of the lines under it**: the tree's subtotal is the value of
+  the group, and the way the values are shown is the way it is shown.
+
+### What it cost
+
+- **Three tests** in the grid battery (`tests/pivotsubtotals.rs`): the
+  subtotal at the bottom, the subtotal at the top, and the default and
+  the refusal.
+- **One command**. The grid battery now carries **140** commands and
+  the MCP server **852**.
+
+### What it does not settle
+
+- **The tree's pivot has many row fields**: its subtotal is of a group
+  of the rows under a parent, and this tree's pivot has one row field.
+- **The subtotal of the tree is in the table**: it is a line of a
+  range of cells, and here it is a line of a summary that is read.
+- **The values of a subtotal are not shown in another way**: they are
+  shown the way the pivot shows its values.
 
 ---
