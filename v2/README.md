@@ -4101,6 +4101,7 @@ so.
 | the **table of figures** of a document | **built.** The captions that carry one label are read as a table — the tree's label, identifier and entry rules (§664) | §664 |
 | the **comment** on a cell | **built.** A comment on a cell is a thread — the comment, the replies to it, and whether it is resolved (§665) | §665 |
 | the **comments** of a sheet moved with its cells | **built.** The comments move with the cells when a column or a row is inserted or deleted (§667) | §667 |
+| the **cues** of a WebVTT file | **built.** The cues of a WebVTT file are read — the identifier, the settings, the voice and the blocks (§668) | §668 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -43740,5 +43741,71 @@ with the cell when the cell is deleted.
   are.
 - **The comments are not written to a file.** The tree keeps them in
   the file's comments part, and here they live in the sheet.
+
+---
+
+## 668. The cues of a WebVTT file
+
+The **cues** of a **WebVTT** file may now be read as well, and the
+file's own words about its cues are kept.
+
+### What was built
+
+- The **cues** of a WebVTT file are read, and the rules are the tree's
+  own:
+  - the **signature** `WEBVTT` and the header that may follow it. A
+    file with no signature is read anyway.
+  - the file is a list of **blocks**, and the blank lines are what end
+    them.
+  - a **NOTE** block is kept, and so are the `STYLE` and `REGION`
+    blocks before the first cue.
+  - a **cue** is an identifier line — when the file gave it one — a
+    timing line, and the text. What follows the end of the timing line
+    is the **settings** of the cue, and they are kept as the file
+    wrote them.
+  - the **voice** of a cue is a `<v Name>` span at the front of the
+    text: it is the speaker, and it is taken off. A span that holds
+    several voices is left where it is.
+  - a cue whose **end is not after its start** is skipped, and the
+    answer says so.
+  - a file with **no signature** and **no cue** and something in it is
+    not a WebVTT file, and that is refused by name.
+- The command now takes the **format** of the file: `subrip` or
+  `webvtt` — the tree's own names, and the extension of a file is one
+  of them too. A format that is not one of them is refused by name.
+- The clock of a WebVTT cue is written with a **point**, as the format
+  says, and the clock of a SubRip cue with a **comma**.
+
+### What the port found
+
+- **The tree's WebVTT keeps more than the cues**: the identifier, the
+  settings, the voice, the inline markup and the blocks. Here the
+  identifier, the settings and the voice are kept, and the inline
+  markup stays in the text.
+- **The tree's signature is optional** — a file with no `WEBVTT` at
+  the front is read — and the tree refuses a file that has no cue and
+  no signature. The same is here.
+- **The tree's blocks are kept in the document** it reads, and here
+  they are said with the cues.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/vttcaptions.rs`): the
+  cues, the blocks, the file with no signature, the skipped cue and
+  the refused format.
+- **No new command**: `film.captions.read` now takes the format. The
+  film battery carries **87** commands and the MCP server **859**.
+
+### What it does not settle
+
+- **The cues are not kept.** They are read out of a file, and they
+  are not stored.
+- **The tree's other five formats are not here**: Scenarist SCC,
+  MacCaption MCC, EBU STL, TTML and DFXP.
+- **Nothing is written back.** The tree writes a caption file again
+  with its cues, its blocks and its voices in it, and nothing writes
+  here.
+- **A cue in the tree may sit in a place on the picture and have a
+  style**: there is no place and no style here.
 
 ---
