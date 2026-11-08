@@ -96,6 +96,47 @@ pub struct Drawings {
     pub images: usize,
     /// How many **paths** were taken away.
     pub paths: usize,
+    /// How many **shadings** were clipped.
+    pub shadings: usize,
+}
+
+/// An **operation** with numbers as its operands.
+fn op_of(operator: &str, numbers: &[f64]) -> crate::content::Operation {
+    crate::content::Operation {
+        operator: operator.to_string(),
+        operands: numbers.iter().map(|number| json!(number)).collect(),
+        inline: None,
+    }
+}
+
+/// The **clip** that cuts a region out of a shading: the tree's own
+/// rule.
+///
+/// A shading fills the clip it is in, so the region is cut out of it:
+/// the box of the page and the region are drawn as one path, and the
+/// **even-odd** rule leaves the region out of it. The path is written
+/// in the space the shading is painted in, so the transform of the page
+/// is undone first.
+fn clip_out(region: [f64; 4], ctm: &crate::content::Matrix) -> Option<Vec<crate::content::Operation>> {
+    let inverse = ctm.invert()?;
+    // The **box of the page**, and a little more than it: the tree's
+    // own box.
+    const PAGE: f64 = 1_000_000.0;
+    let big = [-PAGE - 10.0, -PAGE - 10.0, PAGE + 10.0, PAGE + 10.0];
+    let outer = [(big[0], big[1]), (big[2], big[1]), (big[2], big[3]), (big[0], big[3])];
+    let inner =
+        [(region[0], region[1]), (region[0], region[3]), (region[2], region[3]), (region[2], region[1])];
+    let mut ops: Vec<crate::content::Operation> = Vec::new();
+    for poly in [outer, inner] {
+        for (at, (x, y)) in poly.iter().enumerate() {
+            let (u, v) = inverse.apply(*x, *y);
+            ops.push(op_of(if at == 0 { "m" } else { "l" }, &[u, v]));
+        }
+        ops.push(op_of("h", &[]));
+    }
+    ops.push(op_of("W*", &[]));
+    ops.push(op_of("n", &[]));
+    Some(ops)
 }
 
 /// The **XObjects** of a page: the name each has and the node of it.
@@ -231,6 +272,20 @@ pub fn drawings_under(
                         out.images += 1;
                         continue;
                     }
+                }
+                out.operations.push(operation.clone());
+                continue;
+            }
+            "sh" => {
+                // The **shading** fills the clip it is in, so the
+                // region is cut out of it: the tree's own rule.
+                if let Some(clip) = clip_out(region, &ctm) {
+                    out.operations.push(op_of("q", &[]));
+                    out.operations.extend(clip);
+                    out.operations.push(operation.clone());
+                    out.operations.push(op_of("Q", &[]));
+                    out.shadings += 1;
+                    continue;
                 }
                 out.operations.push(operation.clone());
                 continue;
@@ -487,20 +542,31 @@ impl RedactDrawings {
         let content = content_of(document, page)?;
         let images = xobjects_of(document, page);
         let drawings = drawings_under(&content.operations, region, &images, document);
-        if drawings.images == 0 && drawings.paths == 0 {
-            return Ok(Outcome::new(format!("nothing of the page `{page}` is under the region"))
-                .with_data(json!({ "page": page, "region": json!(region), "images": 0, "paths": 0 })));
+        if drawings.images == 0 && drawings.paths == 0 && drawings.shadings == 0 {
+            return Ok(Outcome::new(format!("nothing of the page `{page}` is under the region")).with_data(
+                json!({
+                    "page": page,
+                    "region": json!(region),
+                    "images": 0,
+                    "paths": 0,
+                    "shadings": 0,
+                }),
+            ));
         }
         let bytes = write_operations(&content.path, &drawings.operations)?;
-        Ok(Outcome::changed(format!("{} image(s) and {} path(s) removed", drawings.images, drawings.paths))
-            .with_data(json!({
-                "page": page,
-                "stream": content.stream,
-                "region": json!(region),
-                "images": drawings.images,
-                "paths": drawings.paths,
-                "bytes": bytes,
-            })))
+        Ok(Outcome::changed(format!(
+            "{} image(s) and {} path(s) removed, and {} shading(s) clipped",
+            drawings.images, drawings.paths, drawings.shadings
+        ))
+        .with_data(json!({
+            "page": page,
+            "stream": content.stream,
+            "region": json!(region),
+            "images": drawings.images,
+            "paths": drawings.paths,
+            "shadings": drawings.shadings,
+            "bytes": bytes,
+        })))
     }
 }
 

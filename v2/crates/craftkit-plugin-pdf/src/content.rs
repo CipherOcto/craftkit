@@ -76,6 +76,21 @@ impl Matrix {
         (a * x + c * y + e, b * x + d * y + f)
     }
 
+    /// The matrix **inverted**: the transform that undoes it.
+    ///
+    /// The tree's own rule: the row-vector convention of the
+    /// specification, so the inverse of a matrix that turns nothing is
+    /// the matrix that turns nothing, and a matrix that cannot be
+    /// undone — one that turns a square into a line — has no inverse.
+    pub fn invert(&self) -> Option<Matrix> {
+        let [a, b, c, d, e, f] = self.0;
+        let det = a * d - c * b;
+        if det == 0.0 || !det.is_finite() {
+            return None;
+        }
+        Some(Matrix([d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det]))
+    }
+
     /// The **box** a rectangle takes after this matrix.
     ///
     /// The tree's own rule: the four corners of the rectangle are
