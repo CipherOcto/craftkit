@@ -4071,6 +4071,7 @@ so.
 | the **place** of the text of a page | **built.** The text of a page says where it is — the text matrix, turned by the transform of the page (§634) | §634 |
 | the **width** of the text of a page | **built.** The text of a page says how wide it is — the widths of the font, the spacings, and the advance of the text (§635) | §635 |
 | the **content** of a stream written back | **built.** A stream may be written again in the kit's own form, and an inline image is kept whole — and the rule for the end of an image is the tree's (§636) | §636 |
+| the **height** of the text of a page | **built.** The text of a page says how tall it is — the metrics of the font, and the box the glyphs take (§637) | §637 |
 
 ### The list of things that are honestly not there: empty
 
@@ -41811,12 +41812,11 @@ the advance of the text, and the text moves on by it.
 
 - **The standard fourteen fonts** are not measured: a font that
   names one and gives no widths has no widths here.
-- **The height of the text** is not worked out: the ascent and the
-  descent of the font are not read, so a piece of text has a place
-  and a width and no box.
-- **A redaction** is still not made: the place and the width of the
-  text are the first half of it, and the half that removes the text
-  is not here.
+- **The height of the text** is worked out now: the ascent and the
+  descent of the font are read, and a piece of text has a box (§637).
+- **A redaction** is still not made: the place, the width and the box
+  of the text are the first half of it, and the half that removes the
+  text is not here.
 
 ## 636. The content of a stream written back
 
@@ -41888,7 +41888,77 @@ is read and written is the stream that was read.
 - **A page is not put back together**: the command writes the stream
   of a node, and the page that says which stream is its content is
   not rewritten.
-- **The redaction is still not made**: the place and the width of the
-  text are here, and the half that takes the text away is not.
+- **The redaction is still not made**: the place, the width and the
+  box of the text are here, and the half that takes the text away is
+  not.
+
+---
+
+## 637. The height of the text of a page
+
+The text of a page may now say **how tall it is**: the box of a piece
+of text is the box of its font, from the descent to the ascent.
+
+### What was built
+
+- A new module (**`src/metrics.rs`**) reads the **metrics** of a font:
+  - a font says them in its **descriptor**: `/Ascent` and `/Descent`,
+    both in thousandths of an em;
+  - a font of **type three** says them in its own box: the
+    `/FontBBox` of the font and the `/FontMatrix` that draws it;
+  - a **composite font** says them in the descendant it descends
+    from: a font of type zero has no descriptor of its own;
+  - the tree's own rules are the rules: an ascent that is not
+    believable — one that is not above **0.3** — is the tree's own
+    **0.9**, and a descent that is not believable — one that is not
+    below **-0.05** — is the tree's own **-0.25**; an ascent that is
+    believable is never above **1.5**, and a descent that is
+    believable is never below **-0.6**;
+  - the ascent of a font of type three is never below **0.5**, and its
+    descent never above **-0.1**;
+  - a font that says nothing has the tree's own metrics.
+- The **box** of a piece of text is the box the tree's own rule makes:
+  - the rectangle the glyphs take in the text space, from the descent
+    to the ascent, and the rendering matrix turns it into the page's
+    own space;
+  - the four numbers are the left, the bottom, the right and the top.
+- The **fonts** of a page say how tall they are: the ascent and the
+  descent are in the answer of `pdf.page.fonts`.
+
+### What the port found
+
+- **This tree's place of an array of text was the end of the run and
+  not its beginning.** The reader moved the pen along the array and
+  then took the place of the text, so a `TJ` piece was reported where
+  it finished. The tree's own rule is that the place of a run is where
+  it begins, and that is the rule now — and the box of the run begins
+  there too.
+- **The tree's redaction works on the box of the glyphs** and not on
+  the place of the text: it turns the rectangle the glyphs take and
+  covers it. The box is the last thing a redaction needs, and the
+  place and the width were the first two.
+- **The tree's metrics are the font's own claim, kept inside the
+  bounds the tree names.** A font that claims nothing believable has
+  the tree's own metrics, and this tree does not make up others.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/textheight.rs`): the box
+  of the text, the font that says nothing, the font of type three, and
+  the place of an array.
+- **No new command**: the text of a page says how tall it is. The pdf
+  battery still carries **67** commands and the MCP server **832**.
+- **One correction**: the place of a `TJ` piece was the end of its
+  run.
+
+### What it does not settle
+
+- **The standard fourteen fonts** are not measured: a font that names
+  one and says nothing has the tree's own metrics, which are the
+  tree's own and not the font's.
+- **A redaction is still not made**: the place, the width and the box
+  of the text are here, and the half that takes the text away is not.
+- **The height of a glyph** is not the height of the font: a font says
+  how high its glyphs go, and a particular glyph may be smaller.
 
 ---
