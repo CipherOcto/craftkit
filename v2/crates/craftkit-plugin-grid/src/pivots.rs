@@ -78,6 +78,47 @@ impl Aggregate {
 /// with the numbers they hold.
 type Group = (Value, Vec<(Value, Vec<Value>)>);
 
+/// The **short names** of the months: the tree's own, and the names the
+/// pivot writes them with.
+const MONTHS: [&str; 12] =
+    ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/// The **grouping** of the items of a date field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DateGroup {
+    /// The **year**: `2024`.
+    Years,
+    /// The **quarter**: `Qtr1`.
+    Quarters,
+    /// The **month**: `Jan`.
+    Months,
+    /// The **day**: `5-Jan`.
+    Days,
+}
+
+impl DateGroup {
+    /// The grouping a name says, if it is **one of the tree's**.
+    pub fn parse(name: &str) -> Option<DateGroup> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "years" | "year" => Some(DateGroup::Years),
+            "quarters" | "quarter" => Some(DateGroup::Quarters),
+            "months" | "month" => Some(DateGroup::Months),
+            "days" | "day" => Some(DateGroup::Days),
+            _ => None,
+        }
+    }
+
+    /// The name of the grouping.
+    pub fn to_text(self) -> &'static str {
+        match self {
+            DateGroup::Years => "years",
+            DateGroup::Quarters => "quarters",
+            DateGroup::Months => "months",
+            DateGroup::Days => "days",
+        }
+    }
+}
+
 /// The **order** of the items of a field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Sort {
@@ -151,6 +192,8 @@ pub struct Pivot {
     pub filter: Option<Filter>,
     /// The **order** of the items of a field: the field and the order.
     pub sort: Option<(u32, Sort)>,
+    /// The **grouping** of a date field: the field and the grouping.
+    pub group: Option<(u32, DateGroup)>,
 }
 
 impl Pivot {
@@ -175,6 +218,12 @@ impl Pivot {
             "sort": match &self.sort {
                 Some((field, order)) => {
                     json!({ "field": CellRef::column_text(*field), "order": order.to_text() })
+                }
+                None => craftkit_sdk::serde_json::Value::Null,
+            },
+            "group": match &self.group {
+                Some((field, group)) => {
+                    json!({ "field": CellRef::column_text(*field), "by": group.to_text() })
                 }
                 None => craftkit_sdk::serde_json::Value::Null,
             },
@@ -222,6 +271,12 @@ pub fn pivots_of(node: &Node) -> Vec<Pivot> {
             let order = sort.get("order").and_then(|order| order.as_str()).and_then(Sort::parse)?;
             Some((field, order))
         });
+        let group = pivot.get("group").and_then(|group| group.as_object()).and_then(|group| {
+            let field =
+                group.get("field").and_then(|field| field.as_str()).and_then(CellRef::column_index)?;
+            let by = group.get("by").and_then(|by| by.as_str()).and_then(DateGroup::parse)?;
+            Some((field, by))
+        });
         pivots.push(Pivot {
             name: name.to_string(),
             range: area,
@@ -233,6 +288,7 @@ pub fn pivots_of(node: &Node) -> Vec<Pivot> {
             grand_totals_cols,
             filter,
             sort,
+            group,
         });
     }
     pivots
@@ -241,6 +297,28 @@ pub fn pivots_of(node: &Node) -> Vec<Pivot> {
 /// The **pivots** of a sheet, as the sheet keeps them.
 fn pivots_into(pivots: &[Pivot]) -> craftkit_sdk::serde_json::Value {
     json!(pivots.iter().map(|pivot| pivot.to_json()).collect::<Vec<_>>())
+}
+
+/// The **label** of the group a value belongs to, when the pivot
+/// groups a date field.
+///
+/// The tree's own rules: a value that is a number and a date is
+/// grouped — by the year, the quarter, the month or the day — and a
+/// value that is not a date is left as it is.
+fn grouped_key(pivot: &Pivot, value: Value, system: crate::dates::System) -> Option<String> {
+    let (field, group) = pivot.group?;
+    if field != pivot.row_field {
+        return None;
+    }
+    let number = value.as_number()?;
+    let date = crate::dates::from_serial(number, system)?;
+    let month = MONTHS[(date.month as usize).saturating_sub(1).min(11)];
+    Some(match group {
+        DateGroup::Years => date.year.to_string(),
+        DateGroup::Quarters => format!("Qtr{}", date.month.saturating_sub(1) / 3 + 1),
+        DateGroup::Months => month.to_string(),
+        DateGroup::Days => format!("{}-{month}", date.day),
+    })
 }
 
 /// The **order** of two values, the tree's way.
@@ -497,6 +575,7 @@ impl CreatePivot {
             grand_totals_cols: true,
             filter: None,
             sort: None,
+            group: None,
         };
         pivots.push(pivot);
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
@@ -746,6 +825,81 @@ impl SetPivotSort {
     }
 }
 
+/// **Say** how the items of a **date field** are grouped.
+///
+/// The tree's own groupings: `years`, `quarters`, `months` and `days`,
+/// and a grouping that is not one of them is refused by name. A value
+/// that is not a date is left as it is.
+#[derive(Command)]
+#[command(id = "grid.pivot.group", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct SetPivotGroup {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The name of the pivot.
+    pub name: Text,
+    /// The column it groups: `C`.
+    pub field: Text,
+    /// How the items are grouped.
+    ///
+    /// `years`, `quarters`, `months` or `days`.
+    pub by: Text,
+}
+
+impl SetPivotGroup {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.pivot.group".to_string();
+        let sheet = self.sheet.0;
+        let node = sheet_of(session, &id, sheet)?;
+        let name = self.name.0.trim().to_string();
+        let mut pivots = pivots_of(&node);
+        let Some(pivot) = pivots.iter_mut().find(|pivot| pivot.name == name) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the sheet `{sheet}` has no pivot called `{name}`"),
+            });
+        };
+        let field = self.field.0.trim().to_string();
+        let Some(field) = CellRef::column_index(&field) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("`{field}` is not a column"),
+            });
+        };
+        if field != pivot.row_field && Some(field) != pivot.column_field {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the pivot gathers by {} and {}, and `{field}` is neither",
+                    CellRef::column_text(pivot.row_field),
+                    match pivot.column_field {
+                        Some(column) => CellRef::column_text(column),
+                        None => "nothing else".to_string(),
+                    }
+                ),
+            });
+        }
+        let by = self.by.0.trim().to_string();
+        let Some(group) = DateGroup::parse(&by) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the grouping `{by}` is not one of this tree's: it is one of years, quarters, months, days"
+                ),
+            });
+        };
+        pivot.group = Some((field, group));
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["pivots"] = pivots_into(&pivots);
+        }
+        Ok(Outcome::changed(format!("the items of the pivot `{name}` are grouped")).with_data(json!({
+            "sheet": sheet,
+            "name": name,
+            "field": CellRef::column_text(field),
+            "by": group.to_text(),
+        })))
+    }
+}
+
 /// **Read** the summary of a pivot.
 ///
 /// The summary is derived: it is worked out now, from the cells of the
@@ -770,6 +924,7 @@ impl ReadPivot {
         let cells = crate::cells_of(&node);
         let book = crate::book_of(session.document());
         let sheet_name = node.name.clone();
+        let system = crate::system_of(session, sheet);
 
         // The **value** of a cell: what it holds, or what its formula
         // computes.
@@ -797,7 +952,10 @@ impl ReadPivot {
                     continue;
                 }
             }
-            let key = value_at(CellRef { col: pivot.row_field, row });
+            let key = match grouped_key(&pivot, value_at(CellRef { col: pivot.row_field, row }), system) {
+                Some(label) => Value::Text(label),
+                None => value_at(CellRef { col: pivot.row_field, row }),
+            };
             let column_key = match pivot.column_field {
                 Some(column) => value_at(CellRef { col: column, row }),
                 None => Value::Empty,
@@ -985,6 +1143,12 @@ impl ReadPivot {
             "sort": match &pivot.sort {
                 Some((field, order)) => {
                     json!({ "field": CellRef::column_text(*field), "order": order.to_text() })
+                }
+                None => craftkit_sdk::serde_json::Value::Null,
+            },
+            "group": match &pivot.group {
+                Some((field, group)) => {
+                    json!({ "field": CellRef::column_text(*field), "by": group.to_text() })
                 }
                 None => craftkit_sdk::serde_json::Value::Null,
             },
