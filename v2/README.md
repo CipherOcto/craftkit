@@ -4076,6 +4076,7 @@ so.
 | the **text** under a region taken away | **built.** The text under a region is gone from the content of the page, and the rest of the line keeps its place — the tree's own rule (§639) | §639 |
 | the **drawings** under a region taken away | **built.** The inline images and the paths a region covers are gone from the content of the page — the tree's own two rules (§640) | §640 |
 | the **annotations** under a region taken away | **built.** The annotations a region overlaps are gone from the document, and their pop-ups go with them (§641) | §641 |
+| the **text** of a page that is not seen | **built.** The text drawn in the invisible mode, and the text wholly off the page, are found — the tree's own two rules (§642) | §642 |
 
 ### The list of things that are honestly not there: empty
 
@@ -42194,5 +42195,53 @@ belong to them go with them.
 - **The field of a widget** does not go with it.
 - **The links and the actions** of the annotations that are gone go
   with the annotation, and nothing else is taken away.
+
+---
+
+## 642. The text of a page that is not seen
+
+The text of a page may now be asked **what is not seen**: the text
+drawn in the invisible mode, and the text that is wholly off the page.
+
+### What was built
+
+- The **render mode** of the text is read: the `Tr` operator says how
+  the text is drawn, and it is a part of the state of the page — the
+  `q` and `Q` keep it.
+  - the mode is in the answer of the text of a page: nothing when the
+    text is filled, which is the default, and the mode itself when it
+    is not.
+- A new command (**`pdf.page.text.hidden`**) answers what is not seen:
+  - a text drawn in the **invisible** mode is not seen: the modes
+    three and seven — the mode that paints nothing and the mode that
+    only clips — are the tree's own modes;
+  - a text that is **wholly off the page** is not seen either;
+  - a text with **no size** is seen where it is: a box with no width
+    and no height is on the page when it begins there;
+  - the answer says **why** each text is not seen.
+
+### What the port found
+
+- **The tree's hidden text is two things**: the text that is painted
+  in the invisible mode, and the text that lies wholly outside the
+  page. Both are here.
+- **The render mode is a part of the state of the page and not of the
+  text object**: it survives a `BT`, and the `q` and `Q` keep it.
+  This tree keeps it in the same place.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/hiddentext.rs`): the
+  invisible mode, the clipping mode, the text off the page, and the
+  text that is seen.
+- **One command** (`pdf.page.text.hidden`). The pdf battery now
+  carries **72** commands and the MCP server **837**.
+
+### What it does not settle
+
+- **The hidden text is not removed**: this says what is not seen, and
+  taking it away is another thing.
+- **The layers that are off** are not counted here: the content of a
+  layer that is off is not seen either, and that is not here.
 
 ---
