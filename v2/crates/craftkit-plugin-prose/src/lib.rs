@@ -113,6 +113,7 @@ mod borders;
 mod captions;
 mod cases;
 mod characters;
+mod citestyles;
 mod columns;
 mod comments;
 pub mod contrast;
@@ -156,6 +157,7 @@ pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
 pub use borders::SetBorders;
 pub use captions::{ReadCaptions, SetCaption};
 pub use characters::FormatRun;
+pub use citestyles::{ListCitationStyles, ReadCitationStyle, SetCitationStyle};
 pub use columns::SetColumns;
 pub use comments::{DeleteComment, GetComment, SetComment};
 pub use dashes::SetDashes;
@@ -1142,6 +1144,9 @@ craftkit_sdk::plugin_anchor!(
     SetList,
     SetStops,
     SetTheme,
+    ListCitationStyles,
+    SetCitationStyle,
+    ReadCitationStyle,
     SetPageNumbers,
     EndnoteKind,
     AddEndnote,
