@@ -4111,6 +4111,7 @@ so.
 | the **pages** of a spread deleted and moved | **built.** A page may be deleted and moved — the tree's rule that a document keeps one page, and the pages close up (§675) | §675 |
 | the **caption track** of a sequence | **built.** A sequence may carry a caption track — the tree's formats, and the cues of a track never overlap (§676) | §676 |
 | a caption file **imported** as a caption track | **built.** The cues of a file become a track — snapped to the frames of the sequence, and an overlap is refused (§677) | §677 |
+| the **cues** of an EBU STL file | **built.** The subtitles of an STL file are read — the tree's blocks, its rate and its ISO 6937 letters (§678) | §678 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -44323,5 +44324,74 @@ track** of a sequence, snapped to the frames of that sequence.
   afterwards; here the cues are made as the file says them.
 - **Only the two formats of the reader are here**: a SubRip file and a
   WebVTT file, and the tree's other five are not.
+
+---
+
+## 678. The cues of an EBU STL file
+
+The **cues** of an **EBU STL** file may now be read: the subtitles of
+the EBU subtitling data exchange format.
+
+### What was built
+
+- The **cues** of an STL file are read, and the rules are the tree's
+  own:
+  - the **rate** is the one the file says in its Disk Format Code:
+    `STL25.01` is twenty-five frames a second and `STL30.01` is
+    twenty-nine and ninety-seven. A file with no rate is not an STL
+    file, and that is refused by name.
+  - the **timecodes** of a block are four bytes — hours, minutes,
+    seconds and frames — and they are **relative to the start of the
+    programme**. A cue that would start before the programme does
+    starts at its beginning.
+  - a **user-data** block (`EBN 0xFE`) and a **comment** block are
+    skipped.
+  - a subtitle may run over **several blocks**: the blocks with the
+    same subtitle number are one subtitle, and the block with the
+    extension number `0xFF` is the last of them.
+  - the **text** of a block is a field of 112 bytes: `0x8A` is a line
+    break, `0x80` and `0x81` are the italics on and off, `0x82` and
+    `0x83` are the underline on and off, and the control codes are
+    skipped. The letters are ISO/IEC 6937, and a diacritic is a byte
+    that is followed by the letter it sits on.
+  - a subtitle whose **end is not after its start**, or whose text is
+    nothing, is not a cue.
+- The command reads the format `stl` now, beside `subrip` and
+  `webvtt`.
+
+### What the port found
+
+- **The tree's STL reader is a reader of bytes**: the file is a
+  general block of 1024 bytes and then blocks of 128 bytes, and the
+  rate is in the Disk Format Code at the head of the general block.
+  Here the file is read as bytes and not as text, for the first time
+  in this battery — a SubRip file and a WebVTT file are text.
+- **The tree's STL reader is a reader of a standard**: the letters are
+  ISO/IEC 6937, and the table of the specials and the table of the
+  diacritics are the standard's own.
+- **The tree's cue times are in ticks of the sequence** and the tree
+  subtracts the start of the programme; here the cue is in
+  **milliseconds**, as every cue of this battery is.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/stlcues.rs`): the cues,
+  the times relative to the programme, the subtitle over several
+  blocks, the italics and the skipped blocks, and the file that is not
+  an STL file.
+- **No new command**: `film.captions.read` reads one more format. The
+  film battery carries **95** commands and the MCP server **880**.
+
+### What it does not settle
+
+- **The tree's writer of STL is not here.** The tree writes a general
+  block and the extension blocks of a long subtitle, and the
+  character code table of the file is written in it; nothing writes
+  here.
+- **The tree's rate of `STL30.01`** is read as twenty-nine and
+  ninety-seven with non-drop-frame timecode labels, and that is here
+  too — but the tree writes that rate back under its own name.
+- **The four other formats of the tree are not here**: Scenarist SCC,
+  MacCaption MCC, TTML and DFXP.
 
 ---
