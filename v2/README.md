@@ -4092,6 +4092,7 @@ so.
 | a cross-reference to a **caption** | **built.** A cross-reference points at a caption and shows its number — the label and the number, derived (§654) | §654 |
 | the **subtotal** naming the tree's eleven functions | **built.** A subtotal names the tree's eleven functions — the product, the deviation and the variance included (§655) | §655 |
 | the **subtotal** of a group of rows | **built.** A total row goes under each group of the rows and a grand total goes at the end — the tree's own rules (§656) | §656 |
+| the **grand totals** of a pivot | **built.** The grand total of the rows is the column at the right and the grand total of the columns is the line at the bottom — the tree's own two (§658) | §658 |
 
 ### The list of things that are honestly not there: empty
 
@@ -43147,5 +43148,62 @@ region is cut out of the shading, and the rest of the shading stays.
   wide — and not the box of the media of the page.
 - **The patterns of a tiling** are not clipped: the tree clips the
   shading as a whole and so does this one.
+
+---
+
+## 658. The grand totals of a pivot
+
+A pivot may now say **where its grand totals are**: the grand total of
+the rows is the column at the right, and the grand total of the columns
+is the line at the bottom.
+
+### What was built
+
+- A pivot may now say where its **grand totals** are:
+  - the grand total of the **rows** is the column at the right that
+    totals the rows, and the grand total of the **columns** is the line
+    at the bottom that totals the columns. The tree's own two.
+  - the **modes** are the tree's own: `off`, `on`, `rows` and
+    `columns` — and a mode that is not one of them is refused by name.
+  - a pivot **has** the grand totals by default. The tree's own
+    default.
+- The **summary** of a pivot says the grand totals:
+  - the total of **every column** and the total of **everything**;
+  - the total of a **row** is there when the grand total of the rows is.
+- A new command (**`grid.pivot.grandtotals`**) says where the totals
+  are.
+
+### What the port found
+
+- **The tree's grand totals are two flags and not one**:
+  `grandTotalsRows` is the column at the right and `grandTotalsCols` is
+  the line at the bottom, and the tree's modes set the two of them.
+  The names are the tree's own, and they read the other way round to
+  what they look like.
+- **The tree's grand total is the aggregate over the source and not the
+  sum of the totals**: a pivot that averages has a grand total that is
+  the average of the numbers and not the sum of the averages. Here the
+  grand total is the aggregate of the numbers of the column, the same
+  way the total of the row is.
+- **The tree's pivot is a table that is written out**: its grand totals
+  are a line and a column of that table. Here the pivot is a summary
+  that is read, and the grand totals are part of the summary.
+
+### What it cost
+
+- **Four tests** in the grid battery (`tests/pivotgrandtotals.rs`): the
+  defaults, the total of the row and the mode that takes it away, the
+  refusals, and the mode that takes both away.
+- **One command**. The grid battery now carries **135** commands and
+  the MCP server **847**.
+
+### What it does not settle
+
+- **The pivot is not written out**: the tree's pivot is a range of
+  cells with a layout, and this one is a summary that is read.
+- **The subtotals of a pivot are not here**: the tree's pivot has a
+  subtotal for each group of the rows, at the top or at the bottom.
+- **The layouts of the tree** — compact, outline and tabular — are not
+  here.
 
 ---
