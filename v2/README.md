@@ -4090,6 +4090,7 @@ so.
 | the **bibliography** of a document written | **built.** The entries of the sources are written in the style of the document — the template, the names, the order and the numbering are the tree's own (§653) | §653 |
 | a cross-reference to a **caption** | **built.** A cross-reference points at a caption and shows its number — the label and the number, derived (§654) | §654 |
 | the **subtotal** naming the tree's eleven functions | **built.** A subtotal names the tree's eleven functions — the product, the deviation and the variance included (§655) | §655 |
+| the **subtotal** of a group of rows | **built.** A total row goes under each group of the rows and a grand total goes at the end — the tree's own rules (§656) | §656 |
 
 ### The list of things that are honestly not there: empty
 
@@ -43022,5 +43023,72 @@ the count, the average and the largest.
   the aggregate itself, and the two ways may one day differ.
 - **The tree's filter is not here**, and so the rows a filter hides
   are not a thing this tree knows.
+
+---
+
+## 656. The subtotal of a group of rows
+
+The **subtotal** of a group of rows may now be put in: a total row goes
+under each group of the rows, and a grand total goes at the end.
+
+### What was built
+
+- A new command (**`grid.data.subtotal`**) puts the subtotals of the
+  groups of rows in:
+  - the **groups** are the rows that share the value of the group
+    column and that follow one another. The tree's own rule. The first
+    row of the range is a **header**, unless it is said not to be one.
+  - a **total row** goes under each group: the name of the group and
+    the word of the way — "East Total" — in the group column, and the
+    formula `=SUBTOTAL(9,B2:B3)` in each of the columns that are
+    totalled. The tree's own rule.
+  - the **grand total** goes at the end: the name "Grand Total" and a
+    formula over every row. A row that holds a subtotal is left out of
+    it, so the grand total is the total of the detail. The tree's own
+    rule.
+  - the rows of each group are **grouped**, and the summary of the
+    sheet goes **below** the detail. The tree's own rule.
+  - the **ways** of totalling are the tree's own: `sum` — the default
+    — `count`, `average`, `max`, `min` and `product`, each with the
+    function number of the subtotal and the word the row is labelled
+    with. A way that is not one of them is refused by name, and so is a
+    range that is not a range and a column that is not a column.
+  - the columns that are totalled are the ones that are named, and
+    without them the **last column** of the range.
+
+### What the port found
+
+- **The tree's command is a command that calls other commands**: it
+  inserts a row, writes the label, writes the formula, groups the rows
+  and then does it again for the next group — and the rows it inserts
+  move the formulas that are already in the sheet. Here the command
+  does the work itself, and the rows it inserts move the formulas by
+  the same rule the row insertion of the tree uses.
+- **The tree's grand total covers the total rows as well**: its range
+  is every row from the first to the last, and the subtotal leaves out
+  the cells that hold a subtotal. So the grand total is the total of
+  the detail and not of the totals. Here it is the same.
+- **The tree's command says where the summaries of the sheet are**, and
+  so does this tree's command — but this tree's command said the
+  summaries that were **given** to it and not the ones that are in
+  effect. That is corrected: the command says where the summaries
+  **are**, and a summary that is not said is below and to the right.
+
+### What it cost
+
+- **Four tests** in the grid battery (`tests/datasubtotal.rs`): the
+  total row under each group, the groups and the summary, the
+  refusals, and the ways of totalling.
+- **One command**. The grid battery now carries **134** commands and
+  the MCP server **846**.
+
+### What it does not settle
+
+- **The total row is not bold**: the tree bolds it, and the styles of
+  a cell are another thing.
+- **The rows are not folded away**: the groups are an outline and the
+  outline is here, but the rows stay open.
+- **The undo of the command** does not take the total rows away one by
+  one: it is one step, like the tree's.
 
 ---
