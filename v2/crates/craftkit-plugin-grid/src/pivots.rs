@@ -78,6 +78,43 @@ impl Aggregate {
 /// with the numbers they hold.
 type Group = (Value, Vec<(Value, Vec<Value>)>);
 
+/// The **order** of the items of a field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Sort {
+    /// From the first to the last.
+    Asc,
+    /// From the last to the first.
+    Desc,
+    /// The order of the **source**: the order the items are in where
+    /// they came from.
+    None,
+}
+
+impl Sort {
+    /// The order a name says, if it is **one of the tree's**.
+    ///
+    /// The tree's own names: `asc`, `ascending` and `a-z` are one
+    /// order, `desc`, `descending` and `z-a` are another, and `none`,
+    /// `manual` and `source` are the order of the source.
+    pub fn parse(name: &str) -> Option<Sort> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "asc" | "ascending" | "a-z" => Some(Sort::Asc),
+            "desc" | "descending" | "z-a" => Some(Sort::Desc),
+            "none" | "manual" | "source" => Some(Sort::None),
+            _ => None,
+        }
+    }
+
+    /// The name of the order.
+    pub fn to_text(self) -> &'static str {
+        match self {
+            Sort::Asc => "asc",
+            Sort::Desc => "desc",
+            Sort::None => "none",
+        }
+    }
+}
+
 /// A **filter** of a pivot: the field it filters by and the items it
 /// keeps.
 #[derive(Debug, Clone)]
@@ -112,6 +149,8 @@ pub struct Pivot {
     /// The **filter** of the pivot: the rows whose field is not
     /// selected are left out of it.
     pub filter: Option<Filter>,
+    /// The **order** of the items of a field: the field and the order.
+    pub sort: Option<(u32, Sort)>,
 }
 
 impl Pivot {
@@ -131,6 +170,12 @@ impl Pivot {
                     "field": CellRef::column_text(filter.field),
                     "selected": filter.selected.clone(),
                 }),
+                None => craftkit_sdk::serde_json::Value::Null,
+            },
+            "sort": match &self.sort {
+                Some((field, order)) => {
+                    json!({ "field": CellRef::column_text(*field), "order": order.to_text() })
+                }
                 None => craftkit_sdk::serde_json::Value::Null,
             },
         })
@@ -172,6 +217,11 @@ pub fn pivots_of(node: &Node) -> Vec<Pivot> {
                 })?;
             Some(Filter { field, selected })
         });
+        let sort = pivot.get("sort").and_then(|sort| sort.as_object()).and_then(|sort| {
+            let field = sort.get("field").and_then(|field| field.as_str()).and_then(CellRef::column_index)?;
+            let order = sort.get("order").and_then(|order| order.as_str()).and_then(Sort::parse)?;
+            Some((field, order))
+        });
         pivots.push(Pivot {
             name: name.to_string(),
             range: area,
@@ -182,6 +232,7 @@ pub fn pivots_of(node: &Node) -> Vec<Pivot> {
             grand_totals_rows,
             grand_totals_cols,
             filter,
+            sort,
         });
     }
     pivots
@@ -445,6 +496,7 @@ impl CreatePivot {
             grand_totals_rows: true,
             grand_totals_cols: true,
             filter: None,
+            sort: None,
         };
         pivots.push(pivot);
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
@@ -617,6 +669,83 @@ impl SetPivotFilter {
     }
 }
 
+/// **Say** in what **order** the items of a field are.
+///
+/// The tree's own orders: `asc`, `desc` and `none` — the last of them
+/// is the order of the source. The field is one of the two the pivot
+/// gathers by, and an order that is not one of the tree's is refused
+/// by name.
+#[derive(Command)]
+#[command(id = "grid.pivot.sort", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct SetPivotSort {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The name of the pivot.
+    pub name: Text,
+    /// The column it orders: `A`.
+    pub field: Text,
+    /// The order it is in.
+    ///
+    /// `asc` — the default — `desc` or `none`.
+    pub order: Option<Text>,
+}
+
+impl SetPivotSort {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.pivot.sort".to_string();
+        let sheet = self.sheet.0;
+        let node = sheet_of(session, &id, sheet)?;
+        let name = self.name.0.trim().to_string();
+        let mut pivots = pivots_of(&node);
+        let Some(pivot) = pivots.iter_mut().find(|pivot| pivot.name == name) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the sheet `{sheet}` has no pivot called `{name}`"),
+            });
+        };
+        let field = self.field.0.trim().to_string();
+        let Some(field) = CellRef::column_index(&field) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("`{field}` is not a column"),
+            });
+        };
+        if field != pivot.row_field && Some(field) != pivot.column_field {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the pivot gathers by {} and {}, and `{field}` is neither",
+                    CellRef::column_text(pivot.row_field),
+                    match pivot.column_field {
+                        Some(column) => CellRef::column_text(column),
+                        None => "nothing else".to_string(),
+                    }
+                ),
+            });
+        }
+        let order =
+            self.order.as_ref().map(|order| order.0.trim().to_string()).unwrap_or_else(|| "asc".to_string());
+        let Some(order) = Sort::parse(&order) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the order `{order}` is not one of this tree's: it is one of asc, desc, none"
+                ),
+            });
+        };
+        pivot.sort = Some((field, order));
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["pivots"] = pivots_into(&pivots);
+        }
+        Ok(Outcome::changed(format!("the items of the pivot `{name}` are in order")).with_data(json!({
+            "sheet": sheet,
+            "name": name,
+            "field": CellRef::column_text(field),
+            "order": order.to_text(),
+        })))
+    }
+}
+
 /// **Read** the summary of a pivot.
 ///
 /// The summary is derived: it is worked out now, from the cells of the
@@ -718,7 +847,17 @@ impl ReadPivot {
             }
         }
         let mut keys: Vec<Value> = groups.iter().map(|(key, _)| key.clone()).collect();
-        keys.sort_by(compare);
+        // The **order** of the items of the field: the tree's own
+        // three orders, and the order of the source when the pivot says
+        // so.
+        let order_of = |field: u32| -> Option<Sort> {
+            pivot.sort.filter(|(sorted, _)| *sorted == field).map(|(_, order)| order)
+        };
+        match order_of(pivot.row_field) {
+            Some(Sort::None) => {}
+            Some(Sort::Desc) => keys.sort_by(|left, right| compare(right, left)),
+            _ => keys.sort_by(compare),
+        }
         let mut columns: Vec<Value> = Vec::new();
         if pivot.column_field.is_some() {
             for (_, group) in &groups {
@@ -728,7 +867,11 @@ impl ReadPivot {
                     }
                 }
             }
-            columns.sort_by(compare);
+            match order_of(pivot.column_field.unwrap_or_default()) {
+                Some(Sort::None) => {}
+                Some(Sort::Desc) => columns.sort_by(|left, right| compare(right, left)),
+                _ => columns.sort_by(compare),
+            }
         }
 
         // The **numbers** of a group, put together.
@@ -837,6 +980,12 @@ impl ReadPivot {
                     "field": CellRef::column_text(filter.field),
                     "selected": filter.selected.clone(),
                 }),
+                None => craftkit_sdk::serde_json::Value::Null,
+            },
+            "sort": match &pivot.sort {
+                Some((field, order)) => {
+                    json!({ "field": CellRef::column_text(*field), "order": order.to_text() })
+                }
                 None => craftkit_sdk::serde_json::Value::Null,
             },
             "grand_total": grand_total,

@@ -446,7 +446,7 @@ pub use outline::{
 };
 pub use pictures::{ReadPicture, RemovePicture, SetPicture};
 pub use pivots::{CreatePivot, ReadPivot, RemovePivot};
-pub use pivots::{SetGrandTotals, SetPivotFilter};
+pub use pivots::{SetGrandTotals, SetPivotFilter, SetPivotSort};
 pub use printing::{
     ReadPages, ReadSetup, SetMargins, SetOrientation, SetPaper, SetPrintArea, SetPrintBreak, SetPrintTitles,
 };
@@ -1814,6 +1814,7 @@ craftkit_sdk::plugin_anchor!(
     SetSummary,
     SetGrandTotals,
     SetPivotFilter,
+    SetPivotSort,
     Subtotal,
     SetPicture,
     ReadPicture,
