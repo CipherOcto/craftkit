@@ -29,8 +29,10 @@
 //! - **The mark is not kept.** The region is not in the document
 //!   afterwards: what the file says is what was written, and the
 //!   region is gone with the command.
-//! - **The images and the paths** under the region are not taken away:
-//!   the tree's redaction takes them too, and that is not here.
+//! - **The pixels of an image are not cleared.** The tree clears the
+//!   covered part of an image that is only partly covered; this tree
+//!   cannot decode an image, so the tree's own rule for an image it
+//!   cannot read applies and the image is taken away whole.
 //! - **The glyphs are not counted one by one**: the tree works glyph
 //!   by glyph, and this tree works by the piece.
 
@@ -89,10 +91,71 @@ fn paints_a_path(operator: &str) -> bool {
 pub struct Drawings {
     /// The operations that are left.
     pub operations: Vec<crate::content::Operation>,
-    /// How many **inline images** were taken away.
+    /// How many **images** were taken away: the inline ones and the
+    /// images of the page itself.
     pub images: usize,
     /// How many **paths** were taken away.
     pub paths: usize,
+}
+
+/// The **XObjects** of a page: the name each has and the node of it.
+///
+/// The tree's own rule: the XObjects are in the resources of the
+/// page, and a resource may be written where it is used or named by a
+/// reference.
+fn xobjects_of(document: &Document, page: u64) -> Vec<(String, u64)> {
+    let Some(node) = document.node(page) else { return Vec::new() };
+    let entries = crate::entries_of(&node.data);
+    let Some(resources) = entries.iter().find(|(key, _)| key == "Resources").map(|(_, value)| value.clone())
+    else {
+        return Vec::new();
+    };
+    let Some(resources) = entries_of_value(document, &resources) else { return Vec::new() };
+    let Some(xobjects) = resources.iter().find(|(key, _)| key == "XObject").map(|(_, value)| value.clone())
+    else {
+        return Vec::new();
+    };
+    let Some(xobjects) = entries_of_value(document, &xobjects) else { return Vec::new() };
+    let mut out: Vec<(String, u64)> = Vec::new();
+    for (name, value) in xobjects {
+        let Some(number) = crate::number_of(&value) else { continue };
+        let Some(node) = document.walk().find(|node| crate::the_number_of(node) == Some(number)) else {
+            continue;
+        };
+        out.push((name, node.id));
+    }
+    out
+}
+
+/// The **entries** of a value: the pairs of a dictionary, whether it is
+/// written where it is used or named by a reference.
+fn entries_of_value(document: &Document, value: &Json) -> Option<Vec<(String, Json)>> {
+    if let Some(node) = crate::preflight::node_of(document, value) {
+        return Some(crate::entries_of(&node.data));
+    }
+    let list = value.get("entries")?.as_array()?;
+    Some(
+        list.iter()
+            .filter_map(|entry| {
+                let pair = entry.as_array()?;
+                let key = pair.first()?.as_str()?.to_string();
+                Some((key, pair.get(1)?.clone()))
+            })
+            .collect(),
+    )
+}
+
+/// Whether an XObject is an **image**: the tree's own rule, the
+/// `/Subtype` of the object.
+fn is_an_image(document: &Document, xobject: u64) -> bool {
+    document
+        .node(xobject)
+        .map(|node| {
+            crate::entries_of(&node.data)
+                .iter()
+                .any(|(key, value)| key == "Subtype" && value.as_str() == Some("Image"))
+        })
+        .unwrap_or(false)
 }
 
 /// The **drawings** of a page with the ones under a region taken away.
@@ -104,8 +167,17 @@ pub struct Drawings {
 /// - a **path** is a box of its own points, and if the region covers
 ///   that box the path is gone; a path that only hits the region is
 ///   left alone — the tree clips it, and that is not here;
+/// - an **image** of the page is drawn in the square that changes
+///   nothing, and the transform of the page places it: an image the
+///   region hits is gone — the tree's own rule, and the tree's own
+///   rule for an image it cannot read is the same;
 /// - a path that **clips** keeps its clip and paints nothing.
-pub fn drawings_under(operations: &[crate::content::Operation], region: [f64; 4]) -> Drawings {
+pub fn drawings_under(
+    operations: &[crate::content::Operation],
+    region: [f64; 4],
+    images: &[(String, u64)],
+    document: &Document,
+) -> Drawings {
     let mut out = Drawings::default();
     // The **transform of the page**: the `q` and `Q` keep it, and the
     // `cm` changes it.
@@ -134,6 +206,31 @@ pub fn drawings_under(operations: &[crate::content::Operation], region: [f64; 4]
                     operation.operands.iter().filter_map(|value| value.as_f64()).collect();
                 if let Some(matrix) = crate::content::Matrix::from_numbers(&numbers) {
                     ctm = matrix.then(&ctm);
+                }
+                out.operations.push(operation.clone());
+                continue;
+            }
+            "Do" => {
+                // The **image** the operator draws: an XObject of the
+                // subtype `Image` is drawn in the square that changes
+                // nothing, and the transform of the page places it.
+                //
+                // The tree's own rules: an image the region **covers**
+                // is gone, and an image the region only **hits** has its
+                // covered pixels cleared. This tree cannot decode an
+                // image, so the tree's own rule for an image it cannot
+                // read applies and the image is gone either way.
+                let name =
+                    operation.operands.first().and_then(|operand| operand.as_str()).unwrap_or_default();
+                let name = name.strip_prefix('/').unwrap_or(name).to_string();
+                let drawn = images.iter().find(|(held, _)| *held == name).map(|(_, id)| *id);
+                let is_an_image = drawn.is_some_and(|id| is_an_image(document, id));
+                if is_an_image {
+                    let bounds = ctm.bbox([0.0, 0.0, 1.0, 1.0]);
+                    if overlaps(region, bounds) {
+                        out.images += 1;
+                        continue;
+                    }
                 }
                 out.operations.push(operation.clone());
                 continue;
@@ -388,7 +485,8 @@ impl RedactDrawings {
             });
         };
         let content = content_of(document, page)?;
-        let drawings = drawings_under(&content.operations, region);
+        let images = xobjects_of(document, page);
+        let drawings = drawings_under(&content.operations, region, &images, document);
         if drawings.images == 0 && drawings.paths == 0 {
             return Ok(Outcome::new(format!("nothing of the page `{page}` is under the region"))
                 .with_data(json!({ "page": page, "region": json!(region), "images": 0, "paths": 0 })));
