@@ -4085,6 +4085,7 @@ so.
 | the **notes** of a document converted | **built.** A footnote becomes an endnote, an endnote becomes a footnote, and the references change with them (§648) | §648 |
 | the **images** of a file under a region taken away | **built.** An image of the page that the region hits is gone from the content of the page — the tree's own rule, and the tree's rule for an image it cannot read is the same (§649) | §649 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
+| the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
 
 ### The list of things that are honestly not there: empty
 
@@ -42688,5 +42689,73 @@ twelve.
 - **The style is not read from a file**: the tree reads it from the
   settings of a document when the document opens, and there are no
   settings here.
+
+---
+
+## 651. The citation of a source is written in the style of the document
+
+The **citation** of a source may now be **said**: it is worked out from
+the source and the style of its document every time, so it cannot be out
+of date.
+
+### What was built
+
+- The **citation** of a source is **derived**:
+  - the **who** is the surnames of the authors: one surname is said
+    alone, two are joined by the word of the style — `&` in APA, `and`
+    in the others — and from as many authors as the style says **et
+    al.** the first surname and "et al." are said instead. The tree's
+    own rule.
+  - a source with **no author** is cited by its **title**. The tree's
+    own rule.
+  - the citation is then written the way the style writes it: the
+    author and the year, with the pages after them (APA, Chicago,
+    Harvard, the ISOs, Turabian); the author and the pages (MLA); or
+    the **number** of the source (GB/T 7714, the two GOSTs, IEEE, the
+    numerical ISO, SIST02).
+- The **authors** of a source are the tree's own: they are separated by
+  a semicolon, an author is written "surname, first name", and when it
+  is not written that way the last word of it is the surname.
+- The **number** of a source is where it stands in the **order the
+  sources are cited**, and a source that is not cited yet stands after
+  the ones that are. The tree's own rule.
+- The styles now say **how** they write a citation: the brackets of a
+  number, and the separators of the year and the pages.
+- A new command (**`prose.document.citation`**) says the citation of a
+  source in the style of its document, and refuses a tag that names no
+  source.
+
+### What the port found
+
+- **The tree's citation is a field with a result kept beside it**, and
+  it is written into the text when the citation is inserted. Here the
+  citation is **derived** — worked out from the source and the style
+  every time — and it is not put into the text: the tree's cached
+  result can be out of date, and this one cannot.
+- **The tree writes the citation of a source with no year as
+  `(Rivera, )`**: its *entry* writes `n.d.` for a source with no year,
+  and its *citation* writes nothing at all. Here the citation is the
+  tree's, word for word.
+- **The tree numbers a citation by the place of the source in the list
+  of the cited sources**, and a source that is not cited yet takes the
+  number after the last one. Here the order of citation is the order of
+  the runs of the document.
+
+### What it cost
+
+- **Five tests** in the prose battery (`tests/citations.rs`): the
+  citation in the style of the document, the numbered style, the
+  author-and-pages style, the authors and the et al., and the refusal.
+- **One command**. The prose battery now carries **105** commands and
+  the MCP server **845**.
+
+### What it does not settle
+
+- **The citation is not put into the text**: the tree inserts a field
+  that shows it, and here it is said.
+- **The bibliography is not written**: the entries of a style are
+  another thing.
+- **The pages are not kept**: they are given when the citation is asked
+  for, and the tree keeps them in the field.
 
 ---
