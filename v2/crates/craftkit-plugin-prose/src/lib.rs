@@ -122,6 +122,7 @@ mod editing;
 mod endnotes;
 mod equations;
 mod fields;
+mod figures;
 mod finding;
 mod footnotes;
 mod index;
@@ -167,6 +168,7 @@ pub use editing::{
 pub use endnotes::{AddEndnote, EndnoteKind, ReadEndnotes};
 pub use equations::{AddEquation, SetEquation};
 pub use fields::{AddField, ReadFields, SetField, UnlinkField};
+pub use figures::ReadFigures;
 pub use finding::{Find, Replace};
 pub use footnotes::{AddFootnote, ReadFootnotes};
 pub use links::ReadLinks;

@@ -99,7 +99,8 @@ fn number_of(document: &craftkit_sdk::Document, block: &Node, target: u64) -> Js
     }) else {
         return Json::Null;
     };
-    let label = caption.get("label").and_then(|label| label.as_str()).unwrap_or(crate::captions::DEFAULT_LABEL);
+    let label =
+        caption.get("label").and_then(|label| label.as_str()).unwrap_or(crate::captions::DEFAULT_LABEL);
     let number = match caption.get("full").and_then(|full| full.as_str()) {
         Some(full) if !full.is_empty() => full.to_string(),
         _ => match caption.get("number").and_then(|number| number.as_str()) {
