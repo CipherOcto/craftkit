@@ -83,6 +83,49 @@ type Group = (Value, Vec<(Value, Vec<Value>)>);
 const MONTHS: [&str; 12] =
     ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+/// The **text** of the key of a row: the name of the group as it is
+/// written.
+fn text_of_key(key: &craftkit_sdk::serde_json::Value) -> String {
+    match key {
+        craftkit_sdk::serde_json::Value::String(text) => text.clone(),
+        other => other.to_string(),
+    }
+}
+
+/// The **subtotals** of a pivot: the total of a group of the rows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Subtotals {
+    /// There are none.
+    None,
+    /// The subtotal is at the **top** of its group.
+    Top,
+    /// The subtotal is at the **bottom** of its group.
+    Bottom,
+}
+
+impl Subtotals {
+    /// The way a name says, if it is **one of the tree's**.
+    ///
+    /// The tree's own modes: `none`, `top` and `bottom`.
+    pub fn parse(name: &str) -> Option<Subtotals> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "none" => Some(Subtotals::None),
+            "top" => Some(Subtotals::Top),
+            "bottom" => Some(Subtotals::Bottom),
+            _ => None,
+        }
+    }
+
+    /// The name of the way.
+    pub fn to_text(self) -> &'static str {
+        match self {
+            Subtotals::None => "none",
+            Subtotals::Top => "top",
+            Subtotals::Bottom => "bottom",
+        }
+    }
+}
+
 /// The way the values of a pivot are **shown**.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShowAs {
@@ -250,6 +293,8 @@ pub struct Pivot {
     pub group: Option<(u32, DateGroup)>,
     /// The way the values are **shown**.
     pub show_as: ShowAs,
+    /// Where the **subtotals** of the groups are.
+    pub subtotals: Subtotals,
 }
 
 impl Pivot {
@@ -284,6 +329,7 @@ impl Pivot {
                 None => craftkit_sdk::serde_json::Value::Null,
             },
             "show_as": self.show_as.to_text(),
+            "subtotals": self.subtotals.to_text(),
         })
     }
 }
@@ -339,6 +385,11 @@ pub fn pivots_of(node: &Node) -> Vec<Pivot> {
             .and_then(|show| show.as_str())
             .and_then(ShowAs::parse)
             .unwrap_or(ShowAs::Normal);
+        let subtotals = pivot
+            .get("subtotals")
+            .and_then(|subtotals| subtotals.as_str())
+            .and_then(Subtotals::parse)
+            .unwrap_or(Subtotals::None);
         pivots.push(Pivot {
             name: name.to_string(),
             range: area,
@@ -352,6 +403,7 @@ pub fn pivots_of(node: &Node) -> Vec<Pivot> {
             sort,
             group,
             show_as,
+            subtotals,
         });
     }
     pivots
@@ -640,6 +692,7 @@ impl CreatePivot {
             sort: None,
             group: None,
             show_as: ShowAs::Normal,
+            subtotals: Subtotals::None,
         };
         pivots.push(pivot);
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
@@ -1018,6 +1071,55 @@ impl SetPivotShowAs {
     }
 }
 
+/// **Say** where the **subtotals** of a pivot are.
+///
+/// The tree's own modes: `none`, `top` and `bottom`, and a mode that
+/// is not one of them is refused by name.
+#[derive(Command)]
+#[command(id = "grid.pivot.subtotals", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct SetPivotSubtotals {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The name of the pivot.
+    pub name: Text,
+    /// Where the subtotals are.
+    ///
+    /// `none` — the default — `top` or `bottom`.
+    pub mode: Text,
+}
+
+impl SetPivotSubtotals {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.pivot.subtotals".to_string();
+        let sheet = self.sheet.0;
+        let node = sheet_of(session, &id, sheet)?;
+        let name = self.name.0.trim().to_string();
+        let mut pivots = pivots_of(&node);
+        let Some(pivot) = pivots.iter_mut().find(|pivot| pivot.name == name) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the sheet `{sheet}` has no pivot called `{name}`"),
+            });
+        };
+        let mode = self.mode.0.trim().to_string();
+        let Some(mode) = Subtotals::parse(&mode) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the mode `{mode}` is not one of this tree's: it is one of none, top, bottom"
+                ),
+            });
+        };
+        pivot.subtotals = mode;
+        let placed = pivot.subtotals;
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["pivots"] = pivots_into(&pivots);
+        }
+        Ok(Outcome::changed(format!("the subtotals of the pivot `{name}` are placed"))
+            .with_data(json!({ "sheet": sheet, "name": name, "subtotals": placed.to_text() })))
+    }
+}
+
 /// **Read** the summary of a pivot.
 ///
 /// The summary is derived: it is worked out now, from the cells of the
@@ -1287,6 +1389,8 @@ impl ReadPivot {
                     json!(rank as f64)
                 }
             };
+            let values_of_the_row = shown_values.clone();
+            let total_of_the_row = shown_total.clone();
             if pivot.column_field.is_some() {
                 row.insert("values".to_string(), craftkit_sdk::serde_json::Value::Object(shown_values));
                 if pivot.grand_totals_rows {
@@ -1294,6 +1398,38 @@ impl ReadPivot {
                 }
             } else {
                 row.insert("value".to_string(), shown_total);
+            }
+            // The **subtotal** of the group: the tree's own line, with
+            // the name of group and the word "Total".
+            let subtotal = match pivot.subtotals {
+                Subtotals::None => None,
+                Subtotals::Top | Subtotals::Bottom => {
+                    let mut line = craftkit_sdk::serde_json::Map::new();
+                    line.insert("key".to_string(), json!(format!("{} Total", text_of_key(key))));
+                    line.insert("subtotal".to_string(), json!(true));
+                    if pivot.column_field.is_some() {
+                        line.insert(
+                            "values".to_string(),
+                            craftkit_sdk::serde_json::Value::Object(values_of_the_row.clone()),
+                        );
+                        if pivot.grand_totals_rows {
+                            line.insert("total".to_string(), total_of_the_row.clone());
+                        }
+                    } else {
+                        line.insert("value".to_string(), total_of_the_row.clone());
+                    }
+                    Some(craftkit_sdk::serde_json::Value::Object(line))
+                }
+            };
+            if let Some(subtotal) = subtotal {
+                if pivot.subtotals == Subtotals::Top {
+                    rows.push(subtotal);
+                    rows.push(craftkit_sdk::serde_json::Value::Object(row));
+                    continue;
+                }
+                rows.push(craftkit_sdk::serde_json::Value::Object(row));
+                rows.push(subtotal);
+                continue;
             }
             rows.push(craftkit_sdk::serde_json::Value::Object(row));
         }
@@ -1323,6 +1459,7 @@ impl ReadPivot {
             "name": name,
             "aggregate": pivot.aggregate.to_text(),
             "show_as": show.to_text(),
+            "subtotals": pivot.subtotals.to_text(),
             "grand_totals_rows": pivot.grand_totals_rows,
             "grand_totals_cols": pivot.grand_totals_cols,
             "filter": match &pivot.filter {
