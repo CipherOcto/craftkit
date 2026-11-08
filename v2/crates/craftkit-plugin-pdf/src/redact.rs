@@ -406,6 +406,131 @@ impl RedactDrawings {
     }
 }
 
+/// Whether two rectangles **overlap**: the tree's own rule.
+///
+/// The tree's rule for the annotations is not the rule of the text
+/// (§638): an annotation is under a region when the two overlap at
+/// all, and the text is under it when more than a fifth of it is.
+fn overlaps(a: [f64; 4], b: [f64; 4]) -> bool {
+    a[0].max(b[0]) < a[2].min(b[2]) && a[1].max(b[1]) < a[3].min(b[3])
+}
+
+/// The **annotations of a page**: the node of each and its rectangle.
+fn annotations_of(document: &Document, page: u64) -> Vec<(u64, Option<[f64; 4]>, String)> {
+    let mut out: Vec<(u64, Option<[f64; 4]>, String)> = Vec::new();
+    for relation in document.relations.iter().filter(|relation| {
+        relation.kind == "ref"
+            && relation.from == page
+            && relation
+                .payload
+                .get("key")
+                .and_then(|key| key.as_str())
+                .map(|key| key == "Annots")
+                .unwrap_or(false)
+    }) {
+        let Some(node) = document.node(relation.to) else { continue };
+        let entries = crate::entries_of(&node.data);
+        let subtype = entries
+            .iter()
+            .find(|(key, _)| key == "Subtype")
+            .and_then(|(_, value)| value.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let rectangle =
+            entries.iter().find(|(key, _)| key == "Rect").and_then(|(_, value)| crate::boxes::rect_of(value));
+        out.push((node.id, rectangle, subtype));
+    }
+    out
+}
+
+/// The **annotations under a region are taken away**.
+///
+/// A change: the annotations the region overlaps are gone from the
+/// document, and the pop-ups that belong to them go with them.
+#[derive(Command)]
+#[command(id = "pdf.redact.annotations", area = "pdf", layer = "pdf", icon = "remove", mutates, undoable)]
+pub struct RedactAnnotations {
+    /// The page whose annotations are taken away.
+    pub page: NodeRef,
+    /// The region: four numbers, the left, the bottom, the right and
+    /// the top of it.
+    pub rect: Json,
+}
+
+impl RedactAnnotations {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let page = self.page.0;
+        let document = session.document();
+        let Some(node) = document.node(page) else {
+            return Err(EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("there is no node `{page}`"),
+            });
+        };
+        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+            return Err(EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("the node `{page}` is a `{}` and not an object", node.kind),
+            });
+        }
+        let Some(region) = crate::boxes::rect_of(&self.rect) else {
+            return Err(EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: "the region is not a rectangle of four numbers".to_string(),
+            });
+        };
+        // The **annotations** the region overlaps. A pop-up is never
+        // taken away by the region: it goes with the annotation it
+        // belongs to.
+        let annotations = annotations_of(document, page);
+        let mut doomed: Vec<u64> = Vec::new();
+        for (id, rectangle, subtype) in &annotations {
+            if subtype == "Popup" {
+                continue;
+            }
+            let Some(rectangle) = rectangle else { continue };
+            if !overlaps(region, *rectangle) {
+                continue;
+            }
+            doomed.push(*id);
+        }
+        // The **pop-ups** of the annotations that are gone.
+        for (id, _rectangle, subtype) in &annotations {
+            if subtype != "Popup" || doomed.contains(id) {
+                continue;
+            }
+            let parent = document.node(*id).map(|node| crate::entries_of(&node.data)).and_then(|entries| {
+                entries.iter().find(|(key, _)| key == "Parent").map(|(_, value)| value.clone())
+            });
+            let Some(parent) = parent else { continue };
+            let Some(number) = crate::number_of(&parent) else { continue };
+            let owner =
+                document.walk().find(|node| crate::the_number_of(node) == Some(number)).map(|node| node.id);
+            if let Some(owner) = owner
+                && doomed.contains(&owner)
+            {
+                doomed.push(*id);
+            }
+        }
+        if doomed.is_empty() {
+            return Ok(Outcome::new(format!("nothing of the page `{page}` is under the region"))
+                .with_data(json!({ "page": page, "region": json!(region), "removed": 0 })));
+        }
+        let mut removed: Vec<u64> = Vec::new();
+        for id in &doomed {
+            if session.document_mut()?.remove_node(*id) {
+                removed.push(*id);
+            }
+        }
+        Ok(Outcome::changed(format!("{} annotation(s) removed", removed.len())).with_data(json!({
+            "page": page,
+            "region": json!(region),
+            "removed": removed.len(),
+            "annotations": removed,
+        })))
+    }
+}
+
 /// The **text under a region is removed**.
 ///
 /// A change: the content of the page is written again without the
