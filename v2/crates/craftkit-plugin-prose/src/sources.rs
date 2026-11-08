@@ -445,10 +445,13 @@ impl ReadSources {
 }
 
 /// **Read** the **bibliography** of a document: the sources that are
-/// cited, in the order they are first cited.
+/// cited, written in the style of the document.
 ///
-/// The bibliography is **derived**: it is worked out from the sources
-/// and the citations every time it is asked for.
+/// The bibliography is **derived**: it is worked out from the sources,
+/// the citations and the style every time it is asked for, so it
+/// cannot be out of date. The **order** is the order the style asks
+/// for — by the author, by the title, or in the order the sources are
+/// cited — and every source that is not cited is left out.
 #[derive(Command)]
 #[command(id = "prose.document.bibliography", area = "prose", layer = "prose", icon = "list")]
 pub struct ReadBibliography {
@@ -463,16 +466,25 @@ impl ReadBibliography {
         the_document(session, &id, document)?;
         let sources = session.document().node(document).map(sources_of).unwrap_or_default();
         let cited = cited_of(session, document);
-        let bibliography: Vec<Json> = cited
+        let style = session
+            .document()
+            .node(document)
+            .map(crate::citestyles::style_of)
+            .unwrap_or(&crate::citestyles::STYLES[0]);
+        let bibliography = crate::citestyles::order_of(&sources, &cited, style.order);
+        let entries: Vec<String> = bibliography
             .iter()
-            .filter_map(|tag| {
-                sources
-                    .iter()
-                    .find(|source| source.get("tag").and_then(|held| held.as_str()) == Some(tag.as_str()))
-                    .cloned()
-            })
+            .enumerate()
+            .map(|(at, source)| crate::citestyles::entry_of(source, style, at + 1))
             .collect();
-        Ok(Outcome::new(format!("the document `{document}` cites {} sources", bibliography.len()))
-            .with_data(json!({ "document": document, "bibliography": bibliography })))
+        Ok(Outcome::new(format!("the document `{document}` cites {} sources", bibliography.len())).with_data(
+            json!({
+                "document": document,
+                "style": style.name,
+                "title": style.bib_title,
+                "entries": entries,
+                "bibliography": bibliography,
+            }),
+        ))
     }
 }
