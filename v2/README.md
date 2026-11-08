@@ -4108,6 +4108,7 @@ so.
 | the **items** of a spread **grouped** | **built.** The items may be grouped — the tree's level, order and layer rules, and ungrouping puts them back (§672) | §672 |
 | the **layers** of a layout document | **built.** A layer is renamed, deleted, moved and merged — the tree's rules, and the items go with the layer (§673) | §673 |
 | the **layers** of a layout are the kit's layers | **built.** The edge is the kit's, so a locked layer locks what is on it and a hidden layer hides it (§674) | §674 |
+| the **pages** of a spread deleted and moved | **built.** A page may be deleted and moved — the tree's rule that a document keeps one page, and the pages close up (§675) | §675 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -44153,5 +44154,57 @@ locked layer locks what is on it, and a hidden layer hides it.
 - **The layer's colour does not follow the tree's rule** here: the
   tree's colour of a layer paints what is on it, and the kit's rule
   for that is the kit's own.
+
+---
+
+## 675. The pages of a spread may be deleted and moved
+
+The **pages** of a spread may now be **deleted** and **moved**, and
+the pages close up when a page is deleted.
+
+### What was built
+
+- The **pages** of a spread may be deleted and moved, and the rules
+  are the tree's own:
+  - a document needs **at least one page**: the last page of a
+    document may not be deleted.
+  - the **items** that stand beyond the page that is deleted move left
+    by the width of that page, because the pages close up.
+  - a page is **moved** to another place among the pages of its
+    spread, and a place that is not there is refused by name.
+- Two new commands: `layout.page.delete` and `layout.page.move`.
+
+### What the port found
+
+- **The tree's items are on a page**, and the tree's page takes them
+  with it when it is deleted. Here the items are in the **spread**,
+  and they stay — and the items that stand beyond the page that is
+  deleted move left, because the pages close up.
+- **The tree's page is an absolute place**: its pages are counted
+  across the whole document, and a page moves to another page's place.
+  Here the pages of a spread are counted, and a page moves among the
+  pages of its own spread.
+- **The tree's pages are laid out again** after a page is deleted or
+  moved — the tree's spreads are paginated, and the pages of a
+  document are counted from the first. Here the pages stand in the
+  order they are in, and their widths are what they say.
+
+### What it cost
+
+- **Three tests** in the layout battery (`tests/pages.rs`): the
+  deleted page and the items that moved, the last page, and the moved
+  page.
+- **Two commands**. The layout battery now carries **56** commands and
+  the MCP server **875**.
+
+### What it does not settle
+
+- **The items of a page do not go with the page**: they are in the
+  spread here, and the tree's are on the page.
+- **A page does not move to another spread**: the tree's pages are
+  counted across the document, and here they are counted in the
+  spread.
+- **The pages are not laid out again**: the tree paginates the
+  document, and here the pages keep the places they stand in.
 
 ---
