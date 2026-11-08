@@ -4079,6 +4079,7 @@ so.
 | the **text** of a page that is not seen | **built.** The text drawn in the invisible mode, and the text wholly off the page, are found — the tree's own two rules (§642) | §642 |
 | the **hidden information** of a file counted | **built.** The nine categories the tree names are counted — the metadata, the attachments, the comments, the fields, the hidden text, the layers that are off, the bookmarks, the links and the scripts (§643) | §643 |
 | the **hidden information** of a file taken away | **built.** The comments, the attachments and the links are gone from the document, with the actions of the annotations that stay (§644) | §644 |
+| the **case** of the text of a paragraph | **built.** The text is changed in the tree's five ways, and the runs move with the text (§645) | §645 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39677,8 +39678,10 @@ and the second space says so.
 
 - **The full stop is not made as the text is typed**: the command is
   asked for, and nothing watches the keyboard.
-- **The capital of the first word of a sentence is not made**: the
-  tree's AutoCorrect capitalises it, and that is not here.
+- **The capital of the first word of a sentence is not made as the
+  text is typed**: the tree's AutoCorrect capitalises it, and that is
+  not here — the sentence case is here (§645), and the watching of the
+  keyboard is not.
 - **The rule is only at the end of the paragraph**: the tree's rule
   fires wherever the caret is, and here the two spaces must be the
   last two characters.
@@ -42346,5 +42349,59 @@ now be **taken away**.
   the private data are counted (§643) and are left as they are.
 - **The files inside the file** are not taken away: only the
   annotations that attach them are.
+
+---
+
+## 645. The case of the text of a paragraph
+
+The **case** of the text of a paragraph may now be changed: the five
+ways the tree changes it are the five ways here.
+
+### What was built
+
+- A new module (**`src/cases.rs`**) changes the **case** of the text
+  by the tree's own rules:
+  - **upper**: every character is uppercased;
+  - **lower**: every character is lowercased, and the Greek capital
+    sigma takes its final form at the end of a word — `ΣΟΦΟΣ` becomes
+    `σοφος` and not `σοφοσ`;
+  - **toggle**: each character has its case flipped;
+  - **title**: the first letter of every word is capitalised;
+  - **sentence**: the first letter of the paragraph and the first
+    letter after a full stop, a question mark or an exclamation mark
+    are capitalised — and a full stop between two digits is a
+    **decimal point**, not the end of a sentence.
+- A new command (**`prose.block.case`**) changes the case of a
+  paragraph:
+  - the text may **change length** — `ß` uppercased is `SS` — and the
+    **runs** move with it, the tree's own mapping;
+  - a paragraph that holds a **revision** is not touched;
+  - a **mode** that is not one of the tree's five is refused by name.
+
+### What the port found
+
+- **The tree's sentence case knows about the decimal point**: a full
+  stop between two digits is not the end of a sentence, and the tree
+  says so. Here it does too.
+- **The tree's Greek sigma has a final form**: the capital sigma at the
+  end of a word lowers to `ς` and not to `σ`. The rule is the rule
+  here.
+
+### What it cost
+
+- **Five tests** in the prose battery (`tests/cases.rs`): the upper and
+  the lower case, the sentence case, the title and the toggle case, the
+  runs that move, and the mode that is refused.
+- **One command** (`prose.block.case`). The prose battery now carries
+  **100** commands and the MCP server **840**.
+
+### What it does not settle
+
+- **The case is not changed as the text is typed**: the command is
+  asked for, and nothing watches the keyboard — the tree's AutoCorrect
+  does.
+- **The Turkish and the Azerbaijani letters** are not the tree's: the
+  tree changes the case of a letter differently when its run is
+  Turkish, and this tree has no runs that are.
 
 ---
