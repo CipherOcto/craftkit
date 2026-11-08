@@ -4078,6 +4078,7 @@ so.
 | the **annotations** under a region taken away | **built.** The annotations a region overlaps are gone from the document, and their pop-ups go with them (§641) | §641 |
 | the **text** of a page that is not seen | **built.** The text drawn in the invisible mode, and the text wholly off the page, are found — the tree's own two rules (§642) | §642 |
 | the **hidden information** of a file counted | **built.** The nine categories the tree names are counted — the metadata, the attachments, the comments, the fields, the hidden text, the layers that are off, the bookmarks, the links and the scripts (§643) | §643 |
+| the **hidden information** of a file taken away | **built.** The comments, the attachments and the links are gone from the document, with the actions of the annotations that stay (§644) | §644 |
 
 ### The list of things that are honestly not there: empty
 
@@ -42295,5 +42296,55 @@ own panel names are counted.
 - **Nothing is taken away**: this counts what a file hides, and the
   taking away is another thing.
 - **The content of a layer that is off** is not counted.
+
+---
+
+## 644. The hidden information of a file is taken away
+
+The **comments**, the **attachments** and the **links** of a file may
+now be **taken away**.
+
+### What was built
+
+- A new command (**`pdf.hidden.remove`**) takes a **category** of the
+  hidden information away:
+  - the **comments** are the annotations that are none of a link, a
+    widget, a pop-up, an attachment or a mark — the tree's own rule,
+    and the tree's own rule says that a square and a highlight are
+    comments too;
+  - the **attachments** are the annotations that attach a file;
+  - the **links** are the annotations that go somewhere, and the
+    **actions** of the annotations that stay are taken away with them
+    — the tree's own rule;
+  - the **pop-ups** of the annotations that are gone go with them;
+  - a category that is **not one of the tree's** is refused by name,
+    and a category that is **not taken away yet** is refused with
+    *not supported yet*.
+
+### What the port found
+
+- **The tree's comment is wide**: every annotation that is not a link,
+  a widget, a pop-up, an attachment or a mark is a comment, so a
+  square and a highlight are comments as well. The tree's rule is the
+  rule here.
+- **The tree takes the actions of the annotations that stay with the
+  links**: the `/AA` and the `/A` of an annotation go when the links
+  go.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/hiddenremove.rs`): the
+  comments, the attachments, the links with their actions, and the
+  category that is refused.
+- **One command** (`pdf.hidden.remove`). The pdf battery now carries
+  **74** commands and the MCP server **839**.
+
+### What it does not settle
+
+- **The other six categories are not taken away**: the metadata, the
+  fields, the hidden text, the layers that are off, the bookmarks and
+  the private data are counted (§643) and are left as they are.
+- **The files inside the file** are not taken away: only the
+  annotations that attach them are.
 
 ---
