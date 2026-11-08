@@ -4081,6 +4081,7 @@ so.
 | the **hidden information** of a file taken away | **built.** The comments, the attachments and the links are gone from the document, with the actions of the annotations that stay (§644) | §644 |
 | the **case** of the text of a paragraph | **built.** The text is changed in the tree's five ways, and the runs move with the text (§645) | §645 |
 | the **chapter** of a caption | **built.** A caption names the chapter it is in, and its number is counted again at each chapter (§646) | §646 |
+| the **path** of a media file | **built.** The path a reference names is worked out — a file URL is a path, and a relative path is relative to the folder of the file (§647) | §647 |
 
 ### The list of things that are honestly not there: empty
 
@@ -42460,5 +42461,52 @@ chapter it is in.
   about its number here.
 - **The cross-reference** to a numbered item is not here: nothing else
   may refer to the caption.
+
+---
+
+## 647. The path of a media file
+
+A file that names another file may now say **where** it is: the path
+is worked out by the tree's own rules.
+
+### What was built
+
+- A new module (**`src/paths.rs`**) works out the **path** a reference
+  names:
+  - a **file URL** is a path in disguise: the scheme is taken off, the
+    host `localhost` is dropped, and the rest is decoded — so
+    `file:///media/the%20clip.mov` is `/media/the clip.mov`;
+  - an **absolute path** is a path already, and it stays as it is;
+  - a **relative path** is relative to the **folder of the file that
+    names it**, and it is joined to it: `.` is nothing and `..` is one
+    folder up.
+- The **OTIO** and the **FCPXML** readers use it: the path of the
+  media is the path that is worked out, and not the text that was in
+  the file.
+
+### What the port found
+
+- **The tree's ALE keeps the source file as it is**: the column of an
+  ALE is a name and not a path, and the tree does not resolve it.
+  Here it is not resolved either.
+- **The tree's reader resolves the paths of the OTIO and the FCPXML**
+  against the folder of the file, and this tree's reader did not: it
+  took the text of the reference and dropped the scheme of a URL.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/mediapaths.rs`): the file
+  URL, the absolute path, the relative path and the `..`.
+- **No new command**: the media says where it is. The film battery
+  still carries **86** commands and the MCP server **840**.
+
+### What it does not settle
+
+- **The file is not opened**: the path is worked out, and nothing looks
+  for it.
+- **The FCP7 reader carries no paths at all**, and the reels of an
+  EDL are names and not paths.
+- **The paths are not written the other way**: the tree writes a path
+  as a file URL when it writes a file, and that is not here.
 
 ---
