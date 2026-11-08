@@ -4107,6 +4107,7 @@ so.
 | a caption file **written** | **built.** The cues are written as a caption file — the tree's numbering, the clock and the blocks (§671) | §671 |
 | the **items** of a spread **grouped** | **built.** The items may be grouped — the tree's level, order and layer rules, and ungrouping puts them back (§672) | §672 |
 | the **layers** of a layout document | **built.** A layer is renamed, deleted, moved and merged — the tree's rules, and the items go with the layer (§673) | §673 |
+| the **layers** of a layout are the kit's layers | **built.** The edge is the kit's, so a locked layer locks what is on it and a hidden layer hides it (§674) | §674 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -44079,8 +44080,9 @@ in their order, and merged into one.
   in the layer's payload here, and the name is checked; the other
   three are not here.
 - **The tree's layers are the tree's own**: a locked layer locks what
-  is on it, and a hidden layer hides it. This battery's edge is its
-  own, so the kit's rule does not reach these layers.
+  is on it, and a hidden layer hides it. This battery's edge was its
+  own, so the kit's rule did not reach these layers — and it does
+  now (§674).
 
 ### What it cost
 
@@ -44092,13 +44094,64 @@ in their order, and merged into one.
 
 ### What it does not settle
 
-- **The layers are not the kit's layers.** The edge of this battery is
-  `layout.on_layer`, and the kit's rule — that a hidden layer hides
-  what is on it, and a locked layer locks it — follows the kit's own
-  edge and does not reach these layers.
+- **The layers are the kit's layers now** (§674): the edge of this
+  battery is the kit's edge, and a locked layer locks what is on it.
 - **A layer has no visible, printable or guides flag** here, and the
   tree's layer has all three.
 - **The layers of a document are not saved in a file here**: they are
   children of the document, and the tree's are a list in the file.
+
+---
+
+## 674. The layers of a layout are the kit's layers
+
+The **edge** that says an item is on a layer is now the **kit's** edge,
+and so the kit's own rules reach the layers of a layout document: a
+locked layer locks what is on it, and a hidden layer hides it.
+
+### What was built
+
+- The edge of a layer is the **kit's** edge — `core.on_layer` — and
+  not one of this battery's.
+- A layer may be **locked** and **unlocked**, and **hidden** and
+  **shown**:
+  - a **locked** layer locks what is on it: the commands that would
+    edit an item on it are refused, and the refusal says why.
+  - a **hidden** layer hides what is on it: the kit does not walk into
+    it, and what is on it is not visible.
+- Four new commands: `layout.layer.lock`, `layout.layer.unlock`,
+  `layout.layer.hide` and `layout.layer.show`.
+
+### What the port found
+
+- **The kit has one edge for the membership of a layer**, and every
+  battery that has layers uses it, so that the rule that follows from
+  it is one rule. This battery had an edge of its own — and so the
+  kit's rule did not reach its layers: a locked layer locked nothing,
+  and a hidden layer hid nothing. The edge is the kit's now.
+- **The tree's layer is locked as a whole** — "locking a layer locks
+  everything on it", the tree says — and the tree's layer is hidden as
+  a whole too.
+- **The layout battery has two words for hidden**: the kit's `hidden`
+  flag, which the kit's walk obeys, and the battery's `muted` flag,
+  which is what the items of the layout use. They are two flags and
+  two words, and the arc above does not merge them.
+
+### What it cost
+
+- **Three tests** in the layout battery (`tests/layerlocks.rs`): the
+  locked layer, the hidden layer, and the edge itself.
+- **Four commands**. The layout battery now carries **54** commands
+  and the MCP server **873**.
+
+### What it does not settle
+
+- **The two words for hidden are still two.** An item hidden by the
+  battery's own command is `muted`, and an item on a hidden layer is
+  hidden by the kit's rule; the evaluation says which of the two it
+  is.
+- **The layer's colour does not follow the tree's rule** here: the
+  tree's colour of a layer paints what is on it, and the kit's rule
+  for that is the kit's own.
 
 ---
