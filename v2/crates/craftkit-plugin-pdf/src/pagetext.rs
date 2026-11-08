@@ -173,26 +173,15 @@ impl HiddenText {
         // The **box** of the page: the media box, and the page's own
         // if it has none.
         let boxes = crate::boxes::boxes_of(session, page);
-        let Some(area) = crate::boxes::rect_of(&boxes[0]) else {
+        if crate::boxes::rect_of(&boxes[0]).is_none() {
             return Err(EngineError::Failed {
                 id: COMMAND.to_string(),
                 message: format!("the page `{page}` has no box"),
             });
-        };
-        let text = text_of_page(session.document(), page)?;
+        }
         let mut hidden: Vec<Json> = Vec::new();
-        for piece in &text.pieces {
+        for piece in hidden_pieces(session, page) {
             let invisible = matches!(piece.mode, Some(3) | Some(7));
-            let off_the_page = match piece.bounds {
-                Some(bounds) => {
-                    let degenerate = bounds[2] - bounds[0] < 0.01 && bounds[3] - bounds[1] < 0.01;
-                    !degenerate && !overlaps(area, bounds)
-                }
-                None => false,
-            };
-            if !invisible && !off_the_page {
-                continue;
-            }
             hidden.push(json!({
                 "text": piece.text.clone(),
                 "operator": piece.operator.clone(),
@@ -210,6 +199,32 @@ impl HiddenText {
             "count": count,
         })))
     }
+}
+
+/// The **pieces** of the text of a page that are **not seen**.
+///
+/// The tree's own rules: a text drawn in the invisible mode is not
+/// seen, and a text that lies wholly off the page is not seen either.
+/// A text with no size is seen where it is.
+pub(crate) fn hidden_pieces(session: &Session, page: u64) -> Vec<Piece> {
+    let boxes = crate::boxes::boxes_of(session, page);
+    let Some(area) = crate::boxes::rect_of(&boxes[0]) else { return Vec::new() };
+    let Ok(text) = text_of_page(session.document(), page) else { return Vec::new() };
+    text.pieces
+        .into_iter()
+        .filter(|piece| {
+            if matches!(piece.mode, Some(3) | Some(7)) {
+                return true;
+            }
+            match piece.bounds {
+                Some(bounds) => {
+                    let degenerate = bounds[2] - bounds[0] < 0.01 && bounds[3] - bounds[1] < 0.01;
+                    !degenerate && !overlaps(area, bounds)
+                }
+                None => false,
+            }
+        })
+        .collect()
 }
 
 /// Whether two rectangles **overlap**: the tree's own rule.

@@ -470,6 +470,15 @@ fn recount(session: &mut Session, root: u64) -> Result<(), EngineError> {
     Ok(())
 }
 
+/// The **number** of the bookmarks of the file.
+///
+/// The tree's own rule: the items of the outline, and not the node
+/// that holds them.
+pub fn count_of(session: &Session) -> usize {
+    let Some(root) = the_root(session) else { return 0 };
+    collect(session, root).len().saturating_sub(1)
+}
+
 /// Every node of an outline, with its children: the tree, from the top.
 fn collect(session: &Session, root: u64) -> Vec<(u64, Vec<u64>)> {
     let mut tree: Vec<(u64, Vec<u64>)> = Vec::new();

@@ -143,6 +143,7 @@ mod fonts;
 mod form;
 mod format;
 mod free;
+mod hidden;
 mod information;
 mod intent;
 mod javascript;
