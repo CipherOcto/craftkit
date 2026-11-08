@@ -4075,6 +4075,7 @@ so.
 | the **text** under a region | **built.** A region of a page says what text it covers — the box of the text, and the tree's own rule for what is under it (§638) | §638 |
 | the **text** under a region taken away | **built.** The text under a region is gone from the content of the page, and the rest of the line keeps its place — the tree's own rule (§639) | §639 |
 | the **drawings** under a region taken away | **built.** The inline images and the paths a region covers are gone from the content of the page — the tree's own two rules (§640) | §640 |
+| the **annotations** under a region taken away | **built.** The annotations a region overlaps are gone from the document, and their pop-ups go with them (§641) | §641 |
 
 ### The list of things that are honestly not there: empty
 
@@ -42142,5 +42143,56 @@ taken away: they are gone from the content of the page.
   and clears the part of an image that is covered.
 - **A path that is only partly covered** is not clipped: it is left
   alone, and the tree's clipping is not here.
+
+---
+
+## 641. The annotations under a region are taken away
+
+The **annotations** under a region may now be **taken away**: the ones
+the region overlaps are gone from the document, and the pop-ups that
+belong to them go with them.
+
+### What was built
+
+- A new command (**`pdf.redact.annotations`**) takes the annotations
+  under a region away:
+  - an annotation is under the region when its **rectangle overlaps**
+    it — the tree's own rule, and it is not the rule of the text
+    (§638): an annotation that touches the region at all goes;
+  - a **pop-up** is never taken away by the region: it goes with the
+    annotation it belongs to — the tree's own rule;
+  - the annotations that are gone are gone from the **document**: the
+    node goes, and the relation the page holds to it goes with the
+    node.
+
+### What the port found
+
+- **The tree's rule for the annotations is not its rule for the
+  text.** An annotation is under a region when the two rectangles
+  overlap at all, and the text is under it when more than a fifth of
+  the box is. The two rules are the two rules here.
+- **The tree takes the field of a widget with it** when the widget is
+  removed: a field that is gone and a widget that is left behind do
+  not go together. That is not here.
+- **The tree's marks are the tree's own**: a `Redact` annotation says
+  where a redaction is, and the tree reads the marks and replaces them
+  with boxes of their own colour. There are no marks here: the region
+  is given to the command.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/redactannotations.rs`):
+  the annotation that is taken away, the one that is left, the pop-up
+  that goes with it, and the region that is refused.
+- **One command** (`pdf.redact.annotations`). The pdf battery now
+  carries **71** commands and the MCP server **836**.
+
+### What it does not settle
+
+- **The marks are not read**: a file that says where its redactions
+  are is not redacted by this command.
+- **The field of a widget** does not go with it.
+- **The links and the actions** of the annotations that are gone go
+  with the annotation, and nothing else is taken away.
 
 ---
