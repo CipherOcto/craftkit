@@ -91,6 +91,10 @@ pub struct Piece {
     /// How far the text moves the pen, in **glyphs of an em**: the
     /// width of the text without the size of the font.
     pub advance: Option<f64>,
+    /// The **render mode** the text was shown in: nothing when the
+    /// text is filled, which is the default, and the mode itself when
+    /// it is not.
+    pub mode: Option<u32>,
     /// The **font** the text is shown in: the name the page gives it.
     pub font: Option<String>,
 }
@@ -109,6 +113,7 @@ impl Piece {
             "box": self.bounds.map(|box_| json!(box_)).unwrap_or(Json::Null),
             "operation": json!(self.operation),
             "advance": self.advance.map(|advance| json!(advance)).unwrap_or(Json::Null),
+            "mode": self.mode.map(|mode| json!(mode)).unwrap_or(Json::Null),
             "font": self.font.clone().map(|font| json!(font)).unwrap_or(Json::Null),
         })
     }
@@ -138,6 +143,78 @@ impl PageText {
         }
         out
     }
+}
+
+/// The **text of a page that is not seen**.
+///
+/// The tree's own rules:
+/// - a text drawn in the **invisible** mode is not seen: the modes
+///   three and seven — the mode that paints nothing and the mode that
+///   only clips — are the modes of the tree;
+/// - a text that is **wholly off the page** is not seen either;
+/// - a text with **no size** is seen where it is: a box with no width
+///   and no height is on the page when it begins there.
+#[derive(Command)]
+#[command(id = "pdf.page.text.hidden", area = "pdf", layer = "pdf", icon = "list")]
+pub struct HiddenText {
+    /// The page whose text is read.
+    pub page: NodeRef,
+}
+
+impl HiddenText {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let page = self.page.0;
+        if session.document().node(page).is_none() {
+            return Err(EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("there is no node `{page}`"),
+            });
+        }
+        // The **box** of the page: the media box, and the page's own
+        // if it has none.
+        let boxes = crate::boxes::boxes_of(session, page);
+        let Some(area) = crate::boxes::rect_of(&boxes[0]) else {
+            return Err(EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("the page `{page}` has no box"),
+            });
+        };
+        let text = text_of_page(session.document(), page)?;
+        let mut hidden: Vec<Json> = Vec::new();
+        for piece in &text.pieces {
+            let invisible = matches!(piece.mode, Some(3) | Some(7));
+            let off_the_page = match piece.bounds {
+                Some(bounds) => {
+                    let degenerate = bounds[2] - bounds[0] < 0.01 && bounds[3] - bounds[1] < 0.01;
+                    !degenerate && !overlaps(area, bounds)
+                }
+                None => false,
+            };
+            if !invisible && !off_the_page {
+                continue;
+            }
+            hidden.push(json!({
+                "text": piece.text.clone(),
+                "operator": piece.operator.clone(),
+                "mode": piece.mode.map(|mode| json!(mode)).unwrap_or(Json::Null),
+                "x": piece.x.map(|x| json!(x)).unwrap_or(Json::Null),
+                "y": piece.y.map(|y| json!(y)).unwrap_or(Json::Null),
+                "box": piece.bounds.map(|bounds| json!(bounds)).unwrap_or(Json::Null),
+                "why": if invisible { "invisible" } else { "off the page" },
+            }));
+        }
+        let count = hidden.len();
+        Ok(Outcome::new(format!("{count} piece(s) of text are not seen")).with_data(json!({
+            "page": page,
+            "pieces": hidden,
+            "count": count,
+        })))
+    }
+}
+
+/// Whether two rectangles **overlap**: the tree's own rule.
+fn overlaps(a: [f64; 4], b: [f64; 4]) -> bool {
+    a[0].max(b[0]) < a[2].min(b[2]) && a[1].max(b[1]) < a[3].min(b[3])
 }
 
 /// The **text** of a page.
@@ -467,13 +544,16 @@ pub(crate) fn pieces_with(
     // The **transform of the page**: the `q` and `Q` keep it, and the
     // `cm` changes it.
     let mut ctm = start;
-    let mut stack: Vec<crate::content::Matrix> = Vec::new();
+    let mut stack: Vec<(crate::content::Matrix, u32)> = Vec::new();
     // The **font** in use, and the map that reads its codes.
     let mut font: Option<String> = None;
     // The **widths** of the font in use: how wide its codes are.
     let mut font_widths: Option<&crate::widths::Widths> = None;
     // The **metrics** of the font in use: how tall its glyphs are.
     let mut font_metrics = crate::metrics::Metrics::FALLBACK;
+    // The **render mode** of the text: how it is drawn. It is a part
+    // of the state of the page, and the `q` and `Q` keep it.
+    let mut render: u32 = 0;
     for (index, operation) in operations.iter().enumerate() {
         if index > to {
             break;
@@ -519,11 +599,22 @@ pub(crate) fn pieces_with(
                 }
             }
             "q" => {
-                stack.push(ctm);
+                stack.push((ctm, render));
             }
             "Q" => {
-                if let Some(saved) = stack.pop() {
+                if let Some((saved, mode)) = stack.pop() {
                     ctm = saved;
+                    render = mode;
+                }
+            }
+            "Tr" => {
+                let numbers = numbers_of(operation);
+                if let Some(mode) = numbers.first()
+                    && mode.is_finite()
+                    && *mode >= 0.0
+                    && *mode <= 7.0
+                {
+                    render = *mode as u32;
                 }
             }
             "cm" => {
@@ -595,6 +686,7 @@ pub(crate) fn pieces_with(
                     bounds: placed.then_some(box_).flatten(),
                     operation: index,
                     advance: advance.map(|(_, glyph)| glyph),
+                    mode: (render != 0).then_some(render),
                     font: font.clone(),
                 });
             }
@@ -650,6 +742,7 @@ pub(crate) fn pieces_with(
                     bounds: placed.then_some(box_).flatten(),
                     operation: index,
                     advance: Some(em_advance),
+                    mode: (render != 0).then_some(render),
                     font: font.clone(),
                 });
             }
@@ -679,6 +772,7 @@ pub(crate) fn pieces_with(
                     bounds: placed.then_some(box_).flatten(),
                     operation: index,
                     advance: advance.map(|(_, glyph)| glyph),
+                    mode: (render != 0).then_some(render),
                     font: font.clone(),
                 });
             }
