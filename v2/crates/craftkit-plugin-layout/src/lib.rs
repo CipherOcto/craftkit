@@ -68,6 +68,7 @@ mod layers;
 mod links;
 mod margins;
 mod order;
+mod pages;
 mod paint;
 mod parents;
 mod radii;
@@ -94,6 +95,7 @@ pub use layers::{
 pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
 pub use margins::SetMargin;
 pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
+pub use pages::{DeletePage, MovePage};
 pub use paint::{SetFill, SetStroke};
 pub use parents::{ClearParent, SetParent};
 pub use radii::SetRadius;
