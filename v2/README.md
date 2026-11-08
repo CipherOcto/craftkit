@@ -4094,6 +4094,7 @@ so.
 | the **subtotal** of a group of rows | **built.** A total row goes under each group of the rows and a grand total goes at the end — the tree's own rules (§656) | §656 |
 | the **grand totals** of a pivot | **built.** The grand total of the rows is the column at the right and the grand total of the columns is the line at the bottom — the tree's own two (§658) | §658 |
 | the **items** of a pivot that are kept | **built.** A pivot may be filtered: the rows whose field is not selected are left out of it (§659) | §659 |
+| the **order** of the items of a pivot | **built.** The items may be in the tree's own order, from the last to the first, or in the order of the source (§660) | §660 |
 
 ### The list of things that are honestly not there: empty
 
@@ -43256,5 +43257,58 @@ are left out of it.
   filter that is on the sheet, and here it is a fact of the pivot.
 - **The values of a filter are the labels**: a number is matched as the
   way it is written, and not as the number it is.
+
+---
+
+## 660. The order of the items of a pivot
+
+The items of a field of a pivot may now be in **another order**: from
+the last to the first, or in the order of the source.
+
+### What was built
+
+- The items of a field of a pivot may now be in another order:
+  - the **orders** are the tree's own: `asc`, `desc` and `none` — the
+    last of them is the order of the **source**, the order the items
+    are in where they came from. The tree's own names are here too:
+    `ascending` and `a-z` are `asc`, `descending` and `z-a` are
+    `desc`, and `manual` and `source` are `none`.
+  - the field is one of the **two the pivot gathers by**, and a field
+    that is not one of them is refused by name.
+  - an order that is **not one of the tree's** is refused by name.
+- The **summary** of a pivot gathers its items in the order the pivot
+  says, and says the order.
+- A new command (**`grid.pivot.sort`**) says the order of the items.
+
+### What the port found
+
+- **The tree's order is a property of the axis and not of the pivot**:
+  every field of the tree's pivot has its own order, and the tree's
+  command changes the order of one of them. Here a pivot has one order
+  and it is the order of one of its two fields.
+- **The tree's `none` is the order of the source** and not the order of
+  the tree — the items are where they came from, and the tree says so
+  with three names for it: `none`, `manual` and `source`.
+- **The tree's order is on the items and not on the summary**: the
+  pivot table is written in that order. Here the summary is worked out
+  in that order, and it is derived every time.
+
+### What it cost
+
+- **Three tests** in the grid battery (`tests/pivotsort.rs`): the order
+  from the last to the first, the order of the source, and the
+  refusals.
+- **One command**. The grid battery now carries **137** commands and
+  the MCP server **849**.
+
+### What it does not settle
+
+- **The tree's pivot has an order for every field**: it has one order
+  here, and one of the two fields it gathers by.
+- **The order of the tree is the order of the tree and not the order of
+  the letters**: the tree compares the items the way the tree does, and
+  so does this one.
+- **The order of the columns** is the order of the column field, and
+  the order of the rows is the order of the row field.
 
 ---
