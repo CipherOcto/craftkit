@@ -93,6 +93,12 @@ pub struct Pivot {
     pub value_field: Option<u32>,
     /// The way it puts them together.
     pub aggregate: Aggregate,
+    /// Whether the **grand total of the rows** is there: the column at
+    /// the right that totals the rows.
+    pub grand_totals_rows: bool,
+    /// Whether the **grand total of the columns** is there: the line at
+    /// the bottom that totals the columns.
+    pub grand_totals_cols: bool,
 }
 
 impl Pivot {
@@ -105,6 +111,8 @@ impl Pivot {
             "column": self.column_field.map(CellRef::column_text),
             "value": self.value_field.map(CellRef::column_text),
             "aggregate": self.aggregate.to_text(),
+            "grand_totals_rows": self.grand_totals_rows,
+            "grand_totals_cols": self.grand_totals_cols,
         })
     }
 }
@@ -129,6 +137,12 @@ pub fn pivots_of(node: &Node) -> Vec<Pivot> {
             .and_then(|aggregate| aggregate.as_str())
             .and_then(Aggregate::parse)
             .unwrap_or(Aggregate::Sum);
+        // The tree's own defaults: a pivot has the grand totals of the
+        // rows and of the columns.
+        let grand_totals_rows =
+            pivot.get("grand_totals_rows").and_then(|held| held.as_bool()).unwrap_or(true);
+        let grand_totals_cols =
+            pivot.get("grand_totals_cols").and_then(|held| held.as_bool()).unwrap_or(true);
         pivots.push(Pivot {
             name: name.to_string(),
             range: area,
@@ -136,6 +150,8 @@ pub fn pivots_of(node: &Node) -> Vec<Pivot> {
             column_field: column,
             value_field: value,
             aggregate,
+            grand_totals_rows,
+            grand_totals_cols,
         });
     }
     pivots
@@ -395,6 +411,9 @@ impl CreatePivot {
             column_field,
             value_field,
             aggregate,
+            // The tree's own defaults.
+            grand_totals_rows: true,
+            grand_totals_cols: true,
         };
         pivots.push(pivot);
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
@@ -407,6 +426,64 @@ impl CreatePivot {
             "row": row_name,
             "aggregate": aggregate.to_text(),
         })))
+    }
+}
+
+/// **Say** where the **grand totals** of a pivot are.
+///
+/// The tree's own modes: `off`, `on`, `rows` and `columns`. The grand
+/// total of the **rows** is the column at the right that totals the
+/// rows, and the grand total of the **columns** is the line at the
+/// bottom that totals the columns.
+#[derive(Command)]
+#[command(id = "grid.pivot.grandtotals", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct SetGrandTotals {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The name of the pivot.
+    pub name: Text,
+    /// Where the totals are.
+    ///
+    /// `on` — the default — `off`, `rows` or `columns`.
+    pub mode: Text,
+}
+
+impl SetGrandTotals {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.pivot.grandtotals".to_string();
+        let sheet = self.sheet.0;
+        let node = sheet_of(session, &id, sheet)?;
+        let name = self.name.0.trim().to_string();
+        let mut pivots = pivots_of(&node);
+        let Some(pivot) = pivots.iter_mut().find(|pivot| pivot.name == name) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the sheet `{sheet}` has no pivot called `{name}`"),
+            });
+        };
+        let mode = self.mode.0.trim().to_ascii_lowercase();
+        let (rows, columns) = match mode.as_str() {
+            "off" => (false, false),
+            "on" => (true, true),
+            "rows" => (true, false),
+            "columns" | "cols" => (false, true),
+            _ => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the mode `{mode}` is not one of this tree's: it is one of off, on, rows, columns"
+                    ),
+                });
+            }
+        };
+        pivot.grand_totals_rows = rows;
+        pivot.grand_totals_cols = columns;
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["pivots"] = pivots_into(&pivots);
+        }
+        Ok(Outcome::changed(format!("the grand totals of the pivot `{name}` are placed")).with_data(
+            json!({ "sheet": sheet, "name": name, "grand_totals_rows": rows, "grand_totals_cols": columns }),
+        ))
     }
 }
 
@@ -562,7 +639,9 @@ impl ReadPivot {
                     None => json!(null),
                 };
                 row.insert("values".to_string(), craftkit_sdk::serde_json::Value::Object(values));
-                row.insert("total".to_string(), total);
+                if pivot.grand_totals_rows {
+                    row.insert("total".to_string(), total);
+                }
             } else {
                 let numbers: Vec<Value> = match group.first() {
                     Some((_, numbers)) => numbers.clone(),
@@ -577,10 +656,45 @@ impl ReadPivot {
             rows.push(craftkit_sdk::serde_json::Value::Object(row));
         }
 
+        // The **grand total of the columns**: the line at the bottom
+        // that totals the columns, and the total of everything.
+        let grand_total = if pivot.grand_totals_cols {
+            let mut column_totals = craftkit_sdk::serde_json::Map::new();
+            let mut all: Vec<Value> = Vec::new();
+            for column in &columns {
+                let numbers: Vec<Value> = groups
+                    .iter()
+                    .flat_map(|(_, group)| {
+                        group
+                            .iter()
+                            .find(|(name, _)| name == column)
+                            .map(|(_, numbers)| numbers.clone())
+                            .unwrap_or_default()
+                    })
+                    .collect();
+                all.extend(numbers.iter().cloned());
+                let value = match put_together(&numbers) {
+                    Some(number) => json!(number),
+                    None => json!(null),
+                };
+                column_totals.insert(key_text(column), value);
+            }
+            let total = match put_together(&all) {
+                Some(number) => json!(number),
+                None => json!(null),
+            };
+            json!({ "columns": craftkit_sdk::serde_json::Value::Object(column_totals), "total": total })
+        } else {
+            craftkit_sdk::serde_json::Value::Null
+        };
+
         Ok(Outcome::new(format!("the pivot `{name}` gathers {} groups", rows.len())).with_data(json!({
             "sheet": sheet,
             "name": name,
             "aggregate": pivot.aggregate.to_text(),
+            "grand_totals_rows": pivot.grand_totals_rows,
+            "grand_totals_cols": pivot.grand_totals_cols,
+            "grand_total": grand_total,
             "columns": columns.iter().map(key_of).collect::<Vec<_>>(),
             "rows": rows,
         })))
