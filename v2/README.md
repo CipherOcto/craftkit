@@ -4083,6 +4083,7 @@ so.
 | the **chapter** of a caption | **built.** A caption names the chapter it is in, and its number is counted again at each chapter (§646) | §646 |
 | the **path** of a media file | **built.** The path a reference names is worked out — a file URL is a path, and a relative path is relative to the folder of the file (§647) | §647 |
 | the **notes** of a document converted | **built.** A footnote becomes an endnote, an endnote becomes a footnote, and the references change with them (§648) | §648 |
+| the **images** of a file under a region taken away | **built.** An image of the page that the region hits is gone from the content of the page — the tree's own rule, and the tree's rule for an image it cannot read is the same (§649) | §649 |
 
 ### The list of things that are honestly not there: empty
 
@@ -42559,5 +42560,65 @@ becomes an endnote, an endnote becomes a footnote, and the two swap.
   styles for the notes.
 - **The numbering** of the notes is not touched: the tree counts the
   footnotes and the endnotes apart, and so does this tree.
+
+---
+
+## 649. The images of a file under a region are taken away
+
+The **images of a page** under a region may now be taken away: the
+operator that draws them is gone from the content of the page.
+
+### What was built
+
+- The **images of a page** are taken away under a region:
+  - the **XObjects** of a page are in the **resources** of the page,
+    and a resource may be written where it is used or named by a
+    reference;
+  - an **image** is an XObject whose **subtype** is `Image`, and it is
+    drawn in the square that changes nothing — the transform of the
+    page places it;
+  - an image the region **hits** is taken away: the operator that draws
+    it does not go into the content that is written;
+  - an image the region does not touch is left alone;
+  - an XObject that is **not an image** is left alone: a form is a
+    drawing of its own.
+- The command **`pdf.redact.drawings`** takes the images of the page
+  away as well, and the count it answers is the tree's own one counter
+  for the images that were taken.
+
+### What the port found
+
+- **The tree has two rules for an image of the page**: an image the
+  region **covers** is gone, and an image the region only **hits** has
+  its covered pixels **cleared** — the pixels whose centre is inside
+  the region — and the result is written as a new Flate image.
+- **The tree cannot always clear an image**: an image whose codec it
+  cannot read (DCT, JPX, JBIG2, CCITT) is removed whole. That is the
+  tree's own fail-closed rule, and it is the tree's own rule for the
+  images it cannot decode.
+- **This tree cannot decode an image at all** yet, so every image is an
+  image the tree cannot read, and the tree's fail-closed rule applies:
+  an image the region hits is taken away whole.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/redactimages.rs`): the
+  image that is covered, the image that is only hit, the image the
+  region does not touch, and the XObject that is not an image.
+- **No new command**: `pdf.redact.drawings` takes the images of the
+  page away too. The pdf battery still carries **74** commands and the
+  MCP server **841**.
+
+### What it does not settle
+
+- **The pixels of an image are not cleared**: the tree keeps an image
+  that is only partly covered and blanks the covered part of it; this
+  tree takes the whole image away.
+- **The image object stays in the file**: what is gone is the operator
+  that draws it. The tree rewrites the image and writes a new object,
+  and the removal of an object that nothing draws is not here.
+- **A form is not rewritten**: the tree removes a form that is under a
+  region and rewrites the forms that are not; here a form is left
+  alone.
 
 ---
