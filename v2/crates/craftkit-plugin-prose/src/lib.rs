@@ -127,6 +127,7 @@ mod index;
 mod links;
 mod media;
 mod merges;
+mod notes;
 mod numberformat;
 mod numbering;
 mod numbers;
