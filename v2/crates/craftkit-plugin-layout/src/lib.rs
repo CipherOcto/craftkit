@@ -62,6 +62,7 @@
 mod bleed;
 mod columns;
 mod facing;
+mod grouping;
 mod items;
 mod links;
 mod margins;
@@ -83,6 +84,7 @@ use craftkit_sdk::{
 pub use bleed::SetBleed;
 pub use columns::SetColumns;
 pub use facing::ReadFacing;
+pub use grouping::{GroupItems, UngroupItems};
 pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem};
 pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
 pub use margins::SetMargin;

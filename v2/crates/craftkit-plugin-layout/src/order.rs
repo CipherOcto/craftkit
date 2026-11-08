@@ -42,21 +42,41 @@ fn items_of(session: &Session, spread: u64) -> Vec<u64> {
         .collect()
 }
 
+/// The **container** of an item: the node that holds it — a spread, or
+/// a group.
+///
+/// The items of a group are drawn in the order they stand in the
+/// group, and that is the tree's own rule: a group is a container of
+/// items like a spread is.
+fn container_of(session: &Session, item: u64) -> Option<u64> {
+    session
+        .document()
+        .walk()
+        .find(|node| {
+            (node.kind == "layout.spread" || node.kind == "layout.item.group")
+                && node.children.iter().any(|child| child.id == item)
+        })
+        .map(|node| node.id)
+}
+
 /// **Move** an item in the order of its spread.
 fn move_item(session: &mut Session, id: &str, item: u64, place: &str) -> Result<Outcome, EngineError> {
     let node = item_of(session, id, item)?;
     may_edit(&node, id)?;
-    let Some(spread) = spread_of(session, item) else {
+    // The **container** of the item: the spread it is in, or the group
+    // it is in.
+    let Some(container) = container_of(session, item) else {
         return Err(EngineError::Failed {
             id: id.to_string(),
-            message: format!("the item `{item}` is not in a spread"),
+            message: format!("the item `{item}` is in nothing"),
         });
     };
-    let items = items_of(session, spread);
+    let spread = spread_of(session, item).unwrap_or(container);
+    let items = items_of(session, container);
     let Some(index) = items.iter().position(|other| *other == item) else {
         return Err(EngineError::Failed {
             id: id.to_string(),
-            message: format!("the item `{item}` is not in the spread `{spread}`"),
+            message: format!("the item `{item}` is not in `{container}`"),
         });
     };
     let last = items.len().saturating_sub(1);
@@ -79,7 +99,7 @@ fn move_item(session: &mut Session, id: &str, item: u64, place: &str) -> Result<
     // the items take the places the items had.
     let slots: Vec<usize> = session
         .document()
-        .node(spread)
+        .node(container)
         .map(|node| {
             node.children
                 .iter()
@@ -96,13 +116,18 @@ fn move_item(session: &mut Session, id: &str, item: u64, place: &str) -> Result<
         let Some(child) = session.document().node(id).cloned() else { continue };
         new_children.push((slot, std::sync::Arc::new(child)));
     }
-    if let Some(node) = session.document_mut()?.node_mut(spread) {
+    if let Some(node) = session.document_mut()?.node_mut(container) {
         for (slot, child) in new_children {
             node.children[slot] = child;
         }
     }
-    Ok(Outcome::changed(format!("the item `{item}` is `{place}`"))
-        .with_data(json!({ "item": item, "spread": spread, "to": place, "moved": true })))
+    Ok(Outcome::changed(format!("the item `{item}` is `{place}`")).with_data(json!({
+        "item": item,
+        "spread": spread,
+        "container": container,
+        "to": place,
+        "moved": true,
+    })))
 }
 
 /// **Read** the items of a spread, in the order they are drawn.
