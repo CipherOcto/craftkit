@@ -4102,6 +4102,7 @@ so.
 | the **comment** on a cell | **built.** A comment on a cell is a thread — the comment, the replies to it, and whether it is resolved (§665) | §665 |
 | the **comments** of a sheet moved with its cells | **built.** The comments move with the cells when a column or a row is inserted or deleted (§667) | §667 |
 | the **cues** of a WebVTT file | **built.** The cues of a WebVTT file are read — the identifier, the settings, the voice and the blocks (§668) | §668 |
+| the **box** of a redaction drawn into the page | **built.** A box in the fill colour of the mark is drawn where the mark was — black when no colour is given (§669) | §669 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -43807,5 +43808,58 @@ file's own words about its cues are kept.
   here.
 - **A cue in the tree may sit in a place on the picture and have a
   style**: there is no place and no style here.
+
+---
+
+## 669. The box of a redaction is drawn into the page
+
+The **box** that stands in place of a redaction may now be drawn into
+the page.
+
+### What was built
+
+- The **box** of a redaction is drawn into the content of the page:
+  - the box is the **region**, filled.
+  - the **colour** of the box is the fill colour of the mark, and the
+    tree's default is **black**. A colour that is not three numbers
+    between zero and one is refused by name.
+  - the **path** of the box is written in the space of the content: the
+    region is in the space of the page, and the path is written where
+    the content is written.
+- A new command (**`pdf.redact.box`**) draws the box.
+
+### What the port found
+
+- **The tree's mark is gone when it is applied, and a box in its fill
+  colour is drawn in its place**, with the overlay text of the mark on
+  it. The tree's fill colour is black, and a mark with no colour of
+  its own has no box.
+- **The tree's mark is an annotation**: it is drawn on the page while
+  it waits, and it is the thing that is applied. This tree has no
+  marks, and the redaction commands take the text, the drawings and
+  the annotations away as they are told to — so the box is drawn on
+  its own, and it is drawn where the mark would have been.
+- **The tree's overlay text is drawn with the mark's own font and
+  size**. There is no overlay text here.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/redactbox.rs`): the colour
+  of the mark, the colour of its own, the refused colour, and the
+  place of the box.
+- **One command**. The pdf battery now carries **75** commands and the
+  MCP server **860**.
+
+### What it does not settle
+
+- **The overlay text is not drawn.** The tree writes the text of the
+  mark on the box, in the font and the size of the mark.
+- **The box is not a mark.** The tree's mark may be drawn, listed and
+  cleared before it is applied, and here the box is a change to the
+  content of the page.
+- **A box on a page with a rotated or a skewed transform is a
+  rectangle of its own**: the path of the box is written in the space
+  of the content, and a transform that turns a square into a
+  parallelogram cannot be written as a rectangle.
 
 ---
