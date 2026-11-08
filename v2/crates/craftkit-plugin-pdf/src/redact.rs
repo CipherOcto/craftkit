@@ -695,6 +695,155 @@ impl RedactAnnotations {
     }
 }
 
+/// The **transform** of a content stream at its end.
+///
+/// The `q` and the `Q` keep it, and the `cm` changes it: the tree's
+/// own rule, and the rule of the reader of the content.
+fn transform_at_end(operations: &[crate::content::Operation]) -> crate::content::Matrix {
+    let mut ctm = crate::content::Matrix::IDENTITY;
+    let mut stack: Vec<crate::content::Matrix> = Vec::new();
+    for operation in operations {
+        match operation.operator.as_str() {
+            "q" => stack.push(ctm),
+            "Q" => {
+                if let Some(saved) = stack.pop() {
+                    ctm = saved;
+                }
+            }
+            "cm" => {
+                let numbers: Vec<f64> =
+                    operation.operands.iter().filter_map(|value| value.as_f64()).collect();
+                if let Some(matrix) = crate::content::Matrix::from_numbers(&numbers) {
+                    ctm = matrix.then(&ctm);
+                }
+            }
+            _ => {}
+        }
+    }
+    ctm
+}
+
+/// The **colour** a box is filled with: three numbers, red, green and
+/// blue, each between zero and one.
+///
+/// The tree's own default is black, and a colour that is not three
+/// numbers is refused by name.
+fn colour_of(value: &Json, id: &str) -> Result<[f64; 3], EngineError> {
+    let Some(numbers) = value.as_array() else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: "a colour is three numbers: red, green and blue".to_string(),
+        });
+    };
+    if numbers.len() != 3 {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("a colour is three numbers, and this one is {}", numbers.len()),
+        });
+    }
+    let mut colour = [0.0f64; 3];
+    for (at, number) in numbers.iter().enumerate() {
+        let Some(number) = number.as_f64() else {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: "a colour is three numbers: red, green and blue".to_string(),
+            });
+        };
+        if !number.is_finite() || !(0.0..=1.0).contains(&number) {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!("the colour {number} is not between zero and one"),
+            });
+        }
+        colour[at] = number;
+    }
+    Ok(colour)
+}
+
+/// The **box** of a redaction is drawn into the page.
+///
+/// The tree's own rule: the mark of a redaction is gone when it is
+/// applied, and **a box in its fill colour is drawn in its place**,
+/// with the overlay text of the mark on it. The tree's fill colour is
+/// black, and a mark with no colour of its own has no box.
+///
+/// Here the box is drawn on its own: the commands that take the text,
+/// the drawings and the annotations away are the tree's, and this
+/// command draws what the tree draws in place of the mark.
+#[derive(Command)]
+#[command(id = "pdf.redact.box", area = "pdf", layer = "pdf", icon = "remove", mutates, undoable)]
+pub struct RedactBox {
+    /// The page the box goes on.
+    pub page: NodeRef,
+    /// The region: four numbers, the left, the bottom, the right and
+    /// the top of it.
+    pub rect: Json,
+    /// The colour of the box: three numbers, red, green and blue.
+    ///
+    /// The tree's default is black.
+    pub color: Option<Json>,
+}
+
+impl RedactBox {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.redact.box".to_string();
+        let page = self.page.0;
+        let document = session.document();
+        let Some(node) = document.node(page) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{page}`"),
+            });
+        };
+        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{page}` is a `{}` and not an object", node.kind),
+            });
+        }
+        let Some(region) = crate::boxes::rect_of(&self.rect) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "the region is not a rectangle of four numbers".to_string(),
+            });
+        };
+        let colour = match &self.color {
+            Some(colour) => colour_of(colour, &id)?,
+            None => [0.0, 0.0, 0.0],
+        };
+        let content = content_of(document, page)?;
+        // The **box**: the region, filled with the colour, drawn into
+        // the content of the page.
+        let mut changed = content.operations.clone();
+        // The **transform** the content ends in, and the way back from
+        // the space of the region to the space the content is written
+        // in: the region is in the space of the page, and the path of
+        // the box is written in the space of the content.
+        let end = transform_at_end(&content.operations);
+        let (x, y, width, height) = match end.invert() {
+            Some(back) => {
+                let (left, bottom) = back.apply(region[0], region[1]);
+                let (right, top) = back.apply(region[2], region[3]);
+                (left, bottom, right - left, top - bottom)
+            }
+            None => (region[0], region[1], region[2] - region[0], region[3] - region[1]),
+        };
+        changed.push(op_of("q", &[]));
+        changed.push(op_of("rg", &[colour[0], colour[1], colour[2]]));
+        changed.push(op_of("re", &[x, y, width, height]));
+        changed.push(op_of("f", &[]));
+        changed.push(op_of("Q", &[]));
+        let bytes = write_operations(&content.path, &changed)?;
+        Ok(Outcome::changed(format!("a box was drawn on the page `{page}`")).with_data(json!({
+            "page": page,
+            "stream": content.stream,
+            "region": json!(region),
+            "color": json!(colour),
+            "bytes": bytes,
+        })))
+    }
+}
+
 /// The **text under a region is removed**.
 ///
 /// A change: the content of the page is written again without the
