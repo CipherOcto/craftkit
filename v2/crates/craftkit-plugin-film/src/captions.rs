@@ -504,3 +504,268 @@ impl ReadCaptions {
         })))
     }
 }
+
+/// The most **cues** a caption file may hold.
+pub const MAX_CUES: usize = 10_000;
+
+/// The most a **cue's text** may have.
+pub const MAX_TEXT: usize = 4096;
+
+/// The most a cue's **time** may be, in milliseconds: a year.
+pub const MAX_MILLISECONDS: i64 = 31_536_000_000;
+
+/// The **cues** a caller gives, and the error when they are not ones.
+///
+/// The cues come from outside, so they are read carefully: the times
+/// are whole milliseconds, a cue ends after it starts, and the texts
+/// are not longer than they may be.
+fn cues_from(value: &Json, id: &str) -> Result<Vec<Cue>, EngineError> {
+    let Some(list) = value.as_array() else {
+        return Err(EngineError::Failed { id: id.to_string(), message: "the cues are a list".to_string() });
+    };
+    if list.len() > MAX_CUES {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("there are {} cues, and the most there may be is {MAX_CUES}", list.len()),
+        });
+    }
+    let mut cues = Vec::with_capacity(list.len());
+    for (at, cue) in list.iter().enumerate() {
+        let Some(fields) = cue.as_object() else {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!("the cue {at} is not a cue"),
+            });
+        };
+        let millis = |name: &str| -> Result<i64, EngineError> {
+            let Some(number) = fields.get(name).and_then(|number| number.as_i64()) else {
+                return Err(EngineError::Failed {
+                    id: id.to_string(),
+                    message: format!("the cue {at} has no `{name}` in whole milliseconds"),
+                });
+            };
+            if !(0..=MAX_MILLISECONDS).contains(&number) {
+                return Err(EngineError::Failed {
+                    id: id.to_string(),
+                    message: format!("the `{name}` of the cue {at} is not between zero and a year"),
+                });
+            }
+            Ok(number)
+        };
+        let start = millis("start")?;
+        let end = millis("end")?;
+        if end <= start {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!("the cue {at} ends before it starts"),
+            });
+        }
+        let text = match fields.get("text") {
+            Some(text) => {
+                let Some(text) = text.as_str() else {
+                    return Err(EngineError::Failed {
+                        id: id.to_string(),
+                        message: format!("the text of the cue {at} is not text"),
+                    });
+                };
+                if text.chars().count() > MAX_TEXT {
+                    return Err(EngineError::Failed {
+                        id: id.to_string(),
+                        message: format!("the text of the cue {at} is longer than {MAX_TEXT} characters"),
+                    });
+                }
+                text.to_string()
+            }
+            None => String::new(),
+        };
+        cues.push(Cue { start, end, text });
+    }
+    Ok(cues)
+}
+
+/// The **cues** of a WebVTT file that a caller gives.
+fn vtt_cues_from(value: &Json, id: &str) -> Result<Vec<VttCue>, EngineError> {
+    let cues = cues_from(value, id)?;
+    let mut out = Vec::with_capacity(cues.len());
+    for (at, cue) in cues.iter().enumerate() {
+        let Some(fields) = value.as_array().and_then(|list| list.get(at)).and_then(|cue| cue.as_object())
+        else {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!("the cue {at} is not a cue"),
+            });
+        };
+        let text = |name: &str| -> Option<String> {
+            fields.get(name).and_then(|value| value.as_str()).map(|value| value.to_string())
+        };
+        out.push(VttCue {
+            start: cue.start,
+            end: cue.end,
+            id: text("id").filter(|id| !id.is_empty() && !id.contains("-->")),
+            settings: text("settings").unwrap_or_default(),
+            speaker: text("speaker").filter(|speaker| !speaker.is_empty()),
+            text: cue.text.clone(),
+        });
+    }
+    Ok(out)
+}
+
+/// The **blocks** a caller gives: the notes, the styles and the
+/// regions of a WebVTT file.
+fn blocks_from(value: &Json, id: &str) -> Result<Vec<String>, EngineError> {
+    let Some(list) = value.as_array() else {
+        return Err(EngineError::Failed { id: id.to_string(), message: "the blocks are a list".to_string() });
+    };
+    if list.len() > MAX_CUES {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("there are {} blocks, and the most there may be is {MAX_CUES}", list.len()),
+        });
+    }
+    let mut blocks = Vec::with_capacity(list.len());
+    for (at, block) in list.iter().enumerate() {
+        let Some(block) = block.as_str() else {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!("the block {at} is not text"),
+            });
+        };
+        if block.chars().count() > MAX_TEXT {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!("the block {at} is longer than {MAX_TEXT} characters"),
+            });
+        }
+        blocks.push(block.to_string());
+    }
+    Ok(blocks)
+}
+
+/// Write a caption file of **SubRip** cues.
+///
+/// The tree's own writer: the cues are numbered from one, the clock is
+/// rounded to the nearest millisecond, and a blank line inside the
+/// text of a cue is dropped — a blank line would end the cue.
+pub fn write_subrip(cues: &[Cue]) -> String {
+    let mut out = String::new();
+    for (at, cue) in cues.iter().enumerate() {
+        out.push_str(&format!("{}\n{} --> {}\n", at + 1, format_clock(cue.start), format_clock(cue.end)));
+        for line in cue.text.lines().filter(|line| !line.trim().is_empty()) {
+            out.push_str(line);
+            out.push('\n');
+        }
+        out.push('\n');
+    }
+    out
+}
+
+/// Write a caption file of **WebVTT** cues.
+///
+/// The tree's own writer: the file begins with the signature, the
+/// blocks come before the cues, a cue keeps its identifier and its
+/// settings, the voice is written in front of the text, and an arrow
+/// in the text is written so that it is not an arrow.
+pub fn write_vtt(cues: &[VttCue], blocks: &[String]) -> String {
+    let mut out = String::from("WEBVTT\n\n");
+    for block in blocks {
+        let block = block.trim_end();
+        if !block.is_empty() {
+            out.push_str(block);
+            out.push_str("\n\n");
+        }
+    }
+    for cue in cues {
+        if let Some(id) = cue.id.as_deref().map(str::trim).filter(|id| !id.is_empty() && !id.contains("-->"))
+        {
+            out.push_str(id);
+            out.push('\n');
+        }
+        out.push_str(&format!(
+            "{} --> {}",
+            format_clock_marked(cue.start, '.'),
+            format_clock_marked(cue.end, '.')
+        ));
+        if !cue.settings.trim().is_empty() {
+            out.push(' ');
+            out.push_str(cue.settings.trim());
+        }
+        out.push('\n');
+        let mut text = String::new();
+        if let Some(speaker) = cue.speaker.as_deref().filter(|speaker| !speaker.is_empty()) {
+            text.push_str(&format!("<v {speaker}>"));
+        }
+        text.push_str(&cue.text);
+        for line in text.lines().filter(|line| !line.trim().is_empty()) {
+            out.push_str(&line.replace("-->", "--&gt;"));
+            out.push('\n');
+        }
+        out.push('\n');
+    }
+    out
+}
+
+/// **Write** a caption file.
+///
+/// The cues are given to the command and the file is written. The
+/// rules are the tree's own: the cues are numbered from one, the
+/// clock is rounded to the nearest millisecond, and a blank line
+/// inside the text of a cue is dropped.
+#[derive(Command)]
+#[command(id = "film.captions.write", area = "film", layer = "film", icon = "plus", mutates, undoable)]
+pub struct WriteCaptions {
+    /// The file to write.
+    pub path: Text,
+    /// The format of the file: `subrip` when it is not given.
+    pub format: Option<Text>,
+    /// The cues: each one a `start`, an `end` and a `text`.
+    pub cues: Json,
+    /// The blocks of a WebVTT file: the notes, the styles and the
+    /// regions.
+    pub blocks: Option<Json>,
+}
+
+impl WriteCaptions {
+    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "film.captions.write".to_string();
+        let path = self.path.0.trim().to_string();
+        if path.is_empty() {
+            return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
+        }
+        let named = self.format.as_ref().map(|format| format.0.trim().to_ascii_lowercase());
+        let format = match named.as_deref() {
+            None | Some("") | Some("subrip") | Some("srt") => "subrip",
+            Some("webvtt") | Some("vtt") => "webvtt",
+            Some(other) => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "`{other}` is not a format of a caption file: the formats are {}",
+                        FORMATS.join(", ")
+                    ),
+                });
+            }
+        };
+        let written = if format == "webvtt" {
+            let cues = vtt_cues_from(&self.cues, &id)?;
+            let blocks = match &self.blocks {
+                Some(blocks) => blocks_from(blocks, &id)?,
+                None => Vec::new(),
+            };
+            write_vtt(&cues, &blocks)
+        } else {
+            let cues = cues_from(&self.cues, &id)?;
+            write_subrip(&cues)
+        };
+        std::fs::write(&path, written.as_bytes()).map_err(|error| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the file cannot be written: {error}"),
+        })?;
+        let count = self.cues.as_array().map(|cues| cues.len()).unwrap_or(0);
+        Ok(Outcome::changed(format!("`{path}` was written with {count} cue(s)")).with_data(json!({
+            "path": path,
+            "format": format,
+            "count": count,
+            "bytes": written.len(),
+        })))
+    }
+}
