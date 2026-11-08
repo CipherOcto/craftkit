@@ -4109,6 +4109,7 @@ so.
 | the **layers** of a layout document | **built.** A layer is renamed, deleted, moved and merged — the tree's rules, and the items go with the layer (§673) | §673 |
 | the **layers** of a layout are the kit's layers | **built.** The edge is the kit's, so a locked layer locks what is on it and a hidden layer hides it (§674) | §674 |
 | the **pages** of a spread deleted and moved | **built.** A page may be deleted and moved — the tree's rule that a document keeps one page, and the pages close up (§675) | §675 |
+| the **caption track** of a sequence | **built.** A sequence may carry a caption track — the tree's formats, and the cues of a track never overlap (§676) | §676 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -44206,5 +44207,63 @@ the pages close up when a page is deleted.
   spread.
 - **The pages are not laid out again**: the tree paginates the
   document, and here the pages keep the places they stand in.
+
+---
+
+## 676. The caption track of a sequence
+
+A **sequence** may now carry a **caption track**, and the track holds
+**cues**: the text that is on the screen and the two times it is on it.
+
+### What was built
+
+- A **caption track** of a sequence, and the rules are the tree's own:
+  - the **format** of a caption track is one of the tree's: a
+    subtitle, a CEA-608, a CEA-708 or a teletext. A format that is not
+    one of them is refused by name, and the default is the subtitle.
+  - the **cues** of a track never **overlap**: a cue that ends after
+    the next one starts is refused. A cue that ends exactly when the
+    next one starts is not an overlap.
+  - a cue has a **positive duration**: it ends after it starts.
+  - the cues are kept in the order they **start** in.
+  - a cue may be **taken away** from its track.
+- Two new kinds: `film.caption.track` and `film.caption`.
+- Four new commands: `film.caption.track.add`, `film.caption.add`,
+  `film.caption.read` and `film.caption.remove`.
+
+### What the port found
+
+- **The tree's caption track is a track of its own**, with a format, a
+  language, a style, an enabled flag, a locked flag and a sync lock,
+  and it holds the cues. Here a caption track is a node of its own
+  kind under the sequence, with a format and a language; the flags are
+  the ones of a track in this battery, and they are not here.
+- **The tree's cue is a clip with exact times**: it has an in-point
+  and an out-point in the ticks of the sequence, and it may carry a
+  position and a style. Here a cue has a start and an end in **frames**
+  — the unit of the timeline of this battery — and a text.
+- **The tree's captions never overlap**, and the tree checks it when
+  the project is loaded: a caption that overlaps another is an error
+  of the project. Here the overlap is refused when the cue is added,
+  and the refusal says which cue it is.
+
+### What it cost
+
+- **Six tests** in the film battery (`tests/captiontracks.rs`): the
+  track, the refused format, the cue, the overlap, the refused cue,
+  and the cue that is taken away.
+- **Four commands**. The film battery now carries **94** commands and
+  the MCP server **879**.
+
+### What it does not settle
+
+- **A caption track is not a track of the timeline.** The tree's is
+  shown in the caption area above the tracks, and here it is a node
+  under the sequence.
+- **The flags of a caption track are not here**: the tree's track may
+  be enabled, locked and synced with the other tracks.
+- **The tree's style and position of a cue are not here**, and neither
+  is its language: the track carries the language `en` and nothing
+  else says it.
 
 ---
