@@ -4087,6 +4087,7 @@ so.
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
 | the **parts** of a source | **built.** The publisher, the place, the journal, the volume, the pages and the address are said, and a part that is said empty is not there (§652) | §652 |
+| the **bibliography** of a document written | **built.** The entries of the sources are written in the style of the document — the template, the names, the order and the numbering are the tree's own (§653) | §653 |
 
 ### The list of things that are honestly not there: empty
 
@@ -39201,7 +39202,8 @@ report, a recording. A **citation** is a run that names one, and the
   - **`prose.document.source.remove`** takes a source away;
   - **`prose.document.source.read`** reads the sources of a document;
   - **`prose.document.bibliography`** reads the **bibliography** — the
-    sources that are cited, in the order they are first cited.
+    sources that are cited, written in the style of the document, in
+    the order the style asks for (§653).
 - The **kind** of a source is one of the tree's own: `book`,
   `bookSection`, `article`, `periodical`, `website`,
   `electronicsource`, `report`, `conference`, `case`, `art`, `film`,
@@ -39249,9 +39251,9 @@ report, a recording. A **citation** is a run that names one, and the
 - **The tree has a bibliography and this tree has one too, but it is
   derived.** The tree's bibliography is written out in a **style** —
   APA, MLA, Chicago and the rest — and the style decides the order,
-  the punctuation and the numbering. Here the style is not here: the
-  bibliography is the sources that are cited, in the order they are
-  cited, and every one of them is whole.
+  the punctuation and the numbering. The style was not here when this
+  section was written; it is here now (§650, §651, §653), and the
+  bibliography is written in it and derived every time.
 
 ### What it cost
 
@@ -39267,11 +39269,13 @@ report, a recording. A **citation** is a run that names one, and the
 
 ### What it does not settle
 
-- **The bibliography is not written out**: it has no style, no
-  punctuation and no numbering, and it is a list of the sources
-  themselves rather than a list of lines.
+- **The bibliography was not written out** when this section was
+  written: it had no style, no punctuation and no numbering, and it was
+  a list of the sources themselves rather than a list of lines. It is
+  written out now (§653).
 - **A citation is not a citation in the text**: it names a source, and
-  it does not write `(Author, 2026)` where the reader sees it.
+  the words of the citation are said (§651) and not written where the
+  reader sees them.
 - **Nothing reads the sources but the bibliography**: the file carries
   them (§602), and no other command of this battery knows what a
   source is.
@@ -42814,5 +42818,78 @@ parts the tree's own entries are written from.
   of an entry is another thing.
 - **The tree's other fields** — the editor, the edition, the issue,
   the month, the day, the date accessed and the DOI — are not here.
+
+---
+
+## 653. The bibliography of a document is written in its style
+
+The **entries** of a bibliography may now be **written**, in the style of
+the document: APA, MLA, IEEE and the tree's other nine.
+
+### What was built
+
+- The **entry** of a source is **derived**, and the style writes it:
+  - each style carries the **templates** of its entries: the entry of a
+    **book** and the entry of an **article**. A source with a journal
+    is written as an article and every other source as a book. The
+    tree's own rule.
+  - the **year** of a source with no year is `n.d.`. The tree's own
+    rule.
+  - the text between `⟦` and `⟧` is left out when a field in it is
+    empty, and `{name}` is the field of that name. The tree's own
+    language.
+  - a full stop never doubles up: `M.` and `. ` make `M. ` and not
+    `M.. `. The tree's own rule.
+- The **names** of the authors are written the way the style writes
+  them. The tree has **seven** forms — `Rivera, Alex`, `Alex Rivera`,
+  `Rivera, A.`, `A. Rivera`, `Rivera A.`, `RIVERA, Alex` and `RIVERA A`
+  — and the tree's own rules for the list: at most so many authors are
+  written and the rest are left out with "et al.", two names are joined
+  by one word and three or more by another.
+- The **order** of the bibliography is the order the style asks for: by
+  the surname of the first author — and by the title when the source
+  has no author — by the title, or in the order the sources are cited.
+  A source that is **not cited** is left out.
+- The command **`prose.document.bibliography`** writes the entries, and
+  says the style and the title of the list.
+
+### What the port found
+
+- **The tree's entry is a template with a language of its own**:
+  `⟦…⟧` for the parts that may be left out, `{name}` for the parts
+  that are filled, and the rule that a full stop never doubles up. So
+  the port is that language: the templates are data, and the writing of
+  an entry is the reading of a template.
+- **The tree's type code is the GB/T one**: `M` a book, `J` an article,
+  `R` a report, `EB/OL` a web page and `Z` anything else, with `/OL`
+  for a source that was read online. It is written in the GB/T entries
+  only, and the other styles do not write it.
+- **The tree's IEEE entry puts the comma inside the quotes** —
+  `“The Book,”` — and this tree writes it as the tree does.
+- **The tree sorts the bibliography in the language of the document**:
+  a Polish `Łukasiewicz` comes before a `Mazur`. Here the sort is on
+  the name as it is written, in lower case, and the tree's own rule
+  for the language is not here.
+- **The tree's list of the sources that are cited falls back to every
+  source while nothing is cited**, and here too.
+
+### What it cost
+
+- **Five tests** in the prose battery (`tests/bibliography.rs`): the
+  entry in the style, the article and the empty parts, the order, the
+  numbered style and the year, and the source that is not cited.
+- **No new command**: `prose.document.bibliography` writes the entries
+  now. The prose battery still carries **105** commands and the MCP
+  server **845**.
+
+### What it does not settle
+
+- **The bibliography is not put into the document**: the entries are
+  said, and writing them into the text is another thing.
+- **The sort is not in the language of the document**: the names are
+  compared as they are written, in lower case.
+- **The tree's other fields** — the editor, the edition, the issue,
+  the month, the day, the date accessed and the DOI — are not here, and
+  no style of the tree writes any of them (§652).
 
 ---
