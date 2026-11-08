@@ -4084,6 +4084,7 @@ so.
 | the **path** of a media file | **built.** The path a reference names is worked out — a file URL is a path, and a relative path is relative to the folder of the file (§647) | §647 |
 | the **notes** of a document converted | **built.** A footnote becomes an endnote, an endnote becomes a footnote, and the references change with them (§648) | §648 |
 | the **images** of a file under a region taken away | **built.** An image of the page that the region hits is gone from the content of the page — the tree's own rule, and the tree's rule for an image it cannot read is the same (§649) | §649 |
+| the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 
 ### The list of things that are honestly not there: empty
 
@@ -42620,5 +42621,72 @@ operator that draws them is gone from the content of the page.
 - **A form is not rewritten**: the tree removes a form that is under a
   region and rewrites the forms that are not; here a form is left
   alone.
+
+---
+
+## 650. The citation styles of a document
+
+The **citation styles** of a document may now be read and said: a
+document names the style it cites by, and the styles are the tree's own
+twelve.
+
+### What was built
+
+- A new module (**`src/citestyles.rs`**) holds the **styles** of the
+  tree as data:
+  - the twelve styles: APA, Chicago, GB/T 7714, GOST (name sort), GOST
+    (title sort), Harvard (Anglia), IEEE, ISO 690 (author-date), ISO 690
+    (numerical), MLA, SIST02 and Turabian;
+  - how each one **cites** in the text — by the author and the date, by
+    the author and the pages, or by a number;
+  - how each one **orders** its list — by the author, by the title, or
+    by the order the sources are first cited;
+  - from how many authors each one says **et al.**, and the title of
+    its list.
+- A style is found by its **name**, whatever the case, or by a name
+  that **begins** with one of its aliases — the **longest** alias wins.
+  The name of a style sheet file names it too: `\GostTitle.XSL` is the
+  GOST that sorts by title.
+- **Three new commands**:
+  - **`prose.citation.styles`** lists the styles of the tree and what
+    each one says;
+  - **`prose.document.citestyle.set`** says the style of a document, and
+    refuses a style that is not one of the tree's by name;
+  - **`prose.document.citestyle.read`** reads the style of a document.
+- A document that names **no** style cites by **APA**: the tree's own
+  default, and the default is **derived** — it is not written down.
+
+### What the port found
+
+- **The tree's styles are data, not code**: a style is a table of a
+  dozen facts, and the tree's twelve styles are in one list. So the
+  port is a list, and the writing of a citation is a reading of it.
+- **The tree's own helper falls back to APA** when it does not find a
+  style, but its **command refuses** a style that is not one of the
+  tree's, by name, and the refusal names the styles there are. This
+  tree refuses: a name that is not a style is refused, and a document
+  that names none is APA.
+- **A name that *begins* with an alias names the style** — "Harvard -
+  Anglia" is Harvard, `\GostTitle.XSL` is the GOST that sorts by title
+  — and the **longest** alias wins, so `gosttitle` is not `gost`.
+
+### What it cost
+
+- **Five tests** in the prose battery (`tests/citestyles.rs`): the
+  styles of the tree, the default, the style of a document, the refusal,
+  and the alias.
+- **Three commands**. The prose battery now carries **104** commands and
+  the MCP server **844**.
+
+### What it does not settle
+
+- **The citations are not written**: a style says how a citation would
+  be written — the brackets, the separators, the pages — and that is
+  not here.
+- **The bibliography is not written**: the entries of a style, and the
+  way each style writes an author's name, are not here.
+- **The style is not read from a file**: the tree reads it from the
+  settings of a document when the document opens, and there are no
+  settings here.
 
 ---
