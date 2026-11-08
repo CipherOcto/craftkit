@@ -4073,6 +4073,7 @@ so.
 | the **content** of a stream written back | **built.** A stream may be written again in the kit's own form, and an inline image is kept whole — and the rule for the end of an image is the tree's (§636) | §636 |
 | the **height** of the text of a page | **built.** The text of a page says how tall it is — the metrics of the font, and the box the glyphs take (§637) | §637 |
 | the **text** under a region | **built.** A region of a page says what text it covers — the box of the text, and the tree's own rule for what is under it (§638) | §638 |
+| the **text** under a region taken away | **built.** The text under a region is gone from the content of the page, and the rest of the line keeps its place — the tree's own rule (§639) | §639 |
 
 ### The list of things that are honestly not there: empty
 
@@ -42011,11 +42012,80 @@ under it is the text whose box is under it.
 
 ### What it does not settle
 
-- **The text is not removed**: this says what is under a region, and
-  taking it away is another thing.
+- **The text was not removed**: this says what is under a region, and
+  taking it away was another thing — it is taken away now (§639).
 - **The glyphs are not counted one by one**: the tree's redaction works
   glyph by glyph, and this tree works by the piece.
 - **The images and the paths** under a region are not read: the tree's
   redaction takes them away too, and that is not here.
+
+---
+
+## 639. The text under a region is taken away
+
+The text under a region may now be **taken away**: it is gone from the
+content of the page, and the rest of the line keeps its place.
+
+### What was built
+
+- A new module (**`src/redact.rs`**) takes the text under a region
+  away:
+  - the **removed text leaves a space of its own** — the tree's own
+    rule: the text is replaced by a number that moves the pen back by
+    the width of what was taken, so the rest of the line stays where
+    it was;
+  - a **line that moves on keeps moving on**: the tree's own rule, the
+    `T*` of the operator that showed it is written out first;
+  - **nothing is written that could not be verified**: the text that
+    is left is read again after the change, and if any of it is still
+    under the region the whole thing is refused and the file is left
+    as it was;
+  - a page whose content is **filtered** is refused, and so is a page
+    with **more than one content stream**: the text of the page is read
+    from all of them together, and one file cannot hold them all.
+- A new command (**`pdf.redact.text`**) takes the text under a region
+  away, and answers how many pieces were taken.
+
+### What the port found
+
+- **The tree removes the text glyph by glyph** and keeps the rest of
+  the line in place with a number in a `TJ` array. This tree works by
+  the **piece** (§638), and the number it writes is the tree's own:
+  the width of what was taken, in thousandths of an em.
+- **The tree's own rule does not carry the horizontal scale**: the
+  number moves the pen by the width times the scale of the text, so
+  with a scale of other than a hundred the rest of the line does not
+  keep its place exactly. That is the tree's rule, and it is the rule
+  here.
+- **This tree's pen did not move for the text it did not report.** A
+  piece of text before the range that was asked for did not move the
+  pen, and an array of text with no text in it did not move it either.
+  Both move it now — and the place of the text of a marked range
+  (§575) was wrong because of it.
+- **The gap the removal leaves reads as a space between two words**,
+  because a number below a hundred and a half is a space — the
+  tree's own rule for the numbers of a `TJ` array.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/redacttext.rs`): the text
+  that is gone, the rest of the line that keeps its place, the text
+  that is left alone, and the region that is refused.
+- **One command** (`pdf.redact.text`). The pdf battery now carries
+  **69** commands and the MCP server **834**.
+- **Two corrections**: the pen did not move for the text the reader
+  did not report.
+
+### What it does not settle
+
+- **The mark is not kept**: the region is not in the document
+  afterwards, and the undo of the command does not put the text back —
+  the bytes are in a file, and the document does not hold the old
+  ones.
+- **The images and the paths** under the region are not taken away:
+  the tree's redaction takes them too, and that is not here.
+- **The glyphs are not counted one by one**, and the whole of the
+  tree's redaction — the annotations, the forms, the links and the
+  verification of every one of them — is not here.
 
 ---
