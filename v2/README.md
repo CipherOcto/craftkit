@@ -4074,6 +4074,7 @@ so.
 | the **height** of the text of a page | **built.** The text of a page says how tall it is — the metrics of the font, and the box the glyphs take (§637) | §637 |
 | the **text** under a region | **built.** A region of a page says what text it covers — the box of the text, and the tree's own rule for what is under it (§638) | §638 |
 | the **text** under a region taken away | **built.** The text under a region is gone from the content of the page, and the rest of the line keeps its place — the tree's own rule (§639) | §639 |
+| the **drawings** under a region taken away | **built.** The inline images and the paths a region covers are gone from the content of the page — the tree's own two rules (§640) | §640 |
 
 ### The list of things that are honestly not there: empty
 
@@ -42082,10 +42083,64 @@ content of the page, and the rest of the line keeps its place.
   afterwards, and the undo of the command does not put the text back —
   the bytes are in a file, and the document does not hold the old
   ones.
-- **The images and the paths** under the region are not taken away:
-  the tree's redaction takes them too, and that is not here.
+- **The images and the paths** under the region were not taken away:
+  they are taken away now (§640) — the images of a file are not.
 - **The glyphs are not counted one by one**, and the whole of the
   tree's redaction — the annotations, the forms, the links and the
   verification of every one of them — is not here.
+
+---
+
+## 640. The drawings under a region are taken away
+
+The **inline images** and the **paths** under a region may now be
+taken away: they are gone from the content of the page.
+
+### What was built
+
+- The **drawings** of a page are taken away under a region:
+  - an **inline image** is drawn in the square that changes nothing,
+    and the transform of the page places it: if the region hits that
+    square the image is gone — the tree's own rule;
+  - a **path** is a box of its own points: `m`, `l`, `c`, `v`, `y`,
+    `h` and `re` say where it goes, and the transform of the page
+    turns them; if the region **covers** that box the path is gone;
+  - a path that only **hits** the region is left alone: the tree
+    clips it, and that is not here;
+  - a path that **clips** keeps its clip and paints nothing — the
+    tree's own rule;
+  - a path that was never painted is still a path.
+- A new command (**`pdf.redact.drawings`**) takes the drawings under a
+  region away, and answers how many images and how many paths were
+  taken.
+
+### What the port found
+
+- **The tree's rules for the images and the paths are not the same**:
+  an image is gone when the region *hits* it, and a path is gone when
+  the region *covers* it. The two rules are the two rules here.
+- **The tree clips a path that is only partly covered**, and it does
+  it by drawing the region as a clip around the path. That is a
+  drawing of its own, and it is not here.
+- **The tree takes the images of a file away too**: an image in a form
+  is rewritten as a new object, and an image that is partly covered
+  loses the covered part. Neither is here.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/redactdrawings.rs`): the
+  inline image, the path that is covered, the path that only hits, and
+  the path that clips.
+- **One command** (`pdf.redact.drawings`). The pdf battery now carries
+  **70** commands and the MCP server **835**.
+
+### What it does not settle
+
+- **The mark is not kept**, and the undo of the command does not put
+  the drawings back.
+- **The images of a file** are not taken away: the tree rewrites them,
+  and clears the part of an image that is covered.
+- **A path that is only partly covered** is not clipped: it is left
+  alone, and the tree's clipping is not here.
 
 ---
