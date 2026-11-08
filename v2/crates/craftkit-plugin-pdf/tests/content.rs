@@ -100,8 +100,12 @@ fn the_operands_of_an_operator_are_read() {
     assert_eq!(operations[0]["operator"], json!("Tf"), "the font is set");
     assert_eq!(operations[0]["operands"], json!(["/F1", 12.0]), "with the font and the size");
     assert_eq!(operations[1]["operator"], json!("TJ"), "the text is shown");
-    assert_eq!(operations[1]["operands"], json!([["a", -250.0, "b"]]), "with the array of pieces");
-    assert_eq!(operations[2]["operands"], json!(["Hello"]), "and the plain text");
+    assert_eq!(
+        operations[1]["operands"],
+        json!([[{ "string": "a" }, -250.0, { "string": "b" }]]),
+        "with the array of pieces"
+    );
+    assert_eq!(operations[2]["operands"], json!([{ "string": "Hello" }]), "and the plain text");
 }
 
 /// A **stream** that says something the kit does not know is refused

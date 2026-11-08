@@ -13,12 +13,22 @@
 //!
 //! # What it does not do
 //!
-//! - **The inline images are not read.** A stream may hold an image
+//! - **The inline images are kept whole.** A stream may hold an image
 //!   between `BI` and `EI`, and the bytes between are the image and
-//!   not a list of operands; the operator is reported and the bytes
-//!   are skipped.
+//!   not a list of operands; the operation keeps the dictionary that
+//!   describes it and the bytes of it, so that a stream that is read
+//!   and written again is the stream it was.
 //! - **The operators are not carried out.** What a `re` means is the
 //!   evaluator's; this module says that a `re` is there.
+//!
+//! # The writer
+//!
+//! The operations of a stream may be **written back** to bytes, by the
+//! tree's own rule: the operands come first, each one followed by a
+//! space, and then the operator and a newline. A **name** is written
+//! as a name and a **string** as a string, because the two are two
+//! things: the reader tells them apart, and the writer keeps them
+//! apart.
 
 use craftkit_sdk::serde_json::{Map, Value as Json};
 
@@ -71,6 +81,9 @@ pub struct Operation {
     pub operator: String,
     /// The operands that came before it.
     pub operands: Vec<Json>,
+    /// The **bytes** of the inline image of the operation, when it
+    /// has one: the dictionary that describes it is its operands.
+    pub inline: Option<Vec<u8>>,
 }
 
 impl Operation {
@@ -79,6 +92,7 @@ impl Operation {
         let mut map = Map::new();
         map.insert("operator".to_string(), Json::String(self.operator.clone()));
         map.insert("operands".to_string(), Json::Array(self.operands.clone()));
+        map.insert("inline".to_string(), Json::Bool(self.inline.is_some()));
         Json::Object(map)
     }
 }
@@ -95,6 +109,117 @@ const OPERATORS: &[&str] = &[
     "Td", "TD", "Tf", "Tj", "TJ", "TL", "Tm", "Tr", "Ts", "Tw", "Tz", "v", "w", "W", "W*", "y", "'", "\"",
 ];
 
+/// Write the **operations** of a content stream back to bytes.
+///
+/// The tree's own rule: the operands come first, each one followed by
+/// a space, and then the operator and a newline. A **name** is written
+/// as a name and a **string** as a string, and the two are two things.
+pub fn write_operations(operations: &[Operation]) -> Vec<u8> {
+    let mut out: Vec<u8> = Vec::new();
+    for operation in operations {
+        if let Some(image) = &operation.inline {
+            out.extend_from_slice(b"BI");
+            for operand in &operation.operands {
+                out.push(b' ');
+                write_operand(operand, &mut out);
+            }
+            out.extend_from_slice(b" ID ");
+            out.extend_from_slice(image);
+            out.extend_from_slice(b"\nEI\n");
+            continue;
+        }
+        for operand in &operation.operands {
+            write_operand(operand, &mut out);
+            out.push(b' ');
+        }
+        out.extend_from_slice(operation.operator.as_bytes());
+        out.push(b'\n');
+    }
+    out
+}
+
+/// Write one **operand** of a content stream.
+fn write_operand(value: &Json, out: &mut Vec<u8>) {
+    match value {
+        Json::Null => out.extend_from_slice(b"null"),
+        Json::Bool(flag) => {
+            if *flag {
+                out.extend_from_slice(b"true");
+            } else {
+                out.extend_from_slice(b"false");
+            }
+        }
+        Json::Number(number) => {
+            // A number is an **integer** when it is one: the tree's
+            // own rule.
+            let value = number.as_f64().unwrap_or_default();
+            if value.fract() == 0.0 && value.abs() < 1e15 {
+                out.extend_from_slice(format!("{}", value as i64).as_bytes());
+            } else {
+                out.extend_from_slice(format!("{value}").as_bytes());
+            }
+        }
+        // A **name**: it carries its own slash, and the bytes that
+        // may not be in one are escaped.
+        Json::String(name) => {
+            let text = name.strip_prefix('/').unwrap_or(name);
+            out.push(b'/');
+            out.extend_from_slice(crate::writer::escape_name(text).as_bytes());
+        }
+        Json::Array(list) => {
+            out.push(b'[');
+            for item in list {
+                write_operand(item, out);
+                out.push(b' ');
+            }
+            out.push(b']');
+        }
+        Json::Object(map) => {
+            if let Some(Json::String(text)) = map.get("string") {
+                // A **string**: its bytes are its characters.
+                write_string(text, out);
+                return;
+            }
+            if let Some(Json::Array(pairs)) = map.get("entries") {
+                // A **dictionary**: the pairs it holds, each one a
+                // key and a value.
+                out.extend_from_slice(b"<<");
+                for pair in pairs {
+                    out.push(b' ');
+                    if let Json::Array(pair) = pair {
+                        for item in pair {
+                            write_operand(item, out);
+                            out.push(b' ');
+                        }
+                    }
+                }
+                out.extend_from_slice(b">>");
+                return;
+            }
+            out.extend_from_slice(b"null");
+        }
+    }
+}
+
+/// Write a **string**: the bytes of it, with the characters that may
+/// not be in one escaped.
+fn write_string(text: &str, out: &mut Vec<u8>) {
+    out.push(b'(');
+    for character in text.chars() {
+        let byte = character as u32 as u8;
+        match byte {
+            b'(' => out.extend_from_slice(b"\\("),
+            b')' => out.extend_from_slice(b"\\)"),
+            b'\\' => out.extend_from_slice(b"\\\\"),
+            b'\n' => out.extend_from_slice(b"\\n"),
+            b'\r' => out.extend_from_slice(b"\\r"),
+            b'\t' => out.extend_from_slice(b"\\t"),
+            other => out.push(other),
+        }
+    }
+    out.push(b')');
+}
+
 /// Read the **operations** of a content stream.
 pub fn operations(bytes: &[u8]) -> Result<Vec<Operation>, Error> {
     let mut reader = Reader { bytes, at: 0 };
@@ -106,12 +231,31 @@ pub fn operations(bytes: &[u8]) -> Result<Vec<Operation>, Error> {
         match token {
             Token::Value(value) => operands.push(value),
             Token::Operator(name) => {
-                if name == "BI" {
+                if name == "ID" {
                     // The **inline image**: the bytes until `EI` are
-                    // the image and not a list of operands.
-                    reader.skip_inline_image()?;
+                    // the image and not a list of operands, and they
+                    // belong to the `BI` before them. The operands read
+                    // since that `BI` are the dictionary of the image.
+                    let image = reader.inline_image()?;
+                    let dictionary = std::mem::take(&mut operands);
+                    match operations.last_mut() {
+                        Some(operation) if operation.operator == "BI" => {
+                            operation.operands.extend(dictionary);
+                            operation.inline = Some(image);
+                        }
+                        _ => {
+                            return Err(Error::Malformed(
+                                "the inline image has no `BI` before it".to_string(),
+                            ));
+                        }
+                    }
+                    continue;
                 }
-                operations.push(Operation { operator: name, operands: std::mem::take(&mut operands) });
+                operations.push(Operation {
+                    operator: name,
+                    operands: std::mem::take(&mut operands),
+                    inline: None,
+                });
             }
         }
     }
@@ -266,7 +410,15 @@ impl<'a> Reader<'a> {
                 b')' => {
                     depth -= 1;
                     if depth == 0 {
-                        return Ok(Json::String(bytes.iter().map(|byte| *byte as char).collect()));
+                        // A **string** is a string and not a name: the
+                        // payload says so, as it does everywhere else
+                        // in the kit.
+                        let text: String = bytes.iter().map(|byte| *byte as char).collect();
+                        return Ok(Json::Object({
+                            let mut map = Map::new();
+                            map.insert("string".to_string(), Json::String(text));
+                            map
+                        }));
                     }
                     bytes.push(byte);
                 }
@@ -299,7 +451,12 @@ impl<'a> Reader<'a> {
             digits.push(0);
         }
         let bytes: Vec<u8> = digits.chunks(2).map(|pair| pair[0] * 16 + pair[1]).collect();
-        Ok(Json::String(bytes.iter().map(|byte| *byte as char).collect()))
+        let text: String = bytes.iter().map(|byte| *byte as char).collect();
+        Ok(Json::Object({
+            let mut map = Map::new();
+            map.insert("string".to_string(), Json::String(text));
+            map
+        }))
     }
 
     /// A **dictionary**: `<< /Key value >>`.
@@ -310,7 +467,11 @@ impl<'a> Reader<'a> {
             self.skip_space();
             if self.bytes.get(self.at) == Some(&b'>') && self.bytes.get(self.at + 1) == Some(&b'>') {
                 self.at += 2;
-                return Ok(Json::Array(pairs));
+                return Ok(Json::Object({
+                    let mut map = Map::new();
+                    map.insert("entries".to_string(), Json::Array(pairs));
+                    map
+                }));
             }
             if self.at >= self.bytes.len() {
                 return Err(Error::Malformed("a dictionary is never closed".to_string()));
@@ -409,18 +570,29 @@ impl<'a> Reader<'a> {
         Ok(Token::Operator(name))
     }
 
-    /// The bytes of an **inline image**, which are skipped.
-    fn skip_inline_image(&mut self) -> Result<(), Error> {
-        while self.at < self.bytes.len() {
-            if self.bytes[self.at] == b'E' && self.bytes.get(self.at + 1) == Some(&b'I') {
-                let before = self.at.checked_sub(1).and_then(|at| self.bytes.get(at)).copied();
-                let after = self.bytes.get(self.at + 2).copied();
-                if !before.map(is_space).unwrap_or(true) && !after.map(is_space).unwrap_or(true) {
-                    self.at += 2;
-                    return Ok(());
-                }
+    /// The bytes of an **inline image**.
+    ///
+    /// The tree's own rule: one whitespace byte separates `ID` from the
+    /// data, and the data ends at whitespace + `EI` + (whitespace or a
+    /// delimiter or the end of the stream). The `EI` is consumed with
+    /// the data, so the reader never sees it as an operator of its own.
+    fn inline_image(&mut self) -> Result<Vec<u8>, Error> {
+        let begin = (self.at + 1).min(self.bytes.len());
+        let mut at = begin;
+        while at + 2 <= self.bytes.len() {
+            let before = at.checked_sub(1).and_then(|at| self.bytes.get(at)).copied();
+            let after = self.bytes.get(at + 2).copied();
+            let closed = self.bytes[at] == b'E'
+                && self.bytes.get(at + 1) == Some(&b'I')
+                && before.is_none_or(is_space)
+                && after.is_none_or(|byte| is_space(byte) || is_delimiter(byte));
+            if closed {
+                let end = if at > begin && before.is_some_and(is_space) { at - 1 } else { at };
+                let image = self.bytes[begin..end].to_vec();
+                self.at = at + 2;
+                return Ok(image);
             }
-            self.at += 1;
+            at += 1;
         }
         Err(Error::Malformed("the inline image is never closed".to_string()))
     }

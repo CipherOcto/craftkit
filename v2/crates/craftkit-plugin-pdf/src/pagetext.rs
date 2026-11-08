@@ -619,7 +619,7 @@ fn shown(array: &[Json], map: Option<&crate::tounicode::Map>) -> (String, String
     let mut encoding = "latin-1".to_string();
     for item in array {
         match item {
-            Json::String(_) => {
+            _ if bytes_of(item).is_some() => {
                 let Some(bytes) = bytes_of(item) else { continue };
                 let (piece, kind) = read_through(map, &bytes);
                 if kind != "latin-1" {
@@ -641,8 +641,7 @@ fn shown(array: &[Json], map: Option<&crate::tounicode::Map>) -> (String, String
 /// The bytes of a PDF string are the string's characters, each one
 /// below 256, and what they mean depends on the font.
 fn bytes_of(value: &Json) -> Option<Vec<u8>> {
-    let Json::String(text) = value else { return None };
-    Some(text.chars().map(|character| character as u32 as u8).collect())
+    crate::crypt::bytes_of(value)
 }
 
 /// The **text** of a string's bytes, and how they were read.

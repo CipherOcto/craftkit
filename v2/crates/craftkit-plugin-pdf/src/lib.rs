@@ -778,6 +778,75 @@ impl ContentOperators {
     }
 }
 
+/// Write the **content** of a stream back.
+///
+/// The content of a stream is read and written again in the kit's own
+/// form: the operands, each one followed by a space, and then the
+/// operator and a newline. The **inline images** are kept whole, so a
+/// stream that is read and written again is the stream it was.
+///
+/// A stream that is **filtered** is refused: its bytes are not the
+/// content, and writing them back would change what the file says.
+#[derive(Command)]
+#[command(id = "pdf.content.write", area = "pdf", layer = "pdf", icon = "file", mutates, undoable)]
+pub struct ContentWrite {
+    /// The stream whose content is written.
+    pub stream: NodeRef,
+}
+
+impl ContentWrite {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = self.stream.0;
+        let Some(node) = session.document().node(id) else {
+            return Err(EngineError::Failed {
+                id: "pdf.content.write".to_string(),
+                message: format!("there is no node `{id}`"),
+            });
+        };
+        if node.kind != "pdf.stream" {
+            return Err(EngineError::Failed {
+                id: "pdf.content.write".to_string(),
+                message: format!("the node `{id}` is a `{}` and not a stream", node.kind),
+            });
+        }
+        // A **filtered** stream's bytes are not the content.
+        if let Some(names) = filters::filter_of(&entries_of(&node.data)) {
+            return Err(EngineError::Failed {
+                id: "pdf.content.write".to_string(),
+                message: format!("the stream is filtered by {names:?}, and its bytes are not the content"),
+            });
+        }
+        let Some(path) = node.stream.clone() else {
+            return Err(EngineError::Failed {
+                id: "pdf.content.write".to_string(),
+                message: format!("the stream `{id}` has no file"),
+            });
+        };
+        let limits = filters::Limits::default();
+        let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
+            .map_err(|message| EngineError::Failed {
+            id: "pdf.content.write".to_string(),
+            message: format!("the stream's bytes cannot be read: {message}"),
+        })?;
+        let operations = content::operations(&bytes).map_err(|error| EngineError::Failed {
+            id: "pdf.content.write".to_string(),
+            message: format!("the content cannot be read: {error:?}"),
+        })?;
+        let written = content::write_operations(&operations);
+        std::fs::write(&path, &written).map_err(|error| EngineError::Failed {
+            id: "pdf.content.write".to_string(),
+            message: format!("the content cannot be written: {error}"),
+        })?;
+        Ok(Outcome::changed(format!("{} operation(s) written", operations.len())).with_data(
+            serde_json::json!({
+                "id": id,
+                "operations": operations.len(),
+                "bytes": written.len(),
+            }),
+        ))
+    }
+}
+
 /// Put a **page** in the document.
 ///
 /// A page is an indirect object whose dictionary says `/Type /Page`, and

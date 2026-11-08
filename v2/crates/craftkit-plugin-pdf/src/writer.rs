@@ -244,7 +244,7 @@ fn value_of(value: &Json) -> String {
 }
 
 /// A **name**, with the characters that may not be in one escaped.
-fn escape_name(text: &str) -> String {
+pub(crate) fn escape_name(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for byte in text.bytes() {
         match byte {
