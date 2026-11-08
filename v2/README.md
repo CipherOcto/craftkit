@@ -4105,6 +4105,7 @@ so.
 | the **box** of a redaction drawn into the page | **built.** A box in the fill colour of the mark is drawn where the mark was — black when no colour is given (§669) | §669 |
 | the **table of contents** of a document | **built.** The headings of a document are read as a table of contents — the tree's levels, the text and the number (§670) | §670 |
 | a caption file **written** | **built.** The cues are written as a caption file — the tree's numbering, the clock and the blocks (§671) | §671 |
+| the **items** of a spread **grouped** | **built.** The items may be grouped — the tree's level, order and layer rules, and ungrouping puts them back (§672) | §672 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -43974,5 +43975,68 @@ is written, with the tree's own writers.
   a track of the project, and the cues of a project are not here yet.
 - **Nothing is drawn on the picture.** The tree's captions may be
   burned in, and there is no rendering of them here.
+
+---
+
+## 672. The items of a spread may be grouped
+
+The **items** of a spread may now be **grouped**: a group holds items,
+and it stands where the item at the back stood.
+
+### What was built
+
+- The **items** of a spread may be grouped, and the rules are the
+  tree's own:
+  - **At least two items** are grouped. One item is not a group.
+  - the items are on the **same spread** and at the **same level**:
+    all of them in the spread, or all of them in one group. Items that
+    are not are refused, and the refusal says why.
+  - the **order** of the items is kept: the group stands where the item
+    at the back stood, and the items are in it in the order they were
+    drawn.
+  - the group is on the **layer** of the item at the back, and the
+    items keep the layers they were on.
+  - a **locked** item may not be grouped: an edit of a locked item is
+    refused, and the refusal says which item and why.
+  - **ungrouping** puts the items back where the group stood, in the
+    order they were in.
+- The **order** of the items of a group is the order they stand in the
+  group: a group is a container of items like a spread is, and the
+  commands that bring an item to the front or send it to the back work
+  on the items of a group as they work on the items of a spread.
+- Two new commands: **`layout.item.group`** and **`layout.item.ungroup`**.
+
+### What the port found
+
+- **The tree's group is an item of its spread**, and the items in it
+  are its content: the tree's `Content::Group { items }`. Here the
+  group is an item of kind `layout.item.group` — a kind the battery
+  already named — and the items in it are its **children**.
+- **The tree's group takes the layer of the item at the back** and
+  keeps the stacking order, and the tree's rule is that the objects to
+  group are on the same spread and at the same level. Here the layer
+  is an **edge**, as it is everywhere in this battery, and the group
+  is put on the layer of the item at the back.
+- **The tree's items inside a multi-state object may not be grouped**;
+  this tree has no multi-state objects.
+
+### What it cost
+
+- **Seven tests** in the layout battery (`tests/grouping.rs`): the
+  group, its place, the ungrouping, the single item, the items that
+  are not at the same level, the locked item, and the order of the
+  items of a group.
+- **Two commands**. The layout battery now carries **45** commands and
+  the MCP server **864**.
+
+### What it does not settle
+
+- **The group has no bounds of its own.** The tree's group has the box
+  that holds its items, and here the group is a node with no place.
+- **The tree's group may be entered and left** — the tree has a
+  command that goes into a group and one that comes out of it — and
+  here the items are given to the command.
+- **The tree's multi-state objects are not here**, and the rule about
+  them comes with them.
 
 ---
