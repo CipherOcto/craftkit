@@ -85,6 +85,12 @@ pub struct Piece {
     /// ascent, in the page's own space. The four numbers are the left,
     /// the bottom, the right and the top of it.
     pub bounds: Option<[f64; 4]>,
+    /// The **operation** that showed the text: the place it holds in
+    /// the content stream.
+    pub operation: usize,
+    /// How far the text moves the pen, in **glyphs of an em**: the
+    /// width of the text without the size of the font.
+    pub advance: Option<f64>,
     /// The **font** the text is shown in: the name the page gives it.
     pub font: Option<String>,
 }
@@ -101,6 +107,8 @@ impl Piece {
             "y": self.y.map(|y| json!(y)).unwrap_or(Json::Null),
             "width": self.width.map(|width| json!(width)).unwrap_or(Json::Null),
             "box": self.bounds.map(|box_| json!(box_)).unwrap_or(Json::Null),
+            "operation": json!(self.operation),
+            "advance": self.advance.map(|advance| json!(advance)).unwrap_or(Json::Null),
             "font": self.font.clone().map(|font| json!(font)).unwrap_or(Json::Null),
         })
     }
@@ -186,6 +194,19 @@ pub fn text_of_page(document: &Document, page: u64) -> Result<PageText, EngineEr
         })?;
         operations.extend(read);
     }
+    found.pieces = pieces_of_operations(document, page, &operations);
+    Ok(found)
+}
+
+/// The **pieces** of the text of a page, for a set of operations.
+///
+/// The page says which fonts it has and which transform it begins
+/// with, and the operations say what the text is.
+pub(crate) fn pieces_of_operations(
+    document: &Document,
+    page: u64,
+    operations: &[crate::content::Operation],
+) -> Vec<Piece> {
     let maps = crate::pagefonts::maps_of(document, page);
     let widths: Vec<(String, crate::widths::Widths)> = crate::pagefonts::fonts_of(document, page)
         .into_iter()
@@ -195,9 +216,9 @@ pub fn text_of_page(document: &Document, page: u64) -> Result<PageText, EngineEr
         .into_iter()
         .map(|(name, font)| (name, crate::metrics::metrics_of(document, font)))
         .collect();
+    let entries = document.node(page).map(|node| crate::entries_of(&node.data)).unwrap_or_default();
     let last = operations.len().saturating_sub(1);
-    found.pieces = pieces_with(&maps, &operations, 0, last, matrix_of(document, &entries), &widths, &metrics);
-    Ok(found)
+    pieces_with(&maps, operations, 0, last, matrix_of(document, &entries), &widths, &metrics)
 }
 
 /// The **transform** a page begins with: its own `/Matrix`.
@@ -551,14 +572,17 @@ pub(crate) fn pieces_with(
                 }
                 let Some(bytes) = operation.operands.last().and_then(bytes_of) else { continue };
                 let (text, encoding) = read_through(map_of(maps, font.as_deref().unwrap_or("")), &bytes);
-                if !within {
-                    continue;
-                }
+                // The pen moves on by the text, whether the piece is
+                // inside the range or not: the text before the range
+                // moves the pen as well.
                 let advance = advance_of(font_widths, &bytes, place.size, place.spacing, place.word_spacing);
                 let (x, y, width) = place.origin(&ctm, advance.map(|(_, glyph)| glyph));
                 let box_ = place.box_of(&ctm, advance.map(|(_, glyph)| glyph), &font_metrics);
                 if let Some((advance, _)) = advance {
                     place.advance_by(advance * place.scale);
+                }
+                if !within {
+                    continue;
                 }
                 pieces.push(Piece {
                     text,
@@ -569,6 +593,8 @@ pub(crate) fn pieces_with(
                     y: placed.then_some(y),
                     width: placed.then_some(width).flatten(),
                     bounds: placed.then_some(box_).flatten(),
+                    operation: index,
+                    advance: advance.map(|(_, glyph)| glyph),
                     font: font.clone(),
                 });
             }
@@ -580,13 +606,11 @@ pub(crate) fn pieces_with(
                     continue;
                 };
                 let (text, encoding) = shown(array, map_of(maps, font.as_deref().unwrap_or("")));
-                if text.is_empty() || !within {
-                    continue;
-                }
                 // The **array** moves the pen: a number of -v moves
                 // it by v thousandths of the size, and a string shows
                 // text and moves it on by the width of the text.
                 let mut glyph_advance = 0.0;
+                let mut em_advance = 0.0;
                 let beginning = place;
                 for item in array {
                     if let Json::String(_) = item {
@@ -597,17 +621,24 @@ pub(crate) fn pieces_with(
                             continue;
                         };
                         glyph_advance += glyph;
+                        em_advance += glyph;
                         place.advance_by(width * place.scale);
                         continue;
                     }
                     if let Some(number) = item.as_f64() {
                         let move_by = -number / 1000.0 * place.size;
                         glyph_advance += -number / 1000.0;
+                        em_advance += -number / 1000.0;
                         place.advance_by(move_by * place.scale);
                     }
                 }
                 let (x, y, width) = beginning.origin(&ctm, Some(glyph_advance));
                 let box_ = beginning.box_of(&ctm, Some(glyph_advance), &font_metrics);
+                // An array with no text in it still moves the pen, and
+                // so does an array outside the range.
+                if text.is_empty() || !within {
+                    continue;
+                }
                 pieces.push(Piece {
                     text,
                     operator: "TJ".to_string(),
@@ -617,6 +648,8 @@ pub(crate) fn pieces_with(
                     y: placed.then_some(y),
                     width: placed.then_some(width).flatten(),
                     bounds: placed.then_some(box_).flatten(),
+                    operation: index,
+                    advance: Some(em_advance),
                     font: font.clone(),
                 });
             }
@@ -626,14 +659,14 @@ pub(crate) fn pieces_with(
                 }
                 let Some(bytes) = operation.operands.last().and_then(bytes_of) else { continue };
                 let (text, encoding) = read_through(map_of(maps, font.as_deref().unwrap_or("")), &bytes);
-                if !within {
-                    continue;
-                }
                 let advance = advance_of(font_widths, &bytes, place.size, place.spacing, place.word_spacing);
                 let (x, y, width) = place.origin(&ctm, advance.map(|(_, glyph)| glyph));
                 let box_ = place.box_of(&ctm, advance.map(|(_, glyph)| glyph), &font_metrics);
                 if let Some((advance, _)) = advance {
                     place.advance_by(advance * place.scale);
+                }
+                if !within {
+                    continue;
                 }
                 pieces.push(Piece {
                     text,
@@ -644,6 +677,8 @@ pub(crate) fn pieces_with(
                     y: placed.then_some(y),
                     width: placed.then_some(width).flatten(),
                     bounds: placed.then_some(box_).flatten(),
+                    operation: index,
+                    advance: advance.map(|(_, glyph)| glyph),
                     font: font.clone(),
                 });
             }

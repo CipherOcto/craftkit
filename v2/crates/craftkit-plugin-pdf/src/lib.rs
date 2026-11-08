@@ -160,6 +160,7 @@ mod pages;
 mod pagetext;
 mod predictors;
 mod preflight;
+mod redact;
 mod region;
 mod remove;
 mod revision6;
