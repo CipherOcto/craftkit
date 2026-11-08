@@ -23,6 +23,11 @@
 //!   tree's own rule.
 //! - The **author** is a text of at most **256** characters, and the
 //!   **year** is a text of at most **32**.
+//! - The **parts** of a source — the place it was made, the publisher,
+//!   the journal, the volume, the pages and the address — are texts of
+//!   at most **1024** characters. They are the parts the tree's own
+//!   entries are written from, and a part that is not said keeps what
+//!   it was.
 //! - A **run** may carry a **citation**: the tag of a source. A tag
 //!   that names no source is refused.
 //! - The **bibliography** is **derived**: it is the sources that are
@@ -64,6 +69,10 @@ pub const MAX_AUTHOR: usize = 256;
 
 /// The longest **year** a source may have.
 pub const MAX_YEAR: usize = 32;
+
+/// The longest **part** of a source may have: the place, the
+/// publisher, the journal, the volume, the pages and the address.
+pub const MAX_PART: usize = 1024;
 
 /// The **sources** of a document, as they are kept.
 pub fn sources_of(node: &Node) -> Vec<Json> {
@@ -203,6 +212,18 @@ pub struct SetSource {
     pub title: Option<Text>,
     /// When it was made.
     pub year: Option<Text>,
+    /// Who published it.
+    pub publisher: Option<Text>,
+    /// Where it was made.
+    pub city: Option<Text>,
+    /// The journal it is in.
+    pub journal: Option<Text>,
+    /// The volume of the journal it is in.
+    pub volume: Option<Text>,
+    /// The pages of it.
+    pub pages: Option<Text>,
+    /// Where it may be found.
+    pub url: Option<Text>,
 }
 
 impl SetSource {
@@ -307,6 +328,33 @@ impl SetSource {
         }
         if let Some(year) = year {
             source["year"] = json!(year);
+        }
+        // The **parts** the tree's entries are written from. A part
+        // that is not said keeps what it was, and a part that is said
+        // empty is not there.
+        for (key, part) in [
+            ("publisher", &self.publisher),
+            ("city", &self.city),
+            ("journal", &self.journal),
+            ("volume", &self.volume),
+            ("pages", &self.pages),
+            ("url", &self.url),
+        ] {
+            let Some(part) = part else { continue };
+            let part = part.0.trim();
+            if part.chars().count() > MAX_PART {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the {key} of a source is at most {MAX_PART} characters long"),
+                });
+            }
+            if part.is_empty() {
+                if let Json::Object(map) = &mut source {
+                    map.remove(key);
+                }
+                continue;
+            }
+            source[key] = json!(part);
         }
         let tag = source.get("tag").and_then(|tag| tag.as_str()).unwrap_or_default().to_string();
         match held {
