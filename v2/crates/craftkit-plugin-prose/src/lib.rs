@@ -111,6 +111,7 @@ mod background;
 mod bookmarks;
 mod borders;
 mod captions;
+mod cases;
 mod characters;
 mod columns;
 mod comments;
