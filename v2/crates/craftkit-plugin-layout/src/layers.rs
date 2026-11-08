@@ -31,7 +31,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
 
 /// The **edge** that says an item is on a layer.
-const ON_LAYER: &str = "layout.on_layer";
+const ON_LAYER: &str = craftkit_sdk::layer::ON_LAYER;
 
 /// The **layers** of a document, in the order they stand in.
 fn layers_of(session: &Session, document: u64) -> Vec<u64> {
@@ -385,4 +385,88 @@ impl MergeLayers {
             "items": moved,
         })))
     }
+}
+
+/// **Lock** a layer: what is on it may not be edited.
+///
+/// The kit's own rule: a locked layer locks everything on it.
+#[derive(Command)]
+#[command(id = "layout.layer.lock", area = "layout", layer = "layout", icon = "lock", mutates, undoable)]
+pub struct LockLayer {
+    /// The layer.
+    pub layer: NodeRef,
+}
+
+impl LockLayer {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        set_flag(session, "layout.layer.lock", self.layer.0, true)
+    }
+}
+
+/// **Unlock** a layer: what is on it may be edited again.
+#[derive(Command)]
+#[command(id = "layout.layer.unlock", area = "layout", layer = "layout", icon = "lock", mutates, undoable)]
+pub struct UnlockLayer {
+    /// The layer.
+    pub layer: NodeRef,
+}
+
+impl UnlockLayer {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        set_flag(session, "layout.layer.unlock", self.layer.0, false)
+    }
+}
+
+/// **Hide** a layer: what is on it is not drawn.
+#[derive(Command)]
+#[command(id = "layout.layer.hide", area = "layout", layer = "layout", icon = "minus", mutates, undoable)]
+pub struct HideLayer {
+    /// The layer.
+    pub layer: NodeRef,
+}
+
+impl HideLayer {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        set_flag(session, "layout.layer.hide", self.layer.0, true)
+    }
+}
+
+/// **Show** a layer: what is on it is drawn again.
+#[derive(Command)]
+#[command(id = "layout.layer.show", area = "layout", layer = "layout", icon = "plus", mutates, undoable)]
+pub struct ShowLayer {
+    /// The layer.
+    pub layer: NodeRef,
+}
+
+impl ShowLayer {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        set_flag(session, "layout.layer.show", self.layer.0, false)
+    }
+}
+
+/// Set the **locked** or the **hidden** flag of a layer.
+///
+/// The flags are the kit's own: a locked layer locks what is on it,
+/// and a hidden layer hides it.
+fn set_flag(session: &mut Session, command: &str, layer: u64, on: bool) -> Result<Outcome, EngineError> {
+    layer_of(session, command, layer)?;
+    let Some(node) = session.document_mut()?.node_mut(layer) else {
+        return Err(EngineError::Failed {
+            id: command.to_string(),
+            message: format!("there is no layer `{layer}`"),
+        });
+    };
+    let name = node.name.clone();
+    if command.ends_with("lock") {
+        node.locked = on;
+    } else {
+        node.hidden = on;
+    }
+    let what = if command.ends_with("lock") { "locked" } else { "hidden" };
+    Ok(Outcome::changed(format!("the layer `{name}` is {what}")).with_data(json!({
+        "layer": layer,
+        "name": name,
+        what: on,
+    })))
 }

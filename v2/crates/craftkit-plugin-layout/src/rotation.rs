@@ -111,7 +111,7 @@ impl RotateItem {
         let id = "layout.item.rotate".to_string();
         let item = self.item.0;
         let node = item_of(session, &id, item)?;
-        may_edit(&node, &id)?;
+        may_edit(session, &node, &id)?;
         let degrees = self.degrees.0;
         if !degrees.is_finite() {
             return Err(EngineError::Failed {

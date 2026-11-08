@@ -72,7 +72,7 @@ impl SetRadius {
         let id = "layout.item.radius".to_string();
         let item = self.item.0;
         let node = item_of(session, &id, item)?;
-        may_edit(&node, &id)?;
+        may_edit(session, &node, &id)?;
         let radius = self.radius.0;
         if !radius.is_finite() || radius < 0.0 {
             return Err(EngineError::Failed {

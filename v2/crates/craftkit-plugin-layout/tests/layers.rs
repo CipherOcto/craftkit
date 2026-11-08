@@ -72,7 +72,7 @@ fn items_on(session: &Session, layer: u64) -> Vec<u64> {
         .document()
         .relations
         .iter()
-        .filter(|relation| relation.kind == "layout.on_layer" && relation.to == layer)
+        .filter(|relation| relation.kind == craftkit_sdk::layer::ON_LAYER && relation.to == layer)
         .map(|relation| relation.from)
         .collect()
 }

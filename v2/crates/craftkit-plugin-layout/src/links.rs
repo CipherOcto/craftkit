@@ -162,7 +162,7 @@ impl SetItemLink {
         let id = "layout.item.link".to_string();
         let item = self.item.0;
         let node = item_of(session, &id, item)?;
-        may_edit(&node, &id)?;
+        may_edit(session, &node, &id)?;
         let target = self.target.0.trim().to_string();
         if target.is_empty() {
             session
@@ -210,7 +210,7 @@ impl SetItemPageLink {
         let id = "layout.item.page.link".to_string();
         let item = self.item.0;
         let node = item_of(session, &id, item)?;
-        may_edit(&node, &id)?;
+        may_edit(session, &node, &id)?;
         let Some(page) = self.page.map(|page| page.0) else {
             session
                 .document_mut()?

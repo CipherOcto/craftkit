@@ -62,7 +62,7 @@ fn container_of(session: &Session, item: u64) -> Option<u64> {
 /// **Move** an item in the order of its spread.
 fn move_item(session: &mut Session, id: &str, item: u64, place: &str) -> Result<Outcome, EngineError> {
     let node = item_of(session, id, item)?;
-    may_edit(&node, id)?;
+    may_edit(session, &node, id)?;
     // The **container** of the item: the spread it is in, or the group
     // it is in.
     let Some(container) = container_of(session, item) else {

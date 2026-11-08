@@ -93,7 +93,7 @@ fn an_items_layer_is_an_edge() {
         .document()
         .relations
         .iter()
-        .find(|relation| relation.kind == "layout.on_layer")
+        .find(|relation| relation.kind == craftkit_sdk::layer::ON_LAYER)
         .expect("there is an edge");
     assert_eq!(edge.from, 5, "the edge is from the item");
     assert_eq!(edge.to, 3, "the edge is to the layer");

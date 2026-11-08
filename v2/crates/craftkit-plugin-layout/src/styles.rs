@@ -349,7 +349,7 @@ impl SetItemStyle {
         let id = "layout.item.style".to_string();
         let item = self.item.0;
         let node = item_of(session, &id, item)?;
-        may_edit(&node, &id)?;
+        may_edit(session, &node, &id)?;
         let style = self.style.map(|style| style.0);
         if let Some(style) = style {
             let Some(node) = session.document().node(style) else {

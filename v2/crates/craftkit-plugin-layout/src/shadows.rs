@@ -134,7 +134,7 @@ impl SetShadow {
         let id = "layout.item.shadow".to_string();
         let item = self.item.0;
         let node = item_of(session, &id, item)?;
-        may_edit(&node, &id)?;
+        may_edit(session, &node, &id)?;
         let angle = self.angle.0;
         if !angle.is_finite() {
             return Err(EngineError::Failed {

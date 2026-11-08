@@ -81,7 +81,7 @@ impl SetFill {
         let id = "layout.item.fill".to_string();
         let item = self.item.0;
         let node = item_of(session, &id, item)?;
-        may_edit(&node, &id)?;
+        may_edit(session, &node, &id)?;
         // An **empty** colour takes the fill away, and a colour that
         // is not said leaves the fill as it was.
         let fill = match &self.colour {
@@ -133,7 +133,7 @@ impl SetStroke {
         let id = "layout.item.stroke".to_string();
         let item = self.item.0;
         let node = item_of(session, &id, item)?;
-        may_edit(&node, &id)?;
+        may_edit(session, &node, &id)?;
         let colour = match &self.colour {
             Some(colour) if colour.0.trim().is_empty() => None,
             Some(colour) => Some(colour_of(&colour.0, &id)?),

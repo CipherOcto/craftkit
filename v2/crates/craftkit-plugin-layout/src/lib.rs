@@ -87,7 +87,10 @@ pub use columns::SetColumns;
 pub use facing::ReadFacing;
 pub use grouping::{GroupItems, UngroupItems};
 pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem};
-pub use layers::{DeleteLayer, DeleteUnusedLayers, MergeLayers, MoveLayer, RenameLayer};
+pub use layers::{
+    DeleteLayer, DeleteUnusedLayers, HideLayer, LockLayer, MergeLayers, MoveLayer, RenameLayer, ShowLayer,
+    UnlockLayer,
+};
 pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
 pub use margins::SetMargin;
 pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
@@ -335,7 +338,7 @@ macro_rules! item_kind {
                 Some(json!({
                     "shape": node.data.get("shape").cloned().unwrap_or(Json::Null),
                     "rect": node.data.get("rect").cloned().unwrap_or(Json::Null),
-                    "layer": edge_name(document, node.id, "layout.on_layer"),
+                    "layer": edge_name(document, node.id, craftkit_sdk::layer::ON_LAYER),
                     "story": edge_name(document, node.id, "layout.text"),
                     "opacity": crate::items::opacity_of(node),
                     "rotation": crate::rotation::rotation_of(node),
@@ -723,12 +726,12 @@ impl PutOnLayer {
                 message: format!("there is no item `{item}`"),
             });
         };
-        crate::items::may_edit(&item_node, "layout.item.layer")?;
+        crate::items::may_edit(session, &item_node, "layout.item.layer")?;
         let name = node.name.clone();
         let added = session.document_mut()?.add_relation(Relation::with_payload(
             item,
             layer,
-            "layout.on_layer",
+            craftkit_sdk::layer::ON_LAYER,
             json!({ "layer": name.clone() }),
         ));
         if !added {
@@ -779,7 +782,7 @@ impl PutStory {
                 message: format!("there is no item `{item}`"),
             });
         };
-        crate::items::may_edit(&item_node, "layout.item.story")?;
+        crate::items::may_edit(session, &item_node, "layout.item.story")?;
         let name = node.name.clone();
         let added = session.document_mut()?.add_relation(Relation::with_payload(
             item,

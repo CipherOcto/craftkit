@@ -114,7 +114,7 @@ impl GroupItems {
         // grouped.
         for id in &ids {
             let node = item_of(session, command, *id)?;
-            may_edit(&node, command)?;
+            may_edit(session, &node, command)?;
         }
         // The **parent**: the items are at the same level, and that is
         // the tree's own rule.
@@ -175,7 +175,7 @@ impl GroupItems {
             .document()
             .relations
             .iter()
-            .find(|relation| relation.from == back && relation.kind == "layout.on_layer")
+            .find(|relation| relation.from == back && relation.kind == craftkit_sdk::layer::ON_LAYER)
             .cloned();
         // The **group** is made in the place the items were.
         let name = self.name.as_ref().map(|name| name.0.trim().to_string()).filter(|name| !name.is_empty());
@@ -266,7 +266,7 @@ impl UngroupItems {
                 message: format!("the node `{group}` is a `{}` and not a group", node.kind),
             });
         }
-        may_edit(&node, command)?;
+        may_edit(session, &node, command)?;
         let Some(parent) = parent_of(session, group) else {
             return Err(EngineError::Failed {
                 id: command.to_string(),

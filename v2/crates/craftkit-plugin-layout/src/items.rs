@@ -59,11 +59,23 @@ pub fn is_locked(item: &Node) -> bool {
 /// It may not, when it is locked — and the refusal says which item and
 /// why, because a refusal that says only "no" is a refusal that sends
 /// the reader looking.
-pub fn may_edit(item: &Node, command: &str) -> Result<(), EngineError> {
+///
+/// And it may not, when the **layer** it is on is locked: the kit's own
+/// rule, that locking a layer locks everything on it.
+pub fn may_edit(session: &Session, item: &Node, command: &str) -> Result<(), EngineError> {
     if is_locked(item) {
         return Err(EngineError::Failed {
             id: command.to_string(),
             message: format!("the item `{}` is locked, and a locked item may not be edited", item.name),
+        });
+    }
+    if session.document().is_locked(item) {
+        return Err(EngineError::Failed {
+            id: command.to_string(),
+            message: format!(
+                "the item `{}` is on a locked layer, and a locked layer locks what is on it",
+                item.name
+            ),
         });
     }
     Ok(())
@@ -96,7 +108,7 @@ impl SetOpacity {
         let id = "layout.item.opacity".to_string();
         let item = self.item.0;
         let node = item_of(session, &id, item)?;
-        may_edit(&node, &id)?;
+        may_edit(session, &node, &id)?;
         let opacity = self.opacity.0;
         if !opacity.is_finite() || !(0.0..=100.0).contains(&opacity) {
             return Err(EngineError::Failed {
@@ -127,7 +139,7 @@ impl HideItem {
         let id = "layout.item.hide".to_string();
         let item = self.item.0;
         let node = item_of(session, &id, item)?;
-        may_edit(&node, &id)?;
+        may_edit(session, &node, &id)?;
         let name = node.name.clone();
         if let Some(node) = session.document_mut()?.node_mut(item) {
             node.muted = true;
@@ -149,7 +161,7 @@ impl ShowItem {
         let id = "layout.item.show".to_string();
         let item = self.item.0;
         let node = item_of(session, &id, item)?;
-        may_edit(&node, &id)?;
+        may_edit(session, &node, &id)?;
         let name = node.name.clone();
         if let Some(node) = session.document_mut()?.node_mut(item) {
             node.muted = false;
@@ -222,7 +234,7 @@ impl ScaleItem {
         let id = "layout.item.scale".to_string();
         let item = self.item.0;
         let node = item_of(session, &id, item)?;
-        may_edit(&node, &id)?;
+        may_edit(session, &node, &id)?;
         let factor = self.factor.0;
         if !factor.is_finite() || factor <= 0.0 {
             return Err(EngineError::Failed {
