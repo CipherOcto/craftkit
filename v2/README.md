@@ -4077,6 +4077,7 @@ so.
 | the **drawings** under a region taken away | **built.** The inline images and the paths a region covers are gone from the content of the page — the tree's own two rules (§640) | §640 |
 | the **annotations** under a region taken away | **built.** The annotations a region overlaps are gone from the document, and their pop-ups go with them (§641) | §641 |
 | the **text** of a page that is not seen | **built.** The text drawn in the invisible mode, and the text wholly off the page, are found — the tree's own two rules (§642) | §642 |
+| the **hidden information** of a file counted | **built.** The nine categories the tree names are counted — the metadata, the attachments, the comments, the fields, the hidden text, the layers that are off, the bookmarks, the links and the scripts (§643) | §643 |
 
 ### The list of things that are honestly not there: empty
 
@@ -42243,5 +42244,56 @@ drawn in the invisible mode, and the text that is wholly off the page.
   taking it away is another thing.
 - **The layers that are off** are not counted here: the content of a
   layer that is off is not seen either, and that is not here.
+
+---
+
+## 643. The hidden information of a file is counted
+
+A file may now be **asked what it hides**: the nine things the tree's
+own panel names are counted.
+
+### What was built
+
+- A new module (**`src/hidden.rs`**) counts the **hidden information**
+  of a file — the tree's own categories, in the tree's own order:
+  - the **metadata** is the information of the file and the metadata
+    streams of the catalog and of the pages;
+  - the **attachments** are the files inside the file and the
+    annotations that attach them;
+  - the **comments** are the annotations that are none of a link, a
+    widget, a pop-up, an attachment or a mark;
+  - the **fields** are the fields of the form;
+  - the **hidden text** is the text that is not seen (§642);
+  - the **layers that are off** are the layers the file shows turned
+    off;
+  - the **bookmarks** are the items of the outline;
+  - the **links, actions and scripts** are the links, the open action,
+    the additional actions and the JavaScript;
+  - the **private data** is the `/PieceInfo` of the catalog and of the
+    pages.
+- A new command (**`pdf.hidden.scan`**) answers: every category and
+  its count, or one category and its count.
+
+### What the port found
+
+- **The tree counts the content of a layer that is off** as well as
+  the layer itself. This tree counts the layer and says so.
+- **The tree's hidden text is counted glyph by glyph**; this tree
+  counts the pieces (§642), and the count is the count of the tree's
+  own rule at the size this tree reads.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/hiddenscan.rs`): the nine
+  categories, what the file hides, one category, and the category that
+  is refused.
+- **One command** (`pdf.hidden.scan`). The pdf battery now carries
+  **73** commands and the MCP server **838**.
+
+### What it does not settle
+
+- **Nothing is taken away**: this counts what a file hides, and the
+  taking away is another thing.
+- **The content of a layer that is off** is not counted.
 
 ---
