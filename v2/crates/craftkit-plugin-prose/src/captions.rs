@@ -29,7 +29,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
 
 /// The longest **label** a caption may have.
 pub const MAX_LABEL: usize = 40;
@@ -42,6 +42,13 @@ pub const FORMATS: [&str; 4] = ["arabic", "roman", "alphabetic", "ALPHABETIC"];
 
 /// The label a caption has when it is not given one: the tree's.
 pub const DEFAULT_LABEL: &str = "Figure";
+
+/// The **separators** the tree offers between a chapter number and a
+/// caption number.
+pub const SEPARATORS: [&str; 5] = ["-", ".", ":", "\u{2014}", "\u{2013}"];
+
+/// The separator a caption has when it is not given one: the tree's.
+pub const DEFAULT_SEPARATOR: &str = "-";
 
 /// The **caption** of a block, as it is kept.
 pub fn caption_of(node: &Node) -> Option<Json> {
@@ -96,28 +103,82 @@ fn text_of(name: &str, id: &str) -> Result<String, EngineError> {
     Ok(name.to_string())
 }
 
+/// The **separator** a caption has, and whether it is one of the
+/// tree's.
+fn separator_of(name: &str, id: &str) -> Result<String, EngineError> {
+    let separator = name.trim();
+    if SEPARATORS.contains(&separator) {
+        return Ok(separator.to_string());
+    }
+    Err(EngineError::Failed {
+        id: id.to_string(),
+        message: format!("the separator `{separator}` is not one of the tree's"),
+    })
+}
+
 /// The **captions** of a document, in order, each with the **number**
 /// it has — derived.
-pub fn captions_of(document: &Node) -> Json {
-    let mut counts: Vec<(String, u64)> = Vec::new();
+pub fn captions_of(document: &craftkit_sdk::Document, node: &Node) -> Json {
+    // The **counts**: the label, the number and the chapter the number
+    // was counted in.
+    let mut counts: Vec<(String, u64, u64)> = Vec::new();
+    // The **headings** of the document: how many there are of each
+    // level.
+    let mut headings: [u64; 9] = [0; 9];
     let mut captions = Vec::new();
-    for block in document.children.iter().filter(|child| child.kind.starts_with("prose.block.")) {
+    for block in node.children.iter().filter(|child| child.kind.starts_with("prose.block.")) {
+        // The **headings**: a paragraph whose style has a level.
+        if let Some(style) = crate::styles::style_of_block(document, block.id)
+            && let Some(level) = crate::outline::effective_level(document, style.id)
+            && (1..=9).contains(&level)
+        {
+            headings[(level - 1) as usize] += 1;
+        }
         let Some(caption) = caption_of(block) else { continue };
         let label =
             caption.get("label").and_then(|label| label.as_str()).unwrap_or(DEFAULT_LABEL).to_string();
         let format = caption.get("format").and_then(|format| format.as_str()).unwrap_or("arabic").to_string();
-        let at = match counts.iter_mut().find(|(held, _)| *held == label) {
-            Some((_, count)) => {
+        // The **chapter** the caption names, and the number of that
+        // chapter: the count of the headings of that level.
+        let chapter = caption.get("chapter").and_then(|chapter| chapter.as_u64());
+        let epoch = chapter.map(|level| headings[(level - 1) as usize]);
+        let at = match counts.iter_mut().find(|(held, _, _)| *held == label) {
+            Some((_, count, held)) => {
+                // The **restart**: the number is counted again when
+                // the chapter changes — the tree's own rule, and only
+                // for a caption that names a chapter.
+                if let Some(epoch) = epoch
+                    && *held != epoch
+                {
+                    *count = 0;
+                    *held = epoch;
+                }
                 *count += 1;
                 *count
             }
             None => {
-                counts.push((label.clone(), 1));
+                counts.push((label.clone(), 1, epoch.unwrap_or(0)));
                 1
             }
         };
         let mut caption = caption;
-        caption["number"] = json!(crate::numbers::of(at, &format));
+        let number = crate::numbers::of(at, &format);
+        caption["number"] = json!(number.clone());
+        match (chapter, epoch) {
+            (Some(_), Some(epoch)) => {
+                let separator = caption
+                    .get("separator")
+                    .and_then(|separator| separator.as_str())
+                    .unwrap_or(DEFAULT_SEPARATOR)
+                    .to_string();
+                caption["chapter"] = json!(epoch);
+                caption["full"] = json!(format!("{epoch}{separator}{number}"));
+            }
+            _ => {
+                caption["chapter"] = Json::Null;
+                caption["full"] = Json::Null;
+            }
+        }
         caption["block"] = json!(block.id);
         captions.push(caption);
     }
@@ -142,6 +203,15 @@ pub struct SetCaption {
     /// The format of the number: `arabic`, `roman`, `alphabetic` or
     /// `ALPHABETIC`.
     pub format: Option<Text>,
+    /// The **chapter** the caption is in: the level of a heading, one
+    /// to nine.
+    ///
+    /// The number of a caption that names a chapter is counted again
+    /// at each chapter, and the caption says the chapter it is in.
+    pub chapter: Option<Number>,
+    /// The **separator** between the chapter number and the number of
+    /// the caption: `-`, `.`, `:`, an em dash or an en dash.
+    pub separator: Option<Text>,
 }
 
 impl SetCaption {
@@ -170,6 +240,19 @@ impl SetCaption {
         }
         if let Some(format) = &self.format {
             caption["format"] = json!(format_of(&format.0, &id)?);
+        }
+        if let Some(chapter) = &self.chapter {
+            let level = chapter.0;
+            if !level.is_finite() || level < 1.0 || level > 9.0 || level.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the chapter `{level}` is not one of the tree's nine levels"),
+                });
+            }
+            caption["chapter"] = json!(level as u64);
+        }
+        if let Some(separator) = &self.separator {
+            caption["separator"] = json!(separator_of(&separator.0, &id)?);
         }
         let Some(node) = session.document_mut()?.node_mut(block) else {
             return Err(EngineError::Failed {
@@ -208,7 +291,7 @@ impl ReadCaptions {
                 message: format!("the node `{document}` is a `{}` and not a document", node.kind),
             });
         }
-        let captions = captions_of(node);
+        let captions = captions_of(session.document(), node);
         Ok(Outcome::new(format!(
             "the document `{document}` has {} captions",
             captions.as_array().map(|c| c.len()).unwrap_or(0)
