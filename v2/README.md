@@ -4093,6 +4093,7 @@ so.
 | the **subtotal** naming the tree's eleven functions | **built.** A subtotal names the tree's eleven functions — the product, the deviation and the variance included (§655) | §655 |
 | the **subtotal** of a group of rows | **built.** A total row goes under each group of the rows and a grand total goes at the end — the tree's own rules (§656) | §656 |
 | the **grand totals** of a pivot | **built.** The grand total of the rows is the column at the right and the grand total of the columns is the line at the bottom — the tree's own two (§658) | §658 |
+| the **items** of a pivot that are kept | **built.** A pivot may be filtered: the rows whose field is not selected are left out of it (§659) | §659 |
 
 ### The list of things that are honestly not there: empty
 
@@ -43205,5 +43206,55 @@ is the line at the bottom.
   subtotal for each group of the rows, at the top or at the bottom.
 - **The layouts of the tree** — compact, outline and tabular — are not
   here.
+
+---
+
+## 659. The items of a pivot that are kept
+
+A pivot may now be **filtered**: the rows whose field is not selected
+are left out of it.
+
+### What was built
+
+- A pivot may now say **which items it keeps**:
+  - the **field** is a column of the range the pivot reads, and a field
+    that is not one of them is refused by name;
+  - the **items** are the labels as they are written, and a list that
+    is **empty** is refused — and a blank is `(blank)`;
+  - no list at all keeps **every** item, and the filter is taken away.
+- The **summary** of a pivot gathers only the rows that are kept, and
+  says the filter.
+- A new command (**`grid.pivot.filter`**) says which items are kept.
+
+### What the port found
+
+- **The tree's filter is on the source and not on the pivot**: the
+  rows of the source whose field is not selected are left out before
+  the pivot is computed, so the grand totals and the totals of the rows
+  are of what is left. Here the filter is read when the summary is
+  worked out, and the result is the same.
+- **The tree's filter has a name and a list, and the list may be
+  nothing**: a filter with no list keeps every item, and the tree's
+  own way of saying a blank item is `(blank)`. Both are here.
+- **The tree's filter is a field of the source** and not of the pivot:
+  the field may be any column of the range, and not only the row field
+  or the column field.
+
+### What it cost
+
+- **Four tests** in the grid battery (`tests/pivotfilter.rs`): the
+  rows that are left out, the list that keeps every item, the
+  refusals, and the labels as they are written.
+- **One command**. The grid battery now carries **136** commands and
+  the MCP server **848**.
+
+### What it does not settle
+
+- **The tree's pivot may have many filters**: it has one filter per
+  field, and this tree's pivot has one.
+- **The filter of the tree is shown in the pivot table**: it is a
+  filter that is on the sheet, and here it is a fact of the pivot.
+- **The values of a filter are the labels**: a number is matched as the
+  way it is written, and not as the number it is.
 
 ---
