@@ -4112,6 +4112,7 @@ so.
 | the **caption track** of a sequence | **built.** A sequence may carry a caption track — the tree's formats, and the cues of a track never overlap (§676) | §676 |
 | a caption file **imported** as a caption track | **built.** The cues of a file become a track — snapped to the frames of the sequence, and an overlap is refused (§677) | §677 |
 | the **cues** of an EBU STL file | **built.** The subtitles of an STL file are read — the tree's blocks, its rate and its ISO 6937 letters (§678) | §678 |
+| the **cues** of a caption track exported | **built.** The cues of a track are written as a caption file — the frames of the track are the milliseconds of the file (§679) | §679 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -44393,5 +44394,61 @@ the EBU subtitling data exchange format.
   too — but the tree writes that rate back under its own name.
 - **The four other formats of the tree are not here**: Scenarist SCC,
   MacCaption MCC, TTML and DFXP.
+
+---
+
+## 679. The cues of a caption track are exported as a caption file
+
+The **cues** of a **caption track** may now be written out as a caption
+file.
+
+### What was built
+
+- The cues of a caption track are **exported** as a caption file, and
+  the rules are the tree's own:
+  - the cues are written in the order they **start** in, and they are
+    **numbered from one**.
+  - the **frames** of the track are the **milliseconds** of the file:
+    the times of a track are the times of the sequence it is on, and
+    the rate of the sequence says how many frames there are in a
+    second.
+  - the file is a **SubRip** file or a **WebVTT** file, and a format
+    that is not one of them is refused by name.
+  - a sequence with **no rate** has no times, and the export is
+    refused.
+- A new command (**`film.captions.export`**) writes the file.
+
+### What the port found
+
+- **The tree writes the captions of a track back as a caption file**,
+  and the times of the track are the ticks of the sequence; the tree
+  writes the file in the format it is asked for, and it may drop the
+  frame rate of the sequence when it writes a WebVTT file.
+- **The tree's times are ticks** and the frames of a sequence are
+  derived from them; here the times of a cue are frames and the
+  milliseconds of the file are derived from them, with the rate of the
+  sequence.
+- **The tree's writer is the same writer for every format**, and the
+  file of a track is a document of the tree's captions crate. Here the
+  writers are the ones of this battery (§671) and the cues of a track
+  are made into them.
+
+### What it cost
+
+- **Three tests** in the film battery (`tests/captionsexport.rs`): the
+  written file, the round trip, and the refused format.
+- **One command**. The film battery now carries **96** commands and
+  the MCP server **881**.
+
+### What it does not settle
+
+- **The identifiers, the settings and the voices of the cues are not
+  written**: a cue of a track here has a text and two times, and that
+  is all a SubRip file holds. A WebVTT file would hold the rest, and
+  the tree's cues carry them.
+- **The tree's writer may write the rate of the sequence** in the
+  file, and it does not here.
+- **The tree's writer of a track writes the blocks of a WebVTT file**
+  that the track kept; the cues of a track here carry no blocks.
 
 ---
