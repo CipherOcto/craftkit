@@ -4099,6 +4099,7 @@ so.
 | the **values** of a pivot shown in another way | **built.** The values may be a share of a total, a running total, or the place of a value among its siblings (§662) | §662 |
 | the **subtotals** of a pivot | **built.** The total of a group of the rows may be a line of its own, at the top of the group or at the bottom (§663) | §663 |
 | the **table of figures** of a document | **built.** The captions that carry one label are read as a table — the tree's label, identifier and entry rules (§664) | §664 |
+| the **comment** on a cell | **built.** A comment on a cell is a thread — the comment, the replies to it, and whether it is resolved (§665) | §665 |
 
 ### The list of things that are honestly not there: empty
 
@@ -43552,5 +43553,68 @@ tables of a document, the equations of a document.
 - **The label is not checked against the document.** A label that no
   caption carries gives an empty table, and that is the tree's own
   behaviour.
+
+---
+
+## 665. The comment on a cell
+
+The **comment** on a cell is a **thread**: a first comment, the replies
+to it, and whether the thread is **resolved**.
+
+### What was built
+
+- The **comment** of a cell:
+  - it holds **text**, and it may say **who wrote it**. There is no
+    user name in this tree, so the author is what is given, and it is
+    kept when it is not given again.
+  - writing a comment on a cell that **has one edits it**: the text is
+    the new text, the author is kept unless a new one is given, and
+    the replies and the resolved flag stay. The tree's own rule.
+  - a **note replaces a comment** and a comment replaces a note. The
+    tree's own rule: a cell carries the one or the other.
+  - a **reply** joins the thread of the cell, and a cell that has no
+    comment has no thread to join — that is refused by name.
+  - a thread may be **resolved**, and unresolved again.
+  - the **whole cell cleared** takes the comment with it — the tree's
+    *clear all* takes the comment of the cell with it — and the *clear
+    contents* does not.
+- **Five new commands**: `grid.cell.comment.set`, `grid.cell.comment.reply`,
+  `grid.cell.comment.resolve`, `grid.cell.comment.get` and
+  `grid.cell.comment.delete`.
+
+### What the port found
+
+- **The tree keeps its comments in a map of the sheet and not in the
+  cell**: a cell in the tree is a value and a formula and a style, and
+  a comment is none of those three. The comment is kept with the sheet
+  here, as the note is.
+- **The tree's note and its comment are two things**: the tree's *note*
+  is the yellow box in the corner of a cell and its *comment* is the
+  thread in the margin. The module `notes` said the thread was not
+  here; it is now.
+- **The tree's author is the user's name** when it is not given. This
+  tree has no user name, so the author is what is given — and it is
+  optional, as the author of a note is.
+- **The tree's comment has a date on it and a box** — the little red
+  triangle. There is no date here and no box: the thread is the text,
+  the replies and the flag.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/comments.rs`): the
+  comment, the edited comment, the reply, the refused reply, the
+  resolved thread, the note that replaces the comment, and the cell
+  that is cleared.
+- **Five commands**. The grid battery now carries **145** commands and
+  the MCP server **858**.
+
+### What it does not settle
+
+- **The thread is not laid out.** The tree's comment has a box in the
+  margin, an author and a date, and there is no layout here.
+- **The comments are not written to a file.** The tree keeps them in
+  the file's comments part, and here they live in the sheet.
+- **The comment is not shown and hidden.** The tree's comment may be
+  shown and hidden; here it is read.
 
 ---
