@@ -55,7 +55,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Outcome, Session, Text};
 
 /// The most a caption file may be: sixteen megabytes.
-const MAX_BYTES: u64 = 16 * 1024 * 1024;
+pub(crate) const MAX_BYTES: u64 = 16 * 1024 * 1024;
 
 /// The most a **clock** may say: the hours are at most this.
 const MAX_HOURS: i64 = 9999;

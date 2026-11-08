@@ -271,3 +271,181 @@ impl RemoveCaption {
         Ok(Outcome::changed(format!("the cue `{caption}` is gone")).with_data(json!({ "caption": caption })))
     }
 }
+
+/// **Import** a caption file as a new caption track of a sequence.
+///
+/// The tree's own rule: the cues of the file are **snapped to the
+/// frames of the sequence**, and the track that is made is a new one —
+/// named after the file, unless a name is given. And the cues of the
+/// file that overlap each other are an error of the project, so the
+/// whole import is refused and the sequence is left as it was.
+#[derive(Command)]
+#[command(id = "film.caption.import", area = "film", layer = "film", icon = "plus", mutates, undoable)]
+pub struct ImportCaptions {
+    /// The sequence the track goes on.
+    pub sequence: NodeRef,
+    /// The file to read.
+    pub path: Text,
+    /// The format of the file: `subrip` when it is not given.
+    pub format: Option<Text>,
+    /// The name of the track: the name of the file when it is not
+    /// given.
+    pub name: Option<Text>,
+}
+
+/// The **frames** a number of milliseconds is, at the rate of a
+/// sequence.
+///
+/// The tree's own rule: the cues of a caption file are snapped to the
+/// frames of the sequence they go on.
+fn frames_of(milliseconds: i64, num: i64, den: i64) -> i64 {
+    // (ms * num) / (1000 * den), rounded to the nearest frame.
+    let numerator = milliseconds.saturating_mul(num);
+    let denominator = 1000i64.saturating_mul(den);
+    if denominator <= 0 {
+        return 0;
+    }
+    (numerator + denominator / 2) / denominator
+}
+
+impl ImportCaptions {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let command = "film.caption.import";
+        let sequence = self.sequence.0;
+        let Some(node) = session.document().node(sequence) else {
+            return Err(EngineError::Failed {
+                id: command.to_string(),
+                message: format!("there is no sequence `{sequence}`"),
+            });
+        };
+        // The **rate** of the sequence: the frames a second.
+        let rate = node.data.get("rate").cloned().unwrap_or(Json::Null);
+        let (Some(num), Some(den)) =
+            (rate.get("num").and_then(|num| num.as_i64()), rate.get("den").and_then(|den| den.as_i64()))
+        else {
+            return Err(EngineError::Failed {
+                id: command.to_string(),
+                message: format!("the sequence `{sequence}` has no rate, and the frames are not known"),
+            });
+        };
+        if num <= 0 || den <= 0 {
+            return Err(EngineError::Failed {
+                id: command.to_string(),
+                message: format!("the rate of the sequence `{sequence}` is not a rate"),
+            });
+        }
+        // The **file** and the cues in it.
+        let path = self.path.0.trim().to_string();
+        if path.is_empty() {
+            return Err(EngineError::Failed {
+                id: command.to_string(),
+                message: "a file has a path".to_string(),
+            });
+        }
+        let named = self.format.as_ref().map(|format| format.0.trim().to_ascii_lowercase());
+        let format = match named.as_deref() {
+            None | Some("") | Some("subrip") | Some("srt") => "subrip",
+            Some("webvtt") | Some("vtt") => "webvtt",
+            Some(other) => {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!(
+                        "`{other}` is not a format of a caption file: the formats are {}",
+                        crate::captions::FORMATS.join(", ")
+                    ),
+                });
+            }
+        };
+        let bytes =
+            craftkit_sdk::files::read_bounded(std::path::Path::new(&path), crate::captions::MAX_BYTES)
+                .map_err(|message| EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("the file cannot be read: {message}"),
+                })?;
+        let text = crate::captions::decode(&bytes);
+        let (cues, warnings) = if format == "webvtt" {
+            let document = crate::captions::vtt_cues(&text).map_err(|message| EngineError::Failed {
+                id: command.to_string(),
+                message: format!("{message}: `{path}`"),
+            })?;
+            let cues: Vec<(i64, i64, String)> =
+                document.cues.into_iter().map(|cue| (cue.start, cue.end, cue.text)).collect();
+            (cues, document.warnings)
+        } else {
+            let (cues, warnings) = crate::captions::cues_of(&text).map_err(|message| {
+                EngineError::Failed { id: command.to_string(), message: format!("{message}: `{path}`") }
+            })?;
+            let cues: Vec<(i64, i64, String)> =
+                cues.into_iter().map(|cue| (cue.start, cue.end, cue.text)).collect();
+            (cues, warnings)
+        };
+        // The cues are **snapped to the frames** of the sequence.
+        let mut snapped: Vec<(i64, i64, String)> = cues
+            .into_iter()
+            .map(|(start, end, text)| (frames_of(start, num, den), frames_of(end, num, den), text))
+            .collect();
+        snapped.sort_by_key(|(start, _, _)| *start);
+        // The **overlap**: the tree checks the project when the track
+        // is made, and a project with overlapping captions is not a
+        // project. So the whole import is refused.
+        for pair in snapped.windows(2) {
+            if pair[0].1 > pair[1].0 {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!(
+                        "the captions of the file overlap: one ends at {} and the next starts at {}",
+                        pair[0].1, pair[1].0
+                    ),
+                });
+            }
+        }
+        // The **track** is a new one, named after the file unless a
+        // name is given, and it goes to the front of the sequence.
+        let stem = std::path::Path::new(&path)
+            .file_stem()
+            .map(|stem| stem.to_string_lossy().to_string())
+            .unwrap_or_else(|| "Captions".to_string());
+        let name = self
+            .name
+            .as_ref()
+            .map(|name| name.0.trim().to_string())
+            .filter(|name| !name.is_empty())
+            .unwrap_or(stem);
+        let track = session.document_mut()?.add_node_with_under(
+            Some(sequence),
+            name.clone(),
+            "film.caption.track",
+            None,
+            json!({ "format": DEFAULT_FORMAT, "language": "en" }),
+        );
+        // The track goes to the **front** of the sequence: the tree's
+        // own rule.
+        if let Some(node) = session.document_mut()?.node_mut(sequence) {
+            let mut children = node.children.clone();
+            if let Some(index) = children.iter().position(|child| child.id == track) {
+                let moved = children.remove(index);
+                children.insert(0, moved);
+            }
+            node.children = children;
+        }
+        // The **cues** are on the track.
+        for (start, end, text) in &snapped {
+            session.document_mut()?.add_node_with_under(
+                Some(track),
+                format!("{start}-{end}"),
+                "film.caption",
+                None,
+                json!({ "start": start, "end": end, "text": text }),
+            );
+        }
+        Ok(Outcome::changed(format!("imported {} caption(s) into `{name}`", snapped.len())).with_data(
+            json!({
+                "sequence": sequence,
+                "track": track,
+                "name": name,
+                "cues": snapped.len(),
+                "warnings": warnings,
+            }),
+        ))
+    }
+}
