@@ -4106,6 +4106,7 @@ so.
 | the **table of contents** of a document | **built.** The headings of a document are read as a table of contents — the tree's levels, the text and the number (§670) | §670 |
 | a caption file **written** | **built.** The cues are written as a caption file — the tree's numbering, the clock and the blocks (§671) | §671 |
 | the **items** of a spread **grouped** | **built.** The items may be grouped — the tree's level, order and layer rules, and ungrouping puts them back (§672) | §672 |
+| the **layers** of a layout document | **built.** A layer is renamed, deleted, moved and merged — the tree's rules, and the items go with the layer (§673) | §673 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -44038,5 +44039,66 @@ and it stands where the item at the back stood.
   here the items are given to the command.
 - **The tree's multi-state objects are not here**, and the rule about
   them comes with them.
+
+---
+
+## 673. The layers of a layout document
+
+The **layers** of a layout document may now be renamed, deleted, moved
+in their order, and merged into one.
+
+### What was built
+
+- The **layers** of a layout document, and the rules are the tree's
+  own:
+  - a layer is **renamed**, and the name is not empty and is not one
+    that is already there.
+  - a layer is **deleted**, and the **items on it go with it**. A
+    document needs **at least one layer**, and the last one may not be
+    deleted.
+  - the layers with **nothing on them** are deleted together, and one
+    layer always stays.
+  - the layers are **ordered**, and the order is the tree's: the first
+    is the frontmost. A layer is moved in that order.
+  - the layers are **merged**: the items of them move to one layer,
+    and the layers that were merged are gone.
+- Five new commands: `layout.layer.rename`, `layout.layer.delete`,
+  `layout.layer.unused.delete`, `layout.layer.move` and
+  `layout.layer.merge`.
+
+### What the port found
+
+- **The tree's layer is a row in a list of layers**, and the list is
+  part of the document. Here a layer is a **child** of the document,
+  and the order of the layers is the order of the children — which is
+  counted from the back, because that is the way the kit draws. The
+  order the tree counts from the front is the tree's own, and a layer
+  moved to `0` is the frontmost.
+- **The tree's layer has a colour, a visible flag, a printable flag
+  and a flag for the guides**, and its name is unique. The colour is
+  in the layer's payload here, and the name is checked; the other
+  three are not here.
+- **The tree's layers are the tree's own**: a locked layer locks what
+  is on it, and a hidden layer hides it. This battery's edge is its
+  own, so the kit's rule does not reach these layers.
+
+### What it cost
+
+- **Five tests** in the layout battery (`tests/layers.rs`): the
+  renamed layer, the deleted layer and its items, the unused layers,
+  the moved layer, and the merged layers.
+- **Five commands**. The layout battery now carries **50** commands and
+  the MCP server **869**.
+
+### What it does not settle
+
+- **The layers are not the kit's layers.** The edge of this battery is
+  `layout.on_layer`, and the kit's rule — that a hidden layer hides
+  what is on it, and a locked layer locks it — follows the kit's own
+  edge and does not reach these layers.
+- **A layer has no visible, printable or guides flag** here, and the
+  tree's layer has all three.
+- **The layers of a document are not saved in a file here**: they are
+  children of the document, and the tree's are a list in the file.
 
 ---
