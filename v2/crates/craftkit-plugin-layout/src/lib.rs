@@ -60,6 +60,7 @@
 #![forbid(unsafe_code)]
 
 mod bleed;
+mod bookmarks;
 mod columns;
 mod facing;
 mod grouping;
@@ -84,6 +85,7 @@ use craftkit_sdk::{
 };
 
 pub use bleed::SetBleed;
+pub use bookmarks::{AddBookmark, DeleteBookmark, ReadBookmarks, RenameBookmark};
 pub use columns::SetColumns;
 pub use facing::ReadFacing;
 pub use grouping::{GroupItems, UngroupItems};
@@ -165,6 +167,29 @@ impl StyleKind {
                 .filter(|base| **base != node.id)
                 .map(|base| json!(base))
                 .unwrap_or(Json::Null),
+        }))
+    }
+}
+
+/// A **bookmark**: a name for a page of a document.
+#[derive(NodeKind)]
+#[node_kind(kind = "layout.bookmark", label = "Bookmark", layer = "layout", evaluates)]
+pub struct BookmarkKind;
+
+impl BookmarkKind {
+    /// A bookmark is not drawn.
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Whether a point is inside a bookmark: never.
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What a bookmark **means**: its name and the page it names.
+    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        Some(json!({
+            "name": node.data.get("name").cloned().unwrap_or(Json::Null),
+            "page": node.data.get("page").cloned().unwrap_or(Json::Null),
         }))
     }
 }
