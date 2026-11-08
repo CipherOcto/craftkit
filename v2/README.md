@@ -4084,6 +4084,7 @@ so.
 | the **path** of a media file | **built.** The path a reference names is worked out — a file URL is a path, and a relative path is relative to the folder of the file (§647) | §647 |
 | the **notes** of a document converted | **built.** A footnote becomes an endnote, an endnote becomes a footnote, and the references change with them (§648) | §648 |
 | the **images** of a file under a region taken away | **built.** An image of the page that the region hits is gone from the content of the page — the tree's own rule, and the tree's rule for an image it cannot read is the same (§649) | §649 |
+| the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
 | the **parts** of a source | **built.** The publisher, the place, the journal, the volume, the pages and the address are said, and a part that is said empty is not there (§652) | §652 |
@@ -43090,5 +43091,61 @@ under each group of the rows, and a grand total goes at the end.
   outline is here, but the rows stay open.
 - **The undo of the command** does not take the total rows away one by
   one: it is one step, like the tree's.
+
+---
+
+## 657. The shading of a page under a region is clipped out
+
+The **shading** of a page may now be **clipped** under a region: the
+region is cut out of the shading, and the rest of the shading stays.
+
+### What was built
+
+- A **shading** under a region is clipped:
+  - a shading fills the clip it is in, so the region is **cut out** of
+    it: the box of the page and the region are drawn as one path, and
+    the **even-odd** rule leaves the region out of it. The tree's own
+    rule.
+  - the path is written in the space the shading is **painted** in, so
+    the transform of the page is **undone** first. The tree's own rule.
+  - the shading is wrapped in the clip: a `q` before it and a `Q` after
+    it. The tree's own rule.
+- The **matrix** of a page may now be **undone**: the transform that
+  turns a point back the way it came, and a matrix that cannot be
+  undone — one that turns a square into a line — has none.
+- The command **`pdf.redact.drawings`** says how many shadings it
+  clipped.
+
+### What the port found
+
+- **The tree's shading is not taken away but cut**: the shading is
+  still painted, and only the part that is under the region is gone.
+  That is the tree's own rule, and it is the rule here: the redaction
+  of a shading is a clip and not a removal.
+- **The tree's clip is a path of two rectangles**: the box of the page
+  and the region, and the even-odd rule of the clip leaves the region
+  out of the box. So the shading is the box and the region is the hole
+  in it.
+- **The tree undoes the transform of the page** before it writes the
+  path, because the shading is painted in the space of the page and the
+  path is in the space of the shading.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/redactshading.rs`): the
+  shading that is clipped, the clip that cuts the region out, the path
+  in the space of the shading, and the page with no shading.
+- **No new command**: `pdf.redact.drawings` clips the shadings now.
+  The pdf battery still carries **74** commands and the MCP server
+  **846**.
+
+### What it does not settle
+
+- **The shading is not taken away**: it is painted without the region,
+  and the pixels of the region are still in the file.
+- **The box of the page** is the tree's own box — a million points
+  wide — and not the box of the media of the page.
+- **The patterns of a tiling** are not clipped: the tree clips the
+  shading as a whole and so does this one.
 
 ---
