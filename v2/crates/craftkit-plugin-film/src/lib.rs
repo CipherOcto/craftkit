@@ -198,6 +198,7 @@ mod anchors;
 mod binreading;
 mod binremoval;
 mod captions;
+mod captiontracks;
 mod clipreading;
 mod edits;
 mod edl;
@@ -250,6 +251,7 @@ pub use anchors::SynchroniseClip;
 pub use binreading::ReadBin;
 pub use binremoval::RemoveBin;
 pub use captions::ReadCaptions;
+pub use captiontracks::{AddCaption, AddCaptionTrack, ReadCaptions as ReadCaptionTrack, RemoveCaption};
 pub use clipreading::ReadClip;
 pub use edits::{NextEdit, PrevEdit, Razor};
 pub use edl::ExportEdl;
@@ -319,6 +321,56 @@ impl BinKind {
         Some(serde_json::json!({
             "items": node.children.iter().filter(|child| child.kind == "film.item").count(),
             "bins": node.children.iter().filter(|child| child.kind == "film.bin").count(),
+        }))
+    }
+}
+
+/// A **caption track**: the cues of a sequence.
+#[derive(NodeKind)]
+#[node_kind(kind = "film.caption.track", label = "Caption Track", layer = "film", evaluates)]
+pub struct CaptionTrackKind;
+
+impl CaptionTrackKind {
+    /// A caption track is not drawn.
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Whether a point is inside a caption track: never.
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What a caption track **means**: its format, its language and how
+    /// many cues it holds.
+    fn evaluate(node: &Node, _document: &Document) -> Option<serde_json::Value> {
+        Some(serde_json::json!({
+            "format": node.data.get("format").cloned().unwrap_or(serde_json::Value::Null),
+            "language": node.data.get("language").cloned().unwrap_or(serde_json::Value::Null),
+            "cues": node.children.iter().filter(|child| child.kind == "film.caption").count(),
+        }))
+    }
+}
+
+/// A **cue**: the text of a caption and the two times it is on the
+/// screen.
+#[derive(NodeKind)]
+#[node_kind(kind = "film.caption", label = "Caption", layer = "film", evaluates)]
+pub struct CaptionKind;
+
+impl CaptionKind {
+    /// A cue is not drawn.
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Whether a point is inside a cue: never.
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What a cue **means**: the two times and the text.
+    fn evaluate(node: &Node, _document: &Document) -> Option<serde_json::Value> {
+        Some(serde_json::json!({
+            "start": node.data.get("start").cloned().unwrap_or(serde_json::Value::Null),
+            "end": node.data.get("end").cloned().unwrap_or(serde_json::Value::Null),
+            "text": node.data.get("text").cloned().unwrap_or(serde_json::Value::Null),
         }))
     }
 }
