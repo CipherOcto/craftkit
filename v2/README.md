@@ -4072,6 +4072,7 @@ so.
 | the **width** of the text of a page | **built.** The text of a page says how wide it is — the widths of the font, the spacings, and the advance of the text (§635) | §635 |
 | the **content** of a stream written back | **built.** A stream may be written again in the kit's own form, and an inline image is kept whole — and the rule for the end of an image is the tree's (§636) | §636 |
 | the **height** of the text of a page | **built.** The text of a page says how tall it is — the metrics of the font, and the box the glyphs take (§637) | §637 |
+| the **text** under a region | **built.** A region of a page says what text it covers — the box of the text, and the tree's own rule for what is under it (§638) | §638 |
 
 ### The list of things that are honestly not there: empty
 
@@ -41816,7 +41817,8 @@ the advance of the text, and the text moves on by it.
   descent of the font are read, and a piece of text has a box (§637).
 - **A redaction** is still not made: the place, the width and the box
   of the text are the first half of it, and the half that removes the
-  text is not here.
+  text is not here — what a region covers is read (§638), and taking
+  it away is not.
 
 ## 636. The content of a stream written back
 
@@ -41957,8 +41959,63 @@ of text is the box of its font, from the descent to the ascent.
   one and says nothing has the tree's own metrics, which are the
   tree's own and not the font's.
 - **A redaction is still not made**: the place, the width and the box
-  of the text are here, and the half that takes the text away is not.
+  of the text are here, and the half that takes the text away is not —
+  what a region covers is read (§638), and taking it away is not.
 - **The height of a glyph** is not the height of the font: a font says
   how high its glyphs go, and a particular glyph may be smaller.
+
+---
+
+## 638. The text under a region
+
+A region of a page may now be **asked what it covers**: the text
+under it is the text whose box is under it.
+
+### What was built
+
+- A new module (**`src/region.rs`**) asks the tree's own question:
+  - a box counts as under a region when **more than a fifth of it**,
+    or a point, whichever is less, is under the region in **both**
+    directions — the tree's own rule, so a neighbour that only
+    touches an edge survives and a partly covered box goes;
+  - a box with **no width or no height** counts when its **origin** is
+    inside the region: there is nothing to overlap, so where it
+    begins is the answer;
+  - a **piece with no place** is under nothing: a text that is not
+    anywhere is not under a region either;
+  - a **region that is not a rectangle** is refused: four finite
+    numbers, and the corners put in order.
+- A new command (**`pdf.page.text.under`**) answers for a page and a
+  region: the pieces of text under it, with their text, their
+  operator, their font and their box.
+
+### What the port found
+
+- **The tree's redaction asks this question first**, and its rule is
+  not *the box is inside the region*: a glyph that only touches the
+  edge of a region survives, and a glyph that is partly covered goes.
+  The fifth and the point are the tree's own bounds, and they are the
+  rule here.
+- **The tree counts the glyphs one by one**, and a glyph with no size
+  is under the region when its origin is inside it. This tree works by
+  the **piece**: the box of a piece is the box of its whole run, so a
+  long run that a region cuts across is under it as a whole.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/textunder.rs`): the text
+  under a region, the neighbour that survives, the box that begins
+  inside, and the region that is refused.
+- **One command** (`pdf.page.text.under`). The pdf battery now carries
+  **68** commands and the MCP server **833**.
+
+### What it does not settle
+
+- **The text is not removed**: this says what is under a region, and
+  taking it away is another thing.
+- **The glyphs are not counted one by one**: the tree's redaction works
+  glyph by glyph, and this tree works by the piece.
+- **The images and the paths** under a region are not read: the tree's
+  redaction takes them away too, and that is not here.
 
 ---
