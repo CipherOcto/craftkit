@@ -4086,6 +4086,7 @@ so.
 | the **images** of a file under a region taken away | **built.** An image of the page that the region hits is gone from the content of the page — the tree's own rule, and the tree's rule for an image it cannot read is the same (§649) | §649 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
+| the **parts** of a source | **built.** The publisher, the place, the journal, the volume, the pages and the address are said, and a part that is said empty is not there (§652) | §652 |
 
 ### The list of things that are honestly not there: empty
 
@@ -42757,5 +42758,61 @@ of date.
   another thing.
 - **The pages are not kept**: they are given when the citation is asked
   for, and the tree keeps them in the field.
+
+---
+
+## 652. The parts of a source
+
+The **parts** of a source may now be said: the place it was made, the
+publisher, the journal, the volume, the pages and the address — the
+parts the tree's own entries are written from.
+
+### What was built
+
+- The command **`prose.document.source.set`** says the **parts** of a
+  source:
+  - the **publisher**, the **place**, the **journal**, the **volume**,
+    the **pages** and the **address** are texts of at most **1024**
+    characters;
+  - a part that is **not named** keeps what it was;
+  - a part that is named **empty** is not there: a source with no
+    publisher has no publisher, and not one that says the empty string;
+  - a part that is **too long** is refused, and the refusal says the
+    bound.
+- The parts live in the **payload** of the document, beside the rest of
+  the source, and the command that reads the sources says them.
+
+### What the port found
+
+- **The tree's source holds more fields than the entries use**: the
+  editor, the edition, the issue, the month, the day, the date
+  accessed and the DOI are in the tree's source, and **no style of the
+  tree writes any of them**. Here the six parts that the tree's own
+  entries are written from are the ones that are said, and the others
+  are not here: a field nobody writes is a field nobody reads.
+- **The tree has no bound on a part of a source**, and a text that
+  comes from outside is hostile. So this tree bounds the parts and says
+  the bound in the prose — the tree's own rule for the text that comes
+  from a person.
+- **The tree keeps a part that is empty as an empty string**, and its
+  writing of an entry asks whether it is empty. Here a part that is
+  said empty is **not there**, so the question does not have to be
+  asked twice.
+
+### What it cost
+
+- **Four tests** in the prose battery (`tests/sourceparts.rs`): the
+  parts that are said, the part that keeps what it was, the part that
+  is said empty, and the part that is too long.
+- **No new command**: `prose.document.source.set` says the parts too.
+  The prose battery still carries **105** commands and the MCP server
+  **845**.
+
+### What it does not settle
+
+- **The entries are not written**: the parts are said, and the writing
+  of an entry is another thing.
+- **The tree's other fields** — the editor, the edition, the issue,
+  the month, the day, the date accessed and the DOI — are not here.
 
 ---
