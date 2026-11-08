@@ -4070,6 +4070,7 @@ so.
 | the **transitions** and the **markers** of an OTIO file | **built.** The transitions of a track and the markers of the stack are read — and the writer is corrected to write a transition once (§633) | §633 |
 | the **place** of the text of a page | **built.** The text of a page says where it is — the text matrix, turned by the transform of the page (§634) | §634 |
 | the **width** of the text of a page | **built.** The text of a page says how wide it is — the widths of the font, the spacings, and the advance of the text (§635) | §635 |
+| the **content** of a stream written back | **built.** A stream may be written again in the kit's own form, and an inline image is kept whole — and the rule for the end of an image is the tree's (§636) | §636 |
 
 ### The list of things that are honestly not there: empty
 
@@ -12410,8 +12411,9 @@ drawn, and v2's PDF battery could not read a byte of it.
 - **An inline image is not a list of operands.** Between `BI` and `EI`
   the bytes are the image, and a reader that read them as operands
   would find a picture full of operators. The operator is reported and
-  the bytes are skipped — and that is a gap, not a solution: the image
-  itself is not read.
+  the bytes are skipped — and the bytes are **kept whole**, so that a
+  stream read and written again is the stream it was (§636). What the
+  bytes *are* — a picture — is still not read.
 - **The operator is a word and the operand is its value.** The PDF
   writes them the other way round — the operands first and the operator
   last — and a reader that took the first word of a pair as the
@@ -12433,7 +12435,7 @@ drawn, and v2's PDF battery could not read a byte of it.
 - **The graphics state is not followed.** `q` and `Q` save and restore
   the state, `cm` changes the matrix and `gs` brings in an extended
   state; the command reports them and does not track them.
-- **The inline images are not read**, and the text is not laid out.
+- **The inline images are not decoded**, and the text is not laid out.
 
 ---
 
@@ -41815,3 +41817,78 @@ the advance of the text, and the text moves on by it.
 - **A redaction** is still not made: the place and the width of the
   text are the first half of it, and the half that removes the text
   is not here.
+
+## 636. The content of a stream written back
+
+The content of a stream may now be **written back**: the stream is read
+in the kit's own form and written again in that form, so a stream that
+is read and written is the stream that was read.
+
+### What was built
+
+- A new command (**`pdf.content.write`**) writes the **content of a
+  stream** back to the stream's own file:
+  - the bytes of the stream are read, and the operations in them are
+    worked out;
+  - the operations are written by the tree's own rule: the operands
+    first, each one followed by a space, and then the operator and a
+    newline;
+  - a **name** is written as a name and a **string** as a string, and
+    the two are two things; a number is written as an integer when it
+    is one;
+  - the command answers how many operations it wrote and how many
+    bytes.
+- The **reader** keeps the two things apart, by the PDF document's own
+  convention:
+  - a literal or a hex string is `{"string": text}` and a dictionary
+    is `{"entries": [...]}` — so a string is never mistaken for a
+    name;
+  - an **inline image** is kept whole: the bytes between `ID` and `EI`
+    are the image, and they are the bytes they were.
+- The **inline image** ends where the tree says it ends: at whitespace
+  + `EI` + (whitespace, a delimiter, or the end of the stream). One
+  whitespace byte separates `ID` from the data.
+- A stream that is **filtered** is refused: its bytes are not the
+  content, and writing them back would change what the file says.
+
+### What the port found
+
+- **This tree's rule for the end of an inline image was the wrong way
+  round.** It looked for an `EI` that was *not* surrounded by space, so
+  a stream with a picture in it was refused with *the inline image is
+  never closed*. The tree's rule is the rule now, and a picture in a
+  stream is read.
+- **The dictionary of an image belongs to the `BI` before it.** Here
+  the reader left the dictionary in the list of operands, and the
+  stream ended with operands and no operator — a refusal for a stream
+  that was in fact well formed. The dictionary is the `BI`'s now, and
+  an `ID` with no `BI` before it is refused by name.
+- **The tree writes an inline image back as `BI`, the dictionary, `ID`,
+  the bytes and `EI`**, and the tree's redaction writes the content
+  back through that writer. That redaction is the reason the place and
+  the width of the text were needed at all: a redaction covers the
+  text, and covering needs to know where the text is.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/contentwrite.rs`): the
+  content written back, the name that is a name and the string that
+  is a string, the inline image kept whole, and the filtered stream
+  refused.
+- **One command** (`pdf.content.write`). The pdf battery now carries
+  **67** commands and the MCP server **832**.
+- **One existing test file** was corrected for the new form of the
+  operands (`tests/content.rs`): a string is `{"string": text}` and a
+  dictionary is `{"entries": [...]}`.
+
+### What it does not settle
+
+- **A stream that is filtered cannot be written back**: it is
+  refused, and nothing here decodes it.
+- **A page is not put back together**: the command writes the stream
+  of a node, and the page that says which stream is its content is
+  not rewritten.
+- **The redaction is still not made**: the place and the width of the
+  text are here, and the half that takes the text away is not.
+
+---
