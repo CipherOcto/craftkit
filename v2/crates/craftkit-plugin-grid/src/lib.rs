@@ -392,6 +392,7 @@ mod special;
 mod statistics;
 mod storedtext;
 mod styles;
+mod subtotals;
 mod tables;
 mod tabs;
 mod tabsorder;
@@ -460,6 +461,7 @@ pub use sorting::SortRange;
 pub use sparklines::{ReadSparkline, RemoveSparkline, SetSparkline};
 pub use storedtext::{NumbersConvert, NumbersStoredAsText};
 pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
+pub use subtotals::Subtotal;
 pub use tables::{
     CreateTable, ReadTableFields, ReadTables, RemoveTable, RenameTable, ResizeTable, SetTableColumnWay,
     SetTableLabel, SetTableTotals,
@@ -561,7 +563,7 @@ impl SheetKind {
 /// A formula may read another sheet, and the value of a cell is then a
 /// fact about the workbook and not about the sheet: the sheets are
 /// gathered here, once, and the evaluation reads them.
-fn book_of(document: &Document) -> Book {
+pub(crate) fn book_of(document: &Document) -> Book {
     // The **date system** is a fact of the workbook, and every sheet
     // of it is read in that calendar.
     let system = document
@@ -1809,6 +1811,7 @@ craftkit_sdk::plugin_anchor!(
     UngroupColumns,
     ReadColumnGroups,
     SetSummary,
+    Subtotal,
     SetPicture,
     ReadPicture,
     RemovePicture,

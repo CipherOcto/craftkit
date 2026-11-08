@@ -478,6 +478,12 @@ impl SetSummary {
                 node.data["summary_right"] = json!(right);
             }
         }
+        // The tree's own rule: the command says where the summaries
+        // **are**, and not the ones that were given to it. A summary
+        // that is not said is below and to the right.
+        let node = session.document().node(sheet);
+        let below = node.map(summary_below).unwrap_or(true);
+        let right = node.map(summary_right).unwrap_or(true);
         Ok(Outcome::changed(format!("the summaries of the sheet `{sheet}` are placed"))
             .with_data(json!({ "sheet": sheet, "below": below, "right": right })))
     }
