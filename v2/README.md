@@ -4088,6 +4088,7 @@ so.
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
 | the **parts** of a source | **built.** The publisher, the place, the journal, the volume, the pages and the address are said, and a part that is said empty is not there (§652) | §652 |
 | the **bibliography** of a document written | **built.** The entries of the sources are written in the style of the document — the template, the names, the order and the numbering are the tree's own (§653) | §653 |
+| a cross-reference to a **caption** | **built.** A cross-reference points at a caption and shows its number — the label and the number, derived (§654) | §654 |
 
 ### The list of things that are honestly not there: empty
 
@@ -31565,21 +31566,22 @@ OTIO is the interchange format of a non-linear editor that is a
 ## 477. The cross-reference of a document
 
 A block may **reference** another: it stands for the text of a block
-that carries a **bookmark**.
+that carries a **bookmark** — or for the **number** of a caption
+(§654).
 
 ### What was built
 
 - **Three commands** in the prose battery: `prose.block.reference.add`
   to add a reference, `prose.block.reference.set` to point it at
-  another bookmark, and `prose.block.reference.read` to read the text
-  it shows.
+  another bookmark or caption (§654), and `prose.block.reference.read`
+  to read the text it shows.
 - The reference is a **block** of a kind of its own
   (`prose.block.reference`), and the text it shows is **derived** — it
   is worked out from the block it points at and it is never written
   down, so a reference cannot be out of date.
 - The reference is an **edge**: from the block that references to the
-  block that is referenced, with the name of the bookmark in the
-  payload.
+  block that is referenced, with the name of the bookmark — or of the
+  caption (§654) — in the payload.
 - The **rules**: a bookmark that is not in the document is refused, for
   a reference to a name that is not there points at nothing; a block
   that points at a block with **no text** shows **nothing**; and a
@@ -31595,7 +31597,8 @@ that carries a **bookmark**.
   never a marker in the middle of a string.
 - **The tree's cross-reference is a number of a page and a number of a
   paragraph.** Here the text of the block it points at is derived, and
-  the page is not here at all.
+  so is the number of a caption (§654), and the page is not here at
+  all.
 
 ### What it cost
 
@@ -42891,5 +42894,72 @@ the document: APA, MLA, IEEE and the tree's other nine.
 - **The tree's other fields** — the editor, the edition, the issue,
   the month, the day, the date accessed and the DOI — are not here, and
   no style of the tree writes any of them (§652).
+
+---
+
+## 654. A cross-reference points at a caption
+
+A cross-reference may now point at a **caption** and show its
+**number**: the number is derived, and so is the text the reference
+shows.
+
+### What was built
+
+- A cross-reference may point at a **caption**:
+  - the **kinds of target** are the tree's own: `bookmark` — the
+    default — `figure`, `table`, `equation`, and `label:<Name>` for a
+    label of the person's own. A kind that is not one of them is
+    refused **by name**.
+  - the target of a caption is its **number** or its **text**, and the
+    text of the caption may begin with it. The tree's own rule.
+  - a reference that points at a caption shows the **text** of the
+    caption, or its **number** when it says so — and the number of a
+    caption that names a chapter is the whole number, the chapter and
+    the number together.
+  - the **ways** of showing are the tree's two, `text` and `number`. A
+    way that is not one of them is refused by name, and a bookmark has
+    no number, so a reference to a bookmark that shows a number is
+    refused.
+- The number is **derived**: a caption that is taken away renumbers the
+  ones after it, and the reference follows.
+- The commands **`prose.block.reference.add`** and
+  **`prose.block.reference.set`** gained the kinds of target and the
+  ways of showing.
+
+### What the port found
+
+- **The tree's number of a caption is the label and the number
+  together** — "Figure 2" — because the tree reads it out of the text
+  of the caption, where the label and the number are one piece of
+  text. Here the label and the number are two facts of the caption, so
+  they are put together the same way.
+- **The tree's cross-reference to a caption makes a hidden bookmark**
+  named `_Ref…` on the target paragraph, and the field says
+  `REF _Ref… \h`. Here the reference is an **edge** to the caption
+  itself and no bookmark is made — the same bargain as §477.
+- **The tree's caption carries a field that counts it** (`SEQ Figure`),
+  and the number of the caption is what that field says. Here the
+  caption is a fact of the block and its number is derived from the
+  captions of the document, so a reference can show a number that was
+  never written down.
+
+### What it cost
+
+- **Five tests** in the prose battery (`tests/captionrefs.rs`): the
+  reference that shows the number, the reference that shows the text,
+  the number that is derived, the refusals, and the bookmark that is
+  still a bookmark.
+- **No new command**: the two commands of the reference gained the
+  kinds of target and the ways of showing. The prose battery still
+  carries **105** commands and the MCP server **845**.
+
+### What it does not settle
+
+- **The page of the target is not here**: the tree can show the page a
+  caption is on, and this tree does not lay out.
+- **The reference is not put into a paragraph**: it is a block of its
+  own, and the tree's is an object in the text.
+- **The hidden bookmark of the tree** — `_Ref…` — is not made, and
+  nothing points at it.
 
 ---
