@@ -4103,6 +4103,7 @@ so.
 | the **comments** of a sheet moved with its cells | **built.** The comments move with the cells when a column or a row is inserted or deleted (§667) | §667 |
 | the **cues** of a WebVTT file | **built.** The cues of a WebVTT file are read — the identifier, the settings, the voice and the blocks (§668) | §668 |
 | the **box** of a redaction drawn into the page | **built.** A box in the fill colour of the mark is drawn where the mark was — black when no colour is given (§669) | §669 |
+| the **table of contents** of a document | **built.** The headings of a document are read as a table of contents — the tree's levels, the text and the number (§670) | §670 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 
 ### The list of things that are honestly not there: empty
@@ -43861,5 +43862,63 @@ the page.
   rectangle of its own**: the path of the box is written in the space
   of the content, and a transform that turns a square into a
   parallelogram cannot be written as a rectangle.
+
+---
+
+## 670. The table of contents of a document
+
+The **table of contents** of a document may now be read: its headings,
+with the level each of them is at.
+
+### What was built
+
+- The **table of contents** of a document is read, and it is
+  **derived**: it is read out of the headings, and it cannot be out of
+  date.
+  - a **heading** is a block on a style with a level, and the level is
+    the level of the style with the level of its base under it.
+  - the **levels** that are in the table are the tree's: three of them,
+    one to three, unless the reader asks for others. A level that is
+    not a whole number from one to nine is refused.
+  - the **text** of an entry is the text the heading shows, so a
+    heading that is a cross-reference shows what it references.
+  - the **number** of an entry is the number its heading shows, and a
+    heading in a list of bullets has no number in the table — the
+    tree's own rule.
+- A new command (**`prose.document.contents`**) reads the table.
+
+### What the port found
+
+- **The tree's table of contents is a field in the document**, and its
+  entries are paragraphs in the body that are rebuilt when the
+  document changes. Here it is read, and not stored — as the table of
+  figures (§664) and the index are read.
+- **The tree's entries carry the page** the heading is on, and the
+  table has a tab leader and a right-aligned page number.
+- **The tree's entries may come from a paragraph that says its own
+  level**, and a paragraph whose level is nine is body text and stays
+  out of the table. Here a heading is a block on a style with a level,
+  and there is no level of its own.
+- **The tree clamps the range of levels to one to nine**; here a level
+  outside that is refused, as it is refused everywhere else in this
+  tree.
+
+### What it cost
+
+- **Four tests** in the prose battery (`tests/contents.rs`): the
+  headings, the levels, the refused level, and the number of a
+  heading.
+- **One command**. The prose battery now carries **107** commands and
+  the MCP server **861**.
+
+### What it does not settle
+
+- **The table is not laid out.** The tree's entries carry the page,
+  the tab leader and the right-aligned page number, and there is no
+  layout here.
+- **The table is not in the document.** The tree's is a field with the
+  entries under it, and here it is read and not stored.
+- **A heading of a style that has no level of its own is in the table
+  when its base has one**: that is the tree's rule, and it is here.
 
 ---
