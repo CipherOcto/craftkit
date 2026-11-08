@@ -63,7 +63,7 @@ pub fn notes_into(notes: &BTreeMap<String, Note>) -> Json {
 
 /// The sheet a command is about, or the error that says there is no
 /// such sheet.
-fn sheet_of(session: &Session, sheet: u64, id: &str) -> Result<String, EngineError> {
+pub(crate) fn sheet_of(session: &Session, sheet: u64, id: &str) -> Result<String, EngineError> {
     let Some(node) = session.document().node(sheet) else {
         return Err(EngineError::Failed {
             id: id.to_string(),
@@ -118,6 +118,10 @@ impl SetNote {
         let author = author.or_else(|| notes.get(&address).and_then(|note| note.author.clone()));
         notes.insert(address.clone(), Note { text, author: author.clone() });
         node.data["notes"] = notes_into(&notes);
+        // A **note replaces a comment**: the tree's own rule.
+        let mut comments = crate::comments::comments_of(node);
+        let took_comment = comments.remove(&address).is_some();
+        node.data["comments"] = crate::comments::comments_into(&comments);
         let who = match &author {
             Some(author) => format!(" by {author}"),
             None => String::new(),
@@ -127,6 +131,7 @@ impl SetNote {
             "cell": address,
             "text": notes.get(&address).map(|note| note.text.clone()),
             "author": author,
+            "took_comment": took_comment,
         })))
     }
 }

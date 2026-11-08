@@ -332,6 +332,7 @@ mod clearing;
 mod columndeleting;
 mod columninserting;
 mod combinations;
+mod comments;
 mod complex;
 mod conditional;
 mod criteria;
@@ -418,6 +419,7 @@ pub use charts::{AddChart, ReadChart, RemoveChart, SetChart};
 pub use clearing::{ClearContents, ClearFormat};
 pub use columndeleting::DeleteColumn;
 pub use columninserting::InsertColumn;
+pub use comments::{DeleteComment, GetComment, ReplyComment, ResolveComment, SetComment};
 pub use conditional::{CheckConditional, ClearConditional, SetConditional};
 pub use criteria::Condition;
 pub use deleting::DeleteRow;
@@ -1553,6 +1555,11 @@ impl ClearCell {
         let mut notes = notes::notes_of(node);
         let had_note = notes.remove(&cell.to_text()).is_some();
         node.data["notes"] = notes::notes_into(&notes);
+        // The **comment** goes with the cell too: the tree's *clear
+        // all* takes the comment of the cell with it.
+        let mut comments = comments::comments_of(node);
+        let had_comment = comments.remove(&cell.to_text()).is_some();
+        node.data["comments"] = comments::comments_into(&comments);
         let mut links = links::links_of(node);
         let had_link = links.remove(&cell.to_text()).is_some();
         node.data["links"] = links::links_into(&links);
@@ -1565,6 +1572,7 @@ impl ClearCell {
             "cell": cell.to_text(),
             "was_there": was_there,
             "had_note": had_note,
+            "had_comment": had_comment,
             "had_link": had_link,
             "had_border": had_border,
         })))
