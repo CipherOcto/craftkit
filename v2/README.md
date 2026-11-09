@@ -4096,6 +4096,7 @@ so.
 | the **fields** of a pivot | **built.** The columns of the range a pivot reads are named, told apart and placed in the areas of the report — the tree's headers, its numbers, its dates and its samples (§706) | §706 |
 | the **trendline** of a chart | **built.** The values of a chart are fitted — the tree's kinds, its transforms, its bounds and its equations (§707) | §707 |
 | the **pitch** of a clip | **built.** The notes a clip's sound sings are heard — the tree's YIN, its runs of frames and its bounds (§708) | §708 |
+| the **loudness** of a clip | **built.** The loudness of a clip is measured — the tree's BS.1770, its gate and its true peak (§709) | §709 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -46292,3 +46293,70 @@ sings are heard and said.
 - **The note of the clip's own pitch is not applied**: the clip may be
   played at another pitch, and the notes heard are the notes of the
   source, not of the clip as it is played.
+
+---
+
+## 709. The loudness of a clip: how loud it is to a listener
+
+A clip of a sound may now be **measured**: how loud it is to a
+listener, and how high its peak goes.
+
+### What was built
+
+- A **new command**: `sound.clip.loudness.read` measures the sound of
+  a clip and says what it found.
+- The **meter** is the tree's own: the **ITU-R BS.1770** loudness, as
+  **EBU R128** asks for it.
+  - the sound is **weighted**: the K-weighting of BS.1770 — a shelf and
+    a high-pass — is what a listener's ear is said to do;
+  - the weighted sound is measured in **blocks of a tenth of a
+    second**, and the blocks are put in a row;
+  - the **momentary** loudness is the mean of the last **four** blocks,
+    four hundred milliseconds;
+  - the **short-term** loudness is the mean of the last **thirty**
+    blocks, three seconds;
+  - the **integrated** loudness is the mean of every block above the
+    **gate**: first the blocks above **minus seventy** LUFS, then those
+    above **ten LU below** that mean.
+- The **true peak** is said beside them: the highest point of the
+  sound **between** its samples, found by looking at the sound **four
+  times over**, so that a peak that falls between two samples is not
+  missed.
+- The loudness is **derived**: it is measured in the sound of the clip
+  every time it is asked for.
+
+### What the port found
+
+- **The tree's meter is in the tree's own arithmetic library**, and
+  here it is in this tree's own arithmetic library too:
+  `craftkit-audio` carries the meter, and the battery carries the
+  command.
+- **The tree's weights of the channels are the tree's own**: every
+  channel counts once, except in a **six-channel** sound, where the
+  low-frequency effects channel counts not at all and the two surrounds
+  count one and a half times.
+- **The tree's meter is a whole programme's measure** and this tree's
+  command measures **one clip**: the integrated loudness of a clip is
+  the integrated loudness of that clip and nothing else.
+- **The tree's sound is planar** — a channel after a channel — and this
+  tree's sound is **interleaved**: the samples are put apart into
+  their channels before they are measured, and the part of the source
+  the clip plays is the part that is measured.
+
+### What it cost
+
+- **Four tests** in the sound battery (`tests/loudness.rs`): the tone,
+  the true peak, the silence, and the clip that plays no sound.
+- **One new command**: the sound battery carries **138** commands and
+  the MCP server **924**.
+
+### What it does not settle
+
+- **The loudness range of the tree** — the spread between the quiet
+  and the loud parts of a programme — is not here: it is a measure of a
+  programme and not of a clip.
+- **The tree's meter also has a peak meter and an RMS meter** for a
+  display; this one measures loudness and nothing else.
+- **A clip shorter than four hundred milliseconds has no momentary
+  loudness**: the meter says the least loudness there is, as the tree
+  does.
