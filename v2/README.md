@@ -4099,6 +4099,7 @@ so.
 | the **loudness** of a clip | **built.** The loudness of a clip is measured — the tree's BS.1770, its gate and its true peak (§709) | §709 |
 | the **figures** of a file | **built.** The pictures of a tagged file are read and their alternative text is set — the tree's role map and its empty text (§710) | §710 |
 | the **images** of a form | **built.** The pictures a form draws are cleared or taken away — the tree's own resources and its own transforms (§711) | §711 |
+| the **CEA-708** service data | **built.** The service data of an MCC file is written and read — the tree's pop-on windows, its packets and its decoder (§712) | §712 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -45507,7 +45508,10 @@ line by line, and the CEA-608 pairs of its field one.
   - the **pairs** of the field one are the **CEA-608** pairs of the
     caption, and they are read with the same decoder the SCC reader
     uses.
-  - the **CEA-708** service data of the format is not read here.
+  - the **CEA-708** service data of the format is read with the
+    **service decoder**, and a file that carries the field one as well
+    is read as the field one. — *The service data was not read here
+    when this section was written; §1473 reads it.*
 - The **formats** of a caption file are now five, and the lists of the
   readers and the writers are apart: the file that is read may not be
   the file that is written, and each command says which are its own.
@@ -45516,9 +45520,10 @@ line by line, and the CEA-608 pairs of its field one.
 
 - **The tree's reader takes the field one when the file carries it and
   the CEA-708 service data when it does not**, and the two are never
-  read together. Here the field one is read and the service data is
-  left alone, and a file that carries only the service data has no cues
-  and says so.
+  read together. Here the field one is read and the service data was
+  left alone, and a file that carries only the service data had no cues
+  and said so. — *§1473 reads the service data, and the two are still
+  never read together.*
 - **The tree's rate of the timecode is a frame rate of the tree** — a
   nominal base of thirty or sixty and a drop-frame mark — and here the
   rate is a table of the tree's own names: the base of the frames, the
@@ -45546,7 +45551,8 @@ line by line, and the CEA-608 pairs of its field one.
   of the pop-on emulation, and nothing writes an MCC file here. — *The
   field one is written now (§704); the service data is not.*
 - **The tree's reader of the CEA-708 service data is not here**, and a
-  file that carries only that data has no cues.
+  file that carries only that data has no cues. — *§1473 reads it, and
+  a file that carries only that data has its cues.*
 - **The tree's import of a caption file takes a SubRip or a WebVTT
   file**, and here it is the same: an SCC or an MCC file is read and is
   not imported as a track. — *Every format that is read may now be
@@ -45996,7 +46002,8 @@ pairs of the field one, in a caption distribution packet a frame.
 - **The tree's writer writes the two streams apart** — the CEA-608
   field one and the CEA-708 service one — and the port found that the
   tree's own writer has a switch for that: this writes the field one,
-  and the service data of the tree's writer is not here.
+  and the service data of the tree's writer was not here. — *§1473
+  writes the service data too, and the switch is here.*
 - **The tree's caption is shown at the frame of the caption** in an MCC
   file, and not at the frame of the end of the load as it is in an SCC
   file: the load is a frame a pair, so it takes a frame a pair of
@@ -46017,7 +46024,8 @@ pairs of the field one, in a caption distribution packet a frame.
 
 - **The CEA-708 service data is not written**: the tree writes it
   beside the CEA-608 pairs, with the two windows of the pop-on
-  emulation, and here only the field one is written.
+  emulation, and here only the field one is written. — *§1473 writes
+  it, with the two windows of the pop-on emulation.*
 - **The identifier of the file is a hash of the frames** of the cues,
   where the tree hashes its ticks.
 
@@ -46476,3 +46484,71 @@ the **images it draws** are treated as the images of the page are.
   is not read, as it was not before.
 - **The images of a form that is itself drawn by a form** are not
   found: the walk is one level deep.
+
+---
+
+## 712. The CEA-708 service data of an MCC file
+
+An MCC file now carries the **CEA-708 service data** beside the
+CEA-608 pairs of the field one — and a file that carries only the
+service data is read with the **service decoder**.
+
+### What was built
+
+- The **writer** of an MCC file writes the two **streams** of the tree's
+  own: the CEA-608 field one and the CEA-708 service one, and either
+  may be left out (`cea_608` and `cea_708`).
+- The **service data** is the tree's own:
+  - the captions are **pop-on**: a window is defined and loaded, and it
+    is shown when its cue begins and hidden when it ends;
+  - the **window** is defined hidden, with its rows and its columns, its
+    position and its style;
+  - the **text** is written in the characters of the service, and the
+    ones that are not there are the **G2 set** of the tree: the ellipsis,
+    the quotes, the bullet and the rest;
+  - the atoms are packed into **DTVCC packets** of thirty-one bytes at
+    the most, so that one fits in a frame, and the packets are carried
+    in the caption distribution packet beside the field one.
+- The **reader** reads the service data with the tree's own **decoder**:
+  the windows, their rows, their visibility, and the characters of them.
+- The **field one comes first**: a file that carries both is read as the
+  field one, and a file that carries only the service data is read with
+  the service decoder — the tree's own rule is that the two streams are
+  alternatives.
+
+### What the port found
+
+- **The tree's writer has a switch for the two streams**, and the port
+  found it while looking for the writer: here the switch is two
+  parameters, and the file says in its own header which streams it
+  carries.
+- **The tree's service data is carried in the caption distribution
+  packet itself**, after the pairs of the field one and the field two,
+  and the first pair of a packet says that the packet starts there.
+- **The tree's cues are in ticks and the frames of the tree's own
+  rate**: here the cues of a file are in the frames of the format, as
+  the field one has always been.
+- **The tree's window is one of eight**, and the service writes two of
+  them in turn — one for the caption that is being loaded and one for
+  the one that is shown.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/mcc708.rs`): the file that
+  carries both, the file that carries only the service data and is read
+  back, the file that carries both and is read as the field one, and
+  the file that carries neither.
+- **No new command**: the export command and the write command learned
+  two parameters. The film battery carries **105** commands and the MCP
+  server **926**.
+
+### What it does not settle
+
+- **Only the service one is written**: the tree's writer can leave out
+  the service data, and here it can leave out either — but the service
+  that is written is the one the tree writes.
+- **The service data is not read from a file that carries the field
+  one as well**: the tree's rule is that the two are alternatives, and
+  that rule is kept.
+- **The other services are not written**: the tree writes the service
+  one, and so does this.
