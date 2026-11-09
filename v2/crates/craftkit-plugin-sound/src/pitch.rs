@@ -25,8 +25,6 @@ use craftkit_derive::Command;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
 
-use crate::{ClipPayload, SourcePayload};
-
 /// The **lowest** pitch the detector looks for, in hertz.
 const MIN_HZ: f64 = 20.0;
 
@@ -52,35 +50,7 @@ impl ReadPitch {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = "sound.clip.pitch.read".to_string();
         let clip_id = self.clip.0;
-        let Some(node) = session.document().node(clip_id) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip_id}`"),
-            });
-        };
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
-            });
-        }
-        let payload = ClipPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-        let Some(source_id) = payload.source else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip_id}` plays no sound, and there is nothing to hear"),
-            });
-        };
-        let Some(source_node) = session.document().node(source_id) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no source `{source_id}`"),
-            });
-        };
-        let source = SourcePayload::from_json(&source_node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-        let sound = crate::read_sound(&id, &source.path)?;
+        let (channels, rate) = crate::planar_of(&id, session, clip_id)?;
         // The **bounds** of the search: the tree's own are fifty hertz
         // to sixteen hundred, and a number outside is refused.
         let min_hz = self.min_hz.map(|value| value.0).unwrap_or(50.0);
@@ -99,11 +69,24 @@ impl ReadPitch {
                 ),
             });
         }
-        // The **part of the source** the clip plays, mixed down to one
-        // channel: the tree renders the range to mono.
-        let mono = mono_of(&sound, payload.offset, payload.length);
-        let notes = craftkit_audio::audio_to_notes(&mono, sound.rate as f32);
-        let rate = sound.rate.max(1) as f64;
+        // The sound in **one channel**: the tree renders the range to
+        // mono.
+        let mono: Vec<f32> = if channels.is_empty() {
+            Vec::new()
+        } else {
+            let count = channels.iter().map(Vec::len).min().unwrap_or(0);
+            let mut out: Vec<f32> = Vec::with_capacity(count);
+            for frame in 0..count {
+                let mut sum = 0.0f32;
+                for lane in &channels {
+                    sum += lane.get(frame).copied().unwrap_or(0.0);
+                }
+                out.push(sum / channels.len() as f32);
+            }
+            out
+        };
+        let notes = craftkit_audio::audio_to_notes(&mono, rate as f32);
+        let rate = rate.max(1) as f64;
         let notes: Vec<craftkit_sdk::serde_json::Value> = notes
             .iter()
             .filter(|note| {
@@ -121,31 +104,8 @@ impl ReadPitch {
             .collect();
         Ok(Outcome::new(format!("the clip `{clip_id}` sings {} note(s)", notes.len())).with_data(json!({
             "clip": clip_id,
-            "rate": sound.rate,
+            "rate": rate,
             "notes": notes,
         })))
     }
-}
-
-/// The **sound** of a clip in **one channel**.
-///
-/// The samples are interleaved, so every frame of the sound is the
-/// average of its channels. The part of the source the clip plays is
-/// the one that is taken, and a part that is not there is silence.
-fn mono_of(sound: &craftkit_wav::Sound, offset: i64, length: i64) -> Vec<f32> {
-    let channels = sound.channels.max(1) as usize;
-    let frames = sound.frames as usize;
-    let start = offset.max(0) as usize;
-    let count = if length > 0 { length as usize } else { frames.saturating_sub(start) };
-    let end = start.saturating_add(count).min(frames);
-    let mut out: Vec<f32> = Vec::with_capacity(end.saturating_sub(start));
-    for frame in start..end {
-        let mut sum = 0.0f32;
-        for channel in 0..channels {
-            let index = frame * channels + channel;
-            sum += sound.samples.get(index).copied().unwrap_or(0.0);
-        }
-        out.push(sum / channels as f32);
-    }
-    out
 }

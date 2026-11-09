@@ -515,6 +515,7 @@ mod fades;
 mod heal;
 mod inactive;
 mod keys;
+mod loudness;
 mod pitch;
 mod ranges;
 mod remove;
@@ -555,6 +556,7 @@ pub use heal::HealTrack;
 pub use inactive::SetTrackInactive;
 pub use keys::{KeyKind, ReadKeys, SetKey};
 pub use locks::{EditLock, TimeLock};
+pub use loudness::ReadLoudness;
 pub use marks::SetRating;
 pub use midi::{
     DurationMidi, ExportMidi, ImportMidi, ImportMidiTracks, QuantizeMidi, ReadMidi, ReadMidiNames,
@@ -7687,6 +7689,63 @@ fn read_sound(id: &str, path: &str) -> Result<craftkit_wav::Sound, EngineError> 
         id: id.to_string(),
         message: format!("the source `{path}` is not a sound the kit reads: {error}"),
     })
+}
+
+/// The **sound of a clip**, channel by channel.
+///
+/// The sound of the source is **interleaved**, and the part of it the
+/// clip plays is the part that is taken: the samples are put apart
+/// into their channels, and a part that is not there is silence.
+pub(crate) fn planar_of(
+    id: &str,
+    session: &Session,
+    clip_id: u64,
+) -> Result<(Vec<Vec<f32>>, u32), EngineError> {
+    let Some(node) = session.document().node(clip_id) else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("there is no node `{clip_id}`"),
+        });
+    };
+    if node.kind != "sound.clip" {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+        });
+    }
+    let payload = ClipPayload::from_json(&node.data)
+        .map_err(|error| EngineError::Failed { id: id.to_string(), message: error })?;
+    let Some(source_id) = payload.source else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("the clip `{clip_id}` plays no sound, and there is nothing to hear"),
+        });
+    };
+    let Some(source_node) = session.document().node(source_id) else {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!("there is no source `{source_id}`"),
+        });
+    };
+    let source = SourcePayload::from_json(&source_node.data)
+        .map_err(|error| EngineError::Failed { id: id.to_string(), message: error })?;
+    let sound = read_sound(id, &source.path)?;
+    let channels = sound.channels.max(1) as usize;
+    let frames = sound.frames as usize;
+    let start = payload.offset.max(0) as usize;
+    let count = if payload.length > 0 { payload.length as usize } else { frames.saturating_sub(start) };
+    let end = start.saturating_add(count).min(frames);
+    let mut out: Vec<Vec<f32>> = vec![Vec::new(); channels];
+    for frame in start..end {
+        for channel in 0..channels {
+            let index = frame * channels + channel;
+            let sample = sound.samples.get(index).copied().unwrap_or(0.0);
+            if let Some(lane) = out.get_mut(channel) {
+                lane.push(sample);
+            }
+        }
+    }
+    Ok((out, sound.rate))
 }
 
 /// Write the sound to a file.
