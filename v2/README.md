@@ -4101,6 +4101,7 @@ so.
 | the **images** of a form | **built.** The pictures a form draws are cleared or taken away — the tree's own resources and its own transforms (§711) | §711 |
 | the **CEA-708** service data | **built.** The service data of an MCC file is written and read — the tree's pop-on windows, its packets and its decoder (§712) | §712 |
 | the **data** of a form | **built.** The values of the fields of a form are written as a file and read back — the tree's XFDF, its table and its rules (§713) | §713 |
+| the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) | §719 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
 | the **binary** variables of a program | **built.** A variable that is zero or one is solved as the tree's binary constraint — an integer variable whose bounds meet the pair (§717) | §717 |
@@ -46619,8 +46620,9 @@ of the names and the values — and read back from one.
 
 - **The comments of the tree's XFDF are not here**: this carries the
   values of the fields and not the annotations.
-- **The FDF file of the tree is not here**: it is a file of PDF
-  syntax, and this tree does not write files of PDF syntax.
+- **The FDF file of the tree was not here** when this section was
+  written, and it **is** now: it is a file of PDF syntax, and this tree
+  writes files of PDF syntax (§719). It is written and not yet **read**.
 - **The tree's import runs the validation and the recalculation of the
   form**: here the values are written, and nothing is calculated.
 
@@ -46943,3 +46945,67 @@ The line of a path now carries its **finish** into the EPS file: the
   the overprinting are not written, and the ink of a path is the colour
   of the path.
 - **The file is in the units of the document** and not in points.
+
+---
+
+## 719. The FDF file of the data of a form
+
+The data of a form may now be written as an **FDF** file: the tree's
+own file, in the syntax of PDF.
+
+### What was built
+
+- The **export** of the data of a form grew a **format**: `fdf`, beside
+  the XFDF, the XML and the CSV.
+- The **file** is the tree's own file:
+  - it begins with the **version line** of the FDF and the four bytes
+    the tree writes after it;
+  - it holds **one object**, and the dictionary of the data is in it:
+    the `/Fields` array, and the `/F` that says the file the data came
+    from;
+  - it ends with the **trailer** that names the object as the root.
+- The **value** of a field is the tree's own:
+  - a **button** holds a **state**, and a state is a **name** — the one
+    it holds, or `Off` when it holds none;
+  - every other field holds a **string**;
+  - a **push button** is **left out**: it holds nothing, and the tree
+    leaves it out too.
+
+### What the port found
+
+- **The tree's FDF holds no appearances and no annotations by
+  default**: the port found that the tree's writer carries the
+  comments only when it is asked for them, and the appearances never —
+  so a file of values is a file of values.
+- **The tree's FDF is a file of PDF syntax and nothing else**: it has
+  the header of an FDF, one object, a trailer and the end — and **no
+  cross-reference table**, so it is not a PDF file that a reader may
+  open: it is read by the reader of form data and by nothing else.
+- **The tree's FDF writes the value of a checkbox as a name and the
+  value of a list as an array**, and the port found that a list here
+  holds **one** value and not several: a list of choices is one of
+  them, so the array of the tree has no case here.
+- The **name** of a field is written as a **string** and the state of a
+  button as a **name**, and the port found that this tree already had
+  the two spellings — a name is a plain string and a text string is
+  `{"string": …}` — so the file writes them the way the writer of the
+  PDF files writes them.
+
+### What it cost
+
+- **Five tests** in the PDF battery (`tests/fdfexport.rs`): the file
+  that is written, the state of a button, the button that holds no
+  state, the push button that is left out, and the format that is not
+  one of the tree's own.
+- **No new command**: the export command grew a format. The PDF
+  battery carries **81** commands and the MCP server **930**.
+
+### What it does not settle
+
+- **The file is not read back**: this tree writes an FDF and does not
+  yet read one, and a file of PDF syntax that has no cross-reference
+  table is not a file the reader of PDFs may open.
+- **The comments of the tree's FDF are not here**: this carries the
+  values of the fields and not the annotations.
+- **The appearances of the fields are not carried**: the file holds the
+  values and nothing else.
