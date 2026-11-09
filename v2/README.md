@@ -4103,6 +4103,7 @@ so.
 | the **data** of a form | **built.** The values of the fields of a form are written as a file and read back — the tree's XFDF, its table and its rules (§713) | §713 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
+| the **EPS file** of a drawing | **built.** A drawing is written as an EPS file — the tree's prolog, its path operators and its ink (§716) | §716 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -46755,3 +46756,63 @@ numbers: the tree's own **branch and bound**.
   programs.
 - **The model is not read from the sheet** and the answer is not
   written into it: the model is numbers, and the answer is said.
+
+---
+
+## 716. The EPS file of a drawing
+
+A drawing may now be written as an **EPS** file: the paths of the
+document, written as PostScript.
+
+### What was built
+
+- A **new command**: `vector.export.eps` writes the drawing as an EPS
+  file.
+- The **rules** are the tree's own:
+  - the file begins with the **version line**, it says its **bounding
+    box**, and it ends with the **trailer**;
+  - the **prolog** of the tree is written as it is: the short names of
+    the operators — `m`, `l`, `c`, `h`, `f`, `f*`, `S`, `rg`, `k`, `g`,
+    `w` — are bound once and used after;
+  - a **number** is written as the tree writes it: at most four
+    decimals, no trailing zeros, and a number that is not finite is
+    **zero**;
+  - the **fill** of a path is the tree's rule: `f` where the inside is
+    the winding number, and `f*` where it is the even-odd rule;
+  - the **ink** is written in the space of the colour: `rg` for a
+    colour of the screen;
+  - the world has **Y down** and the paper has **Y up**, so the drawing
+    is turned over.
+- The path is written **where it is**: the transform of the path is
+  baked into it, and the **appearance** of a path wins over the colours
+  of its payload, the way the tree draws it.
+
+### What the port found
+
+- **The tree's EPS writer is a print pipeline** — pages, jobs,
+  separations, spot colours and overprinting — and the port found that
+  while looking for the shape of the file: here the file is **one
+  sheet** and the drawing, and the ink of a path is the colour of the
+  path.
+- **The tree's file is in points** and the units of a document here are
+  the units of the document: the box of the file is in them, and not in
+  points.
+- **The tree's path is written with its quadratics turned into
+  cubics**: here a path has straight lines and cubics and nothing else,
+  and they are written as they are.
+
+### What it cost
+
+- **Two tests** in the vector battery (`tests/epsexport.rs`): the file
+  that is written, and the drawing with no path in it.
+- **One new command**: the vector battery carries **48** commands and
+  the MCP server **930**.
+
+### What it does not settle
+
+- **The separations of the tree are not here**: the spot colours and
+  the overprinting are not written, and the ink of a path is the colour
+  of the path.
+- **The dash of a stroke is not written**: the pattern of a dashed
+  stroke is in the payload of the path, and the file does not carry it.
+- **The file is in the units of the document** and not in points.
