@@ -4097,6 +4097,7 @@ so.
 | the **trendline** of a chart | **built.** The values of a chart are fitted — the tree's kinds, its transforms, its bounds and its equations (§707) | §707 |
 | the **pitch** of a clip | **built.** The notes a clip's sound sings are heard — the tree's YIN, its runs of frames and its bounds (§708) | §708 |
 | the **loudness** of a clip | **built.** The loudness of a clip is measured — the tree's BS.1770, its gate and its true peak (§709) | §709 |
+| the **figures** of a file | **built.** The pictures of a tagged file are read and their alternative text is set — the tree's role map and its empty text (§710) | §710 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -46360,3 +46361,60 @@ listener, and how high its peak goes.
 - **A clip shorter than four hundred milliseconds has no momentary
   loudness**: the meter says the least loudness there is, as the tree
   does.
+
+---
+
+## 710. The figures of a file: the pictures in it, and what is said of them
+
+A tagged file may now be asked for its **figures**: the pictures in it,
+and the **alternative text** each of them has.
+
+### What was built
+
+- Two **new commands**:
+  - `pdf.figure.read` reads the **figures** of the file — each with its
+    node, its page, its type and its alternative text;
+  - `pdf.figure.alt.set` **sets** the alternative text of a figure, and
+    an empty text **takes it away**.
+- The **rules** are the tree's own:
+  - a file with **no structure tree** is not tagged, and it has **no
+    figures**: the answer says so;
+  - what an element **is** is its `/S`, and the **role map** of the tree
+    says what a name means: an element whose `/S` is a name the role map
+    maps to `Figure` is a figure, whatever its own name is;
+  - the page of a figure is the page it says, or the page it is under;
+  - a node that is **not a figure** is **refused**: an alternative text
+    is the text of a figure and not of anything else;
+  - an alternative text that is **empty** **takes the text away**.
+
+### What the port found
+
+- **The tree's role map is a dictionary that may be written where it is
+  used or named by a reference**, and so is every other dictionary of a
+  file: the reading here takes both, and the tree's own rule is the
+  same for both.
+- **The tree's figure is an object of the file**, and here it is a
+  **node**: a figure is named by its node, and the answer says which
+  node it is.
+- **The tree's type of an element may be a name or a dictionary that
+  holds one**, and here it is the same: an element may say what it is
+  either way.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/figures.rs`): the figures,
+  the role map, the untagged file, the text that is set, the text that
+  is taken away, and the node that is not a figure.
+- **Two new commands**: the PDF battery carries **79** commands and the
+  MCP server **926**.
+
+### What it does not settle
+
+- **The tree's decorative figure is not here**: it turns the figure
+  into an artifact and takes it out of the tree, and it rewrites the
+  content of a page and the parent tree with it.
+- **The tree's box of a figure is not here**: it is read from the
+  content of the page, and this command reads the tree.
+- **The alternative text of a figure that is a part of another element
+  is not found**: the tree's own walk finds the figures of the whole
+  tree, and so does this one.
