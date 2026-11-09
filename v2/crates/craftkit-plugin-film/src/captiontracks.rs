@@ -356,7 +356,7 @@ impl ImportCaptions {
                     id: command.to_string(),
                     message: format!(
                         "`{other}` is not a format of a caption file: the formats are {}",
-                        crate::captions::FORMATS.join(", ")
+                        crate::captions::IMPORTED.join(", ")
                     ),
                 });
             }
@@ -525,7 +525,7 @@ impl ExportCaptions {
                     id: command.to_string(),
                     message: format!(
                         "`{other}` is not a format of a caption file: the formats are {}",
-                        crate::captions::FORMATS.join(", ")
+                        crate::captions::WRITABLE.join(", ")
                     ),
                 });
             }

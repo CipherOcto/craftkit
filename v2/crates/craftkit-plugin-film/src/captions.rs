@@ -420,7 +420,17 @@ pub struct ReadCaptions {
 }
 
 /// The **formats** of a caption file this tree reads.
-pub const FORMATS: [&str; 4] = ["subrip", "webvtt", "stl", "scc"];
+pub const FORMATS: [&str; 5] = ["subrip", "webvtt", "stl", "scc", "mcc"];
+
+/// The **formats** of a caption file this tree writes.
+///
+/// The MacCaption MCC file is read here and it is not written: the
+/// writer of the tree writes the CEA-708 service data beside the
+/// CEA-608 pairs, and that is not here.
+pub const WRITABLE: [&str; 4] = ["subrip", "webvtt", "stl", "scc"];
+
+/// The **formats** of a caption file this tree imports as a track.
+pub const IMPORTED: [&str; 2] = ["subrip", "webvtt"];
 
 impl ReadCaptions {
     fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
@@ -437,6 +447,7 @@ impl ReadCaptions {
             Some("webvtt") | Some("vtt") => "webvtt",
             Some("stl") => "stl",
             Some("scc") => "scc",
+            Some("mcc") => "mcc",
             Some(other) => {
                 return Err(EngineError::Failed {
                     id: id.clone(),
@@ -468,7 +479,16 @@ impl ReadCaptions {
             })));
         }
         let text = decode(&bytes);
-        let (cues, blocks, warnings) = if format == "scc" {
+        let (cues, blocks, warnings) = if format == "mcc" {
+            // An MCC file is **text**: its lines carry the caption
+            // distribution packets, and the pairs of the field one are
+            // the CEA-608 pairs of the caption.
+            let (cues, warnings) = crate::mcc::cues_of(&text).map_err(|message| EngineError::Failed {
+                id: id.clone(),
+                message: format!("{message}: `{path}`"),
+            })?;
+            (crate::mcc::cues_as_json(&cues), Vec::new(), warnings)
+        } else if format == "scc" {
             // An SCC file is **text**: its pairs are read and the
             // captions they carry are decoded.
             let (cues, warnings) = crate::scc::cues_of(&text).map_err(|message| EngineError::Failed {
@@ -770,7 +790,7 @@ impl WriteCaptions {
                     id: id.clone(),
                     message: format!(
                         "`{other}` is not a format of a caption file: the formats are {}",
-                        FORMATS.join(", ")
+                        WRITABLE.join(", ")
                     ),
                 });
             }

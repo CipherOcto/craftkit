@@ -458,6 +458,25 @@ pub fn cues_of(text: &str) -> Result<(Vec<Cue>, Vec<String>), String> {
     Ok((cues, warnings))
 }
 
+/// The **cues** of a run of CEA-608 byte pairs: the frame each begins
+/// at, the frame each ends at, and its text.
+///
+/// The pairs are the ones of the field one, and a caption that is
+/// still showing after the last pair stays up for **one second** more.
+pub fn decode_pairs(pairs: &[(i64, u8, u8)], one_second: i64) -> Vec<(i64, i64, String)> {
+    let mut decoder = Decoder::new();
+    let mut last_frame = 0i64;
+    for (frame, first, second) in pairs {
+        decoder.pair(*frame, *first, *second);
+        last_frame = last_frame.max(*frame + 1);
+    }
+    if let Some((start, text)) = decoder.open.take() {
+        let end = last_frame.max(start + 1) + one_second;
+        decoder.cues.push((start, end, text));
+    }
+    decoder.cues
+}
+
 /// The **cues** of an SCC file, as the answer holds them.
 pub fn cues_as_json(cues: &[Cue]) -> Vec<Json> {
     cues.iter()
