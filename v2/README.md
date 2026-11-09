@@ -4093,6 +4093,7 @@ so.
 | the **cues** of a track written as a DFXP file | **built.** The cues of a track are written as a DFXP file — the tree's presentation profile and its clock times (§703) | §703 |
 | the **cues** of a track written as an MCC file | **built.** The cues of a track are written as an MCC file — the tree's distribution packets, its abbreviations and its timecode (§704) | §704 |
 | the **consolidation** of several ranges of cells | **built.** The ranges are added up into one table — the tree's labels, its ways and its bounds (§705) | §705 |
+| the **fields** of a pivot | **built.** The columns of the range a pivot reads are named, told apart and placed in the areas of the report — the tree's headers, its numbers, its dates and its samples (§706) | §706 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -46065,7 +46066,7 @@ into one table.
   table, the ways, the sources that are refused, and the labels that
   are matched without regard to their case.
 - **One new command**: the grid battery carries **148** commands and the
-  MCP server **919**.
+  MCP server **920**.
 
 ### What it does not settle
 
@@ -46076,3 +46077,83 @@ into one table.
   themselves, and the tree writes formulas that sum the sources again.
 
 ---
+
+---
+
+## 706. The fields of a pivot
+
+A pivot may now be **asked what it is built from**: the **fields** of
+its source, and the **areas** of the report each of them sits in.
+
+### What was built
+
+- A **new command**: `grid.pivot.fields` reads the fields of the
+  range a pivot reads, and says where each of them sits in the
+  report.
+- The **rules** are the tree's own:
+  - the **fields** are the columns of the range, and they are named by
+    their **headers**: a header cell that holds nothing or a number
+    does not name a field — so the fields are **refused** and the
+    refusal says which cell.
+  - a field is **numeric** when every value of it that holds something
+    is a number, and it holds something at all: a column of nothing is
+    not a column of numbers.
+  - a field is a **date** when it is numeric and the cell of its first
+    row carries a **date format**: a date here is a number with a date
+    written on it, as it is in the tree.
+  - the **samples** of a field are up to **five** of its values,
+    without repeats, in the tree's own order: the numbers first and
+    in their own order, then the text without regard to its case,
+    then the booleans, then the errors, and the empty cells last.
+  - the **areas** of a field are the places of the report it sits in:
+    `rows`, `columns`, `values` and `filters`, and a field may sit in
+    more than one of them.
+  - the **records** of a pivot are the rows of the range that hold
+    something.
+- The fields are **derived**: they are worked out from the cells of
+  the sheet as they are, so they cannot be out of date.
+
+### What the port found
+
+- **The tree's fields are named by their headers and matched without
+  regard to their case** — a pivot holds the *names* of its fields.
+  Here a pivot holds the *columns* of its range, and the header of a
+  column names the field, so the same thing is reached without the
+  names and the case-matching with them.
+- **The tree's areas are found by the name of the field**, so a field
+  that is in the rows and in the values is in two areas at once, and
+  a field that is a report filter *and* a row field is counted once.
+  Here the areas are decided by the column itself, so the same
+  arrangement comes about without the names.
+- **The tree's numeric flag is a flag of the column, not of one
+  cell**: a column of text is not numeric even if one of its cells
+  holds a number, and a column of nothing is not numeric either.
+- **The tree's date flag is the numeric flag and a date number format
+  on the first row of the column** — the format of one cell decides
+  for the whole column, and here it is the same rule with the format
+  of the cell it is.
+- **The tree's samples are the distinct items of the column**, and two
+  texts that differ only in their case are one item of them.
+- **The tree's pivot may read a table, a name or a range of another
+  sheet**: here it reads a range of one sheet.
+
+### What it cost
+
+- **Eight tests** in the grid battery (`tests/pivotfields.rs`): the
+  columns, the numbers, the dates, the samples, the areas, the
+  records, and the header that names no field.
+- **One new command**: the grid battery carries **149** commands and
+  the MCP server **921**.
+
+### What it does not settle
+
+- **The tree's calculated fields are not here**: this tree has no
+  calculated fields, so every field of a pivot is a column of its
+  range.
+- **The samples are labels and not values**: a number of a date field
+  is written as the date it is, and the samples say nothing of what
+  the cell holds.
+- **The tree's pivot writes its report into the sheet, and the report
+  may be laid out, filtered and refreshed**; here a pivot is a fact of
+  the sheet whose summary is derived (§455), so a field here is a
+  column of a range and nothing is written down.
