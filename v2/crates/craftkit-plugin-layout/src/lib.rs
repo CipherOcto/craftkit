@@ -90,7 +90,7 @@ pub use bookmarks::{AddBookmark, DeleteBookmark, ReadBookmarks, RenameBookmark};
 pub use columns::SetColumns;
 pub use facing::ReadFacing;
 pub use grouping::{GroupItems, UngroupItems};
-pub use guides::{AddGuide, DeleteAllGuides, DeleteGuide, MoveGuide, ReadGuides};
+pub use guides::{AddGuide, CreateGuides, DeleteAllGuides, DeleteGuide, MoveGuide, ReadGuides};
 pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem};
 pub use layers::{
     DeleteLayer, DeleteUnusedLayers, HideLayer, LockLayer, MergeLayers, MoveLayer, RenameLayer, ShowLayer,

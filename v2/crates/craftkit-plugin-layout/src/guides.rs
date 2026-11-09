@@ -41,6 +41,15 @@ use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session, T
 /// The farthest a guide may be from the origin, either way.
 const MAX_GUIDE_POSITION: f64 = 1_000_000.0;
 
+/// The most **divisions** a page may be cut into, one way.
+const MAX_GUIDE_DIVISIONS: u64 = 1_000;
+
+/// The widest a **gutter** may be.
+const MAX_GUIDE_GUTTER: f64 = 1_000_000.0;
+
+/// The most guides **one command** may make.
+const MAX_GUIDES_CREATED: usize = 10_000;
+
 /// The **pages** of a spread, in the order they stand in.
 fn page_ids(spread: &Node) -> Vec<u64> {
     spread.children.iter().filter(|child| child.kind == "layout.page").map(|child| child.id).collect()
@@ -54,6 +63,104 @@ fn page_node(spread: &Node, page: u64) -> Option<Node> {
 /// The **width** of a page, as the page says it.
 fn width_of(page: &Node) -> f64 {
     page.data.get("width").and_then(|width| width.as_f64()).filter(|width| width.is_finite()).unwrap_or(0.0)
+}
+
+/// The **place** a page stands at in its spread: the width of the
+/// pages before it.
+fn place_of(spread: &Node, page: u64) -> f64 {
+    let mut place = 0.0;
+    for child in spread.children.iter() {
+        if child.id == page {
+            break;
+        }
+        if child.kind == "layout.page" {
+            place += width_of(child);
+        }
+    }
+    place
+}
+
+/// The **divisions** a page may be cut into, one way: a whole number,
+/// and no more than a thousand.
+fn divisions_of(command: &str, key: &str, value: Option<Number>) -> Result<u64, EngineError> {
+    let Some(value) = value else { return Ok(0) };
+    let number = value.0;
+    if !number.is_finite() || number.fract() != 0.0 || number < 0.0 {
+        return Err(EngineError::Failed {
+            id: command.to_string(),
+            message: format!("`{key}` must be a whole number"),
+        });
+    }
+    let count = number as u64;
+    if count > MAX_GUIDE_DIVISIONS {
+        return Err(EngineError::Failed {
+            id: command.to_string(),
+            message: format!("`{key}` must not exceed {MAX_GUIDE_DIVISIONS}"),
+        });
+    }
+    Ok(count)
+}
+
+/// The **gutter** between two divisions: a number between nothing and
+/// a million.
+fn gutter_of(command: &str, key: &str, value: Option<Number>) -> Result<f64, EngineError> {
+    let Some(value) = value else { return Ok(12.0) };
+    let gutter = value.0;
+    if !gutter.is_finite() || !(0.0..=MAX_GUIDE_GUTTER).contains(&gutter) {
+        return Err(EngineError::Failed {
+            id: command.to_string(),
+            message: format!("`{key}` must be between 0 and {MAX_GUIDE_GUTTER}"),
+        });
+    }
+    Ok(gutter)
+}
+
+/// The **guides** of a division: how many they are.
+fn guide_count(divisions: u64, gutter: f64) -> usize {
+    let edges = divisions.saturating_sub(1);
+    let count = if gutter > 0.0 { edges.saturating_mul(2) } else { edges };
+    match usize::try_from(count) {
+        Ok(count) => count,
+        Err(_) => usize::MAX,
+    }
+}
+
+/// The **places** the guides of a division stand at, between `a` and
+/// `b`: the edges of the cells, and — when there is a gutter — the
+/// edge after it as well.
+fn grid_positions(a: f64, b: f64, divisions: u64, gutter: f64) -> Result<Vec<f64>, EngineError> {
+    let command = "layout.guide.create";
+    if divisions < 2 {
+        return Ok(Vec::new());
+    }
+    if !a.is_finite() || !b.is_finite() || !gutter.is_finite() || divisions > MAX_GUIDE_DIVISIONS {
+        return Err(EngineError::Failed {
+            id: command.to_string(),
+            message: "guide geometry must be finite and within the supported range".to_string(),
+        });
+    }
+    let cell = ((b - a) - gutter * (divisions - 1) as f64) / divisions as f64;
+    if !cell.is_finite() {
+        return Err(EngineError::Failed {
+            id: command.to_string(),
+            message: "guide geometry is outside the supported range".to_string(),
+        });
+    }
+    let mut places = Vec::with_capacity(guide_count(divisions, gutter));
+    for k in 1..divisions {
+        let edge = a + k as f64 * cell + (k - 1) as f64 * gutter;
+        if !edge.is_finite() || (gutter > 0.0 && !(edge + gutter).is_finite()) {
+            return Err(EngineError::Failed {
+                id: command.to_string(),
+                message: "guide geometry is outside the supported range".to_string(),
+            });
+        }
+        places.push(edge);
+        if gutter > 0.0 {
+            places.push(edge + gutter);
+        }
+    }
+    Ok(places)
 }
 
 /// The page that stands **under** a coordinate: the page that covers
@@ -322,6 +429,143 @@ impl AddGuide {
         Ok(Outcome::changed(format!("added {} guide(s)", made.len())).with_data(json!({
             "guides": made,
             "count": made.len(),
+        })))
+    }
+}
+
+/// **Create** the guides of a page: a grid of them, across the page
+/// or across its margins.
+///
+/// The tree's own rules: a page may be cut into **rows** and
+/// **columns** — at most a thousand of either — and the cells may have
+/// a **gutter** between them. `n` divisions make `n - 1` guides, and
+/// with a gutter each of them is doubled: the edge of the cell and the
+/// edge after the gutter. One command may make at most **ten thousand**
+/// guides.
+#[derive(Command)]
+#[command(id = "layout.guide.create", area = "layout", layer = "layout", icon = "ruler", mutates, undoable)]
+pub struct CreateGuides {
+    /// The spread the pages are in.
+    pub spread: NodeRef,
+    /// The page, when it is not every page of the spread.
+    pub page: Option<NodeRef>,
+    /// The rows the page is cut into.
+    pub rows: Option<Number>,
+    /// The columns the page is cut into.
+    pub columns: Option<Number>,
+    /// The room between the rows.
+    pub row_gutter: Option<Number>,
+    /// The room between the columns.
+    pub column_gutter: Option<Number>,
+    /// `margins` — the default — or `page`.
+    pub fit_to: Option<Text>,
+    /// Whether the guides that are there are cleared first.
+    pub remove_existing: Option<Bool>,
+}
+
+impl CreateGuides {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let command = "layout.guide.create";
+        let rows = divisions_of(command, "rows", self.rows)?;
+        let columns = divisions_of(command, "columns", self.columns)?;
+        let row_gutter = gutter_of(command, "rowGutter", self.row_gutter)?;
+        let column_gutter = gutter_of(command, "columnGutter", self.column_gutter)?;
+        // The **area** the guides stand across: the margins of the
+        // page, or the page itself.
+        let fit_to = self.fit_to.as_ref().map(|fit| fit.0.trim().to_ascii_lowercase());
+        let to_page = match fit_to.as_deref() {
+            None | Some("margins") => false,
+            Some("page") => true,
+            Some(_) => {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: "fitTo: margins|page".to_string(),
+                });
+            }
+        };
+        let spread = self.spread.0;
+        let spread_node = the_spread(session, command, spread)?.clone();
+        // The **pages** the guides are made on.
+        let pages: Vec<u64> = match self.page {
+            Some(page) => {
+                if !page_ids(&spread_node).contains(&page.0) {
+                    return Err(EngineError::Failed {
+                        id: command.to_string(),
+                        message: format!("there is no page `{}` in the spread `{spread}`", page.0),
+                    });
+                }
+                vec![page.0]
+            }
+            None => page_ids(&spread_node),
+        };
+        // The **count**: at most ten thousand guides in one command.
+        let per_page = guide_count(rows, row_gutter) + guide_count(columns, column_gutter);
+        let total = per_page.saturating_mul(pages.len());
+        if total > MAX_GUIDES_CREATED {
+            return Err(EngineError::Failed {
+                id: command.to_string(),
+                message: format!("a single command may create at most {MAX_GUIDES_CREATED} guides"),
+            });
+        }
+        let remove = self.remove_existing.map(|flag| flag.0).unwrap_or(false);
+        let mut made = 0usize;
+        for page in pages {
+            let Some(node) = page_node(&spread_node, page) else { continue };
+            let width = width_of(&node);
+            let height = node
+                .data
+                .get("height")
+                .and_then(|height| height.as_f64())
+                .filter(|height| height.is_finite())
+                .unwrap_or(0.0);
+            let place = place_of(&spread_node, page);
+            // The **area**: the margin box of the page, and the page
+            // itself when the guides are to fit it.
+            let margins = crate::parents::margins_of(session.document(), page);
+            let (x0, x1, y0, y1) = if to_page {
+                (place, place + width, 0.0, height)
+            } else {
+                (
+                    place + margins.left,
+                    (place + width - margins.right).max(place + margins.left),
+                    margins.top,
+                    (height - margins.bottom).max(margins.top),
+                )
+            };
+            // The **guides** themselves.
+            let mut wanted: Vec<(&str, f64)> = Vec::new();
+            for y in grid_positions(y0, y1, rows, row_gutter)? {
+                wanted.push(("horizontal", y));
+            }
+            for x in grid_positions(x0, x1, columns, column_gutter)? {
+                wanted.push(("vertical", x));
+            }
+            if remove {
+                for guide in guide_ids(&node) {
+                    session.document_mut()?.remove_node(guide);
+                }
+            }
+            for (orientation, position) in wanted {
+                let name = format!("{orientation} guide");
+                session.document_mut()?.add_node_with_under(
+                    Some(page),
+                    name,
+                    "layout.guide",
+                    None,
+                    json!({
+                        "orientation": orientation,
+                        "position": position,
+                        "spread": false,
+                        "liquid": false,
+                    }),
+                );
+                made += 1;
+            }
+        }
+        Ok(Outcome::changed(format!("made {made} guide(s)")).with_data(json!({
+            "guides": made,
+            "count": made,
+            "spread": spread,
         })))
     }
 }
