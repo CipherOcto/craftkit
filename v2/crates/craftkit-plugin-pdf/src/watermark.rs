@@ -38,7 +38,7 @@ const COMMAND: &str = "pdf.page.watermark";
 ///
 /// The tree's own table: the widths of the characters, in the units of
 /// a thousandth of an em.
-pub fn helvetica_width(text: &str, size: f64) -> f64 {
+pub(crate) fn helvetica_width(text: &str, size: f64) -> f64 {
     let units: f64 = text
         .chars()
         .map(|character| match character {
@@ -61,14 +61,14 @@ pub fn helvetica_width(text: &str, size: f64) -> f64 {
 
 /// A **number** as PostScript writes it: the tree's own rule of at most
 /// four decimals.
-fn number(value: f64) -> String {
+pub(crate) fn number(value: f64) -> String {
     let text = format!("{value:.4}");
     let text = text.trim_end_matches('0').trim_end_matches('.');
     if text.is_empty() { "0".to_string() } else { text.to_string() }
 }
 
 /// The **text** of a line, as PostScript writes it: a literal string.
-fn literal(text: &str) -> String {
+pub(crate) fn literal(text: &str) -> String {
     let mut out = String::from("(");
     for character in text.chars() {
         match character {
@@ -87,7 +87,7 @@ fn literal(text: &str) -> String {
 
 /// The **box** of the page: the media box, or the crop box when the
 /// page has one.
-fn box_of(page: &craftkit_sdk::Node) -> [f64; 4] {
+pub(crate) fn box_of(page: &craftkit_sdk::Node) -> [f64; 4] {
     for key in ["CropBox", "MediaBox"] {
         if let Some((_, value)) = crate::entries_of(&page.data).into_iter().find(|(held, _)| held == key)
             && let Some(rect) = crate::boxes::rect_of(&value)

@@ -147,6 +147,7 @@ mod form;
 mod format;
 mod formdata;
 mod free;
+mod headerfooter;
 mod hidden;
 mod image;
 mod information;
@@ -206,6 +207,7 @@ pub use fonts::ReadFonts;
 pub use form::ReadForm;
 pub use format::ReadFormat;
 pub use formdata::{ExportFormData, ImportFormData};
+pub use headerfooter::{AddFooter, AddHeader};
 pub use information::{ReadInformation, SetInformation};
 pub use intent::WriteIntent;
 pub use javascript::ReadScripts;
@@ -2171,6 +2173,8 @@ craftkit_sdk::plugin_anchor!(
     MarkDifferences,
     AddMarkup,
     AddWatermark,
+    AddHeader,
+    AddFooter,
     ReadInherited,
     ReadChildren,
     ReadWidgets,
