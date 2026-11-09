@@ -4101,6 +4101,7 @@ so.
 | the **images** of a form | **built.** The pictures a form draws are cleared or taken away — the tree's own resources and its own transforms (§711) | §711 |
 | the **CEA-708** service data | **built.** The service data of an MCC file is written and read — the tree's pop-on windows, its packets and its decoder (§712) | §712 |
 | the **data** of a form | **built.** The values of the fields of a form are written as a file and read back — the tree's XFDF, its table and its rules (§713) | §713 |
+| the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -46619,3 +46620,73 @@ of the names and the values — and read back from one.
   syntax, and this tree does not write files of PDF syntax.
 - **The tree's import runs the validation and the recalculation of the
   form**: here the values are written, and nothing is calculated.
+
+---
+
+## 714. The solver of the grid: a linear program is solved
+
+A **linear program** may now be solved: the costs of an objective, the
+rows of the constraints and the bounds of the variables.
+
+### What was built
+
+- A **new command**: `grid.solver.solve` solves a linear program and
+  says the answer.
+- The **solver** is the tree's own: the **simplex** of the tree, with
+  its two phases and its bounds.
+  - the variables are **transformed** — `x = offset + Σ sign · y`, with
+    `y ≥ 0` — so that every program is in the same shape;
+  - a row with a **negative** right side is turned about, so that every
+    right side is at least zero;
+  - the **first phase** takes the artificial columns out of the basis,
+    and a program that cannot is **infeasible**;
+  - the **second phase** carries the costs of the program, and the
+    artificial columns may not come back;
+  - the solver **stalls** into Bland's order after fifty steps
+    without moving, so that it cannot cycle;
+  - a program that can grow without end is **unbounded**.
+- The **rules** are the tree's own:
+  - a program is **minimised**, and a program that is to be
+    **maximised** is minimised with its costs turned about;
+  - the **bounds** of a variable may be left out, and a variable
+    without a lower bound may go below zero: a bound is a bound and not
+    a zero;
+  - the **budget** of the solver is a number of pivots, and a program
+    that is not solved within it **stops** and says so: there is no
+    answer rather than a wrong one;
+  - a program with more than **two hundred** variables or more than
+    **a thousand** constraints is **refused**, and not made smaller;
+  - a coefficient that is not a number, a sense that is not `<=`, `>=`
+    or `=`, and a right side that is not a number are **refused**.
+
+### What the port found
+
+- **The tree's solver reads its model from the cells of a sheet** — the
+  objective is a formula cell, the variables are cells, and the
+  constraints are written as text — and the port found that while
+  looking for the model: here the model is **numbers**, and the answer
+  is said and not written into cells.
+- **The tree's solver is a minimiser** and its driver turns the costs
+  about for a maximisation: here the same, and the sign is turned back
+  for the answer.
+- **The tree's budget is a number of evaluations** of the model, and
+  here it is a number of **pivots**: the tree evaluates a formula to
+  linearise it, and there is no formula here to evaluate.
+
+### What it cost
+
+- **Eight tests** in the grid battery (`tests/solver.rs`): the
+  minimisation, the maximisation, the infeasible program, the unbounded
+  program, the bounds, and the three refusals.
+- **One new command**: the grid battery carries **151** commands and
+  the MCP server **929**.
+
+### What it does not settle
+
+- **The tree's integer and binary variables are not here**: a program
+  here is a linear program and nothing else.
+- **The tree's non-linear solver and its evolutionary one are not
+  here**: the simplex is the solver, and it is a solver of linear
+  programs.
+- **The model is not read from the sheet** and the answer is not
+  written into it: the model is numbers, and the answer is said.
