@@ -4092,6 +4092,7 @@ so.
 | the **cues** of a track written as a TTML file | **built.** The cues of a track are written as a TTML file — the tree's IMSC1 profile, its frame offsets and its clocks (§702) | §702 |
 | the **cues** of a track written as a DFXP file | **built.** The cues of a track are written as a DFXP file — the tree's presentation profile and its clock times (§703) | §703 |
 | the **cues** of a track written as an MCC file | **built.** The cues of a track are written as an MCC file — the tree's distribution packets, its abbreviations and its timecode (§704) | §704 |
+| the **consolidation** of several ranges of cells | **built.** The ranges are added up into one table — the tree's labels, its ways and its bounds (§705) | §705 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -46012,5 +46013,66 @@ pairs of the field one, in a caption distribution packet a frame.
   emulation, and here only the field one is written.
 - **The identifier of the file is a hash of the frames** of the cues,
   where the tree hashes its ticks.
+
+---
+
+## 705. The consolidation of several ranges of cells
+
+Several ranges of cells may now be **consolidated**: they are added up
+into one table.
+
+### What was built
+
+- A **new command**: `grid.data.consolidate` adds the sources up into
+  one table, and says where the table is and how many rows and columns
+  it has.
+- The **rules** are the tree's own:
+  - the **sources** are ranges of cells, and they may be on different
+    sheets. The tree's own rule: a source is a range with the name of
+    its sheet, and here a source is a range and the sheet it is in.
+  - the **way** the values are added up in is one of the tree's own:
+    `sum` — the default — `count`, `countNums`, `average`, `max`,
+    `min` or `product`. A way that is not one is refused by name.
+  - the **rows** of the result are the rows of the sources and the
+    **columns** of it are the columns of them: a source with a header
+    row has a row a **label** — the text of the header, matched
+    without regard to its case — and a source without one has a row a
+    **position**.
+  - the **labels** of the rows and of the columns go in the first
+    column and in the first row of the result, and the **values** go
+    in the body of it.
+  - the result goes **below and to the right** of the cell it is
+    given, and a result that does not fit is refused.
+  - the **sources are bounded**: five million cells and two hundred and
+    fifty-five sources.
+
+### What the port found
+
+- **The tree's source is a range with the name of its sheet** — "East!
+  A1:C3" — and here a sheet is named by its node, as it is everywhere
+  else in this battery, and a source is a sheet and a range.
+- **The tree's labels are matched without regard to their case**, and
+  the port found that the label of a row of the result is the label of
+  the **first** source that has it: the tree keeps the first.
+- **The tree's count of the values counts the cells that hold
+  something**, and the count of the numbers counts the ones that hold
+  a number: the port found that the two are apart, and that an
+  average of no numbers is a division by zero.
+
+### What it cost
+
+- **Four tests** in the grid battery (`tests/consolidating.rs`): the
+  table, the ways, the sources that are refused, and the labels that
+  are matched without regard to their case.
+- **One new command**: the grid battery carries **148** commands and the
+  MCP server **919**.
+
+### What it does not settle
+
+- **The styles of the cells of the result are not the styles of the
+  cells they are written over**: the tree keeps them, and the styles of
+  a cell are another thing here.
+- **The values are not formulas**: the result holds the values
+  themselves, and the tree writes formulas that sum the sources again.
 
 ---
