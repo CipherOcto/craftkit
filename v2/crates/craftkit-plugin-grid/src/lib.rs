@@ -336,6 +336,7 @@ mod combinations;
 mod comments;
 mod complex;
 mod conditional;
+mod consolidating;
 mod criteria;
 mod database;
 mod dates;
