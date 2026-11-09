@@ -21,6 +21,9 @@
 //! - The **finish** of a line is the tree's own: the width, the end,
 //!   the corner and the **dash** — the pattern in brackets, the offset
 //!   after it — and a pattern that is not dashed is no dash at all.
+//! - The **fill** of a path that holds a **gradient** is a **shading**
+//!   of PostScript: the tree's own smooth shading, with the stops of
+//!   the gradient as its function.
 //!
 //! # What it does not settle
 //!
@@ -29,13 +32,15 @@
 //! - The **separations** of the tree — the spot colours and the
 //!   overprinting — are not here: the ink of a path is the colour of
 //!   the path.
+//! - The **transparency** of the tree is not here: EPS has none, so a
+//!   colour is written as it is and the opacity of a stop is left out.
 //! - The file is in the **units of the document**, and the tree's file
 //!   is in points.
 
 use craftkit_derive::Command;
 
 use craftkit_sdk::FormatValue;
-use craftkit_sdk::document::{Cap, Colour, Fill, Join, Path, Segment};
+use craftkit_sdk::document::{Cap, Colour, Fill, FillRule, Gradient, GradientGeometry, Join, Path, Segment};
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Document, EngineError, Outcome, Session, Text};
 
@@ -144,6 +149,103 @@ fn join(join: Join) -> &'static str {
     }
 }
 
+/// The **components** of a colour, as PostScript writes them: three
+/// numbers of the screen.
+fn components(colour: Colour) -> String {
+    let [r, g, b, _] = colour.0;
+    numbers(&[f64::from(r), f64::from(g), f64::from(b)]).trim_end().to_string()
+}
+
+/// The **function** of a shading: the colours of the gradient, as
+/// PostScript writes them.
+///
+/// The tree's own rule: one stretch of the gradient is an exponential
+/// function between two colours, and more than one stretch is a
+/// **stitching** function of them — each piece over the stretch of the
+/// gradient that is its own.
+fn function_of(gradient: &Gradient) -> String {
+    let segments: Vec<(&craftkit_sdk::document::GradientStop, &craftkit_sdk::document::GradientStop)> =
+        gradient
+            .stops
+            .windows(2)
+            .filter(|pair| pair[1].offset > pair[0].offset)
+            .map(|pair| (&pair[0], &pair[1]))
+            .collect();
+    match segments.as_slice() {
+        [] => String::new(),
+        [one] => format!(
+            "<< /FunctionType 2 /Domain [0 1] /C0 [{}] /C1 [{}] /N 1 >>",
+            components(one.0.colour),
+            components(one.1.colour)
+        ),
+        many => {
+            let mut functions = String::new();
+            let mut bounds: Vec<String> = Vec::new();
+            let mut encode: Vec<String> = Vec::new();
+            for (index, (from, to)) in many.iter().enumerate() {
+                functions.push_str(&format!(
+                    "<< /FunctionType 2 /Domain [{} {}] /C0 [{}] /C1 [{}] /N 1 >>\n",
+                    number(from.offset),
+                    number(to.offset),
+                    components(from.colour),
+                    components(to.colour)
+                ));
+                if index > 0 {
+                    bounds.push(number(from.offset));
+                }
+                encode.push("0 1".to_string());
+            }
+            format!(
+                "<< /FunctionType 3 /Domain [0 1] /Functions [\n{functions}] /Bounds [{}] /Encode [{}] >>",
+                bounds.join(" "),
+                encode.join(" ")
+            )
+        }
+    }
+}
+
+/// The **shading** of a gradient, as PostScript writes it: the tree's
+/// own smooth shading.
+///
+/// A **linear** gradient is a shading of kind two and a **radial** one
+/// is a shading of kind three, and both are extended both ways.
+fn shading(gradient: &Gradient) -> String {
+    let coords = match &gradient.geometry {
+        GradientGeometry::Linear { from, to } => {
+            format!("{} {} {} {}", number(from.x), number(from.y), number(to.x), number(to.y))
+        }
+        GradientGeometry::Radial { centre, radius } => format!(
+            "{} {} 0 {} {} {}",
+            number(centre.x),
+            number(centre.y),
+            number(centre.x),
+            number(centre.y),
+            number(*radius)
+        ),
+    };
+    let kind = match gradient.kind {
+        craftkit_sdk::document::GradientKind::Linear => 2,
+        craftkit_sdk::document::GradientKind::Radial => 3,
+    };
+    format!(
+        "<< /ShadingType {kind} /ColorSpace /DeviceRGB /Coords [{coords}] /Extend [true true]\n/Function {} >> shfill\n",
+        function_of(gradient)
+    )
+}
+
+/// The **fill** of a path that holds a gradient.
+///
+/// The tree's own rule: a gradient with no stretch in it — a stop and
+/// nothing else — is the colour of its first stop, painted solid.
+fn gradient_fill(gradient: &Gradient, rule: FillRule) -> String {
+    let stretched = gradient.stops.windows(2).any(|pair| pair[1].offset > pair[0].offset);
+    if stretched {
+        return shading(gradient);
+    }
+    let Some(first) = gradient.stops.first() else { return String::new() };
+    format!("{}\n{}", ink(first.colour), fill_op(rule))
+}
+
 /// The **dash** of a line, as PostScript writes it: the pattern in
 /// brackets, the offset after it.
 ///
@@ -188,12 +290,19 @@ pub fn the_eps(document: &Document) -> Result<(String, usize), EngineError> {
             max_x = max_x.max(box_.x + box_.w);
             max_y = max_y.max(box_.y + box_.h);
         }
-        // The **fill** of the path.
-        if let Fill::Solid(colour) = &fill {
-            body.push_str("newpath\n");
-            body.push_str(&path_data(&placed));
-            body.push_str(&ink(*colour));
-            body.push_str(fill_op(placed.rule));
+        // The **fill** of the path: a colour, or a **gradient**.
+        match &fill {
+            Fill::Solid(colour) => {
+                body.push_str("newpath\n");
+                body.push_str(&path_data(&placed));
+                body.push_str(&ink(*colour));
+                body.push_str(fill_op(placed.rule));
+            }
+            Fill::Gradient(gradient) => {
+                body.push_str("newpath\n");
+                body.push_str(&path_data(&placed));
+                body.push_str(&gradient_fill(gradient, placed.rule));
+            }
         }
         // The **stroke** of the path: the path is written again, for a
         // stroke is a path of its own.
