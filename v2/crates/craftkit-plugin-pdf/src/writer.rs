@@ -260,7 +260,7 @@ pub(crate) fn escape_name(text: &str) -> String {
 /// The characters of a string are its **bytes**: a string of a file is
 /// Latin-1 unless it says otherwise, and a character above the Latin-1
 /// range is written as the UTF-8 bytes of itself.
-fn escape_text(text: &str) -> String {
+pub(crate) fn escape_text(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for character in text.chars() {
         let code = character as u32;

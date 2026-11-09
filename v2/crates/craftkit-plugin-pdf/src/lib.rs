@@ -137,6 +137,7 @@ mod crypt;
 mod decrypt;
 mod destinations;
 mod encrypt;
+mod fdf;
 mod fields;
 mod figures;
 mod filters;

@@ -24,8 +24,9 @@
 //!
 //! - The **comments** of the tree's XFDF are not here: this carries the
 //!   values of the fields and not the annotations.
-//! - The **FDF** file of the tree is not here: it is a file of PDF
-//!   syntax, and this tree does not write files of PDF syntax.
+//! - The **FDF file** of the tree is here and is **written**: it is a
+//!   file of PDF syntax, and this tree writes files of PDF syntax
+//!   (`src/fdf.rs`). It is not **read** back yet.
 
 use craftkit_derive::Command;
 
@@ -33,7 +34,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, Outcome, Session, Text};
 
 /// The **formats** the data may be written as.
-pub const FORMATS: [&str; 3] = ["xfdf", "xml", "csv"];
+pub const FORMATS: [&str; 4] = ["xfdf", "xml", "csv", "fdf"];
 
 /// The **name** of the command, in the messages.
 const COMMAND: &str = "pdf.form.data.export";
@@ -295,6 +296,7 @@ impl ExportFormData {
             None | Some("") | Some("xfdf") => "xfdf",
             Some("xml") => "xml",
             Some("csv") => "csv",
+            Some("fdf") => "fdf",
             Some(other) => {
                 return Err(EngineError::Failed {
                     id: id.clone(),
@@ -307,23 +309,25 @@ impl ExportFormData {
         };
         let entries = data_of(session.document());
         let file = self.file.as_ref().map(|file| file.0.trim().to_string()).unwrap_or_default();
-        let written = match format {
-            "xml" => xml_of(&entries),
-            "csv" => csv_of(&entries),
-            _ => xfdf_of(&entries, &file),
+        let (written, count) = match format {
+            "xml" => (xml_of(&entries).into_bytes(), entries.len()),
+            "csv" => (csv_of(&entries).into_bytes(), entries.len()),
+            "fdf" => {
+                let fields = crate::fields::fields_of(session.document());
+                crate::fdf::fdf_of(&fields, &file)
+            }
+            _ => (xfdf_of(&entries, &file).into_bytes(), entries.len()),
         };
-        std::fs::write(&path, written.as_bytes()).map_err(|error| EngineError::Failed {
+        std::fs::write(&path, &written).map_err(|error| EngineError::Failed {
             id: id.clone(),
             message: format!("the file cannot be written: {error}"),
         })?;
-        Ok(Outcome::changed(format!("`{path}` was written with {} field(s)", entries.len())).with_data(
-            json!({
-                "path": path,
-                "format": format,
-                "count": entries.len(),
-                "bytes": written.len(),
-            }),
-        ))
+        Ok(Outcome::changed(format!("`{path}` was written with {count} field(s)")).with_data(json!({
+            "path": path,
+            "format": format,
+            "count": count,
+            "bytes": written.len(),
+        })))
     }
 }
 
