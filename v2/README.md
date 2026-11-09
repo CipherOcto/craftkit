@@ -4089,6 +4089,7 @@ so.
 | a caption file of **any format that is read** imported as a track | **built.** A file of any format the reader reads may be imported — the tree's formats, its snapping and its overlap (§699) | §699 |
 | the **format** of a caption file detected | **built.** The extension of a file and its content say what it is — the tree's rules, its extensions and its refusal (§700) | §700 |
 | the **cues** of a TTML file | **built.** A TTML file is read — the tree's timing parameters, its time expressions, its containers and its text (§701) | §701 |
+| the **cues** of a track written as a TTML file | **built.** The cues of a track are written as a TTML file — the tree's IMSC1 profile, its frame offsets and its clocks (§702) | §702 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -45847,7 +45848,62 @@ the text of it.
 - **The tree's `timeContainer="seq"` is not supported**: the children
   of such a container are timed as in a `par` container, and the tree
   warns about it.
-- **The tree's TTML file is written here**: only read.
+- **The tree's TTML file is written here**: only read. — *It is written
+  now (§702).*
 
 ---
 
+
+## 702. The cues of a track written as a TTML file
+
+The cues of a track may now be written as a **TTML file**: an IMSC1
+text profile, with the times of the captions in it.
+
+### What was built
+
+- A **new format** of the writer: `film.captions.export` writes a TTML
+  file when the format is `ttml`, and `film.captions.write` writes one
+  from the cues it is given.
+- The **rules** are the tree's own:
+  - the file is an **IMSC1 text profile**, with the namespaces of the
+    format, and its rate is the rate of the sequence: the base of the
+    frames, and the multiplier that makes it.
+  - the **times** of the captions are **frame offsets** when they are
+    on a frame boundary of that rate, and **clock times** otherwise —
+    `HH:MM:SS.mmm`, with a point as the mark of the fraction.
+  - the **head** of the file holds the styling and the layout of the
+    format, and the **body** holds one paragraph a caption.
+  - the **text** of a caption is escaped, and a line break in it is a
+    `<br/>`.
+
+### What the port found
+
+- **The tree's times are ticks**, and the port found that a time is on
+  a frame boundary when the milliseconds of it are a whole number of
+  frames of the rate — the ticks make the same test, and the
+  milliseconds make it without a rounding.
+- **The tree's writer keeps the speaker of a caption and writes it as
+  an agent of the head**, and here a caption has no speaker: the
+  paragraph is the text and the two times.
+- **The tree's writer writes the DFXP profile too**, and here the file
+  is the IMSC1 one; a DFXP file is read as a TTML file, and it is not
+  written.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/ttmlwrite.rs`): the file
+  that says what it is, the frame offsets, the clock times, the text
+  that is escaped, and the file that is read back.
+- **No new command**: the export command and the write command learned
+  a format. The film battery carries **105** commands and the MCP server
+  **919**.
+
+### What it does not settle
+
+- **The speakers of the captions are not written**, for a caption here
+  has none.
+- **The DFXP profile is not written**: the file is the IMSC1 one.
+- **The styles of the captions are not written**: the file holds the
+  styling and the layout of the format, and the captions are plain.
+
+---
