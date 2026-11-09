@@ -4087,6 +4087,7 @@ so.
 | the **pixels** of an image under a region | **built.** An image the region only hits has its covered pixels cleared, and it is written again as a new object — the tree's rule, its new name and its fail-closed rule (§697) | §697 |
 | the **content** of a form under a region | **built.** A form a region hits is written again with the drawings under the region taken away — the tree's rule, its own space and its new name (§698) | §698 |
 | a caption file of **any format that is read** imported as a track | **built.** A file of any format the reader reads may be imported — the tree's formats, its snapping and its overlap (§699) | §699 |
+| the **format** of a caption file detected | **built.** The extension of a file and its content say what it is — the tree's rules, its extensions and its refusal (§700) | §700 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -45712,6 +45713,64 @@ file and an MCC file.
 - **The style of an SCC track is not black**, as the tree's is.
 - **The TTML and the DFXP files are not imported**, for they are not
   read here either.
+
+---
+
+
+## 700. The format of a caption file is detected
+
+The **format** of a caption file is now detected: the extension of the
+file and the content of it say together what the file is.
+
+### What was built
+
+- A **new command**: `film.captions.detect` says what a file is, and a
+  file that is not a caption file is refused by name.
+- The **rules** are the tree's own:
+  - the **extension** of the file must be one of the extensions of a
+    caption file — `srt`, `vtt`, `scc`, `webvtt`, `mcc`, `stl`, `ttml`,
+    `dfxp` or `xml` — and a file whose extension is not one is not a
+    caption file at all.
+  - the **EBU STL file** says what it is in its bytes.
+  - the **head** of a text file says it in its first words: `WEBVTT`,
+    `Scenarist_SCC` or `File Format=MacCaption_MCC`.
+  - a **SubRip file** is a file whose head holds a **timing line** — two
+    clocks and an arrow between them — and a file of the extension of a
+    caption file that holds no timing line is not a caption file of
+    that format.
+- The **import** detects the format of the file when the command does
+  not name one, and refuses a file that is not a caption file.
+
+### What the port found
+
+- **The tree's import has no format at all**: the format is detected
+  from the extension and the content of the file, and a file that is
+  not a caption file is refused. Here the command may still name the
+  format, and the detection is what it does when it does not.
+- **The tree's detection reads four kilobytes of the head of the
+  file**, and the port found that the head is what the words of it say
+  are in.
+- **The tree's detection looks for a timing line in the first forty
+  lines**, and a file of an extension of a caption file with no timing
+  line in it is not a caption file of that format.
+
+### What it cost
+
+- **Six tests** in the film battery (`tests/captiondetect.rs`): the
+  SubRip file, the SCC file, the MCC file, the file that is not a
+  caption file, the file whose extension is not one, and the import
+  that detects.
+- **One new command**: the film battery carries **105** commands and the
+  MCP server **919**.
+
+### What it does not settle
+
+- **The TTML and the DFXP files are not detected**, for they are not
+  read here: a file of either extension is not a caption file of this
+  tree.
+- **The format is not detected for the reader**: `film.captions.read`
+  takes the format as it did, and the detection is a command of its
+  own and a rule of the import.
 
 ---
 
