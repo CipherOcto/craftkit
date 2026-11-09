@@ -129,6 +129,7 @@ mod aes;
 mod annot;
 mod appearance;
 mod attachments;
+mod background;
 mod boxes;
 mod calculate;
 mod compare;
@@ -195,6 +196,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 pub use annot::SetAnnotationFlags;
 pub use appearance::{ReadAppearance, WriteAppearance};
 pub use attachments::ReadAttachments;
+pub use background::AddBackground;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use calculate::{ReadCalculatedValue, ReadCalculation};
 pub use compare::{CompareFiles, MarkDifferences};
@@ -2173,6 +2175,7 @@ craftkit_sdk::plugin_anchor!(
     MarkDifferences,
     AddMarkup,
     AddWatermark,
+    AddBackground,
     AddHeader,
     AddFooter,
     ReadInherited,
