@@ -198,6 +198,7 @@ mod anchors;
 mod binreading;
 mod binremoval;
 mod captions;
+mod captionstyle;
 mod captiontracks;
 mod clipreading;
 mod edits;
@@ -252,6 +253,7 @@ pub use anchors::SynchroniseClip;
 pub use binreading::ReadBin;
 pub use binremoval::RemoveBin;
 pub use captions::ReadCaptions;
+pub use captionstyle::{SetCaptionStyle, SetCaptionTrack};
 pub use captiontracks::{
     AddCaption, AddCaptionTrack, ExportCaptions, ImportCaptions, ReadCaptions as ReadCaptionTrack,
     RemoveCaption,
