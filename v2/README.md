@@ -4088,6 +4088,7 @@ so.
 | the **content** of a form under a region | **built.** A form a region hits is written again with the drawings under the region taken away — the tree's rule, its own space and its new name (§698) | §698 |
 | a caption file of **any format that is read** imported as a track | **built.** A file of any format the reader reads may be imported — the tree's formats, its snapping and its overlap (§699) | §699 |
 | the **format** of a caption file detected | **built.** The extension of a file and its content say what it is — the tree's rules, its extensions and its refusal (§700) | §700 |
+| the **cues** of a TTML file | **built.** A TTML file is read — the tree's timing parameters, its time expressions, its containers and its text (§701) | §701 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -43731,7 +43732,8 @@ and the times they are on the screen.
 - **The tree's other six formats are not here**: WebVTT, Scenarist
   SCC, MacCaption MCC, EBU STL, TTML and DFXP. — *WebVTT, EBU STL,
   Scenarist SCC and MacCaption MCC have since come (§668, §678, §694,
-  §696); TTML and DFXP are still not here.*
+  §696), and TTML has since come (§701); the DFXP file is read as one
+  too.*
 - **The cues are not laid out and not burned in.** The tree's captions
   are drawn on the picture, and nothing draws them here.
 
@@ -43844,8 +43846,8 @@ file's own words about its cues are kept.
   are not stored.
 - **The tree's other five formats are not here**: Scenarist SCC,
   MacCaption MCC, EBU STL, TTML and DFXP. — *EBU STL, Scenarist SCC
-  and MacCaption MCC have since come (§678, §694, §696); TTML and
-  DFXP are still not here.*
+  and MacCaption MCC have since come (§678, §694, §696), and TTML has
+  since come (§701); the DFXP file is read as one too.*
 - **Nothing is written back.** The tree writes a caption file again
   with its cues, its blocks and its voices in it, and nothing writes
   here.
@@ -44359,7 +44361,8 @@ track** of a sequence, snapped to the frames of that sequence.
 - **Only the two formats of the reader are here**: a SubRip file and a
   WebVTT file, and the tree's other five are not. — *The reader has
   since read an EBU STL file (§678), a Scenarist SCC file (§694) and a
-  MacCaption MCC file (§696); TTML and DFXP are still not here.*
+  MacCaption MCC file (§696) and a TTML file (§701); the DFXP file is
+  read as one too.*
 
 ---
 
@@ -44430,7 +44433,8 @@ the EBU subtitling data exchange format.
 - **The four other formats of the tree are not here**: Scenarist SCC,
   MacCaption MCC, TTML and DFXP. — *Scenarist SCC has since been read
   (§694) and written (§695), and MacCaption MCC has since been read
-  (§696); TTML and DFXP are still not here.*
+  (§696), and TTML has since been read (§701); the DFXP file is read
+  as one too.*
 
 ---
 
@@ -44936,8 +44940,8 @@ and timing blocks.
 
 - **The other formats of the tree are not here**: SCC, MCC, TTML and
   DFXP are still neither read nor written. — *SCC has since been read
-  (§694) and written (§695), and MCC has since been read (§696); TTML
-  and DFXP are still not here.*
+  (§694) and written (§695), MCC has since been read (§696), and TTML
+  has since been read (§701); the DFXP file is read as one too.*
 - **The tree's file has a display standard code and a disk content
   code**, and they say "unknown" here as they do there.
 - **The tree's writer drops a character the set does not hold** and
@@ -45461,7 +45465,8 @@ it as pop-on captions, and the file is read back as one.
   paint-on modes are read here, and they are not written.
 - **The tree's other formats are not here**: MacCaption MCC, TTML and
   DFXP are neither read nor written. — *MacCaption MCC has since been
-  read (§696); TTML and DFXP are still not here.*
+  read (§696), and TTML has since been read (§701); the DFXP file is
+  read as one too.*
 - **The tree's plain text decodes the entities of the markup**, and that
   is now here too, but only in the writer: the reader of a caption file
   still reads what the file says.
@@ -45712,7 +45717,8 @@ file and an MCC file.
   reader.
 - **The style of an SCC track is not black**, as the tree's is.
 - **The TTML and the DFXP files are not imported**, for they are not
-  read here either.
+  read here either. — *They are read now, and they are imported
+  (§701).*
 
 ---
 
@@ -45767,10 +45773,81 @@ file and the content of it say together what the file is.
 
 - **The TTML and the DFXP files are not detected**, for they are not
   read here: a file of either extension is not a caption file of this
-  tree.
+  tree. — *They are detected now, and read (§701).*
 - **The format is not detected for the reader**: `film.captions.read`
   takes the format as it did, and the detection is a command of its
   own and a rule of the import.
+
+---
+
+
+## 701. The cues of a TTML file
+
+A **TTML file** may now be read: the XML of it, the times of it, and
+the text of it.
+
+### What was built
+
+- A **new format** of the reader: `film.captions.read` reads a TTML
+  file when the format is `ttml`, and a **DFXP** file is the same
+  format with an older namespace, and it is read as one.
+- The **rules** are the tree's own:
+  - the **timing parameters** of the file are its frame rate, its frame
+    rate multiplier, its sub-frame rate and its tick rate. A parameter
+    that is not a positive number is an error, and a file without them
+    keeps the defaults: thirty frames a second, one sub-frame, and one
+    tick a second.
+  - a **time expression** is a clock — `HH:MM:SS`, `HH:MM:SS.fff` or
+    `HH:MM:SS:FF.f` — or an offset: `1h`, `2m`, `3s`, `4ms`, `5f` or
+    `6t`. An expression that is not one is a warning, and the caption
+    it is on is left out.
+  - the **times of a caption** are offsets in its container: the begin
+    of a paragraph is the begin of its container and its own begin, and
+    nothing inside a container outlasts the end of the container.
+  - a paragraph **with a time** of its own, or without timed spans in
+    it, is one caption; a paragraph without a time of its own and with
+    timed spans in it is as many captions as it has spans.
+  - the **text** of a caption is its text with the whitespace collapsed
+    to one space, and a `<br/>` is a line break.
+- The **detection** of a file knows the TTML file: the head of it says
+  `<tt` and the namespace of it, and the import of a file of that
+  format is the import of a caption file.
+
+### What the port found
+
+- **The tree's times are ticks**, and the port found that the
+  milliseconds are enough: a tick is a thousandth of a second and a
+  frame is a thousandth of a second divided by the rate of the file.
+- **The tree's clock does not take a fraction of a second after the
+  frames** — the fraction is of the sub-frame — and the port found that
+  the fraction of a clock is of a second.
+- **The tree's text keeps the styles of a caption in the text of it**,
+  and here the text is the plain text of the caption: the `<i>`, `<b>`
+  and `<u>` of it are not kept.
+- **The tree's XML keeps the text of an element in the order it was
+  written**, and the text of the kit's XML reader was all of it in one
+  piece: the reader now keeps the text before each child, and the text
+  after the last one.
+
+### What it cost
+
+- **Eight tests** in the film battery (`tests/ttmlread.rs`): the
+  caption, the timed spans, the container that clips, the text, the
+  tick rate, the frame rate, the file that is not one, and the time
+  that is not one.
+- **One change in the SDK**: the XML reader keeps the order of the
+  content of an element. No new command: the film battery carries
+  **105** commands and the MCP server **919**.
+
+### What it does not settle
+
+- **The styles of a caption are not kept**, and neither are its
+  speaker and its identifier: the tree keeps them, and here a caption
+  of a TTML file is text and times.
+- **The tree's `timeContainer="seq"` is not supported**: the children
+  of such a container are timed as in a `par` container, and the tree
+  warns about it.
+- **The tree's TTML file is written here**: only read.
 
 ---
 
