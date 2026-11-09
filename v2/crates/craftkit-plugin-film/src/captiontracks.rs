@@ -497,8 +497,8 @@ impl ExportCaptions {
                 message: "the rate of the sequence is not a rate".to_string(),
             });
         }
-        // The **cues** of the track, in the order they start in, and
-        // their times in milliseconds.
+        // The **cues** of the track, in the order they start in. Their
+        // times are the **frames** of the sequence.
         let cues = cues_of(node);
         let cues: Vec<crate::captions::Cue> = cues
             .into_iter()
@@ -513,6 +513,7 @@ impl ExportCaptions {
         let format = match named.as_deref() {
             None | Some("") | Some("subrip") | Some("srt") => "subrip",
             Some("webvtt") | Some("vtt") => "webvtt",
+            Some("stl") | Some("ebu") => "stl",
             Some(other) => {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
@@ -530,7 +531,15 @@ impl ExportCaptions {
                 message: "a file has a path".to_string(),
             });
         }
-        let written = if format == "webvtt" {
+        let written = if format == "stl" {
+            // The **EBU STL file**: the frames of the track are the
+            // frames of the file, at the rate the tree's rule says.
+            let cues: Vec<crate::stl::StlCue> = cues_of(node)
+                .into_iter()
+                .map(|(_, start, end, text)| crate::stl::StlCue { start, end, text })
+                .collect();
+            crate::stl::write(&cues, num, den)
+        } else if format == "webvtt" {
             let cues: Vec<crate::captions::VttCue> = cues
                 .iter()
                 .map(|cue| crate::captions::VttCue {
@@ -542,11 +551,11 @@ impl ExportCaptions {
                     text: cue.text.clone(),
                 })
                 .collect();
-            crate::captions::write_vtt(&cues, &[])
+            crate::captions::write_vtt(&cues, &[]).into_bytes()
         } else {
-            crate::captions::write_subrip(&cues)
+            crate::captions::write_subrip(&cues).into_bytes()
         };
-        std::fs::write(&path, written.as_bytes()).map_err(|error| EngineError::Failed {
+        std::fs::write(&path, &written).map_err(|error| EngineError::Failed {
             id: command.to_string(),
             message: format!("the file cannot be written: {error}"),
         })?;

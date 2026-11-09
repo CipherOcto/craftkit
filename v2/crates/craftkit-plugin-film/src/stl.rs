@@ -332,3 +332,203 @@ pub fn cues_as_json(cues: &[Cue]) -> Vec<Json> {
         })
         .collect()
 }
+
+/// The **name** the file carries: the tree writes its own name in the
+/// header of the file, and this tree writes its own.
+const ORIGINATOR: &str = "craftkit";
+
+/// The **bytes** of one character in ISO/IEC 6937, when it has any.
+///
+/// The letters and the numbers are their own bytes, the specials have
+/// theirs, and a letter with a diacritic is a byte for the diacritic
+/// and the byte of the letter. A character that the set does not hold
+/// has none.
+pub fn encode_6937(character: char) -> Option<Vec<u8>> {
+    if (' '..='~').contains(&character) {
+        return Some(vec![character as u8]);
+    }
+    if let Some((byte, _)) =
+        SPECIALS.iter().find(|entry| entry.1 == character && entry.0 != 0xa4 && entry.0 != 0xa6)
+    {
+        return Some(vec![*byte]);
+    }
+    for (diacritic, bases, composed) in DIACRITICS {
+        if let Some(at) = composed.chars().position(|letter| letter == character) {
+            return Some(vec![*diacritic, bases.as_bytes()[at]]);
+        }
+    }
+    None
+}
+
+/// The **text** of a cue, as the bytes of a text field.
+///
+/// The tags of the tree's text — `<i>`, `</i>`, `<u>` and `</u>` — are
+/// the codes of the format, a line break is a line break, and a
+/// character the set does not hold is a question mark.
+fn encode_text(text: &str) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut rest = text;
+    while let Some(character) = rest.chars().next() {
+        let is_tag_start = character == '<'
+            && rest
+                .get(1..)
+                .and_then(|tail| tail.strip_prefix('/').or(Some(tail)))
+                .and_then(|name| name.as_bytes().first())
+                .is_some_and(u8::is_ascii_alphabetic);
+        if is_tag_start && let Some(end) = rest.find('>') {
+            let tag = &rest[1..end];
+            // Only a tag that is syntactically plausible is markup: a
+            // text such as "2 < 3 > 1" keeps its middle.
+            let name = tag.strip_prefix('/').unwrap_or(tag);
+            if name.as_bytes().first().is_some_and(u8::is_ascii_alphabetic) {
+                match tag.trim().to_ascii_lowercase().as_str() {
+                    "i" => out.push(0x80),
+                    "/i" => out.push(0x81),
+                    "u" => out.push(0x82),
+                    "/u" => out.push(0x83),
+                    _ => {}
+                }
+                rest = &rest[end + 1..];
+                continue;
+            }
+        }
+        if character == '\n' {
+            out.push(0x8a);
+        } else {
+            out.extend(encode_6937(character).unwrap_or_else(|| vec![b'?']));
+        }
+        rest = &rest[character.len_utf8()..];
+    }
+    out
+}
+
+/// The **chunks** a text field is split into: at most 112 bytes each,
+/// and a diacritic is never split from the letter it sits on.
+fn split_tf(text: &[u8]) -> Vec<&[u8]> {
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at < text.len() {
+        let mut end = (at + TF).min(text.len());
+        if end < text.len() && (0xc1..=0xcf).contains(&text[end - 1]) {
+            end -= 1;
+        }
+        out.push(&text[at..end]);
+        at = end;
+    }
+    out
+}
+
+/// A **cue** of an EBU STL file: when it comes and when it goes, in
+/// the **frames** of the sequence, and its text.
+pub struct StlCue {
+    /// When the cue comes, in the frames of the sequence.
+    pub start: i64,
+    /// When the cue goes, in the frames of the sequence.
+    pub end: i64,
+    /// The text of the cue.
+    pub text: String,
+}
+
+/// The **fields** of a timecode: hours, minutes, seconds and frames.
+fn fields_of(frame: i64, base: i64) -> (u8, u8, u8, u8) {
+    let frame = frame.max(0);
+    let hours = frame / (base * 3600);
+    let minutes = (frame / (base * 60)) % 60;
+    let seconds = (frame / base) % 60;
+    let frames = frame % base;
+    (hours.min(255) as u8, minutes as u8, seconds as u8, frames as u8)
+}
+
+/// The cues of a caption track as an **EBU STL file**.
+///
+/// The rate is the rate of the sequence, and the times of the cues are
+/// its frames. The file is written at **twenty-nine and ninety-seven**
+/// when the sequence is at that rate or at thirty, and at **twenty-
+/// five** otherwise.
+pub fn write(cues: &[StlCue], num: i64, den: i64) -> Vec<u8> {
+    // The **rate of the file**: the tree's own rule.
+    let (stl_num, stl_den, dfc) = if (num == 30 && den == 1) || (num == 30000 && den == 1001) {
+        (30000, 1001, "STL30.01")
+    } else {
+        (25, 1, "STL25.01")
+    };
+    // The **frames of the file**: the frames of the sequence, at the
+    // rate of the file.
+    let to_frames = |frame: i64| -> i64 {
+        let numerator = i128::from(frame) * i128::from(den) * i128::from(stl_num);
+        let denominator = i128::from(num) * i128::from(stl_den);
+        let half = denominator / 2;
+        let at = (numerator + half) / denominator;
+        i64::try_from(at).unwrap_or(i64::MAX)
+    };
+    // The **timecode base** of the file: the frames counted in a
+    // second of the timecode.
+    let base = if stl_num % stl_den == 0 { stl_num / stl_den } else { stl_num / stl_den + 1 };
+    // The **blocks**: the text and timing blocks first, as the general
+    // block counts them.
+    let mut ttis: Vec<[u8; TTI]> = Vec::new();
+    let mut subtitles: u16 = 0;
+    let mut first_in: Option<i64> = None;
+    for cue in cues.iter().filter(|cue| cue.end > cue.start) {
+        let number = subtitles;
+        subtitles = subtitles.wrapping_add(1);
+        let start = to_frames(cue.start);
+        let end = to_frames(cue.end).max(start + 1);
+        first_in.get_or_insert(start);
+        let text = encode_text(&cue.text);
+        let chunks: Vec<&[u8]> = if text.is_empty() { vec![&[][..]] } else { split_tf(&text) };
+        let lines = cue.text.lines().count().clamp(1, 11);
+        for (at, chunk) in chunks.iter().enumerate() {
+            let mut block = [0u8; TTI];
+            block[0] = 0;
+            block[1..3].copy_from_slice(&number.to_le_bytes());
+            block[3] = if at + 1 == chunks.len() { 0xff } else { at.min(0xfd) as u8 };
+            block[4] = 0;
+            for (offset, frame) in [(5, start), (9, end)] {
+                let (hours, minutes, seconds, frames) = fields_of(frame, base);
+                block[offset..offset + 4].copy_from_slice(&[hours, minutes, seconds, frames]);
+            }
+            block[13] = (22 - 2 * (lines - 1)) as u8;
+            block[14] = 2;
+            block[15] = 0;
+            block[16..].fill(0x8f);
+            let length = chunk.len().min(TF);
+            block[16..16 + length].copy_from_slice(&chunk[..length]);
+            ttis.push(block);
+        }
+    }
+    // The **general block**.
+    let mut general = [b' '; GSI];
+    let put = |buffer: &mut [u8], at: usize, len: usize, text: &str| {
+        let bytes = text.as_bytes();
+        for (index, byte) in bytes.iter().take(len).enumerate() {
+            buffer[at + index] = *byte;
+        }
+    };
+    put(&mut general, 0, 3, "850");
+    put(&mut general, 3, 8, dfc);
+    put(&mut general, 11, 1, "0");
+    put(&mut general, 12, 2, "00");
+    put(&mut general, 14, 2, "09");
+    put(&mut general, 16, 32, ORIGINATOR);
+    put(&mut general, 224, 6, "000101");
+    put(&mut general, 230, 6, "000101");
+    put(&mut general, 236, 2, "00");
+    put(&mut general, 238, 5, &format!("{:05}", ttis.len().min(99_999)));
+    put(&mut general, 243, 5, &format!("{:05}", subtitles));
+    put(&mut general, 248, 3, "001");
+    put(&mut general, 251, 2, "40");
+    put(&mut general, 253, 2, "23");
+    put(&mut general, 255, 1, "1");
+    put(&mut general, 256, 8, "00000000");
+    let (hours, minutes, seconds, frames) = fields_of(first_in.unwrap_or(0), base);
+    put(&mut general, 264, 8, &format!("{hours:02}{minutes:02}{seconds:02}{frames:02}"));
+    put(&mut general, 272, 1, "1");
+    put(&mut general, 273, 1, "1");
+    // The **file**: the general block and then the blocks.
+    let mut out = general.to_vec();
+    for block in ttis {
+        out.extend_from_slice(&block);
+    }
+    out
+}
