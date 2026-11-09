@@ -4118,6 +4118,7 @@ so.
 | the **checkbox** of a cell | **built.** A cell may be a checkbox — the tree's two commands, its two-pass delete and its clear-formats rule (§681) | §681 |
 | the **guides** of a page | **built.** A guide may be put on a page — the tree's orientation, its spread coordinate, its page and its refusals (§682) | §682 |
 | the **guides** of a page **created** | **built.** A page may be cut into rows and columns — the tree's divisions, its gutter and its limits (§683) | §683 |
+| the **articles** of a layout document | **built.** An article is a named list of items in a reading order — the tree's names, its order and its refusals (§684) | §684 |
 
 ### The list of things that are honestly not there: empty
 
@@ -44728,5 +44729,69 @@ cuts are made for it.
   from the ruler; here a command cuts it.
 - **The tree's positions are in points**, and here they are in
   millimetres.
+
+---
+
+## 684. The articles of a layout document
+
+An **article** may now be made: it is a **named list of items** in a
+reading order — the order they are read in, and not the order they
+stand in.
+
+### What was built
+
+- A new kind (`layout.article`) and six new commands:
+  `layout.document.articles`, `layout.article.new`, `layout.article.add`,
+  `layout.article.remove`, `layout.article.options` and
+  `layout.article.delete`.
+- The **rules** are the tree's own:
+  - an article has a **name**, and no two articles have the same one.
+    An article that is added without a name is called `Article N`,
+    where N is the first number that is free, and a name that is taken
+    is refused by name.
+  - the **items** of an article are the items of the document, in the
+    order they were added. An item that is added twice is not in the
+    article twice, and an item that is not there is not in it at all.
+  - an article may be **renamed**, its items may be **taken out**, and
+    it may be **deleted**. An article that is not there is refused by
+    name.
+  - the **order** of the items may be set: the items that are named
+    come first, in the order they are named, and the rest follow.
+  - an article says whether it is **exported**, and it is exported
+    until it is told otherwise.
+
+### What the port found
+
+- **The tree's articles are addressed by their name** — `article.add`
+  takes a name and refuses an article that is not there by it. Here an
+  article is a **node** and a command takes that node, as a bookmark is
+  a node (§680); the name is still the name it has, and the tree's
+  "no article `X`" refusal has no name to name.
+- **The tree's items are the selection** when no items are named, and
+  the tree's ids are a list in one parameter. Here the ids are a list
+  as well, and every one of them must be a whole number; a list that
+  is not one is refused.
+- **The tree's export flag** says whether the objects of the article
+  are exported in the EPUB and in the HTML. Nothing is exported here,
+  and the flag is carried as it is.
+- **The tree's articles live in the document** and not in the spread,
+  and here they are children of the document as well.
+
+### What it cost
+
+- **Five tests** in the layout battery (`tests/articles.rs`): the
+  article and its items, the name that is given by itself and the name
+  that is taken, the items that are added and taken out, the order that
+  is set, and the article that is renamed and deleted.
+- **Six commands**. The layout battery now carries **68** commands and
+  the MCP server **899**.
+
+### What it does not settle
+
+- **Nothing is exported.** The flag is carried and nothing reads it.
+- **The selection is not here**, so an article is not made of what is
+  selected, and the tree's articles are not made that way here.
+- **An article is a list and not a place.** It holds the ids of the
+  items, and the items stay in the spread.
 
 ---
