@@ -59,6 +59,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod articles;
 mod bleed;
 mod bookmarks;
 mod columns;
@@ -85,6 +86,9 @@ use craftkit_sdk::{
     Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Relation, Session, Text,
 };
 
+pub use articles::{
+    AddToArticle, ArticleOptions, DeleteArticle, NewArticle, ReadArticles, RemoveFromArticle,
+};
 pub use bleed::SetBleed;
 pub use bookmarks::{AddBookmark, DeleteBookmark, ReadBookmarks, RenameBookmark};
 pub use columns::SetColumns;
@@ -192,6 +196,31 @@ impl BookmarkKind {
         Some(json!({
             "name": node.data.get("name").cloned().unwrap_or(Json::Null),
             "page": node.data.get("page").cloned().unwrap_or(Json::Null),
+        }))
+    }
+}
+
+/// An **article**: a named list of items in a reading order.
+#[derive(NodeKind)]
+#[node_kind(kind = "layout.article", label = "Article", layer = "layout", evaluates)]
+pub struct ArticleKind;
+
+impl ArticleKind {
+    /// An article is not drawn.
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Whether a point is inside an article: never.
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What an article **means**: its name, its items and whether it is
+    /// exported.
+    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        Some(json!({
+            "name": node.data.get("name").cloned().unwrap_or(Json::Null),
+            "items": node.data.get("items").cloned().unwrap_or(Json::Null),
+            "export": node.data.get("export").and_then(|export| export.as_bool()).unwrap_or(true),
         }))
     }
 }
