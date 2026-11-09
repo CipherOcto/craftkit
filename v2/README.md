@@ -4123,6 +4123,7 @@ so.
 | the **cues** of a track written as an EBU STL file | **built.** The cues of a track are written as an EBU STL file — the tree's blocks, its rate and its ISO/IEC 6937 (§686) | §686 |
 | the **counts** of this README | **built.** The highest count the README gives for a battery is the count of that battery, and a test keeps it so (§687) | §687 |
 | the **links** of the stories of a layout document | **built.** A story may be linked to another — the tree's revision, its out-of-date link and its update (§688) | §688 |
+| the **style** of a caption track | **built.** A caption track carries a style — the tree's font, its colour, its align and its anchor (§689) | §689 |
 
 ### The list of things that are honestly not there: empty
 
@@ -45025,5 +45026,62 @@ to date when the parent changes.
   and its link — and only the text and the link are here.
 - **The tree's child keeps its frames** when the link is updated, and
   here the items that carry the story keep it.
+
+---
+
+## 689. The style of a caption track
+
+A caption track now carries a **style** — the font the cues are written
+in, the colour, the box behind them and where they stand — and the
+track carries a **language** and its **flags**.
+
+### What was built
+
+- Two new commands: `film.caption.track.set` and
+  `film.caption.track.style`.
+- The **rules** are the tree's own:
+  - the **format** of a track is one of the tree's four, and a format
+    that is not one of them is refused by name;
+  - the **language** of a track is a tag, and it says something;
+  - a track may be **enabled** — shown in the monitor — it may be
+    **locked**, and it may **follow** the inserts and the extracts of
+    the other tracks;
+  - the **style** has a font, a size, a colour, a background and the
+    colour of it, an **align** — left, centre or right — an **anchor**
+    — top, middle or bottom — a margin, a line spacing, an outline and
+    the colour of it. An align and an anchor that are not one of the
+    tree's are refused by name.
+  - a **reset** puts the style back as it was: the font `Inter`, the
+    size fifty-four, white on a black box, centred at the bottom.
+
+### What the port found
+
+- **The tree clamps the numbers** of the style — the size, the outline,
+  the margin and the line spacing — into their ranges, and here a
+  number outside its range is **refused**. The tree's rule and this
+  tree's rule disagree, and this tree refuses.
+- **The tree ignores a colour it cannot read** and keeps the colour it
+  had. Here a colour that is not one is refused by name.
+- **The tree's font may be any name**, and a font that is not there
+  falls back to the tree's own. Here the font is a name, and nothing
+  is drawn with it.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/captionstyle.rs`): the
+  style that is set, the reset, the style that is refused, the track
+  with its name and its language, and the track that is refused.
+- **Two commands**. The film battery now carries **96** commands and
+  the MCP server **908**.
+
+### What it does not settle
+
+- **Nothing draws the captions here**: the style is a fact of the
+  track.
+- **The tree's style is drawn with a font** that may be bundled or a
+  system one, and there is no font here.
+- **The tree's flags do more than they say**: a locked track may not
+  be changed, and a track that follows the inserts moves with them.
+  Here the flags are facts.
 
 ---
