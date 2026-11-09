@@ -4128,6 +4128,7 @@ so.
 | the **patterns** of a redaction | **built.** The text that looks like a card is found by a pattern — the tree's five patterns and their rules (§691) | §691 |
 | the **edges** of a caption | **built.** A cue may be trimmed, moved, split and merged — the tree's room, its next-to-each-other rule and its refusals (§692) | §692 |
 | the **copy** of a cue, and the **end** of a track | **built.** A cue may be duplicated and a track deleted — the tree's copy, its overwrite and its refusals (§693) | §693 |
+| the **cues** of an SCC file | **built.** An SCC file is read — the tree's CEA-608 pairs, its pop-on and roll-up, and its drop-frame timecode (§694) | §694 |
 
 ### The list of things that are honestly not there: empty
 
@@ -45302,5 +45303,63 @@ it.
 - **The tree's track may be locked**, and a locked track may not be
   changed. The lock of this tree is a fact of the track (§689), and
   nothing here reads it yet.
+
+---
+
+## 694. The cues of an SCC file
+
+An **SCC file** may now be read: the CEA-608 byte pairs it carries
+with their timecodes, and the captions they hold.
+
+### What was built
+
+- A **new format** of the reader: `film.captions.read` reads an SCC
+  file when the format is `scc`.
+- The **rules** are the tree's own:
+  - the **header** of the file says `Scenarist_SCC`, and a file that
+    does not is not one.
+  - a **timecode** is hours, minutes, seconds and frames, and it may
+    carry the drop-frame mark. A timecode that is not one is refused
+    by name and with the line it is on.
+  - a **code word** is four hexadecimal digits, and a code word that
+    is not one is a **warning**: the file is read and the word is left
+    out.
+  - the **pairs** are read on **channel one**, and the redundant
+    control code that follows a control code is ignored.
+  - the captions are **pop-on**, **roll-up** or **paint-on**, as the
+    file says, and a caption that is still showing when the file ends
+    stays up for **one second** more.
+  - the **characters** are the ones of the format, and the basic set
+    differs from ASCII in ten places: `á`, `é`, `í`, `ó`, `ú`, `ç`,
+    `÷`, `Ñ`, `ñ` and the block.
+
+### What the port found
+
+- **The tree's timecode is a tick** and the frames of the file are
+  counted at twenty-nine and ninety-seven. Here the cues are the
+  **milliseconds** of the battery, as they are everywhere.
+- **The tree's drop-frame timecode skips two frames** at the start of
+  every minute, and every tenth minute keeps them. Here the same
+  count is made.
+- **The tree's file may hold a caption at the frame zero**, and it is
+  delayed and not lost. Here the same.
+- **The tree's reader runs the channel one decoder** and the data of
+  the other channel is left alone. Here it is the same.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/sccread.rs`): the pop-on
+  caption, the roll-up caption, the file that is not one, the code
+  word that is a warning, and the drop-frame timecode.
+- **No new command**: the reader command learned a format. The film
+  battery carries **104** commands and the MCP server **918**.
+
+### What it does not settle
+
+- **The tree's writer is not here**: an SCC file may not be written.
+- **The tree's reader says the rows of a caption** as they stand, and
+  here the text of a caption is its rows joined with line breaks.
+- **The tree's caption keeps its speaker and its style**, and here a
+  caption of an SCC file is text and times.
 
 ---
