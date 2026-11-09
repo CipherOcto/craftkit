@@ -48,10 +48,12 @@
 
 mod fft;
 mod onsets;
+mod pitch;
 mod transients;
 
 pub use fft::{is_power_of_two, power};
 pub use onsets::{MAX_ONSETS, onsets};
+pub use pitch::{DetectedNote, MAX_FRAMES, audio_to_notes, yin};
 pub use transients::{MAX_TRANSIENTS, levels, loud_ranges, transients};
 
 /// The **limits** a mix is made within.

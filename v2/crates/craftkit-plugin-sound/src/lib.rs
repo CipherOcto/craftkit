@@ -515,6 +515,7 @@ mod fades;
 mod heal;
 mod inactive;
 mod keys;
+mod pitch;
 mod ranges;
 mod remove;
 mod rename;
@@ -563,6 +564,7 @@ pub use mixer::{
     AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, InsertKind, InsertPayload, LaneKind,
     LanePayload, MoveInsert, RemoveInsert, SendKind, SendPayload, SetSend,
 };
+pub use pitch::ReadPitch;
 pub use recording::{MonitorTrack, RecordTrack};
 pub use remove::{RemoveClip, RemoveMarker, RemoveTrack};
 pub use rename::{RenameClip, RenameTrack};
