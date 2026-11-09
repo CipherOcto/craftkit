@@ -4102,6 +4102,7 @@ so.
 | the **CEA-708** service data | **built.** The service data of an MCC file is written and read — the tree's pop-on windows, its packets and its decoder (§712) | §712 |
 | the **data** of a form | **built.** The values of the fields of a form are written as a file and read back — the tree's XFDF, its table and its rules (§713) | §713 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
+| the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -46684,7 +46685,71 @@ rows of the constraints and the bounds of the variables.
 ### What it does not settle
 
 - **The tree's integer and binary variables are not here**: a program
-  here is a linear program and nothing else.
+  here is a linear program and nothing else. — *§715 solves a program
+  whose variables are integers, with the tree's branch and bound; the
+  binary variables are not here.*
+- **The tree's non-linear solver and its evolutionary one are not
+  here**: the simplex is the solver, and it is a solver of linear
+  programs.
+- **The model is not read from the sheet** and the answer is not
+  written into it: the model is numbers, and the answer is said.
+
+---
+
+## 715. The integer variables of a program
+
+A program whose variables are **integers** is now solved in whole
+numbers: the tree's own **branch and bound**.
+
+### What was built
+
+- The **solver** grew the tree's own **branch and bound**:
+  - the program is **relaxed** first — the integer variables are free
+    for a while — and the answer is looked for in the branches of that
+    relaxation;
+  - the variable that is the **most fractional** is the one that is cut
+    in two, and the branch that is **nearer** is taken first;
+  - the best **whole** answer found is the answer, and the number of
+    **nodes** it visited is said;
+  - a program that is not solved within the **nodes** it may visit
+    **stops** and says so: there is no answer rather than a wrong one.
+- The **rules** are the tree's own:
+  - the variables that are integers are **flags**, one for each
+    variable, and a list that is not one flag for each variable is
+    **refused**;
+  - the branch and bound visits between **one** and **ten thousand**
+    nodes, and a number outside is **refused**;
+  - the **optimality** of an answer is a number from zero to a hundred
+    per cent, and a number outside is **refused**: the tree's own zero
+    is a hundredth of a per cent.
+
+### What the port found
+
+- **The tree's branch and bound is a depth-first search over the
+  branches of the relaxation**, and the port found that the nearer
+  branch is *pushed last* — the stack takes the last thing first — so
+  that the nearer branch is taken first.
+- **The tree's branch and bound stops when the best answer it has is
+  within the gap of a better one**: the gap is the tree's own
+  **integer optimality**, a per cent, and here it is the same.
+- **The tree's integer variables are written in the model as
+  constraints** (`B2 int`, `B3 bin`) and here they are **flags** on the
+  variables: the model of the tree is read from cells and this one is
+  numbers.
+
+### What it cost
+
+- **Three tests** in the grid battery (`tests/solver.rs`): the program
+  whose variables are integers, the program whose relaxation is
+  fractional, and the two refusals.
+- **No new command**: the solver command grew three parameters. The
+  grid battery carries **151** commands and the MCP server **929**.
+
+### What it does not settle
+
+- **The binary variables of the tree are not here**: a variable is an
+  integer or it is not, and a variable that is zero or one is a
+  question the bounds answer.
 - **The tree's non-linear solver and its evolutionary one are not
   here**: the simplex is the solver, and it is a solver of linear
   programs.
