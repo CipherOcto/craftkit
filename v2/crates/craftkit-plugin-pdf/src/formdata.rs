@@ -223,6 +223,8 @@ fn read_fields(element: &craftkit_sdk::xml::Element, prefix: &str, out: &mut Vec
 fn set_value(session: &mut Session, node: &Node, value: &str) -> Result<(), String> {
     let document = session.document();
     let found = crate::fields::field_of(document, node).ok_or("the node is not a field")?;
+    // A **button** that is **off** holds no state: the tree's own rule.
+    let off = found.kind == crate::fields::FieldKind::Button && value == "Off";
     match found.kind {
         crate::fields::FieldKind::Text => {}
         crate::fields::FieldKind::Choice => {
@@ -232,16 +234,21 @@ fn set_value(session: &mut Session, node: &Node, value: &str) -> Result<(), Stri
         }
         crate::fields::FieldKind::Button => {
             let states = crate::fields::states_of(node);
-            if !value.is_empty() && !states.iter().any(|state| state == value) {
+            if !value.is_empty() && !off && !states.iter().any(|state| state == value) {
                 return Err(format!("`{value}` is not one of the states of the field"));
             }
         }
     }
     let mut entries = crate::entries_of(&node.data);
-    if value.is_empty() {
+    if value.is_empty() || off {
         entries.retain(|(key, _)| key != "V");
     } else {
-        let held = json!({ "string": value });
+        // The **value** of a **button** is a **state**, and a state is a
+        // **name**; every other field holds a **string**.
+        let held = match found.kind {
+            crate::fields::FieldKind::Button => Json::String(value.to_string()),
+            _ => json!({ "string": value }),
+        };
         match entries.iter_mut().find(|(key, _)| key == "V") {
             Some(entry) => entry.1 = held,
             None => entries.push(("V".to_string(), held)),
@@ -364,8 +371,18 @@ impl ImportFormData {
             id: id.clone(),
             message: format!("the file cannot be read: {error}"),
         })?;
-        let text = String::from_utf8_lossy(&bytes).to_string();
-        let values = values_of(&text).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+        // The **FDF file** is a file of PDF syntax, and the rest are
+        // files of text: the file says which it is.
+        let values: Vec<(String, Vec<String>)> = if bytes.starts_with(b"%FDF") {
+            crate::fdf::values_of(&bytes)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?
+                .into_iter()
+                .map(|(name, value)| (name, value.into_iter().collect()))
+                .collect()
+        } else {
+            let text = String::from_utf8_lossy(&bytes).to_string();
+            values_of(&text).map_err(|message| EngineError::Failed { id: id.clone(), message })?
+        };
         let mut taken = 0usize;
         let mut left_out: Vec<String> = Vec::new();
         for (name, values) in values {
