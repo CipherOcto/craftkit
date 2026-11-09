@@ -157,6 +157,7 @@ mod javascript;
 mod labels;
 mod loader;
 mod marked;
+mod marks;
 mod markup;
 mod metadata;
 mod metrics;
@@ -215,6 +216,7 @@ pub use intent::WriteIntent;
 pub use javascript::ReadScripts;
 pub use labels::SetPageLabels;
 pub use marked::ReadMarked;
+pub use marks::RemoveMarks;
 pub use markup::AddMarkup;
 pub use metadata::WriteMetadata;
 pub use number::SetNumber;
@@ -2176,6 +2178,7 @@ craftkit_sdk::plugin_anchor!(
     AddMarkup,
     AddWatermark,
     AddBackground,
+    RemoveMarks,
     AddHeader,
     AddFooter,
     ReadInherited,
