@@ -4103,6 +4103,7 @@ so.
 | the **data** of a form | **built.** The values of the fields of a form are written as a file and read back — the tree's XFDF, its table and its rules (§713) | §713 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
+| the **binary** variables of a program | **built.** A variable that is zero or one is solved as the tree's binary constraint — an integer variable whose bounds meet the pair (§717) | §717 |
 | the **EPS file** of a drawing | **built.** A drawing is written as an EPS file — the tree's prolog, its path operators and its ink (§716) | §716 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
@@ -46748,9 +46749,9 @@ numbers: the tree's own **branch and bound**.
 
 ### What it does not settle
 
-- **The binary variables of the tree are not here**: a variable is an
-  integer or it is not, and a variable that is zero or one is a
-  question the bounds answer.
+- **The binary variables of the tree were not here** when this section
+  was written, and they are **here** now: a variable that is zero or one
+  has a rule of its own (§717).
 - **The tree's non-linear solver and its evolutionary one are not
   here**: the simplex is the solver, and it is a solver of linear
   programs.
@@ -46816,3 +46817,71 @@ document, written as PostScript.
 - **The dash of a stroke is not written**: the pattern of a dashed
   stroke is in the payload of the path, and the file does not carry it.
 - **The file is in the units of the document** and not in points.
+
+---
+
+## 717. The binary variables of a program
+
+A variable that is **zero or one** is now solved: the tree's own
+**binary** rule.
+
+### What was built
+
+- The **solver** grew the tree's own binary rule:
+  - a binary variable is an **integer variable** whose values are
+    **zero** and **one**;
+  - its **bounds** are the tree's own: they meet that pair, and a
+    variable whose bounds leave it no value has **no solution**, and
+    that is said;
+  - the answer is looked for in the tree's **branch and bound**, and
+    the **nodes** it visited are said.
+- The **rules** are the tree's own:
+  - the variables that are binary are **flags**, one for each variable,
+    as the integer flags are, and a list that is not one flag for each
+    variable is **refused**;
+  - a flag that is not true or false is **refused**;
+  - a variable that is **binary** and is also said **not** to be an
+    integer says two things at once, and that is **refused**: a binary
+    variable is an integer variable.
+
+### What the port found
+
+- **The tree's binary is a constraint on a variable cell** (`B3 bin`),
+  and the port found that it is **two rules at once**: the variable is
+  an integer, and its box is the pair zero and one. The tree's own
+  `build_problem` sets `lo = max(lo, 0)` and `hi = min(hi, 1)`, so the
+  bounds of a binary variable are **the tree's** and not the caller's.
+- **The tree's binary is not a clamp of a wrong number**: what the tree
+  computes is the **intersection** of the caller's box with the pair
+  zero and one, and the port found that this makes a binary variable
+  whose bounds are three to seven a program with **no solution** — and
+  the tree says so rather than answering a number.
+- **A binary variable and a whole variable are one search**: the tree's
+  branch and bound takes a list of flags, and a binary variable is a
+  flag on that list, so the two kinds of variable live in one program
+  here as they do there.
+- The tree writes its binary into the saved model as the **name**
+  `"binary"`, where an integer writes `"integer"`; here the flags are
+  **flags**, as the integer flags are.
+
+### What it cost
+
+- **Nine tests** in the grid battery (`tests/solverbinary.rs`): the
+  knapsack that is solved in zeroes and ones, the binary variable with
+  no value in its bounds, the binary variable that cannot reach one,
+  the program with no solution, the two kinds of variable in one
+  program, and the four refusals.
+- **No new command**: the solver command grew one parameter. The grid
+  battery carries **151** commands and the MCP server **930**.
+
+### What it does not settle
+
+- **The tree's non-linear solver and its evolutionary one are not
+  here**: the simplex is the solver, and it is a solver of linear
+  programs.
+- **The tree's reports are not here**: its Answer sheet and its Limits
+  sheet are written on new sheets, and the tree's own Limits report
+  **does not apply** to a model with a binary constraint, so nothing is
+  lost by not having it.
+- **The model is not read from the sheet** and the answer is not
+  written into it: the model is numbers, and the answer is said.
