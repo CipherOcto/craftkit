@@ -4102,6 +4102,7 @@ so.
 | the **CEA-708** service data | **built.** The service data of an MCC file is written and read — the tree's pop-on windows, its packets and its decoder (§712) | §712 |
 | the **data** of a form | **built.** The values of the fields of a form are written as a file and read back — the tree's XFDF, its table and its rules (§713) | §713 |
 | the **compare** of two files | **built.** The differences between the text of two files of PDF are found — the tree's diff, its kinds and its report (§721) | §721 |
+| the **text markup** of a document | **built.** The highlight, the underline, the strikeout and the squiggly underline are written over the text of a page — the tree's quads, its colours and its blend (§723) | §723 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
@@ -47199,3 +47200,67 @@ PostScript.
   is left out.
 - **The freeform gradient of the tree is not here**: it is a field of
   colour, and it is written as a picture.
+
+---
+
+## 723. The text markup of a document
+
+The **highlight**, the **underline**, the **strikeout** and the
+**squiggly underline** are now written over the text of a page.
+
+### What was built
+
+- A **new command**: `pdf.markup.add` marks the text of a page — the
+  **kind**, the **region** it covers, and the **object number** the
+  annotation has in the file.
+- The **rules** are the tree's own:
+  - the **kinds** are the tree's four, and each has the tree's
+    **colour**: the yellow of a highlight, the blue of an underline, the
+    red of a strikeout and the green of a squiggly underline;
+  - the **quads** are the lines of the text **under the region** — the
+    tree takes the lines of the text that is selected, and here the
+    region says which text it is;
+  - a region with **no text under it** has no quads, and the markup is
+    **refused**: a markup over nothing marks nothing;
+  - the **rectangle** of the annotation is the bounds of the quads;
+  - a **highlight multiplies over the text**, the tree's own rule, and
+    the file says so with the blend mode `/Multiply`.
+
+### What the port found
+
+- **The tree's markup is an annotation**, and the port found that it
+  is an annotation with **no** `/F` flag of its own: it is not a note
+  and it is not printed by itself, it is a mark on the text — and the
+  quads are the thing that says where it is.
+- **The tree's highlight multiplies in its renderer**, and the port
+  found that the tree's file does not say so: the **blend mode** is
+  added here, because a file that is read by a reader that does not
+  multiply would draw the highlight *over* the text and hide it. This
+  is the one thing this file has that the tree's does not, and it is
+  said here because it is a change.
+- **The tree's quads come from the text selection**, and the port found
+  that this tree has no selection of text: the **region** says which
+  text it is, and the rule for what is under a region is the tree's
+  own — a fifth of a line, or a point, whichever is less.
+- **The tree's quads are lines and not words**, and the port found
+  that this tree works by the **piece**: the box of a piece is the box
+  of its whole run, and the quad is that box.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/markup.rs`): the
+  highlight, the highlight that multiplies, the underline, the page
+  that names the markup, the region with no text under it, and the kind
+  that is not one of the tree's own.
+- **One new command**: the PDF battery carries **83** commands and the
+  MCP server **932**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The author and the date of the tree's markup are not here**: this
+  tree has no user to name and no clock to read.
+- **The caret and the replacement of the tree are not here**: they are
+  two more kinds of mark, and they are marks of an editor and not marks
+  of a file.
