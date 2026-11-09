@@ -64,6 +64,7 @@ mod bookmarks;
 mod columns;
 mod facing;
 mod grouping;
+mod guides;
 mod items;
 mod layers;
 mod links;
@@ -89,6 +90,7 @@ pub use bookmarks::{AddBookmark, DeleteBookmark, ReadBookmarks, RenameBookmark};
 pub use columns::SetColumns;
 pub use facing::ReadFacing;
 pub use grouping::{GroupItems, UngroupItems};
+pub use guides::{AddGuide, DeleteAllGuides, DeleteGuide, MoveGuide, ReadGuides};
 pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem};
 pub use layers::{
     DeleteLayer, DeleteUnusedLayers, HideLayer, LockLayer, MergeLayers, MoveLayer, RenameLayer, ShowLayer,
@@ -190,6 +192,31 @@ impl BookmarkKind {
         Some(json!({
             "name": node.data.get("name").cloned().unwrap_or(Json::Null),
             "page": node.data.get("page").cloned().unwrap_or(Json::Null),
+        }))
+    }
+}
+
+/// A **guide**: a line that is drawn on a page.
+#[derive(NodeKind)]
+#[node_kind(kind = "layout.guide", label = "Guide", layer = "layout", evaluates)]
+pub struct GuideKind;
+
+impl GuideKind {
+    /// A guide is not drawn.
+    fn paint(_node: &Node, _document: &craftkit_sdk::Document, _canvas: &mut dyn craftkit_sdk::Canvas) {}
+
+    /// Whether a point is inside a guide: never.
+    fn hit(_node: &Node, _document: &Document, _point: craftkit_sdk::Point) -> bool {
+        false
+    }
+
+    /// What a guide **means**: how it lies and where it stands.
+    fn evaluate(node: &Node, _document: &Document) -> Option<Json> {
+        Some(json!({
+            "orientation": node.data.get("orientation").cloned().unwrap_or(Json::Null),
+            "position": node.data.get("position").cloned().unwrap_or(Json::Null),
+            "spread": node.data.get("spread").and_then(|spread| spread.as_bool()).unwrap_or(false),
+            "liquid": node.data.get("liquid").and_then(|liquid| liquid.as_bool()).unwrap_or(false),
         }))
     }
 }
