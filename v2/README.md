@@ -4119,6 +4119,7 @@ so.
 | the **guides** of a page | **built.** A guide may be put on a page — the tree's orientation, its spread coordinate, its page and its refusals (§682) | §682 |
 | the **guides** of a page **created** | **built.** A page may be cut into rows and columns — the tree's divisions, its gutter and its limits (§683) | §683 |
 | the **articles** of a layout document | **built.** An article is a named list of items in a reading order — the tree's names, its order and its refusals (§684) | §684 |
+| the **table of authorities** of a document | **built.** An authority is marked on a block, and the table is derived from the marks — the tree's entry, its quotes and its order (§685) | §685 |
 
 ### The list of things that are honestly not there: empty
 
@@ -44793,5 +44794,63 @@ stand in.
   selected, and the tree's articles are not made that way here.
 - **An article is a list and not a place.** It holds the ids of the
   items, and the items stay in the spread.
+
+---
+
+## 685. The table of authorities of a document
+
+An **authority** may now be marked on a block, and the table of the
+authorities of a document is derived from the marks.
+
+### What was built
+
+- Two new commands: `prose.authority.mark` and
+  `prose.document.authorities`.
+- The **rules** are the tree's own:
+  - an **entry** is the citation of the authority, and it says
+    something: an entry that says nothing is refused.
+  - the **quotes** are taken out of the entry, as the tree takes them
+    out of the citation it marks.
+  - the **same entry twice is one entry**: the authorities of a
+    document are gathered by their entry, and the blocks an entry is
+    marked on are listed once each.
+  - the entries are **sorted**, as the tree sorts them.
+  - the table is **derived**: it is read out of the marks and it
+    cannot be out of date. The tree's table is a field in the
+    document and it is rebuilt when the document changes, and there is
+    no rebuild here.
+
+### What the port found
+
+- **The tree's mark is an inline field** in a paragraph — a `TA` field
+  with the citation in it — and it takes the selected text when no
+  entry is given. Here the mark is the **block's own payload**, as the
+  tree's index mark is, and the entry is always given: there is no
+  selection here.
+- **The tree's table has categories** — cases, statutes and the other
+  kinds of authority — and the tree's mark does not say which one it
+  is. There is no category here either.
+- **The tree's sort is a collation** of the language, and it is not
+  here: the entries are compared as their text is.
+- **The tree's table ends every entry with the page** the entry is
+  on, and it has a tab leader and a right-aligned page number. There
+  is no layout here, and so there is no page to show.
+
+### What it cost
+
+- **Four tests** in the prose battery (`tests/authorities.rs`): the
+  marked block, the entry that says nothing and the quotes that are
+  taken out, the same entry twice, and the sorted entries.
+- **Two commands**. The prose battery now carries **109** commands and
+  the MCP server **901**.
+
+### What it does not settle
+
+- **The table is not laid out** and it carries no page.
+- **There are no categories**, and the tree's mark does not say which
+  one it is either.
+- **The collation is not ported**, and two entries the tree would
+  order differently may stand in the same order here.
+- **No field is written** into the document and nothing is exported.
 
 ---
