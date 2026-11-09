@@ -452,21 +452,39 @@ fn gcd(a: i64, b: i64) -> i64 {
     if b == 0 { a.abs().max(1) } else { gcd(b, a % b) }
 }
 
+/// The **profile** of a file: the tree's own two.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Flavour {
+    /// The **IMSC1 text** profile: it has a rate, and the times of the
+    /// captions may be frame offsets.
+    Imsc1,
+    /// The **DFXP presentation** profile: it has no rate, and the
+    /// times of the captions are clock times.
+    Dfxp,
+}
+
 /// The **cues** of a track, as a TTML file.
 ///
 /// The tree's own rule: the file is an IMSC1 text profile, and the
 /// times of the captions are frame offsets when they are on a frame
 /// boundary of the rate of the sequence, and clock times otherwise.
-pub fn write(cues: &[Cue], rate: Option<(i64, i64)>) -> String {
+pub fn write(cues: &[Cue], rate: Option<(i64, i64)>, flavour: Flavour) -> String {
     let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     out.push_str(
         "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:ttp=\"http://www.w3.org/ns/ttml#parameter\" xmlns:tts=\"http://www.w3.org/ns/ttml#styling\" xmlns:ttm=\"http://www.w3.org/ns/ttml#metadata\"",
     );
-    out.push_str(" ttp:profile=\"http://www.w3.org/ns/ttml/profile/imsc1/text\" ttp:timeBase=\"media\"");
+    out.push_str(&format!(
+        " ttp:profile=\"{}\" ttp:timeBase=\"media\"",
+        match flavour {
+            Flavour::Imsc1 => "http://www.w3.org/ns/ttml/profile/imsc1/text",
+            Flavour::Dfxp => "http://www.w3.org/ns/ttml/profile/dfxp-presentation",
+        }
+    ));
     // The **rate** of the sequence: the base of the frames and the
     // multiplier that makes it.
     // The **rate** of the sequence: the base of the frames and the
-    // multiplier that makes it.
+    // multiplier that makes it. The DFXP profile has no rate.
+    let rate = if flavour == Flavour::Imsc1 { rate } else { None };
     if let Some((num, den)) = rate.filter(|(num, den)| *num > 0 && *den > 0) {
         let base = if num == 30_000 && den == 1001 {
             30
