@@ -285,3 +285,108 @@ pub fn cues_of(text: &str) -> Result<(Vec<Cue>, Vec<String>), String> {
 pub fn cues_as_json(cues: &[Cue]) -> Vec<Json> {
     crate::scc::cues_as_json(cues)
 }
+
+/// The **bytes** of a line, as the text of the format: the
+/// hexadecimal of it and its abbreviations.
+///
+/// The tree's own rule, and the rule of the reader in reverse.
+pub fn compress(bytes: &[u8]) -> String {
+    let mut out = String::new();
+    let mut at = 0;
+    'outer: while at < bytes.len() {
+        // The **padding** of the format is nine times at most in a row.
+        let mut run = 0;
+        while run < 9 && bytes[at + 3 * run..].starts_with(&[0xfa, 0x00, 0x00]) {
+            run += 1;
+        }
+        if run > 0 {
+            out.push((b'G' + run as u8 - 1) as char);
+            at += 3 * run;
+            continue;
+        }
+        for (letter, run) in ABBREV {
+            if bytes[at..].starts_with(run) {
+                out.push(letter);
+                at += run.len();
+                continue 'outer;
+            }
+        }
+        out.push_str(&format!("{:02X}", bytes[at]));
+        at += 1;
+    }
+    out
+}
+
+/// The **count** of the triplets of a packet.
+const CC_COUNT: usize = 20;
+
+/// The **rate code** of the format: twenty-nine and ninety-seven.
+const RATE_CODE: u8 = 4;
+
+/// The **bytes** of a caption distribution packet for one frame, with
+/// the CEA-608 pair of the field one.
+pub fn build_cdp(seq: u16, pair: Option<(u8, u8)>) -> Vec<u8> {
+    let mut data: Vec<u8> = Vec::with_capacity(CC_COUNT * 3);
+    match pair {
+        Some((first, second)) => {
+            data.extend_from_slice(&[0xfc, crate::scc::with_parity(first), crate::scc::with_parity(second)])
+        }
+        None => data.extend_from_slice(&[0xfc, 0x80, 0x80]),
+    }
+    // The **field two** carries nothing here.
+    data.extend_from_slice(&[0xfd, 0x80, 0x80]);
+    while data.len() < CC_COUNT * 3 {
+        data.extend_from_slice(&[0xfa, 0x00, 0x00]);
+    }
+    let len = 7 + 2 + data.len() + 4;
+    let [high, low] = seq.to_be_bytes();
+    let mut cdp =
+        vec![0x96, 0x69, len as u8, RATE_CODE << 4 | 0x0f, 0x43, high, low, 0x72, 0xe0 | CC_COUNT as u8];
+    cdp.extend_from_slice(&data);
+    cdp.extend_from_slice(&[0x74, high, low]);
+    let sum: u32 = cdp.iter().map(|byte| *byte as u32).sum();
+    cdp.push(((256 - sum % 256) % 256) as u8);
+    let mut out = vec![0x61, 0x01, cdp.len() as u8];
+    out.extend_from_slice(&cdp);
+    // The **checksum** of the ancillary packet: the low eight bits of
+    // the sum of the identifier, the count and the data.
+    let ancillary: u32 = out.iter().map(|byte| *byte as u32).sum();
+    out.push((ancillary & 0xff) as u8);
+    out
+}
+
+/// The **cues** of a track, as an MCC file.
+///
+/// The tree's own rule: the file carries the CEA-608 pairs of the
+/// field one, and the CEA-708 service data of the tree's writer is
+/// not here — the tree writes the two apart, and this writes the first.
+pub fn write(cues: &[(i64, i64, String)], drop_frame: bool) -> String {
+    let schedule = crate::scc::schedule(cues);
+    let mut out = String::from("File Format=MacCaption_MCC V1.0\n\n");
+    out.push_str("///////////////////////////////////////////////////////////////////////////////////\n");
+    out.push_str("// Closed captions written by craftkit: SMPTE ST 334-2 caption distribution packets\n");
+    out.push_str("// carrying CEA-608 field 1 data; empty frames omitted.\n");
+    out.push_str("///////////////////////////////////////////////////////////////////////////////////\n\n");
+    // The **identifier** of the file: a hash of the cues of it.
+    let count = cues.len() as u64;
+    let hash = cues.iter().fold(0xcbf2_9ce4_8422_2325u64 ^ count, |hash, cue| {
+        (hash ^ cue.0 as u64 ^ (cue.1 as u64).rotate_left(17)).wrapping_mul(0x100_0000_01b3)
+    });
+    out.push_str(&format!(
+        "UUID={:08X}-{:04X}-4{:03X}-8{:03X}-{:012X}\n",
+        hash >> 32,
+        (hash >> 16) & 0xffff,
+        hash & 0xfff,
+        (hash >> 20) & 0xfff,
+        hash.rotate_left(29) & 0xffff_ffff_ffff
+    ));
+    out.push_str("Creation Program=craftkit\n");
+    out.push_str(&format!("Time Code Rate={}\n\n", if drop_frame { "30DF" } else { "30" }));
+    let mut seq = 0u16;
+    for (frame, pair) in schedule {
+        let bytes = build_cdp(seq, Some(pair));
+        out.push_str(&format!("{}\t{}\n", crate::scc::format_timecode(frame, drop_frame), compress(&bytes)));
+        seq = seq.wrapping_add(1);
+    }
+    out
+}

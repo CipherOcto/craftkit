@@ -525,6 +525,7 @@ impl ExportCaptions {
             Some("webvtt") | Some("vtt") => "webvtt",
             Some("stl") | Some("ebu") => "stl",
             Some("scc") => "scc",
+            Some("mcc") => "mcc",
             Some("ttml") => "ttml",
             Some("dfxp") => "dfxp",
             Some(other) => {
@@ -575,6 +576,14 @@ impl ExportCaptions {
                 .map(|cue| (crate::scc::frame_of(cue.start), crate::scc::frame_of(cue.end), cue.text.clone()))
                 .collect();
             crate::scc::write(&cues, false).into_bytes()
+        } else if format == "mcc" {
+            // The **MCC file**: the CEA-608 pairs of the field one, in
+            // a caption distribution packet a frame.
+            let cues: Vec<(i64, i64, String)> = cues
+                .iter()
+                .map(|cue| (crate::scc::frame_of(cue.start), crate::scc::frame_of(cue.end), cue.text.clone()))
+                .collect();
+            crate::mcc::write(&cues, false).into_bytes()
         } else if format == "ttml" || format == "dfxp" {
             // The **TTML file**: the cues of the track with the times of
             // the rate of the sequence.

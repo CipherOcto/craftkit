@@ -503,7 +503,7 @@ pub const FORMATS: [&str; 6] = ["subrip", "webvtt", "stl", "scc", "mcc", "ttml"]
 /// The MacCaption MCC file is read here and it is not written: the
 /// writer of the tree writes the CEA-708 service data beside the
 /// CEA-608 pairs, and that is not here.
-pub const WRITABLE: [&str; 6] = ["subrip", "webvtt", "stl", "scc", "ttml", "dfxp"];
+pub const WRITABLE: [&str; 7] = ["subrip", "webvtt", "stl", "scc", "mcc", "ttml", "dfxp"];
 
 /// The **formats** of a caption file this tree imports as a track.
 ///
@@ -873,6 +873,7 @@ impl WriteCaptions {
             None | Some("") | Some("subrip") | Some("srt") => "subrip",
             Some("webvtt") | Some("vtt") => "webvtt",
             Some("scc") => "scc",
+            Some("mcc") => "mcc",
             Some("ttml") => "ttml",
             Some("dfxp") => "dfxp",
             Some(other) => {
@@ -903,6 +904,16 @@ impl WriteCaptions {
                 .collect();
             let drop_frame = self.drop_frame.map(|flag| flag.0).unwrap_or(false);
             crate::scc::write(&cues, drop_frame)
+        } else if format == "mcc" {
+            // The **MCC file**: the CEA-608 pairs of the field one, in
+            // a caption distribution packet a frame.
+            let cues = cues_from(&self.cues, &id)?;
+            let cues: Vec<(i64, i64, String)> = cues
+                .into_iter()
+                .map(|cue| (crate::scc::frame_of(cue.start), crate::scc::frame_of(cue.end), cue.text))
+                .collect();
+            let drop_frame = self.drop_frame.map(|flag| flag.0).unwrap_or(false);
+            crate::mcc::write(&cues, drop_frame)
         } else if format == "ttml" || format == "dfxp" {
             // A TTML file has no rate of its own here: the times of the
             // captions are clock times.

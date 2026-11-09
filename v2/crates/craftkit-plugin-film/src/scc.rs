@@ -762,7 +762,7 @@ fn encode_pac(row: usize, indent: usize) -> (u8, u8) {
 }
 
 /// The **parity** of a byte: the odd parity of the format.
-fn with_parity(byte: u8) -> u8 {
+pub(crate) fn with_parity(byte: u8) -> u8 {
     let byte = byte & 0x7f;
     if byte.count_ones().is_multiple_of(2) { byte | 0x80 } else { byte }
 }
