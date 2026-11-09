@@ -347,9 +347,26 @@ impl ImportCaptions {
                 message: "a file has a path".to_string(),
             });
         }
+        let bytes =
+            craftkit_sdk::files::read_bounded(std::path::Path::new(&path), crate::captions::MAX_BYTES)
+                .map_err(|message| EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("the file cannot be read: {message}"),
+                })?;
+        // The **format** of the file: the one the command names, and
+        // else the one the extension and the content of the file say.
         let named = self.format.as_ref().map(|format| format.0.trim().to_ascii_lowercase());
         let format = match named.as_deref() {
-            None | Some("") | Some("subrip") | Some("srt") => "subrip",
+            None | Some("") => match crate::detect::detect(&path, &bytes) {
+                Some(format) => format,
+                None => {
+                    return Err(EngineError::Failed {
+                        id: command.to_string(),
+                        message: format!("`{path}` is not a caption file of this tree"),
+                    });
+                }
+            },
+            Some("subrip") | Some("srt") => "subrip",
             Some("webvtt") | Some("vtt") => "webvtt",
             Some("stl") | Some("ebu") => "stl",
             Some("scc") => "scc",
@@ -364,12 +381,6 @@ impl ImportCaptions {
                 });
             }
         };
-        let bytes =
-            craftkit_sdk::files::read_bounded(std::path::Path::new(&path), crate::captions::MAX_BYTES)
-                .map_err(|message| EngineError::Failed {
-                    id: command.to_string(),
-                    message: format!("the file cannot be read: {message}"),
-                })?;
         // The **cues** of the file: the formats that are read may be
         // imported, and the reading is the one of the reader.
         let (cues, warnings) = crate::captions::cues_of_file(format, &bytes).map_err(|message| {

@@ -204,6 +204,7 @@ mod captions;
 mod captionstyle;
 mod captiontracks;
 mod clipreading;
+mod detect;
 mod edits;
 mod edl;
 mod edlimport;

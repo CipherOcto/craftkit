@@ -159,6 +159,18 @@ fn clock_of(text: &str) -> Option<i64> {
     Some(milliseconds)
 }
 
+/// Whether a line is a **timing line**: two clocks and an arrow
+/// between them.
+///
+/// The tree's own rule: the arrow is what tells a caption file from a
+/// file of text.
+pub fn timing_line(line: &str) -> bool {
+    let Some((start, rest)) = line.split_once("-->") else { return false };
+    let rest = rest.trim_start();
+    let end = &rest[..rest.find(char::is_whitespace).unwrap_or(rest.len())];
+    clock_of(start.trim()).is_some() && clock_of(end).is_some()
+}
+
 /// The **clock** a number of milliseconds is written as.
 ///
 /// The tree's own shape: `HH:MM:SS,mmm`.
@@ -401,6 +413,43 @@ pub fn cues_of(text: &str) -> Result<(Vec<Cue>, Vec<String>), String> {
         return Err("the file is not a SubRip file".to_string());
     }
     Ok((cues, warnings))
+}
+
+/// **Detect** the format of a caption file.
+///
+/// The tree's own rule: the extension of the file and the content of
+/// it say together what the file is, and a file they do not name is
+/// not a caption file.
+#[derive(Command)]
+#[command(id = "film.captions.detect", area = "film", layer = "film", icon = "search")]
+pub struct DetectCaptions {
+    /// The file to look at.
+    pub path: Text,
+}
+
+impl DetectCaptions {
+    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "film.captions.detect".to_string();
+        let path = self.path.0.trim().to_string();
+        if path.is_empty() {
+            return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
+        }
+        let bytes =
+            craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(|message| {
+                EngineError::Failed { id: id.clone(), message: format!("the file cannot be read: {message}") }
+            })?;
+        let Some(format) = crate::detect::detect(&path, &bytes) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("`{path}` is not a caption file of this tree"),
+            });
+        };
+        Ok(Outcome::new(format!("`{path}` is a {format} file")).with_data(json!({
+            "path": path,
+            "format": format,
+            "bytes": bytes.len(),
+        })))
+    }
 }
 
 /// The **cues** of a caption file, and the **warnings** of the reading.
