@@ -4095,6 +4095,7 @@ so.
 | the **consolidation** of several ranges of cells | **built.** The ranges are added up into one table — the tree's labels, its ways and its bounds (§705) | §705 |
 | the **fields** of a pivot | **built.** The columns of the range a pivot reads are named, told apart and placed in the areas of the report — the tree's headers, its numbers, its dates and its samples (§706) | §706 |
 | the **trendline** of a chart | **built.** The values of a chart are fitted — the tree's kinds, its transforms, its bounds and its equations (§707) | §707 |
+| the **pitch** of a clip | **built.** The notes a clip's sound sings are heard — the tree's YIN, its runs of frames and its bounds (§708) | §708 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -46229,3 +46230,65 @@ explains.
   no trace of it, and the fit is asked for.
 - **The fit is not drawn**: this tree has no chart renderer, so a
   trendline is a line of numbers and not a line on a picture.
+
+---
+
+## 708. The pitch of a clip: the notes its sound sings
+
+A clip of a sound may now be **listened to**: the notes that its sound
+sings are heard and said.
+
+### What was built
+
+- A **new command**: `sound.clip.pitch.read` hears the sound of a clip
+  and says the notes in it.
+- The **detector** is the tree's own: **YIN**, the cumulative mean
+  normalised difference of de Cheveigné and Kawahara (2002), and the
+  segmentation of the frames into **runs** of one note:
+  - the sound is cut into **frames** of forty-six milliseconds, and each
+    frame is compared with itself at every **lag** it could be;
+  - the differences are made **cumulative and normalised**, and the lag
+    where that measure falls below a **threshold** is the period of the
+    note;
+  - a **run** of frames that sing the same note is a note, and a run of
+    fewer than **three** frames is not;
+  - the **velocity** of a note is read from how loud its run was.
+- The **bounds** of the search are the tree's own: **fifty hertz** to
+  **sixteen hundred hertz**, and a range outside **twenty hertz** and
+  **five thousand hertz** is **refused**, and not made to fit.
+- The **frames** are **capped** at **two million**, so that a sound
+  that is longer than that is read as far as it goes and no further.
+- The notes are said in **seconds**, because the tree says them in
+  samples and this tree's timeline is in seconds.
+
+### What the port found
+
+- **The tree's detector is in the tree's own arithmetic library**, and
+  here it is in this tree's own arithmetic library too: `craftkit-audio`
+  carries the detector, and the battery carries the command.
+- **The tree's frames are of forty-six milliseconds and hop a quarter of
+  a frame**, and a frame that is quiet does not sing: there is no note
+  in a silence.
+- **The tree's detector is monophonic** — it looks for one period in
+  the frame and finds one — and a sound that sings two notes at once is
+  heard as one of them.
+- **The tree's copy of the notes is a MIDI clip on the clipboard**, and
+  here the notes are said: a MIDI clip is made by the commands that
+  make MIDI clips, and this one does not pretend to be one of them.
+
+### What it cost
+
+- **Five tests** in the sound battery (`tests/pitchdetect.rs`): the
+  middle A, another pitch, the silence, the bounds, and the clip that
+  plays no sound.
+- **One new command**: the sound battery carries **137** commands and
+  the MCP server **923**.
+
+### What it does not settle
+
+- **The detection is monophonic**: two notes at once are one note.
+- **The notes are said and not written**: a MIDI clip of them is made
+  by the commands that make MIDI clips.
+- **The note of the clip's own pitch is not applied**: the clip may be
+  played at another pitch, and the notes heard are the notes of the
+  source, not of the clip as it is played.
