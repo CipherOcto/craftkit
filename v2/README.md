@@ -4090,6 +4090,7 @@ so.
 | the **format** of a caption file detected | **built.** The extension of a file and its content say what it is — the tree's rules, its extensions and its refusal (§700) | §700 |
 | the **cues** of a TTML file | **built.** A TTML file is read — the tree's timing parameters, its time expressions, its containers and its text (§701) | §701 |
 | the **cues** of a track written as a TTML file | **built.** The cues of a track are written as a TTML file — the tree's IMSC1 profile, its frame offsets and its clocks (§702) | §702 |
+| the **cues** of a track written as a DFXP file | **built.** The cues of a track are written as a DFXP file — the tree's presentation profile and its clock times (§703) | §703 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -45902,8 +45903,55 @@ text profile, with the times of the captions in it.
 
 - **The speakers of the captions are not written**, for a caption here
   has none.
-- **The DFXP profile is not written**: the file is the IMSC1 one.
+- **The DFXP profile is not written**: the file is the IMSC1 one. —
+  *It is written now (§703).*
 - **The styles of the captions are not written**: the file holds the
   styling and the layout of the format, and the captions are plain.
+
+---
+
+## 703. The cues of a track written as a DFXP file
+
+The cues of a track may now be written as a **DFXP file**: the older
+profile of the format, with no rate in it.
+
+### What was built
+
+- A **new format** of the writers: `film.captions.export` writes a DFXP
+  file when the format is `dfxp`, and `film.captions.write` writes one
+  from the cues it is given.
+- The **rules** are the tree's own:
+  - the file is the **DFXP presentation** profile, and it has **no
+    rate**: the times of the captions are clock times.
+  - the rest of the file is as the TTML file is: the styling and the
+    layout of the head, one paragraph a caption in the body, and the
+    text of a caption escaped.
+- The **reader** reads a DFXP file as a TTML file, for it is the same
+  XML with an older namespace.
+
+### What the port found
+
+- **The tree's writer takes the profile of the file** and the rate of
+  the sequence separately, and the rate is only written for the IMSC1
+  profile: the port found that a DFXP file with a rate in it is a file
+  of another format.
+- **The tree's writer writes the clock times of the captions** in the
+  DFXP file, and the frame offsets only in the IMSC1 one.
+
+### What it cost
+
+- **Three tests** in the film battery (`tests/dfxpwrite.rs`): the file
+  that says what it is, the profile that has no rate, and the file that
+  is read back.
+- **No new command**: the export command and the write command learned
+  a format. The film battery carries **105** commands and the MCP server
+  **919**.
+
+### What it does not settle
+
+- **The DFXP file is not the IMSC1 file**: the profile of it is the
+  older one, and the tree writes the two with the same cues.
+- **The speakers of the captions are not written**, for a caption here
+  has none.
 
 ---
