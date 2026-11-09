@@ -75,6 +75,7 @@
 #![forbid(unsafe_code)]
 
 mod dashes;
+mod epsexport;
 mod gradients;
 mod opacity;
 mod pathfinder;
@@ -84,6 +85,7 @@ mod svgexport;
 mod svgimport;
 
 pub use dashes::DashPath;
+pub use epsexport::ExportEps;
 pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
 pub use opacity::{SetOpacity, fill_at, stroke_at};
 pub use pathfinder::{CropPaths, DividePaths, MergePaths, TrimPaths};
