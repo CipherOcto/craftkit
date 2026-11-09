@@ -4107,6 +4107,7 @@ so.
 | the **watermark** of a page | **built.** A page carries a watermark — the tree's text, its Helvetica, its size and its grey (§725) | §725 |
 | the **header** and the **footer** of a page | **built.** The text at the top of a page and at the bottom of it, in three slots each, with the tree's tokens (§726) | §726 |
 | the **background** of a page | **built.** A colour behind the content of a page — the tree's rectangle, its mark and its graphics state (§727) | §727 |
+| the **marks** of a page | **built.** The watermark, the header, the footer and the background are taken away again — the tree's mark and its name (§728) | §728 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
@@ -47519,3 +47520,62 @@ it.
   and a file.
 - **The background is not removed by a command**: the tree removes the
   marks it made, and this tree does not yet keep track of them.
+
+---
+
+## 728. The marks of a page are taken away
+
+The **watermark**, the **header**, the **footer** and the
+**background** of a page may now be taken away.
+
+### What was built
+
+- A **new command**: `pdf.page.marks.remove` takes the marks of a
+  page away — the **page** and the **kind**.
+- The **rules** are the tree's own:
+  - the **kinds** are the tree's own three: the `headerfooter`, the
+    `watermark` and the `background`, and a kind that is not one of
+    them is **refused**;
+  - the header and the footer are **one kind**: the tree draws them
+    with one mark, and so does this one;
+  - a mark is the content between the `q` that opens it and the `EMC`
+    that closes it, and taking it away **cuts that content out** of the
+    page;
+  - **every** mark of that kind on the page is taken away, and how many
+    were is said.
+
+### What the port found
+
+- **The tree's marks are named so that they can be found**, and the
+  port found that the name is the `/PCMark` of the marked content —
+  `/Watermark`, `/HeaderFooter` and `/Background` — and that the name
+  is the only thing the tree needs to take a mark away.
+- **The tree's marks are streams of their own**, and the port found
+  that the tree puts every mark in a stream it tags, so that the
+  content of the page is a list and a mark is one entry of it. Here the
+  mark is written into the content of the page itself, and the port
+  found that the marked content carries the same name — so the mark is
+  found by the name and cut out of the content.
+- **The tree's removal restores the page's content list**, and the
+  port found that the tree wraps the original content in `q`/`Q` so
+  that the marks may be taken away without touching it: here the
+  content is not wrapped, and the mark is cut out of it.
+
+### What it cost
+
+- **Four tests** in the PDF battery (`tests/marks.rs`): the watermark
+  that is taken away, the header and the footer that are taken away
+  together, the mark of another kind that is left alone, and the kind
+  that is refused.
+- **One new command**: the PDF battery carries **89** commands and the
+  MCP server **938**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The marks of a page are not listed**: the command says how many it
+  took away and not where they were.
+- **A mark that is not one of this tree's is not taken away**: the
+  command finds the tree's own names, and a file that carries another
+  mark is left as it is.
