@@ -52,7 +52,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, Outcome, Session, Text};
 
 /// The most a caption file may be: sixteen megabytes.
 pub(crate) const MAX_BYTES: u64 = 16 * 1024 * 1024;
@@ -748,6 +748,9 @@ pub struct WriteCaptions {
     /// The blocks of a WebVTT file: the notes, the styles and the
     /// regions.
     pub blocks: Option<Json>,
+    /// Whether an SCC file carries the **drop-frame** timecode: it does
+    /// not when this is not given.
+    pub drop_frame: Option<Bool>,
 }
 
 impl WriteCaptions {
@@ -761,6 +764,7 @@ impl WriteCaptions {
         let format = match named.as_deref() {
             None | Some("") | Some("subrip") | Some("srt") => "subrip",
             Some("webvtt") | Some("vtt") => "webvtt",
+            Some("scc") => "scc",
             Some(other) => {
                 return Err(EngineError::Failed {
                     id: id.clone(),
@@ -778,6 +782,17 @@ impl WriteCaptions {
                 None => Vec::new(),
             };
             write_vtt(&cues, &blocks)
+        } else if format == "scc" {
+            // An SCC file carries **frames**, and the cues are in
+            // milliseconds: each one is rounded to the nearest frame of
+            // the format.
+            let cues = cues_from(&self.cues, &id)?;
+            let cues: Vec<(i64, i64, String)> = cues
+                .into_iter()
+                .map(|cue| (crate::scc::frame_of(cue.start), crate::scc::frame_of(cue.end), cue.text))
+                .collect();
+            let drop_frame = self.drop_frame.map(|flag| flag.0).unwrap_or(false);
+            crate::scc::write(&cues, drop_frame)
         } else {
             let cues = cues_from(&self.cues, &id)?;
             write_subrip(&cues)

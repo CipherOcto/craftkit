@@ -519,6 +519,7 @@ impl ExportCaptions {
             None | Some("") | Some("subrip") | Some("srt") => "subrip",
             Some("webvtt") | Some("vtt") => "webvtt",
             Some("stl") | Some("ebu") => "stl",
+            Some("scc") => "scc",
             Some(other) => {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
@@ -557,6 +558,16 @@ impl ExportCaptions {
                 })
                 .collect();
             crate::captions::write_vtt(&cues, &[]).into_bytes()
+        } else if format == "scc" {
+            // The **SCC file** carries the frames of the format, which
+            // are twenty-nine and ninety-seven a second whatever the
+            // rate of the sequence is: each cue is rounded to the
+            // nearest frame of the format.
+            let cues: Vec<(i64, i64, String)> = cues
+                .iter()
+                .map(|cue| (crate::scc::frame_of(cue.start), crate::scc::frame_of(cue.end), cue.text.clone()))
+                .collect();
+            crate::scc::write(&cues, false).into_bytes()
         } else {
             crate::captions::write_subrip(&cues).into_bytes()
         };

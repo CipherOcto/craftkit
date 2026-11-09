@@ -472,3 +472,410 @@ pub fn cues_as_json(cues: &[Cue]) -> Vec<Json> {
         })
         .collect()
 }
+
+/// The **plain text** of a caption: the tags, the overrides and the
+/// entities are taken out, as the tree takes them out.
+///
+/// A tag runs to the next `>` and an override block to the next `}`, and
+/// an unterminated one is kept as it is. The **entities** of the markup
+/// are decoded, and a carriage return is dropped.
+pub fn plain_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut characters = text.chars().peekable();
+    while let Some(character) = characters.next() {
+        match character {
+            '<' => {
+                // A tag runs to the next `>`, and an unterminated one
+                // is kept as it is.
+                let mut literal = String::new();
+                let mut closed = false;
+                for next in characters.by_ref() {
+                    if next == '>' {
+                        closed = true;
+                        break;
+                    }
+                    literal.push(next);
+                }
+                if !closed {
+                    out.push('<');
+                    out.push_str(&literal);
+                }
+            }
+            '{' if characters.peek() == Some(&'\\') => {
+                // An override block runs to the next `}`.
+                let mut literal = String::new();
+                let mut closed = false;
+                for next in characters.by_ref() {
+                    if next == '}' {
+                        closed = true;
+                        break;
+                    }
+                    literal.push(next);
+                }
+                if !closed {
+                    out.push('{');
+                    out.push_str(&literal);
+                }
+            }
+            '&' => {
+                // The **entities** of the markup, and the mark itself
+                // when it starts none.
+                let rest: String = characters.clone().take(8).collect();
+                const ENTITIES: [(&str, char); 8] = [
+                    ("amp;", '&'),
+                    ("lt;", '<'),
+                    ("gt;", '>'),
+                    ("nbsp;", '\u{a0}'),
+                    ("quot;", '"'),
+                    ("apos;", '\''),
+                    ("lrm;", '\u{200e}'),
+                    ("rlm;", '\u{200f}'),
+                ];
+                match ENTITIES.iter().find(|(name, _)| rest.starts_with(name)) {
+                    Some((name, character)) => {
+                        for _ in 0..name.len() {
+                            characters.next();
+                        }
+                        out.push(*character);
+                    }
+                    None => out.push('&'),
+                }
+            }
+            '\r' => {}
+            character => out.push(character),
+        }
+    }
+    out
+}
+
+/// The **rows** of a caption: the text wrapped at the columns of the
+/// format, and no more rows than the format has.
+pub fn wrap_rows(text: &str) -> Vec<String> {
+    let mut rows: Vec<String> = Vec::new();
+    for line in text.lines() {
+        let mut current = String::new();
+        for word in line.split_whitespace() {
+            if rows.len() == ROWS {
+                return rows;
+            }
+            // A file may hold at most fifteen rows of thirty-two
+            // columns, and a word longer than the room is cut.
+            let mut word: String = word.chars().take(COLS * (ROWS - rows.len())).collect();
+            loop {
+                let need = if current.is_empty() {
+                    word.chars().count()
+                } else {
+                    current.chars().count() + 1 + word.chars().count()
+                };
+                if need <= COLS {
+                    if !current.is_empty() {
+                        current.push(' ');
+                    }
+                    current.push_str(&word);
+                    break;
+                }
+                if !current.is_empty() {
+                    rows.push(std::mem::take(&mut current));
+                    if rows.len() == ROWS {
+                        return rows;
+                    }
+                    continue;
+                }
+                let head: String = word.chars().take(COLS).collect();
+                word = word.chars().skip(COLS).collect();
+                rows.push(head);
+                if rows.len() == ROWS {
+                    return rows;
+                }
+                if word.is_empty() {
+                    break;
+                }
+            }
+        }
+        if !current.is_empty() {
+            rows.push(current);
+        }
+    }
+    rows.truncate(ROWS);
+    rows
+}
+
+/// How a character is **transmitted**.
+enum Encoded {
+    /// One byte of the basic set.
+    Basic(u8),
+    /// A pair of bytes: a special or an extended character. An
+    /// extended character replaces the character before it, so a
+    /// **fallback** is sent first for the decoders that do not know it.
+    Pair { b1: u8, b2: u8, fallback: Option<u8> },
+}
+
+/// The byte a character of the **basic set** has.
+fn basic_byte(character: char) -> Option<u8> {
+    (0x20u8..=0x7f).find(|byte| basic_char(*byte) == Some(character))
+}
+
+/// The character an **extended** character stands for, when the decoder
+/// does not know it.
+fn fallback_of(character: char) -> char {
+    match character {
+        'Á' | 'À' | 'Â' | 'Ã' | 'Ä' | 'Å' => 'A',
+        'É' | 'È' | 'Ê' | 'Ë' => 'E',
+        'Í' | 'Ì' | 'Î' | 'Ï' => 'I',
+        'Ó' | 'Ò' | 'Ô' | 'Õ' | 'Ö' | 'Ø' => 'O',
+        'Ú' | 'Ù' | 'Û' | 'Ü' => 'U',
+        'ü' | 'ù' => 'u',
+        'ë' => 'e',
+        'ï' | 'ì' => 'i',
+        'ã' | 'ä' | 'å' => 'a',
+        'ò' | 'õ' | 'ö' | 'ø' => 'o',
+        'Ç' => 'C',
+        'ß' => 's',
+        '‘' | '“' | '”' | '«' | '»' => '"',
+        '{' | '┌' | '└' => '[',
+        '}' | '┐' | '┘' => ']',
+        '¡' => '!',
+        '*' | '•' => '.',
+        _ => '-',
+    }
+}
+
+/// The **bytes** one character of the format takes.
+///
+/// The tree's own rule: the apostrophe and the dash of the typography
+/// are the ones of the basic set, a character of the basic set is one
+/// byte, a **special** character is a pair with no fallback, an
+/// **extended** character is a pair with a fallback, and a character
+/// the format cannot show is left out.
+fn encode_char(character: char) -> Option<Encoded> {
+    let character = match character {
+        '’' | 'ʼ' => '\'',
+        '\t' => ' ',
+        '–' => '-',
+        _ => character,
+    };
+    if let Some(byte) = basic_byte(character) {
+        return Some(Encoded::Basic(byte));
+    }
+    if let Some(at) = SPECIAL.iter().position(|known| *known == character) {
+        return Some(Encoded::Pair { b1: 0x11, b2: 0x30 + at as u8, fallback: None });
+    }
+    if let Some(at) = EXT_12.iter().position(|known| *known == character) {
+        let fallback = basic_byte(fallback_of(character)).unwrap_or(0x2d);
+        return Some(Encoded::Pair { b1: 0x12, b2: 0x20 + at as u8, fallback: Some(fallback) });
+    }
+    if let Some(at) = EXT_13.iter().position(|known| *known == character) {
+        let fallback = basic_byte(fallback_of(character)).unwrap_or(0x2d);
+        return Some(Encoded::Pair { b1: 0x13, b2: 0x20 + at as u8, fallback: Some(fallback) });
+    }
+    None
+}
+
+/// The **pairs** that load the text into the non-displayed memory.
+fn load_pairs(text: &str) -> Vec<(u8, u8)> {
+    let plain = plain_text(text);
+    let rows = wrap_rows(&plain);
+    let mut out = vec![(0x14, misc::RCL), (0x14, misc::RCL), (0x14, misc::ENM), (0x14, misc::ENM)];
+    // The rows are **bottom-aligned**: the last row of the format is
+    // the last row of the caption.
+    let first_row = ROWS + 1 - rows.len();
+    for (at, row) in rows.iter().enumerate() {
+        let encoded: Vec<Encoded> = row.chars().filter_map(encode_char).collect();
+        let width = encoded.len().min(COLS);
+        let col = (COLS - width) / 2;
+        let pac = encode_pac(first_row + at, col);
+        out.push(pac);
+        out.push(pac);
+        if !col.is_multiple_of(4) {
+            let offset = (0x17, 0x20 + (col % 4) as u8);
+            out.push(offset);
+            out.push(offset);
+        }
+        let mut pending: Option<u8> = None;
+        for encoded in encoded.into_iter().take(COLS) {
+            match encoded {
+                Encoded::Basic(byte) => match pending.take() {
+                    Some(other) => out.push((other, byte)),
+                    None => pending = Some(byte),
+                },
+                Encoded::Pair { b1, b2, fallback } => {
+                    if let Some(fallback) = fallback {
+                        match pending.take() {
+                            Some(other) => out.push((other, fallback)),
+                            None => out.push((fallback, 0x00)),
+                        }
+                    } else if let Some(other) = pending.take() {
+                        out.push((other, 0x00));
+                    }
+                    out.push((b1, b2));
+                    out.push((b1, b2));
+                }
+            }
+        }
+        if let Some(pending) = pending.take() {
+            out.push((pending, 0x00));
+        }
+    }
+    out
+}
+
+/// The **row** and the **indent** a preamble address code names.
+fn encode_pac(row: usize, indent: usize) -> (u8, u8) {
+    let (first, high) = match row {
+        1 => (0x11, false),
+        2 => (0x11, true),
+        3 => (0x12, false),
+        4 => (0x12, true),
+        5 => (0x15, false),
+        6 => (0x15, true),
+        7 => (0x16, false),
+        8 => (0x16, true),
+        9 => (0x17, false),
+        10 => (0x17, true),
+        11 => (0x10, false),
+        12 => (0x13, false),
+        13 => (0x13, true),
+        14 => (0x14, false),
+        _ => (0x14, true),
+    };
+    let attribute = if indent >= 4 { 0x10 | (((indent / 4).min(7) as u8) << 1) } else { 0 };
+    (first, (if high { 0x60 } else { 0x40 }) | attribute)
+}
+
+/// The **parity** of a byte: the odd parity of the format.
+fn with_parity(byte: u8) -> u8 {
+    let byte = byte & 0x7f;
+    if byte.count_ones().is_multiple_of(2) { byte | 0x80 } else { byte }
+}
+
+/// The **code word** of a pair of bytes: the bytes with their parity.
+pub fn code_word(pair: (u8, u8)) -> u16 {
+    (with_parity(pair.0) as u16) << 8 | with_parity(pair.1) as u16
+}
+
+/// The **fields** of a frame: hours, minutes, seconds and frames.
+///
+/// The tree's own rule: the drop-frame timecode skips two frames at
+/// the start of every minute, and every tenth minute keeps them.
+fn frames_to_fields(frame: i64, drop_frame: bool) -> (i64, i64, i64, i64) {
+    let base = 30i64;
+    let drop = 2i64;
+    let mut n = frame.max(0);
+    if drop_frame {
+        let per_minute = base * 60 - drop;
+        let per_ten = per_minute * 10 + drop;
+        let ten = n / per_ten;
+        let rest = n % per_ten;
+        n += drop * 9 * ten;
+        if rest > drop {
+            n += drop * ((rest - drop) / per_minute);
+        }
+    }
+    let frames = n % base;
+    let seconds = (n / base) % 60;
+    let minutes = (n / (base * 60)) % 60;
+    let hours = n / (base * 3600);
+    (hours, minutes, seconds, frames)
+}
+
+/// The **timecode** of a frame, as the file writes it.
+pub fn format_timecode(frame: i64, drop_frame: bool) -> String {
+    let (hours, minutes, seconds, frames) = frames_to_fields(frame, drop_frame);
+    format!("{hours:02}:{minutes:02}:{seconds:02}{}{frames:02}", if drop_frame { ';' } else { ':' })
+}
+
+/// The **frame** a number of milliseconds is, rounded to the nearest
+/// one.
+pub fn frame_of(milliseconds: i64) -> i64 {
+    (milliseconds.max(0) * 30 + 500) / 1001
+}
+
+/// The **pairs** of the file: the frame each pair is sent at.
+///
+/// The load of a caption is scheduled into the free frames before it,
+/// so that its end of caption lands exactly on the caption's own
+/// frame.
+pub fn schedule(cues: &[(i64, i64, String)]) -> std::collections::BTreeMap<i64, (u8, u8)> {
+    let mut occupied: std::collections::BTreeMap<i64, (u8, u8)> = std::collections::BTreeMap::new();
+    let mut cursor = 0i64;
+    let mut previous_end: Option<i64> = None;
+    let erase = (0x14, misc::EDM);
+    let end_of_caption = (0x14, misc::EOC);
+    let place_free =
+        |occupied: &mut std::collections::BTreeMap<i64, (u8, u8)>, mut frame: i64, pair: (u8, u8)| {
+            while occupied.contains_key(&frame) {
+                frame += 1;
+            }
+            occupied.insert(frame, pair);
+            frame
+        };
+    let mut ordered: Vec<&(i64, i64, String)> = cues.iter().filter(|cue| cue.1 > cue.0).collect();
+    ordered.sort_by_key(|cue| cue.0);
+    for cue in ordered {
+        let start = cue.0.max(cursor);
+        let end = cue.1;
+        // The caption before is cleared when there is a gap.
+        if let Some(previous) = previous_end.take()
+            && previous < start
+        {
+            let frame = place_free(&mut occupied, previous, erase);
+            if !occupied.contains_key(&(frame + 1)) && frame + 1 < start {
+                occupied.insert(frame + 1, erase);
+            }
+        }
+        let load = load_pairs(&cue.2);
+        let count = load.len() as i64;
+        // The doubled codes stay together, so the load is one run of
+        // free frames: the latest run that ends by the caption's frame,
+        // and else the first run after the cursor, which delays it.
+        let run_free = |occupied: &std::collections::BTreeMap<i64, (u8, u8)>, at: i64| {
+            (at..at + count).all(|frame| !occupied.contains_key(&frame))
+        };
+        let base = (cursor..=start - count)
+            .rev()
+            .find(|at| run_free(&occupied, *at))
+            .or_else(|| (cursor..).find(|at| run_free(&occupied, *at)))
+            .unwrap_or(cursor);
+        for (at, pair) in load.into_iter().enumerate() {
+            occupied.insert(base + at as i64, pair);
+        }
+        let mut frame = start.max(base + count);
+        while occupied.contains_key(&frame) {
+            frame += 1;
+        }
+        occupied.insert(frame, end_of_caption);
+        let mut next = frame + 1;
+        if let std::collections::btree_map::Entry::Vacant(slot) = occupied.entry(next) {
+            slot.insert(end_of_caption);
+            next += 1;
+        }
+        cursor = next;
+        previous_end = Some(end.max(next));
+    }
+    if let Some(previous) = previous_end {
+        let frame = place_free(&mut occupied, previous, erase);
+        occupied.insert(frame + 1, erase);
+    }
+    occupied
+}
+
+/// The **cues** as an SCC file.
+pub fn write(cues: &[(i64, i64, String)], drop_frame: bool) -> String {
+    let occupied = schedule(cues);
+    let mut out = String::from("Scenarist_SCC V1.0\n\n");
+    let mut line: Option<(i64, Vec<String>)> = None;
+    let mut last = i64::MIN;
+    for (frame, pair) in occupied {
+        if frame != last + 1
+            && let Some((start, words)) = line.take()
+        {
+            out.push_str(&format!("{}\t{}\n\n", format_timecode(start, drop_frame), words.join(" ")));
+        }
+        line.get_or_insert_with(|| (frame, Vec::new())).1.push(format!("{:04x}", code_word(pair)));
+        last = frame;
+    }
+    if let Some((start, words)) = line {
+        out.push_str(&format!("{}\t{}\n\n", format_timecode(start, drop_frame), words.join(" ")));
+    }
+    out
+}
