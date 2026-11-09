@@ -4129,6 +4129,7 @@ so.
 | the **edges** of a caption | **built.** A cue may be trimmed, moved, split and merged — the tree's room, its next-to-each-other rule and its refusals (§692) | §692 |
 | the **copy** of a cue, and the **end** of a track | **built.** A cue may be duplicated and a track deleted — the tree's copy, its overwrite and its refusals (§693) | §693 |
 | the **cues** of an SCC file | **built.** An SCC file is read — the tree's CEA-608 pairs, its pop-on and roll-up, and its drop-frame timecode (§694) | §694 |
+| the **cues** of a track written as an SCC file | **built.** The cues of a track are written as an SCC file — the tree's pop-on load, its rows, its characters and its timecode (§695) | §695 |
 
 ### The list of things that are honestly not there: empty
 
@@ -43689,7 +43690,8 @@ and the times they are on the screen.
 
 - **The tree has seven caption formats** — SubRip, WebVTT, Scenarist
   SCC, MacCaption MCC, EBU STL, TTML and DFXP — and they are one
-  battery. Here there is one: SubRip.
+  battery. Here there is one: SubRip. — *There are now four: SubRip,
+  WebVTT (§668), EBU STL (§678) and Scenarist SCC (§694).*
 - **The tree's times are ticks** (254 016 000 000 of them a second),
   and a cue keeps the fraction of its clock exactly. Here a cue is in
   **milliseconds**, the unit of the format itself, and a fraction
@@ -43715,7 +43717,9 @@ and the times they are on the screen.
   project, and here the cues are read out of a file and are not
   stored.
 - **The tree's other six formats are not here**: WebVTT, Scenarist
-  SCC, MacCaption MCC, EBU STL, TTML and DFXP.
+  SCC, MacCaption MCC, EBU STL, TTML and DFXP. — *WebVTT, EBU STL and
+  Scenarist SCC have since come (§668, §678, §694); MacCaption MCC,
+  TTML and DFXP are still not here.*
 - **The cues are not laid out and not burned in.** The tree's captions
   are drawn on the picture, and nothing draws them here.
 
@@ -43827,7 +43831,9 @@ file's own words about its cues are kept.
 - **The cues are not kept.** They are read out of a file, and they
   are not stored.
 - **The tree's other five formats are not here**: Scenarist SCC,
-  MacCaption MCC, EBU STL, TTML and DFXP.
+  MacCaption MCC, EBU STL, TTML and DFXP. — *EBU STL and Scenarist SCC
+  have since come (§678, §694); MacCaption MCC, TTML and DFXP are
+  still not here.*
 - **Nothing is written back.** The tree writes a caption file again
   with its cues, its blocks and its voices in it, and nothing writes
   here.
@@ -44339,7 +44345,9 @@ track** of a sequence, snapped to the frames of that sequence.
   import may place the cues, and the tree's captions may be moved
   afterwards; here the cues are made as the file says them.
 - **Only the two formats of the reader are here**: a SubRip file and a
-  WebVTT file, and the tree's other five are not.
+  WebVTT file, and the tree's other five are not. — *The reader has
+  since read an EBU STL file (§678) and a Scenarist SCC file (§694);
+  MacCaption MCC, TTML and DFXP are still not here.*
 
 ---
 
@@ -44408,7 +44416,8 @@ the EBU subtitling data exchange format.
   ninety-seven with non-drop-frame timecode labels, and that is here
   too — but the tree writes that rate back under its own name.
 - **The four other formats of the tree are not here**: Scenarist SCC,
-  MacCaption MCC, TTML and DFXP.
+  MacCaption MCC, TTML and DFXP. — *Scenarist SCC has since been read
+  (§694) and written (§695); the other three are still not here.*
 
 ---
 
@@ -44913,7 +44922,8 @@ and timing blocks.
 ### What it does not settle
 
 - **The other formats of the tree are not here**: SCC, MCC, TTML and
-  DFXP are still neither read nor written.
+  DFXP are still neither read nor written. — *SCC has since been read
+  (§694) and written (§695); MCC, TTML and DFXP are still not here.*
 - **The tree's file has a display standard code and a disk content
   code**, and they say "unknown" here as they do there.
 - **The tree's writer drops a character the set does not hold** and
@@ -45356,10 +45366,89 @@ with their timecodes, and the captions they hold.
 
 ### What it does not settle
 
-- **The tree's writer is not here**: an SCC file may not be written.
+- **The tree's writer is not here**: an SCC file may not be written. —
+  *It is now: §695.*
 - **The tree's reader says the rows of a caption** as they stand, and
   here the text of a caption is its rows joined with line breaks.
 - **The tree's caption keeps its speaker and its style**, and here a
   caption of an SCC file is text and times.
+
+---
+
+## 695. The cues of a track written as an SCC file
+
+An **SCC file** may now be written: the cues of a track are loaded into
+it as pop-on captions, and the file is read back as one.
+
+### What was built
+
+- **Two formats** of the writers: `film.captions.export` writes an SCC
+  file when the format is `scc`, and `film.captions.write` writes one
+  from the cues it is given.
+- The **rules** are the tree's own:
+  - the **load** of a caption is `RCL`, `RCL`, `ENM`, `ENM`, and then a
+    **preamble address code** for each row, twice, and a **tab offset**
+    when the row does not begin on a multiple of four columns.
+  - the **rows** are bottom-aligned — the last row of the format is the
+    last row of the caption — **centred**, and wrapped at thirty-two
+    columns over fifteen rows.
+  - a **character** of the basic set is one byte, a **special**
+    character is a pair of bytes, and an **extended** character is a pair
+    of bytes with a **fallback** sent first for the decoders that do not
+    know it.
+  - the **text** is the plain text of the caption: the tags, the
+    override blocks and the entities of the markup are taken out, and a
+    character the format cannot show is left out.
+  - the **load** is scheduled into the **free frames** before the
+    caption, so that its end of caption lands exactly on the caption's
+    own frame, and the caption before is cleared with an erase when
+    there is a gap.
+  - the **timecode** is the timecode of the format, at twenty-nine and
+    ninety-seven a second, and it carries the drop-frame mark when the
+    file is written for it.
+- The **drop-frame** is a parameter of the writer, and it is not given
+  by default.
+
+### What the port found
+
+- **The tree's writer takes the cues of a document in ticks**, and the
+  frames of the file are counted at twenty-nine and ninety-seven. Here
+  the cues are the **milliseconds** of the battery, and each one is
+  rounded to the nearest frame of the format.
+- **The tree's row of a caption is `16 - the number of rows`** and up,
+  and the port found that the first row of a one-row caption is row
+  **fifteen**, not row sixteen: the port's first attempt was off by one
+  and the tree's own test said so.
+- **The tree's extended characters replace the character before them**,
+  and the writer sends a plain fallback first: `Á` is sent as `A` and
+  then as the pair that means `Á`, so that a decoder that does not know
+  the pair shows `A` and one that does shows `Á`.
+- **The tree's writer drops the characters the format cannot show**, and
+  here they are dropped too.
+- **The tree's writer takes the drop-frame from the sequence**, and a
+  sequence does not have it by default. Here the export writes the file
+  without the mark and the write command has a parameter for it.
+
+### What it cost
+
+- **Six tests** in the film battery (`tests/sccwrite.rs`): the file
+  that says what it is, the file that is written and read back, the
+  caption at zero, the long line that is wrapped, the drop-frame mark,
+  and the format that is not one.
+- **No new command**: the export command and the write command learned
+  a format, and the write command learned a parameter. The film battery
+  carries **104** commands and the MCP server **918**.
+
+### What it does not settle
+
+- **The tree's writer writes a document of cues**, and here the cues are
+  the ones of a track or the ones a command is given.
+- **The tree's writer writes pop-on captions**: the roll-up and the
+  paint-on modes are read here, and they are not written.
+- **The tree's other formats are not here**: MacCaption MCC, TTML and
+  DFXP are neither read nor written.
+- **The tree's plain text decodes the entities of the markup**, and that
+  is now here too, but only in the writer: the reader of a caption file
+  still reads what the file says.
 
 ---
