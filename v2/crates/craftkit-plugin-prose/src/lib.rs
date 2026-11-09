@@ -129,6 +129,7 @@ mod finding;
 mod footnotes;
 mod index;
 mod links;
+mod mailmerge;
 mod media;
 mod merges;
 mod notes;
@@ -175,6 +176,7 @@ pub use figures::ReadFigures;
 pub use finding::{Find, Replace};
 pub use footnotes::{AddFootnote, ReadFootnotes};
 pub use links::ReadLinks;
+pub use mailmerge::Merge;
 pub use media::{SetAlt, SetDecorative, SetPlacement};
 pub use merges::{MergeCells, ReadMerges, SplitCell};
 pub use numberformat::NumberFormat;
@@ -1112,6 +1114,7 @@ craftkit_sdk::plugin_anchor!(
     StyleKind,
     MediaKind,
     AddDocument,
+    Merge,
     AddStyle,
     AddMedia,
     SetAlt,
