@@ -503,7 +503,7 @@ pub const FORMATS: [&str; 6] = ["subrip", "webvtt", "stl", "scc", "mcc", "ttml"]
 /// The MacCaption MCC file is read here and it is not written: the
 /// writer of the tree writes the CEA-708 service data beside the
 /// CEA-608 pairs, and that is not here.
-pub const WRITABLE: [&str; 4] = ["subrip", "webvtt", "stl", "scc"];
+pub const WRITABLE: [&str; 5] = ["subrip", "webvtt", "stl", "scc", "ttml"];
 
 /// The **formats** of a caption file this tree imports as a track.
 ///
@@ -873,6 +873,7 @@ impl WriteCaptions {
             None | Some("") | Some("subrip") | Some("srt") => "subrip",
             Some("webvtt") | Some("vtt") => "webvtt",
             Some("scc") => "scc",
+            Some("ttml") | Some("dfxp") => "ttml",
             Some(other) => {
                 return Err(EngineError::Failed {
                     id: id.clone(),
@@ -901,6 +902,11 @@ impl WriteCaptions {
                 .collect();
             let drop_frame = self.drop_frame.map(|flag| flag.0).unwrap_or(false);
             crate::scc::write(&cues, drop_frame)
+        } else if format == "ttml" {
+            // A TTML file has no rate of its own here: the times of the
+            // captions are clock times.
+            let cues = cues_from(&self.cues, &id)?;
+            crate::ttml::write(&cues, None)
         } else {
             let cues = cues_from(&self.cues, &id)?;
             write_subrip(&cues)

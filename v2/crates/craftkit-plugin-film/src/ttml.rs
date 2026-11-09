@@ -399,3 +399,113 @@ pub fn cues_of(text: &str) -> Result<(Vec<Cue>, Vec<String>), String> {
 pub fn cues_as_json(cues: &[Cue]) -> Vec<craftkit_sdk::serde_json::Value> {
     crate::scc::cues_as_json(cues)
 }
+
+/// The **clock** of a time, as the tree writes it: the mark of the
+/// fraction is a point.
+fn clock(milliseconds: i64) -> String {
+    let milliseconds = milliseconds.max(0);
+    let seconds = milliseconds / 1000;
+    let hours = seconds / 3600;
+    let minutes = (seconds / 60) % 60;
+    let seconds = seconds % 60;
+    let fraction = milliseconds % 1000;
+    format!("{hours:02}:{minutes:02}:{seconds:02}.{fraction:03}")
+}
+
+/// The **time expression** of a time: a frame offset when the time is
+/// on a frame boundary, and a clock otherwise.
+fn time_expr(milliseconds: i64, rate: Option<(i64, i64)>) -> String {
+    if let Some((num, den)) = rate {
+        let scaled = milliseconds.max(0) * num;
+        let unit = 1000 * den;
+        if unit > 0 && scaled % unit == 0 {
+            return format!("{}f", scaled / unit);
+        }
+    }
+    clock(milliseconds)
+}
+
+/// The **text** of a caption, as the tree writes it: the characters are
+/// escaped, and a line break is a `<br/>`.
+fn inline(text: &str) -> String {
+    let mut out = String::new();
+    for (at, line) in text.split('\n').enumerate() {
+        if at > 0 {
+            out.push_str("<br/>");
+        }
+        for character in line.chars() {
+            match character {
+                '&' => out.push_str("&amp;"),
+                '<' => out.push_str("&lt;"),
+                '>' => out.push_str("&gt;"),
+                '"' => out.push_str("&quot;"),
+                '\'' => out.push_str("&apos;"),
+                character => out.push(character),
+            }
+        }
+    }
+    out
+}
+
+/// The **greatest common divisor** of two numbers.
+fn gcd(a: i64, b: i64) -> i64 {
+    if b == 0 { a.abs().max(1) } else { gcd(b, a % b) }
+}
+
+/// The **cues** of a track, as a TTML file.
+///
+/// The tree's own rule: the file is an IMSC1 text profile, and the
+/// times of the captions are frame offsets when they are on a frame
+/// boundary of the rate of the sequence, and clock times otherwise.
+pub fn write(cues: &[Cue], rate: Option<(i64, i64)>) -> String {
+    let mut out = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+    out.push_str(
+        "<tt xmlns=\"http://www.w3.org/ns/ttml\" xmlns:ttp=\"http://www.w3.org/ns/ttml#parameter\" xmlns:tts=\"http://www.w3.org/ns/ttml#styling\" xmlns:ttm=\"http://www.w3.org/ns/ttml#metadata\"",
+    );
+    out.push_str(" ttp:profile=\"http://www.w3.org/ns/ttml/profile/imsc1/text\" ttp:timeBase=\"media\"");
+    // The **rate** of the sequence: the base of the frames and the
+    // multiplier that makes it.
+    // The **rate** of the sequence: the base of the frames and the
+    // multiplier that makes it.
+    if let Some((num, den)) = rate.filter(|(num, den)| *num > 0 && *den > 0) {
+        let base = if num == 30_000 && den == 1001 {
+            30
+        } else if num == 60_000 && den == 1001 {
+            60
+        } else if den == 1 {
+            num
+        } else {
+            30
+        };
+        out.push_str(&format!(" ttp:frameRate=\"{base}\""));
+        let (numerator, denominator) = (num, den * base);
+        let common = gcd(numerator, denominator);
+        if (numerator / common, denominator / common) != (1, 1) {
+            out.push_str(&format!(
+                " ttp:frameRateMultiplier=\"{} {}\"",
+                numerator / common,
+                denominator / common
+            ));
+        }
+    }
+    out.push_str(" xml:lang=\"en\">\n");
+    out.push_str("  <head>\n");
+    out.push_str(
+        "    <styling>\n      <style xml:id=\"s1\" tts:color=\"white\" tts:fontFamily=\"proportionalSansSerif\" tts:fontSize=\"100%\" tts:textAlign=\"center\"/>\n    </styling>\n",
+    );
+    out.push_str(
+        "    <layout>\n      <region xml:id=\"r1\" tts:origin=\"10% 10%\" tts:extent=\"80% 80%\" tts:displayAlign=\"after\"/>\n    </layout>\n",
+    );
+    out.push_str("  </head>\n  <body region=\"r1\" style=\"s1\">\n    <div>\n");
+    for (at, cue) in cues.iter().enumerate() {
+        out.push_str(&format!(
+            "      <p xml:id=\"c{}\" begin=\"{}\" end=\"{}\">{}</p>\n",
+            at + 1,
+            time_expr(cue.start, rate),
+            time_expr(cue.end, rate),
+            inline(&cue.text)
+        ));
+    }
+    out.push_str("    </div>\n  </body>\n</tt>\n");
+    out
+}

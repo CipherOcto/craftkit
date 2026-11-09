@@ -525,6 +525,7 @@ impl ExportCaptions {
             Some("webvtt") | Some("vtt") => "webvtt",
             Some("stl") | Some("ebu") => "stl",
             Some("scc") => "scc",
+            Some("ttml") | Some("dfxp") => "ttml",
             Some(other) => {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
@@ -573,6 +574,10 @@ impl ExportCaptions {
                 .map(|cue| (crate::scc::frame_of(cue.start), crate::scc::frame_of(cue.end), cue.text.clone()))
                 .collect();
             crate::scc::write(&cues, false).into_bytes()
+        } else if format == "ttml" {
+            // The **TTML file**: the cues of the track with the times of
+            // the rate of the sequence.
+            crate::ttml::write(&cues, Some((num, den))).into_bytes()
         } else {
             crate::captions::write_subrip(&cues).into_bytes()
         };
