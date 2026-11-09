@@ -4106,6 +4106,7 @@ so.
 | the **compare** that marks the differences | **built.** The differences between two files are marked in the document — the tree's highlights, its notes and its colours (§724) | §724 |
 | the **watermark** of a page | **built.** A page carries a watermark — the tree's text, its Helvetica, its size and its grey (§725) | §725 |
 | the **header** and the **footer** of a page | **built.** The text at the top of a page and at the bottom of it, in three slots each, with the tree's tokens (§726) | §726 |
+| the **background** of a page | **built.** A colour behind the content of a page — the tree's rectangle, its mark and its graphics state (§727) | §727 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
@@ -47464,3 +47465,57 @@ top of it and at the bottom of it.
   pages.
 - **The date is not the clock**: the caller says the day, so a file
   drawn twice with the same day is the same file.
+
+---
+
+## 727. The background of a page
+
+A page may now carry a **background**: a colour behind the content of
+it.
+
+### What was built
+
+- A **new command**: `pdf.page.background` draws a background on a
+  page — the **colour** and the **opacity**.
+- The **rules** are the tree's own:
+  - the **rectangle** covers the whole page: from its lower left
+    corner, as wide and as high as the page;
+  - the background is drawn **behind** the content of the page;
+  - the **opacity** is a graphics state of its own — the `/PCGS…` that
+    the tree's marks use — and the colour is written with it;
+  - the background is marked as the **pagination artefact** it is, so
+    that a reader may leave it out of the text of the page.
+
+### What the port found
+
+- **The tree's background is page content and not an annotation**,
+  and the port found that the tree marks it the way it marks the
+  watermark and the header: the `/Artifact` of a **pagination**, with
+  the `/Background` mark.
+- **The tree's background is a rectangle and not a picture** when it
+  has no source, and the port found that the rectangle goes from the
+  **lower left** corner of the page — the tree's page space — and is
+  as wide and as high as the page.
+- **The tree's opacity is clamped and this tree refuses**: the tree
+  takes an opacity of two and makes it one; here an opacity outside
+  the scale is **refused**, because a number that is out of scale is a
+  number that is wrong.
+- **The tree's picture background is not here**: that is an image and
+  a file, and this is a colour.
+
+### What it cost
+
+- **Three tests** in the PDF battery (`tests/background.rs`): the
+  background that is drawn behind the content, the graphics state of
+  the page, and the opacity that is refused.
+- **One new command**: the PDF battery carries **88** commands and the
+  MCP server **937**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The picture background of the tree is not here**: that is an image
+  and a file.
+- **The background is not removed by a command**: the tree removes the
+  marks it made, and this tree does not yet keep track of them.
