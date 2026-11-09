@@ -4117,6 +4117,7 @@ so.
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 | the **checkbox** of a cell | **built.** A cell may be a checkbox — the tree's two commands, its two-pass delete and its clear-formats rule (§681) | §681 |
 | the **guides** of a page | **built.** A guide may be put on a page — the tree's orientation, its spread coordinate, its page and its refusals (§682) | §682 |
+| the **guides** of a page **created** | **built.** A page may be cut into rows and columns — the tree's divisions, its gutter and its limits (§683) | §683 |
 
 ### The list of things that are honestly not there: empty
 
@@ -44665,5 +44666,67 @@ help with the placing of things, and it may be moved and deleted.
 - **A guide is not drawn** on the canvas.
 - **The tree's guide has a lock of its own** and no command of the
   tree sets it; here a guide is locked by the layer it is on.
+
+---
+
+## 683. The guides of a page are created
+
+A page may now be **cut** into rows and columns, and the guides of the
+cuts are made for it.
+
+### What was built
+
+- One new command: `layout.guide.create`.
+- The **rules** are the tree's own:
+  - a page is cut into **rows** and **columns**, and there may be at
+    most **a thousand** of either; a request that asks for more is
+    refused by name.
+  - the cells may have a **gutter** between them: a number between
+    nothing and **a million**, and **twelve** when it is not given. A
+    gutter that is not one is refused.
+  - `n` divisions make `n - 1` guides, and with a gutter each of them
+    is **doubled**: the edge of the cell and the edge after the gutter.
+  - the guides stand across the **margins** of the page, or across the
+    page itself when the fit says so. A fit that is not `margins` or
+    `page` is refused.
+  - one command may make at most **ten thousand** guides, and a
+    request that asks for more is refused.
+  - the **page** may be named, and every page of the spread is cut when
+    it is not.
+  - the guides that are there may be **cleared first**.
+
+### What the port found
+
+- **The tree's names are camel case and the kit's are snake case**:
+  the tree's `fitTo` is `fit_to` here, its `removeExisting` is
+  `remove_existing`, its `rowGutter` is `row_gutter` and its
+  `columnGutter` is `column_gutter`. The words are the tree's.
+- **The tree's geometry is in points** and every number in a document
+  here is in millimetres, so the gutter of twelve is twelve
+  millimetres. The numbers are the same and the unit is the kit's.
+- **The tree's page is named by its index** in the spread, and the
+  tree's create command works on a spread. Here the page is a **node**
+  and the spread is a node as well.
+- **The tree's guides are cleared** when the create command is told to,
+  and the tree's locked guides go with them. Here the guides are
+  nodes, and they are cleared the same way.
+
+### What it cost
+
+- **Five tests** in the layout battery (`tests/guidemaking.rs`): the
+  page cut into columns, the gutter that doubles the guides, the
+  guides across the margins, every page of the spread, and the
+  requests that are refused.
+- **One command**. The layout battery now carries **62** commands and
+  the MCP server **893**.
+
+### What it does not settle
+
+- **A guide is not drawn** on the canvas, and the grid of them is not
+  shown.
+- **The tree's guides may be dragged** and the tree's page may be cut
+  from the ruler; here a command cuts it.
+- **The tree's positions are in points**, and here they are in
+  millimetres.
 
 ---
