@@ -4124,6 +4124,7 @@ so.
 | the **counts** of this README | **built.** The highest count the README gives for a battery is the count of that battery, and a test keeps it so (§687) | §687 |
 | the **links** of the stories of a layout document | **built.** A story may be linked to another — the tree's revision, its out-of-date link and its update (§688) | §688 |
 | the **style** of a caption track | **built.** A caption track carries a style — the tree's font, its colour, its align and its anchor (§689) | §689 |
+| the **text** and the **times** of a caption | **built.** A cue may be edited — the tree's text, its speaker and its overlap (§690) | §690 |
 
 ### The list of things that are honestly not there: empty
 
@@ -45083,5 +45084,61 @@ track carries a **language** and its **flags**.
 - **The tree's flags do more than they say**: a locked track may not
   be changed, and a track that follows the inserts moves with them.
   Here the flags are facts.
+
+---
+
+## 690. The text and the times of a caption
+
+A **cue** of a caption track may now be **edited**: its text and its
+speaker may be changed, and the two times it is on the screen may be
+moved.
+
+### What was built
+
+- Two new commands: `film.caption.set` and `film.caption.times`.
+- The **rules** are the tree's own:
+  - the **text** of a cue is a text, and a line break is a line
+    break: the tree takes the carriage return out of it.
+  - the **speaker** of a cue is a name, and an empty name takes it
+    away.
+  - a command that changes neither the text nor the speaker is
+    **refused**: it would do nothing.
+  - the **times** of a cue are whole frames, and the cue ends after it
+    starts.
+  - the cues of a track never **overlap**, and a cue that is moved
+    over another one is refused. A cue that ends exactly when another
+    one starts is not an overlap.
+  - the **reader** of the cues says the speaker of each one, as the
+    tree's reader does.
+
+### What the port found
+
+- **The tree's times are ticks**, and its command may be given a
+  timecode, a number of frames or a number of seconds. Here the times
+  are the **frames** of the sequence, as they are everywhere in this
+  battery.
+- **The tree's speaker is the WebVTT voice**, and it is read from the
+  file with the cue. Here the speaker is a fact of the cue, and the
+  reader says it.
+- **The tree's tree is sorted** after the times are set. Here the cues
+  are read in the order they start in, wherever they stand.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/captionedits.rs`): the
+  text and the speaker of a cue, the command that would do nothing,
+  the times that are moved and the overlap that is refused, and the
+  time that is not a whole number of frames.
+- **Two commands**. The film battery now carries **98** commands and
+  the MCP server **910**.
+
+### What it does not settle
+
+- **The tree's cue may be trimmed and split and merged** with the
+  commands of its panel, and there are none of those here.
+- **The tree's times may be given in three ways**, and here they are
+  frames.
+- **The tree's speaker is a voice of a file**, and here it is a name
+  that is set by hand.
 
 ---
