@@ -4105,6 +4105,7 @@ so.
 | the **text markup** of a document | **built.** The highlight, the underline, the strikeout and the squiggly underline are written over the text of a page — the tree's quads, its colours and its blend (§723) | §723 |
 | the **compare** that marks the differences | **built.** The differences between two files are marked in the document — the tree's highlights, its notes and its colours (§724) | §724 |
 | the **watermark** of a page | **built.** A page carries a watermark — the tree's text, its Helvetica, its size and its grey (§725) | §725 |
+| the **header** and the **footer** of a page | **built.** The text at the top of a page and at the bottom of it, in three slots each, with the tree's tokens (§726) | §726 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
@@ -47394,3 +47395,72 @@ of the page.
   picture behind the whole page.
 - **The watermark is not removed by a command**: the tree removes the
   marks it made, and this tree does not yet keep track of them.
+
+---
+
+## 726. The header and the footer of a page
+
+A page may now carry a **header** and a **footer**: the text at the
+top of it and at the bottom of it.
+
+### What was built
+
+- **Two new commands**: `pdf.page.header` and `pdf.page.footer` draw
+  the text of a header or of a footer on a page.
+- The **slots** are the tree's own: the **left**, the **centre** and
+  the **right** — three slots at the top and three at the bottom — and
+  the tree's own rules for them: the left text is at the left margin,
+  the centre text is in the middle of the page and the right text is at
+  the right margin.
+- The **tokens** are the tree's own:
+  - `<<1>>` the number of the page, `<<n>>` the number of the pages,
+    `<<1 of n>>`, `<<1/n>>`, `<<Page 1>>` and `<<Page 1 of n>>`;
+  - the dates: `<<m/d>>`, `<<m/d/yy>>`, `<<m/d/yyyy>>`,
+    `<<mm/dd/yy>>`, `<<mm/dd/yyyy>>`, `<<d/m/yy>>`, `<<d/m/yyyy>>`,
+    `<<dd/mm/yyyy>>`, `<<yyyy-mm-dd>>` and `<<mmmm d, yyyy>>`;
+  - the **Bates number**: `<<Bates Number#digits#start#prefix#suffix>>`;
+  - a token that is not one of them is **left as it is**.
+- The **settings** are the tree's own: the size is eight points and
+  never more than two hundred, the colour is black, the margins are
+  thirty-six points at the top and at the bottom and seventy-two at
+  the left and at the right, and the text may be **underlined**.
+
+### What the port found
+
+- **The tree's header and its footer are the same thing**: the tree
+  draws both with the same marked content — the `/Artifact` of a
+  **pagination** with the `/HeaderFooter` mark — and the port found
+  that the tree's own `Subtype` is `Header` for both of them.
+- **The tree's header hangs below the top margin and its footer
+  stands on the bottom margin**, and the port found that the two are
+  placed by different rules and not by one: the header is measured
+  down from the top of the page and the footer is measured up from the
+  bottom of it.
+- **The tree's date is the clock of the machine**, and the port found
+  that a file whose header says the day it was written is not the same
+  file every time: the **caller says the day** here.
+- **The tree's Bates number starts at the number in the template** and
+  counts on from there, and the port found that the tree takes the
+  start from the **first** template of the header that has one — so a
+  header and a footer that both have a Bates number share it.
+
+### What it cost
+
+- **Seven tests** in the PDF battery (`tests/headerfooter.rs`): the
+  header, the footer, the tokens of the page number, the date, the
+  Bates number, and the two refusals.
+- **Two new commands**: the PDF battery carries **87** commands and the
+  MCP server **936**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The header and the footer are not removed by a command**: the
+  tree removes the marks it made, and this tree does not yet keep
+  track of them.
+- **The header and the footer are drawn on one page at a time**: the
+  tree draws them on a range of pages, and here the caller walks the
+  pages.
+- **The date is not the clock**: the caller says the day, so a file
+  drawn twice with the same day is the same file.
