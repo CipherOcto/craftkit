@@ -4100,6 +4100,7 @@ so.
 | the **figures** of a file | **built.** The pictures of a tagged file are read and their alternative text is set — the tree's role map and its empty text (§710) | §710 |
 | the **images** of a form | **built.** The pictures a form draws are cleared or taken away — the tree's own resources and its own transforms (§711) | §711 |
 | the **CEA-708** service data | **built.** The service data of an MCC file is written and read — the tree's pop-on windows, its packets and its decoder (§712) | §712 |
+| the **data** of a form | **built.** The values of the fields of a form are written as a file and read back — the tree's XFDF, its table and its rules (§713) | §713 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -46552,3 +46553,69 @@ service data is read with the **service decoder**.
   that rule is kept.
 - **The other services are not written**: the tree writes the service
   one, and so does this.
+
+---
+
+## 713. The data of a form: the values of its fields, written and read
+
+The **values** of the fields of a form may now be written as a file —
+an **XFDF** file, the XML of Adobe's interchange format, or a **table**
+of the names and the values — and read back from one.
+
+### What was built
+
+- Two **new commands**:
+  - `pdf.form.data.export` writes the data of the form as a file;
+  - `pdf.form.data.import` reads a file of data and writes it into the
+    form.
+- The **rules** are the tree's own:
+  - the fields of a form are the fields of its **AcroForm**, and the
+    **qualified name** of a field is the name of it and the names of
+    its parents, joined with a dot;
+  - the **XFDF** file is a **tree**: the name of a field is split at
+    its dots, and every part is a field of its own, so that a file
+    says `who.first` as a field of a field;
+  - the **table** of the values is two lines — the names of the fields
+    and their values — and a value that holds a comma or a quote is
+    **quoted**;
+  - a file that is **not one** is refused;
+  - a field the file names and the form does not have is **left out**,
+    and the names of them are said;
+  - the value of a field must be one the field **can hold**: one of the
+    **options** of a choice, or one of the **states** of a button.
+- The data is **derived**: it is read from the form every time it is
+  asked for.
+
+### What the port found
+
+- **The tree's XFDF file is a tree of fields and not a list of them**,
+  and the port found that while looking for the shape of the file: a
+  field of a field is written as a field inside a field, and the name
+  of it is the two joined with a dot.
+- **The tree's tree of the fields keeps the value of the field and the
+  fields under it**, and a field with the same name in two places is
+  one field: here the same.
+- **The tree's table of the values writes the name of a field as an
+  element name**, and a name that is not one is made into one — the
+  letters, the digits, `_`, `-` and `.`, and a name that does not
+  begin with a letter begins with an underscore.
+- **The tree's import writes the values into the form and counts what
+  took**, and a value the field cannot hold is **left out**: here the
+  same, and the names of the fields that were left out are said.
+
+### What it cost
+
+- **Five tests** in the PDF battery (`tests/formdata.rs`): the XFDF
+  file, the table, the data that is read back, the field that is left
+  out, and the file that is not one.
+- **Two new commands**: the PDF battery carries **81** commands and the
+  MCP server **928**.
+
+### What it does not settle
+
+- **The comments of the tree's XFDF are not here**: this carries the
+  values of the fields and not the annotations.
+- **The FDF file of the tree is not here**: it is a file of PDF
+  syntax, and this tree does not write files of PDF syntax.
+- **The tree's import runs the validation and the recalculation of the
+  form**: here the values are written, and nothing is calculated.
