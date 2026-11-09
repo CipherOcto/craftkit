@@ -28,7 +28,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session, Text};
 
 /// The **formats** of a caption track: the tree's own.
 pub const FORMATS: [&str; 4] = ["subtitle", "cea608", "cea708", "teletext"];
@@ -475,6 +475,12 @@ pub struct ExportCaptions {
     pub path: Text,
     /// The format of the file: `subrip` when it is not given.
     pub format: Option<Text>,
+    /// Whether an MCC file carries the **CEA-608** pairs of the field
+    /// one: it does when this is not given.
+    pub cea_608: Option<Bool>,
+    /// Whether an MCC file carries the **CEA-708** service data: it
+    /// does when this is not given.
+    pub cea_708: Option<Bool>,
 }
 
 impl ExportCaptions {
@@ -583,7 +589,16 @@ impl ExportCaptions {
                 .iter()
                 .map(|cue| (crate::scc::frame_of(cue.start), crate::scc::frame_of(cue.end), cue.text.clone()))
                 .collect();
-            crate::mcc::write(&cues, false).into_bytes()
+            // The **streams** of the file: the CEA-608 field one and
+            // the CEA-708 service one are two streams of their own, and
+            // either may be left out.
+            let cea_608 = self.cea_608.map(|flag| flag.0).unwrap_or(true);
+            let cea_708 = self.cea_708.map(|flag| flag.0).unwrap_or(true);
+            if cea_608 && cea_708 {
+                crate::mcc::write(&cues, false).into_bytes()
+            } else {
+                crate::mcc::write_with(&cues, false, cea_608, cea_708).into_bytes()
+            }
         } else if format == "ttml" || format == "dfxp" {
             // The **TTML file**: the cues of the track with the times of
             // the rate of the sequence.

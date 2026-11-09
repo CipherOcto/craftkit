@@ -859,6 +859,12 @@ pub struct WriteCaptions {
     /// Whether an SCC file carries the **drop-frame** timecode: it does
     /// not when this is not given.
     pub drop_frame: Option<Bool>,
+    /// Whether an MCC file carries the **CEA-608** pairs of the field
+    /// one: it does when this is not given.
+    pub cea_608: Option<Bool>,
+    /// Whether an MCC file carries the **CEA-708** service data: it
+    /// does when this is not given.
+    pub cea_708: Option<Bool>,
 }
 
 impl WriteCaptions {
@@ -913,7 +919,16 @@ impl WriteCaptions {
                 .map(|cue| (crate::scc::frame_of(cue.start), crate::scc::frame_of(cue.end), cue.text))
                 .collect();
             let drop_frame = self.drop_frame.map(|flag| flag.0).unwrap_or(false);
-            crate::mcc::write(&cues, drop_frame)
+            // The **streams** of the file: the CEA-608 field one and the
+            // CEA-708 service one are two streams of their own, and
+            // either may be left out.
+            let cea_608 = self.cea_608.map(|flag| flag.0).unwrap_or(true);
+            let cea_708 = self.cea_708.map(|flag| flag.0).unwrap_or(true);
+            if cea_608 && cea_708 {
+                crate::mcc::write(&cues, drop_frame)
+            } else {
+                crate::mcc::write_with(&cues, drop_frame, cea_608, cea_708)
+            }
         } else if format == "ttml" || format == "dfxp" {
             // A TTML file has no rate of its own here: the times of the
             // captions are clock times.

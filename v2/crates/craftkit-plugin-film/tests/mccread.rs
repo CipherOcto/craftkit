@@ -251,10 +251,14 @@ fn a_line_whose_data_is_not_one_is_a_warning() {
     assert!(warnings[0].contains("caption data"), "and it says what is wrong: {warnings:?}");
 }
 
-/// A file that carries only **CEA-708** data has no cues here, and it
-/// says so.
+/// A file that carries **no caption data** at all — neither the field
+/// one nor the service data — has no cues here, and it says so.
+///
+/// The CEA-708 service data **is** read now (§1473): the warning of
+/// this file is about the data it does not have, and not about the
+/// service data it leaves out.
 #[test]
-fn a_file_of_only_cea708_data_has_no_cues_and_says_so() {
+fn a_file_of_no_caption_data_says_so() {
     let mut session = session();
     let text = a_file_of(&[(20, None), (21, None)]);
     let path = a_file("only-708.mcc", &text);
@@ -262,7 +266,7 @@ fn a_file_of_only_cea708_data_has_no_cues_and_says_so() {
     assert!(cues.is_empty(), "there is no caption: {cues:?}");
     let warnings = warnings_of(&mut session, &path);
     assert_eq!(warnings.len(), 1, "there is one warning: {warnings:?}");
-    assert!(warnings[0].contains("CEA-708"), "and it says what is not read: {warnings:?}");
+    assert!(warnings[0].contains("no caption data"), "and it says what is not there: {warnings:?}");
 }
 
 /// The **rate** of the timecode is the one the header names, and a rate

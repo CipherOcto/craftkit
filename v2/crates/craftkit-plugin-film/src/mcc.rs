@@ -29,7 +29,10 @@
 //! - The **pairs** of the field one are the **CEA-608** pairs of the
 //!   caption, and they are read with the same decoder the SCC reader
 //!   uses.
-//! - The **CEA-708** service data of the format is not read here.
+//! - The **CEA-708** service data is carried beside them: the file
+//!   writes the two, and a file that carries only the service data is
+//!   read with the **service decoder** — the tree's own rule is that
+//!   the two streams are alternatives and the field one comes first.
 
 use craftkit_sdk::serde_json::Value as Json;
 
@@ -209,6 +212,7 @@ pub fn cues_of(text: &str) -> Result<(Vec<Cue>, Vec<String>), String> {
     }
     let mut rate = Rate::fps_29_97();
     let mut pairs: Vec<(i64, u8, u8)> = Vec::new();
+    let mut service: Vec<(i64, bool, u8, u8)> = Vec::new();
     let mut any_608 = false;
     for (number, line) in lines {
         let line = line.trim_end();
@@ -259,12 +263,20 @@ pub fn cues_of(text: &str) -> Result<(Vec<Cue>, Vec<String>), String> {
                 }
                 // The **field two** is not read.
                 1 => {}
-                // The **CEA-708** service data is not read here.
-                _ => {}
+                // The **CEA-708 service data**: the pairs of the DTVCC
+                // packets, and the first of a packet says that it
+                // starts here.
+                other => {
+                    if service.len() < MAX_PAIRS {
+                        service.push((frame, other == 3, first, second));
+                    }
+                }
             }
         }
     }
     let cues = if any_608 {
+        // The **field one** comes first: the tree's own rule is that
+        // the two streams are alternatives.
         let frames = crate::scc::decode_pairs(&pairs, rate.one_second());
         frames
             .into_iter()
@@ -274,9 +286,11 @@ pub fn cues_of(text: &str) -> Result<(Vec<Cue>, Vec<String>), String> {
                 text,
             })
             .collect()
-    } else {
-        warnings.push("the file carries only CEA-708 data, and it is not read here".to_string());
+    } else if service.is_empty() {
+        warnings.push("the file carries no caption data".to_string());
         Vec::new()
+    } else {
+        cues_708_of(&service, &rate)
     };
     Ok((cues, warnings))
 }
@@ -325,7 +339,7 @@ const RATE_CODE: u8 = 4;
 
 /// The **bytes** of a caption distribution packet for one frame, with
 /// the CEA-608 pair of the field one.
-pub fn build_cdp(seq: u16, pair: Option<(u8, u8)>) -> Vec<u8> {
+pub fn build_cdp(seq: u16, pair: Option<(u8, u8)>, service: &[(bool, u8, u8)]) -> Vec<u8> {
     let mut data: Vec<u8> = Vec::with_capacity(CC_COUNT * 3);
     match pair {
         Some((first, second)) => {
@@ -335,6 +349,11 @@ pub fn build_cdp(seq: u16, pair: Option<(u8, u8)>) -> Vec<u8> {
     }
     // The **field two** carries nothing here.
     data.extend_from_slice(&[0xfd, 0x80, 0x80]);
+    // The **CEA-708 service data** follows: the pairs of the DTVCC
+    // packets, the first of a packet saying that it starts here.
+    for (start, first, second) in service.iter().take(DTVCC_PAIRS) {
+        data.extend_from_slice(&[if *start { 0xff } else { 0xfe }, *first, *second]);
+    }
     while data.len() < CC_COUNT * 3 {
         data.extend_from_slice(&[0xfa, 0x00, 0x00]);
     }
@@ -358,14 +377,23 @@ pub fn build_cdp(seq: u16, pair: Option<(u8, u8)>) -> Vec<u8> {
 /// The **cues** of a track, as an MCC file.
 ///
 /// The tree's own rule: the file carries the CEA-608 pairs of the
-/// field one, and the CEA-708 service data of the tree's writer is
-/// not here — the tree writes the two apart, and this writes the first.
+/// field one **and** the CEA-708 service data beside them.
 pub fn write(cues: &[(i64, i64, String)], drop_frame: bool) -> String {
-    let schedule = crate::scc::schedule(cues);
+    write_with(cues, drop_frame, true, true)
+}
+
+/// The **cues** of a track, as an MCC file, with the **streams** that
+/// are written.
+///
+/// The tree's own rule: the CEA-608 field one and the CEA-708 service
+/// one are two streams of their own, and either may be left out.
+pub fn write_with(cues: &[(i64, i64, String)], drop_frame: bool, cea_608: bool, cea_708: bool) -> String {
+    let field_one = if cea_608 { crate::scc::schedule(cues) } else { Default::default() };
+    let service = if cea_708 { schedule_708(cues) } else { Default::default() };
     let mut out = String::from("File Format=MacCaption_MCC V1.0\n\n");
     out.push_str("///////////////////////////////////////////////////////////////////////////////////\n");
     out.push_str("// Closed captions written by craftkit: SMPTE ST 334-2 caption distribution packets\n");
-    out.push_str("// carrying CEA-608 field 1 data; empty frames omitted.\n");
+    out.push_str("// carrying CEA-608 field 1 and CEA-708 service 1 data; empty frames omitted.\n");
     out.push_str("///////////////////////////////////////////////////////////////////////////////////\n\n");
     // The **identifier** of the file: a hash of the cues of it.
     let count = cues.len() as u64;
@@ -382,11 +410,461 @@ pub fn write(cues: &[(i64, i64, String)], drop_frame: bool) -> String {
     ));
     out.push_str("Creation Program=craftkit\n");
     out.push_str(&format!("Time Code Rate={}\n\n", if drop_frame { "30DF" } else { "30" }));
+    // The two **schedules** are put in a row: a frame that carries
+    // either of them is written, and the others are not.
+    let mut field_one = field_one.into_iter().peekable();
+    let mut service = service.into_iter().peekable();
     let mut seq = 0u16;
-    for (frame, pair) in schedule {
-        let bytes = build_cdp(seq, Some(pair));
+    while let Some(frame) = field_one
+        .peek()
+        .map(|(frame, _)| *frame)
+        .into_iter()
+        .chain(service.peek().map(|(frame, _)| *frame))
+        .min()
+    {
+        let pair = field_one.next_if(|(held, _)| *held == frame).map(|(_, pair)| pair);
+        let data = service.next_if(|(held, _)| *held == frame).map(|(_, pairs)| pairs).unwrap_or_default();
+        let bytes = build_cdp(seq, pair, &data);
         out.push_str(&format!("{}\t{}\n", crate::scc::format_timecode(frame, drop_frame), compress(&bytes)));
         seq = seq.wrapping_add(1);
     }
     out
+}
+
+// ---------------------------------------------------------------------------------------------
+// CEA-708 service data
+// ---------------------------------------------------------------------------------------------
+
+/// The **G2** characters the service writes and reads, after the
+/// escape that introduces them.
+const G2: &[(u8, char)] = &[
+    (0x25, '…'),
+    (0x2a, 'Š'),
+    (0x2c, 'Œ'),
+    (0x31, '‘'),
+    (0x32, '’'),
+    (0x33, '“'),
+    (0x34, '”'),
+    (0x35, '•'),
+    (0x39, '™'),
+    (0x3a, 'š'),
+    (0x3c, 'œ'),
+    (0x3d, '℠'),
+    (0x3f, 'Ÿ'),
+    (0x76, '⅛'),
+    (0x77, '⅜'),
+    (0x78, '⅝'),
+    (0x79, '⅞'),
+];
+
+/// The **atoms** of a character: a command with its parameters, or the
+/// character itself.
+fn char_atom(character: char) -> Vec<u8> {
+    match character {
+        '♪' => vec![0x7f],
+        ' '..='~' => vec![character as u8],
+        '\u{a0}'..='\u{ff}' => vec![character as u32 as u8],
+        _ => match G2.iter().find(|(_, held)| *held == character) {
+            Some((byte, _)) => vec![0x10, *byte],
+            None => vec![b'?'],
+        },
+    }
+}
+
+/// The atoms that **define** a window hidden and load the rows into
+/// it.
+fn load_atoms(window: u8, rows: &[String]) -> Vec<Vec<u8>> {
+    let count = rows.len().clamp(1, 12);
+    let columns = rows.iter().map(|row| row.chars().count()).max().unwrap_or(1).clamp(1, 42);
+    let mut out = vec![
+        // DefineWindow: hidden, the row and column locked, the relative
+        // position ninety per cent down and fifty per cent across,
+        // anchored at its bottom centre, the rows and the columns, the
+        // window style one and the pen style one.
+        vec![0x98 + window, 0x18, 0x80 | 90, 50, 7 << 4 | (count as u8 - 1), (columns as u8 - 1), 1 << 3 | 1],
+        vec![0x88, 1 << window], // ClearWindows
+    ];
+    for (index, row) in rows.iter().enumerate() {
+        if index > 0 {
+            out.push(vec![0x0d]);
+        }
+        out.extend(row.chars().map(char_atom));
+    }
+    out
+}
+
+/// Pack the atoms into **DTVCC packets** of the service one: a packet
+/// holds thirty-one bytes at the most, so one fits in a frame.
+fn packets(atoms: &[Vec<u8>], sequence: &mut u8) -> Vec<Vec<u8>> {
+    let mut blocks: Vec<Vec<u8>> = Vec::new();
+    let mut current: Vec<u8> = Vec::new();
+    for atom in atoms {
+        if current.len() + atom.len() > 31 {
+            blocks.push(std::mem::take(&mut current));
+        }
+        current.extend_from_slice(atom);
+    }
+    if !current.is_empty() {
+        blocks.push(current);
+    }
+    blocks
+        .into_iter()
+        .map(|block| {
+            let mut packet = vec![0, 1 << 5 | block.len() as u8];
+            packet.extend(block);
+            if packet.len() % 2 == 1 {
+                packet.push(0);
+            }
+            packet[0] = (*sequence & 3) << 6 | (packet.len() / 2) as u8;
+            *sequence = sequence.wrapping_add(1);
+            packet
+        })
+        .collect()
+}
+
+/// The **pairs** of a packet: the first pair says that the packet
+/// starts here.
+fn pairs_of(packet: &[u8]) -> Vec<(bool, u8, u8)> {
+    packet
+        .chunks(2)
+        .enumerate()
+        .map(|(index, chunk)| {
+            let first = chunk.first().copied().unwrap_or(0);
+            let second = chunk.get(1).copied().unwrap_or(0);
+            (index == 0, first, second)
+        })
+        .collect()
+}
+
+/// The **DTVCC** data of a file: the pairs of each frame.
+struct Dtv {
+    frames: std::collections::BTreeMap<i64, Vec<(bool, u8, u8)>>,
+}
+
+impl Dtv {
+    /// How many pairs a frame has room for.
+    fn room(&self, frame: i64) -> usize {
+        DTVCC_PAIRS - self.frames.get(&frame).map_or(0, Vec::len)
+    }
+
+    /// Put a packet in the first frame at or after `frame` with room
+    /// for it, and give that frame back.
+    fn place(&mut self, mut frame: i64, packet: &[u8]) -> i64 {
+        let pairs = pairs_of(packet);
+        while self.room(frame) < pairs.len() {
+            frame += 1;
+        }
+        self.frames.entry(frame).or_default().extend(pairs);
+        frame
+    }
+}
+
+/// The most **pairs** a frame may carry.
+const DTVCC_PAIRS: usize = 15;
+
+/// Schedule the **CEA-708 service one** captions: the tree's own rule.
+///
+/// The captions are **pop-on**: a window is defined and loaded, and it
+/// is shown when its cue begins and hidden when it ends.
+fn schedule_708(cues: &[(i64, i64, String)]) -> std::collections::BTreeMap<i64, Vec<(bool, u8, u8)>> {
+    let mut dtv = Dtv { frames: std::collections::BTreeMap::new() };
+    let mut sequence = 0u8;
+    let mut cursor = 0i64;
+    let mut cues: Vec<&(i64, i64, String)> = cues.iter().filter(|cue| cue.1 > cue.0).collect();
+    cues.sort_by_key(|cue| cue.0);
+    for (index, cue) in cues.iter().enumerate() {
+        let window = (index % 2) as u8;
+        // The cues are in **frames**: the same grid the field one is
+        // written on.
+        let start = cue.0.max(cursor);
+        let end = cue.1;
+        let rows = crate::scc::wrap_rows(&crate::scc::plain_text(&cue.2));
+        let load = packets(&load_atoms(window, &rows), &mut sequence);
+        let mut frame = (start - load.len() as i64).max(cursor);
+        let mut last = frame;
+        for packet in &load {
+            last = dtv.place(frame, packet);
+            frame = last;
+        }
+        let show = packets(&[vec![0x8a, 1 << (1 - window)], vec![0x89, 1 << window]], &mut sequence);
+        let shown = dtv.place(start.max(last), show.first().map(Vec::as_slice).unwrap_or(&[]));
+        cursor = shown + 1;
+        let next = cues.get(index + 1).map(|next| next.0);
+        if next != Some(end) {
+            let hide = packets(&[vec![0x8a, 1 << window]], &mut sequence);
+            dtv.place(end.max(cursor), hide.first().map(Vec::as_slice).unwrap_or(&[]));
+        }
+    }
+    dtv.frames
+}
+
+/// A **window** of the service: the rows it holds and whether it is
+/// shown.
+#[derive(Clone, Default)]
+struct Window {
+    /// Whether the window is **defined** at all.
+    defined: bool,
+    /// Whether the window is **shown**.
+    visible: bool,
+    /// The rows of it.
+    rows: Vec<String>,
+    /// How many rows it may hold.
+    max_rows: usize,
+    /// How many characters a row may hold.
+    max_cols: usize,
+}
+
+/// The **decoder** of the service one.
+struct Dec708 {
+    windows: [Window; 8],
+    current: usize,
+    packet: Vec<u8>,
+    want: usize,
+    open: Option<(i64, String)>,
+    cues: Vec<(i64, i64, String)>,
+}
+
+impl Dec708 {
+    /// A decoder with nothing in it.
+    fn new() -> Self {
+        Self {
+            windows: Default::default(),
+            current: 0,
+            packet: Vec::new(),
+            want: 0,
+            open: None,
+            cues: Vec::new(),
+        }
+    }
+
+    /// The **text** that is shown now.
+    fn visible_text(&self) -> String {
+        let mut lines: Vec<String> = Vec::new();
+        for window in self.windows.iter().filter(|window| window.defined && window.visible) {
+            lines.extend(window.rows.iter().map(|row| row.trim().to_string()).filter(|row| !row.is_empty()));
+        }
+        lines.join("\n")
+    }
+
+    /// The text that is shown has **changed**: the cue that was open
+    /// ends here, and the new one begins.
+    fn sync(&mut self, frame: i64) {
+        let now = self.visible_text();
+        if self.open.as_ref().map(|open| open.1.as_str()) == Some(now.as_str())
+            || (self.open.is_none() && now.is_empty())
+        {
+            return;
+        }
+        if let Some((start, text)) = self.open.take()
+            && frame > start
+        {
+            self.cues.push((start, frame, text));
+        }
+        if !now.is_empty() {
+            self.open = Some((frame, now));
+        }
+    }
+
+    /// A **pair** of the service data.
+    fn pair(&mut self, frame: i64, start: bool, first: u8, second: u8) {
+        if start {
+            self.packet.clear();
+            let size = (first & 0x3f) as usize;
+            self.want = if size == 0 { 128 } else { size * 2 };
+        } else if self.want == 0 {
+            return;
+        }
+        self.packet.extend_from_slice(&[first, second]);
+        if self.packet.len() >= self.want {
+            let packet = std::mem::take(&mut self.packet);
+            self.want = 0;
+            if let Some(rest) = packet.get(1..) {
+                self.service_blocks(rest);
+            }
+            self.sync(frame);
+        }
+    }
+
+    /// The **service blocks** of a packet.
+    fn service_blocks(&mut self, mut bytes: &[u8]) {
+        while let Some(head) = bytes.first().copied() {
+            if head == 0 {
+                break;
+            }
+            let service = head >> 5;
+            let length = (head & 0x1f) as usize;
+            let (service, skip) =
+                if service == 7 { (bytes.get(1).map_or(0, |value| value & 0x3f), 2) } else { (service, 1) };
+            let data = bytes.get(skip..skip + length).unwrap_or(&[]);
+            if service == 1 {
+                self.service_data(data);
+            }
+            bytes = bytes.get(skip + length..).unwrap_or(&[]);
+        }
+    }
+
+    /// The **window** that is written into now.
+    fn window(&mut self) -> &mut Window {
+        let index = self.current.min(self.windows.len() - 1);
+        &mut self.windows[index]
+    }
+
+    /// Put a **character** into the window that is written into now.
+    fn put(&mut self, character: char) {
+        let window = self.window();
+        match window.rows.last_mut() {
+            Some(row) if row.chars().count() < window.max_cols => row.push(character),
+            None if window.max_rows > 0 && window.max_cols > 0 => window.rows.push(character.to_string()),
+            _ => {}
+        }
+    }
+
+    /// Do something to the **windows** a bitmask names.
+    fn bitmap(&mut self, mask: u8, each: impl Fn(&mut Window)) {
+        for (index, window) in self.windows.iter_mut().enumerate() {
+            if mask & (1 << index) != 0 {
+                each(window);
+            }
+        }
+    }
+
+    /// The **service data** of the service one.
+    fn service_data(&mut self, data: &[u8]) {
+        let mut at = 0usize;
+        while at < data.len() {
+            let command = data[at];
+            at += 1;
+            let argument = |index: usize| data.get(index).copied().unwrap_or(0);
+            match command {
+                0x00 | 0x03 => {}
+                0x08 => {
+                    if let Some(row) = self.window().rows.last_mut() {
+                        row.pop();
+                    }
+                }
+                0x0c => self.window().rows = vec![String::new()],
+                0x0d => {
+                    let window = self.window();
+                    if window.rows.len() < window.max_rows {
+                        window.rows.push(String::new());
+                    }
+                }
+                0x0e => {
+                    if let Some(row) = self.window().rows.last_mut() {
+                        row.clear();
+                    }
+                }
+                0x10 => {
+                    let value = argument(at);
+                    at += 1;
+                    match value {
+                        0x00..=0x07 => {}
+                        0x08..=0x0f => at += 1,
+                        0x10..=0x17 => at += 2,
+                        0x18..=0x1f => at += 3,
+                        // The space and the two above it are the
+                        // tree's own: the others are the G2 set.
+                        0x20..=0x21 => self.put(' '),
+                        0x22..=0x7f => {
+                            if let Some((_, character)) = G2.iter().find(|(byte, _)| *byte == value) {
+                                self.put(*character);
+                            }
+                        }
+                        0x80..=0x87 => at += 4,
+                        0x88..=0x8f => at += 5,
+                        0x90..=0x9f => at += 1 + (argument(at) & 0x1f) as usize,
+                        _ => {}
+                    }
+                }
+                0x11..=0x17 => at += 1,
+                0x18..=0x1f => at += 2,
+                0x20..=0x7e => self.put(command as char),
+                0x7f => self.put('♪'),
+                0x80..=0x87 => self.current = (command - 0x80) as usize,
+                0x88 => {
+                    let mask = argument(at);
+                    at += 1;
+                    self.bitmap(mask, |window| window.rows = vec![String::new()]);
+                }
+                0x89 => {
+                    let mask = argument(at);
+                    at += 1;
+                    self.bitmap(mask, |window| window.visible = true);
+                }
+                0x8a => {
+                    let mask = argument(at);
+                    at += 1;
+                    self.bitmap(mask, |window| window.visible = false);
+                }
+                0x8b => {
+                    let mask = argument(at);
+                    at += 1;
+                    self.bitmap(mask, |window| window.visible = !window.visible);
+                }
+                0x8c => {
+                    let mask = argument(at);
+                    at += 1;
+                    self.bitmap(mask, |window| *window = Window::default());
+                }
+                0x8d => at += 1,
+                0x8e | 0x8f | 0x93..=0x96 => {}
+                0x90 | 0x92 => at += 2,
+                0x91 => at += 3,
+                0x97 => at += 4,
+                0x98..=0x9f => {
+                    let index = (command - 0x98) as usize;
+                    let visible = argument(at) & 0x20 != 0;
+                    let max_rows = (argument(at + 3) & 0x0f) as usize + 1;
+                    let max_cols = (argument(at + 4) & 0x3f) as usize + 1;
+                    let window = &mut self.windows[index.min(self.windows.len() - 1)];
+                    if !window.defined {
+                        *window =
+                            Window { defined: true, visible, rows: vec![String::new()], max_rows, max_cols };
+                    } else {
+                        window.visible = visible;
+                        window.max_rows = max_rows;
+                        window.max_cols = max_cols;
+                        window.rows.truncate(max_rows);
+                        for row in window.rows.iter_mut() {
+                            if let Some((at, _)) = row.char_indices().nth(max_cols) {
+                                row.truncate(at);
+                            }
+                        }
+                        if window.rows.is_empty() {
+                            window.rows.push(String::new());
+                        }
+                    }
+                    self.current = index;
+                    at += 6;
+                }
+                0xa0..=0xff => self.put(command as char),
+                _ => {}
+            }
+        }
+    }
+}
+
+/// The **cues** of the service data, as the reader finds them.
+///
+/// The tree's own rule: the pairs are the DTVCC pairs of the frames,
+/// and a file that carries only them is read with this decoder.
+fn cues_708_of(pairs: &[(i64, bool, u8, u8)], rate: &Rate) -> Vec<Cue> {
+    let mut decoder = Dec708::new();
+    let mut last = 0i64;
+    for (frame, start, first, second) in pairs {
+        decoder.pair(*frame, *start, *first, *second);
+        last = *frame + 1;
+    }
+    if let Some((start, text)) = decoder.open.take() {
+        decoder.cues.push((start, last.max(start + 1), text));
+    }
+    decoder
+        .cues
+        .iter()
+        .map(|(start, end, text)| Cue {
+            start: rate.milliseconds_of(*start),
+            end: rate.milliseconds_of(*end),
+            text: text.clone(),
+        })
+        .collect()
 }
