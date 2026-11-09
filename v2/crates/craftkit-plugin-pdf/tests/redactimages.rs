@@ -1,6 +1,8 @@
 //! The **images** of a file under a region are taken away.
 //!
-//! An image of the page that the region hits is not drawn any more.
+//! An image of the page that the region hits is not drawn any more —
+//! or has its covered pixels cleared, which is the tree's own rule
+//! (§697).
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
@@ -143,12 +145,14 @@ fn an_image_the_region_does_not_touch_is_left_alone() {
     assert!(written.windows(2).any(|window| window == b"Do"), "and it is still drawn: {written:?}");
 }
 
-/// An XObject that is **not an image** is left alone: a form is a
-/// drawing of its own.
+/// An XObject that is **neither an image nor a form** is left alone.
+///
+/// A form is a drawing of its own, and it has a rule of its own: the
+/// content of a form that a region hits is written again (§698).
 #[test]
-fn an_xobject_that_is_not_an_image_is_left_alone() {
+fn an_xobject_that_is_neither_an_image_nor_a_form_is_left_alone() {
     let mut session = session();
-    let (page, directory) = load(&mut session, "form", "Form");
+    let (page, directory) = load(&mut session, "postscript", "PS");
     let outcome = session
         .execute("pdf.redact.drawings", &json!({ "page": page, "rect": [40, 40, 160, 160] }))
         .expect("the region is read");

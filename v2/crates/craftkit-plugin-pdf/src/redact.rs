@@ -33,13 +33,15 @@
 //!   an image that is only partly covered keeps its place and the
 //!   covered part of it is black. An image this tree cannot read is
 //!   taken away whole, which is the tree's own fail-closed rule.
+//! - **The images of a form are not cleared**: the pixels of an image
+//!   that a form draws are not cleared, and the image is left alone.
 //! - **The glyphs are not counted one by one**: the tree works glyph
 //!   by glyph, and this tree works by the piece.
 
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.redact.text";
@@ -199,6 +201,10 @@ fn is_an_image(document: &Document, xobject: u64) -> bool {
         .unwrap_or(false)
 }
 
+/// A **form** whose content was rewritten: the name it had, the
+/// dictionary it carries, and the bytes of its new content.
+type Rewritten = (String, Vec<(String, Json)>, Vec<u8>);
+
 /// An **image** whose pixels were cleared: the name it had, the bytes
 /// of its samples, and the dictionary it carries.
 type Fresh = (String, Vec<u8>, Vec<(String, Json)>);
@@ -246,6 +252,80 @@ fn images_drawn(
     out
 }
 
+/// The **forms** a page draws, and where each of them is drawn.
+///
+/// The tree's own rule: a form is drawn in its own space, and its own
+/// matrix places it on the page.
+fn forms_drawn(
+    operations: &[crate::content::Operation],
+    images: &[(String, u64)],
+    document: &Document,
+) -> Vec<(String, u64, crate::content::Matrix)> {
+    let mut out: Vec<(String, u64, crate::content::Matrix)> = Vec::new();
+    let mut ctm = crate::content::Matrix::IDENTITY;
+    let mut stack: Vec<crate::content::Matrix> = Vec::new();
+    for operation in operations {
+        match operation.operator.as_str() {
+            "q" => stack.push(ctm),
+            "Q" => {
+                if let Some(saved) = stack.pop() {
+                    ctm = saved;
+                }
+            }
+            "cm" => {
+                let numbers: Vec<f64> =
+                    operation.operands.iter().filter_map(|value| value.as_f64()).collect();
+                if let Some(matrix) = crate::content::Matrix::from_numbers(&numbers) {
+                    ctm = matrix.then(&ctm);
+                }
+            }
+            "Do" => {
+                let name =
+                    operation.operands.first().and_then(|operand| operand.as_str()).unwrap_or_default();
+                let name = name.strip_prefix('/').unwrap_or(name).to_string();
+                let drawn = images.iter().find(|(held, _)| *held == name).map(|(_, id)| *id);
+                let Some(id) = drawn else { continue };
+                if !is_a_form(document, id) {
+                    continue;
+                }
+                // The form's **own matrix** places it on the page.
+                let own = document
+                    .node(id)
+                    .map(|node| crate::entries_of(&node.data))
+                    .and_then(|entries| {
+                        entries.iter().find(|(key, _)| key == "Matrix").map(|(_, value)| value.clone())
+                    })
+                    .and_then(|value| {
+                        value.as_array().map(|list| {
+                            list.iter().filter_map(|number| number.as_f64()).collect::<Vec<f64>>()
+                        })
+                    });
+                let placed =
+                    match own.as_ref().and_then(|numbers| crate::content::Matrix::from_numbers(numbers)) {
+                        Some(matrix) => matrix.then(&ctm),
+                        None => ctm,
+                    };
+                out.push((name, id, placed));
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Whether an XObject is a **form**: the tree's own rule, the
+/// `/Subtype` of the object.
+fn is_a_form(document: &Document, xobject: u64) -> bool {
+    document
+        .node(xobject)
+        .map(|node| {
+            crate::entries_of(&node.data)
+                .iter()
+                .any(|(key, value)| key == "Subtype" && value.as_str() == Some("Form"))
+        })
+        .unwrap_or(false)
+}
+
 /// Whether a region **covers** a box: the tree's own rule, with a
 /// slack of a hundredth of a point.
 fn covers(region: [f64; 4], bounds: [f64; 4]) -> bool {
@@ -275,11 +355,13 @@ pub fn drawings_under(
     region: [f64; 4],
     doomed: &[String],
     renamed: &[(String, String)],
+    start: crate::content::Matrix,
 ) -> Drawings {
     let mut out = Drawings::default();
     // The **transform of the page**: the `q` and `Q` keep it, and the
-    // `cm` changes it.
-    let mut ctm = crate::content::Matrix::IDENTITY;
+    // `cm` changes it. A form starts at the transform that places it,
+    // for its own content is in its own space.
+    let mut ctm = start;
     let mut stack: Vec<crate::content::Matrix> = Vec::new();
     // The **path** being built, its box, and whether it clips.
     let mut path: Vec<crate::content::Operation> = Vec::new();
@@ -553,6 +635,18 @@ fn content_of(document: &Document, page: u64) -> Result<Content, EngineError> {
     Ok(Content { stream, path, operations })
 }
 
+/// The **operations** of a stream: the content it holds.
+///
+/// The tree's own rule: the bytes of a stream that is filtered are
+/// undone before they are read.
+fn operations_of(node: &Node) -> Result<Vec<crate::content::Operation>, EngineError> {
+    let decoded = crate::decoded_bytes(node, None, None, false, COMMAND)?;
+    crate::content::operations(&decoded.bytes).map_err(|error| EngineError::Failed {
+        id: COMMAND.to_string(),
+        message: format!("the content cannot be read: {error:?}"),
+    })
+}
+
 /// Write the **operations** back to the file of a stream.
 fn write_operations(path: &str, operations: &[crate::content::Operation]) -> Result<usize, EngineError> {
     let written = crate::content::write_operations(operations);
@@ -628,12 +722,62 @@ impl RedactDrawings {
                 None => doomed.push(name.clone()),
             }
         }
+        // The **forms** the region hits: their content is rewritten, and
+        // they are written again as new objects — the tree's own rule,
+        // and the reason is the same as the one of the images.
+        let forms = forms_drawn(&content.operations, &images, document);
+        let mut doomed_forms: Vec<String> = Vec::new();
+        let mut rewritten: Vec<Rewritten> = Vec::new();
+        for (name, id, placed) in &forms {
+            // The **box** of the form: its own BBox, placed on the page.
+            let box_ = document
+                .node(*id)
+                .map(|node| crate::entries_of(&node.data))
+                .and_then(|entries| {
+                    entries.iter().find(|(key, _)| key == "BBox").map(|(_, value)| value.clone())
+                })
+                .and_then(|value| {
+                    value
+                        .as_array()
+                        .map(|list| list.iter().filter_map(|number| number.as_f64()).collect::<Vec<f64>>())
+                })
+                .filter(|corners| corners.len() == 4)
+                .map(|corners| placed.bbox([corners[0], corners[1], corners[2], corners[3]]));
+            if let Some(box_) = box_
+                && !overlaps(region, box_)
+            {
+                continue;
+            }
+            let Some(node) = document.node(*id) else {
+                doomed_forms.push(name.clone());
+                continue;
+            };
+            // The **content** of the form: a form whose content cannot
+            // be read is taken away whole.
+            let Ok(operations) = operations_of(node) else {
+                doomed_forms.push(name.clone());
+                continue;
+            };
+            let drawings = drawings_under(&operations, region, &[], &[], *placed);
+            if drawings.images == 0 && drawings.paths == 0 && drawings.shadings == 0 {
+                continue;
+            }
+            let bytes = crate::content::write_operations(&drawings.operations);
+            // The **dictionary** of the form, without the ones that say
+            // how its bytes are encoded.
+            let entries: Vec<(String, Json)> = crate::entries_of(&node.data)
+                .into_iter()
+                .filter(|(key, _)| key != "Filter" && key != "Length" && key != "DecodeParms")
+                .collect();
+            rewritten.push((name.clone(), entries, bytes));
+        }
         // The **new images**: a new object for each of them, and a new
         // name for it, so that the object the pages share is untouched.
         let directory =
             std::path::Path::new(&content.path).parent().map(|parent| parent.to_string_lossy().to_string());
         let mut renamed: Vec<(String, String)> = Vec::new();
         let mut cleared = 0usize;
+        let mut forms_written = 0usize;
         for (name, bytes, entries) in &fresh {
             let number = crate::free::the_next_number(session.document(), 0);
             let Some(directory) = directory.clone() else {
@@ -663,14 +807,54 @@ impl RedactDrawings {
             renamed.push((name.clone(), new_name));
             cleared += 1;
         }
-        let drawings = drawings_under(&content.operations, region, &doomed, &renamed);
-        if drawings.images == 0 && drawings.paths == 0 && drawings.shadings == 0 && cleared == 0 {
+        // The **new forms**: the same rule as the images — a new object
+        // with the new content, and a new name for it.
+        for (name, entries, bytes) in &rewritten {
+            let number = crate::free::the_next_number(session.document(), 0);
+            let Some(directory) = directory.clone() else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the stream of the page has no folder, and the form has nowhere to go"
+                        .to_string(),
+                });
+            };
+            let path = format!("{directory}/{number}.bin");
+            std::fs::write(&path, bytes).map_err(|error| EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("the form cannot be written: {error}"),
+            })?;
+            let data = json!({
+                "object": number,
+                "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+            });
+            let stream =
+                session.document_mut()?.add_node_with(format!("object {number}"), "pdf.stream", None, data);
+            if let Some(node) = session.document_mut()?.node_mut(stream) {
+                node.stream = Some(path);
+            }
+            let new_name =
+                fresh_name(&images, &renamed.iter().map(|(_, name)| name.clone()).collect::<Vec<_>>());
+            point_at(session, page, &new_name, number)?;
+            renamed.push((name.clone(), new_name));
+            forms_written += 1;
+        }
+        let mut gone = doomed.clone();
+        gone.extend(doomed_forms.iter().cloned());
+        let drawings =
+            drawings_under(&content.operations, region, &gone, &renamed, crate::content::Matrix::IDENTITY);
+        if drawings.images == 0
+            && drawings.paths == 0
+            && drawings.shadings == 0
+            && cleared == 0
+            && forms_written == 0
+        {
             return Ok(Outcome::new(format!("nothing of the page `{page}` is under the region")).with_data(
                 json!({
                     "page": page,
                     "region": json!(region),
                     "images": 0,
                     "cleared": 0,
+                    "forms": 0,
                     "paths": 0,
                     "shadings": 0,
                 }),
@@ -678,8 +862,8 @@ impl RedactDrawings {
         }
         let bytes = write_operations(&content.path, &drawings.operations)?;
         Ok(Outcome::changed(format!(
-            "{} image(s) removed, {} image(s) cleared, {} path(s) removed, and {} shading(s) clipped",
-            drawings.images, cleared, drawings.paths, drawings.shadings
+            "{} image(s) removed, {} image(s) cleared, {} form(s) rewritten, {} path(s) removed, and {} shading(s) clipped",
+            drawings.images, cleared, forms_written, drawings.paths, drawings.shadings
         ))
         .with_data(json!({
             "page": page,
@@ -687,6 +871,7 @@ impl RedactDrawings {
             "region": json!(region),
             "images": drawings.images,
             "cleared": cleared,
+            "forms": forms_written,
             "paths": drawings.paths,
             "shadings": drawings.shadings,
             "bytes": bytes,
