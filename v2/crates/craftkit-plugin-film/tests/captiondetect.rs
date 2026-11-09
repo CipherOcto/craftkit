@@ -51,7 +51,7 @@ fn format_of(session: &mut Session, path: &str) -> String {
 #[test]
 fn a_subrip_file_is_detected() {
     let mut session = session();
-    let path = a_file("the-captions.srt", "1\n00:00:01,000 --> 00:00:02,000\nHello\n");
+    let path = a_file("the-subrip.srt", "1\n00:00:01,000 --> 00:00:02,000\nHello\n");
     assert_eq!(format_of(&mut session, &path), "subrip", "the file is a SubRip file");
 }
 
@@ -60,7 +60,7 @@ fn a_subrip_file_is_detected() {
 fn an_scc_file_is_detected() {
     let mut session = session();
     let path = a_file(
-        "the-captions.scc",
+        "the-scc.scc",
         "Scenarist_SCC V1.0\n\n00:00:00;20\t9420 9420 94ae 94ae 94d0 94d0 c845 4c4c 4f80 942f 942f\n",
     );
     assert_eq!(format_of(&mut session, &path), "scc", "the file is an SCC file");
@@ -70,7 +70,7 @@ fn an_scc_file_is_detected() {
 #[test]
 fn an_mcc_file_is_detected() {
     let mut session = session();
-    let path = a_file("the-captions.mcc", "File Format=MacCaption_MCC V1.0\n\nTime Code Rate=30DF\n\n");
+    let path = a_file("the-mcc.mcc", "File Format=MacCaption_MCC V1.0\n\nTime Code Rate=30DF\n\n");
     assert_eq!(format_of(&mut session, &path), "mcc", "the file is an MCC file");
 }
 
@@ -78,7 +78,7 @@ fn an_mcc_file_is_detected() {
 #[test]
 fn a_file_that_is_not_a_caption_file_is_refused() {
     let mut session = session();
-    let path = a_file("the-captions.srt", "just some text\n");
+    let path = a_file("the-text.srt", "just some text\n");
     let error =
         session.execute("film.captions.detect", &json!({ "path": path })).expect_err("the file is refused");
     let message = error.to_string();
@@ -111,7 +111,7 @@ fn the_import_detects_the_format_when_it_is_not_named() {
         .execute("film.sequence.rate.set", &json!({ "sequence": sequence, "rate": "25" }))
         .expect("the rate is set");
     let path = a_file(
-        "the-captions.scc",
+        "the-import.scc",
         "Scenarist_SCC V1.0\n\n00:00:00;20\t9420 9420 94ae 94ae 94d0 94d0 c845 4c4c 4f80 942f 942f\n\n00:00:03;00\t942c 942c\n",
     );
     let outcome = session
