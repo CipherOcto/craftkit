@@ -144,6 +144,7 @@ mod form;
 mod format;
 mod free;
 mod hidden;
+mod image;
 mod information;
 mod intent;
 mod javascript;

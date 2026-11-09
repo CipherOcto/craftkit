@@ -29,10 +29,10 @@
 //! - **The mark is not kept.** The region is not in the document
 //!   afterwards: what the file says is what was written, and the
 //!   region is gone with the command.
-//! - **The pixels of an image are not cleared.** The tree clears the
-//!   covered part of an image that is only partly covered; this tree
-//!   cannot decode an image, so the tree's own rule for an image it
-//!   cannot read applies and the image is taken away whole.
+//! - **The pixels of an image are cleared**, as the tree clears them:
+//!   an image that is only partly covered keeps its place and the
+//!   covered part of it is black. An image this tree cannot read is
+//!   taken away whole, which is the tree's own fail-closed rule.
 //! - **The glyphs are not counted one by one**: the tree works glyph
 //!   by glyph, and this tree works by the piece.
 
@@ -199,6 +199,63 @@ fn is_an_image(document: &Document, xobject: u64) -> bool {
         .unwrap_or(false)
 }
 
+/// An **image** whose pixels were cleared: the name it had, the bytes
+/// of its samples, and the dictionary it carries.
+type Fresh = (String, Vec<u8>, Vec<(String, Json)>);
+
+/// The **images** a page draws, and where each of them is drawn.
+///
+/// The tree's own rule: the `q` and the `Q` keep the transform and the
+/// `cm` changes it, and an image is drawn in the square that changes
+/// nothing, so the transform of the page places it.
+fn images_drawn(
+    operations: &[crate::content::Operation],
+    images: &[(String, u64)],
+    document: &Document,
+) -> Vec<(String, u64, crate::content::Matrix)> {
+    let mut out: Vec<(String, u64, crate::content::Matrix)> = Vec::new();
+    let mut ctm = crate::content::Matrix::IDENTITY;
+    let mut stack: Vec<crate::content::Matrix> = Vec::new();
+    for operation in operations {
+        match operation.operator.as_str() {
+            "q" => stack.push(ctm),
+            "Q" => {
+                if let Some(saved) = stack.pop() {
+                    ctm = saved;
+                }
+            }
+            "cm" => {
+                let numbers: Vec<f64> =
+                    operation.operands.iter().filter_map(|value| value.as_f64()).collect();
+                if let Some(matrix) = crate::content::Matrix::from_numbers(&numbers) {
+                    ctm = matrix.then(&ctm);
+                }
+            }
+            "Do" => {
+                let name =
+                    operation.operands.first().and_then(|operand| operand.as_str()).unwrap_or_default();
+                let name = name.strip_prefix('/').unwrap_or(name).to_string();
+                let drawn = images.iter().find(|(held, _)| *held == name).map(|(_, id)| *id);
+                if drawn.is_some_and(|id| is_an_image(document, id)) {
+                    out.push((name, drawn.unwrap_or(0), ctm));
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Whether a region **covers** a box: the tree's own rule, with a
+/// slack of a hundredth of a point.
+fn covers(region: [f64; 4], bounds: [f64; 4]) -> bool {
+    const SLACK: f64 = 0.01;
+    bounds[0] >= region[0] - SLACK
+        && bounds[1] >= region[1] - SLACK
+        && bounds[2] <= region[2] + SLACK
+        && bounds[3] <= region[3] + SLACK
+}
+
 /// The **drawings** of a page with the ones under a region taken away.
 ///
 /// The tree's own rules:
@@ -216,8 +273,8 @@ fn is_an_image(document: &Document, xobject: u64) -> bool {
 pub fn drawings_under(
     operations: &[crate::content::Operation],
     region: [f64; 4],
-    images: &[(String, u64)],
-    document: &Document,
+    doomed: &[String],
+    renamed: &[(String, String)],
 ) -> Drawings {
     let mut out = Drawings::default();
     // The **transform of the page**: the `q` and `Q` keep it, and the
@@ -252,28 +309,25 @@ pub fn drawings_under(
                 continue;
             }
             "Do" => {
-                // The **image** the operator draws: an XObject of the
-                // subtype `Image` is drawn in the square that changes
-                // nothing, and the transform of the page places it.
-                //
-                // The tree's own rules: an image the region **covers**
-                // is gone, and an image the region only **hits** has its
-                // covered pixels cleared. This tree cannot decode an
-                // image, so the tree's own rule for an image it cannot
-                // read applies and the image is gone either way.
+                // The **image** the operator draws. The tree's own
+                // rules: an image the region **covers** is gone, and an
+                // image the region only **hits** has its covered pixels
+                // cleared — and it is then drawn under a new name, for
+                // the object the pages share keeps the name it had.
                 let name =
                     operation.operands.first().and_then(|operand| operand.as_str()).unwrap_or_default();
                 let name = name.strip_prefix('/').unwrap_or(name).to_string();
-                let drawn = images.iter().find(|(held, _)| *held == name).map(|(_, id)| *id);
-                let is_an_image = drawn.is_some_and(|id| is_an_image(document, id));
-                if is_an_image {
-                    let bounds = ctm.bbox([0.0, 0.0, 1.0, 1.0]);
-                    if overlaps(region, bounds) {
-                        out.images += 1;
-                        continue;
-                    }
+                if doomed.contains(&name) {
+                    out.images += 1;
+                    continue;
                 }
-                out.operations.push(operation.clone());
+                let mut operation = operation.clone();
+                if let Some((_, new_name)) = renamed.iter().find(|(old, _)| *old == name)
+                    && let Some(operand) = operation.operands.first_mut()
+                {
+                    *operand = json!(new_name);
+                }
+                out.operations.push(operation);
                 continue;
             }
             "sh" => {
@@ -541,13 +595,82 @@ impl RedactDrawings {
         };
         let content = content_of(document, page)?;
         let images = xobjects_of(document, page);
-        let drawings = drawings_under(&content.operations, region, &images, document);
-        if drawings.images == 0 && drawings.paths == 0 && drawings.shadings == 0 {
+        // The **images** the page draws, and the ones the region takes
+        // away: the tree's own rules — an image the region **covers**
+        // is gone, and an image it only **hits** has its covered pixels
+        // cleared, unless the kit cannot read it, and then it is gone
+        // as well.
+        let drawn = images_drawn(&content.operations, &images, document);
+        let mut doomed: Vec<String> = Vec::new();
+        let mut fresh: Vec<Fresh> = Vec::new();
+        for (name, id, ctm) in &drawn {
+            let bounds = ctm.bbox([0.0, 0.0, 1.0, 1.0]);
+            if !overlaps(region, bounds) {
+                continue;
+            }
+            if covers(region, bounds) {
+                doomed.push(name.clone());
+                continue;
+            }
+            let Some(node) = document.node(*id) else {
+                doomed.push(name.clone());
+                continue;
+            };
+            match crate::image::clear(document, node, ctm, &[region]) {
+                // The **pixels** of the image are cleared: it is written
+                // again, as a new object.
+                Some(Some(bytes)) => {
+                    fresh.push((name.clone(), bytes, crate::image::entries_of_an_image(node)))
+                }
+                // No pixel of it is covered: it is left as it is.
+                Some(None) => {}
+                // The kit cannot read it: it is taken away whole.
+                None => doomed.push(name.clone()),
+            }
+        }
+        // The **new images**: a new object for each of them, and a new
+        // name for it, so that the object the pages share is untouched.
+        let directory =
+            std::path::Path::new(&content.path).parent().map(|parent| parent.to_string_lossy().to_string());
+        let mut renamed: Vec<(String, String)> = Vec::new();
+        let mut cleared = 0usize;
+        for (name, bytes, entries) in &fresh {
+            let number = crate::free::the_next_number(session.document(), 0);
+            let Some(directory) = directory.clone() else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the stream of the page has no folder, and the image has nowhere to go"
+                        .to_string(),
+                });
+            };
+            let path = format!("{directory}/{number}.bin");
+            std::fs::write(&path, bytes).map_err(|error| EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("the image cannot be written: {error}"),
+            })?;
+            let data = json!({
+                "object": number,
+                "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+            });
+            let stream =
+                session.document_mut()?.add_node_with(format!("object {number}"), "pdf.stream", None, data);
+            if let Some(node) = session.document_mut()?.node_mut(stream) {
+                node.stream = Some(path);
+            }
+            let new_name =
+                fresh_name(&images, &renamed.iter().map(|(_, name)| name.clone()).collect::<Vec<_>>());
+            point_at(session, page, &new_name, number)?;
+            renamed.push((name.clone(), new_name));
+            cleared += 1;
+        }
+        let drawings = drawings_under(&content.operations, region, &doomed, &renamed);
+        if drawings.images == 0 && drawings.paths == 0 && drawings.shadings == 0 && cleared == 0 {
             return Ok(Outcome::new(format!("nothing of the page `{page}` is under the region")).with_data(
                 json!({
                     "page": page,
                     "region": json!(region),
                     "images": 0,
+                    "cleared": 0,
                     "paths": 0,
                     "shadings": 0,
                 }),
@@ -555,14 +678,15 @@ impl RedactDrawings {
         }
         let bytes = write_operations(&content.path, &drawings.operations)?;
         Ok(Outcome::changed(format!(
-            "{} image(s) and {} path(s) removed, and {} shading(s) clipped",
-            drawings.images, drawings.paths, drawings.shadings
+            "{} image(s) removed, {} image(s) cleared, {} path(s) removed, and {} shading(s) clipped",
+            drawings.images, cleared, drawings.paths, drawings.shadings
         ))
         .with_data(json!({
             "page": page,
             "stream": content.stream,
             "region": json!(region),
             "images": drawings.images,
+            "cleared": cleared,
             "paths": drawings.paths,
             "shadings": drawings.shadings,
             "bytes": bytes,
@@ -570,12 +694,106 @@ impl RedactDrawings {
     }
 }
 
+/// A **name** for a new image that no other image has.
+///
+/// The tree's own rule: the name of a redacted image is its own, so
+/// that the object the pages share keeps the name it had.
+fn fresh_name(images: &[(String, u64)], taken: &[String]) -> String {
+    let mut index = taken.len() + 1;
+    loop {
+        let name = format!("PCRedacted{index}");
+        if !images.iter().any(|(held, _)| *held == name) && !taken.contains(&name) {
+            return name;
+        }
+        index += 1;
+    }
+}
+
+/// **Point** the page at a new image.
+///
+/// The name of the image is a new one, and it is put in the resources
+/// of the page: the object the pages share is untouched.
+fn point_at(session: &mut Session, page: u64, name: &str, number: u64) -> Result<(), EngineError> {
+    let mut data = session.document().node(page).map(|node| node.data.clone()).unwrap_or(Json::Null);
+    let value = json!({ "ref": [number, 0] });
+    if !add_to_dictionary(session.document_mut()?, &mut data, &["Resources", "XObject"], name, value) {
+        return Err(EngineError::Failed {
+            id: COMMAND.to_string(),
+            message: format!("the resources of the page `{page}` cannot be written"),
+        });
+    }
+    if let Some(node) = session.document_mut()?.node_mut(page) {
+        node.data = data;
+    }
+    Ok(())
+}
+
+/// Set the **value** of a key in a dictionary that is named by a
+/// reference.
+///
+/// The dictionary may be written where it is used or named by a
+/// reference, and the tree's own rule is the same for both: the key
+/// holds the value, and the dictionary is written back where it was.
+fn add_to_dictionary(
+    document: &mut Document,
+    data: &mut Json,
+    path: &[&str],
+    key: &str,
+    value: Json,
+) -> bool {
+    let Some(entries) = data.get_mut("entries").and_then(|entries| entries.as_array_mut()) else {
+        return false;
+    };
+    let Some((first, rest)) = path.split_first() else {
+        // The last step: the key holds the value.
+        match entries.iter_mut().find(|pair| pair.get(0).and_then(|name| name.as_str()) == Some(key)) {
+            Some(pair) => match pair.get_mut(1) {
+                Some(slot) => {
+                    *slot = value;
+                    return true;
+                }
+                None => return false,
+            },
+            None => {
+                entries.push(json!([key, value]));
+                return true;
+            }
+        }
+    };
+    let Some(slot) = entries
+        .iter_mut()
+        .find(|pair| pair.get(0).and_then(|name| name.as_str()) == Some(*first))
+        .and_then(|pair| pair.get_mut(1))
+    else {
+        return false;
+    };
+    if rest.is_empty() {
+        *slot = value;
+        return true;
+    }
+    // The value is a **reference**: the node holds the dictionary.
+    if let Some(number) = crate::number_of(slot) {
+        let id = document.walk().find(|node| crate::the_number_of(node) == Some(number)).map(|node| node.id);
+        let Some(id) = id else { return false };
+        let mut held = document.node(id).map(|node| node.data.clone()).unwrap_or(Json::Null);
+        if !add_to_dictionary(document, &mut held, rest, key, value) {
+            return false;
+        }
+        if let Some(node) = document.node_mut(id) {
+            node.data = held;
+        }
+        return true;
+    }
+    // The value is written where it is used.
+    add_to_dictionary(document, slot, rest, key, value)
+}
+
 /// Whether two rectangles **overlap**: the tree's own rule.
 ///
 /// The tree's rule for the annotations is not the rule of the text
 /// (§638): an annotation is under a region when the two overlap at
 /// all, and the text is under it when more than a fifth of it is.
-fn overlaps(a: [f64; 4], b: [f64; 4]) -> bool {
+pub(crate) fn overlaps(a: [f64; 4], b: [f64; 4]) -> bool {
     a[0].max(b[0]) < a[2].min(b[2]) && a[1].max(b[1]) < a[3].min(b[3])
 }
 
