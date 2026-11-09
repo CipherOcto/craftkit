@@ -4108,6 +4108,7 @@ so.
 | the **header** and the **footer** of a page | **built.** The text at the top of a page and at the bottom of it, in three slots each, with the tree's tokens (§726) | §726 |
 | the **background** of a page | **built.** A colour behind the content of a page — the tree's rectangle, its mark and its graphics state (§727) | §727 |
 | the **marks** of a page | **built.** The watermark, the header, the footer and the background are taken away again — the tree's mark and its name (§728) | §728 |
+| the **mail merge** of a document | **built.** The fields of a document are filled with the rows of a data source — the tree's merge field, its address block and its map of the columns (§729) | §729 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
@@ -47579,3 +47580,78 @@ The **watermark**, the **header**, the **footer** and the
 - **A mark that is not one of this tree's is not taken away**: the
   command finds the tree's own names, and a file that carries another
   mark is left as it is.
+
+---
+
+## 729. The mail merge of a document
+
+The **fields** of a document may now be filled with the **rows** of a
+data source.
+
+### What was built
+
+- A **new command**: `prose.merge` merges the fields of a document
+  with the rows of a data source — the **headers** (the names of the
+  columns) and the **rows** (a list of lists of values).
+- The **rules** are the tree's own:
+  - a **merge field** is a field whose instruction is `MERGEFIELD`,
+    and the **name** of the column is the word that follows it — the
+    word may be in **quotes**;
+  - the name of the instruction is **not case-sensitive**, and so is
+    the name of the column;
+  - a column that the data source does not have is an **empty**
+    value, and that is not an error;
+  - the **address block** is the tree's own: the title, the first
+    name, the last name, the company, the address, the city, the
+    state, the postal code and the country — the parts that the
+    columns hold, in that order, and the **empty parts are left
+    out**;
+  - the columns that hold the parts of an address are the tree's own
+    map: `FirstName`, `First` and `GivenName` are the first name;
+    `LastName`, `Last`, `Surname` and `FamilyName` are the last name;
+    and so on;
+  - a field that is **not** a merge field is left alone;
+  - the command says the **names** of the merge fields the document
+    holds, and it says the text of **every** row.
+- A **row** that is not a list is **refused**.
+
+### What the port found
+
+- **The tree's name of a merge field ends at a space or at a quote**,
+  and the port found that the tree's rule is what keeps
+  `MERGEFIELDX` from being a merge field — so the port carries the
+  rule and not just the prefix.
+- **The tree's address block is a map of names, not a map of places**,
+  and the port found that the tree matches a column by a **set** of
+  names and by a name that has had its spaces and its underscores
+  taken out — so `First Name` and `FirstName` are the same column.
+- **The tree's merge writes documents, and this one does not**: the
+  tree keeps the merged document in the session and moves through it
+  record by record, and the port found that the tree's own rules for
+  that are `NEXT`, `SKIPIF` and `NEXTIF` — the conditions of a
+  merge — so the port takes the rules that fill a field and leaves
+  the rules that choose a record.
+
+### What it cost
+
+- **Seven tests** in the prose battery (`tests/mailmerge.rs`): the
+  merge field that is filled with the value of its column, the
+  column the data source does not have, the name of a column that is
+  not case-sensitive, the address block, the field that is not a
+  merge field, the fields of the document that are said, and the row
+  that is not a list and is refused.
+- **One new command**: the prose battery carries **110** commands and
+  the MCP server **939**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The merge does not write a document**: the command says the text
+  of every row, and the tree writes a document of its own.
+- **The rules that choose a record are not here**: the `NEXT`, the
+  `SKIPIF` and the `NEXTIF` of the tree, and the conditions of a
+  merge, are not ported.
+- **Only the body of the document is merged**: the tree reads the
+  fields of the headers and the footers as well, and this tree has
+  no header or footer of its own to read.
