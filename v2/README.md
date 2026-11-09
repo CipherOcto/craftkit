@@ -4126,6 +4126,7 @@ so.
 | the **style** of a caption track | **built.** A caption track carries a style — the tree's font, its colour, its align and its anchor (§689) | §689 |
 | the **text** and the **times** of a caption | **built.** A cue may be edited — the tree's text, its speaker and its overlap (§690) | §690 |
 | the **patterns** of a redaction | **built.** The text that looks like a card is found by a pattern — the tree's five patterns and their rules (§691) | §691 |
+| the **edges** of a caption | **built.** A cue may be trimmed, moved, split and merged — the tree's room, its next-to-each-other rule and its refusals (§692) | §692 |
 
 ### The list of things that are honestly not there: empty
 
@@ -45195,5 +45196,60 @@ what it is looking for.
 - **Nothing is redacted**, and the ranges are not marked on a page.
 - **The tree's patterns redact a whole page at once**, and there is no
   such command here.
+
+---
+
+## 692. The edges of a caption
+
+A cue of a caption track may now be cut shorter at its **in** edge or
+at its **out** edge, it may be **moved**, it may be **split** in two,
+and two cues may be **merged** into one.
+
+### What was built
+
+- Four new commands: `film.caption.trim`, `film.caption.move`,
+  `film.caption.split` and `film.caption.merge`.
+- The **rules** are the tree's own:
+  - a cue keeps its **room**: a trimmed cue does not run into the cue
+    before it or the cue after it, and it does not become shorter than
+    a frame.
+  - a cue that is **moved** stays at or after the start of the
+    sequence and does not run into its neighbours.
+  - a cue is **split** at a frame that leaves a frame on either side of
+    it, and the two halves are the two cues.
+  - cues are **merged** when they are on one track and they are **next
+    to each other**: the merged cue runs from the start of the first to
+    the end of the last, and the texts are joined with line breaks,
+    the empty ones dropped.
+
+### What the port found
+
+- **The tree clamps the delta** of a trim and of a move into the room
+  there is, and the trim that is left over is nothing at all. Here a
+  delta that does not fit is **refused**, and a trim of nothing is
+  refused as well.
+- **The tree's cues are on a timeline of ticks** and its commands may
+  be given the selection. Here the times are the **frames** of the
+  sequence, and the cues are named.
+- **The tree's shortest cue is ten ticks**, which is a fraction of a
+  frame. Here it is **a frame**, the smallest thing this battery
+  counts.
+
+### What it cost
+
+- **Six tests** in the film battery (`tests/captionedges.rs`): the
+  trimmed cue, the trim that does not fit, the moved cue, the split
+  cue, the merged cues and the cues that are not next to each other.
+- **Four commands**. The film battery now carries **102** commands and
+  the MCP server **916**.
+
+### What it does not settle
+
+- **The tree's cue may be duplicated**, and there is no such command
+  here.
+- **The tree's commands work on the selection** as well as on the
+  named cues, and here they do not.
+- **The tree's trim keeps the room it has** by clamping, and here it
+  keeps it by refusing.
 
 ---
