@@ -4115,6 +4115,7 @@ so.
 | the **cues** of a caption track exported | **built.** The cues of a track are written as a caption file — the frames of the track are the milliseconds of the file (§679) | §679 |
 | the **bookmarks** of a layout document | **built.** A bookmark names a page — the tree's page, its name and its refusals (§680) | §680 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
+| the **checkbox** of a cell | **built.** A cell may be a checkbox — the tree's two commands, its two-pass delete and its clear-formats rule (§681) | §681 |
 
 ### The list of things that are honestly not there: empty
 
@@ -44506,5 +44507,81 @@ the page, and the bookmarks of a document are its own list.
   nothing writes a PDF here.
 - **The names of the bookmarks are not checked against each other**,
   as they are not in the tree: two bookmarks may have one name.
+
+---
+
+## 681. The checkbox of a cell
+
+A **checkbox** may now be put on a cell: the cell keeps what it holds,
+the box is drawn as a **ticked** one or an **empty** one, and the box is
+ticked and unticked by a command.
+
+### What was built
+
+- A new **format** for a cell — `checkbox` — and the tree's own rule
+  for it: a cell that carries it is a **cell control**, and a boolean
+  is written as a box.
+- Two new commands:
+  - `grid.cell.checkbox.set` — the cell **keeps what it holds**, and an
+    **empty** cell starts **unchecked**, that is, it holds `FALSE`. A
+    value that is not a boolean shows as it is.
+  - `grid.cell.checkbox.toggle` — the box is **toggled**: `TRUE` becomes
+    `FALSE` and `FALSE` becomes `TRUE`, and an empty checkbox cell
+    becomes `TRUE`, as an empty checkbox cell counts as `FALSE`. A cell
+    that holds a **formula** is not toggled, and a cell that is **not a
+    checkbox** is left as it is.
+- **Delete** on a checkbox works in **two passes**, the tree's own rule
+  (its issue #196): a **ticked** box is **unchecked first** and keeps
+  its format, and only when every box is unchecked is the box
+  **removed** and the cell emptied. A cell that is not a checkbox is
+  emptied at once.
+- **Clear Formats** removes the box and **keeps the value**, as it does
+  in the tree.
+
+### What the port found
+
+- **The tree keeps the box in the style, not in the cell.** The tree's
+  cell is a value and a formula and a style, and the box is in the
+  style — the number format of the cell is the word `checkbox`. Here
+  the format of the cell is a string as well, and the box is in it.
+- **The tree's box is centred.** The tree's `insert.checkbox` puts the
+  text of the cell in the middle when it makes the box. There is no
+  alignment here, so the box does not centre what it holds.
+- **The tree's toggle takes a range, or the selection when there is no
+  range**, and the tree's space bar toggles the box under the cursor.
+  Here a command takes **one cell**, as every other command of the
+  battery does.
+- **The tree's boxes survive a file.** The tree writes a checkbox into
+  an xlsx as a **cell control**, and reads it back as one. Nothing here
+  writes a checkbox to a file.
+- **The tree's box is drawn by the renderer** and may be clicked. Here
+  a boolean in a checkbox cell is written as the **glyph** of a box —
+  `☑` when it is ticked and `☐` when it is not — and there is no widget
+  to click. This is a deliberate difference, and it is the same for
+  every cell that is read.
+- **The tree's delete skips a box in a row a filter hides**, and that
+  box stays as it is. There is no delete over a range here, so there is
+  nothing to skip.
+
+### What it cost
+
+- **Six tests** in the grid battery (`tests/checkboxes.rs`): the cell
+  that is made a checkbox, the box that is toggled, the cell that is
+  not a checkbox and the cell that holds a formula, the checkbox that
+  holds a text, the delete that works in two passes, and the clear
+  formats that keeps the value.
+- **Two commands**. The grid battery now carries **147** commands and
+  the MCP server **887**.
+
+### What it does not settle
+
+- **The box is a glyph and not a control.** It may be read and it may
+  be written, and it is not a thing that is clicked.
+- **A command works on one cell.** The tree's boxes may be put on a
+  range at once and toggled over a selection, and neither is here.
+- **The box is not centred**, and the cell it holds keeps the
+  alignment it has, which is none.
+- **A checkbox is not written to a file**, and a file that comes back
+  carries no box.
 
 ---
