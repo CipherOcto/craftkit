@@ -67,8 +67,11 @@ fn count(haystack: &[u8], needle: &[u8]) -> usize {
 /// The commands of a battery are only ever added, so the highest count
 /// the README says is the count of the tree.
 fn highest_count(readme: &str, battery: &str) -> Option<usize> {
-    let flat: String = readme.split_whitespace().collect::<Vec<_>>().join(" ");
-    let needle = format!("{battery} battery ");
+    // The README writes the name of a battery as it likes — `PDF` and
+    // `pdf` are the same battery — and the words are read without
+    // regard to case.
+    let flat: String = readme.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    let needle = format!("{} battery ", battery.to_lowercase());
     let mut found = None;
     let mut rest = flat.as_str();
     while let Some(at) = rest.find(&needle) {
