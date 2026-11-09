@@ -4094,6 +4094,7 @@ so.
 | the **cues** of a track written as an MCC file | **built.** The cues of a track are written as an MCC file — the tree's distribution packets, its abbreviations and its timecode (§704) | §704 |
 | the **consolidation** of several ranges of cells | **built.** The ranges are added up into one table — the tree's labels, its ways and its bounds (§705) | §705 |
 | the **fields** of a pivot | **built.** The columns of the range a pivot reads are named, told apart and placed in the areas of the report — the tree's headers, its numbers, its dates and its samples (§706) | §706 |
+| the **trendline** of a chart | **built.** The values of a chart are fitted — the tree's kinds, its transforms, its bounds and its equations (§707) | §707 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -46157,3 +46158,74 @@ its source, and the **areas** of the report each of them sits in.
   may be laid out, filtered and refreshed**; here a pivot is a fact of
   the sheet whose summary is derived (§455), so a field here is a
   column of a range and nothing is written down.
+
+---
+
+## 707. The trendline of a chart
+
+A chart of a sheet may now be **fitted**: the **trendline** of its
+values — the line that best fits them, and how much of their spread it
+explains.
+
+### What was built
+
+- A **new command**: `grid.chart.trendline` fits a kind of fit to the
+  values of a chart, and says what it found.
+- The **kinds** of fit are the tree's own: `linear`, `exponential`,
+  `logarithmic`, `power`, `polynomial` and `moving_average`.
+- The **rules** are the tree's own:
+  - an **exponential**, a **logarithmic** and a **power** fit are fits
+    of **transformed** data — the logarithm of `y` against `x`, `y`
+    against the logarithm of `x`, and the logarithm of `y` against the
+    logarithm of `x` — and a point where the transform is not defined,
+    a number that is not positive, is **not used** by the fit: the
+    command says how many points were left out.
+  - a fit needs **more points than the degree** of its polynomial, and
+    points whose `x` are **not all the same**.
+  - the **order** of a polynomial is between **two and six**, and the
+    **period** of a moving average is between **two and two hundred and
+    fifty-five**: a number outside is **refused**, and not made to fit.
+  - a fit that cannot be found is **refused**: the tree's rule is that
+    there is no fit rather than a wrong one.
+  - the **equation** is written as the tree writes it — `y = 2x + 1`,
+    `y = 0.5x² - 2x + 1`, `y = 3e^(0.2x)` — and the **R²** is said as
+    a number, or not at all when every `y` is the same.
+- The fit is **derived**: it is worked out from the cells of the sheet
+  every time it is asked for.
+
+### What the port found
+
+- **The tree's fit is solved on centred and scaled `x`**, and the
+  coefficients are expanded back into `x` afterwards: the fit is the
+  same, and the numbers are the numbers of the tree.
+- **The tree's R² is said for the transformed fit** when the fit is of
+  transformed data, and the tree says `#N/A` when every `y` is the
+  same. Here the R² is a number when it is defined and **nothing** when
+  it is not, because nothing is a value and `#N/A` is a string.
+- **The tree's moving average is not a fit at all**: it is the average
+  of the last points of each point, and it has no equation and no R².
+  Here it is the same, and the command says so by leaving the two
+  empty.
+- **The tree's `x` of a point is the value of its category when the
+  category is a number, and the number of the category otherwise**. Here
+  it is the same, and the categories count from one.
+- **The tree's automatic name of a trendline** — `Linear (Sales)` — is
+  not here: the fit is not stored, and so it has no name to be given.
+
+### What it cost
+
+- **Eleven tests** in the grid battery (`tests/trendlines.rs`): the
+  straight line, the curve, every series, one series, the
+  logarithm, the points left out, the moving average, and the three
+  refusals.
+- **One new command**: the grid battery carries **150** commands and
+  the MCP server **922**.
+
+### What it does not settle
+
+- **The tree's set intercept is not here**: a trendline that is told to
+  pass through a given point is not a fit that is worked out.
+- **The tree stores the trendline on the chart**; here the chart keeps
+  no trace of it, and the fit is asked for.
+- **The fit is not drawn**: this tree has no chart renderer, so a
+  trendline is a line of numbers and not a line on a picture.
