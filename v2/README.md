@@ -4104,6 +4104,7 @@ so.
 | the **compare** of two files | **built.** The differences between the text of two files of PDF are found — the tree's diff, its kinds and its report (§721) | §721 |
 | the **text markup** of a document | **built.** The highlight, the underline, the strikeout and the squiggly underline are written over the text of a page — the tree's quads, its colours and its blend (§723) | §723 |
 | the **compare** that marks the differences | **built.** The differences between two files are marked in the document — the tree's highlights, its notes and its colours (§724) | §724 |
+| the **watermark** of a page | **built.** A page carries a watermark — the tree's text, its Helvetica, its size and its grey (§725) | §725 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
@@ -47326,3 +47327,70 @@ that was deleted is marked with a note.
   the text, and not over the picture of the page.
 - **The mark is not undoable as a batch**: this tree's undo is the
   undo of the document, and the marks are added one by one.
+
+---
+
+## 725. The watermark of a page
+
+A page may now carry a **watermark**: a text, turned about the centre
+of the page.
+
+### What was built
+
+- A **new command**: `pdf.page.watermark` draws a watermark on a page —
+  the **text**, the **size**, the **rotation**, the **opacity**, the
+  **colour** and whether it is drawn **behind** the content.
+- The **rules** are the tree's own:
+  - the watermark has **text**, and text that is empty is **refused**;
+  - the **size** is the size that is asked for, and the tree's own when
+    it is not asked for: half the **diagonal** of the page over the
+    width of the widest line, and never less than six points and never
+    more than three hundred;
+  - the **opacity** is between zero and one, and an opacity outside
+    that is **refused**;
+  - the **rotation** is in degrees, and forty-five is the tree's;
+  - the **colour** is the tree's grey, and the watermark is drawn
+    **behind** the content or **on top** of it;
+  - the text is measured with the tree's own **Helvetica** widths, so
+    that each line is centred and the lines are stacked as a block.
+
+### What the port found
+
+- **The tree's watermark is page content and not an annotation**,
+  and the port found that the tree marks it as a **pagination
+  artefact** — the marked content `/Artifact <</Type /Pagination
+  /Subtype /Watermark>>` — so that a reader may leave it out of the
+  text of the page.
+- **The tree's watermark has a graphics state of its own**: the
+  opacity is a `/PCGS…` state in the page's resources, and the name
+  says how opaque it is — `PCGS50` is a half.
+- **The tree's watermark sets the tree's Helvetica by name**
+  (`/PCHelv`), and the port found that the font is a plain dictionary
+  in the page's resources — the base fourteen fonts need no file.
+- **The tree's watermark has a picture form as well**, and the port
+  found that the picture is a file and an image: the text watermark is
+  here, and the picture is not.
+- **The tree's opacity is clamped and this tree refuses**: the tree
+  takes an opacity of two and makes it one; here an opacity outside
+  the scale is **refused**, because a number that is out of scale is
+  a number that is wrong.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/watermark.rs`): the
+  watermark that is drawn, the one that is behind the content, the
+  size that is the tree's own, the resources of the page, and the two
+  refusals.
+- **One new command**: the PDF battery carries **85** commands and the
+  MCP server **934**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The picture watermark of the tree is not here**: this is a text
+  watermark, and the picture is a file and an image.
+- **The background of the tree is not here**: that is a colour or a
+  picture behind the whole page.
+- **The watermark is not removed by a command**: the tree removes the
+  marks it made, and this tree does not yet keep track of them.
