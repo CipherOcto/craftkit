@@ -33,8 +33,10 @@
 //!   an image that is only partly covered keeps its place and the
 //!   covered part of it is black. An image this tree cannot read is
 //!   taken away whole, which is the tree's own fail-closed rule.
-//! - **The images of a form are not cleared**: the pixels of an image
-//!   that a form draws are not cleared, and the image is left alone.
+//! - **The images of a form are cleared**, as the tree clears them: an
+//!   image that a form draws is treated as an image of the page, and
+//!   the form carries resources of its own so that the object the
+//!   forms share keeps the name it had.
 //! - **The glyphs are not counted one by one**: the tree works glyph
 //!   by glyph, and this tree works by the piece.
 
@@ -170,6 +172,39 @@ fn xobjects_of(document: &Document, page: u64) -> Vec<(String, u64)> {
     out
 }
 
+/// The **resources** of a node: the dictionaries a page or a form may
+/// draw from.
+///
+/// The tree's own rule: the resources of a form are its own, and the
+/// resources of the page are used when the form has none.
+fn resources_of(document: &Document, node: &Node) -> Vec<(String, Json)> {
+    let entries = crate::entries_of(&node.data);
+    let Some(value) = entries.iter().find(|(key, _)| key == "Resources").map(|(_, value)| value.clone())
+    else {
+        return Vec::new();
+    };
+    entries_of_value(document, &value).unwrap_or_default()
+}
+
+/// The **XObjects** of a set of resources: the name each has and the
+/// node of it.
+fn xobjects_of_resources(document: &Document, resources: &[(String, Json)]) -> Vec<(String, u64)> {
+    let Some(value) = resources.iter().find(|(key, _)| key == "XObject").map(|(_, value)| value.clone())
+    else {
+        return Vec::new();
+    };
+    let Some(xobjects) = entries_of_value(document, &value) else { return Vec::new() };
+    let mut out: Vec<(String, u64)> = Vec::new();
+    for (name, value) in xobjects {
+        let Some(number) = crate::number_of(&value) else { continue };
+        let Some(node) = document.walk().find(|node| crate::the_number_of(node) == Some(number)) else {
+            continue;
+        };
+        out.push((name, node.id));
+    }
+    out
+}
+
 /// The **entries** of a value: the pairs of a dictionary, whether it is
 /// written where it is used or named by a reference.
 fn entries_of_value(document: &Document, value: &Json) -> Option<Vec<(String, Json)>> {
@@ -201,9 +236,57 @@ fn is_an_image(document: &Document, xobject: u64) -> bool {
         .unwrap_or(false)
 }
 
-/// A **form** whose content was rewritten: the name it had, the
-/// dictionary it carries, and the bytes of its new content.
-type Rewritten = (String, Vec<(String, Json)>, Vec<u8>);
+/// A **form** whose content is to be rewritten: what it is, what is
+/// under the region, and the images of it that are cleared.
+struct Form {
+    /// The name the page gives it.
+    name: String,
+    /// The dictionary it carries, without the ones that say how its
+    /// bytes are encoded.
+    entries: Vec<(String, Json)>,
+    /// The content of it.
+    operations: Vec<crate::content::Operation>,
+    /// The resources it draws from.
+    resources: Vec<(String, Json)>,
+    /// The XObjects of those resources: the name each has and the node
+    /// of it.
+    images: Vec<(String, u64)>,
+    /// The XObjects of those resources as the file writes them: the
+    /// name and the value.
+    xobjects: Vec<(String, Json)>,
+    /// Where the form is placed on the page.
+    placed: crate::content::Matrix,
+    /// The images of it that are taken away.
+    doomed: Vec<String>,
+    /// The images of it whose pixels are cleared: the name, the bytes
+    /// and the dictionary.
+    fresh: Vec<Fresh>,
+    /// The names the cleared images are drawn under, and the object
+    /// each of them is.
+    renames: Vec<(String, String, u64)>,
+}
+
+/// The **resources** of a new form.
+///
+/// The tree's own rule: the form carries resources of its own, the
+/// images that are taken away are not among them, and the images that
+/// are cleared are.
+fn resources_of_form(form: &Form) -> Json {
+    let mut resources = form.resources.clone();
+    let mut xobjects: Vec<(String, Json)> = form.xobjects.clone();
+    xobjects.retain(|(name, _)| !form.doomed.contains(name));
+    for (old, new, number) in &form.renames {
+        xobjects.retain(|(name, _)| name != old);
+        xobjects.push((new.clone(), json!({ "ref": [number, 0] })));
+    }
+    let xobjects =
+        json!({ "entries": xobjects.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>() });
+    match resources.iter_mut().find(|(key, _)| key == "XObject") {
+        Some(entry) => entry.1 = xobjects,
+        None => resources.push(("XObject".to_string(), xobjects)),
+    }
+    json!({ "entries": resources.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>() })
+}
 
 /// An **image** whose pixels were cleared: the name it had, the bytes
 /// of its samples, and the dictionary it carries.
@@ -727,7 +810,7 @@ impl RedactDrawings {
         // and the reason is the same as the one of the images.
         let forms = forms_drawn(&content.operations, &images, document);
         let mut doomed_forms: Vec<String> = Vec::new();
-        let mut rewritten: Vec<Rewritten> = Vec::new();
+        let mut rewritten: Vec<Form> = Vec::new();
         for (name, id, placed) in &forms {
             // The **box** of the form: its own BBox, placed on the page.
             let box_ = document
@@ -758,18 +841,76 @@ impl RedactDrawings {
                 doomed_forms.push(name.clone());
                 continue;
             };
-            let drawings = drawings_under(&operations, region, &[], &[], *placed);
-            if drawings.images == 0 && drawings.paths == 0 && drawings.shadings == 0 {
+            // The **images** the form draws: the tree's own rule — the
+            // form has resources of its own, and the page's are used
+            // when it has none.
+            let own = resources_of(document, node);
+            let resources = if own.is_empty() {
+                document.node(page).map(|page| resources_of(document, page)).unwrap_or_default()
+            } else {
+                own
+            };
+            let images = xobjects_of_resources(document, &resources);
+            let xobjects: Vec<(String, Json)> = match resources.iter().find(|(key, _)| key == "XObject") {
+                Some((_, value)) => entries_of_value(document, value).unwrap_or_default(),
+                None => Vec::new(),
+            };
+            let drawn = images_drawn(&operations, &images, document);
+            // The **fate** of each of them: an image the region covers
+            // is gone, and an image it only hits has its covered
+            // pixels cleared — and it is then drawn under a new name,
+            // for the object the forms share keeps the name it had.
+            let mut doomed: Vec<String> = Vec::new();
+            let mut fresh: Vec<Fresh> = Vec::new();
+            for (held, image, ctm) in &drawn {
+                // The image is placed by the form and by the page.
+                let placed = ctm.then(placed);
+                let bounds = placed.bbox([0.0, 0.0, 1.0, 1.0]);
+                if !overlaps(region, bounds) {
+                    continue;
+                }
+                if covers(region, bounds) {
+                    doomed.push(held.clone());
+                    continue;
+                }
+                let Some(node) = document.node(*image) else {
+                    doomed.push(held.clone());
+                    continue;
+                };
+                match crate::image::clear(document, node, &placed, &[region]) {
+                    // The **pixels** of the image are cleared: it is
+                    // written again, as a new object.
+                    Some(Some(bytes)) => {
+                        fresh.push((held.clone(), bytes, crate::image::entries_of_an_image(node)))
+                    }
+                    // No pixel of it is covered: it is left as it is.
+                    Some(None) => {}
+                    // The kit cannot read it: it is taken away whole.
+                    None => doomed.push(held.clone()),
+                }
+            }
+            let drawings = drawings_under(&operations, region, &doomed, &[], *placed);
+            if drawings.images == 0 && drawings.paths == 0 && drawings.shadings == 0 && fresh.is_empty() {
                 continue;
             }
-            let bytes = crate::content::write_operations(&drawings.operations);
             // The **dictionary** of the form, without the ones that say
             // how its bytes are encoded.
             let entries: Vec<(String, Json)> = crate::entries_of(&node.data)
                 .into_iter()
                 .filter(|(key, _)| key != "Filter" && key != "Length" && key != "DecodeParms")
                 .collect();
-            rewritten.push((name.clone(), entries, bytes));
+            rewritten.push(Form {
+                name: name.clone(),
+                entries,
+                operations,
+                resources,
+                images,
+                xobjects,
+                placed: *placed,
+                doomed,
+                fresh,
+                renames: Vec::new(),
+            });
         }
         // The **new images**: a new object for each of them, and a new
         // name for it, so that the object the pages share is untouched.
@@ -807,9 +948,46 @@ impl RedactDrawings {
             renamed.push((name.clone(), new_name));
             cleared += 1;
         }
+        // The **new images of the forms**: the same rule as the images
+        // of the page — a new object for each of them, and a new name
+        // for it, so that the object the forms share is untouched.
+        for form in rewritten.iter_mut() {
+            for (name, bytes, entries) in &form.fresh {
+                let number = crate::free::the_next_number(session.document(), 0);
+                let Some(directory) = directory.clone() else {
+                    return Err(EngineError::Failed {
+                        id: COMMAND.to_string(),
+                        message: "the stream of the page has no folder, and the image has nowhere to go"
+                            .to_string(),
+                    });
+                };
+                let path = format!("{directory}/{number}.bin");
+                std::fs::write(&path, bytes).map_err(|error| EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the image cannot be written: {error}"),
+                })?;
+                let data = json!({
+                    "object": number,
+                    "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+                });
+                let stream = session.document_mut()?.add_node_with(
+                    format!("object {number}"),
+                    "pdf.stream",
+                    None,
+                    data,
+                );
+                if let Some(node) = session.document_mut()?.node_mut(stream) {
+                    node.stream = Some(path);
+                }
+                let taken = form.renames.iter().map(|(_, name, _)| name.clone()).collect::<Vec<_>>();
+                let new_name = fresh_name(&form.images, &taken);
+                form.renames.push((name.clone(), new_name, number));
+                cleared += 1;
+            }
+        }
         // The **new forms**: the same rule as the images — a new object
         // with the new content, and a new name for it.
-        for (name, entries, bytes) in &rewritten {
+        for form in &rewritten {
             let number = crate::free::the_next_number(session.document(), 0);
             let Some(directory) = directory.clone() else {
                 return Err(EngineError::Failed {
@@ -818,6 +996,23 @@ impl RedactDrawings {
                         .to_string(),
                 });
             };
+            // The **content** of the form: the images that are taken
+            // away are not drawn, and the images that are cleared are
+            // drawn under their new names.
+            let renames: Vec<(String, String)> =
+                form.renames.iter().map(|(old, new, _)| (old.clone(), new.clone())).collect();
+            let drawings = drawings_under(&form.operations, region, &form.doomed, &renames, form.placed);
+            let bytes = crate::content::write_operations(&drawings.operations);
+            // The **resources** of the new form: the tree's own rule —
+            // the form carries resources of its own, the images that
+            // are taken away are not among them, and the images that
+            // are cleared are.
+            let resources = resources_of_form(form);
+            let mut entries = form.entries.clone();
+            match entries.iter_mut().find(|(key, _)| key == "Resources") {
+                Some(entry) => entry.1 = resources,
+                None => entries.push(("Resources".to_string(), resources)),
+            }
             let path = format!("{directory}/{number}.bin");
             std::fs::write(&path, bytes).map_err(|error| EngineError::Failed {
                 id: COMMAND.to_string(),
@@ -835,7 +1030,7 @@ impl RedactDrawings {
             let new_name =
                 fresh_name(&images, &renamed.iter().map(|(_, name)| name.clone()).collect::<Vec<_>>());
             point_at(session, page, &new_name, number)?;
-            renamed.push((name.clone(), new_name));
+            renamed.push((form.name.clone(), new_name));
             forms_written += 1;
         }
         let mut gone = doomed.clone();
