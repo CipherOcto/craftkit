@@ -4085,6 +4085,7 @@ so.
 | the **notes** of a document converted | **built.** A footnote becomes an endnote, an endnote becomes a footnote, and the references change with them (§648) | §648 |
 | the **images** of a file under a region taken away | **built.** An image of the page that the region hits is gone from the content of the page — the tree's own rule, and the tree's rule for an image it cannot read is the same (§649) | §649 |
 | the **pixels** of an image under a region | **built.** An image the region only hits has its covered pixels cleared, and it is written again as a new object — the tree's rule, its new name and its fail-closed rule (§697) | §697 |
+| the **content** of a form under a region | **built.** A form a region hits is written again with the drawings under the region taken away — the tree's rule, its own space and its new name (§698) | §698 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -42679,7 +42680,8 @@ operator that draws them is gone from the content of the page.
   because another page may draw it.*
 - **A form is not rewritten**: the tree removes a form that is under a
   region and rewrites the forms that are not; here a form is left
-  alone.
+  alone. — *A form is rewritten now (§698); the images a form draws are
+  still left alone.*
 
 ---
 
@@ -45596,6 +45598,68 @@ is kept, and the part of it that is under the region is black.
   image of the object, and the object is shared.
 - **The image is not re-encoded**: the new image is bigger than the old
   one, because it is written without a filter.
+
+---
+
+
+## 698. The content of a form under a region
+
+The **content of a form** is now rewritten: a form a region hits is
+written again, with the drawings under the region taken away from it.
+
+### What was built
+
+- The **form** rule of the tree's redaction, in `pdf.redact.drawings`:
+  - a form is drawn in its **own space**, and its own matrix places it
+    on the page; the region is in the space of the page, and the
+    drawings of the form are measured there.
+  - the **box** of the form is its own `BBox`, placed on the page, and a
+    form the region does not touch is left alone.
+  - the **content** of a form that a region hits is rewritten: the paths
+    and the shadings under the region are taken away from it.
+  - the form is written as a **new object**, under a **new name**
+    (`PCRedacted1`), and it is drawn under that name: the object the
+    pages share is untouched.
+  - a form whose **content cannot be read** is taken away whole, and
+    the operator that draws it goes with it. That is the tree's own
+    rule, and it is the rule of an image the kit cannot read.
+- The **dictionary** of the new form is the dictionary of the old one,
+  without the filter and the length of the old bytes.
+
+### What the port found
+
+- **The tree's form is processed with the transform that places it**,
+  and the region is in the space of the page: the port found that the
+  content of a form is in the space of the form, and the transform
+  carries it to the page.
+- **The tree's new form is a Flate stream**, and this tree has no
+  encoder for one: the new form is written without a filter, which a
+  file may hold. It is the same deviation as the one of the images
+  (§697).
+- **The tree's form that cannot be read is taken away**, and so is the
+  operator that draws it — the port found that a form is not a drawing
+  that can be left alone.
+
+### What it cost
+
+- **Three tests** in the pdf battery (`tests/redactforms.rs`): the form
+  that is written again, the object the file had, and the form the
+  region does not touch.
+- **One test** of the pdf battery was **corrected**: an XObject that is
+  neither an image nor a form is left alone, for a form has a rule of
+  its own now.
+- **No new command**: `pdf.redact.drawings` learned the tree's rule for
+  a form. The pdf battery carries **77** commands and the MCP server
+  **918**.
+
+### What it does not settle
+
+- **The images of a form are not cleared**: the pixels of an image that
+  a form draws are not cleared, and the image of a form is left alone.
+- **A form that draws a form** is not rewritten twice: the inner form is
+  not looked at.
+- **The new form is bigger than the old one**, because it is written
+  without a filter.
 
 ---
 
