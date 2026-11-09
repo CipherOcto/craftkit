@@ -420,7 +420,7 @@ pub struct ReadCaptions {
 }
 
 /// The **formats** of a caption file this tree reads.
-pub const FORMATS: [&str; 3] = ["subrip", "webvtt", "stl"];
+pub const FORMATS: [&str; 4] = ["subrip", "webvtt", "stl", "scc"];
 
 impl ReadCaptions {
     fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
@@ -436,6 +436,7 @@ impl ReadCaptions {
             None | Some("") | Some("subrip") | Some("srt") => "subrip",
             Some("webvtt") | Some("vtt") => "webvtt",
             Some("stl") => "stl",
+            Some("scc") => "scc",
             Some(other) => {
                 return Err(EngineError::Failed {
                     id: id.clone(),
@@ -467,7 +468,15 @@ impl ReadCaptions {
             })));
         }
         let text = decode(&bytes);
-        let (cues, blocks, warnings) = if format == "webvtt" {
+        let (cues, blocks, warnings) = if format == "scc" {
+            // An SCC file is **text**: its pairs are read and the
+            // captions they carry are decoded.
+            let (cues, warnings) = crate::scc::cues_of(&text).map_err(|message| EngineError::Failed {
+                id: id.clone(),
+                message: format!("{message}: `{path}`"),
+            })?;
+            (crate::scc::cues_as_json(&cues), Vec::new(), warnings)
+        } else if format == "webvtt" {
             let document = vtt_cues(&text).map_err(|message| EngineError::Failed {
                 id: id.clone(),
                 message: format!("{message}: `{path}`"),

@@ -237,6 +237,7 @@ mod replacing;
 mod reversing;
 mod rippling;
 mod rolling;
+mod scc;
 mod sliding;
 mod slipping;
 pub mod speed;
