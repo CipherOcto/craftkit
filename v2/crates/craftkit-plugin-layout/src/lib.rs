@@ -68,6 +68,7 @@ mod grouping;
 mod guides;
 mod items;
 mod layers;
+mod linked;
 mod links;
 mod margins;
 mod order;
@@ -100,6 +101,7 @@ pub use layers::{
     DeleteLayer, DeleteUnusedLayers, HideLayer, LockLayer, MergeLayers, MoveLayer, RenameLayer, ShowLayer,
     UnlockLayer,
 };
+pub use linked::{LinkStory, ReadLinks as ReadStoryLinks, SetStoryText, UnlinkStory, UpdateLinks};
 pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
 pub use margins::SetMargin;
 pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
