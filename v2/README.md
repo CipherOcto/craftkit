@@ -4103,6 +4103,7 @@ so.
 | the **data** of a form | **built.** The values of the fields of a form are written as a file and read back — the tree's XFDF, its table and its rules (§713) | §713 |
 | the **compare** of two files | **built.** The differences between the text of two files of PDF are found — the tree's diff, its kinds and its report (§721) | §721 |
 | the **text markup** of a document | **built.** The highlight, the underline, the strikeout and the squiggly underline are written over the text of a page — the tree's quads, its colours and its blend (§723) | §723 |
+| the **compare** that marks the differences | **built.** The differences between two files are marked in the document — the tree's highlights, its notes and its colours (§724) | §724 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
@@ -47264,3 +47265,64 @@ The **highlight**, the **underline**, the **strikeout** and the
 - **The caret and the replacement of the tree are not here**: they are
   two more kinds of mark, and they are marks of an editor and not marks
   of a file.
+
+---
+
+## 724. The compare marks the differences
+
+The differences between two files may now be **marked** in the
+document: the text that changed is marked with a highlight, and a text
+that was deleted is marked with a note.
+
+### What was built
+
+- A **new command**: `pdf.compare.mark` takes the file that was there
+  before, and marks the differences in the document of the session —
+  which is the file that is there now, the one the caller has loaded.
+- The **rules** are the tree's own:
+  - the **replaced** text is marked with a highlight in the tree's
+    **blue**, the **inserted** text in the tree's **green**, and a
+    **deletion** — which has no text of its own — is a **note** in the
+    tree's **red**, where the text was;
+  - the note says what happened: `Replaced: "…" with "…"`,
+    `Inserted: "…"` or `Deleted: "…"`;
+  - the mark is authored by **Compare**, the tree's own author;
+  - a highlight **multiplies** over the text, as every highlight does
+    (§723).
+- Two files with the same text have **nothing to mark**, and that is
+  said.
+
+### What the port found
+
+- **The tree's compare marks the differences in the new document**,
+  and the port found that the tree's marks are **annotations of the
+  page**: the highlight is over the text of the new side and the note
+  is where the deleted text was — the tree's own rule is that a
+  deletion has no box of its own, so the note goes where the text
+  would have been.
+- **The tree's note is a note and not a mark**: it has the icon
+  `/Note`, and it prints but does not zoom or rotate with the page.
+  The port found that the tree's flags say exactly that, and they are
+  the flags here.
+- **The tree's compare marks the differences of two open documents**,
+  and the port found that a command of this tree reaches **one**
+  document: so the **old** file is read into a document of its own and
+  the **new** one is the document of the session — the one that is
+  marked, and the one the caller has loaded.
+
+### What it cost
+
+- **Five tests** in the PDF battery (`tests/comparemark.rs`): the
+  replaced text, the inserted text, the deleted text, the mark that is
+  an annotation of the page, and the two files with the same text.
+- **One new command**: the PDF battery carries **84** commands and the
+  MCP server **933**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The visual compare of the tree is not here**: the marks are over
+  the text, and not over the picture of the page.
+- **The mark is not undoable as a batch**: this tree's undo is the
+  undo of the document, and the marks are added one by one.
