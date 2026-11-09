@@ -4101,7 +4101,7 @@ so.
 | the **images** of a form | **built.** The pictures a form draws are cleared or taken away — the tree's own resources and its own transforms (§711) | §711 |
 | the **CEA-708** service data | **built.** The service data of an MCC file is written and read — the tree's pop-on windows, its packets and its decoder (§712) | §712 |
 | the **data** of a form | **built.** The values of the fields of a form are written as a file and read back — the tree's XFDF, its table and its rules (§713) | §713 |
-| the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) | §719 |
+| the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
 | the **binary** variables of a program | **built.** A variable that is zero or one is solved as the tree's binary constraint — an integer variable whose bounds meet the pair (§717) | §717 |
@@ -47002,10 +47002,69 @@ own file, in the syntax of PDF.
 
 ### What it does not settle
 
-- **The file is not read back**: this tree writes an FDF and does not
-  yet read one, and a file of PDF syntax that has no cross-reference
-  table is not a file the reader of PDFs may open.
+- **The file was not read back** when this section was written, and it
+  **is** now: the values of an FDF are read and written into the form
+  (§720).
 - **The comments of the tree's FDF are not here**: this carries the
   values of the fields and not the annotations.
 - **The appearances of the fields are not carried**: the file holds the
   values and nothing else.
+
+---
+
+## 720. The FDF file is read back
+
+The data of a form may now be **read** from an FDF file: the values of
+the file's fields are written into the form.
+
+### What was built
+
+- The **import** of the data of a form reads an **FDF file** beside
+  the XFDF: the file says which it is — an FDF begins with its own
+  version line — and the import reads it.
+- The **rules** are the tree's own:
+  - the **values** are in the `/Fields` array of the `/FDF`
+    dictionary, and each one has its **name** (`/T`) and its **value**
+    (`/V`);
+  - a field the file names and the form does not have is **left out**,
+    and the names of the fields that were left out are **said**;
+  - a value the field **cannot hold** is left out too.
+- A **button** holds a **state**, and a state is a **name**: the value
+  of a button is written into the form as a **name** and not as a
+  string, and a button that is **off** holds **no state** at all.
+
+### What the port found
+
+- **The tree's FDF reader is a reader of PDF syntax and nothing
+  else**: the port found that the file has no cross-reference table,
+  so the tree does not read it as a PDF — it reads the dictionary of
+  the data out of it, and the reader of PDFs of this tree may not open
+  it.
+- **The tree's import writes a checkbox that is off as a field with no
+  value**: the port found that the tree turns a value of `Off` into a
+  button that holds nothing, and so does this tree — the value is
+  taken away.
+- **The tree's FDF holds a list of choices as an array**, and the port
+  found that a list here holds **one** value, so the array is read as
+  the first value of it.
+- The **strings** of the file are the **strings of this tree's own PDF
+  writer**: a text string is a string of bytes and a name is a plain
+  string, and the writer of the files of PDF and the reader of them
+  are the same pair of rules on both sides of the file.
+
+### What it cost
+
+- **Four tests** in the PDF battery (`tests/fdfimport.rs`): the file
+  that is read back, the button that is off, the field that is left
+  out, and the file that is not an FDF.
+- **No new command**: the import command reads one more file. The PDF
+  battery carries **81** commands and the MCP server **930**.
+
+### What it does not settle
+
+- **The comments of the tree's FDF are not read**: this carries the
+  values of the fields and not the annotations.
+- **The appearances of the fields are not carried**: the file holds the
+  values and nothing else.
+- **The tree's import runs the validation and the recalculation of the
+  form**: here the values are written, and nothing is calculated.
