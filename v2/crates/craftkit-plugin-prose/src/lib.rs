@@ -106,6 +106,7 @@ use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Relation, Session, Text};
 
 mod accessibility;
+mod authorities;
 mod autolists;
 mod background;
 mod bookmarks;
@@ -153,6 +154,7 @@ mod theme;
 mod titles;
 
 pub use accessibility::CheckAccessibility;
+pub use authorities::{MarkAuthority, ReadAuthorities};
 pub use autolists::SetList;
 pub use background::{SetBackground, SetWatermark};
 pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
