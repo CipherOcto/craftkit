@@ -4084,6 +4084,7 @@ so.
 | the **path** of a media file | **built.** The path a reference names is worked out — a file URL is a path, and a relative path is relative to the folder of the file (§647) | §647 |
 | the **notes** of a document converted | **built.** A footnote becomes an endnote, an endnote becomes a footnote, and the references change with them (§648) | §648 |
 | the **images** of a file under a region taken away | **built.** An image of the page that the region hits is gone from the content of the page — the tree's own rule, and the tree's rule for an image it cannot read is the same (§649) | §649 |
+| the **pixels** of an image under a region | **built.** An image the region only hits has its covered pixels cleared, and it is written again as a new object — the tree's rule, its new name and its fail-closed rule (§697) | §697 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -42652,7 +42653,9 @@ operator that draws them is gone from the content of the page.
   images it cannot decode.
 - **This tree cannot decode an image at all** yet, so every image is an
   image the tree cannot read, and the tree's fail-closed rule applies:
-  an image the region hits is taken away whole.
+  an image the region hits is taken away whole. — *An image this tree
+  can read now has its pixels cleared (§697); an image it cannot read
+  is still taken away whole.*
 
 ### What it cost
 
@@ -42667,10 +42670,13 @@ operator that draws them is gone from the content of the page.
 
 - **The pixels of an image are not cleared**: the tree keeps an image
   that is only partly covered and blanks the covered part of it; this
-  tree takes the whole image away.
+  tree takes the whole image away. — *They are cleared now (§697); an
+  image this tree cannot read is still taken away whole.*
 - **The image object stays in the file**: what is gone is the operator
   that draws it. The tree rewrites the image and writes a new object,
-  and the removal of an object that nothing draws is not here.
+  and the removal of an object that nothing draws is not here. — *The
+  new object is written now (§697); the old one is still in the file,
+  because another page may draw it.*
 - **A form is not rewritten**: the tree removes a form that is under a
   region and rewrites the forms that are not; here a form is left
   alone.
@@ -45524,6 +45530,72 @@ line by line, and the CEA-608 pairs of its field one.
 - **The tree's import of a caption file takes a SubRip or a WebVTT
   file**, and here it is the same: an SCC or an MCC file is read and is
   not imported as a track.
+
+---
+
+
+## 697. The pixels of an image under a region
+
+The **pixels** of an image are now cleared: an image a region only hits
+is kept, and the part of it that is under the region is black.
+
+### What was built
+
+- The **image** rule of the tree's redaction, in `pdf.redact.drawings`:
+  - an image the region **covers** is gone, and an image the region only
+    **hits** has its covered pixels cleared — the pixels whose centre
+    maps into the region.
+  - the cleared image is written as a **new object**, under a **new
+    name** (`PCRedacted1`), and it is drawn under that name: the object
+    the pages share is untouched, and the pages that share it keep
+    drawing it.
+  - an image the kit **cannot read** is taken away whole. That is the
+    tree's own fail-closed rule, and it is the rule for an image whose
+    codec is one the kit cannot undo — DCT, JPX, JBIG2 or CCITT.
+  - the **pixels** of an image are bounded: an image with more than
+    sixty-four million pixels is not cleared, and it is taken away
+    instead.
+- The **samples** of an image are read as the tree reads them: the
+  colour space says how many components a sample has, the bits per
+  component say how wide it is, an **image mask** has one component of
+  one bit, and a cleared sample of a mask is one that does not paint.
+- The **new image** carries the dictionary of the old one, without the
+  filter and the length of the old bytes.
+
+### What the port found
+
+- **The tree's new image is a Flate stream**, and this tree has no
+  encoder for one: the new image is written without a filter, which a
+  file may hold. That is the one place where the port deviates, and it
+  is a deviation of the *encoding*, not of the rule.
+- **The tree's rows are looked at one by one**: a row of the image that
+  is not under the region is not looked at again, and only the pixels
+  of a row that is under it are measured.
+- **The tree's masks paint with the sample zero**, unless the decode
+  says the other way round: a cleared sample of a mask is one that does
+  not paint.
+- **The tree's numbers of a file are held as they were written**, and
+  the port found that a number that is not a whole one is not a number
+  of an image: the width, the height and the bits per component are
+  refused when they are not whole.
+
+### What it cost
+
+- **Four tests** in the pdf battery (`tests/redactpixels.rs`): the
+  image whose pixels are cleared, the image the region covers, the
+  image the region does not touch, and the object the file had.
+- **No new command**: `pdf.redact.drawings` learned the tree's rule for
+  an image. The pdf battery carries **77** commands and the MCP server
+  **918**.
+
+### What it does not settle
+
+- **A form is not rewritten**: the tree rewrites the content of a form
+  that is under a region, and here a form is left alone.
+- **An image that is drawn twice** is cleared once: the tree clears the
+  image of the object, and the object is shared.
+- **The image is not re-encoded**: the new image is bigger than the old
+  one, because it is written without a filter.
 
 ---
 
