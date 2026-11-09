@@ -4125,6 +4125,7 @@ so.
 | the **links** of the stories of a layout document | **built.** A story may be linked to another — the tree's revision, its out-of-date link and its update (§688) | §688 |
 | the **style** of a caption track | **built.** A caption track carries a style — the tree's font, its colour, its align and its anchor (§689) | §689 |
 | the **text** and the **times** of a caption | **built.** A cue may be edited — the tree's text, its speaker and its overlap (§690) | §690 |
+| the **patterns** of a redaction | **built.** The text that looks like a card is found by a pattern — the tree's five patterns and their rules (§691) | §691 |
 
 ### The list of things that are honestly not there: empty
 
@@ -45140,5 +45141,59 @@ moved.
   frames.
 - **The tree's speaker is a voice of a file**, and here it is a name
   that is set by hand.
+
+---
+
+## 691. The patterns of a redaction
+
+A redaction may now be made by **pattern**: the text that looks like a
+phone number or a card is found by the pattern, and the pattern says
+what it is looking for.
+
+### What was built
+
+- Two new commands: `pdf.redact.patterns` and `pdf.redact.pattern.find`.
+- The **rules** are the tree's own:
+  - the **patterns** are the tree's five — the phone numbers, the email
+    addresses, the credit cards, the social security numbers and the
+    dates — and a pattern that is not one of them is refused by name;
+  - a **phone number** has ten or eleven digits and at least one
+    separator, and a country code may come first;
+  - an **email address** has a local part, an `@`, and a domain with a
+    dot and a top level domain of two letters or more;
+  - a **credit card** has thirteen to nineteen digits and it passes the
+    Luhn check;
+  - a **social security number** has three digits, two and four, with
+    a dash or a space between them, and its area is neither `000` nor
+    `666` and does not begin with a nine;
+  - a **date** is a number, a separator and a number — `5/1/24`,
+    `5-1-2024`, `5.1.2024`, `2024-01-05` — or a day and a month and a
+    year, or a month and a day and a year.
+
+### What the port found
+
+- **The tree's patterns are matched over glyphs**, and the ranges are
+  the glyphs of a page's text. Here they are matched over the
+  characters of a text that is given.
+- **Nothing is redacted here.** The tree's patterns are found over the
+  text of a page and the ranges are marked; here the ranges are read
+  out of a text.
+- **A match that runs into a word is not a match**: the tree's phone
+  number may not stand next to a word, and here the others may not
+  either.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/patterns.rs`): the five
+  patterns, the phone number, the email address, the card, the social
+  security number and the date.
+- **Two commands**. The PDF battery now carries **77** commands and the
+  MCP server **912**.
+
+### What it does not settle
+
+- **Nothing is redacted**, and the ranges are not marked on a page.
+- **The tree's patterns redact a whole page at once**, and there is no
+  such command here.
 
 ---
