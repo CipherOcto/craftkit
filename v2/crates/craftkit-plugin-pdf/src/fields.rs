@@ -246,7 +246,7 @@ fn pairs_of(value: &Json) -> Vec<(String, Json)> {
 ///
 /// A button that has no appearance has no states, and it may not be
 /// pressed.
-fn states_of(node: &Node) -> Vec<String> {
+pub(crate) fn states_of(node: &Node) -> Vec<String> {
     let entries = entries_of(node);
     let Some(appearance) = entry(&entries, "AP") else { return Vec::new() };
     let Some((_, normal)) = pairs_of(appearance).into_iter().find(|(key, _)| key == "N") else {
@@ -479,7 +479,7 @@ pub fn fields_of(document: &Document) -> Vec<Field> {
 }
 
 /// The **field** a node is: what it says about itself.
-fn field_of(document: &Document, node: &Node) -> Option<Field> {
+pub(crate) fn field_of(document: &Document, node: &Node) -> Option<Field> {
     let fields = fields_of(document);
     let object = node.data.get("object").and_then(|object| object.as_u64())?;
     fields.into_iter().find(|field| field.object == object)
