@@ -42,6 +42,13 @@ pub const MAX_VARS: usize = 200;
 /// The most **constraints** a program may have.
 pub const MAX_CONSTRAINTS: usize = 1000;
 
+/// The most **nodes** the branch and bound may visit.
+pub const MAX_NODES: usize = 10_000;
+
+/// The most **nodes** the branch and bound may visit, as the tree's
+/// own number for a linear program.
+pub const MAX_NODES_LP: usize = MAX_NODES;
+
 /// The **budget** of the solver: the most pivots it may make.
 ///
 /// The tree's own budget is a number of evaluations; here it is a
@@ -474,6 +481,124 @@ pub fn solve_lp(
     Verdict::Solved(solution, objective, true)
 }
 
+/// **Solve** a program whose variables may be **integers**.
+///
+/// The tree's own rule: the program is **relaxed** — the integer
+/// variables are free for a while — and the answer is looked for in
+/// the branches of that relaxation: the variable that is the most
+/// fractional is cut in two, and the branch that is nearer is taken
+/// first.
+pub fn solve_integer(
+    costs: &[f64],
+    rows: &[(Vec<f64>, Sense, f64)],
+    low: &[f64],
+    high: &[f64],
+    integer: &Integer,
+    budget: &mut u64,
+) -> (Verdict, usize) {
+    let mut relax = |low: &[f64], high: &[f64]| solve_lp(costs, rows, low, high, budget);
+    branch_and_bound(low, high, &integer.variables, integer.max_nodes, integer.gap, &mut relax)
+}
+
+/// The **integer** settings of a program.
+#[derive(Debug, Clone)]
+pub struct Integer {
+    /// The variables that are integers.
+    pub variables: Vec<bool>,
+    /// The most nodes the branch and bound may visit.
+    pub max_nodes: usize,
+    /// The optimality of an answer, in per cent.
+    pub gap: f64,
+}
+
+/// The **branch and bound** of the tree: the best integer point it
+/// finds, and the nodes it visited.
+fn branch_and_bound(
+    low: &[f64],
+    high: &[f64],
+    integer: &[bool],
+    max_nodes: usize,
+    gap: f64,
+    relax: &mut dyn FnMut(&[f64], &[f64]) -> Verdict,
+) -> (Verdict, usize) {
+    let mut stack: Vec<(Vec<f64>, Vec<f64>)> = vec![(low.to_vec(), high.to_vec())];
+    let mut best: Option<(Vec<f64>, f64)> = None;
+    let mut nodes = 0usize;
+    let mut limited = false;
+    let mut root = true;
+    while let Some((low, high)) = stack.pop() {
+        if nodes >= max_nodes {
+            limited = true;
+            break;
+        }
+        nodes += 1;
+        let outcome = relax(&low, &high);
+        let was_root = std::mem::replace(&mut root, false);
+        let (values, objective, converged) = match outcome {
+            Verdict::Solved(values, objective, converged) => (values, objective, converged),
+            Verdict::Unbounded if was_root => return (Verdict::Unbounded, nodes),
+            Verdict::Limit => {
+                limited = true;
+                break;
+            }
+            _ => continue,
+        };
+        if !converged {
+            limited = true;
+        }
+        if let Some((_, best_objective)) = &best
+            && objective
+                >= *best_objective
+                    - gap * best_objective.abs().max(1e-12)
+                    - 1e-9 * (1.0 + best_objective.abs())
+        {
+            continue;
+        }
+        // The variable that is the **most fractional** of the integers.
+        let fractional = values
+            .iter()
+            .zip(integer)
+            .enumerate()
+            .filter(|(_, (_, integer))| **integer)
+            .map(|(index, (value, _))| (index, (value - value.round()).abs()))
+            .filter(|(_, fraction)| *fraction > 1e-6)
+            .max_by(|left, right| left.1.total_cmp(&right.1));
+        match fractional {
+            None => {
+                let snapped: Vec<f64> = values
+                    .iter()
+                    .zip(integer)
+                    .map(|(value, integer)| if *integer { value.round() } else { *value })
+                    .collect();
+                best = Some((snapped, objective));
+            }
+            Some((index, _)) => {
+                let value = values.get(index).copied().unwrap_or(0.0);
+                let (mut down_high, mut up_low) = (high.clone(), low.clone());
+                if let Some(slot) = down_high.get_mut(index) {
+                    *slot = slot.min(value.floor());
+                }
+                if let Some(slot) = up_low.get_mut(index) {
+                    *slot = slot.max(value.ceil());
+                }
+                // The nearer side is taken first: it is pushed last.
+                if value - value.floor() < 0.5 {
+                    stack.push((up_low, high));
+                    stack.push((low, down_high));
+                } else {
+                    stack.push((low, down_high));
+                    stack.push((up_low, high));
+                }
+            }
+        }
+    }
+    match best {
+        Some((values, objective)) => (Verdict::Solved(values, objective, !limited), nodes),
+        None if limited => (Verdict::Limit, nodes),
+        None => (Verdict::Infeasible, nodes),
+    }
+}
+
 /// The **numbers** of a list: the tree's own rule is that a number that
 /// is not a number is refused.
 fn numbers_of(value: &Json, what: &str) -> Result<Vec<f64>, String> {
@@ -514,6 +639,14 @@ pub struct SolveProgram {
     pub maximise: Option<Bool>,
     /// The **budget** of the solver: the most pivots it may make.
     pub budget: Option<Number>,
+    /// The variables that are **integers**: a list of flags, one for
+    /// each variable.
+    pub integer: Option<Json>,
+    /// The most **nodes** the branch and bound may visit.
+    pub max_nodes: Option<Number>,
+    /// The **optimality** of an integer answer, in per cent: a
+    /// hundredth of a per cent is the tree's own zero.
+    pub gap: Option<Number>,
 }
 
 impl SolveProgram {
@@ -646,6 +779,62 @@ impl SolveProgram {
                 }
             }
         }
+        // The **integer** variables: a flag for each of them.
+        let mut integer = vec![false; costs.len()];
+        let mut any_integer = false;
+        if let Some(flags) = &self.integer {
+            let Some(list) = flags.as_array() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the integer variables are a list of flags".to_string(),
+                });
+            };
+            if list.len() != costs.len() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "there are {} flag(s) and the objective has {} variable(s)",
+                        list.len(),
+                        costs.len()
+                    ),
+                });
+            }
+            for (index, flag) in list.iter().enumerate() {
+                let Some(flag) = flag.as_bool() else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a flag of an integer variable is true or false".to_string(),
+                    });
+                };
+                if let Some(slot) = integer.get_mut(index) {
+                    *slot = flag;
+                }
+                any_integer |= flag;
+            }
+        }
+        // The **nodes** the branch and bound may visit.
+        let max_nodes = match self.max_nodes.map(|value| value.0) {
+            None => MAX_NODES_LP,
+            Some(value) if !value.is_finite() || value < 1.0 || value > MAX_NODES_LP as f64 => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the branch and bound visits between 1 and {MAX_NODES_LP} nodes"),
+                });
+            }
+            Some(value) => value as usize,
+        };
+        // The **optimality** of an integer answer, in per cent.
+        let gap = match self.gap.map(|value| value.0) {
+            None => 0.0,
+            Some(value) if !value.is_finite() || value < 0.0 || value > 100.0 => {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the optimality of an integer answer is a number from zero to a hundred"
+                        .to_string(),
+                });
+            }
+            Some(value) => value / 100.0,
+        };
         let maximise = self.maximise.map(|flag| flag.0).unwrap_or(false);
         if maximise {
             for cost in costs.iter_mut() {
@@ -662,7 +851,13 @@ impl SolveProgram {
             }
             Some(value) => value as u64,
         };
-        let outcome = solve_lp(&costs, &rows, &low, &high, &mut budget);
+        let (outcome, nodes) = if any_integer {
+            let settings = Integer { variables: integer, max_nodes, gap };
+            let (outcome, nodes) = solve_integer(&costs, &rows, &low, &high, &settings, &mut budget);
+            (outcome, nodes)
+        } else {
+            (solve_lp(&costs, &rows, &low, &high, &mut budget), 0usize)
+        };
         let (status, values, objective) = match outcome {
             Verdict::Solved(values, objective, _converged) => {
                 let objective = if maximise { -objective } else { objective };
@@ -677,6 +872,7 @@ impl SolveProgram {
             "status": status,
             "objective": if objective.is_finite() { json!(objective) } else { Json::Null },
             "values": values,
+            "nodes": nodes,
         })))
     }
 }
