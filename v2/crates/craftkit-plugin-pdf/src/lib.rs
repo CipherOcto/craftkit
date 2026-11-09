@@ -195,7 +195,7 @@ pub use appearance::{ReadAppearance, WriteAppearance};
 pub use attachments::ReadAttachments;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use calculate::{ReadCalculatedValue, ReadCalculation};
-pub use compare::CompareFiles;
+pub use compare::{CompareFiles, MarkDifferences};
 pub use convert::Convert;
 pub use destinations::ReadDestinations;
 pub use encrypt::ReadEncryption;
@@ -2166,6 +2166,7 @@ craftkit_sdk::plugin_anchor!(
     Convert,
     ReadFields,
     CompareFiles,
+    MarkDifferences,
     AddMarkup,
     ReadInherited,
     ReadChildren,

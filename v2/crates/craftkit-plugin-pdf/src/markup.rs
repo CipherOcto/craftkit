@@ -55,7 +55,7 @@ fn quad_of(bounds: [f64; 4]) -> Vec<f64> {
 }
 
 /// The **bounds** of the quads: the tree's own rectangle.
-fn bounds_of(quads: &[Vec<f64>]) -> [f64; 4] {
+pub(crate) fn bounds_of(quads: &[Vec<f64>]) -> [f64; 4] {
     let mut left = f64::INFINITY;
     let mut bottom = f64::INFINITY;
     let mut right = f64::NEG_INFINITY;

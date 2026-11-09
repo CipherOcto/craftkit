@@ -375,6 +375,29 @@ pub fn compare(old: &[Piece], new: &[Piece]) -> Comparison {
     Comparison { changes, old_pieces: old.len(), new_pieces: new.len() }
 }
 
+/// The **colour** of a change: the tree's own — blue for what was
+/// replaced, green for what was inserted and red for what was deleted.
+pub fn colour_of(kind: Kind) -> [f64; 3] {
+    match kind {
+        Kind::Replaced => [0.2, 0.45, 0.95],
+        Kind::Inserted => [0.2, 0.75, 0.3],
+        Kind::Deleted => [0.9, 0.25, 0.25],
+    }
+}
+
+/// The **contents** of a mark: what the tree writes in the note it
+/// leaves on the difference.
+pub fn contents_of(change: &Change) -> String {
+    match change.kind {
+        Kind::Replaced => format!("Replaced: \"{}\" with \"{}\"", change.old.text, change.new.text),
+        Kind::Inserted => format!("Inserted: \"{}\"", change.new.text),
+        Kind::Deleted => format!("Deleted: \"{}\"", change.old.text),
+    }
+}
+
+/// The **size** of the tree's note: the box of the icon.
+const NOTE_SIZE: f64 = 20.0;
+
 /// The compare report's text: a summary, then each change with its
 /// pages.
 pub fn report(comparison: &Comparison, old_name: &str, new_name: &str) -> String {
@@ -611,5 +634,162 @@ impl CompareFiles {
                 "report": text,
             }),
         ))
+    }
+}
+
+/// The **pages** of the document, as the nodes of them.
+fn page_nodes(document: &Document) -> Vec<u64> {
+    document
+        .walk()
+        .filter(|node| {
+            (node.kind == "pdf.object" || node.kind == "pdf.stream")
+                && crate::entries_of(&node.data)
+                    .iter()
+                    .any(|(key, value)| key == "Type" && value.as_str() == Some("Page"))
+        })
+        .map(|node| node.id)
+        .collect()
+}
+
+/// **Mark** the differences between two files: the highlights over the
+/// text that changed, and the notes where text was deleted.
+///
+/// The tree's own rule: the **new** document is the one that is
+/// marked, the **replaced** and the **inserted** text is marked with a
+/// highlight of the tree's colour, and a **deletion** — which has no
+/// text of its own — is a note where the text was.
+#[derive(Command)]
+#[command(id = "pdf.compare.mark", area = "pdf", layer = "pdf", icon = "git-compare", mutates, undoable)]
+pub struct MarkDifferences {
+    /// The file that was there before.
+    pub old: Text,
+}
+
+impl MarkDifferences {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let old_path = self.old.0.trim().to_string();
+        if old_path.is_empty() {
+            return Err(EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: "the file that was there before has a path".to_string(),
+            });
+        }
+        // The **work area** of the old file: the bytes of its streams
+        // go into a directory of their own, and it is taken away when
+        // the comparison is done.
+        let work = std::env::temp_dir().join(format!(
+            "craftkit-v2-compare-{}-{}",
+            std::process::id(),
+            work_number()
+        ));
+        let old_pieces = pieces_of_file(&old_path, &work.join("old"));
+        let _ = std::fs::remove_dir_all(&work);
+        let old_pieces = old_pieces?;
+        // The **new** file is the document of the session: the caller
+        // has loaded it, and it is the one that is marked.
+        let new_pieces = pieces_of(session.document());
+        let comparison = compare(&old_pieces, &new_pieces);
+        let pages = page_nodes(session.document());
+        // The **marks**: one for each change.
+        let mut marked: Vec<Json> = Vec::new();
+        for change in &comparison.changes {
+            let page = change.new.page;
+            let Some(node) = pages.get(page).copied() else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the document has no page {page}"),
+                });
+            };
+            let page_number = session.document().node(node).and_then(crate::the_number_of).unwrap_or(0);
+            let colour = colour_of(change.kind);
+            let contents = contents_of(change);
+            let number = crate::free::the_next_number(session.document(), 0);
+            // The **shape** of the mark: a highlight over the text that
+            // is there, and a note where the text is not.
+            let (subtype, rect, quads, name) = if change.new.rects.is_empty() {
+                let Some(near) = change.new.near else { continue };
+                let rect = [near[0], near[3] - NOTE_SIZE, near[0] + NOTE_SIZE, near[3]];
+                ("Text", rect, Vec::new(), Some("Note"))
+            } else {
+                let quads: Vec<Vec<f64>> = change
+                    .new
+                    .rects
+                    .iter()
+                    .map(|rect| vec![rect[0], rect[3], rect[2], rect[3], rect[0], rect[1], rect[2], rect[1]])
+                    .collect();
+                let rect = crate::markup::bounds_of(&quads);
+                ("Highlight", rect, quads, None)
+            };
+            let mut entries: Vec<(String, Json)> = vec![
+                ("Type".to_string(), json!("Annot")),
+                ("Subtype".to_string(), json!(subtype)),
+                ("Rect".to_string(), json!(rect)),
+                ("C".to_string(), json!(colour)),
+                ("Contents".to_string(), json!({ "string": contents })),
+                ("T".to_string(), json!("Compare")),
+                ("P".to_string(), json!({ "ref": [page_number, 0] })),
+            ];
+            if let Some(name) = name {
+                entries.push(("Name".to_string(), json!(name)));
+                // The tree's note: it prints, and it does not zoom or
+                // rotate with the page.
+                entries.push(("F".to_string(), json!(28)));
+            } else {
+                entries.push((
+                    "QuadPoints".to_string(),
+                    json!(quads.iter().flat_map(|quad| quad.iter().copied()).collect::<Vec<f64>>()),
+                ));
+                entries.push(("F".to_string(), json!(4)));
+                // The tree's highlight multiplies over the text.
+                entries.push(("BM".to_string(), json!("Multiply")));
+            }
+            let data = json!({ "object": number, "entries": entries });
+            let annot_name = format!("annotation {number}");
+            let annot = session.document_mut()?.add_node_with(annot_name.clone(), "pdf.object", None, data);
+            // The page **names** the annotation.
+            let mut annots = session
+                .document()
+                .node(node)
+                .map(|page| {
+                    crate::entries_of(&page.data)
+                        .into_iter()
+                        .find(|(key, _)| key == "Annots")
+                        .and_then(|(_, value)| value.as_array().cloned())
+                        .unwrap_or_default()
+                })
+                .unwrap_or_default();
+            annots.push(json!({ "ref": [number, 0] }));
+            if let Some(page) = session.document_mut()?.node_mut(node) {
+                page.data = crate::with_entry(&page.data, "Annots", json!(annots));
+            }
+            let relation = craftkit_sdk::Relation::with_payload(
+                node,
+                annot,
+                "ref",
+                json!({ "key": "Annots", "generation": 0 }),
+            );
+            if !session.document_mut()?.add_relation(relation) {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the page already refers to the annotation `{annot}`"),
+                });
+            }
+            marked.push(json!({
+                "id": annot,
+                "object": number,
+                "page": page,
+                "kind": change.kind.name(),
+                "subtype": subtype,
+                "rect": rect,
+                "contents": contents,
+                "colour": colour,
+            }));
+        }
+        Ok(Outcome::changed(format!("{} difference(s) marked", marked.len())).with_data(json!({
+            "old": old_path,
+            "count": marked.len(),
+            "marked": marked,
+            "changes": comparison.changes.len(),
+        })))
     }
 }
