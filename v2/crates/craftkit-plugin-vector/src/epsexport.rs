@@ -18,6 +18,9 @@
 //!   is the winding number, and `f*` where it is the even-odd rule.
 //! - The **ink** is written in the space of the colour: `rg` for a
 //!   colour of the screen, and `k` for one of the press.
+//! - The **finish** of a line is the tree's own: the width, the end,
+//!   the corner and the **dash** — the pattern in brackets, the offset
+//!   after it — and a pattern that is not dashed is no dash at all.
 //!
 //! # What it does not settle
 //!
@@ -32,7 +35,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::FormatValue;
-use craftkit_sdk::document::{Colour, Fill, Path, Segment};
+use craftkit_sdk::document::{Cap, Colour, Fill, Join, Path, Segment};
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Document, EngineError, Outcome, Session, Text};
 
@@ -121,6 +124,40 @@ fn ink(colour: Colour) -> String {
     format!("{}rg\n", numbers(&[f64::from(r), f64::from(g), f64::from(b)]))
 }
 
+/// The **end** of a line, as PostScript writes it: the tree's own
+/// numbers.
+fn cap(cap: Cap) -> &'static str {
+    match cap {
+        Cap::Butt => "0 J\n",
+        Cap::Round => "1 J\n",
+        Cap::Square => "2 J\n",
+    }
+}
+
+/// The **corner** of a line, as PostScript writes it: the tree's own
+/// numbers.
+fn join(join: Join) -> &'static str {
+    match join {
+        Join::Miter => "0 j\n",
+        Join::Round => "1 j\n",
+        Join::Bevel => "2 j\n",
+    }
+}
+
+/// The **dash** of a line, as PostScript writes it: the pattern in
+/// brackets, the offset after it.
+///
+/// The tree's own rule: a pattern that is not dashed — a pattern with
+/// no length in it — is **no dash at all**, and the line is whole.
+fn dash(dash: Option<&crate::dashes::Dash>) -> String {
+    let Some(dash) = dash else { return String::new() };
+    if dash.pattern.is_empty() || !dash.pattern.iter().any(|length| *length > 0.0) {
+        return String::new();
+    }
+    let pattern: Vec<String> = dash.pattern.iter().map(|length| number(*length)).collect();
+    format!("[{}] {} d\n", pattern.join(" "), number(dash.offset))
+}
+
 /// The **file** of the drawing: the EPS of the document's paths.
 pub fn the_eps(document: &Document) -> Result<(String, usize), EngineError> {
     let mut out = String::new();
@@ -165,6 +202,9 @@ pub fn the_eps(document: &Document) -> Result<(String, usize), EngineError> {
             body.push_str(&path_data(&placed));
             body.push_str(&numbers(&[stroke.width]));
             body.push_str("w\n");
+            body.push_str(cap(stroke.cap));
+            body.push_str(join(stroke.join));
+            body.push_str(&dash(vector.dash.as_ref()));
             body.push_str(&ink(stroke.colour));
             body.push_str("S\n");
         }
