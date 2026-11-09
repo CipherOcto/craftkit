@@ -297,6 +297,11 @@ pub struct Pivot {
     pub subtotals: Subtotals,
 }
 
+/// The **pivot**, as the sheet keeps it.
+pub(crate) fn pivot_json(pivot: &Pivot) -> craftkit_sdk::serde_json::Value {
+    pivot.to_json()
+}
+
 impl Pivot {
     /// The pivot, as the sheet keeps it.
     fn to_json(&self) -> craftkit_sdk::serde_json::Value {
@@ -483,7 +488,7 @@ fn key_text(value: &Value) -> String {
 }
 
 /// The **sheet** a command is about, and whether it is a sheet.
-fn sheet_of(session: &Session, id: &str, sheet: u64) -> Result<Node, EngineError> {
+pub(crate) fn sheet_of(session: &Session, id: &str, sheet: u64) -> Result<Node, EngineError> {
     let Some(node) = session.document().node(sheet) else {
         return Err(EngineError::Failed {
             id: id.to_string(),
@@ -500,7 +505,7 @@ fn sheet_of(session: &Session, id: &str, sheet: u64) -> Result<Node, EngineError
 }
 
 /// The **text** of a header cell, and why it is not one.
-fn header_text(cells: &Cells, cell: CellRef) -> Result<String, String> {
+pub(crate) fn header_text(cells: &Cells, cell: CellRef) -> Result<String, String> {
     let Some(entry) = cells.get(cell) else {
         return Err(format!("the cell {} holds nothing, and a field is named by its header", cell.to_text()));
     };
@@ -525,7 +530,7 @@ fn field_name(cells: &Cells, area: &Area, column: u32) -> Result<String, String>
 }
 
 /// The **pivot** of a sheet, and the failure if there is none.
-fn pivot_of(pivots: &[Pivot], name: &str, id: &str) -> Result<Pivot, EngineError> {
+pub(crate) fn pivot_of(pivots: &[Pivot], name: &str, id: &str) -> Result<Pivot, EngineError> {
     pivots.iter().find(|pivot| pivot.name == name).cloned().ok_or_else(|| EngineError::Failed {
         id: id.to_string(),
         message: format!("there is no pivot `{name}` on the sheet"),

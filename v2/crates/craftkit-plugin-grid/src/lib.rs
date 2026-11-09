@@ -376,6 +376,7 @@ mod names;
 mod notes;
 mod outline;
 mod pictures;
+mod pivotfields;
 mod pivots;
 mod printing;
 mod protection;
@@ -450,6 +451,7 @@ pub use outline::{
     GroupColumns, GroupRows, ReadColumnGroups, ReadGroups, SetSummary, UngroupColumns, UngroupRows,
 };
 pub use pictures::{ReadPicture, RemovePicture, SetPicture};
+pub use pivotfields::ReadPivotFields;
 pub use pivots::{CreatePivot, ReadPivot, RemovePivot};
 pub use pivots::{
     SetGrandTotals, SetPivotFilter, SetPivotGroup, SetPivotShowAs, SetPivotSort, SetPivotSubtotals,
