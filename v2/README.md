@@ -4091,6 +4091,7 @@ so.
 | the **cues** of a TTML file | **built.** A TTML file is read — the tree's timing parameters, its time expressions, its containers and its text (§701) | §701 |
 | the **cues** of a track written as a TTML file | **built.** The cues of a track are written as a TTML file — the tree's IMSC1 profile, its frame offsets and its clocks (§702) | §702 |
 | the **cues** of a track written as a DFXP file | **built.** The cues of a track are written as a DFXP file — the tree's presentation profile and its clock times (§703) | §703 |
+| the **cues** of a track written as an MCC file | **built.** The cues of a track are written as an MCC file — the tree's distribution packets, its abbreviations and its timecode (§704) | §704 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -45535,7 +45536,8 @@ line by line, and the CEA-608 pairs of its field one.
 
 - **The tree's writer of an MCC file is not here**: it writes the
   CEA-708 service data beside the CEA-608 pairs, with the two windows
-  of the pop-on emulation, and nothing writes an MCC file here.
+  of the pop-on emulation, and nothing writes an MCC file here. — *The
+  field one is written now (§704); the service data is not.*
 - **The tree's reader of the CEA-708 service data is not here**, and a
   file that carries only that data has no cues.
 - **The tree's import of a caption file takes a SubRip or a WebVTT
@@ -45953,5 +45955,62 @@ profile of the format, with no rate in it.
   older one, and the tree writes the two with the same cues.
 - **The speakers of the captions are not written**, for a caption here
   has none.
+
+---
+
+## 704. The cues of a track written as an MCC file
+
+The cues of a track may now be written as an **MCC file**: the CEA-608
+pairs of the field one, in a caption distribution packet a frame.
+
+### What was built
+
+- A **new format** of the writers: `film.captions.export` writes an MCC
+  file when the format is `mcc`, and `film.captions.write` writes one
+  from the cues it is given.
+- The **rules** are the tree's own:
+  - the file is a **MacCaption MCC** file, and it says the **rate** of
+    its timecode: `30DF` for the drop-frame timecode, and `30` for the
+    other.
+  - the **load** of a caption is scheduled exactly as the SCC file
+    schedules it, and it is written **a frame a pair**: every frame
+    with data of it is a line of the file, and a frame without data is
+    left out.
+  - the **data** of a line is a caption distribution packet — SMPTE ST
+    334-2 — with the pair of the field one, the parity of it, and the
+    padding of the format; and it is written with the
+    **abbreviations** of the format.
+  - the **identifier** of the file is a hash of the cues of it, and the
+    file says which program wrote it.
+
+### What the port found
+
+- **The tree's writer writes the two streams apart** — the CEA-608
+  field one and the CEA-708 service one — and the port found that the
+  tree's own writer has a switch for that: this writes the field one,
+  and the service data of the tree's writer is not here.
+- **The tree's caption is shown at the frame of the caption** in an MCC
+  file, and not at the frame of the end of the load as it is in an SCC
+  file: the load is a frame a pair, so it takes a frame a pair of
+  frames.
+- **The tree's file says which program wrote it**, and the tree's own
+  name is in it; here the name is this tree's.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/mccwrite.rs`): the file
+  that says what it is, the data that uses the abbreviations, the file
+  that is read back, and the drop-frame mark.
+- **No new command**: the export command and the write command learned
+  a format. The film battery carries **105** commands and the MCP server
+  **919**.
+
+### What it does not settle
+
+- **The CEA-708 service data is not written**: the tree writes it
+  beside the CEA-608 pairs, with the two windows of the pop-on
+  emulation, and here only the field one is written.
+- **The identifier of the file is a hash of the frames** of the cues,
+  where the tree hashes its ticks.
 
 ---
