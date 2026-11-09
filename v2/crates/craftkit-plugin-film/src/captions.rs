@@ -403,6 +403,32 @@ pub fn cues_of(text: &str) -> Result<(Vec<Cue>, Vec<String>), String> {
     Ok((cues, warnings))
 }
 
+/// The **cues** of a caption file, and the **warnings** of the reading.
+///
+/// The formats are the tree's own: the binary ones are read as bytes
+/// and the text ones as text.
+pub fn cues_of_file(format: &str, bytes: &[u8]) -> Result<(Vec<Cue>, Vec<String>), String> {
+    if format == "stl" {
+        // An EBU STL file is **binary**: its bytes are the file.
+        return crate::stl::cues_of(bytes);
+    }
+    let text = decode(bytes);
+    match format {
+        "webvtt" => {
+            let document = vtt_cues(&text)?;
+            let cues = document
+                .cues
+                .iter()
+                .map(|cue| Cue { start: cue.start, end: cue.end, text: cue.text.clone() })
+                .collect();
+            Ok((cues, document.warnings))
+        }
+        "scc" => crate::scc::cues_of(&text),
+        "mcc" => crate::mcc::cues_of(&text),
+        _ => cues_of(&text),
+    }
+}
+
 /// **Read** the **cues** of a caption file.
 ///
 /// The cues are read out of the file, and they are not kept: a
@@ -430,7 +456,10 @@ pub const FORMATS: [&str; 5] = ["subrip", "webvtt", "stl", "scc", "mcc"];
 pub const WRITABLE: [&str; 4] = ["subrip", "webvtt", "stl", "scc"];
 
 /// The **formats** of a caption file this tree imports as a track.
-pub const IMPORTED: [&str; 2] = ["subrip", "webvtt"];
+///
+/// They are the formats that are read: a file that may be read may be
+/// imported.
+pub const IMPORTED: [&str; 5] = ["subrip", "webvtt", "stl", "scc", "mcc"];
 
 impl ReadCaptions {
     fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {

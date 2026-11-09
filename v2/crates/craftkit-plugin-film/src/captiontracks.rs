@@ -351,6 +351,9 @@ impl ImportCaptions {
         let format = match named.as_deref() {
             None | Some("") | Some("subrip") | Some("srt") => "subrip",
             Some("webvtt") | Some("vtt") => "webvtt",
+            Some("stl") | Some("ebu") => "stl",
+            Some("scc") => "scc",
+            Some("mcc") => "mcc",
             Some(other) => {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
@@ -367,23 +370,13 @@ impl ImportCaptions {
                     id: command.to_string(),
                     message: format!("the file cannot be read: {message}"),
                 })?;
-        let text = crate::captions::decode(&bytes);
-        let (cues, warnings) = if format == "webvtt" {
-            let document = crate::captions::vtt_cues(&text).map_err(|message| EngineError::Failed {
-                id: command.to_string(),
-                message: format!("{message}: `{path}`"),
-            })?;
-            let cues: Vec<(i64, i64, String)> =
-                document.cues.into_iter().map(|cue| (cue.start, cue.end, cue.text)).collect();
-            (cues, document.warnings)
-        } else {
-            let (cues, warnings) = crate::captions::cues_of(&text).map_err(|message| {
-                EngineError::Failed { id: command.to_string(), message: format!("{message}: `{path}`") }
-            })?;
-            let cues: Vec<(i64, i64, String)> =
-                cues.into_iter().map(|cue| (cue.start, cue.end, cue.text)).collect();
-            (cues, warnings)
-        };
+        // The **cues** of the file: the formats that are read may be
+        // imported, and the reading is the one of the reader.
+        let (cues, warnings) = crate::captions::cues_of_file(format, &bytes).map_err(|message| {
+            EngineError::Failed { id: command.to_string(), message: format!("{message}: `{path}`") }
+        })?;
+        let cues: Vec<(i64, i64, String)> =
+            cues.into_iter().map(|cue| (cue.start, cue.end, cue.text)).collect();
         // The cues are **snapped to the frames** of the sequence.
         let mut snapped: Vec<(i64, i64, String)> = cues
             .into_iter()
