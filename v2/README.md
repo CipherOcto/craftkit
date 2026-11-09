@@ -4121,6 +4121,7 @@ so.
 | the **articles** of a layout document | **built.** An article is a named list of items in a reading order — the tree's names, its order and its refusals (§684) | §684 |
 | the **table of authorities** of a document | **built.** An authority is marked on a block, and the table is derived from the marks — the tree's entry, its quotes and its order (§685) | §685 |
 | the **cues** of a track written as an EBU STL file | **built.** The cues of a track are written as an EBU STL file — the tree's blocks, its rate and its ISO/IEC 6937 (§686) | §686 |
+| the **counts** of this README | **built.** The highest count the README gives for a battery is the count of that battery, and a test keeps it so (§687) | §687 |
 
 ### The list of things that are honestly not there: empty
 
@@ -24016,7 +24017,7 @@ is gone; it is a row that is not shown.
   not a sheet refused, and the hiding being saved.
 - **Four new commands**: `grid.row.hide`, `grid.row.show`,
   `grid.column.hide` and `grid.column.show`. The grid battery now
-  carries **42** commands and the MCP server **455**.
+  carries **41** commands and the MCP server **455**.
 
 ### What it does not settle
 
@@ -24339,7 +24340,7 @@ without the colours.
   filter says so.
 - **Three new commands**: `grid.conditional.set`,
   `grid.conditional.clear` and `grid.conditional.check`. The grid
-  battery now carries **48** commands and the MCP server **463**.
+  battery now carries **47** commands and the MCP server **463**.
 
 ### What it does not settle
 
@@ -24520,7 +24521,7 @@ name has rules, and a rename is more than a rename.
   for a range following, a node that is not a sheet refused, and a
   sheet that is added with a bad name refused.
 - **One new command**: `grid.sheet.rename`. The grid battery now
-  carries **49** commands and the MCP server **468**.
+  carries **48** commands and the MCP server **468**.
 
 ### What it does not settle
 
@@ -26835,7 +26836,7 @@ the block is **derived**.
   that is not a kind, a level that is not a level, a list that is not
   there and a node that is not a block being refused.
 - **Three new commands**: `prose.list.add`, `prose.block.numbering`
-  and `prose.block.number`. The prose battery now carries **21**
+  and `prose.block.number`. The prose battery now carries **20**
   commands and the MCP server **512**.
 
 ### What it does not settle
@@ -26959,7 +26960,7 @@ may be **opened** is derived.
   text being refused, and a block that is not there and a node that is
   not a block being refused.
 - **One new command**: `prose.block.links`. The prose battery now
-  carries **24** commands and the MCP server **515**.
+  carries **23** commands and the MCP server **515**.
 
 ### What it does not settle
 
@@ -27011,7 +27012,7 @@ its format was changed — and by whom.
   that is not one being refused, and a block that is not there and a
   node that is not a block being refused.
 - **One new command**: `prose.block.revisions`. The prose battery now
-  carries **25** commands and the MCP server **516**.
+  carries **24** commands and the MCP server **516**.
 
 ### What it does not settle
 
@@ -29043,7 +29044,7 @@ what of it is seen.
   mask may be set, a mask may be inverted and locked, and a mask may
   be taken away.
 - **One new module** (`masks`): the masks of a layer are their own.
-  The fx battery now carries **36** commands and the MCP server
+  The fx battery now carries **33** commands and the MCP server
   **542**.
 
 ### What it does not settle
@@ -29090,7 +29091,7 @@ composition where it is looking.
   set and read, it may go to the start and to the end, and it may be
   stepped.
 - **One new module** (`time`): the time of a composition is its own.
-  The fx battery now carries **41** commands and the MCP server
+  The fx battery now carries **38** commands and the MCP server
   **547**.
 
 ### What it does not settle
@@ -29141,7 +29142,7 @@ order, and the front of the stack is drawn over the rest of it.
   be read, a layer may be moved in it, a place that is no place is
   refused, and a layer may be renamed.
 - **One new module** (`stack`): the order of the layers is their own.
-  The fx battery now carries **44** commands and the MCP server
+  The fx battery now carries **41** commands and the MCP server
   **550**.
 
 ### What it does not settle
@@ -29186,7 +29187,7 @@ has named.
   be selected, they may be taken out of the selection, and a layer
   that is not there is refused.
 - **One new module** (`selection`): the selection of layers is its
-  own. The fx battery now carries **47** commands and the MCP server
+  own. The fx battery now carries **44** commands and the MCP server
   **553**.
 
 ### What it does not settle
@@ -30862,7 +30863,7 @@ An **equation** is a block whose text is not written down: it is
   is not an equation being refused, the text of an equation not being
   replaced, and the parts being read back with the text.
 - **One new module** (`equations`) and **one new kind**
-  (`prose.block.equation`). The prose battery now carries **45**
+  (`prose.block.equation`). The prose battery now carries **44**
   commands and the MCP server **634**.
 
 ### What it does not settle
@@ -31410,7 +31411,7 @@ page.
   spacing and of a command that says nothing — and the paragraph of a
   block, and a block on no style having none, and a node that is not a
   style being refused.
-- **One new module** (`paragraph`). The prose battery now carries **51**
+- **One new module** (`paragraph`). The prose battery now carries **50**
   commands and the MCP server **651**.
 
 ### What it does not settle
@@ -31466,7 +31467,7 @@ An item may carry a **link**: a target it points at.
   a page of another document being refused, the link of an item being
   one thing, a link to a page being taken away, a locked item not
   being given a link, and an item with no link not being in the list.
-- **One new module** (`links`). The layout battery now carries **25**
+- **One new module** (`links`). The layout battery now carries **23**
   commands and the MCP server **654**.
 
 ### What it does not settle
@@ -31861,7 +31862,7 @@ headings of a document in the order they stand are its **outline**.
   level being refused, the outline being the headings in order, a
   block on no style not being in the outline, the level being taken
   away, and a node that is not a style being refused.
-- **One new module** (`outline`). The prose battery now carries **57**
+- **One new module** (`outline`). The prose battery now carries **56**
   commands and the MCP server **672**.
 
 ### What it does not settle
@@ -31913,7 +31914,7 @@ colour and a weight.
   stroked, a stroke being taken away, a colour that is not a colour
   being refused, a weight that is not a weight being refused, and a
   locked item not being painted.
-- **One new module** (`paint`). The layout battery now carries **27**
+- **One new module** (`paint`). The layout battery now carries **25**
   commands and the MCP server **674**.
 
 ### What it does not settle
@@ -32092,7 +32093,7 @@ shape.
   a turn that is not a number being refused, and a locked item not
   being turned.
 - **One new module** (`rotation`). The layout battery now carries
-  **32** commands and the MCP server **682**.
+  **30** commands and the MCP server **682**.
 
 ### What it does not settle
 
@@ -32285,7 +32286,7 @@ and it says it where the reader can see it.
   entity being refused, and a node that is not a dimension being
   refused a text.
 - **One new module** (`dimensions`) and **one new kind** of entity.
-  The cad battery now carries **38** commands and the MCP server
+  The cad battery now carries **37** commands and the MCP server
   **691**. The count of §1175 said **35** and was one short — the
   battery had 36 commands then — and the correction is here.
 
@@ -32348,7 +32349,7 @@ a gap — and an offset that says where in the pattern the line starts.
   no dash, a length that is negative being refused, a length that is
   not a number being refused, and an offset that is not a number being
   refused.
-- **One new module** (`dashes`). The vector battery now carries **42**
+- **One new module** (`dashes`). The vector battery now carries **41**
   commands and the MCP server **692**. The count of §449 said **40**
   and was one short — the battery had 41 commands then — and the
   correction is here.
@@ -32408,7 +32409,7 @@ to go.
   bleed box of a page being derived, a document with no bleed having
   no room at all, the room of a bleed that is negative being refused,
   and a node that is not a document being refused a bleed.
-- **One new module** (`bleed`). The layout battery now carries **33**
+- **One new module** (`bleed`). The layout battery now carries **31**
   commands and the MCP server **693**.
 
 ### What it does not settle
@@ -32471,7 +32472,7 @@ A layer names a **line type**: the pattern its lines are drawn with.
   the pattern of the line type being derived, the name of a line type
   being found without regard to its case, a name that is not a line
   type being refused, and a layer with no line type having no pattern.
-- **One new module** (`linetypes`). The cad battery now carries **39**
+- **One new module** (`linetypes`). The cad battery now carries **38**
   commands and the MCP server **694**.
 
 ### What it does not settle
@@ -32532,7 +32533,7 @@ the text that is set on it.
   negative being refused, margins that leave no room being refused,
   and a node that is not a page being refused margins.
 - **One new module** (`margins`). The layout battery now carries
-  **34** commands and the MCP server **695**.
+  **32** commands and the MCP server **695**.
 
 ### What it does not settle
 
@@ -32590,7 +32591,7 @@ columns side by side, with a gutter of room between them.
   tree's own bound being refused, and a gutter so wide that the
   columns do not fit being refused.
 - **One new module** (`columns`). The layout battery now carries
-  **35** commands and the MCP server **696**.
+  **33** commands and the MCP server **696**.
 
 ### What it does not settle
 
@@ -32642,7 +32643,7 @@ as arcs of that radius.
   radius beyond half the shorter side being refused, and an item that
   is not a rectangle being refused a radius.
 - **One new module** (`radii`). The layout battery now carries
-  **36** commands and the MCP server **697**.
+  **34** commands and the MCP server **697**.
 
 ### What it does not settle
 
@@ -32691,7 +32692,7 @@ behind it, moved away from it.
   a distance that is negative being refused, a colour that is not a
   colour being refused, and an opacity outside one being refused.
 - **One new module** (`shadows`). The layout battery now carries
-  **37** commands and the MCP server **698**.
+  **35** commands and the MCP server **698**.
 
 ### What it does not settle
 
@@ -33437,7 +33438,7 @@ of its own from. That is the tree's **master page**.
   refused, a parent that is not a page being refused, and a page that
   follows no page having no parent to take away.
 - **One new module** (`parents`). The layout battery now carries
-  **39** commands and the MCP server **704**.
+  **37** commands and the MCP server **704**.
 
 ### What it does not settle
 
@@ -33499,7 +33500,7 @@ outside margin is the room at the other edge.
   side that is not a side being refused, and a node that is not a page
   being refused a side.
 - **One new module** (`sides`). The layout battery now carries
-  **40** commands and the MCP server **705**.
+  **38** commands and the MCP server **705**.
 
 ### What it does not settle
 
@@ -33567,7 +33568,7 @@ A preflight says what a file **declares** about itself and what it
   the output intents being read, and a level that is not a level being
   refused.
 - **One new module** (`preflight`). The pdf battery now carries
-  **30** commands and the MCP server **706**.
+  **29** commands and the MCP server **706**.
 
 ### What it does not settle
 
@@ -33631,7 +33632,7 @@ what lies **inside**.
   paths that do not meet being refused, and the selection saying which
   path is in front.
 - **One new module** (`pathfinder`). The vector battery now carries
-  **44** commands and the MCP server **708**.
+  **43** commands and the MCP server **708**.
 
 ### What it does not settle
 
@@ -33695,7 +33696,7 @@ operations that take the **hidden** parts away and the ones that
   the merge of two paths painted the same way making one path, and the
   merge of two paths painted differently keeping them apart.
 - **One module** (`pathfinder`) grows two commands. The vector battery
-  now carries **46** commands and the MCP server **710**.
+  now carries **45** commands and the MCP server **710**.
 
 ### What it does not settle
 
@@ -33815,7 +33816,7 @@ must be in the file, and not only its name.
   when the font it descends from is, a composite font without a
   program breaking the rule, a Type 3 font being its own program, the
   fonts being read, and the preflight saying what fonts the file has.
-- **One new module** (`fonts`). The pdf battery now carries **31**
+- **One new module** (`fonts`). The pdf battery now carries **30**
   commands and the MCP server **711**.
 
 ### What it does not settle
@@ -33935,7 +33936,7 @@ file's index is, which object is the catalog, and — when the file is
   whether the file is encrypted, one entry of the trailer being read,
   an entry the trailer does not have being refused, and a document
   that was not loaded from a file having no trailer.
-- **One new module** (`trailer`). The pdf battery now carries **32**
+- **One new module** (`trailer`). The pdf battery now carries **31**
   commands and the MCP server **712**.
 
 ### What it does not settle
@@ -33989,7 +33990,7 @@ text**.
   it is, the alt text being changed and not added twice, an empty alt
   text taking the text away, a node that is not a picture being
   refused, and a node that is not there being refused.
-- **One new module** (`media`). The prose battery now carries **58**
+- **One new module** (`media`). The prose battery now carries **57**
   commands and the MCP server **713**.
 
 ### What it does not settle
@@ -34059,7 +34060,7 @@ magnifier, or with a reader who cannot see the picture at all. The
   being a tip, the errors coming before the warnings and the tips, and
   a node that is not a document being refused.
 - **One new module** (`accessibility`). The prose battery carries
-  **59** commands and the MCP server **714**.
+  **58** commands and the MCP server **714**.
 
 ### What it does not settle
 
@@ -34109,7 +34110,7 @@ row a screen reader reads to know the names of the columns.
   nothing, the header row being taken away and the warning coming
   back, and a node that is not a table being refused.
 - **No new module**: the command grows the tables module. The prose
-  battery now carries **60** commands and the MCP server **715**.
+  battery now carries **59** commands and the MCP server **715**.
 
 ### What it does not settle
 
@@ -34164,7 +34165,7 @@ reader reads out.
   taking the title away, a document with no title being a tip, a
   document with a title breaking nothing, and a node that is not a
   document being refused.
-- **One new module** (`titles`). The prose battery now carries **61**
+- **One new module** (`titles`). The prose battery now carries **60**
   commands and the MCP server **716**.
 
 ### What it does not settle
@@ -34224,7 +34225,7 @@ can and says what is left.
   away, the NeedAppearances flag being taken away, the report saying
   what was fixed, the report saying what is left, the encryption not
   being taken away, and a level that is not a level being refused.
-- **One new module** (`convert`). The pdf battery now carries **33**
+- **One new module** (`convert`). The pdf battery now carries **32**
   commands and the MCP server **717**.
 
 ### What it does not settle
@@ -34282,7 +34283,7 @@ from a page is its **facing page**.
   facing page being derived and following the spread, and a node that
   is not a page being refused.
 - **One new module** (`facing`). The layout battery now carries
-  **41** commands and the MCP server **718**.
+  **39** commands and the MCP server **718**.
 
 ### What it does not settle
 
@@ -34389,7 +34390,7 @@ cannot describe.
   itself being a warning, a table that says what it is breaking
   nothing, and a node that is not a table being refused.
 - **No new module**: the command grows the tables module. The prose
-  battery now carries **62** commands and the MCP server **719**.
+  battery now carries **61** commands and the MCP server **719**.
 
 ### What it does not settle
 
@@ -34505,7 +34506,7 @@ field says what it is, and what it holds.
   taking one of its options and nothing else, a button taking one of
   its states and nothing else, an empty value taking the value away,
   and a node that is not a field being refused.
-- **One new module** (`fields`). The pdf battery now carries **35**
+- **One new module** (`fields`). The pdf battery now carries **34**
   commands and the MCP server **721**.
 
 ### What it does not settle
@@ -34561,7 +34562,7 @@ field is then the name of its parent and its own, joined with a dot
   field not being a parent, a cycle ending the name, and a field with
   no name being named after its object.
 - **No new module**: the command grows the fields module. The pdf
-  battery now carries **36** commands and the MCP server **722**.
+  battery now carries **35** commands and the MCP server **722**.
 
 ### What it does not settle
 
@@ -34616,7 +34617,7 @@ facts about how the field behaves.
   again, a flag that is not said being left as it was, and a node that
   is not a field being refused.
 - **No new module**: the command grows the fields module. The pdf
-  battery now carries **37** commands and the MCP server **723**.
+  battery now carries **36** commands and the MCP server **723**.
 
 ### What it does not settle
 
@@ -34897,7 +34898,7 @@ name and no kind, and take the kind of the field it is in.
   field being refused, a node that is not there being refused, and a
   field that is its own ancestor still having an answer.
 - **No new module**: the command grows the fields module. The pdf
-  battery now carries **38** commands and the MCP server **726**.
+  battery now carries **37** commands and the MCP server **726**.
 
 ### What it does not settle
 
@@ -34958,7 +34959,7 @@ the fields it is a group of.
   was in, a node that is not a field being refused, and a node that is
   not there being refused.
 - **No new module**: the command grows the fields module. The pdf
-  battery now carries **39** commands and the MCP server **727**.
+  battery now carries **38** commands and the MCP server **727**.
 
 ### What it does not settle
 
@@ -35026,7 +35027,7 @@ is drawn, what it shows, and whether it may be touched.
   with no widgets having none, a child not being a widget, and a node
   that is not a field being refused.
 - **No new module**: the command grows the fields module. The pdf
-  battery now carries **40** commands and the MCP server **728**.
+  battery now carries **39** commands and the MCP server **728**.
 
 ### What it does not settle
 
@@ -35086,7 +35087,7 @@ purpose** — it is a rule, a flourish, a mark that a reader may skip.
   node that is not a picture being refused, and a node that is not
   there being refused.
 - **No new module**: the command grows the media module. The prose
-  battery now carries **63** commands and the MCP server **729**.
+  battery now carries **62** commands and the MCP server **729**.
 
 ### What it does not settle
 
@@ -35143,7 +35144,7 @@ cannot see it knows where it belongs — or **floating** beside it.
   the picture as it was, a node that is not a picture being refused,
   and a node that is not there being refused.
 - **No new module**: the command grows the media module. The prose
-  battery now carries **64** commands and the MCP server **730**.
+  battery now carries **63** commands and the MCP server **730**.
 
 ### What it does not settle
 
@@ -35210,7 +35211,7 @@ order they were made in: it is the order the **page** says.
   that is on no page having no place in the order, the order of one
   page being read on its own, and a page that is not there being
   refused.
-- **One new module**: `tabs.rs`. The pdf battery now carries **41**
+- **One new module**: `tabs.rs`. The pdf battery now carries **40**
   commands and the MCP server **731**.
 
 ### What it does not settle
@@ -35268,7 +35269,7 @@ the page, and it may be said.
   page as it was, a node that is not a page being refused, and a node
   that is not there being refused.
 - **No new module**: the command grows the tabs module. The pdf
-  battery now carries **42** commands and the MCP server **732**.
+  battery now carries **41** commands and the MCP server **732**.
 
 ### What it does not settle
 
@@ -35335,7 +35336,7 @@ follows.
   checker stopping to say the file has no metadata, a level that is
   not a level being refused, a path that is empty being refused, and a
   file with no catalog being refused.
-- **One new module**: `metadata.rs`. The pdf battery now carries **43**
+- **One new module**: `metadata.rs`. The pdf battery now carries **42**
   commands and the MCP server **733**.
 
 ### What it does not settle
@@ -35400,7 +35401,7 @@ intent**: a dictionary that names an ICC profile.
   what it is with the name the file uses, the checker stopping to say
   the colour needs an output intent, a path that is empty being
   refused, and a file with no catalog being refused.
-- **One new module**: `intent.rs`. The pdf battery now carries **44**
+- **One new module**: `intent.rs`. The pdf battery now carries **43**
   commands and the MCP server **734**.
 
 ### What it does not settle
@@ -35466,7 +35467,7 @@ prints, whether it is hidden, whether it may be turned.
   it was, the reading of a page's annotations saying the flags, a node
   that is not an annotation being refused, and a node that is not there
   being refused.
-- **One new module**: `annot.rs`. The pdf battery now carries **45**
+- **One new module**: `annot.rs`. The pdf battery now carries **44**
   commands and the MCP server **735**.
 
 ### What it does not settle
@@ -35521,7 +35522,7 @@ An image may not ask to be **interpolated**, and it may not carry
   alternates and the OPI away, and the conversion saying what it
   fixed.
 - **No new module**: the rule grows the preflight module and the fix
-  grows the convert module. The pdf battery now carries **45**
+  grows the convert module. The pdf battery now carries **44**
   commands and the MCP server **735**.
 
 ### What it does not settle
@@ -35884,7 +35885,7 @@ draws it.
   states of an appearance, a field without an appearance, and a field
   that is not there.
 - **One new module** (`src/appearance.rs`) and **one new command**
-  (`pdf.field.appearance`). The pdf battery now carries **49**
+  (`pdf.field.appearance`). The pdf battery now carries **48**
   commands and the MCP server **739**.
 
 ### What it does not settle
@@ -36177,7 +36178,7 @@ characters, how many paragraphs.
   characters counted with and without the spaces, the footnotes that
   are not counted, and a document that is not there.
 - **One new module** (`src/statistics.rs`) and **one new command**
-  (`prose.document.stats`). The prose battery now carries **66**
+  (`prose.document.stats`). The prose battery now carries **64**
   commands and the MCP server **744**.
 
 ### What it does not settle
@@ -36238,7 +36239,7 @@ fourth one and a list may count in letters.
   a negative number, a number that is too large, and a name that is
   not known.
 - **One new module** (`src/numberformat.rs`) and **one new command**
-  (`prose.number.format`). The prose battery now carries **67**
+  (`prose.number.format`). The prose battery now carries **65**
   commands and the MCP server **745**.
 
 ### What it does not settle
@@ -36396,7 +36397,7 @@ A style that is not used may be **taken away**.
   style that another style is based on, a node that is not a style,
   and a style that is not there.
 - **One new command** (`prose.style.delete`). The prose battery now
-  carries **68** commands and the MCP server **748**.
+  carries **66** commands and the MCP server **748**.
 
 ### What it does not settle
 
@@ -36439,7 +36440,7 @@ A document may be asked what **styles** it holds.
   styles of a document, the style a style is based on, the blocks
   that are in a style, and a node that is not a document.
 - **One new command** (`prose.style.list`). The prose battery now
-  carries **69** commands and the MCP server **749**.
+  carries **67** commands and the MCP server **749**.
 
 ### What it does not settle
 
@@ -36598,7 +36599,7 @@ The simple way a field is calculated in is **worked out**.
   calculated, an expression that is not worked out, a field the
   script names that is not there, and a field that is not there.
 - **One new command** (`pdf.field.value`). The pdf battery now
-  carries **53** commands and the MCP server **752**.
+  carries **52** commands and the MCP server **752**.
 
 ### What it does not settle
 
@@ -36652,7 +36653,7 @@ An expression says what the value of a property is at every frame.
   taken away, a property with no expression, and a bake that is too
   long.
 - **One new command** (`fx.prop.bake`). The fx battery now carries
-  **50** commands and the MCP server **753**.
+  **47** commands and the MCP server **753**.
 
 ### What it does not settle
 
@@ -36818,7 +36819,7 @@ A file may be **signed**.
   by the name of its field, the bytes that are not checked, and a
   name the file does not use.
 - **One new module** (`src/signatures.rs`) and **one new command**
-  (`pdf.signatures.read`). The pdf battery now carries **55**
+  (`pdf.signatures.read`). The pdf battery now carries **54**
   commands and the MCP server **758**.
 
 ### What it does not settle
@@ -37203,7 +37204,7 @@ a drawing down.
   drawing that is written, the box of the file, the fill and the
   stroke of a path, and a drawing with no path.
 - **One new module** (`src/svgexport.rs`) and **one new command**
-  (`vector.export.svg`). The vector battery now carries **47** commands
+  (`vector.export.svg`). The vector battery now carries **46** commands
   and the MCP server **764**.
 
 ### What it does not settle
@@ -37437,7 +37438,7 @@ back.
   a path, a transform, an element that is skipped, a file with no
   path, and a path that holds an arc.
 - **One new module** (`src/svgimport.rs`) and **one new command**
-  (`vector.import.svg`). The vector battery now carries **48** commands
+  (`vector.import.svg`). The vector battery now carries **47** commands
   and the MCP server **767**.
 
 ### What it does not settle
@@ -37554,7 +37555,7 @@ its top and a **footer** at its bottom.
 - **One new module** (`src/running.rs`) and **four new commands**
   (`prose.document.header`, `prose.document.header.read`,
   `prose.document.footer`, `prose.document.footer.read`). The prose
-  battery now carries **75** commands and the MCP server **772**.
+  battery now carries **74** commands and the MCP server **772**.
 
 ### What it does not settle
 
@@ -38050,7 +38051,7 @@ gathers the marks into an index that is **derived**.
   subentry under its entry, and a node that is not a document.
 - **One new module** (`src/index.rs`) and **two new commands**
   (`prose.index.mark` and `prose.index.read`). The prose battery now
-  carries **77** commands and the MCP server **778**.
+  carries **76** commands and the MCP server **778**.
 
 ### What it does not settle
 
@@ -38124,7 +38125,7 @@ its copies, put in a grid or about a centre.
   a whole number, and an array that is endless.
 - **One new module** (`src/arrays.rs`) and **two new commands**
   (`cad.entity.array.rectangular` and `cad.entity.array.polar`). The
-  cad battery now carries **41** commands and the MCP server **780**.
+  cad battery now carries **40** commands and the MCP server **780**.
 
 ### What it does not settle
 
@@ -38193,7 +38194,7 @@ every edit. Here the constraint is a **fact** of the drawing, and
   constraint, and a constraint between one entity.
 - **One new module** (`src/constraints.rs`) and **two new commands**
   (`cad.constraint.add` and `cad.constraint.list`). The cad battery now
-  carries **43** commands and the MCP server **782**.
+  carries **42** commands and the MCP server **782**.
 
 ### What it does not settle
 
@@ -38687,7 +38688,7 @@ carries: the tree's page background.
   empty text, and a watermark that says too much.
 - **One new module** (`src/background.rs`) and **two new commands**
   (`prose.page.background` and `prose.page.watermark`). The prose
-  battery now carries **79** commands and the MCP server **796**.
+  battery now carries **78** commands and the MCP server **796**.
 
 ### What it does not settle
 
@@ -38754,7 +38755,7 @@ of the border of each of its four sides. The tree's page borders.
   side that is given nothing, the kind `none`, a border that is not
   one of the tree's, and a border that is not named.
 - **One new module** (`src/borders.rs`) and **one new command**
-  (`prose.page.borders`). The prose battery now carries **80**
+  (`prose.page.borders`). The prose battery now carries **79**
   commands and the MCP server **797**.
 
 ### What it does not settle
@@ -44910,5 +44911,59 @@ and timing blocks.
   code**, and they say "unknown" here as they do there.
 - **The tree's writer drops a character the set does not hold** and
   writes a question mark, and so does this one.
+
+---
+
+## 687. The counts of this README are the counts of the tree
+
+The **counts** this README gives are the counts of the tree: every
+number a section says about a battery is right, and a test keeps it
+right.
+
+### What was built
+
+- A **test** that keeps the counts true: the highest count the README
+  gives for a battery is the count of that battery, read out of the
+  source of the battery, and no file of the tree holds a **NUL byte**,
+  which would make a file of words a file of bytes.
+- The counts that were **wrong are corrected in place**: sixty-eight
+  of them, in nine batteries.
+
+### What the port found
+
+- **The counts were wrong, and they were wrong by a little.** The
+  drift began early and was carried from one section to the next: the
+  grid said 45 where it carried 44, the pdf said 67 where it carried
+  66, the prose said 85 where it carried 84, and the layout said 60
+  where it carried 56.
+- **The counts were wrong because they were carried by hand.** Each
+  section says what its battery carries, and the number was written
+  from the section before it and one more added. A number read out of
+  the source does not drift.
+- **The tree's own source held a NUL byte**, in the doc comment of the
+  links module: a URL with a NUL byte in it, written as the byte
+  itself. The file was a file of bytes and not a file of words, and the
+  tools that read the tree — git and grep among them — treated it as
+  binary.
+
+### What it cost
+
+- **Two tests** in the studio (`tests/counts.rs`): the counts of the
+  nine batteries against the README, and the source of the tree
+  holding no NUL byte.
+- **No new command**: this is a test and a correction. The MCP server
+  carries **901** commands.
+
+### What it does not settle
+
+- **The count of the MCP server is not checked by the test**: the
+  number of tools the server has is the number of commands the program
+  links in, and that depends on which batteries are linked.
+- **The counts of the old sections are corrected by hand.** The test
+  checks the highest count and not every one of them, because a
+  section's count is the count of its own day, and the tree keeps that
+  day in its history and not in its text.
+- **The source is checked for the NUL byte only**, and not for the
+  other control characters a file of words may hold.
 
 ---
