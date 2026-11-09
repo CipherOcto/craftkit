@@ -57,7 +57,28 @@ impl ClearContents {
         crate::merges::refuse_covered(node, &[cell], &id)?;
         crate::protection::refuse_locked(node, &[cell], &id)?;
         let mut cells = crate::cells_of(node);
-        let had = cells.clear_contents(cell);
+        // The **checkbox** of the cell: the tree's own rule is that
+        // delete on a checkbox works in two passes, as it does in
+        // Excel. A ticked box is unchecked first, and only when every
+        // box is unchecked is the box removed.
+        let ticked = cells.get(cell).is_some_and(|entry| {
+            crate::checkboxes::is_checkbox(entry.format.as_deref())
+                && entry.value == Some(crate::formula::Value::Bool(true))
+        });
+        let checkbox =
+            cells.get(cell).is_some_and(|entry| crate::checkboxes::is_checkbox(entry.format.as_deref()));
+        let had = if ticked {
+            // The box is **unchecked** and it stays.
+            cells.set_value(cell, crate::formula::Value::Bool(false));
+            true
+        } else {
+            let had = cells.clear_contents(cell);
+            if checkbox {
+                // The box is **removed** with the contents.
+                cells.set_format(cell, None);
+            }
+            had
+        };
         node.data["cells"] = crate::cells_into(&cells);
         Ok(Outcome::changed(format!("emptied the cell {}", cell.to_text()))
             .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "had": had })))

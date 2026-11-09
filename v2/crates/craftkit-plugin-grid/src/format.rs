@@ -128,6 +128,11 @@ pub enum Format {
         /// The shape the time is written in.
         style: TimeStyle,
     },
+    /// A **checkbox**: a boolean that is written as a box.
+    ///
+    /// The tree's own format: a cell with it is a cell control, and
+    /// `TRUE` and `FALSE` are drawn as a ticked box and an empty one.
+    Checkbox,
     /// A **currency**: a number with a **symbol** on it.
     Currency {
         /// The symbol: the tree writes it in quotes.
@@ -374,6 +379,12 @@ impl Format {
         if code.is_empty() || code.eq_ignore_ascii_case("general") {
             return Some(Format::General);
         }
+        // A **checkbox** is a format of its own: the tree writes it in
+        // the cell's style, and it means that the cell is a cell
+        // control.
+        if code.eq_ignore_ascii_case("checkbox") {
+            return Some(Format::Checkbox);
+        }
         // A code with **sections** is a list of codes, and the list is
         // split first: a section is a code of its own. A semicolon
         // inside a literal in quotes is not a separator.
@@ -459,6 +470,10 @@ impl Format {
                 }
                 // A fraction is a **number** written as a fraction.
                 Format::Fraction(fraction) => fractions::text(*number, fraction),
+                // A **checkbox** does not change a number: the tree
+                // says that a value that is not a boolean shows as it
+                // is.
+                Format::Checkbox => general(*number),
                 // A **scientific** format is a **number** written as a
                 // mantissa and an exponent.
                 Format::Scientific { decimals, exponent_digits, plus, upper } => {
@@ -486,13 +501,24 @@ impl Format {
             // A format does not change a text: the tree's text sections
             // are not here.
             Value::Text(text) => text.clone(),
-            Value::Bool(value) => {
-                if *value {
-                    "TRUE".to_string()
-                } else {
-                    "FALSE".to_string()
+            Value::Bool(value) => match self {
+                // A **checkbox** is a box: a ticked one and an empty
+                // one.
+                Format::Checkbox => {
+                    if *value {
+                        "\u{2611}".to_string()
+                    } else {
+                        "\u{2610}".to_string()
+                    }
                 }
-            }
+                _ => {
+                    if *value {
+                        "TRUE".to_string()
+                    } else {
+                        "FALSE".to_string()
+                    }
+                }
+            },
             Value::Error(message) => message.clone(),
         }
     }
