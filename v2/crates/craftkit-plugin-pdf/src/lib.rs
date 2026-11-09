@@ -182,6 +182,7 @@ mod tounicode;
 mod trailer;
 mod transitions;
 mod validation;
+mod watermark;
 mod widths;
 mod writer;
 mod xref;
@@ -228,6 +229,7 @@ pub use tounicode::ReadFontUnicode;
 pub use trailer::ReadTrailer;
 pub use transitions::ReadTransition;
 pub use validation::ReadValidation;
+pub use watermark::AddWatermark;
 
 /// The PDF layer.
 ///
@@ -2168,6 +2170,7 @@ craftkit_sdk::plugin_anchor!(
     CompareFiles,
     MarkDifferences,
     AddMarkup,
+    AddWatermark,
     ReadInherited,
     ReadChildren,
     ReadWidgets,
