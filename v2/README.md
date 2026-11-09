@@ -4104,7 +4104,7 @@ so.
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
 | the **binary** variables of a program | **built.** A variable that is zero or one is solved as the tree's binary constraint — an integer variable whose bounds meet the pair (§717) | §717 |
-| the **EPS file** of a drawing | **built.** A drawing is written as an EPS file — the tree's prolog, its path operators and its ink (§716) | §716 |
+| the **EPS file** of a drawing | **built.** A drawing is written as an EPS file — the tree's prolog, its path operators and its ink (§716), and the finish of its lines with them (§718) | §716, §718 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -46814,8 +46814,9 @@ document, written as PostScript.
 - **The separations of the tree are not here**: the spot colours and
   the overprinting are not written, and the ink of a path is the colour
   of the path.
-- **The dash of a stroke is not written**: the pattern of a dashed
-  stroke is in the payload of the path, and the file does not carry it.
+- **The dash of a stroke was not written** when this section was
+  written, and it **is** now: the line carries its finish into the file
+  (§718).
 - **The file is in the units of the document** and not in points.
 
 ---
@@ -46885,3 +46886,60 @@ A variable that is **zero or one** is now solved: the tree's own
   lost by not having it.
 - **The model is not read from the sheet** and the answer is not
   written into it: the model is numbers, and the answer is said.
+
+---
+
+## 718. The finish of a line in the EPS file
+
+The line of a path now carries its **finish** into the EPS file: the
+**end**, the **corner** and the **dash**.
+
+### What was built
+
+- The **EPS writer** grew the tree's own **line style**:
+  - the **width** is written as it was, and then the **end** and the
+    **corner**, in the tree's own numbers — `0`, `1` and `2` — and then
+    the **dash**;
+  - the **dash** is written as PostScript writes it: the pattern in
+    brackets, the offset after it, and the operator `d`;
+  - a pattern that is **not dashed** — a pattern with no length in it —
+    is **no dash at all**, and the line is whole: this is the tree's
+    own rule, and PostScript would refuse such a pattern.
+- The **finish** comes from the same place the ink does: the
+  **appearance** wins over the payload's own colours, the way the tree
+  draws it.
+
+### What the port found
+
+- **The tree's line style is one line of PostScript** — `w J j M d` —
+  and the port found that the tree writes the **width**, the **cap**,
+  the **join**, the **miter limit** and the **dashes** together, every
+  time it strokes a path.
+- **The tree's dash is not written as it is run**: the tree writes the
+  **pattern** and lets PostScript run an odd pattern twice, the rule
+  PostScript has. The SVG writer of this tree writes the **run** — the
+  pattern doubled — because SVG has the rule and PostScript has not.
+- **The tree's dash belongs to the stroke layer** — the appearance of a
+  path — and the port found that here the dash is on the **payload** of
+  the path, the way it was before this section: so the file takes the
+  colour of the appearance and the dash of the payload.
+- **The tree's miter limit is not here**: v2's line has a width, a
+  colour, an end and a corner, and no limit of its own, so the file
+  writes no `M`.
+
+### What it cost
+
+- **Four tests** in the vector battery (`tests/epsdash.rs`): the
+  dashed line, the whole line, the pattern with no length in it, and
+  the end and the corner.
+- **No new command**: the EPS writer grew a line of PostScript. The
+  vector battery carries **48** commands and the MCP server **930**.
+
+### What it does not settle
+
+- **The miter limit of the tree is not written**: the line of this tree
+  has no limit of its own, and the file writes none.
+- **The separations of the tree are not here**: the spot colours and
+  the overprinting are not written, and the ink of a path is the colour
+  of the path.
+- **The file is in the units of the document** and not in points.
