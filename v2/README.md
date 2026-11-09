@@ -4127,6 +4127,7 @@ so.
 | the **text** and the **times** of a caption | **built.** A cue may be edited — the tree's text, its speaker and its overlap (§690) | §690 |
 | the **patterns** of a redaction | **built.** The text that looks like a card is found by a pattern — the tree's five patterns and their rules (§691) | §691 |
 | the **edges** of a caption | **built.** A cue may be trimmed, moved, split and merged — the tree's room, its next-to-each-other rule and its refusals (§692) | §692 |
+| the **copy** of a cue, and the **end** of a track | **built.** A cue may be duplicated and a track deleted — the tree's copy, its overwrite and its refusals (§693) | §693 |
 
 ### The list of things that are honestly not there: empty
 
@@ -45251,5 +45252,53 @@ and two cues may be **merged** into one.
   named cues, and here they do not.
 - **The tree's trim keeps the room it has** by clamping, and here it
   keeps it by refusing.
+
+---
+
+## 693. The copy of a cue, and the end of a track
+
+A **cue** may now be duplicated — the copy stands later on the same
+track — and a caption **track** may be deleted, and its cues go with
+it.
+
+### What was built
+
+- Two new commands: `film.caption.duplicate` and
+  `film.caption.track.delete`.
+- The **rules** are the tree's own:
+  - a **copy** of a cue stands by the delta that is given, and it is
+    never **before the start of the sequence**: a copy that would be
+    is refused.
+  - a cue that is copied twice is copied twice, and each copy is a cue
+    of its own.
+  - a **track** that is deleted takes its cues with it, and a track
+    that is not there is refused by name.
+
+### What the port found
+
+- **The tree clamps the delta** of a copy so that the copy is not
+  before the start of the sequence, and here such a copy is **refused**.
+- **The tree's duplicate takes the selection** and copies every cue
+  that is named, on its own track. Here one cue is copied at a time.
+- **The tree writes its copies over the captions that are on the
+  track.** Here a copy that would run into another cue is refused, as
+  the cues of a track never overlap.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/captioncopy.rs`): the
+  copied cue, the copy that would stand before the start, the copy that
+  would run into another cue, and the deleted track.
+- **Two commands**. The film battery now carries **104** commands and
+  the MCP server **918**.
+
+### What it does not settle
+
+- **The tree's copy overwrites what is there**, and here it is refused.
+- **The tree's duplicate works on the selection**, and here it works on
+  one cue.
+- **The tree's track may be locked**, and a locked track may not be
+  changed. The lock of this tree is a fact of the track (§689), and
+  nothing here reads it yet.
 
 ---
