@@ -4101,6 +4101,7 @@ so.
 | the **images** of a form | **built.** The pictures a form draws are cleared or taken away — the tree's own resources and its own transforms (§711) | §711 |
 | the **CEA-708** service data | **built.** The service data of an MCC file is written and read — the tree's pop-on windows, its packets and its decoder (§712) | §712 |
 | the **data** of a form | **built.** The values of the fields of a form are written as a file and read back — the tree's XFDF, its table and its rules (§713) | §713 |
+| the **compare** of two files | **built.** The differences between the text of two files of PDF are found — the tree's diff, its kinds and its report (§721) | §721 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
@@ -47068,3 +47069,70 @@ the file's fields are written into the form.
   values and nothing else.
 - **The tree's import runs the validation and the recalculation of the
   form**: here the values are written, and nothing is calculated.
+
+---
+
+## 721. The compare of two files
+
+Two files of PDF may now be **compared**: the differences between
+their text are found and said.
+
+### What was built
+
+- A **new command**: `pdf.compare` takes the file that was there
+  before and the file that is there now, and says how their text
+  differs.
+- The **diff** is the tree's own:
+  - the **common prefix** and the **common suffix** are set aside, and
+    the rest is diffed with **Myers' algorithm**;
+  - a long stretch is first split at the **patience anchors** — the
+    pieces that occur once in each side, in an order both sides agree
+    on — so that the frontiers stay small;
+  - the edit script is grouped into **changes**: **replaced** when both
+    sides have text, **deleted** when only the old side has it, and
+    **inserted** when only the new side has it;
+  - the **boxes** of the text of a change are merged into one box for
+    each line, the tree's own rule.
+- The **report** is the tree's own: a summary, then each change with
+  its pages and its two texts.
+
+### What the port found
+
+- **The tree's unit is the word**, and the port found that the box of
+  a word inside a piece of text would need the **widths of the font**
+  and the position of every glyph in it: this tree's pieces of text
+  carry the box of the whole piece, and a width that is guessed is a
+  width that is wrong — so the **unit here is the piece**, the text
+  one text-showing operation shows.
+- **The tree's compare works on two open documents**, and the port
+  found that a command of this tree reaches **one** document: so the
+  compare here takes two **files**, reads each of them into a document
+  of its own, and the document of the session is **not touched**.
+- **The tree's FDF has no cross-reference table** (§719), and the port
+  found that the same is true of the bytes of the streams here: the
+  streams of a file are written into a work area of their own, and the
+  work area is **taken away** when the comparison is done.
+- **The tree's compare has a visual half as well** — the regions where
+  the two pages look different — and the port found that it needs the
+  two documents **rendered**, and this tree does not render a PDF.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/compare.rs`): the two files
+  with the same text, the text that is not the same, the text that is
+  only in the new file, the text that is only in the old file, and the
+  two refusals.
+- **One new command**: the PDF battery carries **82** commands and the
+  MCP server **931**. Both measured: the battery by the source of its
+  commands, and the MCP server by the tool list it answers with.
+
+### What it does not settle
+
+- **The visual compare of the tree is not here**: it needs the two
+  documents rendered, and this tree does not render a PDF.
+- **The compare is not a compare of two open documents**: it is a
+  compare of two files, and the document of the session is not
+  touched.
+- **The unit is the piece of text and not the word**: the boxes of the
+  changes are the boxes of the pieces, and not the boxes of the words
+  inside them.
