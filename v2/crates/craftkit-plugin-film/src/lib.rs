@@ -197,6 +197,7 @@ mod aleimport;
 mod anchors;
 mod binreading;
 mod binremoval;
+mod captionedits;
 mod captions;
 mod captionstyle;
 mod captiontracks;
@@ -252,6 +253,7 @@ pub use aleimport::ImportAle;
 pub use anchors::SynchroniseClip;
 pub use binreading::ReadBin;
 pub use binremoval::RemoveBin;
+pub use captionedits::{SetCaption, SetCaptionTimes};
 pub use captions::ReadCaptions;
 pub use captionstyle::{SetCaptionStyle, SetCaptionTrack};
 pub use captiontracks::{

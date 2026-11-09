@@ -60,16 +60,19 @@ fn the_track<'a>(session: &'a Session, command: &str, track: u64) -> Result<&'a 
     Ok(node)
 }
 
-/// The **cues** of a track: the start, the end and the text of each.
-fn cues_of(node: &Node) -> Vec<(u64, i64, i64, String)> {
-    let mut cues: Vec<(u64, i64, i64, String)> = Vec::new();
+/// The **cues** of a track: the start, the end, the text and the
+/// speaker of each.
+fn cues_of(node: &Node) -> Vec<(u64, i64, i64, String, Option<String>)> {
+    let mut cues: Vec<(u64, i64, i64, String, Option<String>)> = Vec::new();
     for child in node.children.iter().filter(|child| child.kind == "film.caption") {
         let start = child.data.get("start").and_then(|start| start.as_i64()).unwrap_or(0);
         let end = child.data.get("end").and_then(|end| end.as_i64()).unwrap_or(0);
         let text = child.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
-        cues.push((child.id, start, end, text));
+        let speaker =
+            child.data.get("speaker").and_then(|speaker| speaker.as_str()).map(|speaker| speaker.to_string());
+        cues.push((child.id, start, end, text, speaker));
     }
-    cues.sort_by_key(|(_, start, _, _)| *start);
+    cues.sort_by_key(|(_, start, _, _, _)| *start);
     cues
 }
 
@@ -194,7 +197,7 @@ impl AddCaption {
                 message: format!("a track holds at most {MAX_CUES} cues"),
             });
         }
-        for (_, held_start, held_end, _) in &cues {
+        for (_, held_start, held_end, _, _) in &cues {
             if start < *held_end && *held_start < end {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
@@ -230,7 +233,9 @@ impl ReadCaptions {
         let format = node.data.get("format").and_then(|format| format.as_str()).unwrap_or(DEFAULT_FORMAT);
         let cues: Vec<Json> = cues_of(node)
             .into_iter()
-            .map(|(id, start, end, text)| json!({ "id": id, "start": start, "end": end, "text": text }))
+            .map(|(id, start, end, text, speaker)| {
+                json!({ "id": id, "start": start, "end": end, "text": text, "speaker": speaker })
+            })
             .collect();
         Ok(Outcome::new(format!("the caption track `{track}` holds {} cue(s)", cues.len())).with_data(
             json!({
@@ -502,7 +507,7 @@ impl ExportCaptions {
         let cues = cues_of(node);
         let cues: Vec<crate::captions::Cue> = cues
             .into_iter()
-            .map(|(_, start, end, text)| crate::captions::Cue {
+            .map(|(_, start, end, text, _)| crate::captions::Cue {
                 start: milliseconds_of(start, num, den),
                 end: milliseconds_of(end, num, den),
                 text,
@@ -536,7 +541,7 @@ impl ExportCaptions {
             // frames of the file, at the rate the tree's rule says.
             let cues: Vec<crate::stl::StlCue> = cues_of(node)
                 .into_iter()
-                .map(|(_, start, end, text)| crate::stl::StlCue { start, end, text })
+                .map(|(_, start, end, text, _)| crate::stl::StlCue { start, end, text })
                 .collect();
             crate::stl::write(&cues, num, den)
         } else if format == "webvtt" {
