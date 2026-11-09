@@ -4107,6 +4107,7 @@ so.
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
 | the **binary** variables of a program | **built.** A variable that is zero or one is solved as the tree's binary constraint — an integer variable whose bounds meet the pair (§717) | §717 |
 | the **EPS file** of a drawing | **built.** A drawing is written as an EPS file — the tree's prolog, its path operators and its ink (§716), and the finish of its lines with them (§718) | §716, §718 |
+| the **gradients** of a path in an EPS file | **built.** A path filled with a gradient is written as a shading of PostScript — the tree's smooth shading and its function (§722) | §722 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -47136,3 +47137,65 @@ their text are found and said.
 - **The unit is the piece of text and not the word**: the boxes of the
   changes are the boxes of the pieces, and not the boxes of the words
   inside them.
+
+---
+
+## 722. The gradients of a path in the EPS file
+
+A path whose fill is a **gradient** is now written as a **shading** of
+PostScript.
+
+### What was built
+
+- The **EPS writer** grew the tree's own **shading**:
+  - a **linear** gradient is a shading of **kind two**, with the two
+    points of its line as the coordinates, and a **radial** one is a
+    shading of **kind three**, with its centre and its radius;
+  - both are **extended** both ways, the tree's own rule;
+  - the path is filled with the shading by `shfill`.
+- The **function** of the shading is the tree's own:
+  - two stops are one **exponential** function between the two
+    colours;
+  - more stops are a **stitching** function of them, and each piece is
+    over the stretch of the gradient that is its own;
+  - a gradient with **no stretch** in it — a stop and nothing else — is
+    the colour of its first stop, painted solid.
+
+### What the port found
+
+- **The tree's gradient in an EPS file is a shading of PostScript**,
+  and the port found that the tree writes it at **Level 3** — the
+  smooth shading — and falls back to **bands** of colour at Level 2,
+  and that EPS files carry no level of their own: the file here is the
+  smooth shading, and the bands are not written.
+- **The tree's stitching function gives every piece the domain of the
+  whole gradient**, and the port found that this puts the middle
+  colours in the wrong place: each piece here is over **its own**
+  stretch, which is what the stops say, and the tree's own rule is
+  stated in this section because it is the rule that was changed.
+- **A path with a gradient was not in the file at all**: the writer
+  only wrote a path whose fill was a **colour**, so a gradient-filled
+  path was **left out** — the drawing was quietly missing a part of
+  itself.
+- **The tree's transparency is not here**: EPS has none, so the
+  **opacity** of a stop is left out and the colour is written as it
+  is — the tree's own rule, which is that a transparent thing is
+  written opaque.
+
+### What it cost
+
+- **Five tests** in the vector battery (`tests/epsgradient.rs`): the
+  linear gradient, the radial one, the function of two stops, the
+  stitching function of three, and the path that is drawn at all.
+- **No new command**: the EPS writer grew a shading. The vector
+  battery carries **48** commands and the MCP server **931**.
+
+### What it does not settle
+
+- **The bands of the tree's Level 2 are not written**: the file holds
+  the smooth shading, and a reader that is Level 2 only does not get
+  the gradient.
+- **The transparency of the tree is not here**: the opacity of a stop
+  is left out.
+- **The freeform gradient of the tree is not here**: it is a field of
+  colour, and it is written as a picture.
