@@ -44956,7 +44956,9 @@ right.
 
 - **Two tests** in the studio (`tests/counts.rs`): the counts of the
   nine batteries against the README, and the source of the tree
-  holding no NUL byte.
+  holding no NUL byte. The README writes the name of a battery as it
+  likes — `PDF` and `pdf` are the same battery — and the test reads
+  the words without regard to case.
 - **No new command**: this is a test and a correction. The MCP server
   carries **901** commands.
 
