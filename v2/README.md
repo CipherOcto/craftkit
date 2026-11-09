@@ -4122,6 +4122,7 @@ so.
 | the **table of authorities** of a document | **built.** An authority is marked on a block, and the table is derived from the marks — the tree's entry, its quotes and its order (§685) | §685 |
 | the **cues** of a track written as an EBU STL file | **built.** The cues of a track are written as an EBU STL file — the tree's blocks, its rate and its ISO/IEC 6937 (§686) | §686 |
 | the **counts** of this README | **built.** The highest count the README gives for a battery is the count of that battery, and a test keeps it so (§687) | §687 |
+| the **links** of the stories of a layout document | **built.** A story may be linked to another — the tree's revision, its out-of-date link and its update (§688) | §688 |
 
 ### The list of things that are honestly not there: empty
 
@@ -44965,5 +44966,64 @@ right.
   day in its history and not in its text.
 - **The source is checked for the NUL byte only**, and not for the
   other control characters a file of words may hold.
+
+---
+
+## 688. The links of the stories of a layout document
+
+A **story** may now be linked to another: it takes the content of its
+parent and stays linked to it, so that the content may be brought up
+to date when the parent changes.
+
+### What was built
+
+- Five new commands: `layout.story.set`, `layout.story.link`,
+  `layout.story.unlink`, `layout.story.update` and
+  `layout.document.links`.
+- The **rules** are the tree's own:
+  - a story has a **revision**, and it moves when the text of the
+    story is changed.
+  - a **link** is a pair: the story and its parent, and the revision
+    of the parent at the time the link was made.
+  - a link is **out of date** when the revision of the parent has moved
+    on since the link was made.
+  - **updating** a link takes the content of the parent and replaces
+    the content of the child: the child's own edits are gone.
+  - **unlinking** a story leaves its content as it is.
+  - a story may not be linked to **itself**, and a story that is not
+    there is refused by name.
+
+### What the port found
+
+- **The tree's link is made by placing**: a new frame is placed, its
+  story copies the parent, and the frame is the thing that is linked.
+  Here a **story** is linked to another story, and the items that carry
+  them are put on them as they are put on any story.
+- **The tree's story carries a revision of its own**, and every change
+  of the story moves it. Here the **text** of a story is the only thing
+  that moves the revision, because the text is all a layout story
+  holds.
+- **The tree's links panel** says which links are out of date, and the
+  tree's update command takes the links that are out of date when no
+  story is named and the one that is named when one is. Here it is the
+  same.
+
+### What it cost
+
+- **Five tests** in the layout battery (`tests/linked.rs`): the link
+  and the content it takes, the link that goes out of date and is
+  updated, the link that is not updated, the story that is unlinked,
+  and the story that is not there.
+- **Five commands**. The layout battery now carries **73** commands and
+  the MCP server **906**.
+
+### What it does not settle
+
+- **The tree's link is made by placing a frame**, and there is no such
+  command here: a story is linked to a story.
+- **The tree's story holds more than text** — its frames, its revision
+  and its link — and only the text and the link are here.
+- **The tree's child keeps its frames** when the link is updated, and
+  here the items that carry the story keep it.
 
 ---
