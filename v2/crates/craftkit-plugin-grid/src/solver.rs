@@ -15,6 +15,10 @@
 //! - The **bounds** of a variable may be left out, and a variable
 //!   without a lower bound may go below zero — the tree's rule is
 //!   that a bound is a bound and not a zero.
+//! - A variable that is **binary** is an integer variable whose values
+//!   are **zero** and **one**, and its bounds are the tree's own: they
+//!   meet that pair, and a program whose binary variable has no such
+//!   value has no solution.
 //! - The **budget** of the solver is a number of pivots, and a program
 //!   that is not solved within it **stops** and says so: there is no
 //!   answer rather than a wrong one.
@@ -24,9 +28,9 @@
 //!
 //! # What it does not settle
 //!
-//! - The tree's **integer** and **binary** variables, its **non-linear**
-//!   solver and its **evolutionary** one are not here: this solves a
-//!   linear program and nothing else.
+//! - The tree's **non-linear** solver and its **evolutionary** one are
+//!   not here: this solves a linear program — whole, when the variables
+//!   are whole — and nothing else.
 //! - The tree's model is read from the **cells** of a sheet, and the
 //!   tree writes the answer into them: here the model is given as
 //!   numbers and the answer is said.
@@ -642,6 +646,10 @@ pub struct SolveProgram {
     /// The variables that are **integers**: a list of flags, one for
     /// each variable.
     pub integer: Option<Json>,
+    /// The variables that are **binary**: a list of flags, one for each
+    /// variable. A binary variable is an integer variable whose values
+    /// are zero and one.
+    pub binary: Option<Json>,
     /// The most **nodes** the branch and bound may visit.
     pub max_nodes: Option<Number>,
     /// The **optimality** of an integer answer, in per cent: a
@@ -781,6 +789,7 @@ impl SolveProgram {
         }
         // The **integer** variables: a flag for each of them.
         let mut integer = vec![false; costs.len()];
+        let mut integer_given = vec![false; costs.len()];
         let mut any_integer = false;
         if let Some(flags) = &self.integer {
             let Some(list) = flags.as_array() else {
@@ -809,9 +818,80 @@ impl SolveProgram {
                 if let Some(slot) = integer.get_mut(index) {
                     *slot = flag;
                 }
+                if let Some(slot) = integer_given.get_mut(index) {
+                    *slot = true;
+                }
                 any_integer |= flag;
             }
         }
+        // The **binary** variables: a flag for each of them. A binary
+        // variable is an integer variable whose values are zero and one,
+        // and the tree's rule is that its bounds meet that pair.
+        let mut binary = vec![false; costs.len()];
+        let mut any_binary = false;
+        if let Some(flags) = &self.binary {
+            let Some(list) = flags.as_array() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the binary variables are a list of flags".to_string(),
+                });
+            };
+            if list.len() != costs.len() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "there are {} flag(s) and the objective has {} variable(s)",
+                        list.len(),
+                        costs.len()
+                    ),
+                });
+            }
+            for (index, flag) in list.iter().enumerate() {
+                let Some(flag) = flag.as_bool() else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a flag of a binary variable is true or false".to_string(),
+                    });
+                };
+                if let Some(slot) = binary.get_mut(index) {
+                    *slot = flag;
+                }
+                any_binary |= flag;
+            }
+        }
+        for index in 0..binary.len() {
+            let is_binary = binary.get(index).copied().unwrap_or(false);
+            if !is_binary {
+                continue;
+            }
+            // A binary variable is an integer variable: a variable that
+            // is both says two things at once, and that is refused.
+            if integer_given.get(index).copied().unwrap_or(false)
+                && !integer.get(index).copied().unwrap_or(false)
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the variable {index} is binary, and a binary variable is an integer variable"
+                    ),
+                });
+            }
+            if let Some(slot) = integer.get_mut(index) {
+                *slot = true;
+            }
+            // The **bounds** of a binary variable meet the pair zero and
+            // one: the tree's rule is that they are the tree's own, and a
+            // variable whose bounds leave it no value has no solution.
+            let low_value = low.get(index).copied().unwrap_or(f64::NEG_INFINITY);
+            let high_value = high.get(index).copied().unwrap_or(f64::INFINITY);
+            if let Some(slot) = low.get_mut(index) {
+                *slot = low_value.max(0.0);
+            }
+            if let Some(slot) = high.get_mut(index) {
+                *slot = high_value.min(1.0);
+            }
+        }
+        let any_integer = any_integer || any_binary;
         // The **nodes** the branch and bound may visit.
         let max_nodes = match self.max_nodes.map(|value| value.0) {
             None => MAX_NODES_LP,
