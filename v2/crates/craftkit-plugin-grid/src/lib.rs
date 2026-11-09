@@ -403,6 +403,7 @@ mod tabsorder;
 mod textcolumns;
 mod texts;
 mod textvalue;
+mod trendlines;
 mod trigonometry;
 mod units;
 mod validation;
@@ -479,6 +480,7 @@ pub use tables::{
 pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
 pub use tabsorder::MoveSheet;
 pub use textcolumns::TextColumns;
+pub use trendlines::ChartTrendline;
 pub use validation::{CheckValidation, ClearValidation, SetValidation};
 pub use view::{FreezePanes, SetView, SetZoom, UnfreezePanes};
 pub use whatifs::WhatIf;

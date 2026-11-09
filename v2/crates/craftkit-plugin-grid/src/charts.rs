@@ -125,7 +125,7 @@ pub fn data_to_json(sheet: &Node, area: &Area) -> Json {
 }
 
 /// The **sheet** a chart is in.
-fn sheet_of(session: &Session, id: &str, chart: u64) -> Result<Node, EngineError> {
+pub(crate) fn sheet_of(session: &Session, id: &str, chart: u64) -> Result<Node, EngineError> {
     let Some(node) = session.document().node(chart) else {
         return Err(EngineError::Failed {
             id: id.to_string(),
