@@ -371,6 +371,7 @@ impl ImportCaptions {
             Some("stl") | Some("ebu") => "stl",
             Some("scc") => "scc",
             Some("mcc") => "mcc",
+            Some("ttml") | Some("dfxp") | Some("xml") => "ttml",
             Some(other) => {
                 return Err(EngineError::Failed {
                     id: command.to_string(),

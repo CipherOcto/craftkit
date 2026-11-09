@@ -251,6 +251,7 @@ mod trackremoval;
 mod tracks;
 mod transitions;
 mod trim;
+mod ttml;
 mod workarea;
 
 pub use ale::ExportAle;

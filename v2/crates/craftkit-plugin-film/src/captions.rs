@@ -474,6 +474,7 @@ pub fn cues_of_file(format: &str, bytes: &[u8]) -> Result<(Vec<Cue>, Vec<String>
         }
         "scc" => crate::scc::cues_of(&text),
         "mcc" => crate::mcc::cues_of(&text),
+        "ttml" => crate::ttml::cues_of(&text),
         _ => cues_of(&text),
     }
 }
@@ -495,7 +496,7 @@ pub struct ReadCaptions {
 }
 
 /// The **formats** of a caption file this tree reads.
-pub const FORMATS: [&str; 5] = ["subrip", "webvtt", "stl", "scc", "mcc"];
+pub const FORMATS: [&str; 6] = ["subrip", "webvtt", "stl", "scc", "mcc", "ttml"];
 
 /// The **formats** of a caption file this tree writes.
 ///
@@ -508,7 +509,7 @@ pub const WRITABLE: [&str; 4] = ["subrip", "webvtt", "stl", "scc"];
 ///
 /// They are the formats that are read: a file that may be read may be
 /// imported.
-pub const IMPORTED: [&str; 5] = ["subrip", "webvtt", "stl", "scc", "mcc"];
+pub const IMPORTED: [&str; 6] = ["subrip", "webvtt", "stl", "scc", "mcc", "ttml"];
 
 impl ReadCaptions {
     fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
@@ -526,6 +527,7 @@ impl ReadCaptions {
             Some("stl") => "stl",
             Some("scc") => "scc",
             Some("mcc") => "mcc",
+            Some("ttml") | Some("dfxp") | Some("xml") => "ttml",
             Some(other) => {
                 return Err(EngineError::Failed {
                     id: id.clone(),
@@ -557,7 +559,15 @@ impl ReadCaptions {
             })));
         }
         let text = decode(&bytes);
-        let (cues, blocks, warnings) = if format == "mcc" {
+        let (cues, blocks, warnings) = if format == "ttml" {
+            // A TTML file is **XML**: the cues are in the paragraphs of
+            // its body.
+            let (cues, warnings) = crate::ttml::cues_of(&text).map_err(|message| EngineError::Failed {
+                id: id.clone(),
+                message: format!("{message}: `{path}`"),
+            })?;
+            (crate::ttml::cues_as_json(&cues), Vec::new(), warnings)
+        } else if format == "mcc" {
             // An MCC file is **text**: its lines carry the caption
             // distribution packets, and the pairs of the field one are
             // the CEA-608 pairs of the caption.

@@ -59,6 +59,13 @@ pub fn detect(path: &str, bytes: &[u8]) -> Option<&'static str> {
     if head.starts_with("File Format=MacCaption_MCC") {
         return Some("mcc");
     }
+    // The **TTML file**: the head of it says so.
+    if head.starts_with('<')
+        && (head.contains("<tt ") || head.contains("<tt>") || head.contains(":tt "))
+        && (head.contains("ns/ttml") || head.contains("ttaf1"))
+    {
+        return Some("ttml");
+    }
     // The **timing line**: the arrow of the clocks.
     let timing = head.lines().take(40).any(crate::captions::timing_line);
     match extension.as_str() {
@@ -67,7 +74,9 @@ pub fn detect(path: &str, bytes: &[u8]) -> Option<&'static str> {
         // The extension of a caption file, and no timing line in it: it
         // is not a caption file of that format.
         "srt" | "vtt" | "scc" | "webvtt" | "mcc" | "stl" => None,
-        // The **TTML** and the **DFXP** files are not read here.
+        // The **TTML** and the **DFXP** files are read, and their head
+        // says so: a file of one of those extensions that is not one
+        // is not a caption file of that format.
         "ttml" | "dfxp" | "xml" => None,
         _ if timing => Some("subrip"),
         _ => None,

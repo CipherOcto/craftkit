@@ -37,6 +37,11 @@ pub struct Element {
     pub children: Vec<Element>,
     /// The text of the element, without the text of its children.
     pub text: String,
+    /// The **text** before each child of the element, and the text
+    /// after the last one: there is one more of them than there are
+    /// children, and the order of the content of the element is in
+    /// them.
+    pub texts: Vec<String>,
 }
 
 impl Element {
@@ -236,10 +241,18 @@ fn element_of(chars: &[char], at: &mut usize, depth: usize) -> Result<Element, S
     }
     let (attributes, empty) = attributes_of(chars, at)?;
     if empty {
-        return Ok(Element { name, attributes, children: Vec::new(), text: String::new() });
+        return Ok(Element {
+            name,
+            attributes,
+            children: Vec::new(),
+            text: String::new(),
+            texts: Vec::new(),
+        });
     }
     let mut children: Vec<Element> = Vec::new();
     let mut text = String::new();
+    // The **text** before each child, and the text after the last one.
+    let mut texts: Vec<String> = Vec::new();
     loop {
         match chars.get(*at) {
             None => return Err(format!("the element `{name}` is not finished")),
@@ -255,7 +268,14 @@ fn element_of(chars: &[char], at: &mut usize, depth: usize) -> Result<Element, S
                     if closing != name {
                         return Err(format!("the element `{name}` is closed by `{closing}`"));
                     }
-                    return Ok(Element { name, attributes, children, text: text.trim().to_string() });
+                    texts.push(text);
+                    return Ok(Element {
+                        name,
+                        attributes,
+                        children,
+                        text: texts.concat().trim().to_string(),
+                        texts,
+                    });
                 }
                 if starts_with(chars, *at, "<!--") {
                     skip_until(chars, at, "-->");
@@ -265,6 +285,7 @@ fn element_of(chars: &[char], at: &mut usize, depth: usize) -> Result<Element, S
                     skip_until(chars, at, "?>");
                     continue;
                 }
+                texts.push(std::mem::take(&mut text));
                 children.push(element_of(chars, at, depth + 1)?);
             }
             Some(_) => {
