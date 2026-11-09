@@ -4098,6 +4098,7 @@ so.
 | the **pitch** of a clip | **built.** The notes a clip's sound sings are heard — the tree's YIN, its runs of frames and its bounds (§708) | §708 |
 | the **loudness** of a clip | **built.** The loudness of a clip is measured — the tree's BS.1770, its gate and its true peak (§709) | §709 |
 | the **figures** of a file | **built.** The pictures of a tagged file are read and their alternative text is set — the tree's role map and its empty text (§710) | §710 |
+| the **images** of a form | **built.** The pictures a form draws are cleared or taken away — the tree's own resources and its own transforms (§711) | §711 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -45674,6 +45675,7 @@ written again, with the drawings under the region taken away from it.
 
 - **The images of a form are not cleared**: the pixels of an image that
   a form draws are not cleared, and the image of a form is left alone.
+  **This is no longer true** — §711 clears them, as the tree does.
 - **A form that draws a form** is not rewritten twice: the inner form is
   not looked at.
 - **The new form is bigger than the old one**, because it is written
@@ -46418,3 +46420,59 @@ and the **alternative text** each of them has.
 - **The alternative text of a figure that is a part of another element
   is not found**: the tree's own walk finds the figures of the whole
   tree, and so does this one.
+
+---
+
+## 711. The images of a form: the pictures a form draws
+
+A form that a region hits is written again as a new object — and now
+the **images it draws** are treated as the images of the page are.
+
+### What was built
+
+- The **redaction of the drawings** now looks **inside** a form:
+  - the **images** of a form are the XObjects of its **own resources**,
+    and the resources of the **page** are used when the form has none
+    of its own — the tree's own rule;
+  - the place of an image is the place of the form **and** the place of
+    the image in the form: the two transforms are composed, and the
+    image is drawn in the square that changes nothing;
+  - an image the region **covers** is **taken away**: it is not drawn,
+    and it is not among the resources of the new form;
+  - an image the region only **hits** has its covered pixels
+    **cleared**: it is written again as a new object, and it is drawn
+    under a **new name**;
+  - the **object** the file had is untouched, and the new form carries
+    **resources of its own** — so a form that shared its resources
+    keeps them.
+- No **new command**: the command that was there does more.
+
+### What the port found
+
+- **The tree's form carries its own resources**, and the resources it
+  carries are the ones **left**: the images that are taken away are
+  not among them, and the images that are cleared are. Here the new
+  form carries a **copy** of the resources of the old one, with the
+  same change made in it — so that the resources the forms share are
+  not touched.
+- **The tree's image in a form is placed by the form and by the image
+  together**, and the two are composed in that order: the transform of
+  the form is applied first, and the transform of the image after it.
+- **The tree's new form is written without a filter**, so its bytes
+  are plain: here the same, and the bytes of the old form are left
+  alone.
+
+### What it cost
+
+- **Three tests** in the PDF battery (`tests/redactformimages.rs`): the
+  image that is cleared, the image that is taken away, and the region
+  that touches neither.
+- **No new command**: the PDF battery carries **79** commands and the
+  MCP server **926**.
+
+### What it does not settle
+
+- **A form that draws a form** is not looked at twice: the inner form
+  is not read, as it was not before.
+- **The images of a form that is itself drawn by a form** are not
+  found: the walk is one level deep.
