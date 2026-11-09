@@ -4086,6 +4086,7 @@ so.
 | the **images** of a file under a region taken away | **built.** An image of the page that the region hits is gone from the content of the page — the tree's own rule, and the tree's rule for an image it cannot read is the same (§649) | §649 |
 | the **pixels** of an image under a region | **built.** An image the region only hits has its covered pixels cleared, and it is written again as a new object — the tree's rule, its new name and its fail-closed rule (§697) | §697 |
 | the **content** of a form under a region | **built.** A form a region hits is written again with the drawings under the region taken away — the tree's rule, its own space and its new name (§698) | §698 |
+| a caption file of **any format that is read** imported as a track | **built.** A file of any format the reader reads may be imported — the tree's formats, its snapping and its overlap (§699) | §699 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
 | the **citation** of a source | **built.** The citation of a source is worked out from the source and the style of its document — the author, the year, the pages, or the number (§651) | §651 |
@@ -45531,7 +45532,8 @@ line by line, and the CEA-608 pairs of its field one.
   file that carries only that data has no cues.
 - **The tree's import of a caption file takes a SubRip or a WebVTT
   file**, and here it is the same: an SCC or an MCC file is read and is
-  not imported as a track.
+  not imported as a track. — *Every format that is read may now be
+  imported (§699).*
 
 ---
 
@@ -45660,6 +45662,56 @@ written again, with the drawings under the region taken away from it.
   not looked at.
 - **The new form is bigger than the old one**, because it is written
   without a filter.
+
+---
+
+
+## 699. A caption file of any format that is read may be imported
+
+A caption file may now be imported as a track in **every format this
+tree reads**: a SubRip file, a WebVTT file, an EBU STL file, an SCC
+file and an MCC file.
+
+### What was built
+
+- The **import** takes the formats of the reader: `film.caption.import`
+  reads a file of any of them, and the reading is **the reading of the
+  reader** — the same code, and not a second one.
+- The **binary** formats are read as bytes and the **text** ones as
+  text: an EBU STL file is a general block and blocks of a long
+  subtitle, and it is not text.
+- The **cues** of the file are snapped to the frames of the sequence,
+  as they always were, and the **overlap** is still the error of the
+  project it is: a file whose captions overlap is refused whole.
+
+### What the port found
+
+- **The tree's import takes the format of the file** and detects it
+  from the extension and the content of the file. Here the format is
+  named by the command, as it was before.
+- **The tree's import makes a sequence when none is open**, and here the
+  sequence is named — that is the v2's rule and it was already here.
+- **The tree's import of an SCC file gives the track a black
+  background**, for an SCC caption is written on the picture. Here the
+  track keeps the style it has.
+
+### What it cost
+
+- **Three tests** in the film battery (`tests/captionimportformats.rs`):
+  the SCC file that is imported, the MCC file that is imported, and the
+  format that is not one.
+- **No new command**: the import command learned the formats of the
+  reader. The film battery carries **104** commands and the MCP server
+  **918**.
+
+### What it does not settle
+
+- **The format of the file is not detected**: it is named by the
+  command, and a file of one format named as another is refused by the
+  reader.
+- **The style of an SCC track is not black**, as the tree's is.
+- **The TTML and the DFXP files are not imported**, for they are not
+  read here either.
 
 ---
 
