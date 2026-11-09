@@ -4116,6 +4116,7 @@ so.
 | the **bookmarks** of a layout document | **built.** A bookmark names a page — the tree's page, its name and its refusals (§680) | §680 |
 | the **cues** of a SubRip file | **built.** The cues of a SubRip file are read — the tree's forgiving reader, the clock and the times (§666) | §666 |
 | the **checkbox** of a cell | **built.** A cell may be a checkbox — the tree's two commands, its two-pass delete and its clear-formats rule (§681) | §681 |
+| the **guides** of a page | **built.** A guide may be put on a page — the tree's orientation, its spread coordinate, its page and its refusals (§682) | §682 |
 
 ### The list of things that are honestly not there: empty
 
@@ -44035,7 +44036,7 @@ and it stands where the item at the back stood.
   group, its place, the ungrouping, the single item, the items that
   are not at the same level, the locked item, and the order of the
   items of a group.
-- **Two commands**. The layout battery now carries **45** commands and
+- **Two commands**. The layout battery now carries **41** commands and
   the MCP server **864**.
 
 ### What it does not settle
@@ -44096,7 +44097,7 @@ in their order, and merged into one.
 - **Five tests** in the layout battery (`tests/layers.rs`): the
   renamed layer, the deleted layer and its items, the unused layers,
   the moved layer, and the merged layers.
-- **Five commands**. The layout battery now carries **50** commands and
+- **Five commands**. The layout battery now carries **46** commands and
   the MCP server **869**.
 
 ### What it does not settle
@@ -44148,7 +44149,7 @@ locked layer locks what is on it, and a hidden layer hides it.
 
 - **Three tests** in the layout battery (`tests/layerlocks.rs`): the
   locked layer, the hidden layer, and the edge itself.
-- **Four commands**. The layout battery now carries **54** commands
+- **Four commands**. The layout battery now carries **50** commands
   and the MCP server **873**.
 
 ### What it does not settle
@@ -44200,7 +44201,7 @@ the pages close up when a page is deleted.
 - **Three tests** in the layout battery (`tests/pages.rs`): the
   deleted page and the items that moved, the last page, and the moved
   page.
-- **Two commands**. The layout battery now carries **56** commands and
+- **Two commands**. The layout battery now carries **52** commands and
   the MCP server **875**.
 
 ### What it does not settle
@@ -44495,7 +44496,7 @@ the page, and the bookmarks of a document are its own list.
 - **Five tests** in the layout battery (`tests/bookmarks.rs`): the
   bookmark and its page, the refused page, the name that is given by
   itself, the renamed bookmark, and the deleted bookmark.
-- **Four commands**. The layout battery now carries **60** commands and
+- **Four commands**. The layout battery now carries **56** commands and
   the MCP server **885**.
 
 ### What it does not settle
@@ -44583,5 +44584,86 @@ ticked and unticked by a command.
   alignment it has, which is none.
 - **A checkbox is not written to a file**, and a file that comes back
   carries no box.
+
+---
+
+## 682. The guides of a page
+
+A **guide** may now be put on a page: it is a line that is drawn to
+help with the placing of things, and it may be moved and deleted.
+
+### What was built
+
+- A new kind (`layout.guide`) and five new commands:
+  `layout.guide.add`, `layout.guide.move`, `layout.guide.delete`,
+  `layout.guide.delete.all` and `layout.page.guides`.
+- The **rules** are the tree's own:
+  - a guide is **horizontal** or **vertical**, and it stands at a
+    **position**. A position is a number, and it is finite and no
+    further than **a million** either side of the origin; a position
+    that is not is refused.
+  - a position is a **spread coordinate**: it is measured across the
+    whole spread, and not across the page the guide is on.
+  - a guide is put on a **page**. A page that is not named is found:
+    it is the page that stands **under the coordinate** of the guide.
+    A **spread guide** — one that crosses the pasteboard — stands on
+    the **first page** of its spread.
+  - a guide in **both** directions is **two guides**, and they are one
+    change.
+  - a **liquid** guide — one the page tool draws from the ruler — is
+    never a spread guide.
+  - a guide may be **moved** and **deleted**, and a guide that is
+    **locked** or **hidden** — or that stands on a layer that is — is
+    refused by name.
+  - the guides of a **spread** may be deleted at once, and the locked
+    ones go with them.
+
+### What the port found
+
+- **The tree's guides are addressed by their index** in the page they
+  are on, and the tree's selection holds them. Here a guide is a
+  **node**, and a command takes that node — as a bookmark is a node
+  (§680).
+- **The tree's point is an array** — `point: [x, y]` — and the kit's
+  parameters have no array. A guide in both directions is therefore
+  given an **x** and a **y**, and not a point.
+- **The tree's guide carries a layer** of its own, and the guide of a
+  page is drawn on the layer that is active when it is made. Here a
+  guide is on a layer only when it is put on one, and then the kit's
+  own edge says so — and the locked layer locks the guide with it.
+- **The tree's locked column guides** are a document setting: a
+  vertical guide may not be dragged while it is on. There is no such
+  setting here.
+- **The tree's positions are in points** and every number in a
+  document here is in millimetres, so the bound of a million is a
+  million millimetres. The bound is the same number and the same
+  guard; the unit is the kit's.
+- **The count of the layout battery was wrong in five sections.** The
+  battery carried **41** commands at §672 and **56** at §1440, and the
+  README said 45 and 60: each was four too high, and the count had
+  been carried from one section to the next. The counts are corrected
+  in place, and the battery now carries **61**.
+
+### What it cost
+
+- **Eight tests** in the layout battery (`tests/guides.rs`): the guide
+  and where it stands, the guide in both directions, the refusals, the
+  page under the coordinate, the spread guide and the liquid guide, the
+  moved and the deleted guide, the guides of a spread deleted at once,
+  and the guide on a locked layer.
+- **Five commands**. The layout battery now carries **61** commands and
+  the MCP server **892**.
+
+### What it does not settle
+
+- **The locked column guides** are not here, and neither is the
+  setting that says a vertical guide may not be dragged.
+- **A guide is not selected and dragged**, as the tree's is, and the
+  tree's space bar does nothing here.
+- **The tree's create guides** — a grid of guides across a page, with
+  rows and columns and gutters — is not here.
+- **A guide is not drawn** on the canvas.
+- **The tree's guide has a lock of its own** and no command of the
+  tree sets it; here a guide is locked by the layer it is on.
 
 ---
