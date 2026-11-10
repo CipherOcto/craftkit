@@ -197,6 +197,7 @@ mod aleimport;
 mod anchors;
 mod binreading;
 mod binremoval;
+mod captionburn;
 mod captioncopy;
 mod captionedges;
 mod captionedits;
@@ -260,6 +261,7 @@ pub use aleimport::ImportAle;
 pub use anchors::SynchroniseClip;
 pub use binreading::ReadBin;
 pub use binremoval::RemoveBin;
+pub use captionburn::BurnCaption;
 pub use captioncopy::{DeleteCaptionTrack, DuplicateCaption};
 pub use captionedges::{MergeCaptions, MoveCaption, SplitCaption, TrimCaption};
 pub use captionedits::{SetCaption, SetCaptionTimes};
@@ -1071,6 +1073,7 @@ craftkit_sdk::plugin_anchor!(
     StretchClip,
     RollCut,
     LayoutCaption,
+    BurnCaption,
     TimelineEvaluator,
     FilmPanel
 );

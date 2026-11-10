@@ -14,3 +14,9 @@ craftkit-sdk = { workspace = true }
 craftkit-derive = { workspace = true }
 # The kit's own typeface: the letters of a caption are measured with it.
 craftkit-font = { path = "../craftkit-font", version = "0.2.0" }
+# The **picture**: the frame of a caption is one, and it is written as a PNG.
+craftkit-raster = { path = "../craftkit-raster", version = "0.2.0" }
+
+[dev-dependencies]
+# The **picture**: the test reads the PNG that the burn-in writes.
+craftkit-png = { path = "../craftkit-png", version = "0.2.0" }

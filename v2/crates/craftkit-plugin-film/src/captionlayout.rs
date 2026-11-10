@@ -87,9 +87,41 @@ const ALIGNS: [&str; 3] = ["left", "center", "right"];
 /// The **anchors** of a caption: the tree's own.
 const ANCHORS: [&str; 3] = ["top", "middle", "bottom"];
 
+/// Where a caption goes on a frame: the tree's own layout.
+pub struct Placement {
+    /// The lines of the caption.
+    pub lines: Vec<String>,
+    /// How wide each line is.
+    pub widths: Vec<f64>,
+    /// Where each line starts.
+    pub x: Vec<f64>,
+    /// The size of the letters.
+    pub size: f64,
+    /// The height of a line.
+    pub line_height: f64,
+    /// The top of the block of lines.
+    pub top: f64,
+    /// The padding of a line.
+    pub padding: f64,
+    /// The align of the caption.
+    pub align: String,
+    /// The anchor of the caption.
+    pub anchor: String,
+    /// The margin of the caption.
+    pub margin: f64,
+    /// The outline of the caption.
+    pub outline: f64,
+    /// The box of the caption.
+    pub extent: [f64; 4],
+    /// How high the letters rise above their baseline.
+    pub ascent: f64,
+    /// How far the letters go below their baseline.
+    pub descent: f64,
+}
+
 /// The **style** of a caption: the tree's own defaults, and the style
 /// of the track when it is said.
-fn style_of(session: &Session, track: Option<NodeRef>) -> Result<Json, EngineError> {
+pub fn style_of(session: &Session, track: Option<NodeRef>) -> Result<Json, EngineError> {
     let Some(track) = track else { return Ok(crate::captionstyle::default_style()) };
     let Some(node) = session.document().node(track.0) else {
         return Err(EngineError::Failed {
@@ -169,6 +201,109 @@ fn wrap(line: &str, max_width: f64, measure: &dyn Fn(&str) -> f64) -> Vec<String
     out
 }
 
+/// **Lay** a caption out on a frame of a given size.
+///
+/// The tree's own: the size of the letters is relative to a frame of
+/// a thousand and eighty lines, the lines are wrapped at ninety per
+/// cent of the width of the frame, and the block of them hangs from
+/// the anchor of the style.
+pub fn placement(
+    text: &str,
+    style: &Json,
+    settings: &str,
+    width: f64,
+    height: f64,
+) -> Result<Placement, String> {
+    if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
+        return Err("the frame of a caption has a width and a height that are positive".to_string());
+    }
+    // The **scale** and the **size** of the letters.
+    let scale = height / BASE_HEIGHT;
+    let size = number_in(style, "size", MIN_SIZE, MAX_SIZE, 54.0);
+    let px = (size * scale).clamp(MIN_SIZE, height);
+    let Some(metrics) = Metrics::new(px) else {
+        return Err("the size of the letters of a caption is a number that is positive".to_string());
+    };
+    // The **lines**.
+    let max_width = width * MAX_WIDTH;
+    let font = Font::builtin();
+    let measure = |line: &str| craftkit_font::width(line, font, &metrics);
+    let mut lines: Vec<String> = Vec::new();
+    for line in text.lines() {
+        lines.extend(wrap(line.trim(), max_width, &measure));
+    }
+    lines.retain(|line| !line.is_empty());
+    if lines.is_empty() {
+        return Err("a caption with no words has no place".to_string());
+    }
+    // The **height of a line**, the **padding** and the **block**.
+    let spacing = number_in(style, "line_spacing", MIN_LINE_SPACING, MAX_LINE_SPACING, 1.25);
+    let line_height = px * spacing;
+    let padding = (px * PADDING).round();
+    let block_height = line_height * lines.len() as f64;
+    // The **settings** of the cue.
+    let (line_override, align_override) = settings_of(settings);
+    let align = align_override.unwrap_or_else(|| word_in(style, "align", &ALIGNS, "center"));
+    let anchor = word_in(style, "anchor", &ANCHORS, "bottom");
+    let margin = number_in(style, "margin", 0.0, MAX_MARGIN, 0.08) * height;
+    // The **top** of the block.
+    let top = match (line_override, anchor.as_str()) {
+        (Some(fraction), _) => (fraction * height).min(height - block_height),
+        (None, "top") => margin,
+        (None, "middle") => (height - block_height) / 2.0,
+        _ => height - margin - block_height,
+    }
+    .max(0.0)
+    .round();
+    // The **side** of the frame and the place of each line.
+    let side = width * SIDE;
+    let widths: Vec<f64> = lines.iter().map(|line| measure(line)).collect();
+    let xs: Vec<f64> = widths
+        .iter()
+        .map(|line_width| match align.as_str() {
+            "left" => side + padding,
+            "right" => width - side - padding - line_width,
+            _ => (width - line_width) / 2.0,
+        })
+        .collect();
+    // The **outline** grows the box.
+    let outline = (number_in(style, "outline", 0.0, MAX_OUTLINE, 0.0) * scale).clamp(0.0, MAX_OUTLINE);
+    let grow = outline.ceil() + 1.0;
+    let left = xs.iter().zip(&widths).map(|(x, _)| x - padding - grow).fold(f64::MAX, f64::min).floor();
+    let right = xs
+        .iter()
+        .zip(&widths)
+        .map(|(x, line_width)| x + line_width + padding + grow)
+        .fold(f64::MIN, f64::max)
+        .ceil();
+    let box_top = (top - grow).floor();
+    let box_bottom = (top + block_height + grow).ceil();
+    // The box is held inside the frame.
+    let left = left.clamp(0.0, width);
+    let right = right.clamp(0.0, width);
+    let box_top = box_top.clamp(0.0, height);
+    let box_bottom = box_bottom.clamp(0.0, height);
+    if right <= left || box_bottom <= box_top {
+        return Err("the caption has no room on the frame".to_string());
+    }
+    Ok(Placement {
+        lines,
+        widths,
+        x: xs,
+        size: px,
+        line_height,
+        top,
+        padding,
+        align,
+        anchor,
+        margin,
+        outline,
+        extent: [left, box_top, right, box_bottom],
+        ascent: metrics.em,
+        descent: metrics.descent,
+    })
+}
+
 /// **Lay** a **caption** out on a frame of a given size.
 ///
 /// The tree's own: the size of the letters is relative to a frame of
@@ -194,107 +329,22 @@ pub struct LayoutCaption {
 impl LayoutCaption {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let style = style_of(session, self.track)?;
-        let width = self.width.0;
-        let height = self.height.0;
-        if !width.is_finite() || !height.is_finite() || width <= 0.0 || height <= 0.0 {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the frame of a caption has a width and a height that are positive".to_string(),
-            });
-        }
-        // The **scale** and the **size** of the letters.
-        let scale = height / BASE_HEIGHT;
-        let size = number_in(&style, "size", MIN_SIZE, MAX_SIZE, 54.0);
-        let px = (size * scale).clamp(MIN_SIZE, height);
-        let metrics = Metrics::new(px);
-        let font = Font::builtin();
-        let Some(metrics) = metrics else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the size of the letters of a caption is a number that is positive".to_string(),
-            });
-        };
-        // The **lines**.
-        let max_width = width * MAX_WIDTH;
-        let measure = |text: &str| craftkit_font::width(text, font, &metrics);
-        let mut lines: Vec<String> = Vec::new();
-        for line in self.text.0.lines() {
-            lines.extend(wrap(line.trim(), max_width, &measure));
-        }
-        lines.retain(|line| !line.is_empty());
-        if lines.is_empty() {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "a caption with no words has no place".to_string(),
-            });
-        }
-        // The **height of a line**, the **padding** and the **block**.
-        let spacing = number_in(&style, "line_spacing", MIN_LINE_SPACING, MAX_LINE_SPACING, 1.25);
-        let line_height = px * spacing;
-        let padding = (px * PADDING).round();
-        let block_height = line_height * lines.len() as f64;
-        // The **settings** of the cue.
         let settings = self.settings.as_ref().map(|text| text.0.clone()).unwrap_or_default();
-        let (line_override, align_override) = settings_of(&settings);
-        let align = align_override.unwrap_or_else(|| word_in(&style, "align", &ALIGNS, "center"));
-        let anchor = word_in(&style, "anchor", &ANCHORS, "bottom");
-        let margin = number_in(&style, "margin", 0.0, MAX_MARGIN, 0.08) * height;
-        // The **top** of the block.
-        let top = match (line_override, anchor.as_str()) {
-            (Some(fraction), _) => (fraction * height).min(height - block_height),
-            (None, "top") => margin,
-            (None, "middle") => (height - block_height) / 2.0,
-            _ => height - margin - block_height,
-        }
-        .max(0.0)
-        .round();
-        // The **side** of the frame and the place of each line.
-        let side = width * SIDE;
-        let widths: Vec<f64> = lines.iter().map(|line| measure(line)).collect();
-        let xs: Vec<f64> = widths
-            .iter()
-            .map(|line_width| match align.as_str() {
-                "left" => side + padding,
-                "right" => width - side - padding - line_width,
-                _ => (width - line_width) / 2.0,
-            })
-            .collect();
-        // The **outline** grows the box.
-        let outline = (number_in(&style, "outline", 0.0, MAX_OUTLINE, 0.0) * scale).clamp(0.0, MAX_OUTLINE);
-        let grow = outline.ceil() + 1.0;
-        let left = xs.iter().zip(&widths).map(|(x, _)| x - padding - grow).fold(f64::MAX, f64::min).floor();
-        let right = xs
-            .iter()
-            .zip(&widths)
-            .map(|(x, line_width)| x + line_width + padding + grow)
-            .fold(f64::MIN, f64::max)
-            .ceil();
-        let box_top = (top - grow).floor();
-        let box_bottom = (top + block_height + grow).ceil();
-        // The box is held inside the frame.
-        let left = left.clamp(0.0, width);
-        let right = right.clamp(0.0, width);
-        let box_top = box_top.clamp(0.0, height);
-        let box_bottom = box_bottom.clamp(0.0, height);
-        if right <= left || box_bottom <= box_top {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the caption has no room on the frame".to_string(),
-            });
-        }
+        let laid = placement(&self.text.0, &style, &settings, self.width.0, self.height.0)
+            .map_err(|message| EngineError::Failed { id: COMMAND.to_string(), message })?;
         Ok(Outcome::new("the caption is laid out on the frame".to_string()).with_data(json!({
-            "lines": lines,
-            "widths": widths,
-            "x": xs,
-            "size": px,
-            "line_height": line_height,
-            "top": top,
-            "align": align,
-            "anchor": anchor,
-            "margin": margin,
-            "outline": outline,
-            "box": [left, box_top, right, box_bottom],
-            "frame": [width, height],
+            "lines": laid.lines,
+            "widths": laid.widths,
+            "x": laid.x,
+            "size": laid.size,
+            "line_height": laid.line_height,
+            "top": laid.top,
+            "align": laid.align,
+            "anchor": laid.anchor,
+            "margin": laid.margin,
+            "outline": laid.outline,
+            "box": laid.extent,
+            "frame": [self.width.0, self.height.0],
         })))
     }
 }

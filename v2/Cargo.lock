@@ -531,6 +531,8 @@ version = "0.2.0"
 dependencies = [
  "craftkit-derive",
  "craftkit-font",
+ "craftkit-png",
+ "craftkit-raster",
  "craftkit-sdk",
 ]
 
