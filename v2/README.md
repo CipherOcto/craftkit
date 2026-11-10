@@ -4128,6 +4128,7 @@ so.
 | the **image field** of a form | **built.** An image field is put on a page — the tree's name, its empty mark and its action (§748) | §748 |
 | the **properties** of a field | **built.** The General tab of the tree's own dialog is here — the name, the tooltip, the limit, the options, the alignment, the default and the lock (§749) | §749 |
 | the **look** of a field | **built.** The Appearance tab of the tree's own dialog is here — the border, the fill, the line, the text, the mark and the place (§750) | §750 |
+| the **appearance** of a shape | **built.** The square and the circle are drawn — the tree's colours, its width, its dashes and its opacity (§751) | §751 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -49257,3 +49258,71 @@ tab, the second tab of the dialog its editor shows for a field.
   does not run.
 - **The tree's actions are not here**: the JavaScript of a field and
   the events it answers.
+
+---
+
+## 751. The appearance of a shape is written
+
+A **shape** — a **square** or a **circle** on a page — may now be
+**drawn**: the border of it and the fill of it, written as the
+appearance the reader shows.
+
+### What was built
+
+- A **new command**: `pdf.annot.appearance.write` writes the drawing
+  of a shape — the **shape** itself and **where the bytes are
+  written**.
+- The **rules** are the tree's own, ported by name:
+  - `build` — the drawing is made from the **dictionary** of the
+    annotation: the **rectangle** it covers, the **colour** of its
+    line (`/C`), the **colour** of its fill (`/IC`), the **width** of
+    its line (`/BS /W`) and its **dashes** (`/BS /D`), and the
+    **opacity** of it (`/CA`);
+  - `color` — a colour is one number (a grey), three numbers (red,
+    green and blue) or four (cyan, magenta, yellow and black), and
+    four numbers are turned into the red, the green and the blue of
+    the screen;
+  - `border_width` — the width of the line is the width the
+    dictionary says, or the third number of the old `/Border`, and one
+    point when the dictionary says nothing;
+  - `dash` — a **dashed** line has the dashes the dictionary says, and
+    three points when it says nothing;
+  - the line is **inset** by half its width, so that the line is
+    drawn inside the rectangle and not over its edge;
+  - a shape with **no line and no fill** is drawn empty, as the tree
+    draws it.
+
+### What the port found
+
+- **The tree's colours may be four numbers**, and the port found that
+  a colour in a file may be cyan, magenta, yellow and black, and that
+  the tree turns them into the red, the green and the blue of the
+  screen — and so it is here: the four numbers are turned the same way.
+- **The tree's opacity is in the graphics state of the drawing**, and
+  the port found that the opacity of an annotation is the `/CA` of the
+  annotation and that the drawing says `/GS0 gs` and the resources
+  hold the graphics state — and that an opacity of one needs no
+  graphics state at all.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/shapeappearance.rs`): the
+  square that is drawn and the annotation that names the drawing, the
+  circle that is drawn with its four curves, the colours that are
+  drawn and the four numbers that are turned into three, the dashed
+  line with its dashes and its inset, the opacity and the graphics
+  state, and the annotation that is not a shape.
+- **One new command**: the PDF battery carries **106** commands and the
+  MCP server **961**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The tree's other annotations are not drawn here**: the line, the
+  arrow, the polygon, the cloud, the ink, the caret, the stamp and the
+  free text — the tree's own builder draws them all, and here the
+  square and the circle are the two that are drawn.
+- **The cloudy border of the tree's polygons** is not here: it is the
+  border of a polygon only, and the tree refuses to draw a cloudy
+  border of anything else.
