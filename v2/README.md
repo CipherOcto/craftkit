@@ -4176,6 +4176,7 @@ so.
 | the **points** in the middle of the sides | **built.** Every side of a path gets a point in its middle, and the sides keep their shape (§795) | §795 |
 | the **erasing** of a path | **built.** The parts of a path under a drag are taken away, and the stretches that survive are the path as it was (§796) | §796 |
 | the **cutting** of a closed shape | **built.** A closed shape is cut along a run of points, and a slit is left between the pieces (§797) | §797 |
+| the **splitting** of a shape along a line | **built.** A closed shape is split along a line that goes on for ever, and a hole travels with the shape it is in (§798) | §798 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52504,3 +52505,69 @@ so that the pieces do not touch.
   other cuts, and only the free-hand knife is here.
 - **The tree's knife cuts a whole selection at once**: here one path is
   cut by one run.
+
+## 798. A shape is split along a line
+
+The tree's **Line Cut** splits the shapes it is given along a **line** —
+not a run of points, but a line that goes on for ever, through two
+points the caller names — and each side of the line keeps the part of
+the shape that is on it.
+
+### What was built
+
+- The command **`vector.path.cut.line`** splits a closed shape along a
+  line: the tree's Line Cut, as a command. The line is through two
+  points, `from` and `to`, and the pieces may be **named**.
+- The rules are the tree's own:
+  - the two points must **differ**: the tree's own rule;
+  - the line goes on **for ever** — two points a unit apart are a line
+    and not the cut of the piece between them: the tree's own rule;
+  - each side of the line is a **half-plane**, and the shape is cut by
+    **intersection** with it: the tree's own rule;
+  - the half-planes are the box around the shape, **grown by a unit**,
+    cut by the line: the tree's own rule;
+  - a line that **misses** the shape leaves it as it was: the tree's own
+    rule;
+  - a **hole** travels with the shape it is in: the tree's own rule.
+- The **parts** of a shape are counted by the tree's own rule: the
+  **depth** of a contour is how many other contours hold it; a contour
+  of an **even** depth is a shape and one of an **odd** depth is a hole
+  in the shape above it; and a hole belongs to the **smallest** shape
+  that holds it and is one level above it.
+
+### What the port found
+
+- **The tree's line cut splits an open path too, and this one refuses
+  it.** The tree erases the parts of an open path on either side of the
+  line; here the command names one path, and a closed shape is what it
+  cuts, so an open path is refused by name. The knife's rule (§797) is
+  the same.
+- **The tree's line cut works on the selection and this one names the
+  path.**
+- **The knife's pieces were not grouped.** The port of the knife
+  (§797) made one path for every contour of the cut, so a shape with a
+  hole in it lost the hole from the shape it was in. The parts are now
+  counted by the tree's own rule, and the knife's pieces carry their
+  holes with them.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/linecut.rs`): eight
+  tests — the shape cut in two, the line that goes on for ever, the
+  pieces as nodes of their own, the line that misses, the two points
+  that are the same, the point that is not a point, the open path, and
+  the hole that travels with its shape.
+- **One new command**: the vector battery now carries **59** commands
+  and the MCP server **992** — one more than §797. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **Two new modules**: `linecut`, for the cut, and `components`, for
+  the parts of a shape — and the knife uses the second of them too.
+
+### What it does not settle
+
+- **The tree's other cuts are not here**: the rectangular cut, and the
+  mirror and cut, where the shape is mirrored in an axis and joined to
+  the half that is kept, are two other cuts.
+- **The tree's line cut cuts every selected shape at once**: here one
+  path is cut by one line.
