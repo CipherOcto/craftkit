@@ -4111,6 +4111,7 @@ so.
 | the **mail merge** of a document | **built.** The fields of a document are filled with the rows of a data source — the tree's merge field, its address block and its map of the columns (§729) | §729 |
 | the **flattening** of a form | **built.** The fields of a form are drawn into the pages they are on and taken away — the tree's matrix, its XObjects and its pruning (§730) | §730 |
 | the **comments** of a file | **built.** The notes of a file are read — the tree's summary, its colour of a free text and its order (§731) | §731 |
+| the **flattening** of the comments | **built.** The notes of a file are drawn into the pages they are on and taken away — the tree's matrix, its popup and its replies (§732) | §732 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
@@ -47828,3 +47829,73 @@ they say, and where they are.
 - **The count of the hidden information and this list do not quite
   agree**: the count says that an attachment and a redaction are not
   comments, and this list says that they are.
+
+---
+
+## 732. The comments of a file are flattened into the pages
+
+The **comments** of a file may now be **flattened**: the appearance of
+every comment is drawn into the page the comment is on, and the comment
+is taken away.
+
+### What was built
+
+- A **new command**: `pdf.comment.flatten` flattens the comments of a
+  file — the **page** to flatten, and every page of the file when no
+  page is said.
+- The **rules** are the tree's own:
+  - a **comment** is an annotation that is **none of a link, a widget
+    and a popup** — the same rule the reading of the comments uses;
+  - the **appearance** of a comment is its `/AP`: the `/N` of it is the
+    appearance that is drawn, and when the `/N` holds the **states** of
+    a box, the `/AS` of the comment says which state is drawn;
+  - the appearance must be a **form** — a stream of the subtype `Form`
+    — and it must have a **bounding box**: an appearance that has
+    neither cannot be placed, and the comment is left alone;
+  - a comment that is **hidden** — the flag `Hidden` or the flag
+    `NoView` — is left alone;
+  - the appearance is drawn with the **matrix of ISO 32000-2 §12.5.5**
+    — the tree's own: the bounding box of the appearance, transformed
+    by its `/Matrix`, mapped onto the `/Rect` of the comment — and it
+    is put on the page as an **XObject** of the page's resources,
+    under the tree's own name: `PCFl0`, `PCFl1`, and so on;
+  - the comment is **taken away**, and so are its **popup** and its
+    **replies** — the tree's own rule;
+  - a **link** is left alone: a link has no ink, and it stays
+    clickable.
+
+### What the port found
+
+- **The tree's pop-up and replies go with the comment**, and the port
+  found that the tree looks at the `/Parent` of a **popup** and at the
+  `/IRT` of a **reply**: an annotation that points at a comment that is
+  gone goes with it, and the tree takes them away in one pass over the
+  annotations of the page.
+- **The tree's reply is a comment of its own**, and the port found
+  that a reply is drawn as well when it has an appearance of its own —
+  so a reply that has none is not drawn and still goes with the
+  comment it answers.
+- **The tree's command for the comments and its command for the
+  fields are two**, and the port found that they are one function with
+  two flags — so this tree has two commands over one function.
+
+### What it cost
+
+- **Four tests** in the PDF battery (`tests/commentflatten.rs`): the
+  comment that is drawn and taken away with its popup and its reply,
+  the link that is left alone, the hidden comment that is left alone,
+  and the page that keeps the annotations that are left.
+- **One new command**: the PDF battery carries **92** commands and the
+  MCP server **942**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The original content of the page is not wrapped**: the tree wraps
+  it in `q`/`Q` so that the marks it made may be taken away again, and
+  this tree does not — so a flattened drawing may not be taken away
+  again by `pdf.page.marks.remove`.
+- **The drawing is not a mark of the tree's own kinds**: it carries
+  the name `Flattened`, and the three kinds the command knows are not
+  it.
