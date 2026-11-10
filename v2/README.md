@@ -4148,6 +4148,7 @@ so.
 | the **appearance** of the mark | **built.** The check, the cross, the dot and the line are drawn — the tree's own four (§768) | §768 |
 | the **file attachment** of a page | **built.** The attachment is put on a page — the tree's box, its icon and its file (§769) | §769 |
 | the **appearance** of the attachment | **built.** The pin and the tree's other three icons are drawn (§770) | §770 |
+| the **callout** of a page | **built.** The callout is put on a page — the tree's box, its knee, its point and its leader (§771) | §771 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -50734,3 +50735,74 @@ icons — is now **drawn**.
   free text with a leader.
 - **The tree's own typed signature is not drawn here**: the outline
   of a signature that a person typed.
+
+---
+
+## 771. The callout is put on a page
+
+The **callout** — the tree's own **free text with a leader** — is now
+**put on a page**.
+
+### What was built
+
+- The command **`pdf.annot.callout.add`** puts a **callout** on a page:
+  it takes the page, the object number the annotation has in the file,
+  the **box** the text is in, the **knee** the leader turns at, the
+  **point** the leader starts at, the text of the callout and the size
+  of the text.
+- The **rules** are the tree's own, ported by name:
+  - the **box** is four numbers, the corners may come in any order,
+    and it must be at least a point wide and a point high: the tree's
+    own rule, and a box that is too small is **refused**;
+  - the **knee** and the **point** are two numbers each, and anything
+    else is **refused**;
+  - the place where the leader **meets** the box is the middle of the
+    side of the box that faces the knee: the tree's own
+    `callout_attach`;
+  - the **rectangle** of the annotation is the box and the leader
+    together: the tree's own rectangle, which grows the leader by
+    half the width of the line, by the size of the arrow and by one
+    point more, and does **not** shrink the box;
+  - the **leader** is the three points — the `/CL` of the annotation —
+    and its end is an **open arrow**: the tree's own `/LE`;
+  - the **text box** is inside the rectangle by the `/RD` of the
+    annotation: the tree's own inset;
+  - the **intent** is the tree's own: `FreeTextCallout`;
+  - the **text** is drawn with the tree's own `DA` — the black, the
+    `/Helv` and the size — and the size is the tree's own twelve
+    points when nothing is said.
+
+### What the port found
+
+- **The tree's rectangle grows the leader and leaves the box alone**,
+  and the port found it the hard way: the first version of this
+  command grew the box as well, which made the rectangle ten and a
+  half points wider than the tree's on every side. The tree's rule is
+  to take the bounds of the knee and the point, grow **those**, and
+  take the union with the box — so the box is untouched and the inset
+  (`/RD`) may be **zero** on the sides the leader does not reach.
+- **The tree's leader is three points and not two**: the point, the
+  knee and the place where it meets the box — and the place where it
+  meets the box is **derived** from the knee, so it is not something
+  the caller has to say.
+
+### What it cost
+
+- **Five tests** in the PDF battery (`tests/calloutadd.rs`): the
+  callout on the page, the rectangle and the inset that are the
+  tree's, the leader meeting the box, a box that is too small and a
+  knee that is not two numbers.
+- **One new command**: the PDF battery carries **116** commands and
+  the MCP server **971** — one more than §770. The battery is counted
+  by the source of its commands; the MCP server is counted by the
+  tool list it answers with.
+
+### What it does not settle
+
+- **The callout is not drawn here**: the drawing of the leader line
+  and of the box is the appearance command's own work, and the
+  appearance command already knows the `/CL` and the `/RD` of a
+  callout — but nothing in the tree yet proves that a callout this
+  command makes is drawn.
+- **The tree's own stamp of a typed signature is not here**: the
+  outline of a signature that a person typed.
