@@ -4155,6 +4155,7 @@ so.
 | the **custom stamp** of a page | **built.** The stamp of a picture of the document is put on a page — the tree's `PCCustom` name and its `/PCPicture` (§775) | §775 |
 | the **appearance** of the custom stamp | **built.** The picture is laid over the rectangle, an image exactly and a form by its size (§776) | §776 |
 | the **embedded file** of a document | **built.** The file a file carries is named in the catalog's tree of names, and the reader finds it (§777) | §777 |
+| the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -51209,6 +51210,67 @@ tree walks.
 - **The bytes of the file are not here**: they are the file
   specification's own business, and the command that makes an
   attachment carries them.
+- **The tree's own script outlines are not here**: the tree writes the
+  contours of a typed name from the outlines of a font it carries, and
+  this tree carries **no fonts at all** — so the contours are the
+  caller's.
+
+---
+
+## 778. The option carries an export value and a display text
+
+The **option** of a **drop-down** or a **list box** may now carry an
+**export value** and a **display text** of its own.
+
+### What was built
+
+- The commands **`pdf.field.combo.add`** and **`pdf.field.list.add`**
+  take options that may be a **text** — as they were — or a **pair** of
+  two texts: the **export value** and the **display text**.
+- The **rules** are the tree's own, ported by name:
+  - the file holds an option as a **text** when the export value and the
+    display text are the same thing, and as a **pair** of the two when
+    they are not: the tree's own rule;
+  - the field holds the **export value**, and the caller may give the
+    export value or the display text: the tree's own rule;
+  - the **drawing** shows the **display text** of the option that is
+    chosen, and the band of the list box is on the option whose export
+    value the field holds: the tree's own rule;
+  - a value that is **not one of the options** is **refused**: the
+    tree's own rule;
+  - an option that is **neither a text nor a pair of two texts** is
+    **refused**.
+
+### What the port found
+
+- **The tree's own file already held the pair**, and the port found
+  that the tree's own reader takes an option as an export value and a
+  display text, and that the display text of an option that has only
+  one name is that name: so the tree's file has always been able to
+  say two names for one option, and the writing here is the tree's
+  own.
+- **The tree's own reader shows the display text and the tree's own
+  file holds the export value**, and the port found that the tree maps
+  a value to its display text wherever it reads a choice — so the
+  drawing here draws the display text, and the field holds the export
+  value: a reader sees "France" and a form processor receives "fr".
+
+### What it cost
+
+- **Seven tests** in the PDF battery (`tests/choiceoptions.rs`): the
+  option that is held as a pair, a value given as a display text and
+  held as an export value, an option that is held as a plain text, the
+  drawing that shows the display text, the list box that shows every
+  display text and bands the chosen one, a value that is not an option
+  and an option that is nothing.
+- **No new command**: the two commands that make a choice take the
+  options already, so the PDF battery still carries **119** commands
+  and the MCP server **974** — the same counts as §777. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+
+### What it does not settle
+
 - **The tree's own script outlines are not here**: the tree writes the
   contours of a typed name from the outlines of a font it carries, and
   this tree carries **no fonts at all** — so the contours are the
