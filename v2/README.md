@@ -4122,6 +4122,7 @@ so.
 | the **radio group** that is on | **built.** The group of radio buttons is turned on, and one button of it is on at a time — the tree's states and its export values (§742) | §742 |
 | the **push button** of a form | **built.** A push button is put on a page — the tree's name, its caption and its centred drawing (§743) | §743 |
 | the **drop-down** of a form | **built.** A drop-down is put on a page — the tree's name, its options, its flags and its drawing (§744) | §744 |
+| the **list box** of a form | **built.** A list box is put on a page — the tree's name, its options, its flag and its drawing (§745) | §745 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -48832,3 +48833,74 @@ list of options and holds one of them.
 - **The export values of the tree's options are not here**: the tree
   keeps the text the reader sees and the value the file holds apart,
   and here they are the same thing.
+
+---
+
+## 745. A list box is put on a page
+
+A **form** may now hold a **list box**: a box on a page that shows every
+option it offers, one under the other.
+
+### What was built
+
+- A **new command**: `pdf.field.list.add` puts a list box on a page —
+  the **page**, the **object number** the field holds, the **rectangle**
+  it covers, its **name**, the **options** it shows, whether it may
+  hold **more than one**, the **option that is chosen** and **where the
+  drawing of it is written**.
+- The **rules** are the tree's own, ported by name:
+  - `free_name` — the **name** is the first free `List Box` name —
+    `List Box1`, `List Box2` and so on — when the caller does not give
+    one, and a name that holds a **period** is refused, and so is a
+    name another field has;
+  - the **rectangle** is four numbers and the corners may come in any
+    order, and a list box smaller than **four points by four** is
+    refused, as the tree refuses it;
+  - `widget_dict` — the field is a **widget**, an annotation of the
+    kind `Widget`, and it is a field of the kind `Ch` with the tree's
+    own **flag of a list that may hold more than one** — its
+    twenty-second bit;
+  - the **options** are the field's own `/Opt`, and the field's text is
+    **twelve point Helvetica** (`/DA`);
+  - the **value** the field holds is one of its options;
+  - `ensure_form` — the file's **form** is made when the file has none,
+    and it holds the field;
+  - `field_appearance` — the **drawing** of the field: the frame, the
+    **band** of the option that is chosen, and the options themselves —
+    one per line from the top of the box, and the lines stop when the
+    box is full.
+
+### What the port found
+
+- **The tree's list box holds a list of values**, and the port found
+  that this tree's model holds **one** value in a field: so the list
+  box here holds **one** option, and the flag that says the reader may
+  choose more than one is still written — the tree's own flag — but the
+  value of the field is one thing and not a list of them.
+- **The tree's band is behind the option that is chosen**, and the port
+  found that the band is the tree's own colour — a light blue — and
+  that the lines of the options are thirteen and four tenths of a point
+  high, which is the size of the text times one and fifteen hundredths.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/listbox.rs`): the list box
+  that is put on the page and what its dictionary says, the list that
+  may hold more than one, the free name and the second free name, the
+  value that is not one of the options, the drawing that shows every
+  option and the band of the one that is chosen, and the lines that
+  stop when the box is full.
+- **One new command**: the PDF battery carries **100** commands and the
+  MCP server **955**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The list box holds one option** and not a list of them, as the
+  tree's does.
+- **The tree's other kinds of field are not here**: the image field,
+  the date field and the signature field.
+- **The tree's list box does not scroll here**: the tree keeps the
+  first line that is shown in the field (`/TI`), and this tree's
+  drawing always begins at the first option.
