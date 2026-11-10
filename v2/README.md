@@ -4142,6 +4142,7 @@ so.
 | the **appearance** of the text box | **built.** The text box is drawn — the tree's Helvetica, its wrapping and its border (§762) | §762 |
 | the **mark** of a redaction | **built.** The mark of a redaction is put on a page — the tree's quads, its colours and its overlay (§763) | §763 |
 | the **appearance** of the mark | **built.** The mark of a redaction is drawn — the tree's outline and its red (§764) | §764 |
+| the **stamp** of a page | **built.** The stamp is put on a page — the tree's twenty two kinds, its colours and its line (§765) | §765 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -50302,3 +50303,82 @@ it covers.
   the last two annotations of the tree's builder.
 - **The mark here is drawn in the page's own space**, and it does not
   turn with the page's `/Matrix`: that is the reader's work.
+
+---
+
+## 765. The stamp is put on a page
+
+The tree's **stamps** — the twenty two kinds that say something about
+a page — may now be put on a page.
+
+### What was built
+
+- A **new command**: `pdf.annot.stamp.add` puts a stamp on a page —
+  the **page**, the **object number** the annotation has in the file,
+  the **rectangle** it covers, the **kind** of stamp, and, when the
+  caller says so, the **line** that says who did it and the **colour**
+  of the stamp.
+- The **rules** are the tree's own:
+  - the **kind** is one of the tree's own **twenty two**, named as the
+    file names it — `Approved`, `PCSignHere` and the rest — and a
+    kind that is not one of them is **refused**, and the error names
+    them all;
+  - the **rectangle** is four numbers, the corners may come in any
+    order, and it must be at least a point wide and a point high:
+    the tree's own rule;
+  - the **colour** of the stamp is the tree's own colour for the kind
+    — green for an approval, red for a refusal or a restriction,
+    orange for a signature and blue for the rest — and the caller may
+    say another one, and it is three numbers between zero and one;
+  - the **name** of the annotation is the tree's own: the standard
+    stamp names of the file where one exists — `Approved`,
+    `Confidential`, `Draft`, `Final`, `ForComment`,
+    `ForPublicRelease`, `NotApproved`, `NotForPublicRelease` — and
+    `PC` and the name of the kind where one does not;
+  - the stamp says it is the tree's own with `/PCStamp`, and the
+    **line** that says who did it is `/PCByLine`: the tree's own keys.
+
+### What the port found
+
+- **The tree's stamps come in three groups and the group is the shape
+  of the stamp**, and the port found that the group says what the
+  stamp is for — the standard business ones, the ones that ask for a
+  signature and the **dynamic** ones, which carry a line — and that
+  the group is not in the file at all: it is worked out from the name
+  of the kind: so the group is worked out here too, and it is said in
+  the answer.
+- **The tree's colours of the stamps are three rules and not
+  twenty two**, and the port found that a stamp is green when it
+  approves, red when it refuses or restricts, orange when it asks
+  for a signature and blue otherwise — so that the colour of a kind
+  is not a list of twenty two but four cases: so the colour here is
+  the tree's, and the answer says which kind it is.
+- **The tree's stamp is named as the file names it and not as the
+  tree's editor names it**, and the port found that the tree's stamps
+  carry the standard names of the file where the file has one — so
+  that a reader that knows the file's names knows the stamp — and
+  that the rest carry `PC` and the name of the kind: so the name here
+  is the tree's own, and the caller says it as the file says it.
+
+### What it cost
+
+- **Seven tests** in the PDF battery (`tests/stampadd.rs`): the
+  stamp that is put on the page, the stamp that asks for a signature
+  and its orange, the line that says who did it, the kind that is not
+  known, the stamp that is too small, the colour that is outside zero
+  and one, and the colour the caller says instead.
+- **One new command**: the PDF battery carries **113** commands and
+  the MCP server **968**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The drawing of the stamp is not here**: it is the appearance
+  command's own work, and the tree draws the stamp when the
+  annotation is made.
+- **The tree's own custom stamp is not here**: a stamp that carries a
+  picture of its own, and a stamp that carries the outline of a typed
+  signature.
+- **The stamp here has no author and no name**: the tree's stamp is a
+  tool of its editor, and the editor is not here.
