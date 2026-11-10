@@ -360,6 +360,123 @@ fn the_drawing(font: &str, size: f64, width: f64, height: f64, value: &str) -> O
     Some(drawing.into_bytes())
 }
 
+/// The **colour** a value holds, as PostScript writes it.
+///
+/// The tree's own `color_array`: one number is a grey, three are red,
+/// green and blue, and four are cyan, magenta, yellow and black.
+fn the_colour_of(value: &Json) -> Option<String> {
+    let numbers = numbers_of(value)?;
+    let number = crate::watermark::number;
+    match numbers.as_slice() {
+        [grey] => Some(format!("{} g", number(*grey))),
+        [red, green, blue] => Some(format!("{} {} {} rg", number(*red), number(*green), number(*blue))),
+        [cyan, magenta, yellow, black] => {
+            Some(format!("{} {} {} {} k", number(*cyan), number(*magenta), number(*yellow), number(*black)))
+        }
+        _ => None,
+    }
+}
+
+/// The **stroke** of a colour: the tree's own `stroke_op`.
+fn the_stroke_of(colour: &str) -> String {
+    match colour.rsplit_once(' ') {
+        Some((numbers, "g")) => format!("{numbers} G"),
+        Some((numbers, "rg")) => format!("{numbers} RG"),
+        Some((numbers, "k")) => format!("{numbers} K"),
+        _ => "0 G".to_string(),
+    }
+}
+
+/// The **frame** of a field: the background and the border of it.
+///
+/// The tree's own `frame`: the background is filled from the `/MK` and
+/// the border is stroked from the `/MK` and the `/BS` — and a field
+/// that says no colour has no background and no border, which is the
+/// tree's own rule.
+fn the_frame_of(document: &Document, entries: &[(String, Json)], width: f64, height: f64) -> String {
+    let number = crate::watermark::number;
+    let mut out = String::new();
+    // The **mark** of the widget: the colours of it.
+    let mark =
+        entry(entries, "MK").and_then(|value| dictionary_of_value(document, value)).unwrap_or_default();
+    // The **background**: the tree's own `/BG`.
+    if let Some(background) = entry(&mark, "BG").and_then(the_colour_of) {
+        out.push_str(&format!("{}\n0 0 {} {} re f\n", background, number(width), number(height)));
+    }
+    // The **line**: its width and its style.
+    let line =
+        entry(entries, "BS").and_then(|value| dictionary_of_value(document, value)).unwrap_or_default();
+    let border_width = entry(&line, "W").and_then(|value| value.as_f64()).unwrap_or(1.0).max(0.0);
+    // The **border**: the tree's own `/BC`, and a field that says no
+    // colour has no border.
+    let Some(border) = entry(&mark, "BC").and_then(the_colour_of) else {
+        return out;
+    };
+    if border_width <= 0.0 {
+        return out;
+    }
+    let style = entry(&line, "S").and_then(|value| value.as_str()).unwrap_or("S").to_string();
+    if style == "U" {
+        // **Underline**: only the bottom edge.
+        out.push_str(&format!(
+            "{}\n{} w\n0 {} m {} {} l S\n",
+            the_stroke_of(&border),
+            number(border_width),
+            number(border_width / 2.0),
+            number(width),
+            number(border_width / 2.0)
+        ));
+        return out;
+    }
+    let dashed = style == "D";
+    out.push_str(&format!(
+        "{}\n{} w\n{}{} {} {} {} re S\n[] 0 d\n",
+        the_stroke_of(&border),
+        number(border_width),
+        if dashed { "[3] 0 d\n" } else { "" },
+        number(border_width / 2.0),
+        number(border_width / 2.0),
+        number(width - border_width),
+        number(height - border_width)
+    ));
+    if style == "B" || style == "I" {
+        // **Beveled**: a light top-left and a darker bottom-right inside
+        // the border; **inset**: a grey top-left and a light grey
+        // bottom-right. The tree's own.
+        let (top, bottom) = if style == "B" { ("1 g", "0.5 g") } else { ("0.5 g", "0.75 g") };
+        let (x0, y0, x1, y1) = (border_width, border_width, width - border_width, height - border_width);
+        let k = border_width;
+        out.push_str(&format!(
+            "{top}\n{} {} m {} {} l {} {} l {} {} l {} {} l {} {} l f\n{bottom}\n{} {} m {} {} l {} {} l {} {} l {} {} l {} {} l f\n",
+            number(x0),
+            number(y0),
+            number(x0),
+            number(y1),
+            number(x1),
+            number(y1),
+            number(x1 - k),
+            number(y1 - k),
+            number(x0 + k),
+            number(y1 - k),
+            number(x0 + k),
+            number(y0 + k),
+            number(x1),
+            number(y1),
+            number(x1),
+            number(y0),
+            number(x0),
+            number(y0),
+            number(x0 + k),
+            number(y0 + k),
+            number(x1 - k),
+            number(y0 + k),
+            number(x1 - k),
+            number(y1 - k)
+        ));
+    }
+    out
+}
+
 /// **Write** the **appearance** of a field.
 ///
 /// The appearance is a **form XObject** — a little drawing — and the
@@ -378,7 +495,11 @@ fn the_drawing(font: &str, size: f64, width: f64, height: f64, value: &str) -> O
 /// - the font must be **in the file** — in the page's resources or in
 ///   the form's — and a font that is not there is refused;
 /// - the text is drawn at the **top left** of the box, two points
-///   from its edge, and the drawing is clipped to the box.
+///   from its edge, and the drawing is clipped to the box;
+/// - the **frame** of the field is drawn from its **look**: the
+///   background is filled from the `/BG` and the border is stroked from
+///   the `/BC` and the `/BS` — the tree's own `frame` — and a field
+///   that says no colour has no background and no border.
 #[derive(Command)]
 #[command(id = "pdf.field.appearance.write", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
 pub struct WriteAppearance {
@@ -436,12 +557,17 @@ impl WriteAppearance {
                 message: format!("the font `{font}` is not in the file"),
             });
         };
-        let Some(bytes) = the_drawing(&font, size, width, height, &value) else {
+        let Some(drawing) = the_drawing(&font, size, width, height, &value) else {
             return Err(EngineError::Failed {
                 id: id.clone(),
                 message: format!("the value of the widget `{widget}` cannot be written"),
             });
         };
+        // The **frame** of the widget: the background and the border of
+        // it, as the tree's own `frame` draws them.
+        let frame = the_frame_of(session.document(), &entries, width, height);
+        let mut bytes = frame.into_bytes();
+        bytes.extend_from_slice(&drawing);
         let path = self.to.0.clone();
         if path.trim().is_empty() {
             return Err(EngineError::Failed {
