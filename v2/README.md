@@ -4120,6 +4120,7 @@ so.
 | the **check box** of a form | **built.** A check box is put on a page — the tree's name, its six marks and its two drawings (§740) | §740 |
 | the **radio button** of a form | **built.** A radio button is put on a page, with the group it belongs to — the tree's flags, its export value and its two drawings (§741) | §741 |
 | the **radio group** that is on | **built.** The group of radio buttons is turned on, and one button of it is on at a time — the tree's states and its export values (§742) | §742 |
+| the **push button** of a form | **built.** A push button is put on a page — the tree's name, its caption and its centred drawing (§743) | §743 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -48688,3 +48689,72 @@ holds the value is on, and every other button of the group is off.
 - **The tree's other kinds of field are not here**: the drop-down, the
   list box, the push button, the image field, the date field and the
   signature field.
+
+---
+
+## 743. A push button is put on a page
+
+A **form** may now hold a **push button**: a box on a page that says
+something and does something.
+
+### What was built
+
+- A **new command**: `pdf.field.button.add` puts a push button on a
+  page — the **page**, the **object number** the field holds, the
+  **rectangle** it covers, its **name**, the **caption** it shows and
+  **where the drawing of it is written**.
+- The **rules** are the tree's own, ported by name:
+  - `free_name` — the **name** is the first free `Button` name —
+    `Button1`, `Button2` and so on — when the caller does not give one,
+    and a name that holds a **period** is refused, and so is a name
+    another field has;
+  - the **rectangle** is four numbers and the corners may come in any
+    order, and a button smaller than **four points by four** is
+    refused, as the tree refuses it;
+  - `widget_dict` — the field is a **widget**, an annotation of the
+    kind `Widget`, and it is a field of the kind `Btn` with the tree's
+    own **flag of a push button** — its seventeenth bit;
+  - the **caption** is in the **caption** of the field (`/MK /CA`) and
+    the background is the tree's own **light grey**;
+  - `ensure_form` — the file's **form** is made when the file has none,
+    and it holds the field;
+  - `button_appearance` — the **drawing** of the field: the frame and
+    the caption, **centred** in the box, and the size of the caption is
+    the tree's own — six tenths of the height of the box, and never
+    less than four points and never more than fourteen.
+
+### What the port found
+
+- **The tree's button draws its caption with the tree's own
+  Helvetica**, and the port found that the width of a text is the
+  width of the tree's own table — so the caption of this tree is
+  centred with the same table, and a caption that cannot be written is
+  refused and nothing is changed.
+- **The tree's caption size is a clamp and not a rule about an input**,
+  and the port found that this tree refuses an input that is out of
+  range and clamps a value that is **derived**: the size of the
+  caption is derived from the height of the button, and the tree's own
+  clamp of it is the tree's own.
+
+### What it cost
+
+- **Five tests** in the PDF battery (`tests/pushbutton.rs`): the button
+  that is put on the page and what its dictionary says, the free name
+  and the second free name, the caption that is centred and the size
+  it is drawn at, the form and the page that hold the field, and the
+  name with a period and the name that is taken.
+- **One new command**: the PDF battery carries **98** commands and the
+  MCP server **953**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The button does nothing**: the tree's button carries an
+  **action** — a link, a script, a file — and this command makes the
+  button and not the action.
+- **The tree's other kinds of field are not here**: the drop-down, the
+  list box, the image field, the date field and the signature field.
+- **The icon of the tree's button is not here**: the tree's button may
+  carry a picture instead of a caption, and a picture is a thing this
+  tree cannot yet put in a file.
