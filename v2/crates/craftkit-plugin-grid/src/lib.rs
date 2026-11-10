@@ -648,6 +648,19 @@ pub(crate) fn book_of(document: &Document) -> Book {
                 }
             }
         }
+        // The **advanced filter** of the sheet: the tree's own, and it is
+        // the filter of the sheet when it is there — a sheet has one
+        // filter, and the advanced filter is the more general of the two.
+        if let Some(advanced) = node.data.get("advanced_filter") {
+            let range = advanced.get("range").and_then(|range| range.as_str()).unwrap_or("");
+            let criteria = advanced.get("criteria").and_then(|criteria| criteria.as_str()).unwrap_or("");
+            let unique = advanced.get("unique").and_then(|unique| unique.as_bool()).unwrap_or(false);
+            if let (Some(list), Some(criteria)) =
+                (advancedfilter::area_of(range), advancedfilter::area_of(criteria))
+            {
+                book.set_filter(&node.name, formula::Filter::Advanced { list, criteria, unique });
+            }
+        }
     }
     // The **names** of the workbook: what a name stands for.
     if let Some(workbook) = document.walk().find(|node| node.kind == "grid.workbook")

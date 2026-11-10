@@ -539,6 +539,17 @@ pub enum Filter {
     },
     /// Groups of criteria: the columns of a group are judged together.
     Groups(Vec<Vec<(u32, Criterion)>>),
+    /// The tree's own **advanced filter**: a **list** of rows under a row
+    /// of headings, and a **criteria range** of headings and criteria.
+    Advanced {
+        /// The list: the rows under the headings.
+        list: Area,
+        /// The criteria: the rows of criteria under their headings.
+        criteria: Area,
+        /// Whether only the first row of a set of the same values is
+        /// kept.
+        unique: bool,
+    },
 }
 
 /// The **operations** a filter may have.
@@ -1400,6 +1411,14 @@ impl Book {
                 .and_then(|cell| cell.value.clone())
                 .unwrap_or(Value::Empty)
         };
+        // The **advanced filter**: the rows of its list that are kept,
+        // worked out once.
+        let advanced: Option<Vec<u32>> = match filter {
+            Filter::Advanced { list, criteria, unique } => {
+                crate::advancedfilter::kept_rows(cells, list, criteria, *unique).ok()
+            }
+            _ => None,
+        };
         let mut rows: Vec<u64> = Vec::new();
         for (cell, _) in cells.iter() {
             let row = cell.row as u64 + 1;
@@ -1414,6 +1433,15 @@ impl Book {
                 Filter::Groups(groups) => !groups.iter().any(|group| {
                     group.iter().all(|(column, criterion)| criterion.matches(&value_at(*column, cell.row)))
                 }),
+                Filter::Advanced { list, .. } => {
+                    // The tree's own advanced filter: the rows of the
+                    // list that match are kept, and the others are
+                    // hidden. The **headings** of the list and the rows
+                    // outside it are not hidden: the tree's own rule.
+                    let in_the_list = cell.row > list.start.row && cell.row <= list.end.row;
+                    let kept = advanced.as_ref().map(|kept| kept.contains(&cell.row)).unwrap_or(false);
+                    in_the_list && !kept
+                }
             };
             if hidden {
                 rows.push(row);

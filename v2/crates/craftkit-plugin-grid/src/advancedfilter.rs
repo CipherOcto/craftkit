@@ -43,7 +43,7 @@ use craftkit_derive::Command;
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Session, Text};
 
-use crate::formula::{Anchor, Area, CellRef, Value};
+use crate::formula::{Anchor, Area, CellRef, Cells, Value};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "grid.filter.advanced";
@@ -56,7 +56,7 @@ const MAX_CRITERIA_COLUMNS: u64 = 1024;
 const MAX_CRITERIA_ROWS: u64 = 10_000;
 
 /// The **area** a range names.
-fn area_of(text: &str) -> Option<Area> {
+pub fn area_of(text: &str) -> Option<Area> {
     let trimmed = text.trim();
     let area = match trimmed.split_once(':') {
         Some((first, second)) => {
@@ -161,6 +161,95 @@ fn criterion_matches(value: &Value, text: &str, criterion: &Value) -> bool {
     }
 }
 
+/// The **rows of the list** an advanced filter **keeps**.
+///
+/// The rows are **derived**: they are worked out from the cells each
+/// time they are asked for, and they are not written down. The rules
+/// are the tree's own: the columns of a criteria row are judged
+/// together, the rows of the criteria are judged one by one, and with
+/// the tree's own **unique** rule only the first row of a set of the
+/// same values is kept.
+pub fn kept_rows(cells: &Cells, list: &Area, criteria: &Area, unique: bool) -> Result<Vec<u32>, String> {
+    // The **headings** of the list.
+    let mut headings: Vec<String> = Vec::new();
+    for column in list.start.col..=list.end.col {
+        let cell = CellRef { col: column, row: list.start.row };
+        let text = cells.get(cell).and_then(|entry| entry.value.clone()).map(|value| text_of(&value));
+        headings.push(text.unwrap_or_default().trim().to_lowercase());
+    }
+    // The **criteria rows**: each a list of the columns it judges and
+    // the criterion of each.
+    let mut rows: Vec<Vec<(u32, Value)>> = Vec::new();
+    for row in criteria.start.row + 1..=criteria.end.row {
+        let mut conditions: Vec<(u32, Value)> = Vec::new();
+        for column in criteria.start.col..=criteria.end.col {
+            let cell = CellRef { col: column, row };
+            let Some(entry) = cells.get(cell) else { continue };
+            if entry.formula.is_some() {
+                // The tree's own **computed** criteria are not here yet:
+                // a criteria cell that holds a formula is refused.
+                return Err("a criteria cell that holds a formula is not supported here".to_string());
+            }
+            let Some(value) = entry.value.clone() else { continue };
+            if value == Value::Empty {
+                continue;
+            }
+            let heading_cell = CellRef { col: column, row: criteria.start.row };
+            let heading = cells
+                .get(heading_cell)
+                .and_then(|entry| entry.value.clone())
+                .map(|value| text_of(&value))
+                .unwrap_or_default()
+                .trim()
+                .to_lowercase();
+            match headings.iter().position(|head| !head.is_empty() && *head == heading) {
+                Some(offset) => conditions.push((offset as u32, value)),
+                None => {
+                    return Err(format!(
+                        "the criteria label `{heading}` does not match a column of the list"
+                    ));
+                }
+            }
+        }
+        rows.push(conditions);
+    }
+    let mut kept: Vec<u32> = Vec::new();
+    let mut seen: Vec<Vec<String>> = Vec::new();
+    for row in list.start.row + 1..=list.end.row {
+        let mut matches = rows.is_empty();
+        for conditions in &rows {
+            let all = conditions.iter().all(|(offset, criterion)| {
+                let cell = CellRef { col: list.start.col + offset, row };
+                let value = cells.get(cell).and_then(|entry| entry.value.clone()).unwrap_or(Value::Empty);
+                let text = text_of(&value);
+                criterion_matches(&value, &text, criterion)
+            });
+            if all {
+                matches = true;
+                break;
+            }
+        }
+        if matches && unique {
+            let key: Vec<String> = (list.start.col..=list.end.col)
+                .map(|column| {
+                    let cell = CellRef { col: column, row };
+                    let value = cells.get(cell).and_then(|entry| entry.value.clone()).unwrap_or(Value::Empty);
+                    text_of(&value).to_lowercase()
+                })
+                .collect();
+            if seen.contains(&key) {
+                matches = false;
+            } else {
+                seen.push(key);
+            }
+        }
+        if matches {
+            kept.push(row);
+        }
+    }
+    Ok(kept)
+}
+
 /// **Filter** a list of rows by a **criteria range** — the tree's own
 /// advanced filter.
 #[derive(Command)]
@@ -224,102 +313,41 @@ impl AdvancedFilter {
             });
         }
         let cells = crate::cells_of(node);
-        // The **headings** of the list.
-        let mut headings: Vec<String> = Vec::new();
-        for column in list.start.col..=list.end.col {
-            let cell = CellRef { col: column, row: list.start.row };
-            let text = cells.get(cell).and_then(|entry| entry.value.clone()).map(|value| text_of(&value));
-            headings.push(text.unwrap_or_default().trim().to_lowercase());
-        }
-        // The **criteria rows**: each a list of the columns it judges
-        // and the criterion of each.
-        let mut rows: Vec<Vec<(u32, Value)>> = Vec::new();
-        for row in criteria.start.row + 1..=criteria.end.row {
-            let mut conditions: Vec<(u32, Value)> = Vec::new();
-            for column in criteria.start.col..=criteria.end.col {
-                let cell = CellRef { col: column, row };
-                let Some(entry) = cells.get(cell) else { continue };
-                if entry.formula.is_some() {
-                    // The tree's own **computed** criteria are not here
-                    // yet: a criteria cell that holds a formula is
-                    // refused.
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: "a criteria cell that holds a formula is not supported here".to_string(),
-                    });
-                }
-                let Some(value) = entry.value.clone() else { continue };
-                if value == Value::Empty {
-                    continue;
-                }
-                let heading_cell = CellRef { col: column, row: criteria.start.row };
-                let heading = cells
-                    .get(heading_cell)
-                    .and_then(|entry| entry.value.clone())
-                    .map(|value| text_of(&value))
-                    .unwrap_or_default()
-                    .trim()
-                    .to_lowercase();
-                match headings.iter().position(|head| !head.is_empty() && *head == heading) {
-                    Some(offset) => conditions.push((offset as u32, value)),
-                    None => {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: format!(
-                                "the criteria label `{heading}` does not match a column of the list"
-                            ),
-                        });
-                    }
-                }
-            }
-            rows.push(conditions);
-        }
         // The **rows of the list** that match: the rows of the criteria
         // are judged one by one, and the columns of a row together.
         let unique = matches!(self.unique, Some(Bool(true)));
-        let mut seen: Vec<Vec<String>> = Vec::new();
-        let mut kept: Vec<u32> = Vec::new();
-        for row in list.start.row + 1..=list.end.row {
-            let mut matches = rows.is_empty();
-            for conditions in &rows {
-                let all = conditions.iter().all(|(offset, criterion)| {
-                    let cell = CellRef { col: list.start.col + offset, row };
-                    let value = cells.get(cell).and_then(|entry| entry.value.clone()).unwrap_or(Value::Empty);
-                    let text = text_of(&value);
-                    criterion_matches(&value, &text, criterion)
-                });
-                if all {
-                    matches = true;
-                    break;
-                }
-            }
-            if matches && unique {
-                let key: Vec<String> = (list.start.col..=list.end.col)
-                    .map(|column| {
-                        let cell = CellRef { col: column, row };
-                        let value =
-                            cells.get(cell).and_then(|entry| entry.value.clone()).unwrap_or(Value::Empty);
-                        text_of(&value).to_lowercase()
-                    })
-                    .collect();
-                if seen.contains(&key) {
-                    matches = false;
-                } else {
-                    seen.push(key);
-                }
-            }
-            if matches {
-                kept.push(row);
-            }
-        }
+        let kept = kept_rows(&cells, &list, &criteria, unique)
+            .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+        // The rows of the list are counted from **one**, as the rows of
+        // a filter are: the tree's own counting.
+        let kept: Vec<u64> = kept.iter().map(|row| *row as u64 + 1).collect();
         let matched = kept.len();
         // The **copy**: the heading row and the rows that are kept are
         // written to the range the caller names.
         let Some(copy_to) = &self.copy_to else {
+            // The tree's own **filtering in place**: the filter is set
+            // on the sheet, and the rows that do not match are hidden.
+            let fact = json!({
+                "range": self.range.0.trim(),
+                "criteria": self.criteria.0.trim(),
+                "unique": unique,
+            });
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["advanced_filter"] = fact;
+            }
+            // The rows that do **not** match are hidden — and the rows a
+            // filter hides are **derived**: they are worked out from the
+            // cells each time they are asked for, and they are not
+            // written down.
+            let hidden: Vec<u64> = (list.start.row + 1..=list.end.row)
+                .map(|row| row as u64 + 1)
+                .filter(|row| !kept.contains(row))
+                .collect();
             return Ok(Outcome::changed(format!("{} rows of the list match", matched)).with_data(json!({
                 "sheet": sheet,
                 "matched": matched,
                 "rows": kept,
+                "hidden_rows": hidden,
             })));
         };
         let Some(destination) = area_of(&copy_to.0) else {
@@ -341,7 +369,8 @@ impl AdvancedFilter {
             });
         }
         let width = list.end.col - list.start.col + 1;
-        let rows_out: Vec<u32> = std::iter::once(list.start.row).chain(kept.iter().copied()).collect();
+        let rows_out: Vec<u32> =
+            std::iter::once(list.start.row).chain(kept.iter().map(|row| *row as u32 - 1)).collect();
         let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed {
                 id: id.clone(),

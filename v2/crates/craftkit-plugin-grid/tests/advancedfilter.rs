@@ -75,6 +75,15 @@ fn a_list(session: &mut Session) -> (u64, u64) {
     (workbook, sheet)
 }
 
+/// The **rows** a filter hides.
+fn hidden(session: &mut Session, sheet: u64) -> Vec<u64> {
+    let outcome = session.execute("grid.filter.rows", &json!({ "sheet": sheet })).expect("the rows are read");
+    outcome.data["rows"]
+        .as_array()
+        .map(|rows| rows.iter().filter_map(|row| row.as_u64()).collect())
+        .unwrap_or_default()
+}
+
 /// The **rows** the advanced filter keeps.
 fn kept(session: &mut Session, sheet: u64, criteria: &str) -> Vec<u64> {
     let outcome = session
@@ -92,9 +101,9 @@ fn the_rows_that_match_are_kept() {
     let mut session = session();
     let (_workbook, sheet) = a_list(&mut session);
     a_text(&mut session, sheet, "D2", "apple");
-    // The rows of this tree are counted from **zero**: the apple is in
-    // the second row of the sheet, and that is the row `1`.
-    assert_eq!(kept(&mut session, sheet, "D1:E2"), vec![1], "the row that matches is kept");
+    // The rows are counted from **one**, as the rows of a filter are:
+    // the apple is in the second row of the sheet.
+    assert_eq!(kept(&mut session, sheet, "D1:E2"), vec![2], "the row that matches is kept");
 }
 
 /// The **columns** of a criteria row are judged **together**: the
@@ -108,7 +117,7 @@ fn the_columns_of_a_criteria_row_are_judged_together() {
     // The apple at ten does not pass the price, the pear does not
     // begin with "ap", and the apricot at thirty does both: so only
     // the apricot is kept.
-    assert_eq!(kept(&mut session, sheet, "D1:E2"), vec![3], "one row matches both");
+    assert_eq!(kept(&mut session, sheet, "D1:E2"), vec![4], "one row matches both");
 }
 
 /// The **rows** of the criteria are judged **one by one**: the tree's
@@ -119,7 +128,7 @@ fn the_rows_of_the_criteria_are_judged_one_by_one() {
     let (_workbook, sheet) = a_list(&mut session);
     a_text(&mut session, sheet, "D2", "apple");
     a_text(&mut session, sheet, "D3", "pear");
-    assert_eq!(kept(&mut session, sheet, "D1:E3"), vec![1, 2], "either row is kept");
+    assert_eq!(kept(&mut session, sheet, "D1:E3"), vec![2, 3], "either row is kept");
 }
 
 /// A **text criterion begins with** the text: the tree's own rule for
@@ -129,7 +138,7 @@ fn a_text_criterion_begins_with() {
     let mut session = session();
     let (_workbook, sheet) = a_list(&mut session);
     a_text(&mut session, sheet, "D2", "ap");
-    assert_eq!(kept(&mut session, sheet, "D1:E2"), vec![1, 3], "the rows that begin with it are kept");
+    assert_eq!(kept(&mut session, sheet, "D1:E2"), vec![2, 4], "the rows that begin with it are kept");
 }
 
 /// A criterion whose **label** is not a heading of the list is
@@ -145,6 +154,24 @@ fn a_criterion_with_a_label_that_is_not_a_heading_is_refused() {
         .execute("grid.filter.advanced", &json!({ "sheet": sheet, "range": "A1:B4", "criteria": "F1:F2" }))
         .expect_err("the filter is refused");
     assert!(error.to_string().contains("does not match a column"), "the error says why: {error}");
+}
+
+/// The **filtering in place**: the rows that do not match are hidden,
+/// and the rows a filter hides are **derived** — they are not written
+/// down.
+#[test]
+fn the_rows_that_do_not_match_are_hidden() {
+    let mut session = session();
+    let (_workbook, sheet) = a_list(&mut session);
+    a_text(&mut session, sheet, "D2", "apple");
+    let outcome = session
+        .execute("grid.filter.advanced", &json!({ "sheet": sheet, "range": "A1:B4", "criteria": "D1:E2" }))
+        .expect("the list is filtered");
+    assert_eq!(outcome.data["matched"], json!(1), "one row matched");
+    assert_eq!(outcome.data["hidden_rows"], json!([3, 4]), "the others are hidden");
+    // And the filter is the sheet's own: the rows it hides are worked
+    // out from the cells each time they are asked for.
+    assert_eq!(hidden(&mut session, sheet), vec![3, 4], "the rows are hidden");
 }
 
 /// The **copy**: the heading row and the rows that are kept are
@@ -214,5 +241,5 @@ fn only_the_first_of_a_set_of_the_same_values_is_kept() {
             }),
         )
         .expect("the list is filtered");
-    assert_eq!(outcome.data["rows"], json!([1]), "only the first row is kept");
+    assert_eq!(outcome.data["rows"], json!([2]), "only the first row is kept");
 }
