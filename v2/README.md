@@ -4154,6 +4154,7 @@ so.
 | the **appearance** of the typed signature | **built.** The filled outlines of it are drawn, with the even-odd rule (§774) | §774 |
 | the **custom stamp** of a page | **built.** The stamp of a picture of the document is put on a page — the tree's `PCCustom` name and its `/PCPicture` (§775) | §775 |
 | the **appearance** of the custom stamp | **built.** The picture is laid over the rectangle, an image exactly and a form by its size (§776) | §776 |
+| the **embedded file** of a document | **built.** The file a file carries is named in the catalog's tree of names, and the reader finds it (§777) | §777 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -51142,6 +51143,72 @@ The **custom stamp** — the tree's own **stamp of a picture** — is now
   text box, the mark of a redaction, the stamp, the marks of Fill and
   Sign, the attachment, the callout, the typed signature and the
   custom stamp.
+- **The tree's own script outlines are not here**: the tree writes the
+  contours of a typed name from the outlines of a font it carries, and
+  this tree carries **no fonts at all** — so the contours are the
+  caller's.
+
+---
+
+## 777. The file is named in the document
+
+The **file a file carries** — the tree's own **embedded file** — is now
+**named in the document**, in the **tree of names** the reader of the
+tree walks.
+
+### What was built
+
+- The command **`pdf.embeddedfile.add`** names a **file specification**
+  in the document: it takes the **file specification** and the **name**
+  the file is listed under, and it puts the pair into the catalog's
+  `/Names` dictionary, under `/EmbeddedFiles` — the tree's own place
+  for it.
+- The **rules** are the tree's own, ported by name:
+  - the **name** is the name the file specification carries — the
+    **Unicode** one (`/UF`) and, failing that, the plain one (`/F`) —
+    when the caller says none, and it must not be empty: the tree's
+    own rule, and a file nobody can find is not there;
+  - the **file specification** is an object of the document that says
+    it is one (`/Type /Filespec`), and anything else is **refused**;
+  - the **tree of names** is a list of a name and the file that
+    carries it: the tree's own shape;
+  - a name that is **already there** names the file again and does not
+    make a second entry: the tree's own rule;
+  - the **edges** say it too: the catalog names the names, the names
+    name the tree of embedded files, and the tree names the file.
+
+### What the port found
+
+- **The tree's reader already knew where the files were, and nothing
+  wrote them there**, and the port found that the tree's own reader —
+  the one that lists the attachments of a file — reads the catalog's
+  `/Names` `/EmbeddedFiles` and walks the name tree, and that the
+  tree's own writing of it is a **post-processing step** of its
+  showcase rather than a command: so the gap here was not the reading
+  but the **writing**, and the test proves it end to end — the file is
+  named, and the reader finds it.
+- **The name in the tree and the name of the file are two names**,
+  and the port found that the tree's own reader takes the name of the
+  **file specification** when the file has one, and the key of the
+  tree only when it has not: so naming a file in the tree does not
+  rename the file, and the test says so.
+
+### What it cost
+
+- **Five tests** in the PDF battery (`tests/embeddedfileadd.rs`): the
+  file that is named and that the reader finds, the name the caller
+  gives, a name that is there again, a node that is not a file
+  specification and a file with no name.
+- **One new command**: the PDF battery carries **119** commands and
+  the MCP server **974** — one more than §776. The battery is counted
+  by the source of its commands; the MCP server is counted by the
+  tool list it answers with.
+
+### What it does not settle
+
+- **The bytes of the file are not here**: they are the file
+  specification's own business, and the command that makes an
+  attachment carries them.
 - **The tree's own script outlines are not here**: the tree writes the
   contours of a typed name from the outlines of a font it carries, and
   this tree carries **no fonts at all** — so the contours are the
