@@ -4138,6 +4138,7 @@ so.
 | the **appearance** of the ink | **built.** The ink is drawn — the tree's strokes, its width and its dots (§758) | §758 |
 | the **caret** of a page | **built.** The caret is put on a page — the tree's rectangle, its colour and its symbol (§759) | §759 |
 | the **appearance** of the caret | **built.** The caret is drawn — the tree's wedge and its blue (§760) | §760 |
+| the **text box** of a page | **built.** The free text is put on a page — the tree's text, its appearance and its alignment (§761) | §761 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -49987,3 +49988,84 @@ The **caret** — the tree's own wedge — is now **drawn**.
   turn with the page's `/Matrix`: that is the reader's work.
 - **The tree's caret is a mark in the text layer**, and the text it
   marks is not here: this tree has no text layer of its own.
+
+---
+
+## 761. The text box is put on a page
+
+The tree's **text box** — the **free text** that shows its own text
+inside a rectangle — may now be put on a page.
+
+### What was built
+
+- A **new command**: `pdf.annot.freetext.add` puts a text box on a
+  page — the **page**, the **object number** the annotation has in
+  the file, the **rectangle** it covers, the **text** of the box, and,
+  when the caller says so, the **size** of the text, its **colour**,
+  the **background**, the **width** of the border and the
+  **alignment**.
+- The **rules** are the tree's own:
+  - the **rectangle** is four numbers, the corners may come in any
+    order, and it must be at least a point wide and a point high:
+    the tree's own rule;
+  - the **size** of the text is the tree's own twelve points when the
+    caller says nothing, and it is between one point and four hundred:
+    the tree's own bounds;
+  - the **colour** of the text is the tree's own black when the
+    caller says nothing, and it is three numbers between zero and
+    one;
+  - the **background** of the box is the colour of the fill when the
+    caller says one, and there is none when the caller says nothing:
+    the tree's own rule;
+  - the **width** of the border is the tree's own zero — a text box
+    has no border unless one is asked for — and a width below zero is
+    the tree's own zero;
+  - the **alignment** is the tree's own three: left (`0`), centre
+    (`1`) and right (`2`), and an alignment that is not one of them
+    is **refused**;
+  - the **appearance of the text** is the tree's own string: the
+    colour and the font and the size in one string, the `/DA` of the
+    annotation — the tree's own Helvetica under the name `Helv`.
+
+### What the port found
+
+- **The tree's text box has no border of its own**, and the port found
+  that the tree's tool for a text box has a width of **zero** — so
+  that the box is the text and nothing else — and that a border is
+  written only when one is asked for: so the border here is written
+  only when the caller asks for one.
+- **The tree's colour of a text box is the colour of its background**
+  and not the colour of its text, and the port found that the tree
+  writes the background in the `/C` of the annotation and the colour
+  of the text in the `/DA` — two different places for two different
+  colours: so both are here, in the tree's places.
+- **The tree's size of the text is clamped and this tree refuses it**:
+  the tree takes a size of five hundred and makes it four hundred,
+  and takes a size of zero and makes it twelve; and the port refuses
+  both — so a size outside the tree's own bounds is **refused** here
+  rather than made smaller, and the rule is this tree's own.
+
+### What it cost
+
+- **Eight tests** in the PDF battery (`tests/freetextadd.rs`): the
+  text box that is put on the page, the background that is written
+  when it is said, the size and the colour that are the tree's own
+  string, the box that is too small, the size that is outside the
+  tree's bounds, the alignment that is not known, the width below
+  zero that is the tree's own zero, and the colour that is outside
+  zero and one.
+- **One new command**: the PDF battery carries **111** commands and
+  the MCP server **966**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The drawing of the text box is not here**: it is the appearance
+  command's own work, and the tree draws the box when the annotation
+  is made.
+- **The tree's callout is not here**: the leader line of a callout and
+  the `/CL` and `/RD` that say where it is — the tree's own free text
+  with a leader.
+- **The tree's typewriter is not here**: the free text that is typed
+  onto the page and marked with the tree's own intent.
