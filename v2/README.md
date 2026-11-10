@@ -4118,6 +4118,7 @@ so.
 | the **burn-in** of a caption | **built.** A caption is drawn into a frame and written as a picture — the tree's background, its outline and its letters (§738) | §738 |
 | the **text field** of a form | **built.** A text field is put on a page — the tree's name, its rectangle, its form, its flags and its drawing (§739) | §739 |
 | the **check box** of a form | **built.** A check box is put on a page — the tree's name, its six marks and its two drawings (§740) | §740 |
+| the **radio button** of a form | **built.** A radio button is put on a page, with the group it belongs to — the tree's flags, its export value and its two drawings (§741) | §741 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -48542,3 +48543,83 @@ on or off.
 - **The check box is not turned on here**: the command makes a field
   that is off, and the tree's own value command turns it on — a thing
   this tree has, as `pdf.field.set`.
+
+---
+
+## 741. A radio button is put on a page
+
+A **form** may now hold a **radio button**: a box on a page that is one
+of a group of them, and only one of the group is on at a time.
+
+### What was built
+
+- A **new command**: `pdf.field.radio.add` puts a radio button on a
+  page — the **page**, the **object number** the button holds, the
+  **rectangle** it covers, the **group** it belongs to, the **export
+  value** it holds when it is on, the **style** of its mark and **where
+  the two drawings of it are written**.
+- The **rules** are the tree's own, ported by name:
+  - `free_name` — the **group** is named by the caller, or it is given
+    the first free name of the tree: `Group1`, `Group2` and so on; a
+    name that holds a **period** is refused, and so is a name a field
+    that is **not** a group of radio buttons has;
+  - the **rectangle** is four numbers and the corners may come in any
+    order, and a button smaller than **four points by four** is
+    refused, as the tree refuses it;
+  - the **export value** — what the button holds when it is on — may
+    not be empty and may not be `Off`, as the tree refuses it;
+  - the **group** is a field of its own: it is a button, it carries
+    the tree's own **two flags** — the radio flag and the flag that
+    says the group cannot be turned off — it is **off**, and it holds
+    the buttons as its **kids**;
+  - the **button** is a widget — an annotation of the kind `Widget` —
+    that names the group it belongs to (`/Parent`), and it is **off**
+    as well (`/AS`);
+  - `ensure_form` — the file's **form** is made when the file has none,
+    and it holds the **group** and not the buttons;
+  - `check_box_states` — the button has **two drawings**: the one that
+    says it is off, and the one that says it is on, and the state it is
+    on in is called the **export value** of the button;
+  - the **mark** of a radio button is a **circle**, drawn as a path, so
+    that no font of the file is needed to show it.
+
+### What the port found
+
+- **The tree's group holds the buttons and not the other way round**,
+  and the port found that a field's own **kids** are the tree's
+  relation: the group holds the buttons, and each button names the
+  group it belongs to — so a second button of the same group is added
+  to the group that is already there, and no second group is made.
+- **The tree's button has no name of its own** — the name is the name
+  of the group — and the port found that a kid **with** a name is a
+  field of its own and a kid **without** one is a widget, so the
+  button here has no name either, and the group has the name.
+
+### What it cost
+
+- **Seven tests** in the PDF battery (`tests/radio.rs`): the radio
+  button that is put on the page and what its dictionary says, the
+  group that is made and the flags it carries, the second button that
+  joins the group, the export value that is empty and the one that is
+  `Off`, the group name with a period and the name a field that is not
+  a group has, the two drawings and the states the button names, and
+  the page that holds the button.
+- **One new command**: the PDF battery carries **97** commands and the
+  MCP server **952**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The button is made off and this tree cannot turn it on**: the value
+  of a field is set on the **field**, and the field of a group of radio
+  buttons is the **group** — the buttons are its widgets — and this
+  tree does not set the value of a group. So the button this command
+  makes is off, and it stays off.
+- **The tree's other kinds of field are not here**: the drop-down, the
+  list box, the push button, the image field, the date field and the
+  signature field.
+- **The tree's radio group is not turned off when another button of it
+  is turned on**: that is the reader's work in the tree — a button of a
+  group that is on is the only one that is on — and this tree writes
+  the value of one button and does not touch the others.
