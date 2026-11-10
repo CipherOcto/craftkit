@@ -4110,6 +4110,7 @@ so.
 | the **marks** of a page | **built.** The watermark, the header, the footer and the background are taken away again — the tree's mark and its name (§728) | §728 |
 | the **mail merge** of a document | **built.** The fields of a document are filled with the rows of a data source — the tree's merge field, its address block and its map of the columns (§729) | §729 |
 | the **flattening** of a form | **built.** The fields of a form are drawn into the pages they are on and taken away — the tree's matrix, its XObjects and its pruning (§730) | §730 |
+| the **comments** of a file | **built.** The notes of a file are read — the tree's summary, its colour of a free text and its order (§731) | §731 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
@@ -47741,3 +47742,89 @@ taken away.
 - **The drawing is not a mark of the tree's own kinds**: it carries
   the name `Flattened`, and the three kinds the command knows are not
   it.
+
+---
+
+## 731. The comments of a file are read
+
+The **notes** a file carries may now be **read**: who wrote them, what
+they say, and where they are.
+
+### What was built
+
+- A **new command**: `pdf.comment.read` reads the comments of a file —
+  the **page** whose comments are read, and every page of the file
+  when no page is said.
+- The **rules** are the tree's own:
+  - a **comment** is an annotation that is **none of a link, a widget
+    and a popup** — a link is not a note, a widget is the appearance
+    of a field, and a popup is the window of a note rather than the
+    note itself;
+  - the **pages** are the pages of the tree of pages, in the order the
+    tree holds them;
+  - the **index** of an annotation is its place in the `/Annots` of
+    its page, and a link counts as a place even though it is not a
+    comment;
+  - a comment says:
+    - the **page** it is on, and its **index** on that page;
+    - its **subtype** — the kind of note it is;
+    - its **author** (`/T`), its **contents** (`/Contents`), the **day**
+      it was changed (`/M`) and its **name** (`/NM`);
+    - the comment it **answers** (`/IRT` — the name of that one);
+    - its **rectangle** (`/Rect`), which is two corners in order, and
+      the **origin** when the file says nothing that is a rectangle;
+    - its **colour** (`/C`);
+    - its **quads** (`/QuadPoints`), which are the lines of text it
+      lies over, eight numbers at a time;
+    - whether it is **locked** (the flag `Locked`);
+    - its **intent** (`/IT`) — what it means, when it says.
+  - the **colour** of a comment that is written free — a `FreeText` —
+    is the colour of its **default appearance** (`/DA`): the three
+    numbers that come before the `rg` of the appearance;
+  - the **list** is **sorted**: by the page, and then from the **top of
+    the page down** — the comment whose rectangle reaches highest
+    comes first;
+  - a node that is **not a page of the file** is refused.
+
+### What the port found
+
+- **The tree's index counts the annotations that are not comments**,
+  and the port found that the tree numbers the annotations of a page
+  before it decides which of them are comments — so the index of a
+  comment is its place among **all** the annotations of its page, and
+  a link above it moves the number up.
+- **The tree's free text carries its colour in its appearance** and
+  not in a `/C` of its own, and the port found that the tree reads
+  the `/DA` of the comment and takes the three numbers before its
+  `rg` — so a free text is the colour of the text it draws.
+- **The tree's list is sorted by the top of the rectangle**, and the
+  port found that the tree sorts the comments of a page **from the
+  top down** — which is the order a reader reads them in.
+- **The tree's comment list skips three kinds** — a link, a widget and
+  a popup — and the port found that the tree's count of the **hidden
+  information** skips two more: an attachment and a redaction are not
+  comments there either.
+
+### What it cost
+
+- **Eight tests** in the PDF battery (`tests/comments.rs`): the link
+  and the widget that are not comments, the author and the contents
+  that are said, the rectangle that is two corners in order, the
+  colour of the free text, the quads that are eight numbers at a
+  time, the reply that says what it answers, the list that is sorted
+  from the top of the page down, and the page that is refused.
+- **One new command**: the PDF battery carries **91** commands and the
+  MCP server **941**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The comments are not changed**: the author, the subject and the
+  icon of a comment are the tree's own, and they are not ported here.
+- **The comments are not flattened**: the tree takes the comments into
+  the pages they are on, with their pop-ups and their replies, and
+  this tree does not — `pdf.form.flatten` flattens the fields only.
+- **The count of the hidden information and this list do not quite
+  agree**: the count says that an attachment and a redaction are not
+  comments, and this list says that they are.
