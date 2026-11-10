@@ -17,11 +17,12 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **fifty-one commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **fifty-two commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.create` makes a path out of path data or
-//!   out of anchors; `vector.path.unite`,
+//!   out of anchors, and `vector.path.spline` makes one that curves
+//!   through a list of points; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
 //!   `vector.path.offset` work on whole paths; `vector.path.move` and
@@ -84,6 +85,7 @@ mod pathcreate;
 mod pathfinder;
 mod reshape;
 mod shapes;
+mod spline;
 mod svgexport;
 mod svgimport;
 
@@ -95,6 +97,7 @@ pub use opacity::{SetOpacity, fill_at, stroke_at};
 pub use pathcreate::CreatePath;
 pub use pathfinder::{CropPaths, DividePaths, MergePaths, TrimPaths};
 pub use shapes::{AddLine, AddSpiral, AddStar};
+pub use spline::AddSpline;
 pub use svgexport::ExportSvg;
 pub use svgimport::ImportSvg;
 
@@ -437,6 +440,7 @@ impl AddPolygon {
         "vector.ellipse",
         "vector.polygon",
         "vector.path.create",
+        "vector.path.spline",
         "vector.path.unite",
         "vector.path.subtract",
         "vector.path.intersect",
@@ -2809,6 +2813,7 @@ craftkit_sdk::plugin_anchor!(
     AddLine,
     AddSpiral,
     CreatePath,
+    AddSpline,
     UnitePaths,
     SubtractPaths,
     IntersectPaths,
