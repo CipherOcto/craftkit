@@ -134,6 +134,7 @@ mod attachments;
 mod background;
 mod boxes;
 mod calculate;
+mod calloutadd;
 mod caretadd;
 mod checkbox;
 mod combobox;
@@ -225,6 +226,7 @@ pub use attachments::ReadAttachments;
 pub use background::AddBackground;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use calculate::{ReadCalculatedValue, ReadCalculation};
+pub use calloutadd::AddCallout;
 pub use caretadd::AddCaret;
 pub use checkbox::AddCheckBox;
 pub use combobox::AddCombo;
@@ -2232,6 +2234,7 @@ craftkit_sdk::plugin_anchor!(
     AddStamp,
     AddMark,
     AddAttachment,
+    AddCallout,
     SetProperties,
     SetLook,
     WriteAnnotation,
