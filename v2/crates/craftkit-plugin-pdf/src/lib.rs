@@ -141,6 +141,7 @@ mod decrypt;
 mod destinations;
 mod encrypt;
 mod fdf;
+mod fieldadd;
 mod fields;
 mod figures;
 mod filters;
@@ -207,6 +208,7 @@ pub use compare::{CompareFiles, MarkDifferences};
 pub use convert::Convert;
 pub use destinations::ReadDestinations;
 pub use encrypt::ReadEncryption;
+pub use fieldadd::AddField;
 pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField, SetFlags, SetParent};
 pub use figures::{ReadFigures, SetFigureAlt};
 pub use flatten::{FlattenComments, FlattenForm};
@@ -2172,6 +2174,7 @@ craftkit_sdk::plugin_anchor!(
     StreamKind,
     InformationKind,
     AddObject,
+    AddField,
     Preflight,
     ReadFonts,
     ReadTrailer,

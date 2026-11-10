@@ -331,7 +331,7 @@ fn font_in(document: &Document, resources: &[(String, Json)], name: &str) -> Opt
 /// The characters that are not letters are written as the octal the
 /// standard encoding gives them, and a character that has no byte is
 /// refused: a value that cannot be written is not written.
-fn the_string(value: &str) -> Option<String> {
+pub(crate) fn the_string(value: &str) -> Option<String> {
     let mut out = String::new();
     for character in value.chars() {
         match character {
