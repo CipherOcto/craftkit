@@ -4159,6 +4159,7 @@ so.
 | the **playhead** at the marks | **built.** The playhead goes to the mark in or the mark out, and to the start or the end when there is none (§784) | §784 |
 | the **outline symbols** of a sheet | **built.** The sheet's view carries the tree's own outline-symbols and formulas flags (§785) | §785 |
 | the **scenarios** of a workbook | **built.** The tree's what-if scenarios are added, listed, shown and taken away (§786) | §786 |
+| the **advanced filter** of a sheet | **built.** A list is judged by a criteria range — the columns together, the rows one by one (§787) | §787 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -51752,3 +51753,74 @@ The **scenario** — the tree's own **what-if** — is now a thing of the
 - **The tree's own source of the scenarios is not here**: the tree
   reads them from a hidden name, and here they are nodes of the
   workbook.
+
+---
+
+## 787. The advanced filter finds the rows that match
+
+The **advanced filter** — the tree's own **advanced filter** — is now
+a command: it judges a **list** of rows by a **criteria range** and
+finds the rows that match.
+
+### What was built
+
+- The command **`grid.filter.advanced`** judges a **list** — a range of
+  rows under a row of **headings** — by a **criteria range** — a row of
+  headings and rows of **criteria** under it — and it says which rows
+  match, and it copies them when the caller names a range to copy them
+  to.
+- The **rules** are the tree's own, ported by name:
+  - the headings of the criteria are the headings of the list, and they
+    are compared **without case**; and a criterion whose heading is
+    **not** a heading of the list is **refused**: the tree's own rule;
+  - a criteria cell that is **empty** says nothing and is skipped: the
+    tree's own rule;
+  - the **columns** of a criteria row are judged **together**, and the
+    **rows** of the criteria are judged **one by one**: the tree's own
+    rules;
+  - the **criterion** of a cell is the tree's own advanced-filter
+    criterion: a number is the number, a text that begins with an
+    operator is that comparison, and a text that begins with nothing
+    **begins with** that text — the tree's own rule, and it is not the
+    rule of a counting function's criterion;
+  - with the tree's own **unique** flag only the **first** row of a set
+    of the same values is kept: the tree's own rule;
+  - the **copy** writes the heading row and the rows that are kept to
+    the range the caller names, and that range may not **overlap** the
+    list: the tree's own rule.
+
+### What the port found
+
+- **The tree's advanced filter has a criterion of its own**, and the
+  port found that the tree's own advanced filter reads a plain text
+  criterion as "**begins with**" while the tree's own counting
+  function reads the same text as "**is**" — two rules in one tree —
+  so here the advanced filter has the tree's advanced-filter rule and
+  not the rule of the counting function, and the test says so.
+- **The tree's rows are counted from one and this tree's from zero**,
+  and the port found that the tree's own rows are one-based while
+  this tree's rows are zero-based everywhere — so the answer of the
+  command gives this tree's numbers, and the test says which row is
+  which.
+
+### What it cost
+
+- **Eight tests** in the grid battery (`tests/advancedfilter.rs`): the
+  rows that match, the columns of a criteria row, the rows of the
+  criteria, a text criterion that begins with, a criterion whose label
+  is not a heading, the copy, the destination that overlaps the list
+  and the first of a set of the same values.
+- **One new command**: the grid battery carries **157** commands and
+  the MCP server **983** — one more than §786. The battery is counted
+  by the source of its commands; the MCP server is counted by the tool
+  list it answers with.
+
+### What it does not settle
+
+- **The tree's own filtering in place is not here**: the tree hides the
+  rows that do not match, and here the command copies the rows that do
+  — the hiding is the next arc, because the rows a filter hides are
+  **derived** here and not written down.
+- **The tree's computed criteria are not here**: the tree may put a
+  formula in a criteria cell and judge the row by what it computes,
+  and here such a cell is **refused**.
