@@ -49,7 +49,7 @@ pub const KINDS: [&str; 4] = ["highlight", "underline", "strikeout", "squiggly"]
 
 /// The **quad** of a line of text: the upper left, the upper right,
 /// the lower left and the lower right, the tree's own order.
-fn quad_of(bounds: [f64; 4]) -> Vec<f64> {
+pub(crate) fn quad_of(bounds: [f64; 4]) -> Vec<f64> {
     let [left, bottom, right, top] = bounds;
     vec![left, top, right, top, left, bottom, right, bottom]
 }

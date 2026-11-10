@@ -190,6 +190,7 @@ mod properties;
 mod pushbutton;
 mod radio;
 mod redact;
+mod redactmark;
 mod region;
 mod remove;
 mod revision6;
@@ -263,6 +264,7 @@ pub use preflight::Preflight;
 pub use properties::SetProperties;
 pub use pushbutton::AddButton;
 pub use radio::AddRadio;
+pub use redactmark::AddRedactMark;
 pub use remove::RemoveObject;
 pub use rotation::{ReadRotation, RotatePage};
 pub use signaturefield::AddSignature;
@@ -2220,6 +2222,7 @@ craftkit_sdk::plugin_anchor!(
     AddInk,
     AddCaret,
     AddFreeText,
+    AddRedactMark,
     SetProperties,
     SetLook,
     WriteAnnotation,
