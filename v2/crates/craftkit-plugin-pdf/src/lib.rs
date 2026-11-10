@@ -147,6 +147,7 @@ mod customstampadd;
 mod datefield;
 mod decrypt;
 mod destinations;
+mod embeddedfileadd;
 mod encrypt;
 mod fdf;
 mod fieldadd;
@@ -238,6 +239,7 @@ pub use convert::Convert;
 pub use customstampadd::AddCustomStamp;
 pub use datefield::AddDate;
 pub use destinations::ReadDestinations;
+pub use embeddedfileadd::AddEmbeddedFile;
 pub use encrypt::ReadEncryption;
 pub use fieldadd::AddField;
 pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField, SetFlags, SetParent};
@@ -2241,6 +2243,7 @@ craftkit_sdk::plugin_anchor!(
     AddCallout,
     AddTypedSignature,
     AddCustomStamp,
+    AddEmbeddedFile,
     SetProperties,
     SetLook,
     WriteAnnotation,
