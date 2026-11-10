@@ -311,7 +311,7 @@ pub(crate) fn the_frame(width: f64, height: f64) -> String {
 /// border is stroked, and the text is drawn in the box — on one line
 /// and centred in it, or from the top down and wrapped when the field
 /// is a multiline one.
-fn the_drawing(rect: [f64; 4], value: &str, multiline: bool) -> Option<Vec<u8>> {
+pub(crate) fn the_drawing(rect: [f64; 4], value: &str, multiline: bool) -> Option<Vec<u8>> {
     let width = rect[2] - rect[0];
     let height = rect[3] - rect[1];
     let pad = PADDING + BORDER;

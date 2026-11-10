@@ -139,6 +139,7 @@ mod compare;
 mod content;
 mod convert;
 mod crypt;
+mod datefield;
 mod decrypt;
 mod destinations;
 mod encrypt;
@@ -213,6 +214,7 @@ pub use combobox::AddCombo;
 pub use comments::{AddComment, CommentInfo, ReadComments};
 pub use compare::{CompareFiles, MarkDifferences};
 pub use convert::Convert;
+pub use datefield::AddDate;
 pub use destinations::ReadDestinations;
 pub use encrypt::ReadEncryption;
 pub use fieldadd::AddField;
@@ -2190,6 +2192,7 @@ craftkit_sdk::plugin_anchor!(
     AddButton,
     AddCombo,
     AddList,
+    AddDate,
     Preflight,
     ReadFonts,
     ReadTrailer,
