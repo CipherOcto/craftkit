@@ -119,7 +119,7 @@ impl CheckStyle {
 ///
 /// The tree's own `check_mark`: the shape is drawn as a path — a
 /// stroke, a filled polygon or a filled circle — and not as a glyph.
-fn the_mark(style: CheckStyle, cx: f64, cy: f64, s: f64) -> String {
+pub(crate) fn the_mark(style: CheckStyle, cx: f64, cy: f64, s: f64) -> String {
     let number = crate::watermark::number;
     // A filled polygon through the points.
     let polygon = |points: &[(f64, f64)]| {
