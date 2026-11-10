@@ -4130,6 +4130,7 @@ so.
 | the **look** of a field | **built.** The Appearance tab of the tree's own dialog is here — the border, the fill, the line, the text, the mark and the place (§750) | §750 |
 | the **appearance** of a shape | **built.** The square and the circle are drawn — the tree's colours, its width, its dashes and its opacity (§751) | §751 |
 | the **appearance** of a markup | **built.** The highlight, the underline, the strikeout and the squiggly are drawn — the tree's quads, its fractions and its multiplication (§752) | §752 |
+| the **line** of a page | **built.** A line is put on a page — the tree's two points, its arrow, its width and its rectangle (§753) | §753 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -49421,3 +49422,78 @@ the same command that draws a shape.
 - **The quads here are the quads the annotation holds**: the region
   and the text under it are §723's own work, and the drawing does
   not look at the page.
+
+---
+
+## 753. A line is put on a page
+
+The tree's **line** — two points, and an arrow at the end of it — may
+now be put on a page.
+
+### What was built
+
+- A **new command**: `pdf.annot.line.add` puts a line on a page — the
+  **page**, the **object number** the annotation has in the file, the
+  **point the line starts at**, the **point the line ends at**, and,
+  when the caller says so, the **arrow**, the **colour** and the
+  **width**.
+- The **rules** are the tree's own:
+  - the **points** are two points, and each point is two numbers, and
+    a number that is not a number is **refused**;
+  - a line **shorter than a point** is **refused**: the tree's own
+    rule, and a line a reader cannot see is not a line;
+  - the **width** of the line is the tree's own two points when
+    nothing is said, and a width below zero is the tree's own zero;
+  - the **colour** of the line is the tree's own red when nothing is
+    said, and it is three numbers between zero and one;
+  - the **rectangle** of the annotation is the **bounds** of the two
+    points, grown by half the width of the line, by the **size of the
+    arrow** when the line has one, and by one point more — the tree's
+    own rectangle, so that the line and its arrowhead are inside it;
+  - the **size of the arrow** is six points plus three times the width
+    of the line — the tree's own `arrow_size`;
+  - the **line** is the two points — the `/L` of the annotation — and
+    an **arrow** is the tree's own: the `/LE` of the annotation says
+    `None` at the start and `OpenArrow` at the end;
+  - the **border** of the line is the tree's own: the width, and the
+    style `S`.
+
+### What the port found
+
+- **The tree's line has no rectangle of its own**, and the port found
+  that the tree's rectangle is the **bounds of the two points**,
+  grown by half the width of the line, by the size of the arrow when
+  there is one, and by one point more — so that the arrowhead is
+  inside the rectangle — and so the rectangle here is the tree's and
+  is grown the same way.
+- **The tree's arrow is at one end of the line only**, and the port
+  found that the `/LE` of the annotation names **two** ends and that
+  the tree's own arrow is `None` at the start and `OpenArrow` at the
+  end: so the arrow here is the tree's, and the other end is `None`.
+- **The tree's line is red and two points wide**, and the port found
+  that these are the **defaults of the tree's tool** and not the
+  defaults of the file: so the colour and the width here are the
+  tree's own, and the caller may say otherwise.
+
+### What it cost
+
+- **Seven tests** in the PDF battery (`tests/lineadd.rs`): the line
+  that is put on the page and the page that names it, the rectangle
+  that is the bounds of the points, the arrow and the rectangle it
+  grows, the line that is too short, the point that is not two
+  numbers, the colour that is outside zero and one, and the width
+  below zero that is the tree's own zero.
+- **One new command**: the PDF battery carries **107** commands and
+  the MCP server **962**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The drawing of the line is not here**: it is the appearance
+  command's own work, and the tree draws the line when the annotation
+  is made.
+- **The tree's other shapes are not here**: the polygon, the connected
+  lines, the ink, the cloud, the caret.
+- **The line here has no name, no contents and no author**: the
+  tree's line is a tool of its editor, and the editor is not here.
