@@ -157,6 +157,7 @@ mod free;
 mod headerfooter;
 mod hidden;
 mod image;
+mod imagefield;
 mod information;
 mod intent;
 mod javascript;
@@ -227,6 +228,7 @@ pub use form::ReadForm;
 pub use format::ReadFormat;
 pub use formdata::{ExportFormData, ImportFormData};
 pub use headerfooter::{AddFooter, AddHeader};
+pub use imagefield::AddImage;
 pub use information::{ReadInformation, SetInformation};
 pub use intent::WriteIntent;
 pub use javascript::ReadScripts;
@@ -2196,6 +2198,7 @@ craftkit_sdk::plugin_anchor!(
     AddList,
     AddDate,
     AddSignature,
+    AddImage,
     Preflight,
     ReadFonts,
     ReadTrailer,
