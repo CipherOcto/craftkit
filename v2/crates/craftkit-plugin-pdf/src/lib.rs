@@ -160,6 +160,7 @@ mod hidden;
 mod image;
 mod imagefield;
 mod information;
+mod inkadd;
 mod intent;
 mod javascript;
 mod labels;
@@ -236,6 +237,7 @@ pub use formdata::{ExportFormData, ImportFormData};
 pub use headerfooter::{AddFooter, AddHeader};
 pub use imagefield::AddImage;
 pub use information::{ReadInformation, SetInformation};
+pub use inkadd::AddInk;
 pub use intent::WriteIntent;
 pub use javascript::ReadScripts;
 pub use labels::SetPageLabels;
@@ -2211,6 +2213,7 @@ craftkit_sdk::plugin_anchor!(
     AddImage,
     AddLine,
     AddPolygon,
+    AddInk,
     SetProperties,
     SetLook,
     WriteAnnotation,
