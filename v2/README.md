@@ -4162,6 +4162,7 @@ so.
 | the **advanced filter** of a sheet | **built.** A list is judged by a criteria range — the columns together, the rows one by one (§787) | §787 |
 | the **filtering in place** of the advanced filter | **built.** The rows that do not match are hidden, and the rows a filter hides are derived (§788) | §788 |
 | the **path made by hand** | **built.** A path is made out of path data or out of anchors — the tree's own two ways, its handles and the side that comes back (§789) | §789 |
+| the **curve through the points** | **built.** A path curves through a list of points — the tree's curvature tool, its circle and its tight turn (§790) | §790 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -51968,3 +51969,81 @@ their handles. Both are here now, in one command.
   fill and the line of the session's current paint, and here the path
   is filled with black, or with the colour the caller names, and it has
   no line unless another command gives it one.
+
+## 790. A path curves through the points
+
+The tree's **curvature tool** makes a path that curves through the
+points a person clicks. The curve it makes is the tree's own, and it is
+here.
+
+### What was built
+
+- The command **`vector.path.spline`** puts a **curve through the
+  points** in the document: the tree's curvature tool, as a command. The
+  points are `{x, y}` — or a pair `[x, y]`, which is the tree's own
+  second spelling — and a point may say that it is a **corner**. A curve
+  may go through at most **ten thousand points**, and one that asks for
+  more is refused by name.
+- The curve is the tree's own, and its rules are the tree's own, by
+  name:
+  - the handles of a **smooth point** follow the **circle** through the
+    point and its two neighbours, and each is between **a third and two
+    thirds** of its own chord: the tree's own rule;
+  - a turn **tighter than thirty degrees** is cut back, by the square of
+    how far it is under, so that a narrow V comes to a point instead of
+    swinging round a near-whole circle: the tree's own rule;
+  - three points **in a line** give a **straight tangent**: the tree's
+    own rule;
+  - a point with **no direction** — a chord of no length, or a fold
+    straight back on itself — is a **corner**: the tree's own rule;
+  - the **ends** of an open path take the tangent of their neighbour,
+    mirrored in the chord, so that the end leaves the chord at the angle
+    the curve meets its neighbour at: the tree's own rule;
+  - a **closed** curve needs **more than two points**: the tree's own
+    rule.
+- The command may **replace** the path it is given, as the tree's own
+  command does: with `path`, the path that is named is the path that is
+  made.
+
+### What the port found
+
+- **The tree keeps a curve's shape in its anchors and this tree keeps it
+  in its segments.** The tree's anchors carry a kind — smooth or corner
+  — and the handles of a smooth point; here a path is a run of segments,
+  and a segment says nothing about the point it leaves. So the curve's
+  smoothness is **worked out each time** from the points and it is
+  **not stored**: a curve made here is a path of curves, and nothing in
+  it says that a point was smooth.
+- **The tree's curve of one point is a path with no side, and here it is
+  refused**: a path with no side has no shape, which is §789's rule.
+- **The tree's curve may be edited point by point**, and that editing is
+  not here: the curve is made, and made whole.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/spline.rs`): fifteen
+  tests — the curve through the points, the circle and the chord, the
+  straight tangent, the tight turn, the corner, the closed curve, the
+  two points that stay a line, the tree's own numbers, and the
+  refusals.
+- **One new command**: the vector battery now carries **52** commands
+  and the MCP server **985** — one more than §789. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`spline`), and the curve's arithmetic is the
+  battery's own: two numbers and the arithmetic on them, and no new
+  dependency.
+
+### What it does not settle
+
+- **The tree's own editing of a curve is not here**: the curvature
+  tool's edits — moving a point, inserting one, extending the path,
+  closing it — are the tree's `path.curvatureEdit`, and they are not
+  here.
+- **The tree's own way of making one point smooth is not here**: the
+  tree's `path.convertAnchor` smooths a point with the same circle
+  rule, and here the circle rule is used to make a curve and nothing
+  else; `vector.path.smooth` makes a point smooth by another rule.
+- **The tree's own rubber band is not here**: the curve that is shown
+  while the points are being clicked is a thing of the interface, and
+  this tree has no interface for it.
