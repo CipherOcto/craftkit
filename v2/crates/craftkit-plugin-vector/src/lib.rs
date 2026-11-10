@@ -17,12 +17,13 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **fifty-two commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **fifty-three commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.create` makes a path out of path data or
-//!   out of anchors, and `vector.path.spline` makes one that curves
-//!   through a list of points; `vector.path.unite`,
+//!   out of anchors, `vector.path.spline` makes one that curves
+//!   through a list of points, and `vector.path.anchors.set` sets the
+//!   anchors of a path that is already there; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
 //!   `vector.path.offset` work on whole paths; `vector.path.move` and
@@ -76,6 +77,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod anchors;
 mod colour;
 mod dashes;
 mod epsexport;
@@ -89,6 +91,7 @@ mod spline;
 mod svgexport;
 mod svgimport;
 
+pub use anchors::SetAnchors;
 pub use colour::{ColourGamut, ConvertColour};
 pub use dashes::DashPath;
 pub use epsexport::ExportEps;
@@ -2814,6 +2817,7 @@ craftkit_sdk::plugin_anchor!(
     AddSpiral,
     CreatePath,
     AddSpline,
+    SetAnchors,
     UnitePaths,
     SubtractPaths,
     IntersectPaths,
