@@ -5,6 +5,12 @@
 //! whether it runs right to left. Those are **facts of the sheet**, and
 //! the tree keeps them with the sheet and saves them with the file.
 //!
+//!
+//! And a sheet says whether the **outline symbols** are drawn — the
+//! marks beside the rows and the columns that are in an outline — and
+//! whether the **formulas** are shown instead of the values they
+//! stand for. Those are the tree's own flags of a sheet.
+//!
 //! And a sheet may have **frozen panes**: the rows above a cell and
 //! the columns to the left of it stay put while the sheet scrolls.
 //! The tree's rule is the cell's own: freezing at `B2` freezes the one
@@ -30,6 +36,12 @@ pub struct SheetView {
     pub zeros: bool,
     /// Whether the sheet runs **right to left**.
     pub right_to_left: bool,
+    /// Whether the **outline symbols** are drawn: the marks beside the
+    /// rows and the columns that are in an outline.
+    pub outline_symbols: bool,
+    /// Whether the **formulas** are shown: a cell that holds a formula
+    /// shows the formula and not its value.
+    pub show_formulas: bool,
     /// The **frozen panes**: the rows above and the columns to the
     /// left of a cell.
     ///
@@ -41,7 +53,15 @@ pub struct SheetView {
 
 impl Default for SheetView {
     fn default() -> Self {
-        SheetView { gridlines: true, headings: true, zeros: true, right_to_left: false, freeze: None }
+        SheetView {
+            gridlines: true,
+            headings: true,
+            zeros: true,
+            right_to_left: false,
+            outline_symbols: true,
+            show_formulas: false,
+            freeze: None,
+        }
     }
 }
 
@@ -53,6 +73,8 @@ impl SheetView {
             "headings": self.headings,
             "zeros": self.zeros,
             "right_to_left": self.right_to_left,
+            "outline_symbols": self.outline_symbols,
+            "show_formulas": self.show_formulas,
             "freeze": match self.freeze {
                 Some((rows, cols)) => json!([rows, cols]),
                 None => json!(null),
@@ -74,6 +96,12 @@ impl SheetView {
         }
         if let Some(flag) = value.get("right_to_left").and_then(|flag| flag.as_bool()) {
             view.right_to_left = flag;
+        }
+        if let Some(flag) = value.get("outline_symbols").and_then(|flag| flag.as_bool()) {
+            view.outline_symbols = flag;
+        }
+        if let Some(flag) = value.get("show_formulas").and_then(|flag| flag.as_bool()) {
+            view.show_formulas = flag;
         }
         if let Some(freeze) = value.get("freeze").and_then(|freeze| freeze.as_array()) {
             let rows = freeze.first().and_then(|rows| rows.as_u64()).unwrap_or(0) as u32;
@@ -111,6 +139,11 @@ pub struct SetView {
     pub zeros: Option<Bool>,
     /// Whether the sheet runs right to left.
     pub right_to_left: Option<Bool>,
+    /// Whether the **outline symbols** are drawn.
+    pub outline_symbols: Option<Bool>,
+    /// Whether the **formulas** are shown: a cell that holds a formula
+    /// shows the formula and not its value.
+    pub show_formulas: Option<Bool>,
 }
 
 impl SetView {
@@ -141,6 +174,12 @@ impl SetView {
         }
         if let Some(flag) = self.right_to_left {
             view.right_to_left = flag.0;
+        }
+        if let Some(flag) = self.outline_symbols {
+            view.outline_symbols = flag.0;
+        }
+        if let Some(flag) = self.show_formulas {
+            view.show_formulas = flag.0;
         }
         let data = view.to_json();
         let Some(node) = session.document_mut()?.node_mut(sheet) else {
