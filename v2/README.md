@@ -4131,6 +4131,7 @@ so.
 | the **appearance** of a shape | **built.** The square and the circle are drawn — the tree's colours, its width, its dashes and its opacity (§751) | §751 |
 | the **appearance** of a markup | **built.** The highlight, the underline, the strikeout and the squiggly are drawn — the tree's quads, its fractions and its multiplication (§752) | §752 |
 | the **line** of a page | **built.** A line is put on a page — the tree's two points, its arrow, its width and its rectangle (§753) | §753 |
+| the **appearance** of a line | **built.** The line is drawn — the tree's two points, its width, its dashes and its arrowheads (§754) | §754 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -49497,3 +49498,77 @@ now be put on a page.
   lines, the ink, the cloud, the caret.
 - **The line here has no name, no contents and no author**: the
   tree's line is a tool of its editor, and the editor is not here.
+
+---
+
+## 754. The line is drawn
+
+The **line** — the tree's own, with its two points and its arrowheads —
+is now **drawn**.
+
+### What was built
+
+- The command **`pdf.annot.appearance.write`** now draws the **line**
+  as well as the shape and the markup, and it draws it from the
+  **dictionary of the annotation** — the two points (`/L`), the colour
+  (`/C`), the fill (`/IC`) and the ends (`/LE`) — as the tree's own
+  builder does.
+- The **rules** are the tree's own line branch, ported by name:
+  - the **two points** of the line are the `/L` of the annotation, and
+    a line without them is **refused**;
+  - a line has a **colour**, and one without a colour is **refused**;
+  - the **ends** of the line are the arrowheads, and they are the
+    `/LE` of the annotation: two of them, and each one of the tree's
+    own three — `None`, `OpenArrow` and `ClosedArrow` — and any other
+    is **refused**;
+  - the **size of an arrowhead** is six points plus three times the
+    width of the line — the tree's own `arrow_size` — and the two
+    wings of it lie at thirty degrees either side of the line that
+    arrives at the tip;
+  - the **fill** of the line is the colour of the fill when the
+    annotation says one, and the colour of the line otherwise — the
+    tree's own rule — and a **closed** arrowhead is filled with it;
+  - the line is stroked with its **width** (`/BS /W`) and its
+    **dashes** (`/BS /D`), and the round joins and the round caps are
+    the tree's own.
+
+### What the port found
+
+- **The tree's arrowhead is at one end of the line and nowhere else**,
+  and the port found that the `/LE` of the annotation names **two**
+  ends and that the tree's own arrow is `None` at the start and
+  `OpenArrow` at the end: so the drawing here draws the two ends as
+  they are named, and the line of §753 has the tree's own arrow.
+- **The tree's closed arrowhead is filled with the fill of the line**,
+  and the port found that the fill of the line is the `/IC` of the
+  annotation when it says one and the colour of the line otherwise:
+  so the drawing here sets the fill before it draws the line, and a
+  closed arrowhead is filled with it.
+- **The tree's line ends its own dashes** — the drawing says
+  `[] 0 d` after the line — so that the arrowheads are not dashed:
+  the port found that the dashes are set before the line and cleared
+  after it, and so the drawing here does the same.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/lineappearance.rs`): the
+  line that is drawn, the arrow that is drawn at the end of it, the
+  closed arrow that is filled, the line without a colour, the line
+  without its two points, and the end of the line that the tree does
+  not know.
+- **No new command**: the command that draws a shape draws the line
+  too, so the PDF battery carries **107** commands and the MCP server
+  **962** — the same count as §753. The battery is counted by the
+  source of its commands; the MCP server is counted by the tool list
+  it answers with.
+
+### What it does not settle
+
+- **The tree's other annotations are still not drawn here**: the
+  polygon, the connected lines, the cloud, the ink, the caret, the
+  stamp and the free text — the tree's own builder draws them all.
+- **The line here is drawn in the page's own space**: neither the
+  tree's line nor this one turns with the page's `/Matrix`, and that
+  is the reader's work.
+- **The tree's leader line — the arrow of a callout — is not here**:
+  it is the tree's own free text, and the free text is not drawn here.
