@@ -422,6 +422,183 @@ impl AddComment {
     }
 }
 
+/// **Change** the **author**, the **subject** and the **icon** of a
+/// comment.
+///
+/// The tree's own: the author is the `/T` of the comment, the subject
+/// is its `/Subj` and the icon is its `/Name` — and the icon may only
+/// be given to a **note**, and a comment that is **locked** is not
+/// changed at all.
+///
+/// The rules:
+///
+/// - the node must be a **comment** — an annotation that is none of a
+///   link, a widget and a popup;
+/// - a comment that is **locked** — the flag `Locked` — is
+///   **refused**;
+/// - the **icon** is one of the tree's own seven, and only a **note**
+///   — an annotation of the subtype `Text` — has one: an icon for a
+///   comment of another kind is **refused**;
+/// - an **author** or a **subject** that is empty is taken away;
+/// - when the icon changes, the **icon is drawn again** — the tree's
+///   own drawing, in the content of a form XObject of its own.
+#[derive(Command)]
+#[command(id = "pdf.comment.info", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
+pub struct CommentInfo {
+    /// The comment.
+    pub comment: NodeRef,
+    /// The author of the comment.
+    pub author: Option<Text>,
+    /// The subject of the comment.
+    pub subject: Option<Text>,
+    /// The icon of the comment: `Comment`, `Note`, `Help`, `Insert`,
+    /// `Key`, `NewParagraph` or `Paragraph`.
+    pub icon: Option<Text>,
+    /// Where the bytes of the icon are written, when the icon changes.
+    pub to: Option<Text>,
+}
+
+impl CommentInfo {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.comment.info".to_string();
+        let comment = self.comment.0;
+        let Some(node) = session.document().node(comment).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{comment}`"),
+            });
+        };
+        let entries = crate::entries_of(&node.data);
+        let subtype = entry(&entries, "Subtype").and_then(|kind| kind.as_str()).unwrap_or_default();
+        if matches!(subtype, "Link" | "Widget" | "Popup") || subtype.is_empty() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{comment}` is not a comment"),
+            });
+        }
+        // A **locked** comment is not changed.
+        if flags_of(&entries) & crate::annot::LOCKED != 0 {
+            return Err(EngineError::Failed { id: id.clone(), message: "the comment is locked".to_string() });
+        }
+        // The **icon**: only a note has one.
+        let mut icon = None;
+        if let Some(text) = &self.icon {
+            let name = text.0.trim().to_string();
+            if !ICONS.contains(&name.as_str()) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{name}` is not an icon of a note: it is one of {}", ICONS.join(", ")),
+                });
+            }
+            if subtype != "Text" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "only a note has an icon".to_string(),
+                });
+            }
+            icon = Some(name);
+        }
+        // The **author** and the **subject**.
+        let mut author = entry(&entries, "T").cloned();
+        if let Some(text) = &self.author {
+            let text = text.0.trim().to_string();
+            author = if text.is_empty() { None } else { Some(json!({ "string": text })) };
+        }
+        let mut subject = entry(&entries, "Subj").cloned();
+        if let Some(text) = &self.subject {
+            let text = text.0.trim().to_string();
+            subject = if text.is_empty() { None } else { Some(json!(text)) };
+        }
+        // The **icon**, drawn again.
+        let mut appearance = None;
+        if let Some(name) = &icon {
+            let path = match &self.to {
+                Some(path) => path.0.trim().to_string(),
+                None => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "the drawing of the icon goes somewhere".to_string(),
+                    });
+                }
+            };
+            if path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the drawing of the icon goes somewhere".to_string(),
+                });
+            }
+            let colour = match entry(&entries, "C").map(numbers_of) {
+                Some(colour) if colour.len() == 3 => [colour[0], colour[1], colour[2]],
+                _ => NOTE_COLOUR,
+            };
+            let drawing = note_icon(name, colour);
+            std::fs::write(&path, drawing.as_bytes()).map_err(|error| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the icon cannot be written: {error}"),
+            })?;
+            let number = crate::free::the_next_number(session.document(), 0);
+            let data = json!({
+                "object": number,
+                "entries": [
+                    ["Type", "XObject"],
+                    ["Subtype", "Form"],
+                    ["FormType", 1],
+                    ["BBox", [0.0, 0.0, NOTE_SIZE, NOTE_SIZE]],
+                    ["Resources", { "entries": [] }],
+                ],
+            });
+            let stream_name = format!("stream {number}");
+            let stream = session.document_mut()?.add_node_with(stream_name, "pdf.stream", None, data);
+            if let Some(node) = session.document_mut()?.node_mut(stream) {
+                node.stream = Some(path);
+            }
+            appearance = Some((number, stream));
+        }
+        // The **comment** itself.
+        if let Some(node) = session.document_mut()?.node_mut(comment) {
+            let mut entries = crate::entries_of(&node.data);
+            match &author {
+                Some(author) => match entries.iter_mut().find(|(key, _)| key == "T") {
+                    Some(entry) => entry.1 = author.clone(),
+                    None => entries.push(("T".to_string(), author.clone())),
+                },
+                None => entries.retain(|(key, _)| key != "T"),
+            }
+            match &subject {
+                Some(subject) => match entries.iter_mut().find(|(key, _)| key == "Subj") {
+                    Some(entry) => entry.1 = subject.clone(),
+                    None => entries.push(("Subj".to_string(), subject.clone())),
+                },
+                None => entries.retain(|(key, _)| key != "Subj"),
+            }
+            if let Some(name) = &icon {
+                match entries.iter_mut().find(|(key, _)| key == "Name") {
+                    Some(entry) => entry.1 = json!(name.clone()),
+                    None => entries.push(("Name".to_string(), json!(name.clone()))),
+                }
+            }
+            if let Some((number, _)) = &appearance {
+                let value = json!({ "entries": [["N", { "ref": [*number as f64, 0.0] }]] });
+                match entries.iter_mut().find(|(key, _)| key == "AP") {
+                    Some(entry) => entry.1 = value,
+                    None => entries.push(("AP".to_string(), value)),
+                }
+            }
+            node.data = json!({
+                "object": node.data.get("object").cloned().unwrap_or(Json::Null),
+                "entries": crate::pairs_of(&entries),
+            });
+        }
+        Ok(Outcome::changed(format!("the comment `{comment}` is changed")).with_data(json!({
+            "comment": comment,
+            "author": author,
+            "subject": subject,
+            "icon": icon,
+            "appearance": appearance.map(|(number, _)| number),
+        })))
+    }
+}
+
 /// **Read** the comments of a file.
 ///
 /// The tree's own: the comments are the annotations that are none of a
