@@ -135,7 +135,7 @@ fn the_chosen_option_has_its_index() {
     let outcome = session
         .execute("pdf.field.set", &json!({ "field": widget, "value": "de" }))
         .expect("the field is filled");
-    assert_eq!(outcome.data["index"], json!(1), "the index is the tree's");
+    assert_eq!(outcome.data["index"], json!([1]), "the index is the tree's");
     let node = session.document().node(widget).cloned().expect("the widget is there");
     let entries = entries_of(&node);
     assert_eq!(entry(&entries, "V"), Some(&json!({ "string": "de" })), "the value is there");
@@ -152,7 +152,7 @@ fn a_display_text_is_held_as_the_export_value() {
         .execute("pdf.field.set", &json!({ "field": widget, "value": "Germany" }))
         .expect("the field is filled");
     assert_eq!(outcome.data["value"], json!("de"), "the value is the export value");
-    assert_eq!(outcome.data["index"], json!(1), "and the index is of that option");
+    assert_eq!(outcome.data["index"], json!([1]), "and the index is of that option");
     let node = session.document().node(widget).cloned().expect("the widget is there");
     let entries = entries_of(&node);
     assert_eq!(entry(&entries, "V"), Some(&json!({ "string": "de" })), "the value is there");
@@ -192,7 +192,7 @@ fn a_free_text_in_an_editable_drop_down_is_allowed() {
         .execute("pdf.field.set", &json!({ "field": widget, "value": "Spain" }))
         .expect("the field is filled");
     assert_eq!(outcome.data["value"], json!("Spain"), "the value is what was given");
-    assert_eq!(outcome.data["index"], json!(null), "and there is no index");
+    assert_eq!(outcome.data["index"], json!([]), "and there is no index");
     let node = session.document().node(widget).cloned().expect("the widget is there");
     let entries = entries_of(&node);
     assert_eq!(entry(&entries, "I"), None, "there is no index");
