@@ -170,6 +170,7 @@ mod lineadd;
 mod listbox;
 mod loader;
 mod look;
+mod markadd;
 mod marked;
 mod marks;
 mod markup;
@@ -250,6 +251,7 @@ pub use labels::SetPageLabels;
 pub use lineadd::AddLine;
 pub use listbox::AddList;
 pub use look::SetLook;
+pub use markadd::AddMark;
 pub use marked::ReadMarked;
 pub use marks::RemoveMarks;
 pub use markup::AddMarkup;
@@ -2226,6 +2228,7 @@ craftkit_sdk::plugin_anchor!(
     AddFreeText,
     AddRedactMark,
     AddStamp,
+    AddMark,
     SetProperties,
     SetLook,
     WriteAnnotation,

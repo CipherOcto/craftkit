@@ -1,0 +1,266 @@
+//! The **mark of Fill and Sign** on a page: the tree's own check,
+//! cross, dot and line.
+
+use craftkit_sdk::serde_json::json;
+use craftkit_sdk::{Ecosystem, Session};
+
+/// The battery's **anchor**: the one name that keeps its commands
+/// linked into the program.
+#[allow(dead_code)]
+static ANCHOR: craftkit_sdk::PluginAnchor = craftkit_plugin_pdf::CRAFTKIT_PLUGIN_ANCHOR;
+
+/// The ecosystem of the PDF battery.
+fn ecosystem() -> Ecosystem {
+    Ecosystem::from_inventory().expect("the ecosystem is built")
+}
+
+/// A session over the battery's own contributions.
+fn session() -> Session {
+    let ecosystem = ecosystem();
+    Session::with_formats(
+        ecosystem.commands,
+        ecosystem.kinds,
+        ecosystem.formats,
+        ecosystem.migrations,
+        ecosystem.evaluators,
+    )
+}
+
+/// A **directory** of this test's own, so that the files do not mix.
+fn directory(name: &str) -> String {
+    let path = std::env::temp_dir().join(format!("craftkit-v2-markadd-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&path);
+    std::fs::create_dir_all(&path).expect("the directory is made");
+    path.to_string_lossy().to_string()
+}
+
+/// The **content** of the page.
+const PAGE_CONTENT: &str = "0 0 1 rg 10 10 100 100 re f\n";
+
+/// A file of PDF with a **page** on it.
+fn a_file() -> Vec<u8> {
+    let mut file: Vec<u8> = Vec::new();
+    file.extend_from_slice(b"%PDF-1.7\n");
+    let mut offsets: Vec<usize> = Vec::new();
+    let bodies: Vec<(u32, String)> = vec![
+        (1, "<< /Type /Catalog /Pages 2 0 R >>".to_string()),
+        (2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string()),
+        (
+            3,
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << >> >>"
+                .to_string(),
+        ),
+        (4, format!("<< /Length {} >>\nstream\n{PAGE_CONTENT}endstream", PAGE_CONTENT.len())),
+    ];
+    for (number, body) in &bodies {
+        offsets.push(file.len());
+        file.extend_from_slice(format!("{number} 0 obj\n{body}\nendobj\n").as_bytes());
+    }
+    let table_at = file.len();
+    file.extend_from_slice(b"xref\n0 5\n");
+    file.extend_from_slice(b"0000000000 65535 f\r\n");
+    for offset in &offsets {
+        file.extend_from_slice(format!("{offset:010} 00000 n\r\n").as_bytes());
+    }
+    file.extend_from_slice(b"trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n");
+    file.extend_from_slice(table_at.to_string().as_bytes());
+    file.extend_from_slice(b"\n%%EOF\n");
+    file
+}
+
+/// Load the file and give the **page**.
+fn a_page(session: &mut Session, directory: &str) -> u64 {
+    let path = format!("{directory}/file.pdf");
+    std::fs::write(&path, a_file()).expect("the file is written");
+    let into = format!("{directory}/streams");
+    session.execute("pdf.file.load", &json!({ "path": path, "into": into })).expect("the file is loaded");
+    session
+        .document()
+        .walk()
+        .find(|node| {
+            node.data["entries"]
+                .as_array()
+                .map(|entries| {
+                    entries.iter().any(|entry| {
+                        let Some(pair) = entry.as_array() else { return false };
+                        pair.first().and_then(|key| key.as_str()) == Some("Type")
+                            && pair.get(1).and_then(|value| value.as_str()) == Some("Page")
+                    })
+                })
+                .unwrap_or(false)
+        })
+        .map(|node| node.id)
+        .expect("the page is there")
+}
+
+/// The **entries** of the dictionary of a node.
+fn entries_of(node: &craftkit_sdk::Node) -> Vec<(String, craftkit_sdk::serde_json::Value)> {
+    node.data["entries"]
+        .as_array()
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|entry| {
+                    let pair = entry.as_array()?;
+                    Some((pair.first()?.as_str()?.to_string(), pair.get(1)?.clone()))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The **entry** of a dictionary, by its key.
+fn entry<'a>(
+    entries: &'a [(String, craftkit_sdk::serde_json::Value)],
+    key: &str,
+) -> Option<&'a craftkit_sdk::serde_json::Value> {
+    entries.iter().find(|(name, _)| name == key).map(|(_, value)| value)
+}
+
+/// **The mark is put on a page:** its name, its colour and the tree's
+/// own width.
+#[test]
+fn the_mark_is_put_on_the_page() {
+    let mut session = session();
+    let directory = directory("mark");
+    let page = a_page(&mut session, &directory);
+    let outcome = session
+        .execute(
+            "pdf.annot.mark.add",
+            &json!({
+                "page": page,
+                "object": 10,
+                "rect": [100.0, 700.0, 130.0, 730.0],
+                "mark": "check",
+            }),
+        )
+        .expect("the mark is added");
+    assert!(outcome.changed);
+    let mark = outcome.data["id"].as_u64().expect("the mark is there");
+    let node = session.document().node(mark).cloned().expect("the mark is there");
+    let entries = entries_of(&node);
+    assert_eq!(entry(&entries, "Subtype"), Some(&json!("Stamp")), "the mark is a stamp");
+    // The **tree's own** name of the check.
+    assert_eq!(entry(&entries, "Name"), Some(&json!("PCCheck")), "the name is the tree's");
+    // The **tree's own** black, and its width of one and a half points.
+    assert_eq!(entry(&entries, "C"), Some(&json!([0.0, 0.0, 0.0])), "the colour is the tree's");
+    let border = entry(&entries, "BS").expect("the mark has a border");
+    assert!(
+        border["entries"]
+            .as_array()
+            .map(|entries| entries.iter().any(|entry| entry[0] == json!("W") && entry[1] == json!(1.5)))
+            .unwrap_or(false),
+        "the width is the tree's: {border}"
+    );
+}
+
+/// **The four marks** are the tree's own, and each of them may be
+/// named.
+#[test]
+fn the_four_marks_are_the_trees_own() {
+    for (said, named) in [("check", "PCCheck"), ("cross", "PCCross"), ("dot", "PCDot"), ("line", "PCLine")] {
+        let mut session = session();
+        let directory = directory(said);
+        let page = a_page(&mut session, &directory);
+        let outcome = session
+            .execute(
+                "pdf.annot.mark.add",
+                &json!({
+                    "page": page,
+                    "object": 10,
+                    "rect": [100.0, 700.0, 130.0, 730.0],
+                    "mark": said,
+                }),
+            )
+            .expect("the mark is added");
+        let mark = outcome.data["id"].as_u64().expect("the mark is there");
+        let node = session.document().node(mark).cloned().expect("the mark is there");
+        let entries = entries_of(&node);
+        assert_eq!(entry(&entries, "Name"), Some(&json!(named)), "the name is the tree's");
+    }
+}
+
+/// **A mark that is not one of the tree's four** is refused.
+#[test]
+fn a_mark_that_is_not_known_is_refused() {
+    let mut session = session();
+    let directory = directory("unknown");
+    let page = a_page(&mut session, &directory);
+    let error = session
+        .execute(
+            "pdf.annot.mark.add",
+            &json!({
+                "page": page,
+                "object": 10,
+                "rect": [100.0, 700.0, 130.0, 730.0],
+                "mark": "swoosh",
+            }),
+        )
+        .expect_err("the mark is refused");
+    assert!(error.to_string().contains("is not a mark"), "the error says why: {error}");
+}
+
+/// **A mark that is too small** is refused.
+#[test]
+fn a_mark_that_is_too_small_is_refused() {
+    let mut session = session();
+    let directory = directory("small");
+    let page = a_page(&mut session, &directory);
+    let error = session
+        .execute(
+            "pdf.annot.mark.add",
+            &json!({
+                "page": page,
+                "object": 10,
+                "rect": [100.0, 700.0, 100.5, 700.0],
+                "mark": "dot",
+            }),
+        )
+        .expect_err("the mark is refused");
+    assert!(error.to_string().contains("a point wide"), "the error says why: {error}");
+}
+
+/// **A colour outside zero and one** is refused.
+#[test]
+fn a_colour_outside_zero_and_one_is_refused() {
+    let mut session = session();
+    let directory = directory("colour");
+    let page = a_page(&mut session, &directory);
+    let error = session
+        .execute(
+            "pdf.annot.mark.add",
+            &json!({
+                "page": page,
+                "object": 10,
+                "rect": [100.0, 700.0, 130.0, 730.0],
+                "mark": "dot",
+                "colour": [0.0, 0.0, 1.5],
+            }),
+        )
+        .expect_err("the mark is refused");
+    assert!(error.to_string().contains("between zero and one"), "the error says why: {error}");
+}
+
+/// **The caller may say another colour.**
+#[test]
+fn the_caller_may_say_another_colour() {
+    let mut session = session();
+    let directory = directory("other");
+    let page = a_page(&mut session, &directory);
+    let outcome = session
+        .execute(
+            "pdf.annot.mark.add",
+            &json!({
+                "page": page,
+                "object": 10,
+                "rect": [100.0, 700.0, 130.0, 730.0],
+                "mark": "dot",
+                "colour": [0.1, 0.2, 0.3],
+            }),
+        )
+        .expect("the mark is added");
+    let mark = outcome.data["id"].as_u64().expect("the mark is there");
+    let node = session.document().node(mark).cloned().expect("the mark is there");
+    let entries = entries_of(&node);
+    assert_eq!(entry(&entries, "C"), Some(&json!([0.1, 0.2, 0.3])), "the colour is the caller's");
+}
