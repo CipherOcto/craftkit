@@ -385,6 +385,7 @@ mod regression;
 mod removal;
 mod replacing;
 mod scaling;
+mod scenarios;
 mod sections;
 mod securities;
 mod sheetnames;
@@ -466,6 +467,7 @@ pub use reading::ReadRange;
 pub use removal::RemoveSheet;
 pub use replacing::ReplaceText;
 pub use scaling::{SetFit, SetScale};
+pub use scenarios::{AddScenario, DeleteScenario, ListScenarios, ScenarioKind, ShowScenario};
 pub use sheetnames::RenameSheet;
 pub use sheetreading::ReadSheet;
 pub use sizes::{SetColumnWidth, SetRowHeight};
@@ -1795,6 +1797,7 @@ craftkit_sdk::plugin_anchor!(
     WorkbookKind,
     SheetKind,
     ChartKind,
+    ScenarioKind,
     AddWorkbook,
     AddSheet,
     RenameSheet,
@@ -1842,6 +1845,10 @@ craftkit_sdk::plugin_anchor!(
     ReadPicture,
     RemovePicture,
     SetSparkline,
+    AddScenario,
+    ListScenarios,
+    ShowScenario,
+    DeleteScenario,
     ReadSparkline,
     RemoveSparkline,
     CreatePivot,
