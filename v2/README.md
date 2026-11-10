@@ -4133,6 +4133,7 @@ so.
 | the **line** of a page | **built.** A line is put on a page — the tree's two points, its arrow, its width and its rectangle (§753) | §753 |
 | the **appearance** of a line | **built.** The line is drawn — the tree's two points, its width, its dashes and its arrowheads (§754) | §754 |
 | the **polygon** of a page | **built.** A polygon and its connected lines are put on a page — the tree's corners, its cloud and its rectangle (§755) | §755 |
+| the **appearance** of a polygon | **built.** The polygon and its connected lines are drawn — the tree's corners, its fill and its cloudy border (§756) | §756 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -49654,3 +49655,85 @@ the same thing left open — may now be put on a page.
   of points, and they are a shape of their own.
 - **The polygon here has no name, no contents and no author**: the
   tree's polygon is a tool of its editor, and the editor is not here.
+
+---
+
+## 756. The polygon is drawn
+
+The **polygon** — and the tree's **connected lines** — is now
+**drawn**, with its **cloudy** border when the annotation says so.
+
+### What was built
+
+- The command **`pdf.annot.appearance.write`** now draws the
+  **polygon** and the **connected line** as well as the shape, the
+  markup and the line, and it draws them from the **dictionary of the
+  annotation** — the corners (`/Vertices`), the colour (`/C`), the
+  fill (`/IC`) and the border (`/BE`) — as the tree's own builder
+  does.
+- The **rules** are the tree's own polygon branch, ported by name:
+  - the **corners** of the shape are the `/Vertices` of the annotation,
+    and there are an even number of them and at least two, and a shape
+    without corners is **refused**;
+  - the **colour** of the line and the **fill** of the shape are the
+    `/C` and the `/IC` of the annotation, and a polygon may have
+    neither: the tree's own rule, and a polygon with no colour is
+    drawn with none;
+  - a **cloudy border** is the tree's own `/BE /S /C`, and it is drawn
+    as a row of **bumps** along the edges of the shape — the tree's
+    own `cloud_path` — and the **radius** of a bump is six points plus
+    one and a half times the width of the line, and the
+    **intensity** of the cloud (`/BE /I`) scales it and is between a
+    half and two;
+  - the **bumps** bulge **outwards**, and the side they bulge to is
+    the one the outline turns to: the tree's own rule, and it is the
+    sign of the area of the outline that says which way it turns;
+  - a cloudy border is a **polygon** only: the tree draws it for
+    nothing else, and one that is not a polygon is **refused**;
+  - the **ends** of a connected line are not drawn yet, and a
+    connected line with an end that is not `None` is **refused**: the
+    tree's own rule, and it refuses rather than draw half a line.
+  - a **polygon** is closed and a **connected line** is not, and the
+    line is stroked with its **width** and its **dashes**, and the
+    round joins and the round caps are the tree's own.
+
+### What the port found
+
+- **The tree's polygon may have no colour at all**, and the port found
+  that the colour of a polygon is not required the way the colour of
+  a line is: so a polygon with no colour is drawn with none, and the
+  drawing says `n` — and it is not refused.
+- **The tree's cloud needs the direction of the outline**, and the
+  port found that the bumps bulge to the **outside** of the shape and
+  that the side is the one the outline turns to — and that the tree
+  says which way it turns by the **sign of the area** of the outline:
+  so the drawing here works it out the same way.
+- **The tree's cloudy border is refused for everything but a polygon**,
+  and the port found that the tree refuses at the place the drawing
+  is made and not at the place the shape is made — so a cloudy square
+  is refused here when it is drawn, and a cloudy connected line is
+  refused twice: once when the shape is made (§755) and once when it
+  is drawn.
+
+### What it cost
+
+- **Seven tests** in the PDF battery (`tests/polygonappearance.rs`):
+  the polygon that is drawn, the polygon with a fill that is painted
+  and stroked, the connected line that is left open, the cloud and the
+  thirty four bumps of it, the cloudy square, the cloudy connected
+  line, and the polygon without its corners.
+- **No new command**: the command that draws a shape draws the
+  polygon too, so the PDF battery carries **108** commands and the MCP
+  server **963** — the same count as §755. The battery is counted by
+  the source of its commands; the MCP server is counted by the tool
+  list it answers with.
+
+### What it does not settle
+
+- **The tree's other annotations are still not drawn here**: the ink,
+  the caret, the stamp, the free text and the note — the tree's own
+  builder draws them all.
+- **The ends of a connected line are not drawn**: the tree does not
+  draw them either, and it refuses a connected line that has one.
+- **The cloud here is the tree's own bumps and not the reader's
+  cloud**: a reader that draws a cloud of its own will not see these.
