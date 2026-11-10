@@ -129,6 +129,7 @@ mod aes;
 mod annot;
 mod annotappearance;
 mod appearance;
+mod attachmentadd;
 mod attachments;
 mod background;
 mod boxes;
@@ -219,6 +220,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 pub use annot::SetAnnotationFlags;
 pub use annotappearance::WriteAnnotation;
 pub use appearance::{ReadAppearance, WriteAppearance};
+pub use attachmentadd::AddAttachment;
 pub use attachments::ReadAttachments;
 pub use background::AddBackground;
 pub use boxes::{PageBoxes, SetPageBox};
@@ -2229,6 +2231,7 @@ craftkit_sdk::plugin_anchor!(
     AddRedactMark,
     AddStamp,
     AddMark,
+    AddAttachment,
     SetProperties,
     SetLook,
     WriteAnnotation,
