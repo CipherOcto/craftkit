@@ -1,5 +1,5 @@
 //! The **appearance** of an annotation: the shape, the markup, the
-//! line and the polygon.
+//! line, the polygon and the ink.
 //!
 //! The tree's own: an annotation of the kind `Square` or `Circle` is a
 //! **shape**, and a shape is **drawn** — the border of it and the fill
@@ -10,7 +10,9 @@
 //! kind `Line` is a **line**, and a line is drawn between its two
 //! points, with its arrowheads. An annotation of the kind `Polygon` or
 //! `PolyLine` is a **shape of corners**, and it is drawn through them
-//! — with a **cloudy** border when the annotation says so.
+//! — with a **cloudy** border when the annotation says so. An
+//! annotation of the kind `Ink` is a **hand**, and it is drawn through
+//! the points of its strokes.
 //!
 //! The rules of the tree, ported by name:
 //!
@@ -87,6 +89,14 @@
 //!   nothing else, and one that is not a polygon is refused;
 //! - the **ends** of a connected line are not drawn yet, and a
 //!   connected line with an end that is not `None` is refused.
+//!
+//! The **ink** is the tree's own ink, and its rules are:
+//!
+//! - the **strokes** are the `/InkList` of the annotation, a list of
+//!   lists of numbers, and each stroke is drawn on its own;
+//! - the ink has a **colour**, and one without a colour is refused;
+//! - a stroke of **one point** is a dot, and the tree draws it as the
+//!   point and a hair along it, so that a reader shows a mark.
 
 use craftkit_derive::Command;
 
@@ -653,8 +663,51 @@ fn the_polygon(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
     Some((out.into_bytes(), rect))
 }
 
-/// The **drawing** of an annotation: the shape, the markup, the line or
-/// the polygon.
+/// The **drawing** of the **ink**: the tree's own ink.
+///
+/// The strokes are the `/InkList` of the annotation, and each stroke
+/// is drawn on its own.
+fn the_ink(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
+    let rect = numbers_of(entry(entries, "Rect")?);
+    if rect.len() != 4 {
+        return None;
+    }
+    let rect = [rect[0].min(rect[2]), rect[1].min(rect[3]), rect[0].max(rect[2]), rect[1].max(rect[3])];
+    // The ink has a **colour**, and one without a colour is refused.
+    let colour = the_colour(entry(entries, "C")?).ok().flatten()?;
+    // The **strokes**: a list of lists of numbers.
+    let list = entry(entries, "InkList")?.as_array()?.clone();
+    let width = the_width(entries);
+    let number = crate::watermark::number;
+    let mut out = String::new();
+    out.push_str(&format!(
+        "{} {} {} RG\n{} w 1 J 1 j\n",
+        number(colour[0]),
+        number(colour[1]),
+        number(colour[2]),
+        number(width)
+    ));
+    for stroke in &list {
+        let points = numbers_of(stroke);
+        let points: Vec<(f64, f64)> =
+            points.as_chunks::<2>().0.iter().map(|point| (point[0], point[1])).collect();
+        let Some(first) = points.first() else { continue };
+        out.push_str(&format!("{} {} m\n", number(first.0), number(first.1)));
+        if points.len() == 1 {
+            // A stroke of one point is a dot: the tree draws it as a
+            // point and a hair along.
+            out.push_str(&format!("{} {} l\n", number(first.0 + 0.01), number(first.1)));
+        }
+        for point in &points[1..] {
+            out.push_str(&format!("{} {} l\n", number(point.0), number(point.1)));
+        }
+        out.push_str("S\n");
+    }
+    Some((out.into_bytes(), rect))
+}
+
+/// The **drawing** of an annotation: the shape, the markup, the line,
+/// the polygon or the ink.
 fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f64; 4])> {
     // A **cloudy border** is the tree's own, and the tree draws it for
     // a polygon and for nothing else.
@@ -667,6 +720,8 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
         the_line(entries)
     } else if subtype == "Polygon" || subtype == "PolyLine" {
         the_polygon(entries, subtype)
+    } else if subtype == "Ink" {
+        the_ink(entries)
     } else {
         the_shape(entries, subtype)
     }
@@ -682,9 +737,9 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
 ///
 /// - the annotation must be one this command draws — a **shape**
 ///   (`Square` or `Circle`), a **markup** (`Highlight`, `Underline`,
-///   `StrikeOut` or `Squiggly`), a **line** (`Line`) or a **shape of
-///   corners** (`Polygon` or `PolyLine`) — and any other kind is
-///   refused;
+///   `StrikeOut` or `Squiggly`), a **line** (`Line`), a **shape of
+///   corners** (`Polygon` or `PolyLine`) or the **ink** (`Ink`) — and
+///   any other kind is refused;
 /// - the **rectangle** of the shape is the one the annotation holds,
 ///   and the corners may come in any order;
 /// - a **colour** is one number, three numbers or four numbers, and
@@ -697,6 +752,8 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
 ///   the tree knows;
 /// - a polygon needs its **corners**, and a cloudy border is a polygon
 ///   only;
+/// - the ink needs its **strokes** and its **colour**, and one without
+///   either is refused;
 /// - a **highlight multiplies** over the text, the tree's own rule,
 ///   and the file says so with the blend mode.
 #[derive(Command)]
@@ -725,6 +782,7 @@ impl WriteAnnotation {
             || subtype == "Line"
             || subtype == "Polygon"
             || subtype == "PolyLine"
+            || subtype == "Ink"
             || MARKS.contains(&subtype.as_str());
         if !drawn {
             return Err(EngineError::Failed {
