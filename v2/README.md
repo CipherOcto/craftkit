@@ -4175,6 +4175,7 @@ so.
 | the **rule of a smooth point** | **built.** A point is made smooth by the tree's own rule — the circle through the point and its neighbours (§794) | §794 |
 | the **points** in the middle of the sides | **built.** Every side of a path gets a point in its middle, and the sides keep their shape (§795) | §795 |
 | the **erasing** of a path | **built.** The parts of a path under a drag are taken away, and the stretches that survive are the path as it was (§796) | §796 |
+| the **cutting** of a closed shape | **built.** A closed shape is cut along a run of points, and a slit is left between the pieces (§797) | §797 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52440,3 +52441,66 @@ stretch of the path as it was.
   away.
 - **The tree's own eraser works on the selected paths**: here the
   command names the path it works on.
+
+## 797. A closed shape is cut along a run of points
+
+The tree's **Knife** cuts closed shapes along the line the knife makes,
+and leaves a **slit** between the pieces — a gap of a width of its own,
+so that the pieces do not touch.
+
+### What was built
+
+- The command **`vector.path.knife`** cuts a closed shape along a run of
+  points: the tree's Knife, as a command. The run is a list of points,
+  `[[x, y], …]`, and the pieces may be **named**.
+- The rules are the tree's own:
+  - the knife needs **two points**: the tree's own rule;
+  - the **slit** is the run stroked with a width of its own — a
+    **fiftieth of a point** — so that the pieces are apart and the slit
+    is not seen: the tree's own rule;
+  - the slit is stroked with **butt** ends and **round** joins: the
+    tree's own rule;
+  - the shape is cut by **difference** against the slit, and the pieces
+    are the **parts** of what is left: the tree's own rule;
+  - only **closed shapes** are cut: an open path has no inside, and
+    there is nothing to cut it into: the tree's own rule.
+- A cut shape becomes **one path per piece** — the first keeps the node,
+  and the others are new nodes beside it — the rule of §792 and §796
+  too.
+- The pieces keep the **rule** of the shape they were cut from: a path
+  with the even-odd rule does not become a path with the other one.
+
+### What the port found
+
+- **The tree's knife works on the selection and this one names the
+  path.** The tree's knife cuts every closed shape under the drag; here
+  the command says which path it cuts, as the tree's other commands do.
+- **The tree's knife skips an open path and this one refuses it.** The
+  tree goes on to the next selected path, and an open shape is simply
+  not one of the things a knife cuts; here the command names one path,
+  so an open path has nothing to say and is refused by name.
+- **A knife that does not cut is not a change.** The tree answers with
+  an empty list of ids; here the outcome says that nothing changed and
+  the shape is as it was.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/knife.rs`): nine
+  tests — the shape cut in two, the pieces as nodes of their own, the
+  slit between the pieces, the knife that misses, the open path, the run
+  with one point, the run that is not a list, the point with no numbers
+  in it, and the name of a piece.
+- **One new command**: the vector battery now carries **58** commands
+  and the MCP server **991** — one more than §796. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`knife`), and the cut of a shape is the shape's
+  own boolean against the slit.
+
+### What it does not settle
+
+- **The tree's other knives are not here**: the straight cut, the
+  rectangular cut and the cut mirrored in the shape's own axes are three
+  other cuts, and only the free-hand knife is here.
+- **The tree's knife cuts a whole selection at once**: here one path is
+  cut by one run.
