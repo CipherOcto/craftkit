@@ -4139,6 +4139,7 @@ so.
 | the **caret** of a page | **built.** The caret is put on a page — the tree's rectangle, its colour and its symbol (§759) | §759 |
 | the **appearance** of the caret | **built.** The caret is drawn — the tree's wedge and its blue (§760) | §760 |
 | the **text box** of a page | **built.** The free text is put on a page — the tree's text, its appearance and its alignment (§761) | §761 |
+| the **appearance** of the text box | **built.** The text box is drawn — the tree's Helvetica, its wrapping and its border (§762) | §762 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -50069,3 +50070,87 @@ inside a rectangle — may now be put on a page.
   with a leader.
 - **The tree's typewriter is not here**: the free text that is typed
   onto the page and marked with the tree's own intent.
+
+---
+
+## 762. The text box is drawn
+
+The **text box** — the tree's own **free text** — is now **drawn**:
+its text, set in the tree's Helvetica, inside its box.
+
+### What was built
+
+- The command **`pdf.annot.appearance.write`** now draws the **text
+  box** as well as the shape, the markup, the line, the polygon, the
+  ink and the caret, and it draws it from the **dictionary of the
+  annotation** — the text (`/Contents`), the appearance of the text
+  (`/DA`), the background (`/C`), the border (`/BS`) and the
+  alignment (`/Q`) — as the tree's own builder does.
+- The **rules** are the tree's own free text branch, ported by name:
+  - the **colour of the text** and the **size of it** are the tree's
+    own `parse_da`: the three numbers before an `rg` of the `/DA` are
+    the colour, the number before a `g` is a grey, and the number
+    before a `Tf` is the size — and the colour is the tree's own
+    bounds of zero and one and the size its own four hundred;
+  - the **text** of the box is the `/Contents` of the annotation, and
+    it is **wrapped** at the width of the box, and a word that does
+    not fit on a line of its own is left long — the tree's own rule;
+  - the text is **clipped** to the box, and it sits two points inside
+    it — four, when the box has a border — and the first line is a
+    tenth of the size of the font below the top of the box;
+  - the **alignment** is the tree's own three: left, centre and
+    right, and the text is placed by the width of the line it is on;
+  - the **background** of the box is filled over it, and the **border**
+    of it is stroked inside it, and the dashes of the border end
+    after it — the tree's own rules;
+  - the **font** of the text is the tree's own Helvetica, and it is in
+    the **resources** of the drawing under the name the `/DA` uses.
+
+### What the port found
+
+- **The tree's text box writes its contents as a text string and not
+  as a name**, and the port found that the payload of this tree spells
+  a text string as `{"string": "…"}` and a name as the text itself —
+  and that the two commands of §759 and §761 wrote the contents of
+  the annotation as a name: so both write it as a text string now,
+  and the text of the box is read back as one.
+- **The tree's text is measured with the tree's own Helvetica**, and
+  the port found that the tree measures the text to wrap it and to
+  centre it and to put it on the right — and that the widths of the
+  characters are not the same: a `c` is five hundred units and an `f`
+  is three hundred and thirty three — so that a line of `f`s is
+  shorter than a line of `c`s: so the text here is measured with the
+  tree's own table, as the tree measures it.
+- **The tree's box has no border unless one is asked for**, and the
+  port found that the tree's builder reads the width of the border
+  only when the annotation says anything about a border at all — so
+  that a box with no `/BS` has no border even when the annotation has
+  a colour: so the border here is the tree's, and a box without a
+  border has none.
+
+### What it cost
+
+- **Seven tests** in the PDF battery (`tests/freetextappearance.rs`):
+  the text box that is drawn, the font that is in the resources, the
+  background that is filled, the border that is stroked, the text that
+  is centred, the text that is wrapped, and the text box without its
+  rectangle.
+- **No new command**: the command that draws a shape draws the text
+  box too, so the PDF battery carries **111** commands and the MCP
+  server **966** — the same count as §761. The battery is counted by
+  the source of its commands; the MCP server is counted by the tool
+  list it answers with.
+- **Two commands now write a text string as a text string**: the
+  caret of §759 and the text box of §761 wrote the contents of the
+  annotation as a name, and the file says it is a string.
+
+### What it does not settle
+
+- **The tree's callout is not drawn here**: the leader line of it and
+  the `/CL` and the `/RD` that say where it is — the drawing of the
+  callout is the tree's own, and it is not here.
+- **The tree's typewriter is not drawn here**: the free text that is
+  typed onto the page and marked with the tree's own intent.
+- **The text here is set in the tree's Helvetica only**, and the
+  tree's own text box is set in Helvetica too: a box with another
+  font in it is not the tree's box.
