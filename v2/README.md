@@ -4177,6 +4177,7 @@ so.
 | the **erasing** of a path | **built.** The parts of a path under a drag are taken away, and the stretches that survive are the path as it was (§796) | §796 |
 | the **cutting** of a closed shape | **built.** A closed shape is cut along a run of points, and a slit is left between the pieces (§797) | §797 |
 | the **splitting** of a shape along a line | **built.** A closed shape is split along a line that goes on for ever, and a hole travels with the shape it is in (§798) | §798 |
+| the **cropping** of a shape to a rectangle | **built.** A closed shape is cut to a rectangle — four numbers or two corners — and a shape wholly outside it is taken away (§799) | §799 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52571,3 +52572,65 @@ the shape that is on it.
   the half that is kept, are two other cuts.
 - **The tree's line cut cuts every selected shape at once**: here one
   path is cut by one line.
+
+## 799. A shape is cut to a rectangle
+
+The tree's **Rectangle Cut** crops the shapes it is given to a
+rectangle: the part of the shape that is **inside** the rectangle is
+kept, and the part that is outside is taken away.
+
+### What was built
+
+- The command **`vector.path.cut.rect`** cuts a closed shape to a
+  rectangle: the tree's Rectangle Cut, as a command. The rectangle is
+  `[x, y, width, height]` or **two corners**, and the shape that is
+  left may be **named**.
+- The rules are the tree's own:
+  - the rectangle is **four numbers** or **two corners**, and one
+    malformed number is no rectangle at all: the tree's own rule;
+  - the rectangle must have a **width and a height**: the tree's own
+    rule;
+  - the numbers must be **within the bound** — ten million on either
+    axis, the tree's own bound: the tree's own rule;
+  - a shape that is **wholly inside** the rectangle is left as it was:
+    the tree's own rule;
+  - a shape that is **wholly outside** it is **taken away whole**:
+    the tree's own rule;
+  - what is left is the shape **cropped** to the rectangle, and the
+    shape keeps its **holes**: the tree's own rule.
+
+### What the port found
+
+- **The tree's rectangle cut trims an open path too, and this one
+  refuses it.** The tree erases the parts of an open path outside the
+  rectangle; here the command names one path, and a closed shape is
+  what it cuts, so an open path is refused by name. The knife's rule
+  (§797) and the line cut's rule (§798) are the same.
+- **The tree's rectangle cut works on the selection and this one names
+  the path.**
+- **A shape that is taken away is a node that is removed.** The tree
+  deletes the art that is wholly outside the rectangle; here the named
+  path is removed from the document, and the outcome says which node
+  went.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/rectcut.rs`): nine
+  tests — the shape cut to the rectangle, the shape wholly inside, the
+  shape wholly outside, the two corners, the rectangle with three
+  numbers, the rectangle with no width, the rectangle beyond the
+  bound, the rectangle that is not there, and the open path.
+- **One new command**: the vector battery now carries **60** commands
+  and the MCP server **993** — one more than §798. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`rectcut`), and the crop of a shape is the
+  shape's own boolean against the rectangle.
+
+### What it does not settle
+
+- **The tree's mirror and cut is not here**: the shape is mirrored in
+  an axis, the half that is kept is joined to the mirror of the other
+  half, and the result is one closed shape.
+- **The tree's rectangle cut crops every selected shape at once**: here
+  one path is cut by one rectangle.
