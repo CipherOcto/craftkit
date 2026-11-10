@@ -4149,6 +4149,7 @@ so.
 | the **file attachment** of a page | **built.** The attachment is put on a page — the tree's box, its icon and its file (§769) | §769 |
 | the **appearance** of the attachment | **built.** The pin and the tree's other three icons are drawn (§770) | §770 |
 | the **callout** of a page | **built.** The callout is put on a page — the tree's box, its knee, its point and its leader (§771) | §771 |
+| the **appearance** of the callout | **built.** The leader, its open arrowhead and the text box of it are drawn (§772) | §772 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -50804,5 +50805,67 @@ The **callout** — the tree's own **free text with a leader** — is now
   appearance command already knows the `/CL` and the `/RD` of a
   callout — but nothing in the tree yet proves that a callout this
   command makes is drawn.
+- **The tree's own stamp of a typed signature is not here**: the
+  outline of a signature that a person typed.
+
+---
+
+## 772. The callout is drawn
+
+The **callout** — the tree's own **free text with a leader** — is now
+**drawn**: the leader line, the arrowhead at its end and the text box
+of the text.
+
+### What was built
+
+- **No new command**: the command that draws an annotation —
+  **`pdf.annot.appearance.write`** — draws the callout too, and it
+  draws it from the **dictionary of the annotation**: the leader
+  (`/CL`), the inset of the box (`/RD`) and the end of the leader
+  (`/LE`) — as the tree's own builder does.
+- The **rules** are the tree's own, ported by name:
+  - the **leader** is the three points of the `/CL`, drawn as one
+    path — the point, the knee and the place where it meets the box —
+    and it is stroked with the width of the border of the annotation;
+  - the **arrowhead** is drawn at the **point** the leader starts at,
+    with its two wings at thirty degrees either side of the line that
+    arrives there, and it is **open**: the tree's own `/LE`;
+  - the **box** the text is in is inside the rectangle of the
+    annotation by the `/RD` — the tree's own inset — and the text is
+    clipped to it;
+  - a **box** that is smaller than a point is **refused**: the tree's
+    own rule.
+
+### What the port found
+
+- **The tree's drawing of a callout is the drawing of a free text with
+  a leader in front of it**, and the port found that the tree does not
+  draw a callout by another route at all: the leader is part of the
+  free text's own drawing, and the box it draws afterwards is the box
+  the `/RD` says — so the port did not need a drawing of its own and
+  the work here is a **test** of the drawing that was already there.
+- **The rectangle the answer gives is the rectangle of the annotation**
+  — the box and the leader together — and not the box the text is in,
+  because the drawing is the whole of the annotation: so the box of
+  the text is inside the answer, and not the answer itself.
+
+### What it cost
+
+- **Four tests** in the PDF battery (`tests/calloutappearance.rs`):
+  the leader, the box and the text that are drawn, the arrowhead that
+  is open and at the point, the border of the box, and a callout
+  without its inset that cannot be drawn.
+- **No new command**: the PDF battery still carries **116** commands
+  and the MCP server **971** — the same counts as §771. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+
+### What it does not settle
+
+- **Every annotation of the tree's builder is drawn here now**: the
+  shape, the markup, the line, the polygon, the ink, the caret, the
+  text box, the mark of a redaction, the stamp, the marks of Fill and
+  Sign, the attachment and the callout — and the tree's own typed
+  signature is the one that is not.
 - **The tree's own stamp of a typed signature is not here**: the
   outline of a signature that a person typed.
