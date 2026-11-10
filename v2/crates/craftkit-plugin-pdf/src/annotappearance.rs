@@ -1245,9 +1245,51 @@ fn the_stamp(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
     Some((out.into_bytes(), rect))
 }
 
+/// The **drawing** of a **file attachment**: the tree's own icons.
+///
+/// The icon is drawn in a box of twenty points, whatever the
+/// rectangle of the annotation is.
+fn the_attachment(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
+    let numbers = numbers_of(entry(entries, "Rect")?);
+    if numbers.len() != 4 {
+        return None;
+    }
+    // The **colour** of the attachment: the tree's own blue when the
+    // annotation says none.
+    let colour = match entry(entries, "C") {
+        Some(value) => the_colour(value).ok().flatten()?,
+        None => [0.0, 0.47, 0.84],
+    };
+    // The **icon**: the tree's own four, and the pin when the
+    // annotation says none.
+    let icon = entry(entries, "Name").and_then(|name| name.as_str()).unwrap_or("PushPin").to_string();
+    let number = crate::watermark::number;
+    let mut out = String::new();
+    out.push_str(&format!(
+        "{} {} {} rg\n{} {} {} RG\n1.2 w 1 j 1 J\n",
+        number(colour[0]),
+        number(colour[1]),
+        number(colour[2]),
+        number(colour[0]),
+        number(colour[1]),
+        number(colour[2])
+    ));
+    match icon.as_str() {
+        "Paperclip" => out.push_str("8 4 m 8 15 l 8 18 13 18 13 15 c 13 6 l 13 3 10 3 10 6 c 10 14 l S\n"),
+        "Graph" => out.push_str("3 3 m 3 17 l 3 3 m 17 3 l S\n5 3 3 6 re 9 3 3 10 re 13 3 3 13 re f\n"),
+        "Tag" => out.push_str(
+            "3 10 m 8 15 l 17 15 l 17 5 l 8 5 l h S\n7.3 10 m 7.3 10.7 6.7 11.3 6 11.3 c 5.3 11.3 4.7 10.7 4.7 10 c 4.7 9.3 5.3 8.7 6 8.7 c 6.7 8.7 7.3 9.3 7.3 10 c f\n",
+        ),
+        _ => out.push_str(
+            "10 2 m 10 9 l S\n6 9 m 14 9 l 14 11 l 12 12 l 12 16 l 13.5 17 l 13.5 18.5 l 6.5 18.5 l 6.5 17 l 8 16 l 8 12 l 6 11 l h f\n",
+        ),
+    }
+    Some((out.into_bytes(), [0.0, 0.0, 20.0, 20.0]))
+}
+
 /// The **drawing** of an annotation: the shape, the markup, the line,
-/// the polygon, the ink, the caret, the text box, the mark or the
-/// stamp.
+/// the polygon, the ink, the caret, the text box, the mark, the stamp
+/// or the attachment.
 fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f64; 4])> {
     // A **cloudy border** is the tree's own, and the tree draws it for
     // a polygon and for nothing else.
@@ -1270,6 +1312,8 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
         the_redact(entries)
     } else if subtype == "Stamp" {
         the_stamp(entries)
+    } else if subtype == "FileAttachment" {
+        the_attachment(entries)
     } else {
         the_shape(entries, subtype)
     }
@@ -1340,6 +1384,7 @@ impl WriteAnnotation {
             || subtype == "FreeText"
             || subtype == "Redact"
             || subtype == "Stamp"
+            || subtype == "FileAttachment"
             || MARKS.contains(&subtype.as_str());
         if !drawn {
             return Err(EngineError::Failed {
