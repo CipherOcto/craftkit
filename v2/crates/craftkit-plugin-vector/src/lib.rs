@@ -74,6 +74,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod colour;
 mod dashes;
 mod epsexport;
 mod gradients;
@@ -84,6 +85,7 @@ mod shapes;
 mod svgexport;
 mod svgimport;
 
+pub use colour::{ColourGamut, ConvertColour};
 pub use dashes::DashPath;
 pub use epsexport::ExportEps;
 pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
@@ -2824,7 +2826,9 @@ craftkit_sdk::plugin_anchor!(
     AveragePoints,
     CornerPoint,
     VectorPanel,
-    TotalAreaEvaluator
+    TotalAreaEvaluator,
+    ConvertColour,
+    ColourGamut
 );
 
 #[cfg(test)]
