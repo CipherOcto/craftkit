@@ -4157,6 +4157,7 @@ so.
 | the **embedded file** of a document | **built.** The file a file carries is named in the catalog's tree of names, and the reader finds it (§777) | §777 |
 | the **marks** of a sequence | **built.** The program in and out of a sequence are set, and one that crosses the other takes it away (§783) | §783 |
 | the **playhead** at the marks | **built.** The playhead goes to the mark in or the mark out, and to the start or the end when there is none (§784) | §784 |
+| the **outline symbols** of a sheet | **built.** The sheet's view carries the tree's own outline-symbols and formulas flags (§785) | §785 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -51632,3 +51633,59 @@ a sequence — the tree's own **go to the in** and **go to the out**.
 - **The tree's split points are not here**: the tree takes the split of
   the video and the split of the audio away when a mark is set, and
   this tree has no split points.
+
+---
+
+## 785. The sheet says whether the outline symbols and the formulas are shown
+
+The **view** of a sheet now carries the tree's own **outline symbols**
+and **formulas** flags.
+
+### What was built
+
+- The command **`grid.sheet.view`** now takes two more flags: whether
+  the **outline symbols** are drawn, and whether the **formulas** are
+  shown instead of the values they stand for.
+- The **rules** are the tree's own, ported by name:
+  - the **outline symbols** are the marks beside the rows and the
+    columns that are in an outline, and a new sheet **draws** them: the
+    tree's own default;
+  - the **formulas** are **not** shown by default, and a sheet that
+    shows them shows the formula of a cell and not its value: the
+    tree's own default;
+  - a flag that is **not named** keeps its value: the tree's own rule.
+
+### What the port found
+
+- **The tree's outline symbols and formulas are facts of the sheet**,
+  and the port found that the tree keeps them beside the gridlines and
+  the headings — `show_outline_symbols` and `show_formulas` — and that
+  they are saved with the sheet and not with the window that happens
+  to be open: so here they are in the sheet's own view, and they are
+  saved with the sheet.
+- **The tree's formulas flag is a toggle of the active sheet**, and
+  the port found that the tree's own command takes no sheet at all and
+  works on the sheet that is open: here every command names the sheet
+  it works on, so the flag is set on the sheet the caller says — which
+  is the rule this tree follows everywhere else.
+
+### What it cost
+
+- **Five tests** in the grid battery (`tests/viewflags.rs`): the
+  flags of a new sheet, the outline symbols that are taken away and
+  put back, the formulas that are shown, a flag that is not named, and
+  the answer that says what the view is.
+- **No new command**: the command that sets the view of a sheet takes
+  the flags now, so the grid battery still carries **152** commands and
+  the MCP server **978** — the same counts as §784. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+
+### What it does not settle
+
+- **The tree's own show of the objects is not here**: the tree may
+  hide the objects of a sheet — the drawings on it — and this tree's
+  sheets have no objects.
+- **The tree's own print flags are not here**: the tree says whether
+  the gridlines and the headings are printed, and this tree has no
+  printing of its own.
