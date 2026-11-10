@@ -14,6 +14,9 @@
 //!   appearance** is written on the **field**;
 //! - the **colours** are the three numbers of a colour, and the
 //!   **width of the line** is the tree's own bound;
+//! - a colour of **none** is a colour that is **taken away**: the
+//!   tree's own rule, and the border or the background of a field may
+//!   be taken away as well as set;
 //! - the **style of the line** is one of the tree's own five: the
 //!   solid one, the dashed one, the beveled one, the inset one and the
 //!   underline;
@@ -180,6 +183,26 @@ fn dictionary_of(value: &Json) -> Vec<(String, Json)> {
         .collect()
 }
 
+/// What the caller says about a **colour**: nothing at all, a colour,
+/// or **none** — the tree's own spelling for taking the colour away.
+enum TheColour {
+    /// The caller said nothing: the colour stays as it is.
+    Unchanged,
+    /// The caller named a colour.
+    Set([f64; 3]),
+    /// The caller said **none**: the colour is taken away.
+    None,
+}
+
+/// The **colour** the caller says of: the tree's own rule — a colour
+/// of "none" is a colour that is **removed**.
+fn the_colour_of(value: &serde_json::Value) -> Result<TheColour, EngineError> {
+    if value.as_str() == Some("none") {
+        return Ok(TheColour::None);
+    }
+    Ok(TheColour::Set(the_colour(value)?))
+}
+
 /// A **colour**: the three numbers of it.
 ///
 /// The numbers come from outside, so they are read and checked: a
@@ -286,9 +309,9 @@ fn the_da_string(font: &str, size: f64, colour: [f64; 3]) -> String {
 pub struct SetLook {
     /// The field.
     pub field: NodeRef,
-    /// The **colour of the border**.
+    /// The **colour of the border**. Say `none` to take it away.
     pub border: Option<serde_json::Value>,
-    /// The **colour of the background**.
+    /// The **colour of the background**. Say `none` to take it away.
     pub fill: Option<serde_json::Value>,
     /// The **width of the line**, in points.
     pub width: Option<Number>,
@@ -330,14 +353,15 @@ impl SetLook {
                 message: "the field is locked: unlock it first".to_string(),
             });
         }
-        // The **colours**.
+        // The **colours**. The border and the background may be taken
+        // away: the tree's own rule, and a colour of "none" is that.
         let border = match &self.border {
-            Some(value) => Some(the_colour(value)?),
-            None => None,
+            Some(value) => the_colour_of(value)?,
+            None => TheColour::Unchanged,
         };
         let fill = match &self.fill {
-            Some(value) => Some(the_colour(value)?),
-            None => None,
+            Some(value) => the_colour_of(value)?,
+            None => TheColour::Unchanged,
         };
         let text_colour = match &self.text_colour {
             Some(value) => Some(the_colour(value)?),
@@ -464,16 +488,25 @@ impl SetLook {
                 entries_of(widget_node)
             };
             // The **colours**: the border and the background.
-            if border.is_some() || fill.is_some() || check_style.is_some() {
+            if !matches!(border, TheColour::Unchanged)
+                || !matches!(fill, TheColour::Unchanged)
+                || check_style.is_some()
+            {
                 let mut mark = match entry(&widget_entries, "MK") {
                     Some(value) => dictionary_of(value),
                     None => Vec::new(),
                 };
-                if let Some(border) = border {
-                    put(&mut mark, "BC", json!(border));
+                // A colour of **none** is taken away: the tree's own
+                // rule.
+                match border {
+                    TheColour::Set(border) => put(&mut mark, "BC", json!(border)),
+                    TheColour::None => mark.retain(|(key, _)| key != "BC"),
+                    TheColour::Unchanged => {}
                 }
-                if let Some(fill) = fill {
-                    put(&mut mark, "BG", json!(fill));
+                match fill {
+                    TheColour::Set(fill) => put(&mut mark, "BG", json!(fill)),
+                    TheColour::None => mark.retain(|(key, _)| key != "BG"),
+                    TheColour::Unchanged => {}
                 }
                 if let Some(style) = check_style {
                     put(&mut mark, "CA", json!({ "string": style.code() }));
@@ -545,10 +578,15 @@ impl SetLook {
         if let Some(node) = session.document_mut()?.node_mut(field) {
             node.data = data;
         }
+        let held = |colour: &TheColour| match colour {
+            TheColour::Set(colour) => json!(colour),
+            TheColour::None => json!("none"),
+            TheColour::Unchanged => Json::Null,
+        };
         Ok(Outcome::changed(format!("the field `{field}` has its look")).with_data(json!({
             "field": field,
-            "border": border,
-            "fill": fill,
+            "border": held(&border),
+            "fill": held(&fill),
             "width": width,
             "style": style.map(|style| style.label()),
             "text_colour": text_colour,
