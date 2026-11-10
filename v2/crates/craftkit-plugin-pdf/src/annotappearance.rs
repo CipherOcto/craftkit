@@ -1,11 +1,14 @@
-//! The **appearance** of an annotation: the shape and the markup.
+//! The **appearance** of an annotation: the shape, the markup and the
+//! line.
 //!
 //! The tree's own: an annotation of the kind `Square` or `Circle` is a
 //! **shape**, and a shape is **drawn** — the border of it and the fill
 //! of it — and the drawing is an appearance, a form XObject that the
 //! reader shows where the annotation is. An annotation of the kind
 //! `Highlight`, `Underline`, `StrikeOut` or `Squiggly` is a **markup**,
-//! and a markup is drawn over the text it covers.
+//! and a markup is drawn over the text it covers. An annotation of the
+//! kind `Line` is a **line**, and a line is drawn between its two
+//! points, with its arrowheads.
 //!
 //! The rules of the tree, ported by name:
 //!
@@ -48,6 +51,22 @@
 //!   and never less than half a point and never more than two, and
 //!   the rise of each step is six percent of the height of the text
 //!   and never less than three quarters of a point.
+//!
+//! The **line** is the tree's own line, and its rules are:
+//!
+//! - the **two points** of the line are the `/L` of the annotation,
+//!   and a line without them is refused;
+//! - a line has a **colour**, and one without a colour is refused;
+//! - the **ends** of the line are the arrowheads, and they are the
+//!   `/LE` of the annotation: two of them, and each one of the tree's
+//!   own three — `None`, `OpenArrow` and `ClosedArrow` — and any other
+//!   is refused;
+//! - the **size of an arrowhead** is six points plus three times the
+//!   width of the line, and the two wings of it lie at thirty degrees
+//!   either side of the line;
+//! - the **fill** of the line is the colour of the fill when the
+//!   annotation says one, and the colour of the line otherwise, and a
+//!   **closed** arrowhead is filled with it.
 
 use craftkit_derive::Command;
 
@@ -362,9 +381,120 @@ fn the_markup(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f6
     Some((out.into_bytes(), rect))
 }
 
-/// The **drawing** of an annotation: the shape or the markup.
+/// The **size of an arrowhead** for a line of the width `w`: the tree's
+/// own `arrow_size`.
+fn the_arrow_size(width: f64) -> f64 {
+    6.0 + 3.0 * width.max(0.0)
+}
+
+/// The **end of a line**: the tree's own `line_end`.
+///
+/// The arrowhead is drawn at the `tip`, and its two wings lie at
+/// thirty degrees either side of the line that arrives at the tip.
+fn the_line_end(out: &mut String, kind: &str, tip: (f64, f64), from: (f64, f64), width: f64) {
+    if kind == "None" {
+        return;
+    }
+    let (dx, dy) = (from.0 - tip.0, from.1 - tip.1);
+    let length = dx.hypot(dy);
+    if length == 0.0 {
+        return;
+    }
+    let (ux, uy) = (dx / length, dy / length);
+    let size = the_arrow_size(width);
+    let (cos, sin) = (30f64.to_radians().cos(), 30f64.to_radians().sin());
+    let a = (tip.0 + size * (ux * cos - uy * sin), tip.1 + size * (ux * sin + uy * cos));
+    let b = (tip.0 + size * (ux * cos + uy * sin), tip.1 + size * (-ux * sin + uy * cos));
+    let number = crate::watermark::number;
+    let paint = if kind == "ClosedArrow" { "h B" } else { "S" };
+    out.push_str(&format!(
+        "{} {} m {} {} l {} {} l {paint}\n",
+        number(a.0),
+        number(a.1),
+        number(tip.0),
+        number(tip.1),
+        number(b.0),
+        number(b.1)
+    ));
+}
+
+/// The **drawing** of a **line**: the tree's own line.
+///
+/// The two points of the line are the `/L` of the annotation, and the
+/// ends of the line — the arrowheads — are the `/LE` of it.
+fn the_line(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
+    let rect = numbers_of(entry(entries, "Rect")?);
+    if rect.len() != 4 {
+        return None;
+    }
+    let rect = [rect[0].min(rect[2]), rect[1].min(rect[3]), rect[0].max(rect[2]), rect[1].max(rect[3])];
+    // The **two points** of the line.
+    let points = numbers_of(entry(entries, "L")?);
+    if points.len() != 4 {
+        return None;
+    }
+    // A line has a **colour**, and one without a colour is refused.
+    let colour = the_colour(entry(entries, "C")?).ok().flatten()?;
+    // The **ends** of the line: the arrowheads. Two of them, and each
+    // one of the tree's own three.
+    let ends: Vec<String> = match entry(entries, "LE") {
+        None => vec!["None".to_string(), "None".to_string()],
+        Some(value) => {
+            let list = value.as_array()?;
+            let mut ends = Vec::new();
+            for end in list {
+                ends.push(end.as_str()?.to_string());
+            }
+            ends
+        }
+    };
+    if ends.len() != 2 || ends.iter().any(|end| !matches!(end.as_str(), "None" | "OpenArrow" | "ClosedArrow"))
+    {
+        return None;
+    }
+    // The **fill** of the line: the colour of the fill when the
+    // annotation says one, and the colour of the line otherwise — the
+    // tree's own rule, and a closed arrowhead is filled with it.
+    let fill = match entry(entries, "IC") {
+        Some(value) => the_colour(value).ok().flatten()?,
+        None => colour,
+    };
+    let width = the_width(entries);
+    let number = crate::watermark::number;
+    let mut out = String::new();
+    out.push_str(&format!(
+        "{} {} {} RG\n{} {} {} rg\n{} w 1 J 1 j\n{}",
+        number(colour[0]),
+        number(colour[1]),
+        number(colour[2]),
+        number(fill[0]),
+        number(fill[1]),
+        number(fill[2]),
+        number(width),
+        the_dash(entries)
+    ));
+    out.push_str(&format!(
+        "{} {} m {} {} l S\n[] 0 d\n",
+        number(points[0]),
+        number(points[1]),
+        number(points[2]),
+        number(points[3])
+    ));
+    // The **arrowheads**: one at each end of the line.
+    the_line_end(&mut out, &ends[0], (points[0], points[1]), (points[2], points[3]), width);
+    the_line_end(&mut out, &ends[1], (points[2], points[3]), (points[0], points[1]), width);
+    Some((out.into_bytes(), rect))
+}
+
+/// The **drawing** of an annotation: the shape, the markup or the line.
 fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f64; 4])> {
-    if MARKS.contains(&subtype) { the_markup(entries, subtype) } else { the_shape(entries, subtype) }
+    if MARKS.contains(&subtype) {
+        the_markup(entries, subtype)
+    } else if subtype == "Line" {
+        the_line(entries)
+    } else {
+        the_shape(entries, subtype)
+    }
 }
 
 /// **Write** the **appearance** of an annotation.
@@ -376,9 +506,9 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
 /// The rules:
 ///
 /// - the annotation must be one this command draws — a **shape**
-///   (`Square` or `Circle`) or a **markup** (`Highlight`,
-///   `Underline`, `StrikeOut` or `Squiggly`) — and any other kind is
-///   refused;
+///   (`Square` or `Circle`), a **markup** (`Highlight`, `Underline`,
+///   `StrikeOut` or `Squiggly`) or a **line** (`Line`) — and any other
+///   kind is refused;
 /// - the **rectangle** of the shape is the one the annotation holds,
 ///   and the corners may come in any order;
 /// - a **colour** is one number, three numbers or four numbers, and
@@ -386,6 +516,9 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
 /// - the **opacity** of the shape is between zero and one;
 /// - a markup needs its **quads** and its **colour**, and one without
 ///   either is refused;
+/// - a line needs its **two points** and its **colour**, and one
+///   without either is refused, and the **ends** of it are the three
+///   the tree knows;
 /// - a **highlight multiplies** over the text, the tree's own rule,
 ///   and the file says so with the blend mode.
 #[derive(Command)]
@@ -409,7 +542,11 @@ impl WriteAnnotation {
         let entries = entries_of(&node);
         let subtype =
             entry(&entries, "Subtype").and_then(|subtype| subtype.as_str()).unwrap_or_default().to_string();
-        if subtype != "Square" && subtype != "Circle" && !MARKS.contains(&subtype.as_str()) {
+        if subtype != "Square"
+            && subtype != "Circle"
+            && subtype != "Line"
+            && !MARKS.contains(&subtype.as_str())
+        {
             return Err(EngineError::Failed {
                 id: COMMAND.to_string(),
                 message: format!("the appearance of an annotation of the kind `{subtype}` is not drawn here"),
