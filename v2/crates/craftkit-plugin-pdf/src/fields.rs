@@ -223,16 +223,26 @@ fn entry<'a>(entries: &'a [(String, Json)], key: &str) -> Option<&'a Json> {
 /// An option is either a text, or a pair — the value and the text
 /// that is shown for it.
 fn options_of(value: &Json) -> Vec<String> {
+    the_options_of(value).into_iter().map(|(export, _)| export).collect()
+}
+
+/// The **options** of a choice: the **export value** and the **display
+/// text** of each of them.
+///
+/// The tree's own: an option is a text, or a pair of the export value
+/// and the display text — and an option that is a text is its own
+/// export value and its own display text.
+fn the_options_of(value: &Json) -> Vec<(String, String)> {
     let Some(list) = value.as_array() else { return Vec::new() };
-    let mut options: Vec<String> = Vec::new();
+    let mut options: Vec<(String, String)> = Vec::new();
     for option in list {
         if let Some(text) = text_of(option) {
-            options.push(text);
+            options.push((text.clone(), text));
         } else if let Some(pair) = option.as_array()
-            && let Some(first) = pair.first()
-            && let Some(text) = text_of(first)
+            && let Some(export) = pair.first().and_then(text_of)
         {
-            options.push(text);
+            let display = pair.get(1).and_then(text_of).unwrap_or_else(|| export.clone());
+            options.push((export, display));
         }
     }
     options
@@ -565,6 +575,15 @@ impl ReadFields {
 }
 
 /// **Fill** a field of a form.
+///
+/// The tree's own rules for a **choice**:
+///
+/// - the caller may give the **export value** or the **display text**,
+///   and the field holds the export value;
+/// - the **index** of the option that is chosen is written — the
+///   tree's own `/I` — and it is taken away when nothing is chosen;
+/// - a **free text** is allowed in a drop-down that may be edited, and
+///   in a choice that has no options at all: the tree's own rule.
 #[derive(Command)]
 #[command(id = "pdf.field.set", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
 pub struct SetField {
@@ -593,22 +612,48 @@ impl SetField {
             });
         };
         let value = self.value.0.clone();
+        let mut entries = entries_of(&node);
+        // The **index** of the option that is chosen: the tree's own
+        // `/I`.
+        let mut chosen: Option<usize> = None;
+        // The **value** the field holds: for a choice it is the
+        // **export value** of the option, and the caller may give the
+        // export value or the display text — the tree's own rule.
+        let mut held = value.clone();
         // The value must be one the field **can hold**.
         match found.kind {
             FieldKind::Text => {}
             FieldKind::Choice => {
-                if !value.is_empty() && !found.options.contains(&value) {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!(
-                            "`{value}` is not one of the options of the field: the options are {}",
-                            if found.options.is_empty() {
-                                "none".to_string()
-                            } else {
-                                found.options.join(", ")
+                let options = match entry(&entries, "Opt") {
+                    Some(options) => the_options_of(options),
+                    None => Vec::new(),
+                };
+                if !value.is_empty() {
+                    match options.iter().position(|(export, display)| *export == value || *display == value) {
+                        Some(index) => {
+                            chosen = Some(index);
+                            held = options[index].0.clone();
+                        }
+                        None => {
+                            // The tree's own rule: a free text is
+                            // allowed in a drop-down that may be edited,
+                            // and in a choice that has no options at all.
+                            let editable = (found.flags as i64) & crate::combobox::EDIT != 0;
+                            if !editable && !options.is_empty() {
+                                return Err(EngineError::Failed {
+                                    id: id.clone(),
+                                    message: format!(
+                                        "`{value}` is not one of the options of the field: the options are {}",
+                                        options
+                                            .iter()
+                                            .map(|(export, _)| export.clone())
+                                            .collect::<Vec<_>>()
+                                            .join(", ")
+                                    ),
+                                });
                             }
-                        ),
-                    });
+                        }
+                    }
                 }
             }
             FieldKind::Signature => {}
@@ -656,22 +701,34 @@ impl SetField {
                 }
             }
         }
-        let mut entries = entries_of(&node);
         if value.is_empty() {
-            // An **empty** value takes the value away.
-            entries.retain(|(key, _)| key != "V");
+            // An **empty** value takes the value away — and the index
+            // of the option with it: the tree's own rule.
+            entries.retain(|(key, _)| key != "V" && key != "I");
         } else {
             // The value of a **button** is a **name** — the state it is
             // in — and the value of every other field is a text.
             let value_json = if found.kind == FieldKind::Button {
                 json!(value.clone())
             } else {
-                json!({ "string": value.clone() })
+                json!({ "string": held.clone() })
             };
             match entries.iter_mut().find(|(key, _)| key == "V") {
                 Some(entry) => entry.1 = value_json,
                 None => entries.push(("V".to_string(), value_json)),
             }
+        }
+        // The **index** of the option that is chosen: the tree's own
+        // `/I`, and it is taken away when nothing is chosen.
+        match chosen {
+            Some(index) => {
+                let index = json!([index]);
+                match entries.iter_mut().find(|(key, _)| key == "I") {
+                    Some(entry) => entry.1 = index,
+                    None => entries.push(("I".to_string(), index)),
+                }
+            }
+            None => entries.retain(|(key, _)| key != "I"),
         }
         let data = json!({
             "object": node.data.get("object").cloned().unwrap_or(Json::Null),
@@ -684,8 +741,8 @@ impl SetField {
             });
         };
         node.data = data;
-        Ok(Outcome::changed(format!("the field `{field}` holds `{value}`"))
-            .with_data(json!({ "field": field, "value": value })))
+        Ok(Outcome::changed(format!("the field `{field}` holds `{held}`"))
+            .with_data(json!({ "field": field, "value": held, "index": chosen })))
     }
 }
 
