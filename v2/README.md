@@ -4160,6 +4160,7 @@ so.
 | the **outline symbols** of a sheet | **built.** The sheet's view carries the tree's own outline-symbols and formulas flags (§785) | §785 |
 | the **scenarios** of a workbook | **built.** The tree's what-if scenarios are added, listed, shown and taken away (§786) | §786 |
 | the **advanced filter** of a sheet | **built.** A list is judged by a criteria range — the columns together, the rows one by one (§787) | §787 |
+| the **filtering in place** of the advanced filter | **built.** The rows that do not match are hidden, and the rows a filter hides are derived (§788) | §788 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -51797,11 +51798,13 @@ finds the rows that match.
   function reads the same text as "**is**" — two rules in one tree —
   so here the advanced filter has the tree's advanced-filter rule and
   not the rule of the counting function, and the test says so.
-- **The tree's rows are counted from one and this tree's from zero**,
-  and the port found that the tree's own rows are one-based while
-  this tree's rows are zero-based everywhere — so the answer of the
-  command gives this tree's numbers, and the test says which row is
-  which.
+- **The tree's rows are counted from one and so are this tree's**, and
+  the port found that the tree's own rows are one-based and that the
+  rows of a filter in this tree are one-based too — so the answer of
+  the command gives one-based rows, and the test says which row is
+  which. (§788 corrected this note: the first version of this command
+  counted the rows from zero, and the rows of a filter are counted
+  from one.)
 
 ### What it cost
 
@@ -51824,3 +51827,63 @@ finds the rows that match.
 - **The tree's computed criteria are not here**: the tree may put a
   formula in a criteria cell and judge the row by what it computes,
   and here such a cell is **refused**.
+
+---
+
+## 788. The advanced filter filters in place
+
+The **advanced filter** now does what the tree's own does when no
+range is named: it **hides the rows that do not match** — and the rows
+a filter hides are **derived**.
+
+### What was built
+
+- The command **`grid.filter.advanced`** now **sets the filter** on the
+  sheet when the caller names no range to copy the rows to: the tree's
+  own filtering in place.
+- The **rules** are the tree's own, ported by name:
+  - the **rows** that do not match are hidden, and the **headings** of
+    the list and the rows outside the list are **not** hidden: the
+    tree's own rule;
+  - the rows a filter hides are **derived**: they are worked out from
+    the cells each time they are asked for, and they are not written
+    down — and so the rows of the advanced filter are the rows
+    `grid.filter.rows` reports, and the rows a **subtotal** leaves out
+    whatever its function number: the tree's own rule;
+  - the advanced filter is the **filter of the sheet** when it is
+    there, and a sheet has one filter: the tree's own rule.
+
+### What the port found
+
+- **The tree's rows are counted from one**, and the port found that
+  the first version of this command counted the rows of the list from
+  zero — while the rows of a filter in this tree are counted from one
+  — so the command now counts them from one, and §787's note about
+  the counting is **corrected in place**.
+- **The tree's advanced filter is the filter of the sheet**, and the
+  port found that the tree's own sheet has one filter and that the
+  advanced filter is it: so here the advanced filter is read into the
+  book of formulas beside the simple filter, and it takes its place
+  when it is there — and the tree's own `SUBTOTAL` rule, that the rows
+  a filter hides are left out whatever the function number, holds for
+  it as well.
+
+### What it cost
+
+- **One more test** in the grid battery (`tests/advancedfilter.rs`):
+  the rows that do not match are hidden, and they are hidden by the
+  sheet's own filter — the nine tests of §787 and this one.
+- **No new command**: the command that filters a list filters it in
+  place, so the grid battery still carries **157** commands and the MCP
+  server **983** — the same counts as §787. The battery is counted by
+  the source of its commands; the MCP server is counted by the tool
+  list it answers with.
+
+### What it does not settle
+
+- **The tree's computed criteria are not here**: the tree may put a
+  formula in a criteria cell and judge the row by what it computes,
+  and here such a cell is **refused**.
+- **The tree's own summary of the scenarios is not here**: the tree
+  writes a sheet that says what every scenario does to the book, and
+  that is a trial of the book as well as a sheet of its own.
