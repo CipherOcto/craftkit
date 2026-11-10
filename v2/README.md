@@ -4115,6 +4115,7 @@ so.
 | a **note** on a page | **built.** A sticky note is put on a page — the tree's icons, its rectangle, its popup and its drawing (§735) | §735 |
 | the **author** of a comment | **built.** The author, the subject and the icon of a comment are changed — the tree's lock, its note and its drawing (§736) | §736 |
 | the **layout** of a caption | **built.** A caption is laid out on a frame — the tree's scale, its wrapping, its anchor and its outline (§737) | §737 |
+| the **burn-in** of a caption | **built.** A caption is drawn into a frame and written as a picture — the tree's background, its outline and its letters (§738) | §738 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -48304,6 +48305,72 @@ a frame of a given size.
   the frame, and this tree says where it goes and does not paint it —
   the burn-in needs a raster of the letters, and the kit's face is a
   stroke face and not a filled one.
+- **The speaker of a caption is not burnt in**: the tree keeps the
+  speaker in the metadata of the cue and does not draw it, and this
+  tree says nothing about it.
+
+---
+
+## 738. A caption is burnt into the frame
+
+A **caption** may now be **burnt in**: drawn into a frame, and written
+as a picture.
+
+### What was built
+
+- A **new command**: `film.caption.burn` burns a caption into a frame —
+  the **text** of it, the caption **track** that holds the style, the
+  **width** and the **height** of the frame, the **settings** of the
+  cue and **where the picture is written**.
+- The **rules** are the tree's own:
+  - the **layout** is the tree's own — the size of the letters is
+    relative to a frame of a thousand and eighty lines, the lines are
+    wrapped at ninety per cent of the width of the frame, and the block
+    of them hangs from the anchor of the style;
+  - the **background** of the style is the box of each line — the line
+    and the padding around it — and it is drawn under the letters;
+  - the **outline** of the style is under the letters and over the
+    background;
+  - the **letters** are the colour of the style;
+  - the picture is a **PNG**, and it is written where the caller says;
+  - a frame that holds more pixels than the kit's own bound is
+    **refused**, and so is a caption with no words.
+
+### What the port found
+
+- **The tree fills the letters of its font**, and the port found that
+  the tree's face is a **filled** face — it draws the shape of a letter
+  and not its middle line — and that this tree's face is a **stroke**
+  face: it has the middle line of every stroke of a letter and not
+  its shape. So the letters of this tree are **drawn as strokes** — a
+  tenth of the size of the letters wide — and the outline is a wider
+  stroke of the same letters beneath them, where the tree widens the
+  filled letters themselves.
+- **The tree composes in linear light**, and the port found that the
+  tree's picture holds premultiplied samples of a linear light, and
+  that the kit's picture holds the bytes of a picture in the space of
+  the screen — so the colours of this tree are mixed in the space of
+  the screen, and not in the space of the light.
+
+### What it cost
+
+- **Five tests** in the film battery (`tests/captionburn.rs`): the
+  caption that is burnt and the picture that is written, the letters
+  that are where the layout says, the background that is under them,
+  the caption with no words that is refused, and the frame that is too
+  big that is refused.
+- **One new command**: the film battery carries **107** commands and
+  the MCP server **949**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The letters are strokes and not shapes**: the caption of this tree
+  looks like the kit's face, and not like the tree's.
+- **The picture holds the caption alone**: the tree burns the caption
+  into the picture of the frame — the video, the image — and this
+  tree draws it on a frame that holds nothing else.
 - **The speaker of a caption is not burnt in**: the tree keeps the
   speaker in the metadata of the cue and does not draw it, and this
   tree says nothing about it.
