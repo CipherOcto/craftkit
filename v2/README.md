@@ -4145,6 +4145,7 @@ so.
 | the **stamp** of a page | **built.** The stamp is put on a page — the tree's twenty two kinds, its colours and its line (§765) | §765 |
 | the **appearance** of the stamp | **built.** The stamp is drawn — the tree's tag, its frame and its label (§766) | §766 |
 | the **mark** of Fill and Sign | **built.** The check, the cross, the dot and the line are put on a page — the tree's own four (§767) | §767 |
+| the **appearance** of the mark | **built.** The check, the cross, the dot and the line are drawn — the tree's own four (§768) | §768 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -50517,3 +50518,73 @@ the **dot** and the **line** — may now be put on a page.
   which the tree draws as an ink.
 - **The mark here is a stamp of its own and not a signature**: a form
   signed by a person is not the same thing as a mark put on a page.
+
+---
+
+## 768. The mark of Fill and Sign is drawn
+
+The **marks of Fill and Sign** — the **check**, the **cross**, the
+**dot** and the **line** — are now **drawn**.
+
+### What was built
+
+- The command **`pdf.annot.appearance.write`** now draws the **marks
+  of Fill and Sign** as well as the shape, the markup, the line, the
+  polygon, the ink, the caret, the text box, the mark of a redaction
+  and the stamp, and it draws them from the **dictionary of the
+  annotation** — the name (`/Name`), the colour (`/C`) and the
+  rectangle (`/Rect`) — as the tree's own builder does.
+- The **rules** are the tree's own marks, ported by name:
+  - the **check** is a mark of **three points**: a fifteenth of the
+    width along and half the height down, then two fifths of the width
+    along and a fifth of the height up, and then to the top of the
+    mark: the tree's own proportions;
+  - the **cross** is **two lines** that cross, and each of them is an
+    eighth of the way in: the tree's own;
+  - the **dot** is a **filled circle**, and its radius is three tenths
+    of the smaller of the two sides of the rectangle: the tree's own;
+  - the **line** is a line across the **middle** of the rectangle, and
+    it is as wide as the height of it and never more than two points:
+    the tree's own;
+  - the **width of the line** of the check, the cross and the dot is
+    a twelfth of the smaller of the two sides: the tree's own;
+  - the **colour** of a mark is the `/C` of the annotation, and the
+    tree's own black when the annotation says none: the tree's own
+    rule.
+
+### What the port found
+
+- **The tree's marks are drawn by the stamp branch and not by a
+  branch of their own**, and the port found that the tree's builder
+  knows the four marks by their names and draws them before it looks
+  at the twenty two stamps — and that the mark and the stamp are the
+  same kind of annotation: so the drawing here knows the four marks
+  first and the twenty two stamps after it, as the tree does.
+- **The tree's line of a mark is a twelfth of the smaller side and
+  not a fixed width**, and the port found that the check, the cross
+  and the dot share one width and that the line has its own — the
+  height of the rectangle, and never more than two points: so the
+  widths here are the tree's, and a mark that is small is drawn with
+  a thin line.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/markappearance.rs`): the
+  check that is drawn, the cross that is drawn, the dot that is
+  drawn, the line that is drawn, the mark without a colour that is
+  the tree's black, and the mark with a name that is not known.
+- **No new command**: the command that draws a shape draws the marks
+  too, so the PDF battery carries **114** commands and the MCP server
+  **969** — the same count as §767. The battery is counted by the
+  source of its commands; the MCP server is counted by the tool list
+  it answers with.
+
+### What it does not settle
+
+- **The tree's own signature is not drawn here**: the strokes of a
+  hand, which the tree draws as an ink and which this tree draws as
+  an ink too — but a signature is not a mark.
+- **The tree's file attachment is still not drawn here**: the last
+  annotation of the tree's builder that is not here.
+- **The mark here is drawn in the page's own space**, and it does not
+  turn with the page's `/Matrix`: that is the reader's work.
