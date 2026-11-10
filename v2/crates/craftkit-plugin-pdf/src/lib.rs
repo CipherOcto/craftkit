@@ -143,6 +143,7 @@ mod fdf;
 mod fields;
 mod figures;
 mod filters;
+mod flatten;
 mod fonts;
 mod form;
 mod format;
@@ -206,6 +207,7 @@ pub use destinations::ReadDestinations;
 pub use encrypt::ReadEncryption;
 pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField, SetFlags, SetParent};
 pub use figures::{ReadFigures, SetFigureAlt};
+pub use flatten::FlattenForm;
 pub use fonts::ReadFonts;
 pub use form::ReadForm;
 pub use format::ReadFormat;
@@ -2179,6 +2181,7 @@ craftkit_sdk::plugin_anchor!(
     AddWatermark,
     AddBackground,
     RemoveMarks,
+    FlattenForm,
     AddHeader,
     AddFooter,
     ReadInherited,

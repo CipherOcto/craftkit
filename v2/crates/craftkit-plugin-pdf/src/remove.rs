@@ -160,7 +160,10 @@ struct Holder {
 /// A value that **is** a reference to the number loses its key, and a
 /// value that is a **list** loses the elements that name the number —
 /// and the key too, when the list is empty afterwards.
-fn without(entries: &[(String, serde_json::Value)], number: u64) -> Vec<(String, serde_json::Value)> {
+pub(crate) fn without(
+    entries: &[(String, serde_json::Value)],
+    number: u64,
+) -> Vec<(String, serde_json::Value)> {
     let mut kept: Vec<(String, serde_json::Value)> = Vec::with_capacity(entries.len());
     for (key, value) in entries {
         if names(value, number) {
