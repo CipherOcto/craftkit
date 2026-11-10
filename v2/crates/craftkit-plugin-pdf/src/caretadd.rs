@@ -146,7 +146,7 @@ impl AddCaret {
             ("P".to_string(), json!({ "ref": [page_number, 0] })),
         ];
         if let Some(contents) = &self.contents {
-            entries.push(("Contents".to_string(), json!(contents.0)));
+            entries.push(("Contents".to_string(), json!({ "string": contents.0 })));
         }
         let data = json!({ "object": number, "entries": entries });
         let name = format!("annotation {number}");

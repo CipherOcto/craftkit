@@ -258,7 +258,7 @@ pub(crate) fn ensure_form(session: &mut Session) -> Result<TheForm, EngineError>
 ///
 /// The tree's own rule: the text is broken at the spaces, and a word
 /// that does not fit on a line of its own is left long.
-fn wrap(text: &str, size: f64, width: f64) -> Vec<String> {
+pub(crate) fn wrap(text: &str, size: f64, width: f64) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     for paragraph in text.split('\n') {
         let mut line = String::new();

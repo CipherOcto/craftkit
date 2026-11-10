@@ -139,7 +139,7 @@ fn a_text_box_is_put_on_the_page() {
     let node = session.document().node(box_of).cloned().expect("the text box is there");
     let entries = entries_of(&node);
     assert_eq!(entry(&entries, "Subtype"), Some(&json!("FreeText")), "the box is free text");
-    assert_eq!(entry(&entries, "Contents"), Some(&json!("a note")), "the text is there");
+    assert_eq!(entry(&entries, "Contents"), Some(&json!({ "string": "a note" })), "the text is there");
     // The **appearance of the text** is the tree's own string.
     assert_eq!(
         entry(&entries, "DA"),

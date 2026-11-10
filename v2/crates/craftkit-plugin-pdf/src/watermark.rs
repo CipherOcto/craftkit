@@ -85,6 +85,53 @@ pub(crate) fn literal(text: &str) -> String {
     out
 }
 
+/// The **bytes** of a text in WinAnsiEncoding: the tree's own
+/// `win_ansi`.
+///
+/// The characters that WinAnsi has are the ones of ISO 32000-2
+/// Annex D, and a character that it does not have becomes a question
+/// mark.
+pub(crate) fn win_ansi(text: &str) -> Vec<u8> {
+    text.chars()
+        .map(|character| match character {
+            '\u{20}'..='\u{7e}' => character as u8,
+            '\u{a0}'..='\u{ff}' => character as u32 as u8,
+            '\u{20ac}' => 0x80,
+            '\u{201a}' => 0x82,
+            '\u{201e}' => 0x84,
+            '\u{2026}' => 0x85,
+            '\u{2018}' => 0x91,
+            '\u{2019}' => 0x92,
+            '\u{201c}' => 0x93,
+            '\u{201d}' => 0x94,
+            '\u{2022}' => 0x95,
+            '\u{2013}' => 0x96,
+            '\u{2014}' => 0x97,
+            '\u{2122}' => 0x99,
+            '\t' => b' ',
+            _ => b'?',
+        })
+        .collect()
+}
+
+/// The **bytes** of a line, as PostScript writes it: a literal string.
+pub(crate) fn literal_bytes(bytes: &[u8]) -> String {
+    let mut out = String::from("(");
+    for byte in bytes {
+        match byte {
+            b'(' | b')' | b'\\' => {
+                out.push('\\');
+                out.push(*byte as char);
+            }
+            b'\r' => out.push_str("\\r"),
+            b'\n' => out.push_str("\\n"),
+            other => out.push(*other as char),
+        }
+    }
+    out.push(')');
+    out
+}
+
 /// The **box** of the page: the media box, or the crop box when the
 /// page has one.
 pub(crate) fn box_of(page: &craftkit_sdk::Node) -> [f64; 4] {

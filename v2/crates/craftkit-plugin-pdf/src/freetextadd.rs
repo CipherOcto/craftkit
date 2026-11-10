@@ -231,7 +231,7 @@ impl AddFreeText {
             ("Type".to_string(), json!("Annot")),
             ("Subtype".to_string(), json!("FreeText")),
             ("Rect".to_string(), json!(rect)),
-            ("Contents".to_string(), json!(self.contents.0)),
+            ("Contents".to_string(), json!({ "string": self.contents.0 })),
             ("DA".to_string(), json!(appearance)),
             ("Q".to_string(), json!(align)),
             ("P".to_string(), json!({ "ref": [page_number, 0] })),

@@ -763,8 +763,188 @@ fn the_caret(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
     Some((out.into_bytes(), rect))
 }
 
+/// The **appearance of the text** of a text box: the tree's own
+/// `parse_da`.
+///
+/// The `/DA` of the annotation holds the colour of the text and the
+/// size of it in one string, and the tree reads the string: the three
+/// numbers before an `rg` are the colour, the number before a `g` is
+/// a grey, and the number before a `Tf` is the size.
+fn the_da(value: Option<&Json>) -> ([f64; 3], f64) {
+    let text = value.and_then(crate::fields::text_of).unwrap_or_default();
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let mut colour = [0.0; 3];
+    let mut size = 12.0;
+    let number = |index: usize| tokens.get(index).and_then(|token| token.parse::<f64>().ok());
+    for (index, token) in tokens.iter().enumerate() {
+        match *token {
+            "rg" if index >= 3 => {
+                if let (Some(red), Some(green), Some(blue)) =
+                    (number(index - 3), number(index - 2), number(index - 1))
+                {
+                    colour = [red, green, blue];
+                }
+            }
+            "g" if index >= 1 => {
+                if let Some(grey) = number(index - 1) {
+                    colour = [grey; 3];
+                }
+            }
+            "Tf" if index >= 1 => {
+                if let Some(size_of_text) = number(index - 1).filter(|size| *size > 0.0) {
+                    size = size_of_text;
+                }
+            }
+            _ => {}
+        }
+    }
+    (colour.map(|value| value.clamp(0.0, 1.0)), size.min(400.0))
+}
+
+/// The **drawing** of a **text box**: the tree's own free text.
+///
+/// The text of the box is the `/Contents` of the annotation, and the
+/// colour of it and the size of it are the `/DA` of it.
+fn the_freetext(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
+    let numbers = numbers_of(entry(entries, "Rect")?);
+    if numbers.len() != 4 {
+        return None;
+    }
+    let full = [
+        numbers[0].min(numbers[2]),
+        numbers[1].min(numbers[3]),
+        numbers[0].max(numbers[2]),
+        numbers[1].max(numbers[3]),
+    ];
+    // The **colour of the text** and the **size of it**: the tree's
+    // own string.
+    let (colour, size) = the_da(entry(entries, "DA"));
+    // The **background** of the box.
+    let background = match entry(entries, "C") {
+        Some(value) => Some(the_colour(value).ok().flatten()?),
+        None => None,
+    };
+    // The **width of the border**: the tree's own zero when the
+    // annotation says nothing about a border.
+    let border = if entry(entries, "BS").is_some() || entry(entries, "Border").is_some() {
+        the_width(entries)
+    } else {
+        0.0
+    };
+    let number = crate::watermark::number;
+    let mut rect = full;
+    let mut out = String::new();
+    // The **leader line** of a callout: the `/CL` of the annotation,
+    // and the box is inside the `/RD` of it.
+    if let Some(value) = entry(entries, "CL") {
+        let points = numbers_of(value);
+        if points.len() != 4 && points.len() != 6 {
+            return None;
+        }
+        let inset = numbers_of(entry(entries, "RD")?);
+        if inset.len() != 4 || inset.iter().any(|number| *number < 0.0) {
+            return None;
+        }
+        rect = [full[0] + inset[0], full[1] + inset[1], full[2] - inset[2], full[3] - inset[3]];
+        if rect[2] - rect[0] < 1.0 || rect[3] - rect[1] < 1.0 {
+            return None;
+        }
+        let end = match entry(entries, "LE") {
+            None => "None".to_string(),
+            Some(value) => value.as_str()?.to_string(),
+        };
+        if !matches!(end.as_str(), "None" | "OpenArrow" | "ClosedArrow") {
+            return None;
+        }
+        let line_width = border.max(0.5);
+        let fill = background.unwrap_or([1.0; 3]);
+        out.push_str(&format!(
+            "{} {} {} RG\n{} {} {} rg\n{} w 1 J 1 j\n",
+            number(colour[0]),
+            number(colour[1]),
+            number(colour[2]),
+            number(fill[0]),
+            number(fill[1]),
+            number(fill[2]),
+            number(line_width)
+        ));
+        for (index, point) in points.as_chunks::<2>().0.iter().enumerate() {
+            out.push_str(&format!(
+                "{} {} {}\n",
+                number(point[0]),
+                number(point[1]),
+                if index == 0 { "m" } else { "l" }
+            ));
+        }
+        out.push_str("S\n");
+        the_line_end(&mut out, &end, (points[0], points[1]), (points[2], points[3]), line_width);
+    }
+    // The **background** of the box.
+    if let Some(background) = background {
+        out.push_str(&format!(
+            "{} {} {} rg\n{} {} {} {} re f\n",
+            number(background[0]),
+            number(background[1]),
+            number(background[2]),
+            number(rect[0]),
+            number(rect[1]),
+            number(rect[2] - rect[0]),
+            number(rect[3] - rect[1])
+        ));
+    }
+    // The **border** of the box, inside it.
+    if border > 0.0 {
+        let half = border / 2.0;
+        out.push_str(&format!(
+            "{} {} {} RG\n{} w\n{} {} {} {} re S\n[] 0 d\n",
+            number(colour[0]),
+            number(colour[1]),
+            number(colour[2]),
+            number(border),
+            number(rect[0] + half),
+            number(rect[1] + half),
+            number(rect[2] - rect[0] - border),
+            number(rect[3] - rect[1] - border)
+        ));
+    }
+    // The **text** of the box.
+    let text = entry(entries, "Contents").and_then(crate::fields::text_of).unwrap_or_default();
+    let pad = 2.0 + border;
+    let width = (rect[2] - rect[0] - 2.0 * pad).max(1.0);
+    let align = entry(entries, "Q").and_then(|value| value.as_f64()).unwrap_or(0.0);
+    out.push_str(&format!(
+        "{} {} {} {} re W n\nBT\n/Helv {} Tf\n{} {} {} rg\n",
+        number(rect[0]),
+        number(rect[1]),
+        number(rect[2] - rect[0]),
+        number(rect[3] - rect[1]),
+        number(size),
+        number(colour[0]),
+        number(colour[1]),
+        number(colour[2])
+    ));
+    let mut y = rect[3] - pad - size * 0.9;
+    for line in crate::fieldadd::wrap(&text, size, width) {
+        if y < rect[1] - size {
+            break;
+        }
+        let line_width = crate::watermark::helvetica_width(&line, size);
+        let x = match align as i64 {
+            1 => rect[0] + pad + (width - line_width) / 2.0,
+            2 => rect[2] - pad - line_width,
+            _ => rect[0] + pad,
+        };
+        out.push_str(&format!("1 0 0 1 {} {} Tm ", number(x), number(y)));
+        out.push_str(&crate::watermark::literal_bytes(&crate::watermark::win_ansi(&line)));
+        out.push_str(" Tj\n");
+        y -= size * 1.2;
+    }
+    out.push_str("ET\n");
+    Some((out.into_bytes(), full))
+}
+
 /// The **drawing** of an annotation: the shape, the markup, the line,
-/// the polygon, the ink or the caret.
+/// the polygon, the ink, the caret or the text box.
 fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f64; 4])> {
     // A **cloudy border** is the tree's own, and the tree draws it for
     // a polygon and for nothing else.
@@ -781,6 +961,8 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
         the_ink(entries)
     } else if subtype == "Caret" {
         the_caret(entries)
+    } else if subtype == "FreeText" {
+        the_freetext(entries)
     } else {
         the_shape(entries, subtype)
     }
@@ -845,6 +1027,7 @@ impl WriteAnnotation {
             || subtype == "PolyLine"
             || subtype == "Ink"
             || subtype == "Caret"
+            || subtype == "FreeText"
             || MARKS.contains(&subtype.as_str());
         if !drawn {
             return Err(EngineError::Failed {
@@ -893,7 +1076,8 @@ impl WriteAnnotation {
         })?;
         // The **appearance**: a form XObject, and the resources it
         // needs — the graphics state of the opacity.
-        let resources = if state {
+        let mut resources: Vec<(String, Json)> = Vec::new();
+        if state {
             let mut entries = vec![
                 ("Type".to_string(), json!("ExtGState")),
                 ("CA".to_string(), json!(opacity)),
@@ -902,17 +1086,27 @@ impl WriteAnnotation {
             if multiply {
                 entries.insert(1, ("BM".to_string(), json!("Multiply")));
             }
-            json!({
-                "entries": [
-                    [
-                        "ExtGState",
-                        { "entries": crate::pairs_of(&entries) },
-                    ],
-                ]
-            })
-        } else {
-            json!({ "entries": [] })
-        };
+            resources.push(("ExtGState".to_string(), json!({ "entries": crate::pairs_of(&entries) })));
+        }
+        if subtype == "FreeText" {
+            // The **font** of the text: the tree's own Helvetica, under
+            // the name the text of the box uses.
+            resources.push((
+                "Font".to_string(),
+                json!({
+                    "entries": [[
+                        "Helv",
+                        { "entries": [
+                            ["Type", "Font"],
+                            ["Subtype", "Type1"],
+                            ["BaseFont", "Helvetica"],
+                            ["Encoding", "WinAnsiEncoding"],
+                        ] },
+                    ]],
+                }),
+            ));
+        }
+        let resources = json!({ "entries": crate::pairs_of(&resources) });
         let number = crate::free::the_next_number(session.document(), 0);
         let entries = vec![
             ("Type".to_string(), json!("XObject")),

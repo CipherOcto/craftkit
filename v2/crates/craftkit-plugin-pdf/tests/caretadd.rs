@@ -242,5 +242,5 @@ fn the_text_is_the_contents() {
     let caret = outcome.data["id"].as_u64().expect("the caret is there");
     let node = session.document().node(caret).cloned().expect("the caret is there");
     let entries = entries_of(&node);
-    assert_eq!(entry(&entries, "Contents"), Some(&json!("inserted")), "the text is there");
+    assert_eq!(entry(&entries, "Contents"), Some(&json!({ "string": "inserted" })), "the text is there");
 }
