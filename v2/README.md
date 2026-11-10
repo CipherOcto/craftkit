@@ -4151,6 +4151,7 @@ so.
 | the **callout** of a page | **built.** The callout is put on a page — the tree's box, its knee, its point and its leader (§771) | §771 |
 | the **appearance** of the callout | **built.** The leader, its open arrowhead and the text box of it are drawn (§772) | §772 |
 | the **typed signature** of a page | **built.** The signature of filled outlines is put on a page — the tree's `PCTypedSignature` and its normalised contours (§773) | §773 |
+| the **appearance** of the typed signature | **built.** The filled outlines of it are drawn, with the even-odd rule (§774) | §774 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -50942,3 +50943,70 @@ outlines** — is now **put on a page**.
   caller's, and the tree's own `script_outline` is not ported.
 - **The tree's own custom stamp is not here**: the stamp of a picture
   that is already in the document.
+
+---
+
+## 774. The typed signature is drawn
+
+The **typed signature** — the tree's own **signature of filled
+outlines** — is now **drawn**.
+
+### What was built
+
+- The command **`pdf.annot.appearance.write`** now draws the **typed
+  signature** as well as the shape, the markup, the line, the polygon,
+  the ink, the caret, the text box, the mark of a redaction, the stamp,
+  the marks of Fill and Sign, the attachment and the callout, and it
+  draws it from the **dictionary of the annotation** — the outlines
+  (`/PCOutline`) and the colour (`/C`) — as the tree's own builder
+  does.
+- The **rules** are the tree's own, ported by name:
+  - the **outlines** are the contours of the annotation, and every
+    point of them is **normalised**: it is laid over the rectangle by
+    the width of it and by the height of it, so that the outline of a
+    name may be put on any rectangle: the tree's own layout;
+  - a contour of **three points or more** is **closed**: the tree's
+    own rule;
+  - the **fill** is the colour of the annotation (`/C`), and the black
+    of the tree when the annotation says none: the tree's own rule;
+  - the fill is with the **even-odd** rule: the tree's own `f*`.
+
+### What the port found
+
+- **The tree's typed signature is drawn by the stamp's own drawing**,
+  and the port found that the tree does not draw it by a route of its
+  own: the stamp branch of the tree's builder looks for the outlines
+  **first**, and a stamp that has them is drawn as filled outlines and
+  not as a stamp of the palette — so the port put the outlines in the
+  same place, **before** the marks and the stamps of the palette.
+- **The tree's outlines are not clipped**, and the port found that the
+  tree's builder lays the outlines over the rectangle without any
+  clipping: so a point that is outside the normalisation would draw
+  outside the rectangle — which is why §773 **refuses** such a point
+  rather than clamping it.
+
+### What it cost
+
+- **Three tests** in the PDF battery
+  (`tests/typedsignatureappearance.rs`): the two contours that are
+  drawn and the even-odd fill, the colour of the signature, and a
+  signature without its outlines that cannot be drawn.
+- **No new command**: the command that draws an annotation draws the
+  typed signature too, so the PDF battery still carries **117**
+  commands and the MCP server **972** — the same counts as §773. The
+  battery is counted by the source of its commands; the MCP server is
+  counted by the tool list it answers with.
+
+### What it does not settle
+
+- **Every annotation of the tree's builder is drawn here now**: the
+  shape, the markup, the line, the polygon, the ink, the caret, the
+  text box, the mark of a redaction, the stamp, the marks of Fill and
+  Sign, the attachment, the callout and the typed signature — and the
+  tree's own **custom stamp** is the one that is not.
+- **The tree's own custom stamp is not here**: the stamp of a picture
+  that is already in the document.
+- **The tree's own script outlines are not here**: the tree writes the
+  contours of a typed name from the outlines of a font it carries, and
+  this tree carries **no fonts at all** — so the contours are the
+  caller's.
