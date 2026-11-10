@@ -72,7 +72,7 @@ const BACKGROUND_COLOUR: [f64; 3] = [1.0, 1.0, 1.0];
 const FONTS: [(&str, &str); 3] = [("Helv", "Helvetica"), ("TiRo", "Times-Roman"), ("Cour", "Courier")];
 
 /// The **entry** of a dictionary, by its key.
-fn entry<'a>(entries: &'a [(String, Json)], key: &str) -> Option<&'a Json> {
+pub(crate) fn entry<'a>(entries: &'a [(String, Json)], key: &str) -> Option<&'a Json> {
     entries.iter().find(|(name, _)| name == key).map(|(_, value)| value)
 }
 
@@ -91,12 +91,12 @@ fn dictionary_of(value: &Json) -> Vec<(String, Json)> {
 }
 
 /// The **entries** of a node's dictionary.
-fn the_entries(session: &Session, node: u64) -> Vec<(String, Json)> {
+pub(crate) fn the_entries(session: &Session, node: u64) -> Vec<(String, Json)> {
     session.document().node(node).map(|node| crate::entries_of(&node.data)).unwrap_or_default()
 }
 
 /// A **node** of the document, with the entries it holds.
-fn a_node(
+pub(crate) fn a_node(
     session: &mut Session,
     number: u64,
     kind: &str,
@@ -107,7 +107,7 @@ fn a_node(
 }
 
 /// Put an **entry** in a node's dictionary.
-fn put(session: &mut Session, node: u64, key: &str, value: Json) -> Result<(), EngineError> {
+pub(crate) fn put(session: &mut Session, node: u64, key: &str, value: Json) -> Result<(), EngineError> {
     if let Some(node) = session.document_mut()?.node_mut(node) {
         let data = crate::with_entry(&node.data, key, value);
         node.data = data;
@@ -131,7 +131,7 @@ fn the_dictionary(session: &Session, value: &Json) -> Vec<(String, Json)> {
 /// The tree's own rule: the first `<base>N` that no field has, where
 /// a field whose name **begins** with the name and a period has that
 /// name too.
-fn free_name(existing: &[String], base: &str) -> String {
+pub(crate) fn free_name(existing: &[String], base: &str) -> String {
     for number in 1u64.. {
         let candidate = format!("{base}{number}");
         let taken =
@@ -144,14 +144,14 @@ fn free_name(existing: &[String], base: &str) -> String {
 }
 
 /// The **form** of the file: the dictionary the catalogue names.
-struct TheForm {
+pub(crate) struct TheForm {
     /// The node the form is.
-    node: u64,
+    pub(crate) node: u64,
     /// The object number of the form.
-    number: u64,
+    pub(crate) number: u64,
     /// The **fonts** of the form: the name and the value that names
     /// the font.
-    fonts: Vec<(String, Json)>,
+    pub(crate) fonts: Vec<(String, Json)>,
 }
 
 /// The **form** of the file, made when the file has none.
@@ -160,7 +160,7 @@ struct TheForm {
 /// form holds the fields, the form says how a field's text looks by
 /// default, and the form holds the resources the fields use — the
 /// three standard fonts, under the names Acrobat uses.
-fn ensure_form(session: &mut Session) -> Result<TheForm, EngineError> {
+pub(crate) fn ensure_form(session: &mut Session) -> Result<TheForm, EngineError> {
     let catalog = crate::preflight::the_catalog(session.document()).map(|node| node.id).ok_or_else(|| {
         EngineError::Failed {
             id: COMMAND.to_string(),
@@ -281,19 +281,12 @@ fn colour(colour: [f64; 3]) -> String {
     colour.iter().map(|value| crate::watermark::number(*value)).collect::<Vec<_>>().join(" ")
 }
 
-/// The **drawing** of a text field: the frame and the text.
+/// The **frame** of a field: the background and the border.
 ///
-/// The tree's own `field_appearance`: the background is filled, the
-/// border is stroked, and the text is drawn in the box — on one line
-/// and centred in it, or from the top down and wrapped when the field
-/// is a multiline one.
-fn the_drawing(rect: [f64; 4], value: &str, multiline: bool) -> Option<Vec<u8>> {
-    let width = rect[2] - rect[0];
-    let height = rect[3] - rect[1];
-    let pad = PADDING + BORDER;
-    let inner = (width - 2.0 * pad).max(1.0);
+/// The tree's own `frame`: the background is filled over the whole box
+/// and the border is stroked inside it.
+pub(crate) fn the_frame(width: f64, height: f64) -> String {
     let mut out = String::new();
-    // The **frame**: the background and the border.
     out.push_str(&format!(
         "{} rg\n0 0 {} {} re f\n",
         colour(BACKGROUND_COLOUR),
@@ -309,6 +302,21 @@ fn the_drawing(rect: [f64; 4], value: &str, multiline: bool) -> Option<Vec<u8>> 
         crate::watermark::number(width - BORDER),
         crate::watermark::number(height - BORDER)
     ));
+    out
+}
+
+/// The **drawing** of a text field: the frame and the text.
+///
+/// The tree's own `field_appearance`: the background is filled, the
+/// border is stroked, and the text is drawn in the box — on one line
+/// and centred in it, or from the top down and wrapped when the field
+/// is a multiline one.
+fn the_drawing(rect: [f64; 4], value: &str, multiline: bool) -> Option<Vec<u8>> {
+    let width = rect[2] - rect[0];
+    let height = rect[3] - rect[1];
+    let pad = PADDING + BORDER;
+    let inner = (width - 2.0 * pad).max(1.0);
+    let mut out = the_frame(width, height);
     // The **text**.
     out.push_str(&format!(
         "/Tx BMC\nq\n{} {} {} {} re W n\nBT\n/Helv {} Tf\n0 g\n",
@@ -537,20 +545,15 @@ impl AddField {
                 message: format!("the object {number} is already in the document"),
             });
         }
-        // The number of the **drawing**: the stream that holds it.
+        let data = json!({ "object": number, "entries": crate::pairs_of(&entries) });
+        let widget =
+            session.document_mut()?.add_node_with(format!("field {number}"), "pdf.object", None, data);
+        // The number of the **drawing**: the stream that holds it. It
+        // is a number of its own, above the field's.
         let appearance_number = match &drawing {
             Some(_) => crate::free::the_next_number(session.document(), 0),
             None => 0,
         };
-        if appearance_number == number {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the object {number} is already in the document"),
-            });
-        }
-        let data = json!({ "object": number, "entries": crate::pairs_of(&entries) });
-        let widget =
-            session.document_mut()?.add_node_with(format!("field {number}"), "pdf.object", None, data);
         let mut fields = entry(&the_entries(session, form.node), "Fields")
             .and_then(|fields| fields.as_array().cloned())
             .unwrap_or_default();

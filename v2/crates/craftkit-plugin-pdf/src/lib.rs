@@ -132,6 +132,7 @@ mod attachments;
 mod background;
 mod boxes;
 mod calculate;
+mod checkbox;
 mod comments;
 mod compare;
 mod content;
@@ -203,6 +204,7 @@ pub use attachments::ReadAttachments;
 pub use background::AddBackground;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use calculate::{ReadCalculatedValue, ReadCalculation};
+pub use checkbox::AddCheckBox;
 pub use comments::{AddComment, CommentInfo, ReadComments};
 pub use compare::{CompareFiles, MarkDifferences};
 pub use convert::Convert;
@@ -2175,6 +2177,7 @@ craftkit_sdk::plugin_anchor!(
     InformationKind,
     AddObject,
     AddField,
+    AddCheckBox,
     Preflight,
     ReadFonts,
     ReadTrailer,

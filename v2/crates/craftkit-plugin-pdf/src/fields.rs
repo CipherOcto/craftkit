@@ -605,7 +605,13 @@ impl SetField {
             // An **empty** value takes the value away.
             entries.retain(|(key, _)| key != "V");
         } else {
-            let value_json = json!({ "string": value.clone() });
+            // The value of a **button** is a **name** — the state it is
+            // in — and the value of every other field is a text.
+            let value_json = if found.kind == FieldKind::Button {
+                json!(value.clone())
+            } else {
+                json!({ "string": value.clone() })
+            };
             match entries.iter_mut().find(|(key, _)| key == "V") {
                 Some(entry) => entry.1 = value_json,
                 None => entries.push(("V".to_string(), value_json)),
