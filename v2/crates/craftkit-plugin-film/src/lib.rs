@@ -242,6 +242,7 @@ mod reversing;
 mod rippling;
 mod rolling;
 mod scc;
+mod sequencemarks;
 mod sliding;
 mod slipping;
 pub mod speed;
@@ -304,6 +305,7 @@ pub use replacing::ReplaceMedia;
 pub use reversing::ReverseClip;
 pub use rippling::RippleClip;
 pub use rolling::RollCut;
+pub use sequencemarks::{ClearMarks, SetMarkIn, SetMarkOut};
 pub use sliding::SlideClip;
 pub use slipping::SlipClip;
 pub use speed::SetSpeed;
@@ -1038,6 +1040,9 @@ craftkit_sdk::plugin_anchor!(
     TransitionKind,
     MarkerKind,
     AddMarker,
+    SetMarkIn,
+    SetMarkOut,
+    ClearMarks,
     SetMarker,
     RemoveMarker,
     ClearMarkers,
