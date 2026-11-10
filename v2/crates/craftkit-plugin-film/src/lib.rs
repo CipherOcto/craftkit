@@ -200,6 +200,7 @@ mod binremoval;
 mod captioncopy;
 mod captionedges;
 mod captionedits;
+mod captionlayout;
 mod captions;
 mod captionstyle;
 mod captiontracks;
@@ -262,6 +263,7 @@ pub use binremoval::RemoveBin;
 pub use captioncopy::{DeleteCaptionTrack, DuplicateCaption};
 pub use captionedges::{MergeCaptions, MoveCaption, SplitCaption, TrimCaption};
 pub use captionedits::{SetCaption, SetCaptionTimes};
+pub use captionlayout::LayoutCaption;
 pub use captions::ReadCaptions;
 pub use captionstyle::{SetCaptionStyle, SetCaptionTrack};
 pub use captiontracks::{
@@ -1068,6 +1070,7 @@ craftkit_sdk::plugin_anchor!(
     SetMarks,
     StretchClip,
     RollCut,
+    LayoutCaption,
     TimelineEvaluator,
     FilmPanel
 );

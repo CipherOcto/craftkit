@@ -12,3 +12,5 @@ license.workspace = true
 # application.
 craftkit-sdk = { workspace = true }
 craftkit-derive = { workspace = true }
+# The kit's own typeface: the letters of a caption are measured with it.
+craftkit-font = { path = "../craftkit-font", version = "0.2.0" }
