@@ -4158,6 +4158,7 @@ so.
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
+| the **index** of a chosen option | **built.** The place of the chosen option in the list is written — the tree's own `/I` (§781) | §781 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -51391,6 +51392,68 @@ away** — the tree's own rule of a colour of **"none"**.
 
 ### What it does not settle
 
+- **The tree's own script outlines are not here**: the tree writes the
+  contours of a typed name from the outlines of a font it carries, and
+  this tree carries **no fonts at all** — so the contours are the
+  caller's.
+
+---
+
+## 781. The chosen option has its index
+
+The **choice** now writes the **index** of the option that is chosen —
+the tree's own `/I`.
+
+### What was built
+
+- The command **`pdf.field.set`** now writes the **index** of the
+  option that is chosen, next to the value of the field.
+- The **rules** are the tree's own, ported by name:
+  - the **index** is the place of the option in the list of the
+    options of the field, and it is written as the tree's own `/I`:
+    the tree's own rule;
+  - the **value** the field holds is the **export value** of the
+    option, and the caller may give the export value or the display
+    text: the tree's own rule;
+  - an **empty** value takes the value **and the index** away: the
+    tree's own rule;
+  - a **free text** is allowed in a drop-down that may be edited, and
+    in a choice that has no options at all, and it has no index: the
+    tree's own rule;
+  - a value that is **not one of the options** is **refused**: the
+    tree's own rule.
+
+### What the port found
+
+- **The tree's own reader takes an option as a pair**, and the port
+  found that the tree's own reader of a choice keeps the **export
+  value** and the **display text** of every option, and that the index
+  is the place of the option in the list: so the tree's own file says
+  twice which option is chosen — once by its value and once by its
+  index — and the index is what a reader uses when the options have
+  been sorted.
+- **The tree's own file removes the index when nothing is chosen**,
+  and the port found that the tree removes the `/I` with the `/V`:
+  so an empty value takes both away, and a field that holds nothing
+  says nothing about which option it had.
+
+### What it cost
+
+- **Five tests** in the PDF battery (`tests/choiceindex.rs`): the
+  index that is written, a display text that is held as the export
+  value, an empty value that takes the index away, a value that is not
+  an option and a free text in a drop-down that may be edited.
+- **No new command**: the command that fills a field writes the index
+  too, so the PDF battery still carries **119** commands and the MCP
+  server **974** — the same counts as §780. The battery is counted by
+  the source of its commands; the MCP server is counted by the tool
+  list it answers with.
+
+### What it does not settle
+
+- **A list that may hold more than one option** still holds one: the
+  tree's own rule is that such a list holds an **array** of values and
+  an array of indices, and this tree's list box takes one value.
 - **The tree's own script outlines are not here**: the tree writes the
   contours of a typed name from the outlines of a font it carries, and
   this tree carries **no fonts at all** — so the contours are the
