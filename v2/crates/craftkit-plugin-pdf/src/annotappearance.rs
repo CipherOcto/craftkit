@@ -1027,6 +1027,36 @@ fn the_stamp(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
     let width_of = x1 - x0;
     let height = y1 - y0;
     let number = crate::watermark::number;
+    // The **typed signature**: the tree's own filled outlines, laid over
+    // the rectangle and filled with the **even-odd** rule: the tree's
+    // own `PCOutline`.
+    if let Some(value) = entry(entries, "PCOutline") {
+        let list = value.as_array()?;
+        let colour = match entry(entries, "C") {
+            Some(value) => the_colour(value).ok().flatten()?,
+            None => [0.0; 3],
+        };
+        let mut out = String::new();
+        out.push_str(&format!("{} {} {} rg\n", number(colour[0]), number(colour[1]), number(colour[2])));
+        for contour in list {
+            let numbers = numbers_of(contour);
+            for (index, point) in numbers.as_chunks::<2>().0.iter().enumerate() {
+                out.push_str(&format!(
+                    "{} {} {}\n",
+                    number(x0 + point[0] * width_of),
+                    number(y0 + point[1] * height),
+                    if index == 0 { "m" } else { "l" }
+                ));
+            }
+            // A contour of three points or more is **closed**: the
+            // tree's own rule.
+            if numbers.len() >= 6 {
+                out.push_str("h\n");
+            }
+        }
+        out.push_str("f*\n");
+        return Some((out.into_bytes(), rect));
+    }
     // The **four marks** of Fill and Sign: the tree's own, and they
     // are drawn with the black of the tree when the annotation says no
     // colour.
