@@ -4140,6 +4140,7 @@ so.
 | the **appearance** of the caret | **built.** The caret is drawn — the tree's wedge and its blue (§760) | §760 |
 | the **text box** of a page | **built.** The free text is put on a page — the tree's text, its appearance and its alignment (§761) | §761 |
 | the **appearance** of the text box | **built.** The text box is drawn — the tree's Helvetica, its wrapping and its border (§762) | §762 |
+| the **mark** of a redaction | **built.** The mark of a redaction is put on a page — the tree's quads, its colours and its overlay (§763) | §763 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -50154,3 +50155,83 @@ its text, set in the tree's Helvetica, inside its box.
 - **The text here is set in the tree's Helvetica only**, and the
   tree's own text box is set in Helvetica too: a box with another
   font in it is not the tree's box.
+
+---
+
+## 763. The mark of a redaction is put on a page
+
+The tree's **mark of a redaction** — the mark that says "this text is
+going to be taken away" — may now be put on a page.
+
+### What was built
+
+- A **new command**: `pdf.annot.redact.add` puts a mark on a page —
+  the **page**, the **object number** the annotation has in the file,
+  the **region** it covers, and, when the caller says so, the **text**
+  that is written over it, the **colour** of the mark, the **size** of
+  the text, its **alignment** and whether it **repeats**.
+- The **rules** are the tree's own:
+  - the **quads** of the mark are the lines of the **text under the
+    region** — the tree's own rule, and the text under the region is
+    what the mark covers;
+  - a region with **no text under it** is **refused**: the tree's own
+    rule, and a mark over nothing marks nothing;
+  - the **colour** of the mark is the tree's own red when the caller
+    says nothing, and it is three numbers between zero and one;
+  - the **fill** of the mark is the tree's own black: the tree fills
+    the area it takes away;
+  - the **rectangle** of the annotation is the **bounds** of the
+    quads, and it is not grown — a mark covers the text and nothing
+    else;
+  - the **size** of the overlay text is the tree's own ten points when
+    the caller says nothing, and it is between one point and four
+    hundred: the tree's own bounds;
+  - the **appearance of the overlay** is the tree's own string: the
+    colour and the font and the size in one string, the `/DA` of the
+    annotation;
+  - the **alignment** of the overlay is the tree's own three: left
+    (`0`), centre (`1`) and right (`2`);
+  - the overlay **repeats** when the caller says so, and the file says
+    so with the `/Repeat` of the annotation.
+
+### What the port found
+
+- **The tree's mark takes the quads of the text that is selected**,
+  and the port found that this tree's own markup command (§723) works
+  out the quads of the text under a region — and that the mark is the
+  same thing with another name and another colour: so the quads here
+  are worked out the same way, and the region is the caller's.
+- **The tree's mark is filled with black and not with the colour of
+  the mark**, and the port found that the tree's mark has two colours
+  — the red of the outline and the black of the fill — and that the
+  black is the colour of the area the tree takes away: so the fill
+  here is the tree's own black, and the outline is the red.
+- **The tree's rectangle of a mark is not grown**, and the port found
+  that the tree's rectangle of a mark is the bounds of its quads with
+  nothing added to it — while the rectangle of every other shape of
+  the tree is grown by the width of its line: so the rectangle here is
+  the bounds, and it is not grown.
+
+### What it cost
+
+- **Seven tests** in the PDF battery (`tests/redactmark.rs`): the
+  mark that is put on the page, the rectangle that is the bounds of
+  the quads, the overlay text that is written, the region with no
+  text under it, the colour that is outside zero and one, the size
+  that is outside the tree's bounds, and the alignment that is not
+  known.
+- **One new command**: the PDF battery carries **112** commands and
+  the MCP server **967**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The drawing of the mark is not here**: it is the appearance
+  command's own work, and the tree draws the mark when the annotation
+  is made.
+- **The mark does not take the text away**: this tree's own redaction
+  commands take the text away, and this one says where it will go.
+- **The tree's own redaction removes the annotations of a page and
+  keeps the text of it**: that is this tree's own work and not the
+  tree's, and the two are not the same thing.
