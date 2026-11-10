@@ -4124,6 +4124,7 @@ so.
 | the **drop-down** of a form | **built.** A drop-down is put on a page — the tree's name, its options, its flags and its drawing (§744) | §744 |
 | the **list box** of a form | **built.** A list box is put on a page — the tree's name, its options, its flag and its drawing (§745) | §745 |
 | the **date field** of a form | **built.** A date field is put on a page — the tree's name, its format and its two actions (§746) | §746 |
+| the **signature field** of a form | **built.** A signature field is put on a page — the tree's name and its empty box (§747) | §747 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -48972,3 +48973,69 @@ day.
   the tree's own format is the one that is written.
 - **The tree's other kinds of field are not here**: the image field
   and the signature field.
+
+---
+
+## 747. A signature field is put on a page
+
+A **form** may now hold a **signature field**: a box on a page that the
+reader signs.
+
+### What was built
+
+- A **new command**: `pdf.field.signature.add` puts a signature field on
+  a page — the **page**, the **object number** the field holds, the
+  **rectangle** it covers, its **name** and **where the drawing of it is
+  written**.
+- The **rules** are the tree's own, ported by name:
+  - `free_name` — the **name** is the first free `Signature` name —
+    `Signature1`, `Signature2` and so on — when the caller does not give
+    one, and a name that holds a **period** is refused, and so is a
+    name another field has;
+  - the **rectangle** is four numbers and the corners may come in any
+    order, and a field smaller than **four points by four** is refused,
+    as the tree refuses it;
+  - `widget_dict` — the field is a **widget**, an annotation of the
+    kind `Widget`, and it is a field of the kind `Sig`;
+  - `ensure_form` — the file's **form** is made when the file has none,
+    and it holds the field;
+  - `empty_box` — the **drawing** of the field: the frame and nothing
+    else, so that the reader may sign in it.
+- The **model of the fields** now knows the **fourth kind** the file
+  has: a field of the kind `Sig` is a **signature**, and it is told
+  apart from the text, the button and the choice.
+
+### What the port found
+
+- **The tree's kinds of field are seven and the file's are four**, and
+  the port found that the tree tells the **check box**, the **radio
+  button** and the **push button** apart, and that the file tells them
+  apart by their **flags** and not by their kind: the file says `Btn`
+  for all three. So this tree's model says what the file says — the
+  kind is the name the file holds — and the **check box**, the **radio
+  button** and the **push button** are told apart by their flags.
+- **The tree's signature field has a kind of its own**, and the port
+  found that the file says `Sig` for it, and that a kind this tree did
+  not know was a kind a field could not be read as — so the **fourth
+  kind** is known now, and a signature field is a field like any other.
+
+### What it cost
+
+- **Four tests** in the PDF battery (`tests/signaturefield.rs`): the
+  signature field that is put on the page and what its dictionary says,
+  the free name and the second free name, the drawing that is the
+  empty box, and the form and the page that hold the field.
+- **One new command** and **one kind of field**: the PDF battery
+  carries **102** commands and the MCP server **957**. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+
+### What it does not settle
+
+- **The signature is not made here**: a signature is the reader's own
+  mark, and this tree makes the box and not the mark.
+- **The tree's image field is not here**: a field that asks for a
+  picture, and a picture is a thing this tree cannot yet put in a file.
+- **The kinds of the tree are not the kinds of the file**: the check
+  box, the radio button and the push button are one kind here — the
+  kind the file says — and they are told apart by their flags.
