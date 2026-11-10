@@ -4132,6 +4132,7 @@ so.
 | the **appearance** of a markup | **built.** The highlight, the underline, the strikeout and the squiggly are drawn — the tree's quads, its fractions and its multiplication (§752) | §752 |
 | the **line** of a page | **built.** A line is put on a page — the tree's two points, its arrow, its width and its rectangle (§753) | §753 |
 | the **appearance** of a line | **built.** The line is drawn — the tree's two points, its width, its dashes and its arrowheads (§754) | §754 |
+| the **polygon** of a page | **built.** A polygon and its connected lines are put on a page — the tree's corners, its cloud and its rectangle (§755) | §755 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -49572,3 +49573,84 @@ is now **drawn**.
   is the reader's work.
 - **The tree's leader line — the arrow of a callout — is not here**:
   it is the tree's own free text, and the free text is not drawn here.
+
+---
+
+## 755. A polygon is put on a page
+
+The tree's **polygon** — and the tree's **connected lines**, which are
+the same thing left open — may now be put on a page.
+
+### What was built
+
+- A **new command**: `pdf.annot.polygon.add` puts a polygon on a page —
+  the **page**, the **object number** the annotation has in the file,
+  the **kind** (`polygon` or `polyline`), the **corners** of the shape,
+  and, when the caller says so, the **colour**, the **width**, the
+  **fill** and the **cloud**.
+- The **rules** are the tree's own:
+  - the **kind** is one of the tree's own two, and a kind that is not
+    one of them is **refused**;
+  - the **corners** are points, and each point is two numbers, and a
+    number that is not a number is **refused**;
+  - a **polygon** needs **three** corners and a **connected line**
+    needs **two**: the tree's own rules;
+  - the **bounds** of the corners must be at least a point wide and a
+    point high for a polygon, and the larger of the two at least a
+    point for a connected line: the tree's own rules;
+  - the **width** of the line is the tree's own two points when
+    nothing is said, and a width below zero is the tree's own zero;
+  - the **colour** is the tree's own red when nothing is said, and it
+    is three numbers between zero and one;
+  - the **fill** of a polygon is the colour of the fill when the
+    caller says one, and there is none when the caller says nothing;
+  - the **rectangle** of the annotation is the **bounds** of the
+    corners, grown by half the width of the line and by one point
+    more — and by one and a half **cloud radii** when the border is
+    cloudy: the tree's own rectangle;
+  - the **radius of a cloud** is six points plus one and a half times
+    the width of the line: the tree's own `cloud_radius`;
+  - a **cloud** is a polygon only: a connected line with a cloudy
+    border is **refused**, the tree's own rule;
+  - the **cloud** is the tree's own: the intent says `PolygonCloud`
+    and the border says `/BE /S /C` with the intensity `1`.
+
+### What the port found
+
+- **The tree's cloudy border is a border of a polygon only**, and the
+  port found that the tree's own builder refuses to draw a cloudy
+  border of anything else — so a connected line with a cloud is
+  refused here too, at the place the shape is made and not at the
+  place it is drawn.
+- **The tree's cloud is said twice**, and the port found that the
+  annotation says it in the **intent** (`/IT`) and in the **border**
+  (`/BE`) — the intent for the reader that shows the cloud and the
+  border for the reader that draws it — so both are written here.
+- **The tree's fill is a colour the caller may leave out**, and the
+  port found that the tree's polygon has no fill at all unless one is
+  asked for, and that the fill is not the colour of the line: so the
+  fill here is what the caller says, and there is none when the caller
+  says nothing.
+
+### What it cost
+
+- **Nine tests** in the PDF battery (`tests/polygonadd.rs`): the
+  polygon that is put on the page and the page that names it, the
+  connected line, the rectangle that is the bounds of the corners, the
+  cloud and the rectangle it grows, the polygon with two corners, the
+  cloud on a connected line, the polygon that is too small, the kind
+  that is not known, and the fill that is written when it is said.
+- **One new command**: the PDF battery carries **108** commands and
+  the MCP server **963**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The drawing of the polygon is not here**: it is the appearance
+  command's own work, and the tree draws the polygon when the
+  annotation is made.
+- **The tree's ink and its signature are not here**: they are strokes
+  of points, and they are a shape of their own.
+- **The polygon here has no name, no contents and no author**: the
+  tree's polygon is a tool of its editor, and the editor is not here.
