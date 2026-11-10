@@ -35,8 +35,9 @@
 
 use craftkit_derive::Command;
 
+use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Session, Text};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.comment.read";
@@ -160,6 +161,265 @@ fn flags_of(entries: &[(String, Json)]) -> i64 {
         .filter(|flags| flags.is_finite() && *flags > 0.0)
         .map(|flags| flags as i64)
         .unwrap_or(0)
+}
+
+/// The **icons** of a note: the tree's own.
+pub const ICONS: [&str; 7] = ["Comment", "Note", "Help", "Insert", "Key", "NewParagraph", "Paragraph"];
+
+/// The **size** of the icon of a note: the tree's own, in points.
+const NOTE_SIZE: f64 = 20.0;
+
+/// The **flags** of a note: the tree's own — it prints, it does not
+/// zoom and it does not rotate.
+const NOTE_FLAGS: i64 = 28;
+
+/// The **colour** of a note that says none: the tree's own.
+const NOTE_COLOUR: [f64; 3] = [1.0, 0.82, 0.0];
+
+/// A **number**, as the tree writes it in a content stream.
+fn stream_number(value: f64) -> String {
+    let text = format!("{value:.3}");
+    let text = text.trim_end_matches('0').trim_end_matches('.');
+    if text == "-0" { "0".to_string() } else { text.to_string() }
+}
+
+/// The **drawing** of the icon of a note: the tree's own.
+///
+/// The tree draws the **bubble** for the icon `Comment` and the
+/// **folded page** for every other icon — so the name of the icon says
+/// which kind of note it is, and the shape of the icon is the tree's.
+fn note_icon(name: &str, colour: [f64; 3]) -> String {
+    let mut out = format!(
+        "{} {} {} rg\n0.25 0.25 0.25 RG 0.8 w 1 j 1 J\n",
+        stream_number(colour[0]),
+        stream_number(colour[1]),
+        stream_number(colour[2])
+    );
+    if name == "Comment" {
+        out.push_str("3 18.5 m 17 18.5 l 18.5 18.5 18.5 17 18.5 17 c 18.5 8 l 18.5 6.5 17 6.5 17 6.5 c 9.5 6.5 l 5 2 l 5.5 6.5 l 3 6.5 l 1.5 6.5 1.5 8 1.5 8 c 1.5 17 l 1.5 18.5 3 18.5 3 18.5 c h B\n");
+        out.push_str("4.5 15 m 15.5 15 l 4.5 12.5 m 15.5 12.5 l 4.5 10 m 11.5 10 l S\n");
+    } else {
+        out.push_str("3 19 m 13 19 l 17 15 l 17 1 l 3 1 l h B\n13 19 m 13 15 l 17 15 l S\n");
+        out.push_str("5.5 12 m 14.5 12 l 5.5 9 m 14.5 9 l 5.5 6 m 11.5 6 l S\n");
+    }
+    out
+}
+
+/// **Put** a **note** on a page.
+///
+/// The tree's own: a note is an annotation of the subtype `Text` — a
+/// sticky note — and it is drawn as an **icon** that hangs below the
+/// point it is put at, with a **popup** beside it that holds the text
+/// when it is opened.
+///
+/// The rules:
+///
+/// - the **icon** is one of the tree's own seven — `Comment`, `Note`,
+///   `Help`, `Insert`, `Key`, `NewParagraph` and `Paragraph` — and an
+///   icon that is not one of them is **refused**;
+/// - the **point** is two numbers, and the **rectangle** of the note
+///   is the tree's own: the icon is twenty points square and hangs
+///   **below** the point;
+/// - the **popup** of the note is the tree's own: it is beside the
+///   icon, two hundred points wide and a hundred and twenty high;
+/// - the note **prints**, and it does not zoom and it does not rotate;
+/// - the **colour** of a note that says none is the tree's own — the
+///   yellow of a sticky note;
+/// - the **subject** of the note is `Sticky Note`;
+/// - the **day** the note was written is the **caller's**: the tree
+///   keeps the clock of the machine, and this tree is given the day.
+#[derive(Command)]
+#[command(id = "pdf.comment.add", area = "pdf", layer = "pdf", icon = "plus", mutates, undoable)]
+pub struct AddComment {
+    /// The page the note is on.
+    pub page: NodeRef,
+    /// The point the note is put at: two numbers.
+    pub at: serde_json::Value,
+    /// The text of the note.
+    pub contents: Option<Text>,
+    /// The author of the note.
+    pub author: Option<Text>,
+    /// The icon of the note: `Comment`, `Note`, `Help`, `Insert`,
+    /// `Key`, `NewParagraph` or `Paragraph`.
+    pub icon: Option<Text>,
+    /// The colour of the note: a hex text.
+    pub colour: Option<Text>,
+    /// The day the note was written: `D:YYYYMMDDHHmmSS`.
+    pub date: Option<Text>,
+    /// Where the bytes of the icon are written.
+    pub to: Text,
+}
+
+impl AddComment {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "pdf.comment.add".to_string();
+        // The **page**.
+        let Some(page_node) = session.document().node(self.page.0).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{}`", self.page.0),
+            });
+        };
+        let page_entries = crate::entries_of(&page_node.data);
+        if !page_entries.iter().any(|(key, value)| key == "Type" && value.as_str() == Some("Page")) {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{}` is not a page", self.page.0),
+            });
+        }
+        let Some(page_number) = crate::the_number_of(&page_node) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{}` has no object number", self.page.0),
+            });
+        };
+        // The **point**: two numbers.
+        let numbers = numbers_of(&self.at);
+        if numbers.len() != 2 || numbers.iter().any(|number| !number.is_finite()) {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "the point of a note is two numbers".to_string(),
+            });
+        }
+        // The **icon**.
+        let icon = match &self.icon {
+            Some(icon) => {
+                let name = icon.0.trim().to_string();
+                if !ICONS.contains(&name.as_str()) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "`{name}` is not an icon of a note: it is one of {}",
+                            ICONS.join(", ")
+                        ),
+                    });
+                }
+                name
+            }
+            None => "Note".to_string(),
+        };
+        // The **colour**.
+        let colour = match &self.colour {
+            Some(colour) => {
+                let parsed = craftkit_sdk::document::Colour::from_hex(colour.0.trim())
+                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                [f64::from(parsed.0[0]), f64::from(parsed.0[1]), f64::from(parsed.0[2])]
+            }
+            None => NOTE_COLOUR,
+        };
+        // The **rectangle**: the icon hangs below the point.
+        let rect = [numbers[0], numbers[1] - NOTE_SIZE, numbers[0] + NOTE_SIZE, numbers[1]];
+        // The **popup**: beside the icon.
+        let popup_rect = [rect[2] + 10.0, rect[3] - 120.0, rect[2] + 210.0, rect[3]];
+        // The **icon**, drawn.
+        let path = self.to.0.trim().to_string();
+        if path.is_empty() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "the drawing of the icon goes somewhere".to_string(),
+            });
+        }
+        let drawing = note_icon(&icon, colour);
+        std::fs::write(&path, drawing.as_bytes()).map_err(|error| EngineError::Failed {
+            id: id.clone(),
+            message: format!("the icon cannot be written: {error}"),
+        })?;
+        // The **appearance**: the icon is a form XObject of its own.
+        let appearance_number = crate::free::the_next_number(session.document(), 0);
+        let appearance_data = json!({
+            "object": appearance_number,
+            "entries": [
+                ["Type", "XObject"],
+                ["Subtype", "Form"],
+                ["FormType", 1],
+                ["BBox", [0.0, 0.0, NOTE_SIZE, NOTE_SIZE]],
+                ["Resources", { "entries": [] }],
+            ],
+        });
+        let appearance_name = format!("stream {appearance_number}");
+        let appearance =
+            session.document_mut()?.add_node_with(appearance_name, "pdf.stream", None, appearance_data);
+        if let Some(node) = session.document_mut()?.node_mut(appearance) {
+            node.stream = Some(path);
+        }
+        // The **note**.
+        let note_number = crate::free::the_next_number(session.document(), 0);
+        let mut entries: Vec<(String, Json)> = vec![
+            ("Type".to_string(), json!("Annot")),
+            ("Subtype".to_string(), json!("Text")),
+            ("Rect".to_string(), json!(rect)),
+            (
+                "Contents".to_string(),
+                json!({ "string": self.contents.as_ref().map(|text| text.0.clone()).unwrap_or_default() }),
+            ),
+            ("Subj".to_string(), json!("Sticky Note")),
+            ("C".to_string(), json!([colour[0], colour[1], colour[2]])),
+            ("Name".to_string(), json!(icon.clone())),
+            ("F".to_string(), json!(NOTE_FLAGS)),
+            ("Open".to_string(), json!(false)),
+            ("P".to_string(), json!({ "ref": [page_number as f64, 0.0] })),
+            ("AP".to_string(), json!({ "entries": [["N", { "ref": [appearance_number as f64, 0.0] }]] })),
+        ];
+        if let Some(author) = &self.author {
+            let author = author.0.trim();
+            if !author.is_empty() {
+                entries.push(("T".to_string(), json!({ "string": author })));
+            }
+        }
+        if let Some(date) = &self.date {
+            let date = date.0.trim();
+            if !date.is_empty() {
+                entries.push(("M".to_string(), json!({ "string": date })));
+                entries.push(("CreationDate".to_string(), json!({ "string": date })));
+            }
+        }
+        let note_data = json!({ "object": note_number, "entries": crate::pairs_of(&entries) });
+        let note_name = format!("annotation {note_number}");
+        let note = session.document_mut()?.add_node_with(note_name, "pdf.object", None, note_data);
+        // The **popup** of the note.
+        let popup_number = crate::free::the_next_number(session.document(), 0);
+        let popup_entries: Vec<(String, Json)> = vec![
+            ("Type".to_string(), json!("Annot")),
+            ("Subtype".to_string(), json!("Popup")),
+            ("Rect".to_string(), json!(popup_rect)),
+            ("Parent".to_string(), json!({ "ref": [note_number as f64, 0.0] })),
+            ("Open".to_string(), json!(false)),
+            ("F".to_string(), json!(NOTE_FLAGS)),
+        ];
+        let popup_data = json!({ "object": popup_number, "entries": crate::pairs_of(&popup_entries) });
+        let popup_name = format!("annotation {popup_number}");
+        let popup = session.document_mut()?.add_node_with(popup_name, "pdf.object", None, popup_data);
+        // The note names its popup.
+        if let Some(node) = session.document_mut()?.node_mut(note) {
+            node.data = crate::with_entry(&node.data, "Popup", json!({ "ref": [popup_number as f64, 0.0] }));
+        }
+        // The page names them both.
+        let page_entries = crate::entries_of(
+            &session.document().node(self.page.0).map(|node| node.data.clone()).unwrap_or(Json::Null),
+        );
+        let mut annots =
+            entry(&page_entries, "Annots").and_then(|annots| annots.as_array()).cloned().unwrap_or_default();
+        annots.push(json!({ "ref": [note_number as f64, 0.0] }));
+        annots.push(json!({ "ref": [popup_number as f64, 0.0] }));
+        if let Some(node) = session.document_mut()?.node_mut(self.page.0) {
+            node.data = crate::with_entry(&node.data, "Annots", json!(annots));
+        }
+        // And the **edges**.
+        for to in [note, popup] {
+            let payload = json!({ "key": "Annots", "generation": 0 });
+            let relation = craftkit_sdk::Relation::with_payload(self.page.0, to, "ref", payload);
+            session.document_mut()?.add_relation(relation);
+        }
+        Ok(Outcome::changed("the note is put on the page".to_string()).with_data(json!({
+            "note": note,
+            "object": note_number,
+            "popup": popup,
+            "appearance": appearance,
+            "icon": icon,
+            "rect": rect,
+            "popup_rect": popup_rect,
+        })))
+    }
 }
 
 /// **Read** the comments of a file.

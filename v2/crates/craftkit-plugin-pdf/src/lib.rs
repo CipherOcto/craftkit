@@ -202,7 +202,7 @@ pub use attachments::ReadAttachments;
 pub use background::AddBackground;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use calculate::{ReadCalculatedValue, ReadCalculation};
-pub use comments::ReadComments;
+pub use comments::{AddComment, ReadComments};
 pub use compare::{CompareFiles, MarkDifferences};
 pub use convert::Convert;
 pub use destinations::ReadDestinations;
@@ -2184,6 +2184,7 @@ craftkit_sdk::plugin_anchor!(
     AddBackground,
     RemoveMarks,
     ReadComments,
+    AddComment,
     FlattenComments,
     FlattenForm,
     AddHeader,
