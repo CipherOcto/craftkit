@@ -4112,6 +4112,7 @@ so.
 | the **flattening** of a form | **built.** The fields of a form are drawn into the pages they are on and taken away — the tree's matrix, its XObjects and its pruning (§730) | §730 |
 | the **comments** of a file | **built.** The notes of a file are read — the tree's summary, its colour of a free text and its order (§731) | §731 |
 | the **flattening** of the comments | **built.** The notes of a file are drawn into the pages they are on and taken away — the tree's matrix, its popup and its replies (§732) | §732 |
+| a **note** on a page | **built.** A sticky note is put on a page — the tree's icons, its rectangle, its popup and its drawing (§735) | §735 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -48082,3 +48083,79 @@ to another, and the **gamut** of a space may be measured.
 - **The profiles of the tree are not here**: the tree writes the ICC
   profiles of its spaces, and this tree carries the numbers of the
   spaces and not the profiles.
+
+---
+
+## 735. A note is put on a page
+
+A **sticky note** may now be put on a page of a file.
+
+### What was built
+
+- A **new command**: `pdf.comment.add` puts a note on a page — the
+  **page**, the **point** the note is put at, the **text** of the
+  note, its **author**, its **icon**, its **colour**, the **day** it
+  was written and **where the bytes of the icon are written**.
+- The **rules** are the tree's own:
+  - the **icon** is one of the tree's own seven — `Comment`, `Note`,
+    `Help`, `Insert`, `Key`, `NewParagraph` and `Paragraph` — and an
+    icon that is not one of them is **refused**;
+  - the **point** is two numbers, and the **rectangle** of the note
+    is the tree's own: the icon is twenty points square and hangs
+    **below** the point;
+  - the **popup** of the note is the tree's own: it is beside the
+    icon, two hundred points wide and a hundred and twenty high, and
+    it is **shut**;
+  - the note **prints**, and it does not zoom and it does not rotate;
+  - the **colour** of a note that says none is the tree's own — the
+    yellow of a sticky note;
+  - the **subject** of the note is `Sticky Note`;
+  - the **icon** is **drawn**: the tree's own drawing, in the content
+    of a form XObject of its own, twenty points square.
+- The note is a **comment** of the file, and the reading of the
+  comments finds it.
+
+### What the port found
+
+- **The tree's icons are seven names and two drawings**, and the port
+  found that the tree draws the **bubble** for the icon `Comment` and
+  the **folded page** for every other icon — so the name says which
+  kind of note it is, and the shape of the icon is the tree's.
+- **The tree's icon hangs below the point**, and the port found that
+  the tree does not put a rectangle where the caller asks for one: the
+  caller gives a **point**, and the tree builds the rectangle of the
+  icon from it — so a note is put where it is clicked, and not where
+  it is dragged to.
+- **The tree's popup is beside the icon**, and the port found that the
+  tree builds the rectangle of the popup from the rectangle of the
+  icon — ten points to the right and a hundred and twenty down — so
+  the window opens where the note is.
+- **The tree's day is the clock of the machine**, and the port found
+  that the tree writes the day of the note from its own metadata — so
+  here the **caller states the day**, as it does for the header and
+  the footer of a page.
+
+### What it cost
+
+- **Eight tests** in the PDF battery (`tests/commentadd.rs`): the
+  note that is put and the icon that hangs below the point, the popup
+  that is beside the icon, the icon that is drawn, the bubble that is
+  drawn for the icon `Comment`, the note that the reading of the
+  comments finds, the icon that is refused, the point that is refused,
+  and the file that is written with the note in it.
+- **One new command**: the PDF battery carries **93** commands and the
+  MCP server **946**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The other comments of the tree are not here**: the tree has the
+  arrow, the callout, the caret, the cloud, the circle, the ink, the
+  line, the polygon, the square, the stamp and the free text, and this
+  tree has the **note** only.
+- **The note cannot be changed**: the tree changes the author, the
+  subject and the icon of a comment, and this tree does not.
+- **The bytes of the icon are written where the caller says**: the
+  tree writes them into the file, and the bytes of a stream live in a
+  file of their own here.
