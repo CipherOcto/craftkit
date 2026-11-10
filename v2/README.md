@@ -4156,6 +4156,7 @@ so.
 | the **appearance** of the custom stamp | **built.** The picture is laid over the rectangle, an image exactly and a form by its size (§776) | §776 |
 | the **embedded file** of a document | **built.** The file a file carries is named in the catalog's tree of names, and the reader finds it (§777) | §777 |
 | the **marks** of a sequence | **built.** The program in and out of a sequence are set, and one that crosses the other takes it away (§783) | §783 |
+| the **playhead** at the marks | **built.** The playhead goes to the mark in or the mark out, and to the start or the end when there is none (§784) | §784 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -51579,3 +51580,55 @@ tree's own **program** marks.
   tree moves the playhead to the marks, and this tree's playhead is a
   fact of the sequence, so the two commands that move it are still to
   come.
+
+---
+
+## 784. The playhead goes to the marks
+
+The **playhead** now goes to the **mark in** and to the **mark out** of
+a sequence — the tree's own **go to the in** and **go to the out**.
+
+### What was built
+
+- The command **`film.playhead.goto.mark`** moves the playhead of a
+  sequence to its mark in or to its mark out.
+- The **rules** are the tree's own, ported by name:
+  - the playhead goes to the **mark in**, and to the **start** of the
+    sequence when there is no mark in: the tree's own `goToIn`;
+  - the playhead goes to the **mark out**, and to the **end** of the
+    sequence when there is no mark out: the tree's own `goToOut`;
+  - a mark that is **not one of the tree's own** — neither `in` nor
+    `out` — is **refused**.
+
+### What the port found
+
+- **The tree's playhead is the editor's and this one's is the
+  sequence's**, and the port found that the tree's own `goToIn` and
+  `goToOut` move the editor's playhead — a thing that is gone when the
+  editor is closed — while here the playhead is a **fact of the
+  sequence** (§783's module `playhead`), so the two commands move that
+  and the playhead stays where it was put.
+- **The tree's marks are the frames of the sequence**, and the port
+  found that the tree's own `goToOut` without a mark out goes to the
+  **duration** of the sequence and not to its last frame: so here the
+  playhead goes to the **end** of the sequence, which is the end of the
+  last clip — the tree's own end.
+
+### What it cost
+
+- **Four tests** in the film battery (`tests/gotomark.rs`): the
+  playhead that goes to the marks, a sequence with no mark in and one
+  with no mark out, and a mark that is not one of the tree's own.
+- **One new command**: the film battery carries **111** commands and
+  the MCP server **978** — one more than §783. The battery is counted
+  by the source of its commands; the MCP server is counted by the tool
+  list it answers with.
+
+### What it does not settle
+
+- **The tree's own source monitor is not here**: the tree's `goToIn`
+  and `goToOut` may be sent to the **source** instead of the program,
+  and here there is one sequence and its marks.
+- **The tree's split points are not here**: the tree takes the split of
+  the video and the split of the audio away when a mark is set, and
+  this tree has no split points.
