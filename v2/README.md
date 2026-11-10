@@ -4126,6 +4126,7 @@ so.
 | the **date field** of a form | **built.** A date field is put on a page — the tree's name, its format and its two actions (§746) | §746 |
 | the **signature field** of a form | **built.** A signature field is put on a page — the tree's name and its empty box (§747) | §747 |
 | the **image field** of a form | **built.** An image field is put on a page — the tree's name, its empty mark and its action (§748) | §748 |
+| the **properties** of a field | **built.** The General tab of the tree's own dialog is here — the name, the tooltip, the limit, the options, the alignment, the default and the lock (§749) | §749 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -49108,3 +49109,73 @@ the reader for a picture.
 - **The tree's kinds of field are all here now**, and the tree's own
   **editor** of them — the properties, the actions, the validation and
   the calculation — is not.
+
+---
+
+## 749. The properties of a field are set
+
+A **field** may now have its **properties** set: the tree's own General
+tab, the first tab of the dialog its editor shows for a field.
+
+### What was built
+
+- A **new command**: `pdf.field.properties.set` sets the properties of
+  a field — the field itself, its **name**, the **tooltip** that is
+  shown when the reader rests on it, the **most characters** it holds,
+  the **options** it offers, where its **text** sits, the **value** the
+  reset of the form restores, whether its **properties** may be
+  changed, and whether it holds **more than one line** of text.
+- The **rules** are the tree's own, ported by name:
+  - `set_props` — a **locked** field takes only **unlocking**: a field
+    whose properties are locked refuses every change but the unlocking,
+    and so it is refused here;
+  - the **name** may not be empty and may not hold a period, and a
+    name another field has is refused — and the name that is set is
+    the **last** part of the name, the part the field has of its own;
+  - the **tooltip** is taken away when it is empty;
+  - the **options** of a choice may not be empty;
+  - the **alignment** is 0 (left), 1 (centre) or 2 (right);
+  - the **multiline** flag is the flag of a **text field** and of
+    nothing else;
+  - the **maximum length** is a whole number of characters, and **zero**
+    means that there is no limit.
+- The read-only flag and the required flag are the flags of the field
+  and are set by `pdf.field.flags`, as they were.
+
+### What the port found
+
+- **The tree's locked field is greyed out in its own editor**, and the
+  port found that the lock of a field is on its **widgets** — the
+  annotation that shows the field on the page — and not on the field
+  itself; so the lock is set on the widgets here, and a field that
+  **is** its own widget — and a text field is — is locked itself.
+- **The tree's name is the last part of the name**, and the port found
+  that a field's name may be **qualified** — a parent and a child, and
+  the name of the child is the last part — and so a name that is set
+  here is the part the field has of its own and not the whole of it.
+
+### What it cost
+
+- **Nine tests** in the PDF battery (`tests/properties.rs`): the name
+  that is set and the names that are refused, the tooltip that is set
+  and the one that is taken away, the limit that is set and the one
+  that is taken away, the options that are set and the choice that may
+  not be left empty, the alignment that is set and the one that is
+  refused, the default that is set and the one that is taken away, the
+  flag of the text field and the button that refuses it, the locked
+  field and the unlocking, and the node that is not a field.
+- **One new command**: the PDF battery carries **104** commands and the
+  MCP server **959**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The tree's Appearance tab is not here**: the border, the fill, the
+  width of the line, the colour of the text, the font, the size of the
+  text and the place of the field on the page.
+- **The tree's Format, Validate and Calculate tabs are not here**:
+  they are the tree's own scripts, and a script is a thing this tree
+  does not run.
+- **The tree's actions are not here**: the JavaScript of a field and
+  the events it answers.
