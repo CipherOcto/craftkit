@@ -4147,6 +4147,7 @@ so.
 | the **mark** of Fill and Sign | **built.** The check, the cross, the dot and the line are put on a page — the tree's own four (§767) | §767 |
 | the **appearance** of the mark | **built.** The check, the cross, the dot and the line are drawn — the tree's own four (§768) | §768 |
 | the **file attachment** of a page | **built.** The attachment is put on a page — the tree's box, its icon and its file (§769) | §769 |
+| the **appearance** of the attachment | **built.** The pin and the tree's other three icons are drawn (§770) | §770 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -50667,3 +50668,69 @@ with it — may now be put on a page.
   command does not: the file is carried by the annotation alone.
 - **The tree's own stamp of a typed signature is not here**: the
   outline of a signature that a person typed.
+
+---
+
+## 770. The file attachment is drawn
+
+The **file attachment** — the tree's own **pin** and its other three
+icons — is now **drawn**.
+
+### What was built
+
+- The command **`pdf.annot.appearance.write`** now draws the **file
+  attachment** as well as the shape, the markup, the line, the
+  polygon, the ink, the caret, the text box, the mark of a redaction,
+  the stamp and the marks of Fill and Sign, and it draws it from the
+  **dictionary of the annotation** — the icon (`/Name`) and the colour
+  (`/C`) — as the tree's own builder does.
+- The **rules** are the tree's own icons, ported by name:
+  - the **icon** is one of the tree's own four — the **push pin**, the
+    **paperclip**, the **graph** and the **tag** — and the pin is the
+    tree's own when the annotation says none;
+  - the **pin** is a needle and a head: the tree's own drawing, and
+    the head is filled with the colour of the attachment;
+  - the **paperclip**, the **graph** and the **tag** are the tree's
+    own drawings, each in the box of twenty points;
+  - the **colour** of the attachment is the `/C` of the annotation,
+    and the tree's own blue when the annotation says none: the tree's
+    own rule;
+  - the icon is drawn in a box of **twenty points**, whatever the
+    rectangle of the annotation is: the tree's own box.
+
+### What the port found
+
+- **The tree's attachment is drawn in a box of its own**, and the port
+  found that the tree's builder draws the icon in the box of twenty
+  points that a note is drawn in — and not in the rectangle of the
+  annotation, which is where the icon hangs: so the drawing here is
+  in the tree's box, and the rectangle the answer gives is the box of
+  the drawing and not the rectangle of the annotation.
+- **The tree's pin is one drawing and the other icons are others**,
+  and the port found that the tree draws four different icons and
+  that the pin is the one it draws when the annotation says nothing:
+  so the icon here is the tree's, and the pin is the tree's default.
+
+### What it cost
+
+- **Four tests** in the PDF battery (`tests/attachmentappearance.rs`):
+  the pin that is drawn, the other three icons, the attachment
+  without a colour that is the tree's blue, and the attachment
+  without its rectangle.
+- **No new command**: the command that draws a shape draws the
+  attachment too, so the PDF battery carries **115** commands and the
+  MCP server **970** — the same count as §769. The battery is counted
+  by the source of its commands; the MCP server is counted by the
+  tool list it answers with.
+
+### What it does not settle
+
+- **Every annotation of the tree's builder is drawn here now**: the
+  shape, the markup, the line, the polygon, the ink, the caret, the
+  text box, the mark of a redaction, the stamp, the marks of Fill and
+  Sign and the attachment — and the tree's own callout leader line
+  and its typed signature are the two that are not.
+- **The callout is not drawn here**: the leader line of the tree's
+  free text with a leader.
+- **The tree's own typed signature is not drawn here**: the outline
+  of a signature that a person typed.
