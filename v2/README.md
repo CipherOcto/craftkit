@@ -4157,6 +4157,7 @@ so.
 | the **embedded file** of a document | **built.** The file a file carries is named in the catalog's tree of names, and the reader finds it (§777) | §777 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
+| the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -51334,6 +51335,62 @@ now **drawn** with the value of it.
   tree's own rule is that a border or a fill of "none" is **removed**,
   and here there is no way to say that — a look that says no colour is
   a field that never had one.
+- **The tree's own script outlines are not here**: the tree writes the
+  contours of a typed name from the outlines of a font it carries, and
+  this tree carries **no fonts at all** — so the contours are the
+  caller's.
+
+---
+
+## 780. The border and the background may be taken away
+
+The **border** and the **background** of a field may now be **taken
+away** — the tree's own rule of a colour of **"none"**.
+
+### What was built
+
+- The command **`pdf.field.look.set`** now takes the word **"none"**
+  for the border and for the background, and a colour of "none" is a
+  colour that is **removed**: the `/BC` and the `/BG` go out of the
+  `/MK` of the widget, and so the border and the background are not
+  drawn.
+- The **rules** are the tree's own, ported by name:
+  - a colour of **"none"** is a colour that is taken away: the tree's
+    own rule, and the tree's own spelling of it is the word "none";
+  - a look that says **nothing** leaves the colours as they were: the
+    tree's own rule — the three states are *not said*, *a colour* and
+    *none*;
+  - a colour that is **neither three numbers nor "none"** is
+    **refused**: the tree's own rule.
+
+### What the port found
+
+- **The tree's own look has three states and this tree had two**, and
+  the port found that the tree's own reader takes a border and a fill
+  as *optional* — the border is `None` when the field has no border
+  colour, and the fill is `None` when the field has no fill — so the
+  tree's own file has always been able to say "no border" and "no
+  fill", and the only thing missing here was a way to **say** it.
+- **The tree's own writer removes the colour and does not write an
+  empty one**, and the port found that the tree removes the `/BC` and
+  the `/BG` from the `/MK` rather than writing a colour of nothing:
+  so a field whose border is taken away has no border colour in it at
+  all, and the drawing follows — there is no border to draw.
+
+### What it cost
+
+- **Five tests** in the PDF battery (`tests/lookremove.rs`): the
+  border that is taken away, the background that is taken away, both
+  of them at once, a look that says nothing, and a colour that is
+  neither a colour nor "none".
+- **No new command**: the command that sets the look of a field takes
+  the word "none" now, so the PDF battery still carries **119**
+  commands and the MCP server **974** — the same counts as §779. The
+  battery is counted by the source of its commands; the MCP server is
+  counted by the tool list it answers with.
+
+### What it does not settle
+
 - **The tree's own script outlines are not here**: the tree writes the
   contours of a typed name from the outlines of a font it carries, and
   this tree carries **no fonts at all** — so the contours are the
