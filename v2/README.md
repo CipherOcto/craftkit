@@ -4135,6 +4135,7 @@ so.
 | the **polygon** of a page | **built.** A polygon and its connected lines are put on a page — the tree's corners, its cloud and its rectangle (§755) | §755 |
 | the **appearance** of a polygon | **built.** The polygon and its connected lines are drawn — the tree's corners, its fill and its cloudy border (§756) | §756 |
 | the **ink** of a page | **built.** The ink is put on a page — the tree's strokes, its colour and its rectangle (§757) | §757 |
+| the **appearance** of the ink | **built.** The ink is drawn — the tree's strokes, its width and its dots (§758) | §758 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -49806,3 +49807,67 @@ put on a page.
   a different name.
 - **The ink here has no name, no contents and no author**: the tree's
   ink is a tool of its editor, and the editor is not here.
+
+---
+
+## 758. The ink is drawn
+
+The **ink** — the tree's own freehand **strokes** — is now **drawn**.
+
+### What was built
+
+- The command **`pdf.annot.appearance.write`** now draws the **ink**
+  as well as the shape, the markup, the line and the polygon, and it
+  draws it from the **dictionary of the annotation** — the strokes
+  (`/InkList`) and the colour (`/C`) — as the tree's own builder
+  does.
+- The **rules** are the tree's own ink branch, ported by name:
+  - the **strokes** are the `/InkList` of the annotation, a list of
+    lists of numbers, and each stroke is drawn **on its own**: the
+    tree's own rule, and the tree strokes each of them and closes it;
+  - the ink has a **colour**, and one without a colour is
+    **refused**;
+  - a stroke of **one point** is a **dot**, and the tree draws it as
+    the point and a hair along it — a hundredth of a point — so that
+    a reader shows a mark;
+  - the ink is stroked with its **width** (`/BS /W`), and the round
+    joins and the round caps are the tree's own.
+
+### What the port found
+
+- **The tree's ink is not one path but a list of strokes**, and the
+  port found that each stroke of the tree is drawn, stroked and
+  closed on its own — so that a stroke that crosses another does not
+  join it: so the drawing here strokes each of the strokes on its
+  own, as the tree does.
+- **The tree's dot is a hair and not a point**, and the port found
+  that a stroke of one point is drawn as the point and the point a
+  hundredth of a point along — so that a reader that draws nothing
+  for a lone point still shows a mark: so the dot here is the tree's
+  hair.
+- **The tree's ink may have a stroke with an odd number of numbers**,
+  and the port found that the tree takes the points two at a time and
+  leaves the last one out: so the drawing here does the same, and a
+  stroke with three numbers is drawn as one point and a hair.
+
+### What it cost
+
+- **Five tests** in the PDF battery (`tests/inkappearance.rs`): the
+  ink that is drawn, the stroke of one point that is a dot, the two
+  strokes that are drawn one by one, the ink without a colour, and the
+  ink without its strokes.
+- **No new command**: the command that draws a shape draws the ink
+  too, so the PDF battery carries **109** commands and the MCP server
+  **964** — the same count as §757. The battery is counted by the
+  source of its commands; the MCP server is counted by the tool list
+  it answers with.
+
+### What it does not settle
+
+- **The tree's other annotations are still not drawn here**: the
+  caret, the stamp, the free text and the note — the tree's own
+  builder draws them all.
+- **The tree's signature is an ink too**, and it is drawn as one, and
+  it is not here: the signature of a form is the tree's own thing.
+- **The ink here is drawn in the page's own space**, and it does not
+  turn with the page's `/Matrix`: that is the reader's work.
