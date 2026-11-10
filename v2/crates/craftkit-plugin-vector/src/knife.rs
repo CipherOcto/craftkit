@@ -82,12 +82,13 @@ impl KnifePath {
             Some(name) => name.0.clone(),
             None => session.document().node(self.path.0).map(|node| node.name.clone()).unwrap_or_default(),
         };
-        let mut pieces = cut.subpaths.into_iter();
+        // A **hole** travels with the shape it is in.
+        let mut pieces = crate::components::components(&cut).into_iter();
         let Some(first) = pieces.next() else {
             return Err(EngineError::Failed { id, message: "the knife left no shape".to_string() });
         };
         let mut vector = vector;
-        vector.path = Path { subpaths: vec![first], rule: vector.path.rule };
+        vector.path = first;
         write_back(session, self.path.0, &vector)?;
         let mut ids: Vec<u64> = vec![self.path.0];
         for piece in pieces {
@@ -105,12 +106,12 @@ fn add_piece(
     session: &mut Session,
     name: &str,
     vector: &crate::VectorNode,
-    contour: SubPath,
+    path: Path,
 ) -> Result<u64, EngineError> {
     let mut piece = vector.clone();
     // The piece keeps the **rule** of the shape it was cut from: a path
     // with the even-odd rule does not become a path with the other one.
-    piece.path = Path { subpaths: vec![contour], rule: vector.path.rule };
+    piece.path = path;
     let rect = geom::bounds(&piece.placed());
     let id =
         session.document_mut()?.add_node_with(name.to_string(), "vector.path", Some(rect), piece.to_json());

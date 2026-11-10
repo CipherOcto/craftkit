@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **fifty-eight commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **fifty-nine commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.create` makes a path out of path data or
@@ -27,7 +27,8 @@
 //!   puts a point in the middle of every side of it, `vector.path.cut` cuts
 //!   a path at a point, `vector.path.erase` takes away the parts of a
 //!   path under a drag, `vector.path.knife` cuts a closed shape along a
-//!   run of points, and `vector.path.freehand` draws a stroke by hand;
+//!   run of points, `vector.path.cut.line` cuts a closed shape along a
+//!   line, and `vector.path.freehand` draws a stroke by hand;
 //!   `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
@@ -84,6 +85,7 @@
 
 mod anchors;
 mod colour;
+mod components;
 mod cutpath;
 mod dashes;
 mod epsexport;
@@ -91,6 +93,7 @@ mod erasepath;
 mod freehand;
 mod gradients;
 mod knife;
+mod linecut;
 mod opacity;
 mod pathcreate;
 mod pathfinder;
@@ -102,6 +105,7 @@ mod svgimport;
 
 pub use anchors::{AddMiddleAnchors, SetAnchors};
 pub use colour::{ColourGamut, ConvertColour};
+pub use components::components;
 pub use cutpath::CutPath;
 pub use dashes::DashPath;
 pub use epsexport::ExportEps;
@@ -109,6 +113,7 @@ pub use erasepath::ErasePath;
 pub use freehand::Freehand;
 pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
 pub use knife::KnifePath;
+pub use linecut::CutPathLine;
 pub use opacity::{SetOpacity, fill_at, stroke_at};
 pub use pathcreate::CreatePath;
 pub use pathfinder::{CropPaths, DividePaths, MergePaths, TrimPaths};
@@ -2858,6 +2863,7 @@ craftkit_sdk::plugin_anchor!(
     AddMiddleAnchors,
     ErasePath,
     KnifePath,
+    CutPathLine,
     CutPath,
     Freehand,
     UnitePaths,
