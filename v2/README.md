@@ -4137,6 +4137,7 @@ so.
 | the **ink** of a page | **built.** The ink is put on a page — the tree's strokes, its colour and its rectangle (§757) | §757 |
 | the **appearance** of the ink | **built.** The ink is drawn — the tree's strokes, its width and its dots (§758) | §758 |
 | the **caret** of a page | **built.** The caret is put on a page — the tree's rectangle, its colour and its symbol (§759) | §759 |
+| the **appearance** of the caret | **built.** The caret is drawn — the tree's wedge and its blue (§760) | §760 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -49930,3 +49931,59 @@ may now be put on a page.
   marks is not here: this tree has no text layer of its own.
 - **The caret here has no author and no name**: the tree's caret is a
   tool of its editor, and the editor is not here.
+
+---
+
+## 760. The caret is drawn
+
+The **caret** — the tree's own wedge — is now **drawn**.
+
+### What was built
+
+- The command **`pdf.annot.appearance.write`** now draws the **caret**
+  as well as the shape, the markup, the line, the polygon and the
+  ink, and it draws it from the **dictionary of the annotation** — the
+  rectangle (`/Rect`) and the colour (`/C`) — as the tree's own
+  builder does.
+- The **rules** are the tree's own caret branch, ported by name:
+  - the caret is a **filled wedge**: two curved flanks that meet at
+    the top centre of the rectangle, and the flanks start a tenth of
+    the width of the rectangle from the sides and a fifth of its
+    height from the bottom — the tree's own proportions;
+  - the **colour** of the caret is the `/C` of the annotation, and the
+    tree's own blue when the annotation says none: the tree's own
+    rule, and a caret has a colour whether or not it is said.
+
+### What the port found
+
+- **The tree's caret has a colour even when the annotation does not
+  say one**, and the port found that the tree's builder falls back to
+  its blue — and that this is the only shape of the tree's whose
+  colour is not required: so a caret without a colour is drawn in the
+  tree's blue here, and it is not refused.
+- **The tree's wedge is drawn with two curves and not with straight
+  lines**, and the port found that the flanks of the wedge are the
+  two curves that meet at the top centre — and that the width of the
+  wedge is a tenth of the rectangle and not a fixed size: so the
+  drawing here follows the rectangle, as the tree does.
+
+### What it cost
+
+- **Three tests** in the PDF battery (`tests/caretappearance.rs`): the
+  caret that is drawn, the caret without a colour that is the tree's
+  blue, and the caret without its rectangle.
+- **No new command**: the command that draws a shape draws the caret
+  too, so the PDF battery carries **110** commands and the MCP server
+  **965** — the same count as §759. The battery is counted by the
+  source of its commands; the MCP server is counted by the tool list
+  it answers with.
+
+### What it does not settle
+
+- **The tree's other annotations are still not drawn here**: the
+  stamp, the free text and the attachment — the tree's own builder
+  draws them all.
+- **The caret here is drawn in the page's own space**, and it does not
+  turn with the page's `/Matrix`: that is the reader's work.
+- **The tree's caret is a mark in the text layer**, and the text it
+  marks is not here: this tree has no text layer of its own.
