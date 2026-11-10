@@ -693,6 +693,12 @@ battery now draws a shape with a hole, and the file carries it.
 - **Simplification keeps the sharp corners.** A polygon with 32 sides
   still has 32 sides: they are corners, and a corner is not a point a
   flat line would serve.
+- **The tree's simplification is a refit and this one is not.** The
+  tree's Simplify dialog fits the path with curves — a least-squares
+  fit, with a level slider, a corner angle and an option to make
+  straight lines — and this tree's simplification is the geometry
+  library's, which fits the path within an accuracy. So the two are
+  **not the same operation**, and the tree's refit is **not here**.
 - **Hit testing is still the plugin's, and still by sampling.** The
   geometry library knows the area exactly; the hit test flattens.
 - **One path, one fill rule.** A shape with two holes of different
@@ -4165,6 +4171,7 @@ so.
 | the **curve through the points** | **built.** A path curves through a list of points — the tree's curvature tool, its circle and its tight turn (§790) | §790 |
 | the **anchors** of a path | **built.** The anchors of a path are set, and the path is the shape they describe (§791) | §791 |
 | the **cutting** of a path | **built.** A path is cut at a point — a closed path opens there, an open one becomes one path per piece (§792) | §792 |
+| the **stroke drawn by hand** | **built.** A stroke is fitted to its samples — the tree's jitter, its corners and its spline (§793) | §793 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52178,3 +52185,75 @@ not change — the pieces are the sides that were there.
   one of the two coincident anchors of each cut selected, so that a
   drag pulls the ends apart; here the command says what it made and
   nothing more.
+
+## 793. A stroke is drawn by hand
+
+The tree's **Pencil** draws a stroke by hand and **fits** it to the
+samples: the jitter is dropped, the sharp turns stay corners, and the
+rest is a spline through the samples that is then simplified.
+
+### What was built
+
+- The command **`vector.path.freehand`** draws a **stroke by hand** in
+  the document: the tree's Pencil, as a command. The samples are
+  `[[x, y], …]` or `[{x, y}, …]` — the tree's own two spellings.
+- The stroke is the tree's own, and its rules are the tree's own, by
+  name:
+  - a sample closer than a **third of the fidelity** to the last one
+    kept is dropped — the **jitter** — and the **last sample always
+    ends the stroke**: the tree's own rule;
+  - a turn of **more than a hundred degrees** is a **corner**, and a
+    corner has no handles: the tree's own rule;
+  - the stroke is a **spline through the samples** — the Catmull-Rom
+    one: the handles at a point are a sixth of the way to the point
+    before it and the point after it: the tree's own rule;
+  - the spline is **simplified** at the fidelity: the tree's own rule.
+- The **fidelity** is between a **hundredth of a point** and a
+  **hundred points**, and one outside that is refused by name; it is
+  **1.5** when the caller names none — the tree's own default.
+- A stroke that is **not fitted** is the samples joined by **straight
+  sides**: the tree's own switch.
+
+### What the port found
+
+- **The tree's simplify is a refit and this tree's simplification is
+  not.** The tree's Simplify dialog fits the path with curves — a
+  least-squares fit, with a level slider, a corner angle and an option
+  to make straight lines — and this tree's simplification is the
+  geometry library's, which fits the path within an accuracy. So the two
+  are **not the same operation**, and the tree's refit is **not here**:
+  §13's note about the simplification is **corrected in place** to say
+  so, and the stroke is simplified with this tree's simplification.
+- **The tree's Pencil keeps the pen's pressure on a stroke**, and this
+  tree has nowhere to keep it: a sample that carries a **pressure** is
+  refused rather than quietly losing it.
+- **The tree's stroke may be drawn onto another path**, and that is not
+  here: what is here is the stroke itself.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/freehand.rs`): twelve
+  tests — the stroke of its samples, the jitter that is dropped, the
+  last sample that ends it, the corner and the sample that is not one,
+  the fitted stroke, the straight stroke, the closed stroke, and the
+  refusals.
+- **One new command**: the vector battery now carries **55** commands
+  and the MCP server **988** — one more than §792. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`freehand`), and the anchors of the stroke are
+  the crate's own: the same ones `vector.path.create` and
+  `vector.path.anchors.set` use.
+
+### What it does not settle
+
+- **The tree's own brushes are not here**: the Paintbrush and the Blob
+  Brush make a shape of their own, and the tree's brush library is a
+  library of symbols.
+- **The tree's own edits of a path with a stroke are not here**:
+  extending a path with a stroke, connecting a stroke to one, and
+  redrawing a part of one are the tree's own commands, and they are not
+  here.
+- **The tree's own refit is not here**: the tree's Smooth and Simplify
+  dialogs fit a path with curves, and this tree's simplification is
+  the geometry library's.
