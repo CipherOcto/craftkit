@@ -321,6 +321,7 @@
 )]
 #![forbid(unsafe_code)]
 
+mod advancedfilter;
 mod arithmetic;
 mod autofit;
 mod bonds;
@@ -418,6 +419,7 @@ use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
+pub use advancedfilter::AdvancedFilter;
 pub use autofit::{AutofitColumn, AutofitRow};
 pub use borders::{ClearBorder, GetBorder, SetBorder};
 pub use cellread::ReadCell;
@@ -1846,6 +1848,7 @@ craftkit_sdk::plugin_anchor!(
     RemovePicture,
     SetSparkline,
     AddScenario,
+    AdvancedFilter,
     ListScenarios,
     ShowScenario,
     DeleteScenario,
