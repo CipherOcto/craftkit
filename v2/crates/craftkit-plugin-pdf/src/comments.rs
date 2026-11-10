@@ -42,7 +42,7 @@ use craftkit_sdk::{Document, EngineError, Outcome, Session};
 const COMMAND: &str = "pdf.comment.read";
 
 /// How deep the tree of pages may be walked.
-const MAX_DEPTH: usize = 64;
+pub(crate) const MAX_DEPTH: usize = 64;
 
 /// The **entry** of a dictionary, by its key.
 fn entry<'a>(entries: &'a [(String, Json)], key: &str) -> Option<&'a Json> {

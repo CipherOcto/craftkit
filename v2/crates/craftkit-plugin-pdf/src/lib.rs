@@ -209,7 +209,7 @@ pub use destinations::ReadDestinations;
 pub use encrypt::ReadEncryption;
 pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField, SetFlags, SetParent};
 pub use figures::{ReadFigures, SetFigureAlt};
-pub use flatten::FlattenForm;
+pub use flatten::{FlattenComments, FlattenForm};
 pub use fonts::ReadFonts;
 pub use form::ReadForm;
 pub use format::ReadFormat;
@@ -2184,6 +2184,7 @@ craftkit_sdk::plugin_anchor!(
     AddBackground,
     RemoveMarks,
     ReadComments,
+    FlattenComments,
     FlattenForm,
     AddHeader,
     AddFooter,
