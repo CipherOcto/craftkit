@@ -152,13 +152,13 @@ fn read_points(value: &Json) -> Result<Vec<(Point, bool)>, String> {
 }
 
 /// An **anchor** of the curve: a point and its two handles.
-struct Anchor {
+pub(crate) struct Anchor {
     /// Where the anchor is.
-    p: Point,
+    pub(crate) p: Point,
     /// The handle the curve that arrives at the anchor comes by.
-    h_in: Point,
+    pub(crate) h_in: Point,
     /// The handle the curve that leaves the anchor goes by.
-    h_out: Point,
+    pub(crate) h_out: Point,
 }
 
 impl Anchor {
@@ -168,12 +168,12 @@ impl Anchor {
     }
 
     /// Whether the curve that arrives at the anchor has a handle.
-    fn has_in(&self) -> bool {
+    pub(crate) fn has_in(&self) -> bool {
         self.h_in != self.p
     }
 
     /// Whether the curve that leaves the anchor has a handle.
-    fn has_out(&self) -> bool {
+    pub(crate) fn has_out(&self) -> bool {
         self.h_out != self.p
     }
 }
@@ -277,7 +277,7 @@ fn arc_handle(chord: Vec2, dir: Vec2) -> f64 {
 ///
 /// None when there is no direction: a chord of no length, or a fold
 /// straight back on itself. The point is then a corner.
-fn smooth_handles(prev: Point, p: Point, next: Point) -> Option<(Point, Point)> {
+pub(crate) fn smooth_handles(prev: Point, p: Point, next: Point) -> Option<(Point, Point)> {
     let (a, b) = (Vec2::from(prev) - Vec2::from(p), Vec2::from(next) - Vec2::from(p));
     let (la2, lb2) = (a.squared_length(), b.squared_length());
     if !(la2.is_finite() && lb2.is_finite()) || la2 <= 1e-18 || lb2 <= 1e-18 {
@@ -318,7 +318,7 @@ fn smooth_handles(prev: Point, p: Point, next: Point) -> Option<(Point, Point)> 
 ///
 /// None when `q` has no handle to take a tangent from (a corner): the
 /// segment stays straight.
-fn end_handle(p: Point, q: &Anchor, forward: bool) -> Option<Point> {
+pub(crate) fn end_handle(p: Point, q: &Anchor, forward: bool) -> Option<Point> {
     let t = if q.has_out() {
         Vec2::from(q.h_out) - Vec2::from(q.p)
     } else if q.has_in() {

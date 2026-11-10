@@ -1980,10 +1980,9 @@ impl TransformPath {
 
 /// Make a point of a path **smooth**.
 ///
-/// A smooth point's two handles are collinear and of the same length:
-/// the curve passes through the point as one curve and not as two. The
-/// command makes it so — the handles take the average of the two they
-/// were, and a side that was a straight line becomes a curve.
+/// A smooth point's two handles are in line: the curve passes through
+/// the point as one curve and not as two. The command makes it so, and
+/// the rule is the tree's own.
 #[derive(Command)]
 #[command(
     id = "vector.path.smooth",
@@ -2022,9 +2021,14 @@ impl SmoothPoint {
 
 /// Make a point of a path **smooth**.
 ///
-/// The two handles of the point become collinear and of the same
-/// length, and a side that was a straight line becomes a curve with a
-/// handle.
+/// The tree's rule: the two handles at the point are the ones the
+/// **curvature tool** gives it — the handles along the circle through
+/// the point and its two neighbours, and at an end of an open contour
+/// the handle that mirrors its neighbour's tangent. A point with no
+/// direction to take is left as it is.
+///
+/// A side that was a straight line becomes a curve with a handle: the
+/// handle is at the point, and the far end keeps the line's direction.
 fn smooth_point(path: &mut Path, contour: usize, point: usize) -> Result<(), String> {
     let Some(subpath) = path.subpaths.get_mut(contour) else {
         return Err(format!("the path has no contour {contour}"));
@@ -2056,78 +2060,98 @@ fn smooth_point(path: &mut Path, contour: usize, point: usize) -> Result<(), Str
             None => subpath.start,
         },
     };
-    // The two **handles**: a straight side has none, and its tangent
-    // is the line itself.
-    let out_handle = match leaving {
-        Some(index) => match &subpath.segments[index] {
-            Segment::Line { .. } => None,
-            Segment::Cubic { c1, .. } => Some(*c1),
-        },
-        None => None,
+    // The two **handles**: the curvature tool's rule.
+    let (h_in, h_out) = match (arriving, leaving) {
+        (Some(arriving), Some(leaving)) => {
+            let previous = anchor_starting_at(subpath, arriving);
+            let next = anchor_ending_at(subpath, leaving);
+            crate::spline::smooth_handles(previous.p, at, next.p)
+                .ok_or_else(|| format!("the point {point} has no direction: its neighbours are one point"))?
+        }
+        // An end of an open contour has one neighbour, and it takes
+        // that neighbour's tangent, mirrored in the chord.
+        (None, Some(leaving)) => {
+            let next = anchor_ending_at(subpath, leaving);
+            let handle = crate::spline::end_handle(at, &next, true).ok_or_else(|| {
+                format!("the point {point} has no direction: its neighbour has no handle to take")
+            })?;
+            (at, handle)
+        }
+        (Some(arriving), None) => {
+            let previous = anchor_starting_at(subpath, arriving);
+            let handle = crate::spline::end_handle(at, &previous, false).ok_or_else(|| {
+                format!("the point {point} has no direction: its neighbour has no handle to take")
+            })?;
+            (handle, at)
+        }
+        (None, None) => {
+            return Err(format!("the point {point} has no neighbour to take a direction from"));
+        }
     };
-    let in_handle = match arriving {
-        Some(index) => match &subpath.segments[index] {
-            Segment::Line { .. } => None,
-            Segment::Cubic { c2, .. } => Some(*c2),
-        },
-        None => None,
-    };
-    if leaving.is_none() || arriving.is_none() {
-        return Err(format!("the point {point} has a curve on only one side"));
-    }
-    let out_offset = match out_handle {
-        Some(handle) => Point::new(handle.x - at.x, handle.y - at.y),
-        None => Point::new(0.0, 0.0),
-    };
-    let in_offset = match in_handle {
-        Some(handle) => Point::new(handle.x - at.x, handle.y - at.y),
-        None => Point::new(0.0, 0.0),
-    };
-    let out_is_zero = out_offset.x.abs() < f64::EPSILON && out_offset.y.abs() < f64::EPSILON;
-    let in_is_zero = in_offset.x.abs() < f64::EPSILON && in_offset.y.abs() < f64::EPSILON;
-    if out_is_zero && in_is_zero {
-        return Err(format!("the point {point} has no handles to smooth"));
-    }
-    // The **new** handle: the average of the two, or the one that is
-    // there when the other side is a straight line.
-    let offset = if out_is_zero || in_is_zero {
-        if out_is_zero { in_offset } else { out_offset }
-    } else {
-        Point::new((out_offset.x + in_offset.x) / 2.0, (out_offset.y + in_offset.y) / 2.0)
-    };
-    let out_at = Point::new(at.x + offset.x, at.y + offset.y);
-    let in_at = Point::new(at.x - offset.x, at.y - offset.y);
-    // The **leaving** side: the handle at the point, and — when the
-    // side was a straight line — the other end keeps the line's
-    // direction.
+    // The **leaving** side: the handle at the point, and the far end
+    // keeps what it had.
     if let Some(index) = leaving {
         let end = subpath.segments[index].end();
-        let c2 = if out_is_zero {
-            // A straight line that becomes a curve: the other end's
-            // handle is a third of the way along it.
-            Point::new(end.x - (end.x - at.x) / 3.0, end.y - (end.y - at.y) / 3.0)
-        } else {
-            match &subpath.segments[index] {
-                Segment::Line { .. } => end,
-                Segment::Cubic { c2, .. } => *c2,
-            }
+        let c2 = match &subpath.segments[index] {
+            Segment::Line { .. } => end,
+            Segment::Cubic { c2, .. } => *c2,
         };
-        subpath.segments[index] = Segment::Cubic { c1: out_at, c2, to: end };
+        subpath.segments[index] = Segment::Cubic { c1: h_out, c2, to: end };
     }
     // The **arriving** side: the same, the other way round.
     if let Some(index) = arriving {
         let start = if index == 0 { subpath.start } else { subpath.segments[index - 1].end() };
-        let c1 = if in_is_zero {
-            Point::new(start.x + (at.x - start.x) / 3.0, start.y + (at.y - start.y) / 3.0)
-        } else {
-            match &subpath.segments[index] {
-                Segment::Line { .. } => start,
-                Segment::Cubic { c1, .. } => *c1,
-            }
+        let c1 = match &subpath.segments[index] {
+            Segment::Line { .. } => start,
+            Segment::Cubic { c1, .. } => *c1,
         };
-        subpath.segments[index] = Segment::Cubic { c1, c2: in_at, to: at };
+        subpath.segments[index] = Segment::Cubic { c1, c2: h_in, to: at };
     }
     Ok(())
+}
+
+/// The **anchor** at the start of a side: the point, and the handles it
+/// has.
+fn anchor_starting_at(subpath: &SubPath, index: usize) -> crate::spline::Anchor {
+    let point = if index == 0 { subpath.start } else { subpath.segments[index - 1].end() };
+    let h_out = match &subpath.segments[index] {
+        Segment::Line { .. } => point,
+        Segment::Cubic { c1, .. } => *c1,
+    };
+    // The handle that arrives at the point is the one of the side
+    // before it — the closing side, for the first point of a closed
+    // contour.
+    let h_in = match index {
+        0 => match closing_segment(subpath) {
+            Some(closing) => match &subpath.segments[closing] {
+                Segment::Line { .. } => point,
+                Segment::Cubic { c2, .. } => *c2,
+            },
+            None => point,
+        },
+        index => match &subpath.segments[index - 1] {
+            Segment::Line { .. } => point,
+            Segment::Cubic { c2, .. } => *c2,
+        },
+    };
+    crate::spline::Anchor { p: point, h_in, h_out }
+}
+
+/// The **anchor** at the end of a side: the point, and the handles it
+/// has.
+fn anchor_ending_at(subpath: &SubPath, index: usize) -> crate::spline::Anchor {
+    let point = subpath.segments[index].end();
+    let h_in = match &subpath.segments[index] {
+        Segment::Line { .. } => point,
+        Segment::Cubic { c2, .. } => *c2,
+    };
+    // The handle that leaves the point is the one of the side after it.
+    let h_out = match subpath.segments.get(index + 1) {
+        Some(Segment::Line { .. }) => point,
+        Some(Segment::Cubic { c1, .. }) => *c1,
+        None => point,
+    };
+    crate::spline::Anchor { p: point, h_in, h_out }
 }
 
 /// Make a point of a path a **corner**.

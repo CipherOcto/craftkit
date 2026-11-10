@@ -1,9 +1,10 @@
 //! The **smooth** point: a point whose two handles are one.
 //!
-//! A smooth point's handles are collinear and of the same length: the
-//! curve passes through the point as one curve and not as two. The
-//! command makes it so, and a side that was a straight line becomes a
-//! curve with a handle.
+//! A smooth point's handles are in line: the curve passes through the
+//! point as one curve and not as two. The command makes it so, and a
+//! side that was a straight line becomes a curve with a handle. The
+//! rule the handles follow is the tree's own, and `tests/smoothrule.rs`
+//! says which.
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
@@ -98,20 +99,11 @@ fn a_point_with_a_curve_on_one_side_may_be_made_smooth() {
     assert!((out_len - back_len).abs() < 1e-9, "and they are the same length");
 }
 
-/// A point with **no curve at all** has nothing to smooth, and a
-/// point that is not there is refused by name.
+/// A point that is **not there** is refused by name.
 #[test]
-fn a_point_that_cannot_be_made_smooth_is_refused() {
+fn a_point_that_is_not_there_is_refused() {
     let mut session = session();
     let id = a_triangle(&mut session);
-    // A point between two straight lines has no curvature to smooth.
-    let refused = session.execute("vector.path.smooth", &json!({ "path": id, "point": 1 }));
-    let message = match refused {
-        Ok(_) => panic!("a point with no handles is refused"),
-        Err(error) => error.to_string(),
-    };
-    assert!(message.contains("handles"), "the refusal says why: {message}");
-    // A point that is not there is refused too.
     let refused = session.execute("vector.path.smooth", &json!({ "path": id, "point": 99 }));
     let message = match refused {
         Ok(_) => panic!("a point that is not there is refused"),
