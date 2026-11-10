@@ -133,6 +133,7 @@ mod attachments;
 mod background;
 mod boxes;
 mod calculate;
+mod caretadd;
 mod checkbox;
 mod combobox;
 mod comments;
@@ -218,6 +219,7 @@ pub use attachments::ReadAttachments;
 pub use background::AddBackground;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use calculate::{ReadCalculatedValue, ReadCalculation};
+pub use caretadd::AddCaret;
 pub use checkbox::AddCheckBox;
 pub use combobox::AddCombo;
 pub use comments::{AddComment, CommentInfo, ReadComments};
@@ -2214,6 +2216,7 @@ craftkit_sdk::plugin_anchor!(
     AddLine,
     AddPolygon,
     AddInk,
+    AddCaret,
     SetProperties,
     SetLook,
     WriteAnnotation,
