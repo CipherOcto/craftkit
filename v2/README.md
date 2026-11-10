@@ -4125,6 +4125,7 @@ so.
 | the **list box** of a form | **built.** A list box is put on a page — the tree's name, its options, its flag and its drawing (§745) | §745 |
 | the **date field** of a form | **built.** A date field is put on a page — the tree's name, its format and its two actions (§746) | §746 |
 | the **signature field** of a form | **built.** A signature field is put on a page — the tree's name and its empty box (§747) | §747 |
+| the **image field** of a form | **built.** An image field is put on a page — the tree's name, its empty mark and its action (§748) | §748 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -49039,3 +49040,71 @@ reader signs.
 - **The kinds of the tree are not the kinds of the file**: the check
   box, the radio button and the push button are one kind here — the
   kind the file says — and they are told apart by their flags.
+
+---
+
+## 748. An image field is put on a page
+
+A **form** may now hold an **image field**: a box on a page that asks
+the reader for a picture.
+
+### What was built
+
+- A **new command**: `pdf.field.image.add` puts an image field on a
+  page — the **page**, the **object number** the field holds, the
+  **rectangle** it covers, its **name** and **where the drawing of it is
+  written**.
+- The **rules** are the tree's own, ported by name:
+  - `free_name` — the **name** is the first free `Image` name — `Image1`,
+    `Image2` and so on — when the caller does not give one, and a name
+    that holds a **period** is refused, and so is a name another field
+    has;
+  - the **rectangle** is four numbers and the corners may come in any
+    order, and a field smaller than **four points by four** is refused,
+    as the tree refuses it;
+  - `widget_dict` — the field is a **widget**, an annotation of the
+    kind `Widget`, and it is a **push button** — the tree's own
+    seventeenth bit;
+  - the field has **no border** and **no background**, and it says that
+    it is **icon only** (`/MK /TP 1`) — the picture is the field;
+  - the field carries the tree's own **action**, the JavaScript that
+    asks the reader for a picture;
+  - `ensure_form` — the file's **form** is made when the file has none,
+    and it holds the field;
+  - `button_appearance` — the **drawing** of the field: the frame, and
+    the frame of an image field has nothing in it.
+
+### What the port found
+
+- **The tree's image field is a button and not a picture**, and the
+  port found that the picture is not in the file when the field is
+  made: the field is a **push button** whose action asks the reader
+  for a picture, and the picture arrives later — and so the drawing of
+  the field here is **empty**, as the tree's is.
+- **The tree's icon only is said in the mark of the field**, and the
+  port found that the tree says it in two ways at once — the colours
+  are left away **and** the mark says that the field is icon only — and
+  that both are written here.
+
+### What it cost
+
+- **Four tests** in the PDF battery (`tests/imagefield.rs`): the image
+  field that is put on the page and what its dictionary says, the mark
+  that has no border and no background, the action that asks for a
+  picture, the free name and the second free name, and the drawing that
+  is empty.
+- **One new command**: the PDF battery carries **103** commands and the
+  MCP server **958**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The picture is not here**: the field asks the reader for a picture
+  and the reader's own reader brings it — a picture is a thing this
+  tree cannot yet put in a file.
+- **The script only Acrobat runs**: a reader that is not Acrobat shows
+  an empty box and does not ask for a picture.
+- **The tree's kinds of field are all here now**, and the tree's own
+  **editor** of them — the properties, the actions, the validation and
+  the calculation — is not.
