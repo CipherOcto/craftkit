@@ -4113,6 +4113,7 @@ so.
 | the **comments** of a file | **built.** The notes of a file are read — the tree's summary, its colour of a free text and its order (§731) | §731 |
 | the **flattening** of the comments | **built.** The notes of a file are drawn into the pages they are on and taken away — the tree's matrix, its popup and its replies (§732) | §732 |
 | a **note** on a page | **built.** A sticky note is put on a page — the tree's icons, its rectangle, its popup and its drawing (§735) | §735 |
+| the **author** of a comment | **built.** The author, the subject and the icon of a comment are changed — the tree's lock, its note and its drawing (§736) | §736 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -48159,3 +48160,61 @@ A **sticky note** may now be put on a page of a file.
 - **The bytes of the icon are written where the caller says**: the
   tree writes them into the file, and the bytes of a stream live in a
   file of their own here.
+
+---
+
+## 736. The author, the subject and the icon of a comment
+
+A **comment** of a file may now be **changed**: its author, its
+subject and — when it is a note — its icon.
+
+### What was built
+
+- A **new command**: `pdf.comment.info` changes a comment — the
+  **comment**, the **author**, the **subject**, the **icon** and, when
+  the icon changes, **where the bytes of the icon are written**.
+- The **rules** are the tree's own:
+  - the node must be a **comment** — an annotation that is none of a
+    link, a widget and a popup;
+  - a comment that is **locked** — the flag `Locked` — is **refused**;
+  - the **icon** is one of the tree's own seven, and **only a note**
+    has one: an icon for a comment of another kind is **refused**;
+  - an **author** or a **subject** that is empty is taken away;
+  - when the icon changes, the **icon is drawn again** — the tree's
+    own drawing, in the content of a form XObject of its own, and the
+    comment points at the new drawing.
+
+### What the port found
+
+- **The tree's locked comment is not changed at all**, and the port
+  found that the tree refuses the change before it looks at what is
+  being changed — so a locked comment cannot even be given an author.
+- **The tree's icon belongs to a note**, and the port found that the
+  tree's rule is that only a **sticky note** has an icon — every other
+  kind of comment is refused an icon, and the icon of a note is the
+  only one that is drawn again.
+- **The tree draws the icon again and points at the new drawing**,
+  and the port found that the tree does not draw into the old stream
+  but makes a **new** one — so the comment names a drawing that was
+  made for it.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/commentinfo.rs`): the
+  author and the subject that are changed, the empty author that
+  takes the author away, the icon that is changed and drawn again,
+  the icon of a comment that is not a note that is refused, the
+  locked comment that is refused, and the icon that is not one of the
+  tree's own that is refused.
+- **One new command**: the PDF battery carries **94** commands and the
+  MCP server **947**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The comments of another kind are not drawn again**: the tree draws
+  the arrow, the callout, the circle and the rest as well, and this
+  tree draws the **note** only.
+- **The day of the comment is not changed**: the tree touches the
+  `/M` of a comment it changes, and this tree does not.
