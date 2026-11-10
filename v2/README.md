@@ -4150,6 +4150,7 @@ so.
 | the **appearance** of the attachment | **built.** The pin and the tree's other three icons are drawn (§770) | §770 |
 | the **callout** of a page | **built.** The callout is put on a page — the tree's box, its knee, its point and its leader (§771) | §771 |
 | the **appearance** of the callout | **built.** The leader, its open arrowhead and the text box of it are drawn (§772) | §772 |
+| the **typed signature** of a page | **built.** The signature of filled outlines is put on a page — the tree's `PCTypedSignature` and its normalised contours (§773) | §773 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -50869,3 +50870,75 @@ of the text.
   signature is the one that is not.
 - **The tree's own stamp of a typed signature is not here**: the
   outline of a signature that a person typed.
+
+---
+
+## 773. The typed signature is put on a page
+
+The **typed signature** — the tree's own **signature of filled
+outlines** — is now **put on a page**.
+
+### What was built
+
+- The command **`pdf.annot.typedsignature.add`** puts a **typed
+  signature** on a page: it takes the page, the object number the
+  annotation has in the file, the **rectangle** the signature covers,
+  the **contours** of the signature and the **colour** of it.
+- The **rules** are the tree's own, ported by name:
+  - the **rectangle** is four numbers, the corners may come in any
+    order, and it must be at least a point wide and a point high: the
+    tree's own rule;
+  - the **contours** are a list of contours, and a contour is a list
+    of points of two numbers each;
+  - a contour of **fewer than three points** is **dropped**: the
+    tree's own rule;
+  - every point must be **between zero and one**, with the y growing
+    upwards: the tree's own normalisation of the outlines, so that
+    they may be laid over any rectangle — and a point that is not is
+    **refused**;
+  - the **name** of the annotation is the tree's own:
+    `PCTypedSignature`, and the **outline** is its `/PCOutline` — the
+    tree's own key;
+  - the **colour** is the tree's own black when the caller says none,
+    and it is three numbers between zero and one;
+  - the **subtype** is a **stamp**: the tree's own, because a typed
+    signature is a stamp of its own kind.
+
+### What the port found
+
+- **The tree's typed signature is a stamp and not an ink**, and the
+  port found that the tree's own builder gives it the subtype of a
+  stamp and the name `PCTypedSignature` — and that its outlines live
+  in a key of their own, `/PCOutline`, where the ink's strokes live
+  in `/InkList`: so the two are told apart by the tree by their
+  dictionary, and not by their subtype.
+- **The tree's outlines are normalised, and the tree does not check
+  them**: the port found that the tree's own caller guarantees that
+  every point is between zero and one, and that the tree's builder
+  writes them as they come — so here the check is **made**, and a
+  point that is not between zero and one is **refused** rather than
+  clamped, because a point outside the rectangle would draw outside
+  it and the tree's own appearance would not clip it.
+
+### What it cost
+
+- **Five tests** in the PDF battery (`tests/typedsignatureadd.rs`):
+  the signature on the page with its name and its outlines, a short
+  contour that is dropped, a point outside the normalisation, a
+  rectangle that is too small and a colour that is not three numbers.
+- **One new command**: the PDF battery carries **117** commands and
+  the MCP server **972** — one more than §772. The battery is counted
+  by the source of its commands; the MCP server is counted by the
+  tool list it answers with.
+
+### What it does not settle
+
+- **The drawing of the signature is not here**: it is the appearance
+  command's own work — the tree's own filled outlines, drawn with the
+  even-odd rule.
+- **The tree's own script outlines are not here**: the tree writes the
+  contours of a typed name from the outlines of a font it carries,
+  and this tree carries **no fonts at all** — so the contours are the
+  caller's, and the tree's own `script_outline` is not ported.
+- **The tree's own custom stamp is not here**: the stamp of a picture
+  that is already in the document.
