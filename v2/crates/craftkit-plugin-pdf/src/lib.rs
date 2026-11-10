@@ -163,6 +163,7 @@ mod information;
 mod intent;
 mod javascript;
 mod labels;
+mod lineadd;
 mod listbox;
 mod loader;
 mod look;
@@ -237,6 +238,7 @@ pub use information::{ReadInformation, SetInformation};
 pub use intent::WriteIntent;
 pub use javascript::ReadScripts;
 pub use labels::SetPageLabels;
+pub use lineadd::AddLine;
 pub use listbox::AddList;
 pub use look::SetLook;
 pub use marked::ReadMarked;
@@ -2205,6 +2207,7 @@ craftkit_sdk::plugin_anchor!(
     AddDate,
     AddSignature,
     AddImage,
+    AddLine,
     SetProperties,
     SetLook,
     WriteAnnotation,
