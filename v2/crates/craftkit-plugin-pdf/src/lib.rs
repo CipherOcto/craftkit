@@ -127,6 +127,7 @@
 
 mod aes;
 mod annot;
+mod annotappearance;
 mod appearance;
 mod attachments;
 mod background;
@@ -190,7 +191,6 @@ mod revision6;
 mod rotation;
 mod scripts;
 mod sha2;
-mod shapeappearance;
 mod signaturefield;
 mod signatures;
 mod structure;
@@ -209,6 +209,7 @@ use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 pub use annot::SetAnnotationFlags;
+pub use annotappearance::WriteAnnotation;
 pub use appearance::{ReadAppearance, WriteAppearance};
 pub use attachments::ReadAttachments;
 pub use background::AddBackground;
@@ -254,7 +255,6 @@ pub use pushbutton::AddButton;
 pub use radio::AddRadio;
 pub use remove::RemoveObject;
 pub use rotation::{ReadRotation, RotatePage};
-pub use shapeappearance::WriteShape;
 pub use signaturefield::AddSignature;
 pub use signatures::ReadSignatures;
 pub use structure::ReadStructure;
@@ -2207,7 +2207,7 @@ craftkit_sdk::plugin_anchor!(
     AddImage,
     SetProperties,
     SetLook,
-    WriteShape,
+    WriteAnnotation,
     Preflight,
     ReadFonts,
     ReadTrailer,

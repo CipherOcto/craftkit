@@ -28,7 +28,7 @@ fn session() -> Session {
 /// A **directory** of this test's own, so that the files do not mix.
 fn directory(name: &str) -> String {
     let path =
-        std::env::temp_dir().join(format!("craftkit-v2-shapeappearance-{name}-{}", std::process::id()));
+        std::env::temp_dir().join(format!("craftkit-v2-annotappearance-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&path);
     std::fs::create_dir_all(&path).expect("the directory is made");
     path.to_string_lossy().to_string()
@@ -262,12 +262,12 @@ fn the_opacity_is_in_the_graphics_state() {
     assert!(bytes.contains("/GS0 gs"), "the opacity is used: {bytes}");
 }
 
-/// **An annotation that is not a shape** is refused.
+/// **An annotation that is not drawn here** is refused.
 #[test]
-fn an_annotation_that_is_not_a_shape_is_refused() {
+fn an_annotation_that_is_not_drawn_here_is_refused() {
     let mut session = session();
     let directory = directory("notashape");
-    let shape = a_shape(&mut session, &directory, "Highlight", 10);
+    let shape = a_shape(&mut session, &directory, "Text", 10);
     let to = format!("{directory}/drawing.txt");
     let error = session
         .execute("pdf.annot.appearance.write", &json!({ "annotation": shape, "to": to }))

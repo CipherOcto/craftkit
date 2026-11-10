@@ -1,9 +1,11 @@
-//! The **appearance** of a shape: the square and the circle.
+//! The **appearance** of an annotation: the shape and the markup.
 //!
 //! The tree's own: an annotation of the kind `Square` or `Circle` is a
 //! **shape**, and a shape is **drawn** — the border of it and the fill
 //! of it — and the drawing is an appearance, a form XObject that the
-//! reader shows where the annotation is.
+//! reader shows where the annotation is. An annotation of the kind
+//! `Highlight`, `Underline`, `StrikeOut` or `Squiggly` is a **markup**,
+//! and a markup is drawn over the text it covers.
 //!
 //! The rules of the tree, ported by name:
 //!
@@ -23,6 +25,29 @@
 //!   and three points when it says nothing;
 //! - the line is **inset** by half its width, so that the line is
 //!   drawn inside the rectangle and not over its edge.
+//!
+//! The **markup** is the tree's own markup branch, and its rules are:
+//!
+//! - the **quads** (`/QuadPoints`) are the lines of the text the
+//!   markup covers, and there are **eight** numbers to a quad — the
+//!   upper left, the upper right, the lower left and the lower right —
+//!   and a number of quads that is not a whole number of quads is
+//!   refused;
+//! - a markup has a **colour**, and a markup without one is refused;
+//! - a **highlight** is a filled quadrilateral over the text, and it
+//!   **multiplies** over the text — the tree's own rule, and the file
+//!   says so with the blend mode `/Multiply`;
+//! - an **underline** and a **strikeout** are a **line** across the
+//!   text: the underline lies eight percent of the way up the quad,
+//!   the strikeout forty two percent, and the line is seven percent
+//!   of the height of the text wide, and never less than half a point
+//!   and never more than three;
+//! - a **squiggly** is a **zigzag** along the bottom of the quad: the
+//!   step is a quarter of the height of the text and never less than
+//!   point and a half, the zigzag is five percent of the height wide
+//!   and never less than half a point and never more than two, and
+//!   the rise of each step is six percent of the height of the text
+//!   and never less than three quarters of a point.
 
 use craftkit_derive::Command;
 
@@ -31,6 +56,9 @@ use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.annot.appearance.write";
+
+/// The kinds of **markup**, the tree's own four.
+const MARKS: [&str; 4] = ["Highlight", "Underline", "StrikeOut", "Squiggly"];
 
 /// The **entries** of a node's dictionary.
 fn entries_of(node: &Node) -> Vec<(String, Json)> {
@@ -149,7 +177,7 @@ fn the_ellipse(x0: f64, y0: f64, x1: f64, y1: f64) -> String {
     for (a, b, c, d, e, f) in [
         (cx + rx, cy + oy, cx + ox, cy + ry, cx, cy + ry),
         (cx - ox, cy + ry, cx - rx, cy + oy, cx - rx, cy),
-        (cx - rx, cy - oy, cx - ox, cy - ry, cx, cy - ry),
+        (cx - rx, cy - oy, cx - ox, cy - ry, cx - rx, cy - ry),
         (cx + ox, cy - ry, cx + rx, cy - oy, cx + rx, cy),
     ] {
         out.push_str(&format!(
@@ -170,7 +198,7 @@ fn the_ellipse(x0: f64, y0: f64, x1: f64, y1: f64) -> String {
 ///
 /// The rectangle is the one of the annotation, the corners in order,
 /// and the line is inset by half its width.
-fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f64; 4])> {
+fn the_shape(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f64; 4])> {
     let rect = numbers_of(entry(entries, "Rect")?);
     if rect.len() != 4 {
         return None;
@@ -184,17 +212,8 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
         Some(value) => the_colour(value).ok()?,
         None => None,
     };
-    // The **opacity** of the shape.
-    let opacity = match entry(entries, "CA").and_then(|value| value.as_f64()) {
-        Some(value) if !value.is_finite() || !(0.0..=1.0).contains(&value) => return None,
-        Some(value) => value,
-        None => 1.0,
-    };
     let width = the_width(entries);
     let mut out = String::new();
-    if opacity < 1.0 {
-        out.push_str("/GS0 gs\n");
-    }
     if fill.is_none() && stroke.is_none() {
         return Some((out.into_bytes(), rect));
     }
@@ -238,7 +257,117 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
     Some((out.into_bytes(), rect))
 }
 
-/// **Write** the **appearance** of a shape.
+/// The **drawing** of a **markup**: the tree's own markup branch.
+///
+/// A quad is eight numbers — the upper left, the upper right, the
+/// lower left and the lower right — and the text of a quad is the
+/// height between its top and its bottom.
+fn the_markup(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f64; 4])> {
+    let rect = numbers_of(entry(entries, "Rect")?);
+    if rect.len() != 4 {
+        return None;
+    }
+    let rect = [rect[0].min(rect[2]), rect[1].min(rect[3]), rect[0].max(rect[2]), rect[1].max(rect[3])];
+    // The **quads**: eight numbers to a quad, and a whole number of
+    // quads.
+    let quads = numbers_of(entry(entries, "QuadPoints")?);
+    if quads.is_empty() || !quads.len().is_multiple_of(8) {
+        return None;
+    }
+    // A markup has a **colour**, and one without a colour is refused.
+    let colour = the_colour(entry(entries, "C")?).ok().flatten()?;
+    let number = crate::watermark::number;
+    let mut out = String::new();
+    for quad in quads.as_chunks::<8>().0 {
+        let point = |index: usize| (quad[index * 2], quad[index * 2 + 1]);
+        let (p1, p2, p3, p4) = (point(0), point(1), point(2), point(3));
+        // The **height** of the text of the quad.
+        let height = (p1.0 - p3.0).hypot(p1.1 - p3.1);
+        // A point a fraction `t` of the way from the bottom edge to
+        // the top edge.
+        let at = |bottom: (f64, f64), top: (f64, f64), t: f64| {
+            (bottom.0 + (top.0 - bottom.0) * t, bottom.1 + (top.1 - bottom.1) * t)
+        };
+        match subtype {
+            "Highlight" => {
+                out.push_str(&format!(
+                    "{} {} {} rg\n",
+                    number(colour[0]),
+                    number(colour[1]),
+                    number(colour[2])
+                ));
+                out.push_str(&format!(
+                    "{} {} m {} {} l {} {} l {} {} l h f\n",
+                    number(p1.0),
+                    number(p1.1),
+                    number(p2.0),
+                    number(p2.1),
+                    number(p4.0),
+                    number(p4.1),
+                    number(p3.0),
+                    number(p3.1)
+                ));
+            }
+            "Underline" | "StrikeOut" => {
+                let line_width = (height * 0.07).clamp(0.5, 3.0);
+                let fraction = if subtype == "Underline" { 0.08 } else { 0.42 };
+                let (from, to) = (at(p3, p1, fraction), at(p4, p2, fraction));
+                out.push_str(&format!(
+                    "{} {} {} RG\n{} w\n{} {} m {} {} l S\n",
+                    number(colour[0]),
+                    number(colour[1]),
+                    number(colour[2]),
+                    number(line_width),
+                    number(from.0),
+                    number(from.1),
+                    number(to.0),
+                    number(to.1)
+                ));
+            }
+            _ => {
+                // The **squiggly**: a zigzag along the bottom of the
+                // quad.
+                let line_width = (height * 0.05).clamp(0.5, 2.0);
+                let rise = (height * 0.06).max(0.75);
+                let length = (p4.0 - p3.0).hypot(p4.1 - p3.1);
+                let step = (height / 4.0).max(1.5);
+                let steps = (length / step).ceil().clamp(1.0, 10_000.0) as usize;
+                out.push_str(&format!(
+                    "{} {} {} RG\n{} w 1 j\n",
+                    number(colour[0]),
+                    number(colour[1]),
+                    number(colour[2]),
+                    number(line_width)
+                ));
+                for index in 0..=steps {
+                    let fraction = index as f64 / steps as f64;
+                    let base = (p3.0 + (p4.0 - p3.0) * fraction, p3.1 + (p4.1 - p3.1) * fraction);
+                    let up = if index % 2 == 0 { rise * 2.0 } else { 0.0 };
+                    let (ux, uy) = if height > 0.0 {
+                        ((p1.0 - p3.0) / height, (p1.1 - p3.1) / height)
+                    } else {
+                        (0.0, 1.0)
+                    };
+                    out.push_str(&format!(
+                        "{} {} {}\n",
+                        number(base.0 + ux * up),
+                        number(base.1 + uy * up),
+                        if index == 0 { "m" } else { "l" }
+                    ));
+                }
+                out.push_str("S\n");
+            }
+        }
+    }
+    Some((out.into_bytes(), rect))
+}
+
+/// The **drawing** of an annotation: the shape or the markup.
+fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f64; 4])> {
+    if MARKS.contains(&subtype) { the_markup(entries, subtype) } else { the_shape(entries, subtype) }
+}
+
+/// **Write** the **appearance** of an annotation.
 ///
 /// The appearance is a **form XObject** — a little drawing — and the
 /// annotation's `/AP` names it under the key `N`. The bytes of the
@@ -246,23 +375,29 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
 ///
 /// The rules:
 ///
-/// - the annotation must be a shape — an annotation of the kind
-///   `Square` or `Circle` — and any other kind is refused;
+/// - the annotation must be one this command draws — a **shape**
+///   (`Square` or `Circle`) or a **markup** (`Highlight`,
+///   `Underline`, `StrikeOut` or `Squiggly`) — and any other kind is
+///   refused;
 /// - the **rectangle** of the shape is the one the annotation holds,
 ///   and the corners may come in any order;
 /// - a **colour** is one number, three numbers or four numbers, and
 ///   anything else is refused;
-/// - the **opacity** of the shape is between zero and one.
+/// - the **opacity** of the shape is between zero and one;
+/// - a markup needs its **quads** and its **colour**, and one without
+///   either is refused;
+/// - a **highlight multiplies** over the text, the tree's own rule,
+///   and the file says so with the blend mode.
 #[derive(Command)]
 #[command(id = "pdf.annot.appearance.write", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct WriteShape {
-    /// The shape.
+pub struct WriteAnnotation {
+    /// The annotation.
     pub annotation: NodeRef,
     /// Where the bytes of the drawing are written.
     pub to: Text,
 }
 
-impl WriteShape {
+impl WriteAnnotation {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let annotation = self.annotation.0;
         let Some(node) = session.document().node(annotation).cloned() else {
@@ -274,7 +409,7 @@ impl WriteShape {
         let entries = entries_of(&node);
         let subtype =
             entry(&entries, "Subtype").and_then(|subtype| subtype.as_str()).unwrap_or_default().to_string();
-        if subtype != "Square" && subtype != "Circle" {
+        if subtype != "Square" && subtype != "Circle" && !MARKS.contains(&subtype.as_str()) {
             return Err(EngineError::Failed {
                 id: COMMAND.to_string(),
                 message: format!("the appearance of an annotation of the kind `{subtype}` is not drawn here"),
@@ -287,31 +422,54 @@ impl WriteShape {
                 message: "the drawing goes somewhere".to_string(),
             });
         }
+        // The **opacity** of the shape, and the tree's own rule that a
+        // highlight **multiplies** over the text.
+        let opacity = match entry(&entries, "CA").and_then(|value| value.as_f64()) {
+            Some(value) if !value.is_finite() || !(0.0..=1.0).contains(&value) => {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the opacity of an annotation is between zero and one".to_string(),
+                });
+            }
+            Some(value) => value,
+            None => 1.0,
+        };
+        let multiply = subtype == "Highlight";
         let Some((bytes, rect)) = the_drawing(&entries, &subtype) else {
             return Err(EngineError::Failed {
                 id: COMMAND.to_string(),
-                message: format!("the shape `{annotation}` cannot be drawn"),
+                message: format!("the annotation `{annotation}` cannot be drawn"),
             });
         };
+        // The **graphics state**: the opacity, and the blend mode of a
+        // highlight.
+        let state = opacity < 1.0 || multiply;
+        let mut bytes = bytes;
+        if state {
+            let mut prefix = b"/GS0 gs\n".to_vec();
+            prefix.append(&mut bytes);
+            bytes = prefix;
+        }
         std::fs::write(&path, &bytes).map_err(|error| EngineError::Failed {
             id: COMMAND.to_string(),
             message: format!("the drawing cannot be written to `{path}`: {error}"),
         })?;
         // The **appearance**: a form XObject, and the resources it
         // needs — the graphics state of the opacity.
-        let opacity = entry(&entries, "CA").and_then(|value| value.as_f64()).unwrap_or(1.0);
-        let resources = if opacity < 1.0 {
+        let resources = if state {
+            let mut entries = vec![
+                ("Type".to_string(), json!("ExtGState")),
+                ("CA".to_string(), json!(opacity)),
+                ("ca".to_string(), json!(opacity)),
+            ];
+            if multiply {
+                entries.insert(1, ("BM".to_string(), json!("Multiply")));
+            }
             json!({
                 "entries": [
                     [
                         "ExtGState",
-                        {
-                            "entries": [
-                                ["Type", "ExtGState"],
-                                ["CA", opacity],
-                                ["ca", opacity],
-                            ]
-                        },
+                        { "entries": crate::pairs_of(&entries) },
                     ],
                 ]
             })
@@ -368,7 +526,7 @@ impl WriteShape {
                 message: format!("the annotation `{annotation}` already refers to its drawing"),
             });
         }
-        Ok(Outcome::changed(format!("the shape `{annotation}` has an appearance")).with_data(json!({
+        Ok(Outcome::changed(format!("the annotation `{annotation}` has an appearance")).with_data(json!({
             "annotation": annotation,
             "appearance": stream,
             "object": number,
@@ -376,6 +534,7 @@ impl WriteShape {
             "bytes": bytes.len(),
             "rect": rect,
             "opacity": opacity,
+            "multiply": multiply,
         })))
     }
 }
