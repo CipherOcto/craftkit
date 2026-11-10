@@ -420,7 +420,7 @@ use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, 
 pub use autofit::{AutofitColumn, AutofitRow};
 pub use borders::{ClearBorder, GetBorder, SetBorder};
 pub use cellread::ReadCell;
-pub use charts::{AddChart, ReadChart, RemoveChart, SetChart};
+pub use charts::{AddChart, ChartElement, ReadChart, RemoveChart, SetChart};
 pub use checkboxes::{SetCheckbox, ToggleCheckbox};
 pub use clearing::{ClearContents, ClearFormat};
 pub use columndeleting::DeleteColumn;
