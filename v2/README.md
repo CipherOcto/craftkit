@@ -4163,6 +4163,7 @@ so.
 | the **filtering in place** of the advanced filter | **built.** The rows that do not match are hidden, and the rows a filter hides are derived (§788) | §788 |
 | the **path made by hand** | **built.** A path is made out of path data or out of anchors — the tree's own two ways, its handles and the side that comes back (§789) | §789 |
 | the **curve through the points** | **built.** A path curves through a list of points — the tree's curvature tool, its circle and its tight turn (§790) | §790 |
+| the **anchors** of a path | **built.** The anchors of a path are set, and the path is the shape they describe (§791) | §791 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -51918,6 +51919,8 @@ their handles. Both are here now, in one command.
     the path: the tree's own rule;
   - the path is **named** `Pen`, which is the tree's own name for a path
     made by hand.
+- A path may have at most **ten thousand anchors**, and one that asks
+  for more is refused by name.
 - The two ways may **not** be used together, and a command that says
   neither is refused: they are two ways of saying one path.
 
@@ -52047,3 +52050,66 @@ here.
 - **The tree's own rubber band is not here**: the curve that is shown
   while the points are being clicked is a thing of the interface, and
   this tree has no interface for it.
+
+## 791. The anchors of a path are set
+
+The tree's `path.setAnchors` replaces the anchors of a path with new
+ones. Here the anchors of a path are set too, and the rules about them
+are the ones §789 already ported.
+
+### What was built
+
+- The command **`vector.path.anchors.set`** sets the **anchors** of a
+  path: the path's contours become the ones the anchors describe. The
+  tree's own command, and the tree's own rules:
+  - a contour is a list of anchors and whether it is **closed**: the
+    tree's own shape;
+  - the anchors are the tree's own, and the rules about them are §789's
+    — a handle that is not given is the point itself, a side with no
+    handle is a **line**, a malformed anchor is **refused** rather than
+    given a default, and a **smooth** anchor is refused as §789 says;
+  - a **closed** contour has one more side than it has anchors — the
+    side that comes back to the first anchor: the tree's own rule;
+  - the **fill rule** is not part of the anchors, and it does not
+    change: the tree's own rule, where the fill rule is not part of a
+    path's shape at all;
+  - the anchors of a path are bounded as §789's are — at most **ten
+    thousand** in a path — and one that asks for more is refused by
+    name.
+
+### What the port found
+
+- **The tree's anchors are one thing and this tree's anchors are
+  another.** In the tree a path *is* its anchors, so setting the anchors
+  is setting the path. Here a path is a run of segments, so setting the
+  anchors means working out the segments those anchors describe — and
+  the reader of the anchors is now **one reader**, shared with
+  `vector.path.create`: the rules about an anchor are written once and
+  not twice.
+- **The tree's command takes a contour of no anchors and this one
+  refuses it**: a contour with no side has no shape, which is §789's
+  rule; and a path of no contour at all is refused for the same reason.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/anchorsset.rs`): ten
+  tests — the anchors that are set, the closed contour, the handle that
+  makes a curve, the two contours, the refusals, and the fill rule that
+  does not change.
+- **One new command**: the vector battery now carries **53** commands
+  and the MCP server **986** — one more than §790. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`anchors`), and the reader of the anchors is
+  **shared**: §789's command and this one read an anchor the same way.
+
+### What it does not settle
+
+- **The tree's own smooth anchors are still not here**: an anchor that
+  says it is smooth is refused in this command as in §789's.
+- **The tree's own family of commands that write a path's shape is
+  here in other words**: the tree's `path.setHandle` is
+  `vector.path.handle` here, and its `path.convertAnchor` is
+  `vector.path.smooth`.
+- **The tree's own command may be given a path of no contours at all**,
+  and here that is refused: a path with nothing in it is not a path.
