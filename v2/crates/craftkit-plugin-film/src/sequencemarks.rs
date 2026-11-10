@@ -89,7 +89,7 @@ fn frame_of(command: &str, value: f64) -> Result<u64, EngineError> {
 }
 
 /// The **marks** a sequence carries.
-fn marks_of(node: &craftkit_sdk::Node) -> (Option<u64>, Option<u64>) {
+pub(crate) fn marks_of(node: &craftkit_sdk::Node) -> (Option<u64>, Option<u64>) {
     let mark_in = node.data.get(MARK_IN).and_then(|frame| frame.as_u64());
     let mark_out = node.data.get(MARK_OUT).and_then(|frame| frame.as_u64());
     (mark_in, mark_out)

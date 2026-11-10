@@ -21,7 +21,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
 
 /// The most frames a playhead may be at.
 const MAX_FRAME: u64 = 1_000_000_000;
@@ -191,6 +191,59 @@ impl GoToEnd {
         node.data["playhead"] = json!(frames);
         Ok(Outcome::changed(format!("the playhead is at frame {frames}"))
             .with_data(json!({ "sequence": sequence, "frame": frames })))
+    }
+}
+
+/// **Go to** the **mark** of a sequence: the mark in or the mark out.
+///
+/// The tree's own rules — the tree's `goToIn` and its `goToOut`:
+///
+/// - the playhead goes to the **mark in**, and to the **start** of the
+///   sequence when there is no mark in;
+/// - the playhead goes to the **mark out**, and to the **end** of the
+///   sequence when there is no mark out.
+#[derive(Command)]
+#[command(
+    id = "film.playhead.goto.mark",
+    area = "film",
+    layer = "film",
+    icon = "playhead",
+    mutates,
+    undoable
+)]
+pub struct GoToMark {
+    /// The sequence.
+    pub sequence: NodeRef,
+    /// Which mark the playhead goes to: `in` or `out`.
+    pub which: Text,
+}
+
+impl GoToMark {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "film.playhead.goto.mark".to_string();
+        let sequence = self.sequence.0;
+        let node = the_sequence(session, &id, sequence)?;
+        let which = self.which.0.trim().to_ascii_lowercase();
+        if !matches!(which.as_str(), "in" | "out") {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("`{}` is not a mark to go to: it is `in` or `out`", self.which.0),
+            });
+        }
+        let (mark_in, mark_out) = crate::sequencemarks::marks_of(node);
+        // The tree's own rule: a mark that is not there sends the
+        // playhead to the start or to the end of the sequence.
+        let frames = length_in_frames(node);
+        let target = if which == "in" { mark_in.unwrap_or(0) } else { mark_out.unwrap_or(frames) };
+        let Some(node) = session.document_mut()?.node_mut(sequence) else {
+            return Err(EngineError::Failed {
+                id: "film.playhead.goto.mark".to_string(),
+                message: format!("there is no sequence `{sequence}`"),
+            });
+        };
+        node.data["playhead"] = json!(target);
+        Ok(Outcome::changed(format!("the playhead is at frame {target}"))
+            .with_data(json!({ "sequence": sequence, "frame": target, "which": which })))
     }
 }
 

@@ -297,7 +297,7 @@ pub use moving::MoveClip;
 pub use naming::RenameClip;
 pub use otio::ExportOtio;
 pub use otioimport::ImportOtio;
-pub use playhead::{GetPlayhead, GoToEnd, GoToStart, SetPlayhead, StepPlayhead};
+pub use playhead::{GetPlayhead, GoToEnd, GoToMark, GoToStart, SetPlayhead, StepPlayhead};
 pub use project::ReadProject;
 pub use rates::{GetRate, SetRate};
 pub use removal::RemoveClip;
@@ -1040,6 +1040,7 @@ craftkit_sdk::plugin_anchor!(
     TransitionKind,
     MarkerKind,
     AddMarker,
+    GoToMark,
     SetMarkIn,
     SetMarkOut,
     ClearMarks,
