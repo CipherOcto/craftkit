@@ -36,6 +36,14 @@ use craftkit_derive::Command;
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, Document, EngineError, Node, NodeRef, Outcome, Session, Text};
 
+/// The **radio** flag of a group of radio buttons: the tree's own, the
+/// sixteenth bit of the flags of a field.
+pub const RADIO: i64 = 1 << 15;
+
+/// The flag that says a group of radio buttons **cannot be turned
+/// off**: the tree's own, the fifteenth bit of the flags of a field.
+pub const NO_TOGGLE_TO_OFF: i64 = 1 << 14;
+
 /// The **kind** of a field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FieldKind {
@@ -246,13 +254,25 @@ fn pairs_of(value: &Json) -> Vec<(String, Json)> {
 ///
 /// A button that has no appearance has no states, and it may not be
 /// pressed.
-pub(crate) fn states_of(node: &Node) -> Vec<String> {
+pub(crate) fn states_of(document: &Document, node: &Node) -> Vec<String> {
     let entries = entries_of(node);
-    let Some(appearance) = entry(&entries, "AP") else { return Vec::new() };
-    let Some((_, normal)) = pairs_of(appearance).into_iter().find(|(key, _)| key == "N") else {
-        return Vec::new();
-    };
-    pairs_of(&normal).into_iter().map(|(key, _)| key).collect()
+    if let Some(appearance) = entry(&entries, "AP")
+        && let Some((_, normal)) = pairs_of(appearance).into_iter().find(|(key, _)| key == "N")
+    {
+        return pairs_of(&normal).into_iter().map(|(key, _)| key).collect();
+    }
+    // A **group** of radio buttons has no appearance of its own: its
+    // buttons have the states, and the group has them all.
+    let mut out: Vec<String> = Vec::new();
+    for kid in kids_of(node) {
+        let Some(kid_node) = node_of_number(document, kid) else { continue };
+        for state in states_of(document, kid_node) {
+            if !out.contains(&state) {
+                out.push(state);
+            }
+        }
+    }
+    out
 }
 
 /// The **flags** of a field, as the tree's own names.
@@ -588,7 +608,7 @@ impl SetField {
                 }
             }
             FieldKind::Button => {
-                let states = states_of(&node);
+                let states = states_of(session.document(), &node);
                 if !value.is_empty() && !states.contains(&value) {
                     return Err(EngineError::Failed {
                         id: id.clone(),
@@ -597,6 +617,37 @@ impl SetField {
                             if states.is_empty() { "none".to_string() } else { states.join(", ") }
                         ),
                     });
+                }
+            }
+        }
+        // A **group** of radio buttons: the button that is on holds the
+        // value, and every other button of the group is off. The
+        // group is the field, and its buttons are its widgets.
+        let is_group = found.kind == FieldKind::Button && (found.flags as i64) & RADIO != 0;
+        if is_group {
+            for kid in kids_of(&node) {
+                let Some(kid_node) = node_of_number(session.document(), kid) else { continue };
+                let kid_id = kid_node.id;
+                let states = states_of(session.document(), kid_node);
+                // The button that holds the value is on, and every
+                // other button of the group is off.
+                let state = if !value.is_empty() && states.contains(&value) {
+                    value.clone()
+                } else {
+                    "Off".to_string()
+                };
+                let mut kid_entries = entries_of(kid_node);
+                for key in ["V", "AS"] {
+                    match kid_entries.iter_mut().find(|(name, _)| name == key) {
+                        Some(entry) => entry.1 = json!(state.clone()),
+                        None => kid_entries.push((key.to_string(), json!(state.clone()))),
+                    }
+                }
+                let mut data = kid_node.data.clone();
+                data["entries"] =
+                    json!(kid_entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>());
+                if let Some(node) = session.document_mut()?.node_mut(kid_id) {
+                    node.data = data;
                 }
             }
         }

@@ -38,6 +38,7 @@ use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
 
 use crate::checkbox::{CheckStyle, the_mark};
 use crate::fieldadd::{a_node, ensure_form, entry, free_name, put, the_entries, the_frame};
+use crate::fields::{NO_TOGGLE_TO_OFF, RADIO};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.field.radio.add";
@@ -48,14 +49,6 @@ const SMALLEST: f64 = 4.0;
 
 /// The **state** a radio button is off in: the tree's own.
 const OFF: &str = "Off";
-
-/// The **flags** of a group of radio buttons: the tree's own — the
-/// radio flag and the flag that says the group cannot be turned off.
-pub const RADIO: i64 = 1 << 15;
-
-/// The flag that says a group of radio buttons **cannot be turned
-/// off**: the tree's own.
-pub const NO_TOGGLE_TO_OFF: i64 = 1 << 14;
 
 /// **Put** a **radio button** on a page.
 ///
