@@ -208,6 +208,7 @@ mod tabs;
 mod tounicode;
 mod trailer;
 mod transitions;
+mod typedsignatureadd;
 mod validation;
 mod watermark;
 mod widths;
@@ -282,6 +283,7 @@ pub use tabs::{ReadTabOrder, SetTabs};
 pub use tounicode::ReadFontUnicode;
 pub use trailer::ReadTrailer;
 pub use transitions::ReadTransition;
+pub use typedsignatureadd::AddTypedSignature;
 pub use validation::ReadValidation;
 pub use watermark::AddWatermark;
 
@@ -2235,6 +2237,7 @@ craftkit_sdk::plugin_anchor!(
     AddMark,
     AddAttachment,
     AddCallout,
+    AddTypedSignature,
     SetProperties,
     SetLook,
     WriteAnnotation,
