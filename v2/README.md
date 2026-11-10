@@ -3628,7 +3628,7 @@ so.
 | a **reader that feeds a bus** | **built.** The buses and the readers are mixed in the order their routes say, and a mix that loops is refused (§181) | §181 |
 | the **outline of a line** | **built.** The shape a stroke covers is a path of its own, which may be filled, measured and cut (§182) | §182 |
 | a **file written out** | **built.** The document is written out as a PDF file, and the file that comes out is read back (§183) | §183 |
-| a **smooth point** | **built.** A point's two handles become one: collinear and of the same length, and a straight side becomes a curve (§184) | §184 |
+| a **smooth point** | **built.** A point's two handles become one: along the circle through the point and its neighbours, and a straight side becomes a curve (§184, §794) | §184, §794 |
 | the **spacing** of the clips | **built.** The clips are butted against each other, with a gap between them, end to start or start to start (§185) | §185 |
 | the **loop** of a clip | **built.** The copies of a clip are made, and each one is named by the clip it follows — so the chain is a walk and the loop is not inferred from the track (§186) | §186 |
 | a **clip that snaps** to its neighbour | **built.** Next and Previous, the clip nearest the destination first, and the clips that are named are the destinations too (§187) | §187 |
@@ -4172,6 +4172,7 @@ so.
 | the **anchors** of a path | **built.** The anchors of a path are set, and the path is the shape they describe (§791) | §791 |
 | the **cutting** of a path | **built.** A path is cut at a point — a closed path opens there, an open one becomes one path per piece (§792) | §792 |
 | the **stroke drawn by hand** | **built.** A stroke is fitted to its samples — the tree's jitter, its corners and its spline (§793) | §793 |
+| the **rule of a smooth point** | **built.** A point is made smooth by the tree's own rule — the circle through the point and its neighbours (§794) | §794 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -13035,7 +13036,8 @@ handles and no command that made them agree.
 ### What was built
 
 - The command `vector.path.smooth` makes a point smooth: the two
-  handles take the average of the two they were, and a side that was a
+  handles take the average of the two they were (§184's rule; §794 made
+  the command the tree's own rule instead), and a side that was a
   straight line becomes a curve with a handle.
 - A point with **no handles** has nothing to smooth, and a point with a
   curve on only one side is refused — both by name.
@@ -13078,10 +13080,12 @@ handles and no command that made them agree.
   back to a corner, which frees its two handles; here the handles are
   the shape, and freeing them means putting them back where they were
   — which nobody kept.
-- **The average is the average.** The tree's smooth point keeps the
+- **The average was the average.** The tree's smooth point keeps the
   handles' directions and their lengths in a way that is not simply
-  their average; here the two handles become the average, which keeps
+  their average; here the two handles became the average, which keeps
   the point where it was and makes the curve as smooth as it can be.
+  **§794 made the command the tree's own rule**, and the average is
+  not the rule here any more.
 - **The first point of a closed contour gains a segment.** The contour
   is the same shape, and the segment is the edge that was there.
 
@@ -52051,10 +52055,11 @@ here.
   tool's edits — moving a point, inserting one, extending the path,
   closing it — are the tree's `path.curvatureEdit`, and they are not
   here.
-- **The tree's own way of making one point smooth is not here**: the
+- **The tree's own way of making one point smooth was not here**: the
   tree's `path.convertAnchor` smooths a point with the same circle
-  rule, and here the circle rule is used to make a curve and nothing
-  else; `vector.path.smooth` makes a point smooth by another rule.
+  rule, and here the circle rule was used to make a curve and nothing
+  else. **§794 made `vector.path.smooth` the tree's own rule**, so the
+  circle rule is now the rule of the curve and of the point alike.
 - **The tree's own rubber band is not here**: the curve that is shown
   while the points are being clicked is a thing of the interface, and
   this tree has no interface for it.
@@ -52257,3 +52262,74 @@ rest is a spline through the samples that is then simplified.
 - **The tree's own refit is not here**: the tree's Smooth and Simplify
   dialogs fit a path with curves, and this tree's simplification is
   the geometry library's.
+
+## 794. A smooth point follows the tree's own rule
+
+The tree's **Convert Anchor Point** makes a point smooth with the rule
+the **curvature tool** uses: the handles along the circle through the
+point and its two neighbours. This tree had a rule of its own — the
+average of the two handles — and now it has the tree's.
+
+### What was built
+
+- The command **`vector.path.smooth`** now follows the tree's own rule:
+  - the two handles at the point are the ones the **curvature tool**
+    gives it: along the **circle** through the point and its two
+    neighbours, and each between a **third and two thirds** of its own
+    chord: the tree's own rule;
+  - an **end** of an open contour takes its neighbour's **tangent**,
+    mirrored in the chord, so that the end leaves the chord at the
+    angle the curve meets its neighbour at: the tree's own rule;
+  - a point with **no handles** may be made smooth: the rule makes the
+    handles, and it does not need them there first: the tree's own
+    rule;
+  - a point with **no direction** — its neighbours are one point, or
+    its neighbour has no handle to take a tangent from — is refused by
+    name.
+- The **circle rule** is now **one** rule in this tree: the curve §793
+  draws and the point that is made smooth follow the same one.
+
+### What the port found
+
+- **The tree has two smooth rules, and this tree had a third.** The
+  tree's `path.convertAnchor` — one point — uses the **curvature
+  tool's** rule, the circle through the point and its neighbours; the
+  tree's `path.convertAnchors` — many points at once — uses the
+  **neighbours'** rule, the handles in line with the neighbours and
+  each a third of the way to that side's neighbour. This tree had a
+  rule of its own: the two handles became the **average** of the two
+  they were. So there were three rules for one thing, and there are
+  two here now: the circle rule, which is the tree's own for a single
+  point, and the tree's own rule for many points, which this tree does
+  not have.
+- **The average could not make a corner smooth.** The tree's rule reads
+  the **neighbours** and makes the handles; the average needed the
+  handles to be there first, so a point with no handles had nothing to
+  average and was refused. So the command could not do the thing it is
+  for.
+- §184's note about the average is **corrected in place**, and §790's
+  note that the tree's own way of making one point smooth is not here
+  is **corrected in place** too: it is here now.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/smoothrule.rs`): five
+  tests — the circle through the point, the corner that may be made
+  smooth, the far end that keeps the line, the end that takes its
+  neighbour's tangent, and the point with no direction.
+- **One test changed** (`tests/smooth.rs`): what is refused is the
+  point that is not there, and a point between two straight lines may
+  be made smooth now.
+- **No new command**: the vector battery still carries **55** commands
+  and the MCP server **988** — the same counts as §793. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+
+### What it does not settle
+
+- **The tree's own rule for many points at once is not here**: the
+  tree's `path.convertAnchors` makes many points smooth in one go with
+  the neighbours' rule, and here one point at a time is the circle
+  rule.
+- **The tree's own smooth region is not here**: the tree's Smooth tool
+  smooths the parts of a path near a drag.
