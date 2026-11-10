@@ -4153,6 +4153,7 @@ so.
 | the **typed signature** of a page | **built.** The signature of filled outlines is put on a page — the tree's `PCTypedSignature` and its normalised contours (§773) | §773 |
 | the **appearance** of the typed signature | **built.** The filled outlines of it are drawn, with the even-odd rule (§774) | §774 |
 | the **custom stamp** of a page | **built.** The stamp of a picture of the document is put on a page — the tree's `PCCustom` name and its `/PCPicture` (§775) | §775 |
+| the **appearance** of the custom stamp | **built.** The picture is laid over the rectangle, an image exactly and a form by its size (§776) | §776 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -51076,6 +51077,71 @@ The **custom stamp** — the tree's own **stamp of a picture** — is now
 - **The drawing of the stamp is not here**: it is the appearance
   command's own work — the tree's own picture, laid over the
   rectangle.
+- **The tree's own script outlines are not here**: the tree writes the
+  contours of a typed name from the outlines of a font it carries, and
+  this tree carries **no fonts at all** — so the contours are the
+  caller's.
+
+---
+
+## 776. The custom stamp is drawn
+
+The **custom stamp** — the tree's own **stamp of a picture** — is now
+**drawn**.
+
+### What was built
+
+- The command **`pdf.annot.appearance.write`** now draws the **custom
+  stamp** as well as the shape, the markup, the line, the polygon, the
+  ink, the caret, the text box, the mark of a redaction, the stamp, the
+  marks of Fill and Sign, the attachment, the callout, the typed
+  signature and the custom stamp, and it draws it from the
+  **dictionary of the annotation** — the picture (`/PCPicture`), the
+  flag that says whether it is an image (`/PCPictureImage`) and its
+  size (`/PCPictureSize`) — as the tree's own builder does.
+- The **rules** are the tree's own, ported by name:
+  - the **picture** is drawn under the name `Pic`, and it is in the
+    **resources** of the drawing as an XObject: the tree's own name;
+  - an **image** is mapped onto the **rectangle** itself: the tree's
+    own mapping;
+  - a **form** is mapped by its **size**: the tree's own mapping, and
+    the size must be greater than zero — the tree's own rule;
+  - the drawing is wrapped in a **graphics state** — `q` and `Q` — so
+    that the mapping does not leak: the tree's own.
+
+### What the port found
+
+- **The tree's picture is a reference and not a copy**, and the port
+  found that the tree's own builder puts the picture in the resources
+  of the appearance and names it `Pic` — so the artwork is the object
+  of the document itself and the appearance only says where it goes:
+  so the drawing here refers to the object and does not carry its
+  bytes.
+- **The tree's mapping of a form is a scale and not a place**: the
+  port found that the tree maps a form by the **ratio** of the
+  rectangle to the size of the form — so a form of a hundred and twenty
+  points in a rectangle of two hundred is drawn a little larger than
+  itself — while an image is mapped by the rectangle exactly.
+
+### What it cost
+
+- **Four tests** in the PDF battery (`tests/customstampappearance.rs`):
+  the picture that is drawn, the picture that is in the resources, the
+  form that is drawn by its size, and a stamp without its picture that
+  cannot be drawn.
+- **No new command**: the command that draws an annotation draws the
+  custom stamp too, so the PDF battery still carries **118** commands
+  and the MCP server **973** — the same counts as §775. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+
+### What it does not settle
+
+- **Every annotation of the tree's builder is drawn here now**: the
+  shape, the markup, the line, the polygon, the ink, the caret, the
+  text box, the mark of a redaction, the stamp, the marks of Fill and
+  Sign, the attachment, the callout, the typed signature and the
+  custom stamp.
 - **The tree's own script outlines are not here**: the tree writes the
   contours of a typed name from the outlines of a font it carries, and
   this tree carries **no fonts at all** — so the contours are the
