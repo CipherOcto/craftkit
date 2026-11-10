@@ -156,6 +156,7 @@ mod form;
 mod format;
 mod formdata;
 mod free;
+mod freetextadd;
 mod headerfooter;
 mod hidden;
 mod image;
@@ -236,6 +237,7 @@ pub use fonts::ReadFonts;
 pub use form::ReadForm;
 pub use format::ReadFormat;
 pub use formdata::{ExportFormData, ImportFormData};
+pub use freetextadd::AddFreeText;
 pub use headerfooter::{AddFooter, AddHeader};
 pub use imagefield::AddImage;
 pub use information::{ReadInformation, SetInformation};
@@ -2217,6 +2219,7 @@ craftkit_sdk::plugin_anchor!(
     AddPolygon,
     AddInk,
     AddCaret,
+    AddFreeText,
     SetProperties,
     SetLook,
     WriteAnnotation,
