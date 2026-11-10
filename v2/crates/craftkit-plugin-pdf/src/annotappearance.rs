@@ -1,5 +1,5 @@
-//! The **appearance** of an annotation: the shape, the markup and the
-//! line.
+//! The **appearance** of an annotation: the shape, the markup, the
+//! line and the polygon.
 //!
 //! The tree's own: an annotation of the kind `Square` or `Circle` is a
 //! **shape**, and a shape is **drawn** — the border of it and the fill
@@ -8,7 +8,9 @@
 //! `Highlight`, `Underline`, `StrikeOut` or `Squiggly` is a **markup**,
 //! and a markup is drawn over the text it covers. An annotation of the
 //! kind `Line` is a **line**, and a line is drawn between its two
-//! points, with its arrowheads.
+//! points, with its arrowheads. An annotation of the kind `Polygon` or
+//! `PolyLine` is a **shape of corners**, and it is drawn through them
+//! — with a **cloudy** border when the annotation says so.
 //!
 //! The rules of the tree, ported by name:
 //!
@@ -67,6 +69,24 @@
 //! - the **fill** of the line is the colour of the fill when the
 //!   annotation says one, and the colour of the line otherwise, and a
 //!   **closed** arrowhead is filled with it.
+//!
+//! The **polygon** is the tree's own polygon, and its rules are:
+//!
+//! - the **corners** of the shape are the `/Vertices` of the
+//!   annotation, and there are an even number of them and at least
+//!   two, and a shape without corners is refused;
+//! - the **colour** of the line and the **fill** of the shape are the
+//!   `/C` and the `/IC` of the annotation, and a polygon may have
+//!   neither;
+//! - a **cloudy border** is the tree's own `/BE /S /C`, and it is
+//!   drawn as a row of **bumps** along the edges of the shape, and the
+//!   **radius** of a bump is six points plus one and a half times the
+//!   width of the line, and the **intensity** of the cloud (`/BE /I`)
+//!   scales it and is between a half and two;
+//! - a cloudy border is a **polygon** only: the tree draws it for
+//!   nothing else, and one that is not a polygon is refused;
+//! - the **ends** of a connected line are not drawn yet, and a
+//!   connected line with an end that is not `None` is refused.
 
 use craftkit_derive::Command;
 
@@ -486,12 +506,167 @@ fn the_line(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
     Some((out.into_bytes(), rect))
 }
 
-/// The **drawing** of an annotation: the shape, the markup or the line.
+/// The **radius of a cloud**: the tree's own `cloud_radius` — six
+/// points plus one and a half times the width of the line.
+fn the_cloud_radius(width: f64) -> f64 {
+    6.0 + 1.5 * width.max(0.0)
+}
+
+/// Whether the border of the annotation is **cloudy**: the tree's own
+/// `/BE /S /C`.
+fn the_cloudy(entries: &[(String, Json)]) -> bool {
+    let Some(border) = entry(entries, "BE") else { return false };
+    dictionary_of(border).iter().any(|(key, value)| key == "S" && value.as_str() == Some("C"))
+}
+
+/// The **cloud** of a border: a closed outline through the points, and
+/// each edge of it is a row of half-circle bumps.
+///
+/// The tree's own `cloud_path`: the bumps bulge **outwards**, and the
+/// side they bulge to is the one the outline turns to.
+fn the_cloud_path(points: &[(f64, f64)], radius: f64) -> String {
+    let number = crate::watermark::number;
+    // The **area** of the outline: its sign says which way it turns.
+    let area: f64 =
+        points.iter().zip(points.iter().cycle().skip(1)).map(|(a, b)| a.0 * b.1 - b.0 * a.1).sum();
+    let sign = if area >= 0.0 { 1.0 } else { -1.0 };
+    let mut out = String::new();
+    for (index, (a, b)) in points.iter().zip(points.iter().cycle().skip(1)).enumerate() {
+        let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        let length = dx.hypot(dy);
+        if index == 0 {
+            out.push_str(&format!("{} {} m\n", number(a.0), number(a.1)));
+        }
+        if length < 1e-6 {
+            continue;
+        }
+        let bumps = ((length / (2.0 * radius)).round() as usize).clamp(1, 10_000);
+        let step = length / bumps as f64;
+        let (ux, uy) = (dx / length, dy / length);
+        let (nx, ny) = (sign * uy, -sign * ux);
+        let h = 4.0 / 3.0 * step / 2.0;
+        for bump in 0..bumps {
+            let p0 = (a.0 + ux * step * bump as f64, a.1 + uy * step * bump as f64);
+            let p1 = (a.0 + ux * step * (bump + 1) as f64, a.1 + uy * step * (bump + 1) as f64);
+            out.push_str(&format!(
+                "{} {} {} {} {} {} c\n",
+                number(p0.0 + nx * h),
+                number(p0.1 + ny * h),
+                number(p1.0 + nx * h),
+                number(p1.1 + ny * h),
+                number(p1.0),
+                number(p1.1)
+            ));
+        }
+    }
+    out.push_str("h\n");
+    out
+}
+
+/// The **drawing** of a **polygon** and of the tree's **connected
+/// lines**: the tree's own polygon branch.
+///
+/// The **corners** of the shape are the `/Vertices` of the annotation,
+/// and a **cloudy** border is drawn as a row of bumps along its edges.
+fn the_polygon(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f64; 4])> {
+    let rect = numbers_of(entry(entries, "Rect")?);
+    if rect.len() != 4 {
+        return None;
+    }
+    let rect = [rect[0].min(rect[2]), rect[1].min(rect[3]), rect[0].max(rect[2]), rect[1].max(rect[3])];
+    // The **corners**: an even number of them, and at least two.
+    let vertices = numbers_of(entry(entries, "Vertices")?);
+    if vertices.len() < 4 || !vertices.len().is_multiple_of(2) {
+        return None;
+    }
+    let points: Vec<(f64, f64)> =
+        vertices.as_chunks::<2>().0.iter().map(|point| (point[0], point[1])).collect();
+    let closed = subtype == "Polygon";
+    // The **colour** of the line: a polygon may have none.
+    let stroke = match entry(entries, "C") {
+        Some(value) => the_colour(value).ok()?,
+        None => None,
+    };
+    // The **fill**: a polygon may have one, and a connected line never
+    // has.
+    let fill = match entry(entries, "IC") {
+        Some(value) => the_colour(value).ok()?,
+        None => None,
+    };
+    // The tree does not draw the **ends** of a connected line yet, and
+    // a connected line with an end that is not `None` is not drawn.
+    if !closed && let Some(value) = entry(entries, "LE") {
+        let unknown = match value.as_array() {
+            None => true,
+            Some(list) => list.iter().any(|end| end.as_str() != Some("None")),
+        };
+        if unknown {
+            return None;
+        }
+    }
+    let width = the_width(entries);
+    let number = crate::watermark::number;
+    let mut out = String::new();
+    if let Some(fill) = fill {
+        out.push_str(&format!("{} {} {} rg\n", number(fill[0]), number(fill[1]), number(fill[2])));
+    }
+    if let Some(stroke) = stroke {
+        out.push_str(&format!(
+            "{} {} {} RG\n{} w 1 J 1 j\n{}",
+            number(stroke[0]),
+            number(stroke[1]),
+            number(stroke[2]),
+            number(width),
+            the_dash(entries)
+        ));
+    }
+    if the_cloudy(entries) {
+        // The **intensity** of the cloud, and the tree's own bounds of
+        // it.
+        let intensity = entry(entries, "BE")
+            .map(dictionary_of)
+            .and_then(|border| {
+                border.iter().find(|(key, _)| key == "I").and_then(|(_, value)| value.as_f64())
+            })
+            .unwrap_or(1.0);
+        let radius = the_cloud_radius(width) * intensity.clamp(0.5, 2.0);
+        out.push_str(&the_cloud_path(&points, radius));
+    } else {
+        for (index, point) in points.iter().enumerate() {
+            out.push_str(&format!(
+                "{} {} {}\n",
+                number(point.0),
+                number(point.1),
+                if index == 0 { "m" } else { "l" }
+            ));
+        }
+        if closed {
+            out.push_str("h\n");
+        }
+    }
+    out.push_str(match (fill.is_some(), stroke.is_some() && width > 0.0) {
+        (true, true) => "B\n",
+        (true, false) => "f\n",
+        (false, true) => "S\n",
+        (false, false) => "n\n",
+    });
+    Some((out.into_bytes(), rect))
+}
+
+/// The **drawing** of an annotation: the shape, the markup, the line or
+/// the polygon.
 fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f64; 4])> {
+    // A **cloudy border** is the tree's own, and the tree draws it for
+    // a polygon and for nothing else.
+    if the_cloudy(entries) && subtype != "Polygon" {
+        return None;
+    }
     if MARKS.contains(&subtype) {
         the_markup(entries, subtype)
     } else if subtype == "Line" {
         the_line(entries)
+    } else if subtype == "Polygon" || subtype == "PolyLine" {
+        the_polygon(entries, subtype)
     } else {
         the_shape(entries, subtype)
     }
@@ -507,8 +682,9 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
 ///
 /// - the annotation must be one this command draws — a **shape**
 ///   (`Square` or `Circle`), a **markup** (`Highlight`, `Underline`,
-///   `StrikeOut` or `Squiggly`) or a **line** (`Line`) — and any other
-///   kind is refused;
+///   `StrikeOut` or `Squiggly`), a **line** (`Line`) or a **shape of
+///   corners** (`Polygon` or `PolyLine`) — and any other kind is
+///   refused;
 /// - the **rectangle** of the shape is the one the annotation holds,
 ///   and the corners may come in any order;
 /// - a **colour** is one number, three numbers or four numbers, and
@@ -519,6 +695,8 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
 /// - a line needs its **two points** and its **colour**, and one
 ///   without either is refused, and the **ends** of it are the three
 ///   the tree knows;
+/// - a polygon needs its **corners**, and a cloudy border is a polygon
+///   only;
 /// - a **highlight multiplies** over the text, the tree's own rule,
 ///   and the file says so with the blend mode.
 #[derive(Command)]
@@ -542,11 +720,13 @@ impl WriteAnnotation {
         let entries = entries_of(&node);
         let subtype =
             entry(&entries, "Subtype").and_then(|subtype| subtype.as_str()).unwrap_or_default().to_string();
-        if subtype != "Square"
-            && subtype != "Circle"
-            && subtype != "Line"
-            && !MARKS.contains(&subtype.as_str())
-        {
+        let drawn = subtype == "Square"
+            || subtype == "Circle"
+            || subtype == "Line"
+            || subtype == "Polygon"
+            || subtype == "PolyLine"
+            || MARKS.contains(&subtype.as_str());
+        if !drawn {
             return Err(EngineError::Failed {
                 id: COMMAND.to_string(),
                 message: format!("the appearance of an annotation of the kind `{subtype}` is not drawn here"),
