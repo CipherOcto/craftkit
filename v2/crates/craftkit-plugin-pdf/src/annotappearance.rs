@@ -1,5 +1,6 @@
 //! The **appearance** of an annotation: the shape, the markup, the
-//! line, the polygon, the ink and the caret.
+//! line, the polygon, the ink, the caret, the text box and the mark of
+//! a redaction.
 //!
 //! The tree's own: an annotation of the kind `Square` or `Circle` is a
 //! **shape**, and a shape is **drawn** — the border of it and the fill
@@ -14,6 +15,10 @@
 //! annotation of the kind `Ink` is a **hand**, and it is drawn through
 //! the points of its strokes. An annotation of the kind `Caret` is a
 //! **wedge**, and it is the mark that says "text was inserted here".
+//! An annotation of the kind `FreeText` is a **text box**, and its own
+//! text is drawn inside it. An annotation of the kind `Redact` is the
+//! **mark of a redaction**, and the outline of what it covers is
+//! drawn.
 //!
 //! The rules of the tree, ported by name:
 //!
@@ -107,6 +112,15 @@
 //!   height from the bottom;
 //! - the **colour** of the caret is the `/C` of the annotation, and
 //!   the tree's own blue when the annotation says none.
+//!
+//! The **mark of a redaction** is the tree's own mark, and its rules
+//! are:
+//!
+//! - the **quads** of the mark are the `/QuadPoints` of the
+//!   annotation, and the **outline** of each of them is drawn: the
+//!   fill comes when the redaction is applied, and not before;
+//! - the **colour** of the mark is the `/C` of the annotation, and the
+//!   tree's own red when the annotation says none.
 
 use craftkit_derive::Command;
 
@@ -943,8 +957,55 @@ fn the_freetext(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
     Some((out.into_bytes(), full))
 }
 
+/// The **drawing** of the **mark of a redaction**: the tree's own
+/// redaction mark.
+///
+/// While the mark is there, the **outline** of each quad is drawn: the
+/// fill comes when the redaction is applied.
+fn the_redact(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
+    let numbers = numbers_of(entry(entries, "Rect")?);
+    if numbers.len() != 4 {
+        return None;
+    }
+    let rect = [
+        numbers[0].min(numbers[2]),
+        numbers[1].min(numbers[3]),
+        numbers[0].max(numbers[2]),
+        numbers[1].max(numbers[3]),
+    ];
+    // The **quads**: eight numbers to a quad, and a whole number of
+    // quads.
+    let quads = numbers_of(entry(entries, "QuadPoints")?);
+    if quads.is_empty() || !quads.len().is_multiple_of(8) {
+        return None;
+    }
+    // The **colour** of the mark: the tree's own red when the
+    // annotation says none.
+    let colour = match entry(entries, "C") {
+        Some(value) => the_colour(value).ok().flatten()?,
+        None => [0.89, 0.13, 0.13],
+    };
+    let number = crate::watermark::number;
+    let mut out = String::new();
+    out.push_str(&format!("{} {} {} RG\n1 w\n", number(colour[0]), number(colour[1]), number(colour[2])));
+    for quad in quads.as_chunks::<8>().0 {
+        out.push_str(&format!(
+            "{} {} m {} {} l {} {} l {} {} l h S\n",
+            number(quad[0]),
+            number(quad[1]),
+            number(quad[2]),
+            number(quad[3]),
+            number(quad[6]),
+            number(quad[7]),
+            number(quad[4]),
+            number(quad[5])
+        ));
+    }
+    Some((out.into_bytes(), rect))
+}
+
 /// The **drawing** of an annotation: the shape, the markup, the line,
-/// the polygon, the ink, the caret or the text box.
+/// the polygon, the ink, the caret, the text box or the mark.
 fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f64; 4])> {
     // A **cloudy border** is the tree's own, and the tree draws it for
     // a polygon and for nothing else.
@@ -963,6 +1024,8 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
         the_caret(entries)
     } else if subtype == "FreeText" {
         the_freetext(entries)
+    } else if subtype == "Redact" {
+        the_redact(entries)
     } else {
         the_shape(entries, subtype)
     }
@@ -980,7 +1043,8 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
 ///   (`Square` or `Circle`), a **markup** (`Highlight`, `Underline`,
 ///   `StrikeOut` or `Squiggly`), a **line** (`Line`), a **shape of
 ///   corners** (`Polygon` or `PolyLine`), the **ink** (`Ink`) or the
-///   **caret** (`Caret`) — and any other kind is refused;
+///   **caret** (`Caret`), the **text box** (`FreeText`) or the **mark
+///   of a redaction** (`Redact`) — and any other kind is refused;
 /// - the **rectangle** of the shape is the one the annotation holds,
 ///   and the corners may come in any order;
 /// - a **colour** is one number, three numbers or four numbers, and
@@ -997,6 +1061,8 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
 ///   either is refused;
 /// - the caret needs its **rectangle**, and it has a colour whether or
 ///   not the annotation says one;
+/// - the mark of a redaction needs its **quads**, and it has a colour
+///   whether or not the annotation says one;
 /// - a **highlight multiplies** over the text, the tree's own rule,
 ///   and the file says so with the blend mode.
 #[derive(Command)]
@@ -1028,6 +1094,7 @@ impl WriteAnnotation {
             || subtype == "Ink"
             || subtype == "Caret"
             || subtype == "FreeText"
+            || subtype == "Redact"
             || MARKS.contains(&subtype.as_str());
         if !drawn {
             return Err(EngineError::Failed {
