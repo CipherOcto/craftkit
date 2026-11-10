@@ -132,6 +132,7 @@ mod attachments;
 mod background;
 mod boxes;
 mod calculate;
+mod comments;
 mod compare;
 mod content;
 mod convert;
@@ -201,6 +202,7 @@ pub use attachments::ReadAttachments;
 pub use background::AddBackground;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use calculate::{ReadCalculatedValue, ReadCalculation};
+pub use comments::ReadComments;
 pub use compare::{CompareFiles, MarkDifferences};
 pub use convert::Convert;
 pub use destinations::ReadDestinations;
@@ -2181,6 +2183,7 @@ craftkit_sdk::plugin_anchor!(
     AddWatermark,
     AddBackground,
     RemoveMarks,
+    ReadComments,
     FlattenForm,
     AddHeader,
     AddFooter,
