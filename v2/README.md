@@ -4134,6 +4134,7 @@ so.
 | the **appearance** of a line | **built.** The line is drawn — the tree's two points, its width, its dashes and its arrowheads (§754) | §754 |
 | the **polygon** of a page | **built.** A polygon and its connected lines are put on a page — the tree's corners, its cloud and its rectangle (§755) | §755 |
 | the **appearance** of a polygon | **built.** The polygon and its connected lines are drawn — the tree's corners, its fill and its cloudy border (§756) | §756 |
+| the **ink** of a page | **built.** The ink is put on a page — the tree's strokes, its colour and its rectangle (§757) | §757 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -49737,3 +49738,71 @@ The **polygon** — and the tree's **connected lines** — is now
   draw them either, and it refuses a connected line that has one.
 - **The cloud here is the tree's own bumps and not the reader's
   cloud**: a reader that draws a cloud of its own will not see these.
+
+---
+
+## 757. The ink is put on a page
+
+The tree's **ink** — the freehand **strokes** of a hand — may now be
+put on a page.
+
+### What was built
+
+- A **new command**: `pdf.annot.ink.add` puts ink on a page — the
+  **page**, the **object number** the annotation has in the file, the
+  **strokes** of the ink, and, when the caller says so, the **colour**
+  and the **width**.
+- The **rules** are the tree's own:
+  - the **strokes** are strokes of points, and each point is two
+    numbers, and a number that is not a number is **refused**;
+  - **every stroke empty** is **refused**: the tree's own rule, and an
+    ink with no points in it marks nothing;
+  - the **width** of the ink is the tree's own two points when nothing
+    is said, and a width below zero is the tree's own zero;
+  - the **colour** of the ink is the tree's own blue when nothing is
+    said, and it is three numbers between zero and one;
+  - the **rectangle** of the annotation is the **bounds** of all the
+    points, grown by half the width of the ink and by one point more:
+    the tree's own rectangle;
+  - the **ink list** of the annotation is the list of the strokes, and
+    a stroke is a flat list of numbers — the tree's own `/InkList`.
+
+### What the port found
+
+- **The tree's ink is a list of strokes and not one path**, and the
+  port found that each stroke is drawn on its own — the tree strokes
+  each of them and closes it — and that the strokes are the points the
+  hand went through: so the ink list here is a list of strokes, as the
+  tree's is, and not one long path.
+- **The tree's ink may have a stroke of one point**, and the port found
+  that the tree draws such a stroke as a point with a hair of length
+  — the point and the point a hundredth of a point along — so that a
+  reader shows a dot: so a stroke of one point is not refused here
+  either.
+- **The tree's ink is blue and two points wide**, and the port found
+  that these are the **defaults of the tree's tool** and not the
+  defaults of the file: so the colour and the width here are the
+  tree's own, and the caller may say otherwise.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/inkadd.rs`): the ink that
+  is put on the page, the rectangle that is the bounds of the points,
+  the ink with no points in it, the point that is not two numbers, the
+  colour that is outside zero and one, and the width below zero that
+  is the tree's own zero.
+- **One new command**: the PDF battery carries **109** commands and
+  the MCP server **964**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The drawing of the ink is not here**: it is the appearance
+  command's own work, and the tree draws the ink when the annotation
+  is made.
+- **The tree's signature is an ink too**, and it is not here: it is
+  the ink of a hand and the ink of a signature are the same shape with
+  a different name.
+- **The ink here has no name, no contents and no author**: the tree's
+  ink is a tool of its editor, and the editor is not here.
