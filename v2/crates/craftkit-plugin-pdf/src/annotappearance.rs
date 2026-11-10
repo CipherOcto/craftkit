@@ -1004,8 +1004,170 @@ fn the_redact(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
     Some((out.into_bytes(), rect))
 }
 
+/// The **drawing** of a **stamp**: the tree's own stamp.
+///
+/// A stamp that asks for a signature is a **tag** pointing left, and
+/// every other stamp is a **rounded frame** with a light tint. The
+/// label of the kind is drawn in the tree's Helvetica bold, and the
+/// line that says who did it in the tree's Helvetica.
+fn the_stamp(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
+    let numbers = numbers_of(entry(entries, "Rect")?);
+    if numbers.len() != 4 {
+        return None;
+    }
+    let rect = [
+        numbers[0].min(numbers[2]),
+        numbers[1].min(numbers[3]),
+        numbers[0].max(numbers[2]),
+        numbers[1].max(numbers[3]),
+    ];
+    // The **kind**: the tree's own twenty two, and a kind that is not
+    // one of them is refused.
+    let name = entry(entries, "Name")?.as_str()?.to_string();
+    let kind = crate::stampadd::kind_of(&name)?;
+    // The **colour** of the stamp: the tree's own colour for the kind
+    // when the annotation says none.
+    let colour = match entry(entries, "C") {
+        Some(value) => the_colour(value).ok().flatten()?,
+        None => kind.colour,
+    };
+    // The **line** that says who did it.
+    let by = entry(entries, "PCByLine").and_then(crate::fields::text_of);
+    let [x0, y0, x1, y1] = rect;
+    let height = y1 - y0;
+    let number = crate::watermark::number;
+    let mut out = String::new();
+    // The **width of the line** of the stamp: the tree's own, a
+    // fourteenth of the height and never less than a point and never
+    // more than three.
+    let line_width = (height * 0.07).clamp(1.0, 3.0);
+    let inset = line_width / 2.0 + 0.5;
+    if kind.group == crate::stampadd::Group::SignHere {
+        // A **tag** pointing left, filled with the colour of the stamp.
+        let tip = height * 0.45;
+        out.push_str(&format!(
+            "{} {} {} rg\n{} {} {} RG\n{} w 1 j\n{} {} m {} {} l {} {} l {} {} l {} {} l h B\n",
+            number(colour[0]),
+            number(colour[1]),
+            number(colour[2]),
+            number(colour[0]),
+            number(colour[1]),
+            number(colour[2]),
+            number(line_width),
+            number(x0 + inset),
+            number(y0 + height / 2.0),
+            number(x0 + tip),
+            number(y1 - inset),
+            number(x1 - inset),
+            number(y1 - inset),
+            number(x1 - inset),
+            number(y0 + inset),
+            number(x0 + tip),
+            number(y0 + inset)
+        ));
+    } else {
+        // A **rounded frame** with a light tint.
+        let radius = (height * 0.2).min(8.0);
+        let k = 0.552_284_75 * radius;
+        let (a0, b0, a1, b1) = (x0 + inset, y0 + inset, x1 - inset, y1 - inset);
+        let tint = colour.map(|value| 1.0 - (1.0 - value) * 0.12);
+        out.push_str(&format!(
+            "{} {} {} rg\n{} {} {} RG\n{} w\n{} {} m {} {} l \
+{} {} {} {} {} {} c {} {} l {} {} {} {} {} {} c {} {} l {} {} {} {} {} {} c \
+{} {} l {} {} {} {} {} {} c h B\n",
+            number(tint[0]),
+            number(tint[1]),
+            number(tint[2]),
+            number(colour[0]),
+            number(colour[1]),
+            number(colour[2]),
+            number(line_width),
+            number(a0 + radius),
+            number(b0),
+            number(a1 - radius),
+            number(b0),
+            number(a1 - radius + k),
+            number(b0),
+            number(a1),
+            number(b0 + radius - k),
+            number(a1),
+            number(b0 + radius),
+            number(a1),
+            number(b1 - radius),
+            number(a1),
+            number(b1 - radius + k),
+            number(a1 - radius + k),
+            number(b1),
+            number(a1 - radius),
+            number(b1),
+            number(a0 + radius),
+            number(b1),
+            number(a0 + radius - k),
+            number(b1),
+            number(a0),
+            number(b1 - radius + k),
+            number(a0),
+            number(b1 - radius),
+            number(a0),
+            number(b0 + radius),
+            number(a0),
+            number(b0 + radius - k),
+            number(a0 + radius - k),
+            number(b0),
+            number(a0 + radius),
+            number(b0)
+        ));
+    }
+    // The **label** of the kind, and the **line** that says who did it.
+    let label = kind.label;
+    let (title, by_size) = if by.is_some() { (height * 0.5, height * 0.22) } else { (height * 0.52, 0.0) };
+    let area = if kind.group == crate::stampadd::Group::SignHere {
+        (x0 + height * 0.45, x1 - line_width * 2.0)
+    } else {
+        (x0 + line_width * 2.0, x1 - line_width * 2.0)
+    };
+    let mut size = title;
+    let mut width_of = crate::watermark::helvetica_width(label, size) * 1.12;
+    if width_of > area.1 - area.0 - 4.0 {
+        size *= (area.1 - area.0 - 4.0) / width_of;
+    }
+    width_of = crate::watermark::helvetica_width(label, size) * 1.12;
+    let text_colour = if kind.group == crate::stampadd::Group::SignHere { [1.0; 3] } else { colour };
+    let top = if by.is_some() { y0 + height * 0.48 } else { y0 + (height - size * 0.72) / 2.0 };
+    out.push_str(&format!(
+        "BT\n{} {} {} rg\n/HelvB {} Tf\n1 0 0 1 {} {} Tm ",
+        number(text_colour[0]),
+        number(text_colour[1]),
+        number(text_colour[2]),
+        number(size),
+        number(area.0 + (area.1 - area.0 - width_of) / 2.0),
+        number(top)
+    ));
+    out.push_str(&crate::watermark::literal_bytes(&crate::watermark::win_ansi(label)));
+    out.push_str(" Tj\n");
+    if let Some(by) = by {
+        let mut size_of_line = by_size;
+        let mut width_of_line = crate::watermark::helvetica_width(&by, size_of_line);
+        if width_of_line > area.1 - area.0 - 4.0 {
+            size_of_line *= (area.1 - area.0 - 4.0) / width_of_line;
+        }
+        width_of_line = crate::watermark::helvetica_width(&by, size_of_line);
+        out.push_str(&format!(
+            "/Helv {} Tf\n1 0 0 1 {} {} Tm ",
+            number(size_of_line),
+            number(area.0 + (area.1 - area.0 - width_of_line) / 2.0),
+            number(y0 + height * 0.18)
+        ));
+        out.push_str(&crate::watermark::literal_bytes(&crate::watermark::win_ansi(&by)));
+        out.push_str(" Tj\n");
+    }
+    out.push_str("ET\n");
+    Some((out.into_bytes(), rect))
+}
+
 /// The **drawing** of an annotation: the shape, the markup, the line,
-/// the polygon, the ink, the caret, the text box or the mark.
+/// the polygon, the ink, the caret, the text box, the mark or the
+/// stamp.
 fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f64; 4])> {
     // A **cloudy border** is the tree's own, and the tree draws it for
     // a polygon and for nothing else.
@@ -1026,6 +1188,8 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
         the_freetext(entries)
     } else if subtype == "Redact" {
         the_redact(entries)
+    } else if subtype == "Stamp" {
+        the_stamp(entries)
     } else {
         the_shape(entries, subtype)
     }
@@ -1095,6 +1259,7 @@ impl WriteAnnotation {
             || subtype == "Caret"
             || subtype == "FreeText"
             || subtype == "Redact"
+            || subtype == "Stamp"
             || MARKS.contains(&subtype.as_str());
         if !drawn {
             return Err(EngineError::Failed {
@@ -1170,6 +1335,29 @@ impl WriteAnnotation {
                             ["Encoding", "WinAnsiEncoding"],
                         ] },
                     ]],
+                }),
+            ));
+        }
+        if subtype == "Stamp" {
+            // The **fonts** of the stamp: the tree's own Helvetica and
+            // its bold, under the names the stamp uses.
+            let font = |base: &str| {
+                json!({
+                    "entries": [
+                        ["Type", "Font"],
+                        ["Subtype", "Type1"],
+                        ["BaseFont", base],
+                        ["Encoding", "WinAnsiEncoding"],
+                    ],
+                })
+            };
+            resources.push((
+                "Font".to_string(),
+                json!({
+                    "entries": [
+                        ["HelvB", font("Helvetica-Bold")],
+                        ["Helv", font("Helvetica")],
+                    ],
                 }),
             ));
         }
