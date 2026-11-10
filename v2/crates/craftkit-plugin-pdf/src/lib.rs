@@ -143,6 +143,7 @@ mod compare;
 mod content;
 mod convert;
 mod crypt;
+mod customstampadd;
 mod datefield;
 mod decrypt;
 mod destinations;
@@ -234,6 +235,7 @@ pub use combobox::AddCombo;
 pub use comments::{AddComment, CommentInfo, ReadComments};
 pub use compare::{CompareFiles, MarkDifferences};
 pub use convert::Convert;
+pub use customstampadd::AddCustomStamp;
 pub use datefield::AddDate;
 pub use destinations::ReadDestinations;
 pub use encrypt::ReadEncryption;
@@ -2238,6 +2240,7 @@ craftkit_sdk::plugin_anchor!(
     AddAttachment,
     AddCallout,
     AddTypedSignature,
+    AddCustomStamp,
     SetProperties,
     SetLook,
     WriteAnnotation,
