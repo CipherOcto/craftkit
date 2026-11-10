@@ -17,13 +17,14 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **fifty-five commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **fifty-six commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.create` makes a path out of path data or
 //!   out of anchors, `vector.path.spline` makes one that curves
 //!   through a list of points, and `vector.path.anchors.set` sets the
-//!   anchors of a path that is already there, `vector.path.cut` cuts
+//!   anchors of a path that is already there, `vector.path.anchors.middle`
+//!   puts a point in the middle of every side of it, `vector.path.cut` cuts
 //!   a path at a point, and `vector.path.freehand` draws a stroke by
 //!   hand; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
@@ -95,7 +96,7 @@ mod spline;
 mod svgexport;
 mod svgimport;
 
-pub use anchors::SetAnchors;
+pub use anchors::{AddMiddleAnchors, SetAnchors};
 pub use colour::{ColourGamut, ConvertColour};
 pub use cutpath::CutPath;
 pub use dashes::DashPath;
@@ -2526,7 +2527,7 @@ fn arriving_segment(subpath: &SubPath, point: usize) -> Option<usize> {
 /// A closed contour may leave its closing edge out — the edge is then a
 /// straight line, and there is nothing to hold a handle — or it may
 /// have one, and then that segment ends where the contour starts.
-fn closing_segment(subpath: &SubPath) -> Option<usize> {
+pub(crate) fn closing_segment(subpath: &SubPath) -> Option<usize> {
     let segments = subpath.segments.len();
     if !subpath.closed || segments == 0 {
         return None;
@@ -2848,6 +2849,7 @@ craftkit_sdk::plugin_anchor!(
     CreatePath,
     AddSpline,
     SetAnchors,
+    AddMiddleAnchors,
     CutPath,
     Freehand,
     UnitePaths,

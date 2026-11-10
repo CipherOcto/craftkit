@@ -22,7 +22,7 @@ use craftkit_derive::Command;
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Path, Point, Segment, Session, SubPath};
 
-use crate::{vector_of, write_back};
+use crate::{closing_segment, vector_of, write_back};
 
 /// The most **anchors** one path may hold.
 ///
@@ -185,6 +185,56 @@ impl SetAnchors {
         vector.path = Path { subpaths, rule: vector.path.rule };
         write_back(session, self.path.0, &vector)?;
         Ok(Outcome::changed(format!("the anchors of `{}` are set", self.path.0))
+            .with_data(json!({ "id": self.path.0 })))
+    }
+}
+
+/// Put a point in the **middle of every side** of a path.
+///
+/// The tree's own command: an anchor is added at the middle of each
+/// side, so that the path may be edited in finer pieces. The sides
+/// keep their shape — the split is the tree's own, and the curve is
+/// the same curve.
+#[derive(Command)]
+#[command(
+    id = "vector.path.anchors.middle",
+    area = "vector",
+    layer = "vector",
+    icon = "path",
+    menu("Path", "Anchors"),
+    mutates,
+    undoable
+)]
+pub struct AddMiddleAnchors {
+    /// The path.
+    pub path: NodeRef,
+}
+
+impl AddMiddleAnchors {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "vector.path.anchors.middle".to_string();
+        let mut vector = vector_of(session, self.path.0)?;
+        let mut subpaths: Vec<SubPath> = Vec::with_capacity(vector.path.subpaths.len());
+        for contour in &vector.path.subpaths {
+            let mut contour = contour.clone();
+            // A closed contour may leave its **closing edge** out, and
+            // the tree's closed contour has it in: the edge is a side
+            // of its own here too, and it is split like the others.
+            if contour.closed && closing_segment(&contour).is_none() {
+                contour.segments.push(Segment::Line { to: contour.start });
+            }
+            // Every side is split in the middle, from the last to the
+            // first, so that the sides that are not split yet keep
+            // their places.
+            for side in (0..contour.segments.len()).rev() {
+                contour = craftkit_vector_geom::split_segment(&contour, side, 0.5)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            }
+            subpaths.push(contour);
+        }
+        vector.path = Path { subpaths, rule: vector.path.rule };
+        write_back(session, self.path.0, &vector)?;
+        Ok(Outcome::changed("the path has a point in the middle of every side")
             .with_data(json!({ "id": self.path.0 })))
     }
 }
