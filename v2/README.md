@@ -4117,6 +4117,7 @@ so.
 | the **layout** of a caption | **built.** A caption is laid out on a frame — the tree's scale, its wrapping, its anchor and its outline (§737) | §737 |
 | the **burn-in** of a caption | **built.** A caption is drawn into a frame and written as a picture — the tree's background, its outline and its letters (§738) | §738 |
 | the **text field** of a form | **built.** A text field is put on a page — the tree's name, its rectangle, its form, its flags and its drawing (§739) | §739 |
+| the **check box** of a form | **built.** A check box is put on a page — the tree's name, its six marks and its two drawings (§740) | §740 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -48455,3 +48456,89 @@ reader may write in.
 - **The text of a field is Latin-1**: a character that has no byte in
   it is refused, where the tree writes it in the **WinAnsi** encoding
   of the PDF standard.
+
+---
+
+## 740. A check box is put on a page
+
+A **form** may now hold a **check box**: a box on a page that is either
+on or off.
+
+### What was built
+
+- A **new command**: `pdf.field.checkbox.add` puts a check box on a
+  page — the **page**, the **object number** the field holds, the
+  **rectangle** it covers, its **name**, the **style** of its mark and
+  **where the two drawings of it are written**.
+- The **rules** are the tree's own, ported by name:
+  - `free_name` — the **name** is the first free `Check Box` name —
+    `Check Box1`, `Check Box2` and so on — when the caller does not
+    give one, and a name that holds a **period** is refused, and so is
+    a name another field has;
+  - the **rectangle** is four numbers and the corners may come in any
+    order, and a check box smaller than **four points by four** is
+    refused, as the tree refuses it;
+  - `widget_dict` — the field is a **widget**, an annotation of the
+    kind `Widget`, and it is a field of the kind `Btn` that starts
+    **off** — the value and the appearance state are both `Off` — and
+    its default appearance is the tree's own, `/ZaDb 0 Tf 0 g`;
+  - `ensure_form` — the file's **form** is made when the file has none,
+    and it holds the field;
+  - `check_box_states` — the field has **two drawings**: the one that
+    says it is off, and the one that says it is on, and the state it is
+    on in is called `Yes`;
+  - the **mark** is one of the tree's **six** — the check, the circle,
+    the cross, the diamond, the square and the star — and it is
+    **drawn as a path**, so that no font of the file is needed to show
+    it; the file says which one it is in the **caption** of the field
+    (`/MK /CA`), with the code of the glyph of the Zapf Dingbats.
+
+### What the port found
+
+- **The tree's mark is a shape and not a glyph**, and the port found
+  that the tree writes the **code** of a glyph of the Zapf Dingbats
+  into the caption of the field — `4` for the check, `l` for the
+  circle — and draws the shape itself as a path, so that the mark is
+  the same in every reader and not the reader's own font. Here the
+  style is asked for by the tree's **label** — `Check`, `Circle`,
+  `Cross`, `Diamond`, `Square` or `Star` — and the tree's code is what
+  the file holds.
+- **The tree writes the value of a button as a name**, and the port
+  found that this tree's own value command wrote every value as a
+  text: the value of a **button** is the state it is in, and the
+  standard asks for a name and not a text — so the command writes a
+  name for a button and a text for every other field.
+- **The tree draws both drawings at once**, and the port found that
+  this tree keeps the bytes of a stream in a **file of their own**, so
+  the two drawings are written when the caller says where they go — and
+  a check box with one of the two and not the other is refused, since
+  a field with one drawing and not the other is a field a reader cannot
+  show.
+
+### What it cost
+
+- **Nine tests** in the PDF battery (`tests/checkbox.rs`): the check
+  box that is put on the page and what its dictionary says, the free
+  name and the second free name, the style that is not one of the
+  tree's six, all six of the tree's styles, the two drawings and the
+  states the field names, the mark of the circle and the mark of the
+  star, the one drawing without the other, the form and the page that
+  hold the field, and the value command that turns the box on.
+- **One correction** in the battery's own value command: the value of
+  a **button** is a **name** in the standard — the state it is in — and
+  this tree wrote it as a text. It is written as a name now.
+- **One new command**: the PDF battery carries **96** commands and the
+  MCP server **951**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The radio button is not here**: the tree's group of radio buttons,
+  with its own flags and the circle that is its mark.
+- **The tree's other kinds of field are not here**: the drop-down, the
+  list box, the push button, the image field, the date field and the
+  signature field.
+- **The check box is not turned on here**: the command makes a field
+  that is off, and the tree's own value command turns it on — a thing
+  this tree has, as `pdf.field.set`.
