@@ -4144,6 +4144,7 @@ so.
 | the **appearance** of the mark | **built.** The mark of a redaction is drawn — the tree's outline and its red (§764) | §764 |
 | the **stamp** of a page | **built.** The stamp is put on a page — the tree's twenty two kinds, its colours and its line (§765) | §765 |
 | the **appearance** of the stamp | **built.** The stamp is drawn — the tree's tag, its frame and its label (§766) | §766 |
+| the **mark** of Fill and Sign | **built.** The check, the cross, the dot and the line are put on a page — the tree's own four (§767) | §767 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -50454,3 +50455,65 @@ or the frame, and the label of the kind in it.
   a form is signed by hand.
 - **The tree's file attachment is still not drawn here**: the last
   annotation of the tree's builder that is not here.
+
+---
+
+## 767. The mark of Fill and Sign is put on a page
+
+The tree's **marks of Fill and Sign** — the **check**, the **cross**,
+the **dot** and the **line** — may now be put on a page.
+
+### What was built
+
+- A **new command**: `pdf.annot.mark.add` puts a mark on a page — the
+  **page**, the **object number** the annotation has in the file, the
+  **rectangle** it covers, the **mark**, and, when the caller says so,
+  the **colour** of it.
+- The **rules** are the tree's own:
+  - the **mark** is one of the tree's own **four** — `check`, `cross`,
+    `dot` and `line` — and a mark that is not one of them is
+    **refused**;
+  - the **rectangle** is four numbers, the corners may come in any
+    order, and it must be at least a point wide and a point high:
+    the tree's own rule;
+  - the **colour** of the mark is the tree's own black when the
+    caller says nothing, and it is three numbers between zero and
+    one;
+  - the **width** of the line of the mark is the tree's own one and a
+    half points, and it is never less than zero;
+  - the **name** of the annotation is the tree's own: `PCCheck`,
+    `PCCross`, `PCDot` or `PCLine`.
+
+### What the port found
+
+- **The tree's marks are stamps**, and the port found that the tree
+  writes a mark as an annotation of the kind `Stamp` with the name of
+  the mark in the `/Name` — and that the drawing of it is the tree's
+  own branch of the stamp: so the mark here is a stamp too, and the
+  name is the tree's.
+- **The tree's mark may be named two ways**, and the port found that
+  the file knows the mark by `PCCheck` and the tree's editor knows it
+  by `Checkmark` — and that neither is the word a person would type:
+  so the mark here answers to `check` as well as to the tree's own
+  name, and the name that is written is the tree's.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/markadd.rs`): the mark
+  that is put on the page, the four marks and their names, the mark
+  that is not known, the mark that is too small, the colour that is
+  outside zero and one, and the colour the caller says instead.
+- **One new command**: the PDF battery carries **114** commands and
+  the MCP server **969**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The drawing of the mark is not here**: it is the appearance
+  command's own work, and the tree draws the mark when the annotation
+  is made.
+- **The tree's own signature is not here**: the strokes of a hand,
+  which the tree draws as an ink.
+- **The mark here is a stamp of its own and not a signature**: a form
+  signed by a person is not the same thing as a mark put on a page.
