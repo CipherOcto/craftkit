@@ -4155,6 +4155,7 @@ so.
 | the **custom stamp** of a page | **built.** The stamp of a picture of the document is put on a page — the tree's `PCCustom` name and its `/PCPicture` (§775) | §775 |
 | the **appearance** of the custom stamp | **built.** The picture is laid over the rectangle, an image exactly and a form by its size (§776) | §776 |
 | the **embedded file** of a document | **built.** The file a file carries is named in the catalog's tree of names, and the reader finds it (§777) | §777 |
+| the **marks** of a sequence | **built.** The program in and out of a sequence are set, and one that crosses the other takes it away (§783) | §783 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -51514,3 +51515,67 @@ The **list** that may hold **more than one** option now holds an
   contours of a typed name from the outlines of a font it carries, and
   this tree carries **no fonts at all** — so the contours are the
   caller's.
+
+---
+
+## 783. The sequence has its own marks
+
+The **sequence** now carries its own **mark in** and **mark out** — the
+tree's own **program** marks.
+
+### What was built
+
+- The commands **`film.sequence.mark.in`**, **`film.sequence.mark.out`**
+  and **`film.sequence.mark.clear`** set and take away the **marks** of
+  a sequence: the tree's own program in and out.
+- The **rules** are the tree's own, ported by name:
+  - the **mark in** is the first frame of the range and the **mark out**
+    is the last one: the tree's own range is the mark in and the mark
+    out **plus one frame**;
+  - **setting the mark in takes the mark out away** when the mark out
+    is before it, and **setting the mark out takes the mark in away**
+    when the mark in is after it: the tree's own rule — a range that
+    begins after it ends is not a range, and the tree takes the end
+    away rather than refusing the beginning;
+  - a **frame** is a whole number and it is not before the beginning of
+    the timeline: the tree's own rule;
+  - the tree's three commands — the clear in, the clear out and the
+    clear of both — are **one command** here, and the caller says
+    which: `in`, `out` or `both`.
+
+### What the port found
+
+- **The tree's sequence carries its own marks, and they are not the
+  marks of a media.** The port found that the tree's own sequence has
+  a `mark_in` and a `mark_out` of its own, beside the marks of the
+  media it plays, and that the tree's own rule for them is the
+  *clearing* one and not the *refusing* one that this tree's own media
+  marks use — so the tree takes the end of a range away when the
+  beginning crosses it, and here it does the same.
+- **The tree's marks are the frames of the sequence and not the frames
+  of a media**, and the port found that a sequence in this tree is an
+  **item**, and that the marks of a media are the item's own facts:
+  so the sequence's marks are kept under **keys of their own**, and the
+  two facts cannot be confused.
+
+### What it cost
+
+- **Seven tests** in the film battery (`tests/sequencemarks.rs`): the
+  marks that are set, the mark in that takes the mark out away, the
+  mark out that takes the mark in away, a mark that does not cross the
+  other, the marks that are taken away, a frame that is not a frame and
+  a mark that is not one of the tree's own.
+- **Three new commands**: the film battery carries **110** commands and
+  the MCP server **977** — three more than §782. The battery is counted
+  by the source of its commands; the MCP server is counted by the tool
+  list it answers with.
+
+### What it does not settle
+
+- **The tree's split points are not here**: the tree takes the split of
+  the video and the split of the audio away when a mark is set, and
+  this tree has no split points.
+- **The tree's own go to the in and go to the out are not here**: the
+  tree moves the playhead to the marks, and this tree's playhead is a
+  fact of the sequence, so the two commands that move it are still to
+  come.
