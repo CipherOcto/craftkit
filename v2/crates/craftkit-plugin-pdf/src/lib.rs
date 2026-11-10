@@ -164,6 +164,7 @@ mod javascript;
 mod labels;
 mod listbox;
 mod loader;
+mod look;
 mod marked;
 mod marks;
 mod markup;
@@ -235,6 +236,7 @@ pub use intent::WriteIntent;
 pub use javascript::ReadScripts;
 pub use labels::SetPageLabels;
 pub use listbox::AddList;
+pub use look::SetLook;
 pub use marked::ReadMarked;
 pub use marks::RemoveMarks;
 pub use markup::AddMarkup;
@@ -2202,6 +2204,7 @@ craftkit_sdk::plugin_anchor!(
     AddSignature,
     AddImage,
     SetProperties,
+    SetLook,
     Preflight,
     ReadFonts,
     ReadTrailer,

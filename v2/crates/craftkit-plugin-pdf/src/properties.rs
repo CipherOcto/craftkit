@@ -65,7 +65,7 @@ fn flags_of(node: &Node) -> i64 {
 ///
 /// A field is locked when one of its **widgets** says so — and a field
 /// that is its own widget says so itself.
-fn is_locked(document: &Document, node: &Node) -> bool {
+pub(crate) fn is_locked(document: &Document, node: &Node) -> bool {
     if flags_of(node) & LOCKED != 0 {
         return true;
     }
