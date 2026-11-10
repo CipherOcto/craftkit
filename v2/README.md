@@ -4156,6 +4156,7 @@ so.
 | the **appearance** of the custom stamp | **built.** The picture is laid over the rectangle, an image exactly and a form by its size (§776) | §776 |
 | the **embedded file** of a document | **built.** The file a file carries is named in the catalog's tree of names, and the reader finds it (§777) | §777 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
+| the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -51271,6 +51272,68 @@ The **option** of a **drop-down** or a **list box** may now carry an
 
 ### What it does not settle
 
+- **The tree's own script outlines are not here**: the tree writes the
+  contours of a typed name from the outlines of a font it carries, and
+  this tree carries **no fonts at all** — so the contours are the
+  caller's.
+
+---
+
+## 779. The look of a field is drawn
+
+The **look** of a field — its **background** and its **border** — is
+now **drawn** with the value of it.
+
+### What was built
+
+- The command **`pdf.field.appearance.write`** now draws the **frame**
+  of the widget before the text of it, and it draws it from the
+  **look** of the widget — the tree's own `frame`.
+- The **rules** are the tree's own, ported by name:
+  - the **background** is filled from the `/BG` of the look, over the
+    whole of the box: the tree's own rule;
+  - the **border** is stroked from the `/BC` of the look and the
+    **width** and the **style** of the `/BS`: the tree's own rule;
+  - a field that says **no colour** has no background and no border:
+    the tree's own rule;
+  - a border of **no width** is not stroked: the tree's own rule;
+  - a **dashed** line is dashed, and an **underline** is the bottom
+    edge of the box and nothing else: the tree's own rules;
+  - a **grey** is drawn with the operator of a grey, and four numbers
+    are cyan, magenta, yellow and black: the tree's own `color_array`.
+
+### What the port found
+
+- **The tree's look was written but never drawn**, and the port found
+  that the tree's own builder takes the **frame** of the field from the
+  `/MK` and the `/BS` of the widget every time it draws it — so a
+  field whose look says red is drawn with a red border, and a field
+  whose look says nothing is drawn with no border at all: the tree's
+  own rule, and here the drawing follows it.
+- **The tree's frame and the tree's padding are two rules**, and the
+  port found that the tree's own frame returns the width of the border
+  as well as the drawing of it, because the text of the field is
+  padded by it: so the padding of the text here is still this tree's
+  own two points, and only the frame is the tree's.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/lookframe.rs`): the
+  background and the border that are drawn, a field with no colour and
+  no frame, a border of no width, a dashed border, an underline and a
+  grey.
+- **No new command**: the command that draws the appearance of a
+  field draws the frame of it too, so the PDF battery still carries
+  **119** commands and the MCP server **974** — the same counts as
+  §778. The battery is counted by the source of its commands; the MCP
+  server is counted by the tool list it answers with.
+
+### What it does not settle
+
+- **The border and the fill of a field cannot be taken away yet**: the
+  tree's own rule is that a border or a fill of "none" is **removed**,
+  and here there is no way to say that — a look that says no colour is
+  a field that never had one.
 - **The tree's own script outlines are not here**: the tree writes the
   contours of a typed name from the outlines of a font it carries, and
   this tree carries **no fonts at all** — so the contours are the
