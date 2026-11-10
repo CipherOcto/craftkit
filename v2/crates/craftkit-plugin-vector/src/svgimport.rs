@@ -109,7 +109,7 @@ fn read_tokens(data: &str) -> Result<Vec<Token>, String> {
 /// curve, a smooth quadratic curve and a close. An **arc** is not
 /// read, and a file that holds one is refused: an arc is a curve, and
 /// this tree does not write a curve it cannot say.
-fn read_path(data: &str) -> Result<Path, String> {
+pub(crate) fn read_path(data: &str) -> Result<Path, String> {
     let tokens = read_tokens(data)?;
     let mut at = 0usize;
     let mut subpaths: Vec<craftkit_sdk::SubPath> = Vec::new();
