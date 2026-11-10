@@ -232,6 +232,7 @@ fn set_value(session: &mut Session, node: &Node, value: &str) -> Result<(), Stri
                 return Err(format!("`{value}` is not one of the options of the field"));
             }
         }
+        crate::fields::FieldKind::Signature => {}
         crate::fields::FieldKind::Button => {
             let states = crate::fields::states_of(document, node);
             if !value.is_empty() && !off && !states.iter().any(|state| state == value) {

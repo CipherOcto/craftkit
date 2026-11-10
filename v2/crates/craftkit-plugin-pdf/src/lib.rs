@@ -187,6 +187,7 @@ mod revision6;
 mod rotation;
 mod scripts;
 mod sha2;
+mod signaturefield;
 mod signatures;
 mod structure;
 mod tabs;
@@ -246,6 +247,7 @@ pub use pushbutton::AddButton;
 pub use radio::AddRadio;
 pub use remove::RemoveObject;
 pub use rotation::{ReadRotation, RotatePage};
+pub use signaturefield::AddSignature;
 pub use signatures::ReadSignatures;
 pub use structure::ReadStructure;
 pub use tabs::{ReadTabOrder, SetTabs};
@@ -2193,6 +2195,7 @@ craftkit_sdk::plugin_anchor!(
     AddCombo,
     AddList,
     AddDate,
+    AddSignature,
     Preflight,
     ReadFonts,
     ReadTrailer,

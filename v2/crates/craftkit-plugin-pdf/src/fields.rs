@@ -53,6 +53,8 @@ pub enum FieldKind {
     Button,
     /// A field that holds one of its options: `Ch`.
     Choice,
+    /// A field the reader signs: `Sig`.
+    Signature,
 }
 
 impl FieldKind {
@@ -62,6 +64,7 @@ impl FieldKind {
             "Tx" => Some(FieldKind::Text),
             "Btn" => Some(FieldKind::Button),
             "Ch" => Some(FieldKind::Choice),
+            "Sig" => Some(FieldKind::Signature),
             _ => None,
         }
     }
@@ -72,6 +75,7 @@ impl FieldKind {
             FieldKind::Text => "Tx",
             FieldKind::Button => "Btn",
             FieldKind::Choice => "Ch",
+            FieldKind::Signature => "Sig",
         }
     }
 }
@@ -607,6 +611,7 @@ impl SetField {
                     });
                 }
             }
+            FieldKind::Signature => {}
             FieldKind::Button => {
                 let states = states_of(session.document(), &node);
                 if !value.is_empty() && !states.contains(&value) {
