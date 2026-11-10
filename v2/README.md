@@ -4141,6 +4141,7 @@ so.
 | the **text box** of a page | **built.** The free text is put on a page — the tree's text, its appearance and its alignment (§761) | §761 |
 | the **appearance** of the text box | **built.** The text box is drawn — the tree's Helvetica, its wrapping and its border (§762) | §762 |
 | the **mark** of a redaction | **built.** The mark of a redaction is put on a page — the tree's quads, its colours and its overlay (§763) | §763 |
+| the **appearance** of the mark | **built.** The mark of a redaction is drawn — the tree's outline and its red (§764) | §764 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -50235,3 +50236,69 @@ going to be taken away" — may now be put on a page.
 - **The tree's own redaction removes the annotations of a page and
   keeps the text of it**: that is this tree's own work and not the
   tree's, and the two are not the same thing.
+
+---
+
+## 764. The mark of a redaction is drawn
+
+The **mark of a redaction** is now **drawn**: the outline of the text
+it covers.
+
+### What was built
+
+- The command **`pdf.annot.appearance.write`** now draws the **mark
+  of a redaction** as well as the shape, the markup, the line, the
+  polygon, the ink, the caret and the text box, and it draws it from
+  the **dictionary of the annotation** — the quads (`/QuadPoints`) and
+  the colour (`/C`) — as the tree's own builder does.
+- The **rules** are the tree's own redaction branch, ported by name:
+  - the **quads** of the mark are the `/QuadPoints` of the annotation,
+    and the **outline** of each of them is drawn — the upper left, the
+    upper right, the lower right and the lower left, and the line is
+    one point wide: the tree's own;
+  - the **fill** of the mark comes when the redaction is **applied**,
+    and not before: the tree's own rule, and while the mark is there
+    it is an outline and nothing else;
+  - the **colour** of the mark is the `/C` of the annotation, and the
+    tree's own red when the annotation says none: the tree's own rule.
+
+### What the port found
+
+- **The tree's mark is an outline and not a filled box**, and the port
+  found that the tree draws the outline of each quad and leaves the
+  fill to the redaction itself — so that a reader shows what is going
+  to go and not what has gone: so the drawing here is an outline, and
+  it has no fill.
+- **The tree's mark is the tree's red even when the annotation says
+  no colour**, and the port found that the tree's builder falls back
+  to its red for the mark — as it does for the caret: so a mark
+  without a colour is drawn in the tree's red here, and it is not
+  refused.
+- **The tree's outline of a quad goes round it in the order of the
+  file**, and the port found that the tree draws the quad as it is
+  written — the upper left, the upper right, the lower right and the
+  lower left — and that the order of the file is not the order of the
+  rectangle: so the drawing here goes round the quad the way the file
+  says.
+
+### What it cost
+
+- **Four tests** in the PDF battery (`tests/redactappearance.rs`):
+  the mark that is drawn, the fill that comes later, the mark without
+  a colour that is the tree's red, and the mark without its quads.
+- **No new command**: the command that draws a shape draws the mark
+  too, so the PDF battery carries **112** commands and the MCP server
+  **967** — the same count as §763. The battery is counted by the
+  source of its commands; the MCP server is counted by the tool list
+  it answers with.
+
+### What it does not settle
+
+- **The overlay text of the mark is not drawn here**: the tree's mark
+  holds the text that is written over the area, and the tree's builder
+  does not draw it either — the text belongs to the redaction that
+  takes the area away.
+- **The tree's stamp and its attachment are still not drawn here**:
+  the last two annotations of the tree's builder.
+- **The mark here is drawn in the page's own space**, and it does not
+  turn with the page's `/Matrix`: that is the reader's work.
