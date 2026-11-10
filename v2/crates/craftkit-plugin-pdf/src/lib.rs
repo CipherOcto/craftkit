@@ -180,6 +180,7 @@ mod pagefonts;
 mod pages;
 mod pagetext;
 mod patterns;
+mod polygonadd;
 mod predictors;
 mod preflight;
 mod properties;
@@ -251,6 +252,7 @@ pub use outline::{AddOutline, ReadOutline};
 pub use pages::RemovePage;
 pub use pagetext::ReadPageText;
 pub use patterns::{FindPattern, ReadPatterns};
+pub use polygonadd::AddPolygon;
 pub use preflight::Preflight;
 pub use properties::SetProperties;
 pub use pushbutton::AddButton;
@@ -2208,6 +2210,7 @@ craftkit_sdk::plugin_anchor!(
     AddSignature,
     AddImage,
     AddLine,
+    AddPolygon,
     SetProperties,
     SetLook,
     WriteAnnotation,
