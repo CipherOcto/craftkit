@@ -4116,6 +4116,7 @@ so.
 | the **author** of a comment | **built.** The author, the subject and the icon of a comment are changed — the tree's lock, its note and its drawing (§736) | §736 |
 | the **layout** of a caption | **built.** A caption is laid out on a frame — the tree's scale, its wrapping, its anchor and its outline (§737) | §737 |
 | the **burn-in** of a caption | **built.** A caption is drawn into a frame and written as a picture — the tree's background, its outline and its letters (§738) | §738 |
+| the **text field** of a form | **built.** A text field is put on a page — the tree's name, its rectangle, its form, its flags and its drawing (§739) | §739 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -48374,3 +48375,83 @@ as a picture.
 - **The speaker of a caption is not burnt in**: the tree keeps the
   speaker in the metadata of the cue and does not draw it, and this
   tree says nothing about it.
+
+---
+
+## 739. A text field is put on a page
+
+A **form** may now hold a **text field**: a box on a page that the
+reader may write in.
+
+### What was built
+
+- A **new command**: `pdf.field.add` puts a text field on a page — the
+  **page**, the **object number** the field holds, the **rectangle** it
+  covers, its **name**, whether it is a **multiline** field, the
+  **text** it holds and **where the drawing of it is written**.
+- The **rules** are the tree's own, ported by name:
+  - `free_name` — the **name** is the first free `Text` name — `Text1`,
+    `Text2` and so on — when the caller does not give one, and a name
+    that holds a **period** is refused, and so is a name another field
+    has;
+  - the **rectangle** is four numbers and the corners may come in any
+    order, and a field smaller than **four points by four** is refused,
+    as the tree refuses it;
+  - `widget_dict` — the field is a **widget**, an annotation of the
+    kind `Widget`, with the tree's flags, its **thin grey border** and
+    its **white background**;
+  - the field is **twelve point Helvetica** (`/DA`), and a multiline
+    field says so with the tree's own **thirteenth bit**;
+  - `ensure_form` — the file's **form** (`/AcroForm`) is made when the
+    file has none: the catalogue names it, it holds the **fields**, it
+    says how a field's text looks by default (`/DA`), and it holds the
+    **three standard fonts** under the names Acrobat uses;
+  - `field_appearance` — the **drawing** of the field: the background
+    is filled, the border is stroked, and the text is drawn — centred
+    in the box, or wrapped from the top down when the field is a
+    multiline one.
+
+### What the port found
+
+- **The tree writes the three standard fonts where they are used** —
+  inside the form's `/DR /Font`, as dictionaries of their own — and the
+  port found that a font here is a thing the **file holds**, so that
+  the drawing of a field can name it: the three fonts are objects of
+  their own, and the resources of the form name them.
+- **The tree's form may be written where it is used**, and the port
+  found that a form here is an object as well: a form that was written
+  inside the catalogue becomes an object, and the catalogue names it —
+  the tree's own rule, and for the same reason.
+- **The tree draws the appearance of every field it makes**, and the
+  port found that this tree keeps the bytes of a stream in a **file of
+  their own**, so the drawing is written when the caller says where it
+  goes — and a field put on a page without it has no drawing of its
+  own.
+
+### What it cost
+
+- **Eleven tests** in the PDF battery (`tests/fieldadd.rs`): the field
+  that is put on the page and what its dictionary says, the page that
+  holds it, the form that is made and the three fonts it holds, the
+  free name and the second free name, the name with a period and the
+  name that is taken, the rectangle whose corners come in any order and
+  the field that is too small, the multiline field and the text it
+  holds, the drawing that is written and the one that wraps, the object
+  number that is taken, and the node that is not a page.
+- **One new command**: the PDF battery carries **95** commands and the
+  MCP server **950**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The other kinds of field are not here**: the tree's check box,
+  radio button, drop-down, list box, push button, date field and
+  signature field.
+- **The tree's form editor is not here**: the properties, the
+  actions, the validation, the calculation, the alignment and the
+  quadding of a field, and the tree's own **format** and **calculate**
+  scripts.
+- **The text of a field is Latin-1**: a character that has no byte in
+  it is refused, where the tree writes it in the **WinAnsi** encoding
+  of the PDF standard.
