@@ -4146,6 +4146,7 @@ so.
 | the **appearance** of the stamp | **built.** The stamp is drawn — the tree's tag, its frame and its label (§766) | §766 |
 | the **mark** of Fill and Sign | **built.** The check, the cross, the dot and the line are put on a page — the tree's own four (§767) | §767 |
 | the **appearance** of the mark | **built.** The check, the cross, the dot and the line are drawn — the tree's own four (§768) | §768 |
+| the **file attachment** of a page | **built.** The attachment is put on a page — the tree's box, its icon and its file (§769) | §769 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -50588,3 +50589,81 @@ The **marks of Fill and Sign** — the **check**, the **cross**, the
   annotation of the tree's builder that is not here.
 - **The mark here is drawn in the page's own space**, and it does not
   turn with the page's `/Matrix`: that is the reader's work.
+
+---
+
+## 769. The file attachment is put on a page
+
+The tree's **file attachment** — an annotation that carries a file
+with it — may now be put on a page.
+
+### What was built
+
+- A **new command**: `pdf.annot.attachment.add` puts an attachment on
+  a page — the **page**, the **object number** the annotation has in
+  the file, the **point** it hangs from, the **name** of the file, the
+  **file** itself, where the **bytes** are written, and, when the
+  caller says so, the **icon** and the **colour**.
+- The **rules** are the tree's own:
+  - the **name** of the attached file must not be empty: the tree's
+    own rule, and a file with no name is a file nobody can find;
+  - the **point** is two numbers, and the annotation covers the **box
+    of twenty points** that hangs from it: the tree's own box;
+  - the **icon** is one of the tree's own four — `PushPin`,
+    `Paperclip`, `Graph` and `Tag` — and the pin is the tree's own
+    when the caller says nothing;
+  - the **colour** of the attachment is the tree's own blue when the
+    caller says nothing, and it is three numbers between zero and
+    one;
+  - the **bytes** of the file are read and are **bounded**: the file
+    is read whole or not at all, and the answer says how many bytes
+    there were;
+  - the **embedded file** is a stream of its own, and it says its
+    **type** and its **size**: the tree's own keys;
+  - the **file specification** is an object of its own, and it says
+    the **name** of the file — the plain one and the Unicode one —
+    and, under `/EF`, which object holds the bytes;
+  - the annotation **names** the file specification, and the file
+    specification names the embedded file: the edges of the document
+    say it as well as the dictionary.
+
+### What the port found
+
+- **The tree's file is in the file itself and not in the document**,
+  and the port found that this tree keeps the bytes of a stream in a
+  file of its own — and that the file that is attached is already
+  such a file: so the bytes are written out where the caller says and
+  the document names them, and the answer says how many there were.
+- **The tree's attachment is a box that hangs from a point**, and the
+  port found that the tree's box is twenty points square and that the
+  point is its **top** — so that the attachment sits on the page the
+  way a pin does: so the rectangle here is the tree's, and it is not
+  given by the caller.
+- **The tree's numbers of the document go after the caller's own**,
+  and the port found that the file and its specification are objects
+  of their own and that they must not take the number the caller
+  asked for: so they are allocated after the annotation is made, and
+  the caller's number is never stolen.
+
+### What it cost
+
+- **Six tests** in the PDF battery (`tests/attachmentadd.rs`): the
+  attachment that is put on the page, the file that is carried by the
+  document with its embedded file and its specification, the file with
+  no name, the file that is not there, the icon that is not known, and
+  the point that is not two numbers.
+- **One new command**: the PDF battery carries **115** commands and
+  the MCP server **970**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The drawing of the attachment is not here**: it is the appearance
+  command's own work, and the tree draws the pin when the annotation
+  is made.
+- **The file is not in the name tree of the document**: the tree adds
+  the attachment to the `/Names` of the catalog as well, and this
+  command does not: the file is carried by the annotation alone.
+- **The tree's own stamp of a typed signature is not here**: the
+  outline of a signature that a person typed.
