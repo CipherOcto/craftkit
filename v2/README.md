@@ -4174,6 +4174,7 @@ so.
 | the **stroke drawn by hand** | **built.** A stroke is fitted to its samples — the tree's jitter, its corners and its spline (§793) | §793 |
 | the **rule of a smooth point** | **built.** A point is made smooth by the tree's own rule — the circle through the point and its neighbours (§794) | §794 |
 | the **points** in the middle of the sides | **built.** Every side of a path gets a point in its middle, and the sides keep their shape (§795) | §795 |
+| the **erasing** of a path | **built.** The parts of a path under a drag are taken away, and the stretches that survive are the path as it was (§796) | §796 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52378,4 +52379,64 @@ the sides keep their shape.
   keeps no kind, and §789's rule stands.
 - **The tree's own command works on the selected paths**: the tree's
   `object.path.addAnchorPoints` works on what is selected, and here the
+  command names the path it works on.
+
+## 796. The parts of a path under a drag are taken away
+
+The tree's **Path Eraser** takes away the parts of a path that are
+under the drag, and what is left is the stretches that survive — each a
+stretch of the path as it was.
+
+### What was built
+
+- The command **`vector.path.erase`** takes away the parts of a path
+  that are **under a drag**: the tree's Path Eraser, as a command. The
+  drag is a run of points, `[[x, y], …]`, and the **width** is the width
+  of the eraser — 8 if the caller names none.
+- The rules are the tree's own:
+  - the parts within **half the width** of the drag are taken away: the
+    tree's own rule;
+  - the path is **sampled** at least every half width, so that a
+    narrow stroke is not missed: the tree's own rule;
+  - where the path crosses the edge of the eraser is found by **halving
+    the way**, over and over: the tree's own rule;
+  - a stretch that is left is the path **as it was** — the curve of the
+    stretch is the curve of the path: the tree's own rule.
+- A path of **one contour** becomes **one path per piece** — the first
+  keeps the node, and the others are new nodes beside it — and the
+  pieces of a path of **several contours** stay **contours of it**: the
+  tree's own rule, and §792's rule too.
+
+### What the port found
+
+- **The tree's eraser works on the anchors and this tree's works on the
+  sides.** The tree's path is a run of anchors and its erase cuts the
+  anchors; here a path is a run of sides, and the erase cuts the sides
+  — and the piece of a side is the same curve, cut by the curve's own
+  rule, so that the shape does not change.
+- **A path that is entirely under the drag is refused here.** The tree
+  takes the path away, and a path with nothing in it is not a path: so
+  the erasure that leaves nothing is refused by name.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/erasepath.rs`): six
+  tests — the parts that are taken away, the pieces that are paths of
+  their own, the path that is left alone, the closed path, and the
+  refusals.
+- **One new command**: the vector battery now carries **57** commands
+  and the MCP server **990** — one more than §795. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`erasepath`), and the cut of a side is the
+  curve's own.
+
+### What it does not settle
+
+- **The tree's own eraser with a shaped tip is not here**: the tree's
+  Eraser takes an elliptical tip — a size, an angle and a roundness —
+  and takes the **area** of a closed shape away as well; here the
+  eraser is a round one, the width of it, and it takes the outline
+  away.
+- **The tree's own eraser works on the selected paths**: here the
   command names the path it works on.
