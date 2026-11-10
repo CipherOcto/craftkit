@@ -160,6 +160,7 @@ mod information;
 mod intent;
 mod javascript;
 mod labels;
+mod listbox;
 mod loader;
 mod marked;
 mod marks;
@@ -227,6 +228,7 @@ pub use information::{ReadInformation, SetInformation};
 pub use intent::WriteIntent;
 pub use javascript::ReadScripts;
 pub use labels::SetPageLabels;
+pub use listbox::AddList;
 pub use marked::ReadMarked;
 pub use marks::RemoveMarks;
 pub use markup::AddMarkup;
@@ -2187,6 +2189,7 @@ craftkit_sdk::plugin_anchor!(
     AddRadio,
     AddButton,
     AddCombo,
+    AddList,
     Preflight,
     ReadFonts,
     ReadTrailer,
