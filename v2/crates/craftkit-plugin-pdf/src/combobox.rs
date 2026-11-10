@@ -14,8 +14,9 @@
 //!   the tree's own nineteenth bit;
 //! - the **options** are the **display texts** of the field, and the
 //!   value it holds is the **export value** of the option — the tree's
-//!   own rule, and here the export value and the display text are the
-//!   same thing, as they are in the tree's own editor;
+//!   own rule; an option may carry an **export value** and a **display
+//!   text** of its own, and the tree's own file holds the pair when the
+//!   two are not the same;
 //! - the field's text is **twelve point Helvetica** (`/DA`).
 //!
 //! The rules of the tree, ported by name:
@@ -54,24 +55,61 @@ pub const EDIT: i64 = 1 << 18;
 ///
 /// The list comes from outside, so it is read and checked: a thing that
 /// is not a text is refused, and not taken as an empty text.
-fn the_options(value: &serde_json::Value) -> Result<Vec<String>, EngineError> {
+///
+/// The tree's own: an option is an **export value** and a **display
+/// text**, and they are the same thing unless the caller says
+/// otherwise — so an option may be a text, or a pair of two texts.
+fn the_options(value: &serde_json::Value) -> Result<Vec<(String, String)>, EngineError> {
     let Some(list) = value.as_array() else {
         return Err(EngineError::Failed {
             id: COMMAND.to_string(),
             message: "the options of a drop-down are a list of texts".to_string(),
         });
     };
-    let mut out: Vec<String> = Vec::with_capacity(list.len());
+    let mut out: Vec<(String, String)> = Vec::with_capacity(list.len());
     for item in list {
-        let Some(text) = item.as_str() else {
+        if let Some(text) = item.as_str() {
+            out.push((text.to_string(), text.to_string()));
+            continue;
+        }
+        // A **pair**: the export value and the display text.
+        let Some(pair) = item.as_array() else {
             return Err(EngineError::Failed {
                 id: COMMAND.to_string(),
                 message: "the options of a drop-down are a list of texts".to_string(),
             });
         };
-        out.push(text.to_string());
+        if pair.len() != 2 {
+            return Err(EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: "an option of a drop-down is a text or a pair of two texts".to_string(),
+            });
+        }
+        let (Some(export), Some(display)) = (pair[0].as_str(), pair[1].as_str()) else {
+            return Err(EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: "an option of a drop-down is a text or a pair of two texts".to_string(),
+            });
+        };
+        out.push((export.to_string(), display.to_string()));
     }
     Ok(out)
+}
+
+/// The **options** as the file holds them: a text when the export value
+/// and the display text are the same, and a **pair** of the two when
+/// they are not: the tree's own rule.
+fn the_options_of_the_file(options: &[(String, String)]) -> Vec<Json> {
+    options
+        .iter()
+        .map(|(export, display)| {
+            if export == display {
+                json!({ "string": display })
+            } else {
+                json!([{ "string": export }, { "string": display }])
+            }
+        })
+        .collect()
 }
 
 /// The **drawing** of a drop-down: the frame and the text it holds.
@@ -111,7 +149,8 @@ fn the_drawing(rect: [f64; 4], value: &str) -> Option<Vec<u8>> {
 ///   any order; a drop-down smaller than four points by four is
 ///   refused, as the tree refuses it;
 /// - the **options** are a list of texts, and a list that holds
-///   something that is not a text is refused;
+///   something that is not a text is refused; an option may be a
+///   **pair** of two texts — the export value and the display text;
 /// - the **name** is the first free `Dropdown` name when the caller
 ///   does not give one; a name with a period in it is refused, and so
 ///   is a name another field has;
@@ -133,7 +172,9 @@ pub struct AddCombo {
     /// Leave it out and the drop-down is given the first free name of
     /// the tree: `Dropdown1`, `Dropdown2` and so on.
     pub name: Option<Text>,
-    /// The **options** the drop-down offers: a list of texts.
+    /// The **options** the drop-down offers: a list of texts, or of
+    /// pairs of two texts — the **export value** and the **display
+    /// text** of the option.
     pub options: serde_json::Value,
     /// Whether the reader may write something that is not one of the
     /// options.
@@ -227,15 +268,34 @@ impl AddCombo {
         }
         // The **value** the field holds: it must be one of the options,
         // unless the field may be edited — and then anything may be
-        // written in it.
+        // written in it. The tree's own rule: the caller may give the
+        // **export value** or the **display text**, and the field holds
+        // the export value.
         let editable = self.editable.as_ref().map(|flag| flag.0).unwrap_or(false);
-        let value = self.value.as_ref().map(|value| value.0.clone()).unwrap_or_default();
-        if !value.is_empty() && !editable && !options.contains(&value) {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("`{value}` is not one of the options of the drop-down"),
-            });
-        }
+        let given = self.value.as_ref().map(|value| value.0.clone()).unwrap_or_default();
+        let value = if given.is_empty() {
+            String::new()
+        } else {
+            let found = options.iter().find(|(export, display)| *export == given || *display == given);
+            match found {
+                Some((export, _)) => export.clone(),
+                None if editable => given.clone(),
+                None => {
+                    return Err(EngineError::Failed {
+                        id: COMMAND.to_string(),
+                        message: format!("`{given}` is not one of the options of the drop-down"),
+                    });
+                }
+            }
+        };
+        // The **display text** of the option that is chosen: the tree's
+        // own rule — the reader sees the display text and the file
+        // holds the export value.
+        let display = options
+            .iter()
+            .find(|(export, _)| *export == value)
+            .map(|(_, display)| display.clone())
+            .unwrap_or_else(|| value.clone());
         // The **drawing**: the bytes are made before the document is
         // changed, so that a text that cannot be written is refused and
         // nothing is changed.
@@ -248,7 +308,7 @@ impl AddCombo {
                     message: "the drawing goes somewhere".to_string(),
                 });
             }
-            let Some(bytes) = the_drawing(rect, &value) else {
+            let Some(bytes) = the_drawing(rect, &display) else {
                 return Err(EngineError::Failed {
                     id: COMMAND.to_string(),
                     message: "the text of the drop-down cannot be written".to_string(),
@@ -290,10 +350,7 @@ impl AddCombo {
             ("BS".to_string(), json!({ "entries": [ ["W", 1], ["S", "S"] ] })),
             ("FT".to_string(), json!("Ch")),
             ("DA".to_string(), json!({ "string": "/Helv 12 Tf 0 g" })),
-            (
-                "Opt".to_string(),
-                json!(options.iter().map(|option| json!({ "string": option })).collect::<Vec<_>>()),
-            ),
+            ("Opt".to_string(), json!(the_options_of_the_file(&options))),
             ("T".to_string(), json!({ "string": name.clone() })),
         ];
         let mut flags = COMBO;
@@ -380,7 +437,9 @@ impl AddCombo {
             "page": self.page.0,
             "name": name,
             "rect": rect,
-            "options": options,
+            "options": options.iter().map(|(_, display)| display.clone()).collect::<Vec<_>>(),
+            "exports": options.iter().map(|(export, _)| export.clone()).collect::<Vec<_>>(),
+            "display": display,
             "editable": editable,
             "value": value,
             "form": form.node,
