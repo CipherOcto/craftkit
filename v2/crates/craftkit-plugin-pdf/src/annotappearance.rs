@@ -1022,7 +1022,6 @@ fn the_stamp(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
         numbers[1].max(numbers[3]),
     ];
     // The **name** of the stamp or of the mark.
-    let name = entry(entries, "Name")?.as_str()?.to_string();
     let [x0, y0, x1, y1] = rect;
     let width_of = x1 - x0;
     let height = y1 - y0;
@@ -1057,6 +1056,31 @@ fn the_stamp(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
         out.push_str("f*\n");
         return Some((out.into_bytes(), rect));
     }
+    // The **custom stamp**: the tree's own picture, laid over the
+    // rectangle: an image is mapped onto the rectangle itself, and a
+    // form is mapped by its size — the tree's own `/PCPictureSize`.
+    if entry(entries, "PCPicture").is_some() {
+        let place = if entry(entries, "PCPictureImage") == Some(&Json::Bool(true)) {
+            format!("{} 0 0 {} {} {} cm", number(width_of), number(height), number(x0), number(y0))
+        } else {
+            let size = numbers_of(entry(entries, "PCPictureSize")?);
+            if size.len() != 2 || size[0] <= 0.0 || size[1] <= 0.0 {
+                return None;
+            }
+            format!(
+                "{} 0 0 {} {} {} cm",
+                number(width_of / size[0]),
+                number(height / size[1]),
+                number(x0),
+                number(y0)
+            )
+        };
+        let mut out = String::new();
+        out.push_str(&format!("q {place} /Pic Do Q\n"));
+        return Some((out.into_bytes(), rect));
+    }
+    // The **name** of the stamp or of the mark.
+    let name = entry(entries, "Name")?.as_str()?.to_string();
     // The **four marks** of Fill and Sign: the tree's own, and they
     // are drawn with the black of the tree when the annotation says no
     // colour.
@@ -1494,6 +1518,21 @@ impl WriteAnnotation {
             ));
         }
         if subtype == "Stamp" {
+            // The **picture** of a custom stamp: the tree's own XObject,
+            // under the name the drawing uses.
+            if let Some(picture) = entry(&entries, "PCPicture") {
+                let reference = picture
+                    .get("ref")
+                    .and_then(|value| value.as_array())
+                    .and_then(|list| list.first())
+                    .and_then(|number| number.as_u64());
+                if let Some(number) = reference {
+                    resources.push((
+                        "XObject".to_string(),
+                        json!({ "entries": [["Pic", { "ref": [number, 0] }]] }),
+                    ));
+                }
+            }
             // The **fonts** of the stamp: the tree's own Helvetica and
             // its bold, under the names the stamp uses.
             let font = |base: &str| {
