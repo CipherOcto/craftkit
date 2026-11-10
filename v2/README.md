@@ -4161,6 +4161,7 @@ so.
 | the **scenarios** of a workbook | **built.** The tree's what-if scenarios are added, listed, shown and taken away (§786) | §786 |
 | the **advanced filter** of a sheet | **built.** A list is judged by a criteria range — the columns together, the rows one by one (§787) | §787 |
 | the **filtering in place** of the advanced filter | **built.** The rows that do not match are hidden, and the rows a filter hides are derived (§788) | §788 |
+| the **path made by hand** | **built.** A path is made out of path data or out of anchors — the tree's own two ways, its handles and the side that comes back (§789) | §789 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -51887,3 +51888,83 @@ a filter hides are **derived**.
 - **The tree's own summary of the scenarios is not here**: the tree
   writes a sheet that says what every scenario does to the book, and
   that is a trial of the book as well as a sheet of its own.
+
+## 789. A path is made by hand
+
+The tree's **pen** makes a path one of two ways: out of a run of path
+data written in the SVG spelling, or out of a list of **anchors** with
+their handles. Both are here now, in one command.
+
+### What was built
+
+- The command **`vector.path.create`** puts a path in the document, made
+  one of two ways: the **path data** (`d`) or the **anchors**
+  (`anchors`). The two are the tree's own two, and the tree's own rules
+  about them are the rules here:
+  - the **path data** is read by the reader this battery already had for
+    SVG files, so there is **one reader of path data** in this tree and
+    not two; and an **arc** is refused, as it is in the tree, because
+    this tree does not write a curve it cannot say;
+  - an **anchor** is a point and two handles, and a handle that is not
+    given — or given as `null` — is the point itself: the tree's own
+    rule;
+  - a side whose two handles are both their points is a **line**, and any
+    other side is a **curve** through them: the tree's own rule;
+  - a **closed** path has one more side than it has anchors — the side
+    that comes back to the first anchor: the tree's own closed contour;
+  - anything **malformed** in an anchor is refused rather than left out
+    or given a default, because a default handle changes the shape of
+    the path: the tree's own rule;
+  - the path is **named** `Pen`, which is the tree's own name for a path
+    made by hand.
+- The two ways may **not** be used together, and a command that says
+  neither is refused: they are two ways of saying one path.
+
+### What the port found
+
+- **The tree's reader of path data reads arcs and this tree's does
+  not.** The tree's own reader is the geometry library's, and that
+  library reads an arc and turns it into curves; the reader in this
+  battery is the battery's own, and it refuses an arc. So the two
+  readers differ in exactly one thing: `A` is read there and refused
+  here.
+- **The tree keeps an anchor's kind and this tree has nowhere to keep
+  it.** A path here is a run of segments, and a segment says nothing
+  about the point it leaves, so a **smooth** anchor is refused rather
+  than quietly forgotten — and `vector.path.smooth` is the way to have
+  a smooth point.
+- **The tree's black line for an open path cannot happen here.** The
+  tree draws an open path that has neither a fill nor a line with a
+  black line, so that it can be seen at all. Here a path **always**
+  carries a fill — there is no "no fill" to say — so the rule cannot
+  fire, and an open path is filled black instead.
+- **The tree takes a path of one anchor and this tree refuses it.** A
+  path of one anchor has no side at all, and a path here with no side
+  has no shape; so the one-anchor path is refused by name.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/pathcreate.rs`):
+  fourteen tests — the path of anchors, the side that comes back, the
+  handle that makes a curve, the path of data, the arc that is refused,
+  the malformed anchor that is refused, the smooth anchor that is
+  refused, the one anchor that is refused, and the two ways that may not
+  be used together.
+- **One new command**: the vector battery now carries **51** commands
+  and the MCP server **984** — one more than §788. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`pathcreate`), and the reader of path data is
+  now shared: the SVG reader and this command read it, and there is
+  one reader of it.
+
+### What it does not settle
+
+- **The tree's arcs are not here**: path data that holds an arc is
+  refused, and the tree's own reader would have read it.
+- **The tree's smooth anchors are not here**: an anchor that says it is
+  smooth is refused, because a path here keeps no kind for an anchor.
+- **The tree's own paint is not ported**: the tree's path takes the
+  fill and the line of the session's current paint, and here the path
+  is filled with black, or with the colour the caller names, and it has
+  no line unless another command gives it one.
