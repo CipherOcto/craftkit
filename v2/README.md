@@ -4164,6 +4164,7 @@ so.
 | the **path made by hand** | **built.** A path is made out of path data or out of anchors — the tree's own two ways, its handles and the side that comes back (§789) | §789 |
 | the **curve through the points** | **built.** A path curves through a list of points — the tree's curvature tool, its circle and its tight turn (§790) | §790 |
 | the **anchors** of a path | **built.** The anchors of a path are set, and the path is the shape they describe (§791) | §791 |
+| the **cutting** of a path | **built.** A path is cut at a point — a closed path opens there, an open one becomes one path per piece (§792) | §792 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52113,3 +52114,67 @@ are the ones §789 already ported.
   `vector.path.smooth`.
 - **The tree's own command may be given a path of no contours at all**,
   and here that is refused: a path with nothing in it is not a path.
+
+## 792. A path is cut at a point
+
+The tree's **scissors** cut a path at a point: a **closed** path opens
+there, and an **open** one becomes one path per piece. The shape does
+not change — the pieces are the sides that were there.
+
+### What was built
+
+- The command **`vector.path.cut`** cuts a path at a **point** of one
+  of its contours. The tree's own rule, and the tree's own rules:
+  - the cut is at a **point of the contour**, counted from zero, as the
+    points of a contour are counted everywhere in this tree;
+  - a **closed** contour opens at the cut: it is one piece whose ends
+    meet where the cut was: the tree's own rule;
+  - an **open** contour is cut into **two**, and its **ends** are not
+    cut, because a piece with no side has no shape: the tree's own rule;
+  - the **shape does not change** — the pieces are the sides that were
+    there: the tree's own rule;
+  - a path of **one contour** becomes **one path per piece** — the
+    first keeps the node, and the others are new nodes beside it, with
+    the same name — and the pieces of a path of **several contours**
+    stay **contours of it**: the tree's own rule.
+
+### What the port found
+
+- **The tree's closed contour has its closing side in it and this
+  tree's may not.** In the tree a closed contour is a run of anchors,
+  and the side that comes back to the first anchor is one of them. Here
+  a closed contour may leave that side out — the rectangle does — and
+  the side is the straight line the contour closes with. So **opening**
+  a closed contour here makes that side a side of its own: the piece
+  has one more side than the contour had, and the shape is the same.
+- **The tree's cut is at an anchor and this tree's is at a point.** The
+  tree's path *is* its anchors, so a cut is at an anchor of it; here a
+  path is a run of sides, so a cut is at a point of the contour — where
+  two sides meet — and the points are counted from zero, as they are
+  everywhere in this tree.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/cutpath.rs`): eight
+  tests — the open path that is cut in two, the pieces that are paths
+  of their own, the closed path that opens, the shape that does not
+  change, the path of several contours, and the refusals.
+- **One new command**: the vector battery now carries **54** commands
+  and the MCP server **987** — one more than §791. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`cutpath`), and no new dependency: the pieces are
+  made of the sides that were there.
+
+### What it does not settle
+
+- **The tree's own cut is at the points a person picked**: the tree
+  cuts at the anchors that were selected, and here the cut is at the
+  point the caller names.
+- **The tree's own knife, and its line, rectangle and mirror cuts, are
+  not here**: they cut a path with a shape, and this command cuts at a
+  point.
+- **The tree's own cut leaves the pieces selected**: the tree leaves
+  one of the two coincident anchors of each cut selected, so that a
+  drag pulls the ends apart; here the command says what it made and
+  nothing more.
