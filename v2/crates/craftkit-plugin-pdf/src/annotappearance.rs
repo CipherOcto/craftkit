@@ -1021,9 +1021,92 @@ fn the_stamp(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
         numbers[0].max(numbers[2]),
         numbers[1].max(numbers[3]),
     ];
+    // The **name** of the stamp or of the mark.
+    let name = entry(entries, "Name")?.as_str()?.to_string();
+    let [x0, y0, x1, y1] = rect;
+    let width_of = x1 - x0;
+    let height = y1 - y0;
+    let number = crate::watermark::number;
+    // The **four marks** of Fill and Sign: the tree's own, and they
+    // are drawn with the black of the tree when the annotation says no
+    // colour.
+    if crate::markadd::mark_of(&name).is_some() {
+        let colour = match entry(entries, "C") {
+            Some(value) => the_colour(value).ok().flatten()?,
+            None => [0.0; 3],
+        };
+        let line_width = width_of.min(height) * 0.12;
+        let mut out = String::new();
+        match name.as_str() {
+            "PCCheck" => {
+                out.push_str(&format!(
+                    "{} {} {} RG
+{} w 1 J
+{} {} m {} {} l {} {} l S\n",
+                    number(colour[0]),
+                    number(colour[1]),
+                    number(colour[2]),
+                    number(line_width),
+                    number(x0 + width_of * 0.15),
+                    number(y0 + height * 0.5),
+                    number(x0 + width_of * 0.4),
+                    number(y0 + height * 0.2),
+                    number(x0 + width_of * 0.88),
+                    number(y0 + height * 0.85)
+                ));
+            }
+            "PCCross" => {
+                out.push_str(&format!(
+                    "{} {} {} RG
+{} w 1 J\n{} {} m {} {} l {} {} m {} {} l S\n",
+                    number(colour[0]),
+                    number(colour[1]),
+                    number(colour[2]),
+                    number(line_width),
+                    number(x0 + width_of * 0.18),
+                    number(y0 + height * 0.18),
+                    number(x1 - width_of * 0.18),
+                    number(y1 - height * 0.18),
+                    number(x0 + width_of * 0.18),
+                    number(y1 - height * 0.18),
+                    number(x1 - width_of * 0.18),
+                    number(y0 + height * 0.18)
+                ));
+            }
+            "PCDot" => {
+                let radius = width_of.min(height) * 0.3;
+                out.push_str(&format!(
+                    "{} {} {} rg\n",
+                    number(colour[0]),
+                    number(colour[1]),
+                    number(colour[2])
+                ));
+                out.push_str(&the_ellipse(
+                    x0 + width_of / 2.0 - radius,
+                    y0 + height / 2.0 - radius,
+                    x0 + width_of / 2.0 + radius,
+                    y0 + height / 2.0 + radius,
+                ));
+                out.push_str("f\n");
+            }
+            _ => {
+                out.push_str(&format!(
+                    "{} {} {} RG\n{} w 1 J\n{} {} m {} {} l S\n",
+                    number(colour[0]),
+                    number(colour[1]),
+                    number(colour[2]),
+                    number(height.clamp(0.5, 2.0)),
+                    number(x0),
+                    number(y0 + height * 0.5),
+                    number(x1),
+                    number(y0 + height * 0.5)
+                ));
+            }
+        }
+        return Some((out.into_bytes(), rect));
+    }
     // The **kind**: the tree's own twenty two, and a kind that is not
     // one of them is refused.
-    let name = entry(entries, "Name")?.as_str()?.to_string();
     let kind = crate::stampadd::kind_of(&name)?;
     // The **colour** of the stamp: the tree's own colour for the kind
     // when the annotation says none.
@@ -1033,9 +1116,6 @@ fn the_stamp(entries: &[(String, Json)]) -> Option<(Vec<u8>, [f64; 4])> {
     };
     // The **line** that says who did it.
     let by = entry(entries, "PCByLine").and_then(crate::fields::text_of);
-    let [x0, y0, x1, y1] = rect;
-    let height = y1 - y0;
-    let number = crate::watermark::number;
     let mut out = String::new();
     // The **width of the line** of the stamp: the tree's own, a
     // fourteenth of the height and never less than a point and never
