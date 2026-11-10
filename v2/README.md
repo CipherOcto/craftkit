@@ -4152,6 +4152,7 @@ so.
 | the **appearance** of the callout | **built.** The leader, its open arrowhead and the text box of it are drawn (§772) | §772 |
 | the **typed signature** of a page | **built.** The signature of filled outlines is put on a page — the tree's `PCTypedSignature` and its normalised contours (§773) | §773 |
 | the **appearance** of the typed signature | **built.** The filled outlines of it are drawn, with the even-odd rule (§774) | §774 |
+| the **custom stamp** of a page | **built.** The stamp of a picture of the document is put on a page — the tree's `PCCustom` name and its `/PCPicture` (§775) | §775 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -51006,6 +51007,75 @@ outlines** — is now **drawn**.
   tree's own **custom stamp** is the one that is not.
 - **The tree's own custom stamp is not here**: the stamp of a picture
   that is already in the document.
+- **The tree's own script outlines are not here**: the tree writes the
+  contours of a typed name from the outlines of a font it carries, and
+  this tree carries **no fonts at all** — so the contours are the
+  caller's.
+
+---
+
+## 775. The custom stamp is put on a page
+
+The **custom stamp** — the tree's own **stamp of a picture** — is now
+**put on a page**.
+
+### What was built
+
+- The command **`pdf.annot.customstamp.add`** puts a **custom stamp** on
+  a page: it takes the page, the object number the annotation has in
+  the file, the **rectangle** the stamp covers, the **name** of the
+  stamp, the **picture** it is — an object of the document — whether
+  that picture is an **image**, and the **size** of it.
+- The **rules** are the tree's own, ported by name:
+  - the **rectangle** is four numbers, the corners may come in any
+    order, and it must be at least a point wide and a point high: the
+    tree's own rule;
+  - the **picture** is an object of the document, and the stamp refers
+    to it: the tree's own `/PCPicture`;
+  - the **name** of the annotation is the tree's own: `PCCustom` and
+    then the **letters and the digits** of the name the caller gave —
+    the tree's own cleaning of it, which drops the spaces and the
+    marks — and a name with no letters or digits in it is **refused**;
+  - whether the picture is an **image** is the tree's own
+    `/PCPictureImage`, and it is **false** when nothing is said;
+  - the **size** of the picture is two numbers, and they must be
+    **greater than zero**: the tree's own `/PCPictureSize` — which a
+    picture that is **not** an image needs, because it is the size the
+    form is mapped to — and a picture that is not an image and has no
+    size is **refused**.
+
+### What the port found
+
+- **The tree's custom stamp is a stamp and not a picture of its own**,
+  and the port found that the tree's own builder gives the custom
+  stamp the **subtype** of a stamp and a **name** of its own
+  (`PCCustom` and the cleaned name), and that the artwork is not in
+  the annotation at all: it is a **reference** to an object that is
+  already in the document — so the stamp here refers to a picture of
+  the document and carries no bytes.
+- **The tree's size is only needed by a form**, and the port found
+  that the tree's own drawing reads the size **only** when the picture
+  is not an image: an image is mapped onto the rectangle itself, and a
+  form is mapped by its size — so here the size is required for a form
+  and is left out for an image, and the tree's own rule that the size
+  is greater than zero is kept.
+
+### What it cost
+
+- **Five tests** in the PDF battery (`tests/customstampadd.rs`): the
+  stamp on the page with its name, its picture and its flag, a form
+  that needs its size, a name with nothing in it, a size that is not
+  greater than zero, and a picture that is not in the document.
+- **One new command**: the PDF battery carries **118** commands and
+  the MCP server **973** — one more than §774. The battery is counted
+  by the source of its commands; the MCP server is counted by the
+  tool list it answers with.
+
+### What it does not settle
+
+- **The drawing of the stamp is not here**: it is the appearance
+  command's own work — the tree's own picture, laid over the
+  rectangle.
 - **The tree's own script outlines are not here**: the tree writes the
   contours of a typed name from the outlines of a font it carries, and
   this tree carries **no fonts at all** — so the contours are the
