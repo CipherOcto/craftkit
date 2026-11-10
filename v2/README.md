@@ -4158,6 +4158,7 @@ so.
 | the **marks** of a sequence | **built.** The program in and out of a sequence are set, and one that crosses the other takes it away (§783) | §783 |
 | the **playhead** at the marks | **built.** The playhead goes to the mark in or the mark out, and to the start or the end when there is none (§784) | §784 |
 | the **outline symbols** of a sheet | **built.** The sheet's view carries the tree's own outline-symbols and formulas flags (§785) | §785 |
+| the **scenarios** of a workbook | **built.** The tree's what-if scenarios are added, listed, shown and taken away (§786) | §786 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -51689,3 +51690,65 @@ and **formulas** flags.
 - **The tree's own print flags are not here**: the tree says whether
   the gridlines and the headings are printed, and this tree has no
   printing of its own.
+
+---
+
+## 786. The workbook holds its scenarios
+
+The **scenario** — the tree's own **what-if** — is now a thing of the
+**workbook**, and it may be added, listed, shown and taken away.
+
+### What was built
+
+- The commands **`grid.scenario.add`**, **`grid.scenario.list`**,
+  **`grid.scenario.show`** and **`grid.scenario.delete`** are the
+  tree's own four commands of a scenario.
+- The **rules** are the tree's own, ported by name:
+  - the **name** of a scenario is not empty and is at most **255**
+    characters: the tree's own bound;
+  - a scenario has at most **32** changing cells, and a scenario with
+    **no** changing cell is **refused**: the tree's own bound and its
+    own rule;
+  - the **values** are one for each changing cell, and when the caller
+    says none they are the **values the cells hold now**: the tree's
+    own rule;
+  - a scenario of the **same name on the same sheet** is refused, and
+    it is replaced when the caller says so: the tree's own rule;
+  - a workbook holds at most **1000** scenarios: the tree's own bound;
+  - showing a scenario puts the values of it in the cells, and a
+    **number** is a number and not typed text: the tree's own rule.
+
+### What the port found
+
+- **The tree keeps the scenarios in a hidden name**, and the port found
+  that the tree's own scenarios live in a **defined name** that says
+  nothing and holds a JSON text — the tree's own hiding of them — and
+  that here a scenario is a **node under the workbook**: a scenario is
+  a thing of its own, and the document holds it, as it holds a marker
+  on a timeline (§ the film battery's markers).
+- **The tree's scenarios are found by name**, and the port found that
+  the tree's own command has no sheet at all: it works on the sheet
+  that is open, and here the caller names the sheet — or does not, and
+  then the scenario is found on any sheet of the workbook.
+
+### What it cost
+
+- **Seven tests** in the grid battery (`tests/scenarios.rs`): the
+  scenario that is added and listed, the values that are the values the
+  cells hold now, the scenario that is shown, the scenario of the same
+  name that is refused and replaced, the scenario with the wrong number
+  of cells, the scenario with no name and the scenario that is taken
+  away.
+- **Four new commands**: the grid battery carries **156** commands and
+  the MCP server **982** — four more than §785. The battery is counted
+  by the source of its commands; the MCP server is counted by the tool
+  list it answers with.
+
+### What it does not settle
+
+- **The tree's own summary of the scenarios is not here**: the tree
+  writes a sheet that says what every scenario does to the book, and
+  that is a trial of the book as well as a sheet of its own.
+- **The tree's own source of the scenarios is not here**: the tree
+  reads them from a hidden name, and here they are nodes of the
+  workbook.
