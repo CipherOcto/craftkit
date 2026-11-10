@@ -190,6 +190,7 @@ mod revision6;
 mod rotation;
 mod scripts;
 mod sha2;
+mod shapeappearance;
 mod signaturefield;
 mod signatures;
 mod structure;
@@ -253,6 +254,7 @@ pub use pushbutton::AddButton;
 pub use radio::AddRadio;
 pub use remove::RemoveObject;
 pub use rotation::{ReadRotation, RotatePage};
+pub use shapeappearance::WriteShape;
 pub use signaturefield::AddSignature;
 pub use signatures::ReadSignatures;
 pub use structure::ReadStructure;
@@ -2205,6 +2207,7 @@ craftkit_sdk::plugin_anchor!(
     AddImage,
     SetProperties,
     SetLook,
+    WriteShape,
     Preflight,
     ReadFonts,
     ReadTrailer,
