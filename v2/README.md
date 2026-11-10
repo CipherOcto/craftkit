@@ -4114,6 +4114,7 @@ so.
 | the **flattening** of the comments | **built.** The notes of a file are drawn into the pages they are on and taken away — the tree's matrix, its popup and its replies (§732) | §732 |
 | a **note** on a page | **built.** A sticky note is put on a page — the tree's icons, its rectangle, its popup and its drawing (§735) | §735 |
 | the **author** of a comment | **built.** The author, the subject and the icon of a comment are changed — the tree's lock, its note and its drawing (§736) | §736 |
+| the **layout** of a caption | **built.** A caption is laid out on a frame — the tree's scale, its wrapping, its anchor and its outline (§737) | §737 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -48218,3 +48219,91 @@ subject and — when it is a note — its icon.
   tree draws the **note** only.
 - **The day of the comment is not changed**: the tree touches the
   `/M` of a comment it changes, and this tree does not.
+
+---
+
+## 737. The layout of a caption
+
+A **caption** of a film may now be **laid out**: where its lines go on
+a frame of a given size.
+
+### What was built
+
+- A **new command**: `film.caption.layout` lays a caption out — the
+  **text** of it, the caption **track** that holds the style, the
+  **width** and the **height** of the frame, and the **settings** of
+  the cue.
+- The **rules** are the tree's own:
+  - the **scale** is the height of the frame over the tree's own
+    thousand and eighty lines;
+  - the **size** of the letters is the size of the style, held between
+    the tree's own four and two hundred and fifty-six pixels, scaled,
+    and then held between four pixels and the height of the frame;
+  - the **lines** are the lines of the text, each one trimmed, each
+    one **wrapped** at ninety per cent of the width of the frame — the
+    tree's rule: a word is never broken, and a line that would be too
+    wide with the next word on it starts a new one;
+  - the **height of a line** is the size of the letters times the line
+    spacing of the style, held between the tree's own eight tenths and
+    four;
+  - the **padding** of a line is three tenths of the size of the
+    letters, rounded;
+  - the **align** is the align of the style and the **anchor** is its
+    anchor: the block of lines hangs from the top, the middle or the
+    bottom of the frame, a **margin** away from it — the margin is
+    the margin of the style, held between zero and forty-five
+    hundredths of the height of the frame;
+  - the **side** of the frame is five per cent of its width;
+  - the **settings** of the cue — the tree's own `line:` and `align:`
+    of a WebVTT cue — may say where the caption goes: a `line:` says
+    the top of the block as a fraction of the frame, and an `align:`
+    says the align;
+  - the **outline** of the style grows the box of the caption: the
+    outline is scaled and held between zero and the tree's own
+    sixty-four pixels, and the box grows by that much and one;
+  - the **place** of the block is **rounded**, as the tree's is;
+  - a caption with **no words** has no place and is **refused**, and
+    so is a frame with no width or no height.
+- The command says: the **lines**, the **width** of each, its place
+  on the frame, the size of the letters, the height of a line, the
+  top of the block, the align, the anchor, the margin, the outline and
+  the **box** of the caption.
+
+### What the port found
+
+- **The tree measures the text with the font of the family**, and the
+  port found that the tree lays a caption out with the real font it
+  names — and that this tree has one typeface, the kit's own stroke
+  face, so the lines of a caption are measured with it: a line of this
+  tree is a little narrower than a line of the tree's face.
+- **The tree's word is never broken**, and the port found that the
+  tree's wrapping keeps a word whole and starts a new line when the
+  next word does not fit — so a caption that is one very long word is
+  one very long line, and the tree says so rather than cutting it.
+- **The tree rounds the place of the block**, and the port found that
+  the tree rounds the **top** of the block and not the lines inside
+  it — so the block sits on a whole pixel and the letters do not.
+
+### What it cost
+
+- **Nine tests** in the film battery (`tests/captionlayout.rs`): the
+  caption that hangs from the bottom a margin away, the size that is
+  relative to the height of the frame, the lines that are wrapped, the
+  align that says where the lines are, the anchor that says where the
+  block hangs, the settings of the cue, the caption with no words that
+  is refused, the frame with no height that is refused, and the
+  outline that grows the box.
+- **One new command**: the film battery carries **106** commands and
+  the MCP server **948**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The caption is not drawn**: the tree rasterises the caption into
+  the frame, and this tree says where it goes and does not paint it —
+  the burn-in needs a raster of the letters, and the kit's face is a
+  stroke face and not a filled one.
+- **The speaker of a caption is not burnt in**: the tree keeps the
+  speaker in the metadata of the cue and does not draw it, and this
+  tree says nothing about it.
