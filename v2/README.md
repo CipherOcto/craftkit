@@ -4173,6 +4173,7 @@ so.
 | the **cutting** of a path | **built.** A path is cut at a point — a closed path opens there, an open one becomes one path per piece (§792) | §792 |
 | the **stroke drawn by hand** | **built.** A stroke is fitted to its samples — the tree's jitter, its corners and its spline (§793) | §793 |
 | the **rule of a smooth point** | **built.** A point is made smooth by the tree's own rule — the circle through the point and its neighbours (§794) | §794 |
+| the **points** in the middle of the sides | **built.** Every side of a path gets a point in its middle, and the sides keep their shape (§795) | §795 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52333,3 +52334,48 @@ average of the two handles — and now it has the tree's.
   rule.
 - **The tree's own smooth region is not here**: the tree's Smooth tool
   smooths the parts of a path near a drag.
+
+## 795. A point in the middle of every side
+
+The tree's **Add Anchor Points** puts an anchor at the middle of every
+side of a path, so that the path may be edited in finer pieces — and
+the sides keep their shape.
+
+### What was built
+
+- The command **`vector.path.anchors.middle`** puts a point in the
+  **middle of every side** of a path: the tree's own command.
+- The rules are the tree's own:
+  - the point is at the **middle** of the side: the tree's own place;
+  - the side keeps its **shape** — the split is the curve's own, and
+    the two halves are the same curve: the tree's own rule;
+  - the **closing edge** of a closed contour is a side of its own here
+    too, and it is split like the others: the tree's closed contour has
+    the edge in it.
+
+### What the port found
+
+- **The tree's closed contour has its closing edge in it and this
+  tree's may not** — the same thing §792 found when a path was cut: so
+  the edge is made a side of its own here, and it gets a point in its
+  middle like every other side.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/middleanchors.rs`): four
+  tests — every side, the point in the middle, the shape that does not
+  change, and the open path.
+- **One new command**: the vector battery now carries **56** commands
+  and the MCP server **989** — one more than §794. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **No new module**: the command lives with the other anchor commands,
+  and the split it uses is the geometry library's.
+
+### What it does not settle
+
+- **The tree's own smooth anchors are still not here**: a point here
+  keeps no kind, and §789's rule stands.
+- **The tree's own command works on the selected paths**: the tree's
+  `object.path.addAnchorPoints` works on what is selected, and here the
+  command names the path it works on.
