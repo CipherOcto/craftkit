@@ -4129,6 +4129,7 @@ so.
 | the **properties** of a field | **built.** The General tab of the tree's own dialog is here — the name, the tooltip, the limit, the options, the alignment, the default and the lock (§749) | §749 |
 | the **look** of a field | **built.** The Appearance tab of the tree's own dialog is here — the border, the fill, the line, the text, the mark and the place (§750) | §750 |
 | the **appearance** of a shape | **built.** The square and the circle are drawn — the tree's colours, its width, its dashes and its opacity (§751) | §751 |
+| the **appearance** of a markup | **built.** The highlight, the underline, the strikeout and the squiggly are drawn — the tree's quads, its fractions and its multiplication (§752) | §752 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -49306,7 +49307,8 @@ appearance the reader shows.
 
 ### What it cost
 
-- **Six tests** in the PDF battery (`tests/shapeappearance.rs`): the
+- **Six tests** in the PDF battery (`tests/annotappearance.rs`, which §752
+  renamed): the
   square that is drawn and the annotation that names the drawing, the
   circle that is drawn with its four curves, the colours that are
   drawn and the four numbers that are turned into three, the dashed
@@ -49326,3 +49328,96 @@ appearance the reader shows.
 - **The cloudy border of the tree's polygons** is not here: it is the
   border of a polygon only, and the tree refuses to draw a cloudy
   border of anything else.
+
+---
+
+## 752. The markup is drawn
+
+A **markup** — a **highlight**, an **underline**, a **strikeout** or a
+**squiggly underline** — is now **drawn** over the text it covers, by
+the same command that draws a shape.
+
+### What was built
+
+- The command **`pdf.annot.appearance.write`** now draws the four
+  markups as well as the square and the circle, and it draws them
+  from the **dictionary of the annotation** — the quads and the
+  colour — as the tree's own builder does.
+- The **rules** are the tree's own markup branch, ported by name:
+  - the **quads** (`/QuadPoints`) are the lines of the text the markup
+    covers, and there are **eight** numbers to a quad — the upper
+    left, the upper right, the lower left and the lower right — and a
+    number of quads that is not a whole number of quads is
+    **refused**;
+  - a markup has a **colour**, and a markup without one is
+    **refused**: a mark in no colour marks nothing;
+  - a **highlight** is a **filled quadrilateral** over the text, and it
+    **multiplies** over the text — the tree's own rule, and the file
+    says so with the blend mode `/Multiply`;
+  - an **underline** and a **strikeout** are a **line** across the
+    text: the underline lies eight percent of the way up the quad, the
+    strikeout forty two percent, and the line is seven percent of the
+    height of the text wide, and never less than half a point and
+    never more than three;
+  - a **squiggly** is a **zigzag** along the bottom of the quad: the
+    step is a quarter of the height of the text and never less than
+    point and a half, the zigzag is five percent of the height wide
+    and never less than half a point and never more than two, the
+    rise of each step is six percent of the height of the text and
+    never less than three quarters of a point, and the number of the
+    steps is never more than ten thousand;
+  - the **graphics state** of the drawing carries the blend mode of a
+    highlight, and the drawing says `/GS0 gs`.
+
+### What the port found
+
+- **The tree's markup is drawn from the annotation alone**, and the
+  port found that the tree's builder never looks at the text of the
+  page: it reads the **quads** of the annotation and its **colour**,
+  and draws over whatever is under it — so the appearance here is
+  built the same way.
+- **The tree's squiggly starts at the top of the text** — the first
+  step of the zigzag is the rise and the second is the bottom — and
+  the port found it by drawing one: so the zigzag here starts at the
+  top and falls, as the tree draws it.
+- **The tree's blend mode of a highlight is in the drawing and not on
+  the annotation**, and the port found that this tree's own
+  `pdf.markup.add` writes the mode on the annotation as well (§723) —
+  and that both are wanted, a reader that reads the annotation's own
+  key and a reader that reads only the appearance — so both are
+  written: the annotation keeps its `/BM`, and the drawing says so
+  too.
+- **The tree clamps the opacity of an annotation into zero and one**,
+  and the port refuses an opacity outside it instead: so an opacity
+  that is not a number between zero and one is **refused**, as §751's
+  shape does — the port's own rule, and the tree's is the other way.
+
+### What it cost
+
+- **Eight tests** in the PDF battery (`tests/markupappearance.rs`):
+  the highlight that is filled over the text and the multiplication
+  that the graphics state carries, the underline that lies eight
+  percent of the way up the text, the strikeout that lies forty two
+  percent of the way up, the squiggly that is a zigzag, the markup
+  without a colour, the quads that are not whole quads, and the
+  markup without quads.
+- **No new command**: the command that draws a shape draws the
+  markups too, so the PDF battery carries **106** commands and the MCP
+  server **961** — the same count as §751. The battery is counted by
+  the source of its commands; the MCP server is counted by the tool
+  list it answers with.
+- **The test file of §751 was renamed**: `tests/shapeappearance.rs`
+  is now `tests/annotappearance.rs`, because the drawing of a shape
+  and the drawing of a markup are one drawing and one command.
+
+### What it does not settle
+
+- **The tree's other annotations are still not drawn here**: the
+  line, the arrow, the polygon, the cloud, the ink, the caret, the
+  stamp and the free text — the tree's own builder draws them all.
+- **The tree's redaction mark is not drawn**: the tree draws the
+  outline of the area while the mark is there, and the fill comes
+  when it is applied.
+- **The quads here are the quads the annotation holds**: the region
+  and the text under it are §723's own work, and the drawing does
+  not look at the page.
