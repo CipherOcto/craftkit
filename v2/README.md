@@ -4114,6 +4114,7 @@ so.
 | the **flattening** of the comments | **built.** The notes of a file are drawn into the pages they are on and taken away — the tree's matrix, its popup and its replies (§732) | §732 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
+| the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
 | the **binary** variables of a program | **built.** A variable that is zero or one is solved as the tree's binary constraint — an integer variable whose bounds meet the pair (§717) | §717 |
 | the **EPS file** of a drawing | **built.** A drawing is written as an EPS file — the tree's prolog, its path operators and its ink (§716), and the finish of its lines with them (§718) | §716, §718 |
@@ -47899,3 +47900,86 @@ is taken away.
 - **The drawing is not a mark of the tree's own kinds**: it carries
   the name `Flattened`, and the three kinds the command knows are not
   it.
+
+---
+
+## 733. The elements of a chart
+
+A chart of a sheet may now carry the **elements** the tree's own
+charts carry: its **title**, its **legend**, its **data labels**, its
+**gridlines**, the **titles of its axes** and its **smooth** line.
+
+### What was built
+
+- A **new command**: `grid.chart.element` turns an element of a chart
+  on or off — the **chart**, the **element**, whether it is **on** (it
+  is on unless it is said to be off) and, for the legend, the
+  **position** it is put at.
+- The **rules** are the tree's own:
+  - the **elements** are the tree's own six: the `title`, the `legend`,
+    the `dataLabels`, the `gridlines`, the `axisTitles` and the
+    `smooth` — and an element that is not one of them is **refused**;
+  - the **legend** is `none` when it is turned off, and it is put
+    where it is said to be when it is turned on;
+  - the **title** is the title the chart has, or `Chart Title` when it
+    has none, and an **empty** title when the title is turned off;
+  - the **titles of the axes** are the titles the chart has, or
+    `Axis Title` when it has none, and they are **taken away** when
+    they are turned off;
+  - the **data labels**, the **gridlines** and the **smooth** line are
+    a flag each;
+  - the **places** of the legend are the tree's own five: `none`,
+    `bottom`, `top`, `left` and `right` — and a place that is not one
+    of them is **refused**.
+- A chart is now made with the tree's own **defaults**:
+  - the **legend** is at the **bottom**, and at the **right** for a
+    **pie**;
+  - the **data labels** are **off**;
+  - the **gridlines** are **on**, and **off** for a **pie**;
+  - the **titles of the axes** are **none**, and the line is **not
+    smooth**.
+- The commands that **make** a chart and **change** it take the
+  elements too — the **legend**, the **data labels**, the
+  **gridlines** and the **titles of the axes** — and the command that
+  **reads** a chart says them all.
+
+### What the port found
+
+- **The tree's legend falls back to the bottom**, and the port found
+  that the tree reads the place of the legend and puts it at the
+  bottom when the place is not one it knows — so a place that is not
+  named is not an error in the tree, and it is one here.
+- **The tree's elements are camel-cased** — `dataLabels`,
+  `axisTitles` — and the port found that the names of the tree's
+  elements are the names of the *elements*, not of the parameters, so
+  the case of the name of an element does not matter here; the
+  **parameters** of this tree are in **snake case**, as they are
+  everywhere else in this tree.
+- **The tree's smooth line belongs to the series**, and the port found
+  that the tree's series are held by the chart and are worked out from
+  the cells here — so the flag of the smooth line is the flag of the
+  chart, and it says of every series of it.
+- **The tree's trendline is an element too**, and the port found that
+  this tree has a command of its own for the trendline of a chart, so
+  the element that is not here is the one the tree's list holds.
+
+### What it cost
+
+- **Ten tests** in the grid battery (`tests/chartelements.rs`): the
+  elements a chart is made with, the pie whose legend is at the right,
+  the legend that is moved and taken away, the data labels and the
+  gridlines, the title that is taken away and given back, the titles
+  of the axes, the smooth line, the element that is refused, the
+  place of the legend that is refused, and the chart that is made with
+  its elements said.
+- **One new command**: the grid battery carries **152** commands and
+  the MCP server **943**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The elements of a chart are not drawn**: this tree has no canvas
+  for a chart, and the elements are said and not painted.
+- **The trendline is not an element here**: it has a command of its
+  own, and the element that turns it on is refused.
