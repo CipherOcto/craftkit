@@ -4127,6 +4127,7 @@ so.
 | the **signature field** of a form | **built.** A signature field is put on a page — the tree's name and its empty box (§747) | §747 |
 | the **image field** of a form | **built.** An image field is put on a page — the tree's name, its empty mark and its action (§748) | §748 |
 | the **properties** of a field | **built.** The General tab of the tree's own dialog is here — the name, the tooltip, the limit, the options, the alignment, the default and the lock (§749) | §749 |
+| the **look** of a field | **built.** The Appearance tab of the tree's own dialog is here — the border, the fill, the line, the text, the mark and the place (§750) | §750 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -49174,6 +49175,83 @@ tab, the first tab of the dialog its editor shows for a field.
 - **The tree's Appearance tab is not here**: the border, the fill, the
   width of the line, the colour of the text, the font, the size of the
   text and the place of the field on the page.
+- **The tree's Format, Validate and Calculate tabs are not here**:
+  they are the tree's own scripts, and a script is a thing this tree
+  does not run.
+- **The tree's actions are not here**: the JavaScript of a field and
+  the events it answers.
+
+---
+
+## 750. The look of a field is set
+
+A **field** may now have its **look** set: the tree's own Appearance
+tab, the second tab of the dialog its editor shows for a field.
+
+### What was built
+
+- A **new command**: `pdf.field.look.set` sets the look of a field —
+  the field itself, the **colour of the border**, the **colour of the
+  background**, the **width of the line** and its **style**, the
+  **colour of the text**, the **font** of the text and its **size**, the
+  **mark** of a check box, and the **rectangle** the field covers.
+- The **rules** are the tree's own, ported by name:
+  - `set_props` — a **locked** field takes only **unlocking**;
+  - the **look** is written on the **widgets** of the field — the
+    annotation that shows the field on the page — and the **default
+    appearance** is written on the **field**;
+  - a **colour** is three numbers, and each of them is between zero
+    and one;
+  - the **width of the line** is between zero and twelve points;
+  - the **style of the line** is one of the tree's own five: the solid
+    one, the dashed one, the beveled one, the inset one and the
+    underline — and the dashed line has the tree's own three dashes;
+  - the **font** is one of the tree's own three — Helvetica, Times and
+    Courier — under the names the file holds: `Helv`, `TiRo` and
+    `Cour`;
+  - the **size of the text** is between zero and a hundred points;
+  - the **mark** belongs to a check box or a radio button and to
+    nothing else;
+  - the **rectangle** is four numbers, the corners may come in any
+    order, and a field smaller than four points by four is refused.
+
+### What the port found
+
+- **The tree clamps the colours and the width of the line**, and the
+  port found that this tree refuses an input that is out of range and
+  does not clamp it: so a colour outside zero and one is refused, and
+  so is a line that is wider than twelve points — where the tree
+  makes it narrower and says nothing.
+- **The tree's default appearance is rebuilt from the whole look**,
+  and the port found that the font, the size and the colour of the
+  text live in one string — `/Helv 12 Tf 0 g` — and that a change to
+  one of them keeps the others as they were: so the appearance is read
+  here and written again with the part that was said.
+- **The tree's font of a field is one of three**, and the port found
+  that the file holds the **resource name** of the font and not its
+  name — `Helv` and not `Helvetica` — and so both are accepted here
+  and the resource name is what is written.
+
+### What it cost
+
+- **Eight tests** in the PDF battery (`tests/look.rs`): the colours
+  that are set and the colour that is refused, the line that is set
+  with its width and its dashes and the width and the style that are
+  refused, the text that is set with its font, its size and its colour
+  and the size and the font that are refused, the mark of a check box
+  and the text field that refuses one, the rectangle that is set and
+  the one that is too small, the locked field, and the node that is
+  not a field.
+- **One new command**: the PDF battery carries **105** commands and the
+  MCP server **960**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **A border and a fill may not be taken away here**: the tree's look
+  is given as a whole, and a look with no border has no border; here
+  what is not said is left as it was.
 - **The tree's Format, Validate and Calculate tabs are not here**:
   they are the tree's own scripts, and a script is a thing this tree
   does not run.
