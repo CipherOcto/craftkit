@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **fifty-six commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **fifty-seven commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.create` makes a path out of path data or
@@ -25,7 +25,8 @@
 //!   through a list of points, and `vector.path.anchors.set` sets the
 //!   anchors of a path that is already there, `vector.path.anchors.middle`
 //!   puts a point in the middle of every side of it, `vector.path.cut` cuts
-//!   a path at a point, and `vector.path.freehand` draws a stroke by
+//!   a path at a point, `vector.path.erase` takes away the parts of a
+//!   path under a drag, and `vector.path.freehand` draws a stroke by
 //!   hand; `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
@@ -85,6 +86,7 @@ mod colour;
 mod cutpath;
 mod dashes;
 mod epsexport;
+mod erasepath;
 mod freehand;
 mod gradients;
 mod opacity;
@@ -101,6 +103,7 @@ pub use colour::{ColourGamut, ConvertColour};
 pub use cutpath::CutPath;
 pub use dashes::DashPath;
 pub use epsexport::ExportEps;
+pub use erasepath::ErasePath;
 pub use freehand::Freehand;
 pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
 pub use opacity::{SetOpacity, fill_at, stroke_at};
@@ -2850,6 +2853,7 @@ craftkit_sdk::plugin_anchor!(
     AddSpline,
     SetAnchors,
     AddMiddleAnchors,
+    ErasePath,
     CutPath,
     Freehand,
     UnitePaths,
