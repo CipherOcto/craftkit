@@ -4143,6 +4143,7 @@ so.
 | the **mark** of a redaction | **built.** The mark of a redaction is put on a page — the tree's quads, its colours and its overlay (§763) | §763 |
 | the **appearance** of the mark | **built.** The mark of a redaction is drawn — the tree's outline and its red (§764) | §764 |
 | the **stamp** of a page | **built.** The stamp is put on a page — the tree's twenty two kinds, its colours and its line (§765) | §765 |
+| the **appearance** of the stamp | **built.** The stamp is drawn — the tree's tag, its frame and its label (§766) | §766 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -50382,3 +50383,74 @@ a page — may now be put on a page.
   signature.
 - **The stamp here has no author and no name**: the tree's stamp is a
   tool of its editor, and the editor is not here.
+
+---
+
+## 766. The stamp is drawn
+
+The **stamp** — the tree's own twenty two — is now **drawn**: the tag
+or the frame, and the label of the kind in it.
+
+### What was built
+
+- The command **`pdf.annot.appearance.write`** now draws the **stamp**
+  as well as the shape, the markup, the line, the polygon, the ink,
+  the caret, the text box and the mark of a redaction, and it draws it
+  from the **dictionary of the annotation** — the name (`/Name`), the
+  colour (`/C`), the line that says who did it (`/PCByLine`) and the
+  rectangle (`/Rect`) — as the tree's own builder does.
+- The **rules** are the tree's own stamp branch, ported by name:
+  - a stamp that asks for a **signature** is a **tag** pointing left,
+    filled with the colour of the stamp, and every other stamp is a
+    **rounded frame** with a light tint of the colour: the tree's own
+    shapes;
+  - the **width of the line** of the stamp is a fourteenth of the
+    height of it, and never less than a point and never more than
+    three: the tree's own;
+  - the **label** of the kind is drawn in the tree's Helvetica bold,
+    and the **line** that says who did it in the tree's Helvetica, and
+    the label is made smaller when it does not fit: the tree's own;
+  - the **fonts** are in the **resources** of the drawing, under the
+    names the stamp uses.
+
+### What the port found
+
+- **The tree's stamp is two shapes and not one**, and the port found
+  that the group of the kind says which: the ones that ask for a
+  signature are a **tag** pointing left and the rest are a **rounded
+  frame** — and that the shape is not in the file at all: so the
+  drawing here works the group out from the name of the kind, as the
+  tree's builder does.
+- **The tree's stamp measures its label with the regular Helvetica and
+  draws it in the bold**, and the port found that the tree measures
+  the label with the widths of the regular face and then sets it in
+  the bold one — so that the label is a little wider than the tree
+  measured it: so the drawing here measures it the same way, and the
+  label of a stamp is a little wider than it was measured to be.
+- **The tree's stamp pushes the graphics state of the opacity twice**
+  — once for the drawing and once for the stamp itself — and the port
+  found that the second one is the same as the first: so the drawing
+  here pushes it once, and the file says the same thing.
+
+### What it cost
+
+- **Five tests** in the PDF battery (`tests/stampappearance.rs`): the
+  stamp that is drawn, the stamp that asks for a signature and its
+  tag, the fonts that are in the resources, the stamp with a name
+  that is not known, and the stamp without its rectangle.
+- **No new command**: the command that draws a shape draws the stamp
+  too, so the PDF battery carries **113** commands and the MCP server
+  **968** — the same count as §765. The battery is counted by the
+  source of its commands; the MCP server is counted by the tool list
+  it answers with.
+
+### What it does not settle
+
+- **The tree's own custom stamp is not drawn here**: a stamp that
+  carries a picture of its own, and a stamp that carries the outline
+  of a typed signature — the tree draws them and this does not.
+- **The tree's four marks of Fill and Sign are not drawn here**: the
+  check, the cross, the dot and the line, which the tree draws when
+  a form is signed by hand.
+- **The tree's file attachment is still not drawn here**: the last
+  annotation of the tree's builder that is not here.
