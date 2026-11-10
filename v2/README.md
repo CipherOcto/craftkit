@@ -4118,6 +4118,7 @@ so.
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
 | the **binary** variables of a program | **built.** A variable that is zero or one is solved as the tree's binary constraint — an integer variable whose bounds meet the pair (§717) | §717 |
 | the **EPS file** of a drawing | **built.** A drawing is written as an EPS file — the tree's prolog, its path operators and its ink (§716), and the finish of its lines with them (§718) | §716, §718 |
+| the **colour** of a drawing | **built.** A colour is carried from one space of colour into another, and the gamut of a space is measured — the tree's primaries, its Bradford and its threshold (§734) | §734 |
 | the **gradients** of a path in an EPS file | **built.** A path filled with a gradient is written as a shading of PostScript — the tree's smooth shading and its function (§722) | §722 |
 | the **shading** under a region clipped | **built.** The region is cut out of the shading of a page — the box of the page and the region as one path, and the even-odd rule (§657) | §657 |
 | the **citation styles** of a document | **built.** The tree's twelve styles are data, and a document names the one it cites by — APA when it names none (§650) | §650 |
@@ -47983,3 +47984,101 @@ charts carry: its **title**, its **legend**, its **data labels**, its
   for a chart, and the elements are said and not painted.
 - **The trendline is not an element here**: it has a command of its
   own, and the element that turns it on is refused.
+
+---
+
+## 734. The colour of a drawing in another space
+
+A colour of a drawing may now be carried from one **space of colour**
+to another, and the **gamut** of a space may be measured.
+
+### What was built
+
+- Two **new commands**, in the vector battery:
+  - `vector.colour.convert` carries a colour from one space into
+    another — the **colour** (a hex text, `#rrggbb`), the space it is
+    **from** and the space it is put **into**;
+  - `vector.colour.gamut` says whether a colour is **inside** the
+    gamut of a space — the colour, the space it is **from**, the space
+    whose gamut is tested and the **threshold** of the measure.
+- The **spaces** are the tree's own eight:
+  - `srgb` — the sRGB IEC 61966-2.1 primaries, D65 and the sRGB
+    transfer function;
+  - `display-p3` — the DCI-P3 primaries, D65 and the sRGB transfer
+    function;
+  - `adobe-rgb-compat` — the Adobe RGB (1998) primaries, D65 and the
+    gamma of 563/256;
+  - `prophoto-compat` — the ROMM RGB primaries, D50 and the gamma of
+    1.8;
+  - `linear-srgb` — the sRGB primaries with a linear transfer
+    function;
+  - `rec2020` — the Rec. ITU-R BT.2020 primaries, D65 and the Rec. 709
+    transfer function;
+  - `gray-gamma-2.2` — a gray with the gamma of 2.2;
+  - `sgray` — a gray with the sRGB transfer function, so that a gray
+    `v` looks like the RGB `(v, v, v)` of sRGB.
+- The **rules** are the tree's own:
+  - a colour is carried by **undoing the tone curve** of the space it
+    is in, **multiplying by the matrix of its primaries**, adapting
+    the white with **Bradford**, and doing the same in reverse for the
+    space it is put into;
+  - a **gray** space holds one value, and the gray of a colour is the
+    **luminance** of it — the tree's own rule, and the rule here;
+  - a space that is **not one of them** is **refused**;
+  - a colour that falls **outside** the space it is put into is
+    **refused** — the tree clips it, and this tree does not;
+  - the **gamut** is measured the tree's own way: the colour is sent
+    to the space and **clipped** there, the two ways of looking at it
+    are compared in **CIE L\*a\*b\*** — the lightness on the scale of a
+    hundred and the two colours on the scale of two hundred and
+    fifty-five — and a colour is **out of gamut** when the difference
+    is more than the tree's own threshold of **four**.
+
+### What the port found
+
+- **The tree's primaries are chromaticities**, and the port found that
+  the tree builds the matrix of a space from the **chromaticities** of
+  its primaries and its **white point** — and that the matrix it puts
+  in the profile is the matrix **adapted to D50**, so the numbers of a
+  space are not the numbers of its primaries but the numbers of the
+  PCS.
+- **The tree's gray is the luminance of the colour**, and the port
+  found that the tree's gray profile carries the **white point of the
+  PCS** — so the gray of a colour is measured against D50, and the red
+  of sRGB is a little brighter in a gray than it looks in sRGB.
+- **The tree's gamut measure is a difference of two Lab colours**, and
+  the port found that the tree measures it with the colour **clipped**
+  in the space it is tested against, and that the scales of the
+  difference are the **hundred** of the lightness and the **two
+  hundred and fifty-five** of the two colours — and not the plain
+  difference of the three numbers.
+- **The tree's threshold is four**, and the port found that it is the
+  tree's own number and not a public one — so it is named here and it
+  is not a public number of this tree.
+
+### What it cost
+
+- **Eight tests** in the vector battery (`tests/colour.rs`): the white
+  that is the white of every space, the colour of sRGB in the numbers
+  of P3, the gray that stays a gray, the linear space that undoes the
+  tone curve, the gray that is the luminance of a colour, the colour
+  that is outside the space and is refused, the gamut that is
+  measured, and the space that is refused.
+- **Two new commands**: the vector battery carries **50** commands and
+  the MCP server **945**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The colour is not clipped**: the tree clips a colour that is
+  outside the space it is put into, and this tree refuses it instead.
+- **The two measures do not quite agree**: the conversion refuses a
+  colour whose **channel** is outside the space, and the gamut is
+  measured by the tree's **difference** — so a colour that is a little
+  outside is inside by the measure and outside by the channel.
+- **The CMYK spaces are not here**: the tree has them, and they are
+  the tree's own model of ink, and this tree has no ink.
+- **The profiles of the tree are not here**: the tree writes the ICC
+  profiles of its spaces, and this tree carries the numbers of the
+  spaces and not the profiles.
