@@ -4159,6 +4159,7 @@ so.
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
 | the **index** of a chosen option | **built.** The place of the chosen option in the list is written — the tree's own `/I` (§781) | §781 |
+| the **many** values of a list | **built.** A list that may hold more than one option holds an array of values and an array of indices (§782) | §782 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -51454,6 +51455,61 @@ the tree's own `/I`.
 - **A list that may hold more than one option** still holds one: the
   tree's own rule is that such a list holds an **array** of values and
   an array of indices, and this tree's list box takes one value.
+- **The tree's own script outlines are not here**: the tree writes the
+  contours of a typed name from the outlines of a font it carries, and
+  this tree carries **no fonts at all** — so the contours are the
+  caller's.
+
+---
+
+## 782. A list may hold more than one option
+
+The **list** that may hold **more than one** option now holds an
+**array** of values and an **array** of indices — the tree's own rule.
+
+### What was built
+
+- The command **`pdf.field.set`** now takes a **list** of values as
+  well as a single one, and a list that may hold more than one option
+  holds them all: the tree's own rule.
+- The **rules** are the tree's own, ported by name:
+  - the field holds an **array** of the values when it holds more than
+    one, and a **text** when it holds one: the tree's own rule;
+  - the **indices** are an **array** as well, and the tree's own `/I`
+    is always an array: the tree's own rule;
+  - a field that takes a **single value** refuses to take more than
+    one — "takes a single value" — and only a list with the tree's own
+    multi-select flag may hold more than one: the tree's own rules;
+  - the values may be **export values** or **display texts**, and the
+    field holds the export values: the tree's own rule.
+
+### What the port found
+
+- **The tree's own index is always an array**, and the port found that
+  the tree's own writer writes the `/I` as an array of the indices of
+  the chosen options — even when there is only one — and that the
+  tree's own `/V` is a text when there is one value and an array when
+  there are several: so the tree's own file says the same thing in two
+  shapes, and the shapes are the tree's own.
+- **The tree's own reader joins the values with a comma and a space**,
+  and the port found that the tree's own `display_value` joins the
+  values of a choice with ", " when it shows them: so the answer of
+  this tree joins them the same way.
+
+### What it cost
+
+- **Four tests** in the PDF battery (`tests/multiselect.rs`): the
+  array of the values and the array of the indices, the display texts
+  that are given, a field that takes one value and refuses two, and
+  one value that is still one value.
+- **No new command**: the command that fills a field takes the values
+  now, so the PDF battery still carries **119** commands and the MCP
+  server **974** — the same counts as §781. The battery is counted by
+  the source of its commands; the MCP server is counted by the tool
+  list it answers with.
+
+### What it does not settle
+
 - **The tree's own script outlines are not here**: the tree writes the
   contours of a typed name from the outlines of a font it carries, and
   this tree carries **no fonts at all** — so the contours are the
