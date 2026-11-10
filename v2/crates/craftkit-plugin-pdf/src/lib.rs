@@ -179,6 +179,7 @@ mod pagetext;
 mod patterns;
 mod predictors;
 mod preflight;
+mod properties;
 mod pushbutton;
 mod radio;
 mod redact;
@@ -245,6 +246,7 @@ pub use pages::RemovePage;
 pub use pagetext::ReadPageText;
 pub use patterns::{FindPattern, ReadPatterns};
 pub use preflight::Preflight;
+pub use properties::SetProperties;
 pub use pushbutton::AddButton;
 pub use radio::AddRadio;
 pub use remove::RemoveObject;
@@ -2199,6 +2201,7 @@ craftkit_sdk::plugin_anchor!(
     AddDate,
     AddSignature,
     AddImage,
+    SetProperties,
     Preflight,
     ReadFonts,
     ReadTrailer,
