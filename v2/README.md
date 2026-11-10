@@ -4123,6 +4123,7 @@ so.
 | the **push button** of a form | **built.** A push button is put on a page — the tree's name, its caption and its centred drawing (§743) | §743 |
 | the **drop-down** of a form | **built.** A drop-down is put on a page — the tree's name, its options, its flags and its drawing (§744) | §744 |
 | the **list box** of a form | **built.** A list box is put on a page — the tree's name, its options, its flag and its drawing (§745) | §745 |
+| the **date field** of a form | **built.** A date field is put on a page — the tree's name, its format and its two actions (§746) | §746 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **elements** of a chart | **built.** A chart carries its title, its legend, its data labels, its gridlines and its axis titles — the tree's own six elements and its defaults (§733) | §733 |
@@ -48904,3 +48905,70 @@ option it offers, one under the other.
 - **The tree's list box does not scroll here**: the tree keeps the
   first line that is shown in the field (`/TI`), and this tree's
   drawing always begins at the first option.
+
+---
+
+## 746. A date field is put on a page
+
+A **form** may now hold a **date field**: a box on a page that holds a
+day.
+
+### What was built
+
+- A **new command**: `pdf.field.date.add` puts a date field on a page —
+  the **page**, the **object number** the field holds, the **rectangle**
+  it covers, its **name**, the **day** it holds and **where the drawing
+  of it is written**.
+- The **rules** are the tree's own, ported by name:
+  - `free_name` — the **name** is the first free `Date` name — `Date1`,
+    `Date2` and so on — when the caller does not give one, and a name
+    that holds a **period** is refused, and so is a name another field
+    has;
+  - the **rectangle** is four numbers and the corners may come in any
+    order, and a field smaller than **four points by four** is refused,
+    as the tree refuses it;
+  - `widget_dict` — the field is a **widget**, an annotation of the
+    kind `Widget`, and it is a **text** field of **twelve point
+    Helvetica** (`/DA`);
+  - the field carries the tree's own **two actions** (`/AA`): the one
+    that **formats** the day — `AFDate_FormatEx("mm/dd/yyyy");` — and
+    the one that **keystrokes** it — `AFDate_KeystrokeEx("mm/dd/yyyy");`
+    — and the format is the tree's own, month, day and year;
+  - `ensure_form` — the file's **form** is made when the file has none,
+    and it holds the field;
+  - `field_appearance` — the **drawing** of the field: the frame and
+    the day it holds.
+
+### What the port found
+
+- **The tree's date field is a text field with scripts**, and the port
+  found that the scripts are **Acrobat's own** — they call
+  `AFDate_FormatEx` and `AFDate_KeystrokeEx`, which are functions of
+  the reader and not of the file — and so a reader that is not Acrobat
+  shows the day as a plain text and does not help with the keys. The
+  scripts are the tree's own, written here as they are written there.
+- **The tree's date field has no format of its own to choose** — the
+  format is in the script — and the port found that the tree's own
+  format is `mm/dd/yyyy` and that this tree writes it and does not
+  offer another.
+
+### What it cost
+
+- **Four tests** in the PDF battery (`tests/datefield.rs`): the date
+  field that is put on the page and what its dictionary says, its two
+  actions and their scripts, the free name and the second free name,
+  the day it holds and the drawing that shows it, and the field that
+  is too small and the name with a period that are refused.
+- **One new command**: the PDF battery carries **101** commands and the
+  MCP server **956**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The scripts only Acrobat runs**: a reader that is not Acrobat shows
+  the day and does not format it, and does not check the keys.
+- **The format is the tree's own**: another format is not offered, and
+  the tree's own format is the one that is written.
+- **The tree's other kinds of field are not here**: the image field
+  and the signature field.
