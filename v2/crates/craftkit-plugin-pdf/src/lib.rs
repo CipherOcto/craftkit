@@ -199,6 +199,7 @@ mod scripts;
 mod sha2;
 mod signaturefield;
 mod signatures;
+mod stampadd;
 mod structure;
 mod tabs;
 mod tounicode;
@@ -269,6 +270,7 @@ pub use remove::RemoveObject;
 pub use rotation::{ReadRotation, RotatePage};
 pub use signaturefield::AddSignature;
 pub use signatures::ReadSignatures;
+pub use stampadd::AddStamp;
 pub use structure::ReadStructure;
 pub use tabs::{ReadTabOrder, SetTabs};
 pub use tounicode::ReadFontUnicode;
@@ -2223,6 +2225,7 @@ craftkit_sdk::plugin_anchor!(
     AddCaret,
     AddFreeText,
     AddRedactMark,
+    AddStamp,
     SetProperties,
     SetLook,
     WriteAnnotation,
