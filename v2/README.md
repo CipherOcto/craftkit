@@ -4109,6 +4109,7 @@ so.
 | the **background** of a page | **built.** A colour behind the content of a page — the tree's rectangle, its mark and its graphics state (§727) | §727 |
 | the **marks** of a page | **built.** The watermark, the header, the footer and the background are taken away again — the tree's mark and its name (§728) | §728 |
 | the **mail merge** of a document | **built.** The fields of a document are filled with the rows of a data source — the tree's merge field, its address block and its map of the columns (§729) | §729 |
+| the **flattening** of a form | **built.** The fields of a form are drawn into the pages they are on and taken away — the tree's matrix, its XObjects and its pruning (§730) | §730 |
 | the **FDF file** of a form's data | **built.** The values of the fields are written in the syntax of PDF — the tree's header, its object and its trailer (§719) — and read back from one (§720) | §719, §720 |
 | the **solver** of the grid | **built.** A linear program is solved — the tree's simplex, its two phases, its bounds and its budget (§714) | §714 |
 | the **integer** variables of a program | **built.** A program whose variables are integers is solved in whole numbers — the tree's branch and bound and its gap (§715) | §715 |
@@ -47655,3 +47656,88 @@ data source.
 - **Only the body of the document is merged**: the tree reads the
   fields of the headers and the footers as well, and this tree has
   no header or footer of its own to read.
+
+---
+
+## 730. The form is flattened into the pages
+
+The **fields** of a form may now be **flattened**: the appearance of
+every field is drawn into the page the field is on, and the field is
+taken away.
+
+### What was built
+
+- A **new command**: `pdf.form.flatten` flattens the form of a file —
+  the **page** to flatten, and every page of the file when no page is
+  said.
+- The **rules** are the tree's own:
+  - a **widget** — an annotation of the subtype `Widget` — is the
+    appearance of a field on a page, and it is the widget that is
+    flattened;
+  - the **appearance** is the `/AP` of the widget: the `/N` of it is
+    the appearance that is drawn, and when the `/N` holds the
+    **states** of a box, the `/AS` of the widget says which state is
+    drawn;
+  - the appearance must be a **form** — a stream of the subtype `Form`
+    — and it must have a **bounding box**: an appearance that has
+    neither cannot be placed, and it is left alone;
+  - a widget that is **hidden** — the flag `Hidden` or the flag
+    `NoView` — is left alone;
+  - the appearance is drawn with the **matrix of ISO 32000-2 §12.5.5**
+    — the tree's own: the bounding box of the appearance, transformed
+    by its `/Matrix`, mapped onto the `/Rect` of the widget — and it
+    is put on the page as an **XObject** of the page's resources,
+    under the tree's own name: `PCFl0`, `PCFl1`, and so on;
+  - the widget is **taken away**, and the references that named it go
+    with it: the `/Annots` of the page, the `/Kids` of the field and
+    the `/Fields` of the form;
+  - a **field that is left without widgets** is taken away from the
+    form as well;
+  - a **link** is left alone: a link has no ink, and it stays
+    clickable.
+
+### What the port found
+
+- **The tree's matrix is a rule about the corners of the box**, and
+  the port found that the tree transforms the **corners** of the
+  bounding box by the `/Matrix` of the appearance and measures **that**
+  box — so an appearance whose `/Matrix` turns it is placed by the box
+  it turns into, and not by the box it was written with.
+- **The tree's appearances are XObjects of the page**, and the port
+  found that the tree names them `PCFl0`, `PCFl1`, and so on — one
+  name for each appearance that is drawn, and the names are what the
+  tree's own reader sees.
+- **The tree's drawing is a stream of its own**, and the port found
+  that the tree puts it **after** the content of the page, so that
+  the flattened field is drawn **on top** of the content that was
+  there.
+- **The tree's flattening takes the widget out of the form as well**,
+  and the port found that the tree prunes the **fields that are left
+  without widgets** — a field that holds nothing is not a field.
+
+### What it cost
+
+- **Eight tests** in the PDF battery (`tests/flatten.rs`): the
+  appearance that is drawn and the widget that is taken away, the
+  widget that is hidden, the widget that has no appearance, the state
+  of a box that is drawn, the matrix that maps the box onto the
+  rectangle, the field that is left without widgets, the link that is
+  left alone, and the file that is written with the drawing in it and
+  without the widget.
+- **One new command**: the PDF battery carries **90** commands and the
+  MCP server **940**. The battery is counted by the source of its
+  commands; the MCP server is counted by the tool list it answers
+  with.
+
+### What it does not settle
+
+- **The comments of a file are not flattened**: the tree flattens the
+  comments as well, and takes their pop-ups and their replies with
+  them.
+- **The original content of the page is not wrapped**: the tree wraps
+  it in `q`/`Q` so that the marks it made may be taken away again, and
+  this tree does not — so a flattened drawing may not be taken away
+  again by `pdf.page.marks.remove`.
+- **The drawing is not a mark of the tree's own kinds**: it carries
+  the name `Flattened`, and the three kinds the command knows are not
+  it.
