@@ -133,6 +133,7 @@ mod background;
 mod boxes;
 mod calculate;
 mod checkbox;
+mod combobox;
 mod comments;
 mod compare;
 mod content;
@@ -207,6 +208,7 @@ pub use background::AddBackground;
 pub use boxes::{PageBoxes, SetPageBox};
 pub use calculate::{ReadCalculatedValue, ReadCalculation};
 pub use checkbox::AddCheckBox;
+pub use combobox::AddCombo;
 pub use comments::{AddComment, CommentInfo, ReadComments};
 pub use compare::{CompareFiles, MarkDifferences};
 pub use convert::Convert;
@@ -2184,6 +2186,7 @@ craftkit_sdk::plugin_anchor!(
     AddCheckBox,
     AddRadio,
     AddButton,
+    AddCombo,
     Preflight,
     ReadFonts,
     ReadTrailer,
