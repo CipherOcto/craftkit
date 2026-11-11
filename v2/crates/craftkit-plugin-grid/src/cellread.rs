@@ -10,6 +10,9 @@
 //! - the **text** it shows — the value written with the format of the
 //!   cell and with the conditional format that matches it;
 //! - the **format** and the **style** it carries;
+//! - the **look** of the cell: its alignment, its font, its fill and
+//!   the lock it is under — the tree's cell carries all of them in
+//!   its style, and here the cell carries them itself;
 //! - the **note** and the **link** that are on it;
 //! - the **merge** that covers it, if it is covered by one.
 //!
@@ -92,6 +95,11 @@ impl ReadCell {
         // The **merge** that covers the cell, if it is covered by one.
         let merges = crate::merges::merges_of(node);
         let merge = crate::merges::covering(&merges, cell);
+        // The **look** of the cell: its alignment, its font and its
+        // fill, and the lock it is under. The lock is the cell's own
+        // word, then the style it names, and then the sheet.
+        let locks = crate::style_locks(session, sheet);
+        let locked = crate::protection::is_locked(node, &locks, cell);
         Ok(Outcome::new(format!("{name}!{address} holds {}", kind_of(&value))).with_data(json!({
             "sheet": sheet,
             "cell": address,
@@ -113,6 +121,19 @@ impl ReadCell {
                 Some(area) => json!(area.to_text()),
                 None => Json::Null,
             },
+            "align": match entry.as_ref().and_then(|entry| entry.align) {
+                Some(align) => align.to_json(),
+                None => Json::Null,
+            },
+            "font": match entry.as_ref().and_then(|entry| entry.font.as_ref()) {
+                Some(font) => font.to_json(),
+                None => Json::Null,
+            },
+            "fill": match entry.as_ref().and_then(|entry| entry.fill.clone()) {
+                Some(fill) => json!(fill),
+                None => Json::Null,
+            },
+            "locked": locked,
         })))
     }
 }

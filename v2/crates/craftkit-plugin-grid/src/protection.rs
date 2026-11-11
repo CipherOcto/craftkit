@@ -104,6 +104,19 @@ pub fn lock_of(node: &Node, locks: &[(String, Option<bool>)], cell: CellRef) -> 
     locks.iter().find(|(style, _)| style.eq_ignore_ascii_case(name)).and_then(|(_, locked)| *locked)
 }
 
+/// Whether a cell is **locked**: its own word, then the style it
+/// names, and then the sheet.
+///
+/// A cell that says nothing and names a style that says nothing is
+/// locked when the sheet is protected and the protection locks the
+/// cells.
+pub fn is_locked(node: &Node, locks: &[(String, Option<bool>)], cell: CellRef) -> bool {
+    match lock_of(node, locks, cell) {
+        Some(locked) => locked,
+        None => Protection::of(node).is_some_and(|protection| protection.locked),
+    }
+}
+
 /// Refuse a change to the **contents** of a cell of a locked sheet.
 ///
 /// A sheet that is not protected, or a protection that does not lock
