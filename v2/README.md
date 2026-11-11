@@ -4199,6 +4199,7 @@ so.
 | the **merge and centre** of a range | **built.** A range is merged and its text is centred, and a range that is already merged is unmerged again (§818) | §818 |
 | the **font** of a cell | **built.** The face, the size and the marks of the text of a cell are set, and a button pressed twice does the opposite (§819) | §819 |
 | the **locked cell** | **built.** A cell may be unlocked while the sheet is protected, and the lock of a cell is a button (§820) | §820 |
+| the **colours** of a cell | **built.** The text of a cell takes a colour and the cell takes a fill, and `none` takes them away (§821) | §821 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -53923,3 +53924,48 @@ unlocked may be changed even while the sheet is protected.
 - **The tree's lock may be part of a style and here it is not**: a
   style of the workbook carries a format, and the lock of a cell is the
   cell's own.
+
+## 821. The colours of a cell
+
+The tree's **Font Color** and **Fill Color**: the colour of the text
+of a cell, and the colour behind it.
+
+### What was built
+
+- **Two commands** in the grid battery: `grid.cell.font.colour` (the
+  colour of the text) and `grid.cell.fill` (the colour behind it): the
+  tree's two commands, by name.
+- The rules are the tree's own:
+  - a colour is **`#rrggbb`** — six digits of hex, and the rule of a
+    colour of this tree;
+  - **none** takes the colour away, and the text takes the colour of
+    the sheet: the tree's own rule;
+  - a colour that is not one of them is **refused** by name.
+
+### What the port found
+
+- **The tree's fill and its font colour are in the style of the cell,
+  and here they are the cell's own**: as the format, the alignment and
+  the font are (§816, §819).
+- **The tree's colour may be a theme colour with a tint**, and this
+  tree has no theme: a colour is six digits of hex or it is refused.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/cellcolours.rs`): five
+  tests — the text taking a colour, `none` taking the colour away, the
+  cell being filled, the colour that is not one of them being refused,
+  and the colours staying when the cell's value changes.
+- **Two new commands**: the grid battery now carries **180** commands
+  and the MCP server **1026** — two more than §820. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **The cell grew a field and the font grew one**: the fill is the
+  cell's own field, and the colour of the text is the font's.
+
+### What it does not settle
+
+- **The tree's theme colours and their tints are not here**: a colour
+  is six digits of hex.
+- **The tree's colours are in the style of the cell, and other cells
+  that name the style share them**: here every cell carries its own.
