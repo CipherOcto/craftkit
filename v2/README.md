@@ -4191,6 +4191,7 @@ so.
 | the **levels** of the outline | **built.** A sheet is shown down to an outline level, and the rows that are deeper than the level are hidden (§810) | §810 |
 | the **detail** of a group | **built.** The rows of a group of the outline are hidden and shown, and the group whose summary row is named is opened (§811) | §811 |
 | the **list filter** | **built.** A sheet is filtered by a list of values, and the rows whose cell shows one of them are kept (§812) | §812 |
+| the **slicer** of a table | **built.** A slicer filters a column of a table by the values that are kept, and it writes them into the filter of the sheet (§813) | §813 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -26573,8 +26574,10 @@ and everything that is said about it.
 - **The tree's edit ranges are not here**, and so the locked flag of a
   cell's style is not here either: a sheet here is locked as a whole.
 - **The tree's charts, images, shapes, sparklines, slicers and pivot
-  tables are not here**, and neither are its tables and its autofilter
-  as things a sheet carries.
+  tables are not here as things a sheet carries.** The charts, the
+  pictures, the sparklines, the tables, the filters, the pivot tables
+  and the slicers are here as commands of their own (§ the slicer of a
+  table), and the shapes are not here at all.
 - **The tree's page layout and its page break preview are not here**:
   the view here is the view of the grid.
 
@@ -53450,9 +53453,80 @@ shows one of a list of values.
 
 ### What it does not settle
 
-- **The tree's slicer is not here**: the slicer is a front-end over
-  this filter — a widget that writes a list of values into it — and
-  the widget is not in this tree yet.
+- **The tree's slicer is here**: it came with §813, and the slicer
+  writes a list of values into this filter.
 - **The tree's other criteria are not here**: a top-ten, an
   above-the-average and a colour are three criteria of their own, and
   each of them is a command with its own rules.
+
+## 813. The slicer of a table
+
+The tree's **slicer**: a widget that filters a column of a table by
+the values that are chosen.
+
+### What was built
+
+- **Five commands** in the grid battery: `grid.slicer.add`,
+  `grid.slicer.read`, `grid.slicer.toggle`, `grid.slicer.clear` and
+  `grid.slicer.remove`: the tree's slicer, as commands.
+- The rules are the tree's own:
+  - a slicer is bound to a **column of a table**, and the column is one
+    of the table's **fields**: the tree's own rule;
+  - the **values** of the slicer are the texts the cells of that
+    column show, and they are **distinct**: the tree's own rule;
+  - a value that is not in the column is **refused** by name: the
+    tree's own rule;
+  - a **single** click keeps that value and nothing else, and a click
+    on the only value that is kept takes the filter away: the tree's own
+    rule;
+  - a **multi** click adds the value to the ones that are kept and
+    takes it away again, and when every value is kept the filter is
+    taken away — a filter that keeps everything filters nothing: the
+    tree's own rule;
+  - the slicer writes its selection into the **filter of the sheet**,
+    and the rows the filter hides are **derived**.
+
+### What the port found
+
+- **The tree's slicer is a widget on the sheet.** The tree keeps the
+  place of it, its width, its height and its caption, and the widget is
+  drawn. Here a slicer is the **table, the column and the values that
+  are kept**, and a widget is a drawing and a drawing is not a fact of
+  the sheet.
+- **The tree's filter holds a criterion for every column of its range,
+  and here a sheet has one filter.** The tree's slicer adds its
+  criterion to the filter and takes nothing away; here the slicer
+  writes the filter of the sheet, and a filter that is there already is
+  written over.
+- **The tree's filter is over the range of the table and this one's is
+  over the sheet.** The tree's filter keeps the heading row of the
+  range and the rows outside it; here the heading row of the table is
+  hidden with the rows that do not show the value, and so is a row
+  outside the table. That is the difference the filter of a sheet
+  already has (§347).
+- **The tree's slicer is found on the sheet of the selection.** Here the
+  sheet is named, and the slicer is named by its **id**.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/slicers.rs`): nine tests
+  — the slicer bound to a column, the value that is kept hiding the
+  rows that do not show it, the single toggle keeping that value alone,
+  the toggle of the only value that is kept taking the filter away, the
+  multi toggle adding a value and taking it away, the value that is not
+  in the column, the slicer that is cleared, the slicer that is removed,
+  and the table and the column that are not there.
+- **Five new commands**: the grid battery now carries **169** commands
+  and the MCP server **1014** — five more than §812. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`slicers`): the slicers of a sheet are a fact of
+  the sheet, beside its tables and its filter.
+
+### What it does not settle
+
+- **The tree's slicer may be drawn on the sheet**: the place, the
+  width, the height and the caption of the widget are not here.
+- **The tree's slicer filters the range of its table and this one
+  filters the sheet**: the difference the filter of a sheet already has
+  (§347), and it is named above.
