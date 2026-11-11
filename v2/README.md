@@ -4196,6 +4196,7 @@ so.
 | the **sends** of a track | **built.** Every send of a track is muted at once, and a muted send is a copy of nothing (§815) | §815 |
 | the **alignment** of a cell | **built.** The text of a cell lies across it and down it, and the text is indented and wraps (§816) | §816 |
 | the **merge across** of a range | **built.** Every row of a range is merged on its own, and the value of a merged region is the value of its top left cell (§817) | §817 |
+| the **merge and centre** of a range | **built.** A range is merged and its text is centred, and a range that is already merged is unmerged again (§818) | §818 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -53745,9 +53746,59 @@ The tree's **Merge Across**: every row of a range is merged on its own.
 
 ### What it does not settle
 
-- **The tree's merge that centres the text is not here**: it is the
-  tree's Merge and Center, and it needs the alignment of a range
-  (§816) — which is here for a cell and not for a range.
+- **The tree's merge that centres the text is here**: it came with
+  §818, and it centres the text of the top left cell of the region.
 - **The tree's merge across may be made over a range that holds
   values, and the tree asks**: here it is refused, and the refusal says
   which cell holds a value.
+
+## 818. A range is merged and its text is centred
+
+The tree's **Merge and Center**: the range becomes one cell and its text
+is centred.
+
+### What was built
+
+- The command **`grid.merge.center`** merges a range and centres its
+  text: the tree's Merge and Center, as a command.
+- The rules are the tree's own:
+  - the range becomes **one cell** and its text is **centred**: the
+    tree's own rule;
+  - a range that is **already merged** is unmerged again — the button
+    is a button and a button pressed twice does the opposite: the
+    tree's own rule;
+  - the value of a merged region is the value of its **top left cell**,
+    and the merge is refused when a cell of the region holds a value:
+    the tree's own rule and the rule of every merge here;
+  - a merge may not **overlap** another merge: the tree's own rule.
+
+### What the port found
+
+- **The tree centres the style of the whole range and here the text of
+  the top left cell is centred.** The tree's style is shared between
+  the cells of the range and the text of the region is the text of its
+  top left cell; here the alignment is the cell's own (§816), so the
+  cell that holds the text is the cell that is centred.
+- **The tree's button unmerges a range that is already merged, and
+  here it does too**: the two commands are one, as the tree's button is
+  one.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/mergecenter.rs`): five
+  tests — the range merged and its text centred, the range that is
+  already merged being unmerged again, the text of the region being the
+  text of its top left cell, the cell that holds a value being
+  refused, and the range of one cell not being a merge.
+- **One new command**: the grid battery now carries **173** commands
+  and the MCP server **1019** — one more than §817. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **No new module**: the command lives with the merges it belongs to.
+
+### What it does not settle
+
+- **The tree's merge and center asks before it loses a value and here
+  it is refused**: the refusal says which cell holds a value.
+- **The tree's centre is a style and here it is the alignment of one
+  cell**: a range of many cells would be centred a cell at a time.
