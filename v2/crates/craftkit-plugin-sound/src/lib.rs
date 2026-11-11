@@ -563,7 +563,7 @@ pub use midi::{
     TransposeMidi, VelocityMidi,
 };
 pub use mixer::{
-    AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, ClearMutes, InsertKind,
+    AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, ClearMutes, ClearSolos, InsertKind,
     InsertPayload, LaneKind, LanePayload, MoveInsert, RemoveInsert, SendKind, SendPayload, SetSend,
 };
 pub use pitch::ReadPitch;
@@ -8236,6 +8236,7 @@ craftkit_sdk::plugin_anchor!(
     SourceKind,
     AddTrack,
     SoloTrack,
+    ClearSolos,
     AddClip,
     SetClipStretch,
     SetClipFade,

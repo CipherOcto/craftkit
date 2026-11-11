@@ -2298,3 +2298,55 @@ impl ClearMutes {
             .with_data(json!({ "cleared": cleared })))
     }
 }
+
+/// The **solos** of every track cleared.
+///
+/// The tree's Clear Solos: every track of the document is unsoloed at
+/// once, and the document is heard whole again.
+///
+/// A solo is a rule about the **other** tracks, and so clearing it is
+/// about every track and not about one: the tree's own rule. The flag
+/// that says a track is heard even when another is soloed — the solo
+/// safe — is not a solo and is left as it is.
+#[derive(Command)]
+#[command(
+    id = "sound.track.solo.clear",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Track", "Solo"),
+    mutates,
+    undoable
+)]
+pub struct ClearSolos {}
+
+impl ClearSolos {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let tracks: Vec<u64> =
+            session.document().walk().filter(|node| node.kind == "sound.track").map(|node| node.id).collect();
+        let mut cleared = 0usize;
+        for track in tracks {
+            let Some(node) = session.document().node(track) else {
+                continue;
+            };
+            let Ok(mut payload) = crate::TrackPayload::from_json(&node.data) else {
+                continue;
+            };
+            if !payload.solo {
+                continue;
+            }
+            payload.solo = false;
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(track) else {
+                continue;
+            };
+            node.data = data;
+            cleared += 1;
+        }
+        if cleared == 0 {
+            return Ok(Outcome::new("no track was soloed").with_data(json!({ "cleared": 0 })));
+        }
+        Ok(Outcome::changed(format!("cleared the solo of {cleared} track(s)"))
+            .with_data(json!({ "cleared": cleared })))
+    }
+}
