@@ -10,7 +10,7 @@
 //! **name**, and the name is read apart from the code: a code is a
 //! code of this tree, and a name is one of the names below.
 //!
-//! The names this tree **honours** are ten, and each says a code
+//! The names this tree **honours** are twelve, and each says a code
 //! this tree has:
 //!
 //! | the name | the code it says |
@@ -18,6 +18,8 @@
 //! | `general` | `general` |
 //! | `number` | `0.00` |
 //! | `currency` | `"$"#,##0.00` |
+//! | `accounting` | `accounting` |
+//! | `comma` | `comma` |
 //! | `percentage` | `0.00%` |
 //! | `fraction` | `# ?/?` |
 //! | `scientific` | `0.00E+00` |
@@ -26,13 +28,14 @@
 //! | `time` | `h:mm:ss AM/PM` |
 //! | `text` | `@` |
 //!
-//! The names this tree **knows but does not honour** are two, and
-//! each is refused with the **reason**:
+//! The **accounting** and the **comma** formats are the tree's own
+//! **filling** ones: they write the symbol at the edge of the cell and
+//! the number at the other edge, and the space between them is the
+//! **fill**. The symbol of the accounting one may be chosen, and it is
+//! written in quotes: `accounting "L"`.
 //!
-//! - `accounting` and `comma` — the tree's accounting and comma codes
-//!   **fill** the space the number does not take: they write spaces
-//!   around it and put the symbol at the edge. This tree has no fill
-//!   and writes no spaces that are not there;
+//! The names this tree **knows but does not honour** are **none**:
+//! every name of the tree's ribbon is a name this tree writes.
 //!
 //! And a name that is **not one of these** is refused as a format that
 //! this tree does not have: a name that is quietly ignored is a name
@@ -41,10 +44,12 @@
 use crate::format::Format;
 
 /// The names this tree honours, and the code each one says.
-pub const HONOURED: [(&str, &str); 10] = [
+pub const HONOURED: [(&str, &str); 12] = [
     ("general", "general"),
     ("number", "0.00"),
     ("currency", "\"$\"#,##0.00"),
+    ("accounting", "accounting"),
+    ("comma", "comma"),
     ("percentage", "0.00%"),
     ("fraction", "# ?/?"),
     ("scientific", "0.00E+00"),
@@ -55,13 +60,12 @@ pub const HONOURED: [(&str, &str); 10] = [
 ];
 
 /// The names this tree knows but does not honour, and the reason.
-pub const REFUSED: [(&str, &str); 2] = [
-    (
-        "accounting",
-        "an accounting format fills the space the number does not take with spaces, and puts the symbol at the edge; this tree has no fill",
-    ),
-    ("comma", "a comma format fills the space the number does not take with spaces; this tree has no fill"),
-];
+///
+/// There are **none**: every name of the tree's ribbon is a name this
+/// tree writes. The list is here because the refusal that names a
+/// format and says why is a rule of this tree, and a rule with no
+/// names in it is still a rule.
+pub const REFUSED: [(&str, &str); 0] = [];
 
 /// Why a format was refused.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,4 +115,4 @@ pub fn message(input: &str, refusal: &Refusal) -> String {
 }
 
 /// What a format is, said in full.
-pub const FORMATS: &str = "a number format is `general`, a whole part of `0` and `#`, up to fifteen decimals and a `%`, or a number with a symbol in quotes; a fraction is `# ?/?`, `# ??/??`, `?/?` or `# ?/4`; a scientific format is a mantissa, an `E` and the exponent's digits, such as `0.00E+00`; a text format is `@`, which writes the text of a cell; and a format may have sections, separated by a semicolon; and a date format is `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd`, `yyyy` or `dddd, mmmm dd, yyyy`; and a time format is `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`, `h AM/PM`, `h:mm AM/PM`, `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`, `[h]:mm`, `[h]:mm:ss` or `[mm]:ss`; and a format may be named `general`, `number`, `currency`, `percentage`, `fraction`, `scientific`, `short date`, `long date`, `time` or `text`";
+pub const FORMATS: &str = "a number format is `general`, a whole part of `0` and `#`, up to fifteen decimals and a `%`, or a number with a symbol in quotes; a fraction is `# ?/?`, `# ??/??`, `?/?` or `# ?/4`; a scientific format is a mantissa, an `E` and the exponent's digits, such as `0.00E+00`; a text format is `@`, which writes the text of a cell; and a format may have sections, separated by a semicolon; and a date format is `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd`, `yyyy` or `dddd, mmmm dd, yyyy`; and a time format is `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`, `h AM/PM`, `h:mm AM/PM`, `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`, `[h]:mm`, `[h]:mm:ss` or `[mm]:ss`; and a format may be named `general`, `number`, `currency`, `accounting`, `comma`, `percentage`, `fraction`, `scientific`, `short date`, `long date`, `time` or `text`";

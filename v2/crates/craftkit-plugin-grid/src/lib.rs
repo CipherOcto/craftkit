@@ -1534,7 +1534,10 @@ impl CellText {
             Some(code) => Format::parse(&code).unwrap_or(Format::General),
             None => format_of(session, sheet, &cells, cell),
         };
-        let text = format.text(&value, system_of(session, sheet));
+        // The **fill** of the text: the formats that fill the cell are
+        // written in the width of the column they are in.
+        let width = sizes::column_width(node, cell.col);
+        let text = format.text_in(&value, system_of(session, sheet), width);
         Ok(Outcome::new(format!("{} shows `{text}`", cell.to_text())).with_data(
             json!({ "sheet": sheet, "cell": cell.to_text(), "text": text, "value": value.to_json() }),
         ))

@@ -74,7 +74,10 @@ pub(crate) fn text_of(
         },
         None => crate::format::Format::General,
     };
-    format.text(&value, crate::system_of(session, sheet))
+    // The **fill** of the text: the formats that fill the cell are
+    // written in the width of the column they are in.
+    let width = node.and_then(|node| crate::sizes::column_width(node, cell.col));
+    format.text_in(&value, crate::system_of(session, sheet), width)
 }
 
 /// **Find** the cells whose text holds what was looked for.

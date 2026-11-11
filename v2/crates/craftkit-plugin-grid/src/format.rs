@@ -13,6 +13,10 @@
 //!   hundred;
 //! - the **currencies**: a number with a symbol in quotes, such as
 //!   `"$"#,##0.00` or `#,##0.00" kr"`;
+//! - the **accounting** and the **comma**: the tree's two **filling**
+//!   formats — the symbol at the left of the cell and the number at
+//!   the right, and the space between them is the width of the column
+//!   (**§838**);
 //! - the **fractions**: `# ?/?`, `# ??/??`, `?/?` and `# ?/4` — a
 //!   number written as the nearest fraction (the module `fractions`);
 //! - the **scientific**: `0.00E+00` — a mantissa and an exponent, and
@@ -77,9 +81,10 @@
 //!   shapes and its elapsed shapes are both here.
 //! - **A format may be named** as well as coded: the tree's ribbon
 //!   names its formats, and here a name says a code of this tree
-//!   (the module `formatnames`). The names this tree does not write —
-//!   the accounting and comma fills, the long date and the text — are
-//!   refused with the reason.
+//!   (the module `formatnames`). **Every** name of the tree's ribbon
+//!   is a name this tree writes: the text and the long date came with
+//!   §824 and §825, and the accounting and the comma fills with
+//!   §838.
 //! - **The tree's date formats are a language, and here they are a
 //!   list**: the ten shapes above are the ones this tree has, and a
 //!   date format that is not one of them is refused.
@@ -157,6 +162,22 @@ pub enum Format {
         /// Whether the thousands are separated by a comma.
         thousands: bool,
     },
+    /// An **accounting** format: the symbol at the left of the cell,
+    /// the number at the right, and the space between them.
+    ///
+    /// The tree's own format: the tree writes the currency symbol at
+    /// the edge of the cell and the number at the other edge, and the
+    /// space between them is the **fill**.
+    Accounting {
+        /// The symbol: the tree writes it in quotes.
+        symbol: String,
+    },
+    /// A **comma** format: the number with the thousands separated, and
+    /// the cell filled around it.
+    ///
+    /// The tree's own format: it is the accounting format with no
+    /// symbol at all.
+    Comma,
     /// A **fraction**: a number written as a fraction.
     Fraction(fractions::Fraction),
     /// A **scientific** format: a number written as a mantissa and an
@@ -485,6 +506,14 @@ impl Format {
         if let Some((decimals, exponent_digits, plus, upper)) = scientific_shape(code) {
             return Some(Format::Scientific { decimals, exponent_digits, plus, upper });
         }
+        // The tree's **accounting** and **comma** formats: they fill
+        // the cell, and the accounting one may have any symbol.
+        if let Some(symbol) = accounting_code(code) {
+            return Some(Format::Accounting { symbol });
+        }
+        if code.eq_ignore_ascii_case("comma") {
+            return Some(Format::Comma);
+        }
         // A **currency** is a number with a **symbol**: the symbol is a
         // literal in quotes, and the tree writes it that way.
         for (symbol, before, rest) in symbols(code) {
@@ -521,6 +550,17 @@ impl Format {
                 // A currency is a **number** with a symbol on it.
                 Format::Currency { symbol, before, decimals, thousands } => {
                     currency(*number, symbol, *before, *decimals, *thousands)
+                }
+                // The **accounting** and the **comma** formats fill
+                // the cell: the symbol at the left and the number at
+                // the right.
+                Format::Accounting { symbol } => {
+                    let (head, tail) = filled_parts(*number, Some(symbol));
+                    filled(&head, &tail, None)
+                }
+                Format::Comma => {
+                    let (head, tail) = filled_parts(*number, None);
+                    filled(&head, &tail, None)
                 }
                 // A fraction is a **number** written as a fraction.
                 Format::Fraction(fraction) => fractions::text(*number, fraction),
@@ -587,6 +627,100 @@ impl Format {
             Value::Error(message) => message.clone(),
         }
     }
+
+    /// The **text** a value is written with, in a column of that
+    /// **width**.
+    ///
+    /// The formats that **fill** the cell — the tree's accounting and
+    /// comma — are written in the width of their column: the symbol at
+    /// the left, the number at the right, and the space between them.
+    /// A column with no width has no fill, and the text is written as
+    /// it is.
+    pub fn text_in(&self, value: &Value, system: dates::System, width: Option<f64>) -> String {
+        if let Value::Number(number) = value {
+            match self {
+                Format::Accounting { symbol } => {
+                    let (head, tail) = filled_parts(*number, Some(symbol));
+                    return filled(&head, &tail, width);
+                }
+                Format::Comma => {
+                    let (head, tail) = filled_parts(*number, None);
+                    return filled(&head, &tail, width);
+                }
+                _ => {}
+            }
+        }
+        self.text(value, system)
+    }
+}
+
+/// The **symbol** an accounting code says, when the code is one.
+///
+/// The tree's own rule: the symbol goes into a quoted literal, and a
+/// symbol with a quote, a backslash or a control character in it is
+/// **refused**.
+fn accounting_code(code: &str) -> Option<String> {
+    let code = code.trim();
+    // The word is **accounting**, and it is ten letters long.
+    const WORD: &str = "accounting";
+    let head = code.get(..WORD.len())?;
+    if !head.eq_ignore_ascii_case(WORD) {
+        return None;
+    }
+    let rest = code.get(WORD.len()..)?.trim();
+    if rest.is_empty() {
+        return Some("$".to_string());
+    }
+    let symbol = rest.strip_prefix('"')?.strip_suffix('"')?;
+    if symbol.is_empty() || symbol.contains(['"', '\\']) || symbol.chars().any(char::is_control) {
+        return None;
+    }
+    Some(symbol.to_string())
+}
+
+/// The **parts** of the text of a number that fills a cell: the **head**
+/// at the left and the **tail** at the right.
+///
+/// The tree's own rules: a negative number is written in
+/// **parentheses**, a zero is written as a **dash**, and the number has
+/// two decimals and its thousands separated.
+fn filled_parts(number: f64, symbol: Option<&str>) -> (String, String) {
+    let head = symbol.unwrap_or_default().to_string();
+    let tail = if number < 0.0 {
+        format!("({})", fixed(number.abs(), 2, true, false))
+    } else if number == 0.0 {
+        "-".to_string()
+    } else {
+        fixed(number, 2, true, false)
+    };
+    (head, tail)
+}
+
+/// The **fill** of a cell: the head at the left, the tail at the right,
+/// and the space between them.
+///
+/// The tree's own fill: the text is as wide as the column, the tree's
+/// trailing space is the last character of it, and a text that is
+/// **longer** than the column is written as it is.
+fn filled(head: &str, tail: &str, width: Option<f64>) -> String {
+    let plain = if head.is_empty() { tail.to_string() } else { format!("{head} {tail}") };
+    let Some(width) = width else { return plain };
+    if !width.is_finite() || width < 0.0 {
+        return plain;
+    }
+    // The width is in **characters**, and a width that is not a whole
+    // number holds that many characters and no more.
+    let width = width.floor() as usize;
+    let head_len = head.chars().count();
+    let tail_len = tail.chars().count();
+    // The tree's trailing space: the number does not touch the edge of
+    // the column.
+    let Some(room) = width.checked_sub(tail_len + 1) else { return plain };
+    if room < head_len + 1 {
+        return plain;
+    }
+    let gap = room - head_len;
+    format!("{head}{}{tail} ", " ".repeat(gap))
 }
 
 /// The **symbols** of a currency, and the number format that is left.

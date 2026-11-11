@@ -1,8 +1,8 @@
 //! The **names** of a format.
 //!
 //! The tree's ribbon names its formats; here a format may be given by
-//! its code or by its name, and the names this tree does not write are
-//! refused with the reason.
+//! its code or by its name, and every name of the tree's ribbon is a
+//! name this tree writes.
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
@@ -189,18 +189,21 @@ fn a_name_may_be_given_to_a_conditional_format() {
     assert_eq!(text_of(&mut session, sheet, "A1"), "25.00%", "the matching cell is written with it");
 }
 
-/// A name this tree knows but does not write is **refused with the
-/// reason**.
+/// The name of an **accounting** format is written: the tree's
+/// accounting format fills the cell, and this tree fills it too
+/// (**§838**).
 #[test]
-fn an_accounting_name_is_refused_with_the_reason() {
+fn an_accounting_name_is_written() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
-    let error = session
+    set(&mut session, sheet, "A1", 1234.5);
+    session
         .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "accounting" }))
-        .expect_err("the name is refused");
-    let message = error.to_string();
-    assert!(message.contains("accounting"), "the refusal names the format: {message}");
-    assert!(message.contains("fill"), "and says why: {message}");
+        .expect("the format is set");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
+    assert_eq!(outcome.data["format"], json!("accounting"), "the code the name said is what is kept");
+    assert_eq!(text_of(&mut session, sheet, "A1"), "$ 1,234.50", "and the cell shows the number");
 }
 
 /// The name of a **text** format says the code `@`: the tree's own

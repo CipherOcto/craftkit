@@ -89,7 +89,10 @@ impl ReadCell {
             Some(code) => crate::format::Format::parse(code).unwrap_or(crate::format::Format::General),
             None => crate::format_of(session, sheet, &cells, cell),
         };
-        let text = format.text(&value, crate::system_of(session, sheet));
+        // The **fill** of the text: the formats that fill the cell are
+        // written in the width of the column they are in.
+        let width = crate::sizes::column_width(node, cell.col);
+        let text = format.text_in(&value, crate::system_of(session, sheet), width);
         // The **note** and the **link** that are on the cell.
         let notes = crate::notes::notes_of(node);
         let links = crate::links::links_of(node);

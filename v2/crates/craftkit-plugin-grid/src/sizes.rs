@@ -118,6 +118,16 @@ impl SetRowHeight {
     }
 }
 
+/// The **width** of a column, in characters, when it has one.
+///
+/// A column with no width has no width: the tree's default width is a
+/// fact of the tree's dialogue and of its renderer, and this tree
+/// writes the text of a cell and not a picture of it.
+pub(crate) fn column_width(node: &craftkit_sdk::Node, col: u32) -> Option<f64> {
+    let name = crate::formula::CellRef::column_text(col);
+    node.data.get("columns")?.get(&name)?.as_f64()
+}
+
 /// The **width** of a column, in characters.
 #[derive(Command)]
 #[command(id = "grid.column.width", area = "grid", layer = "grid", icon = "columns", mutates, undoable)]
