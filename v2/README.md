@@ -4190,6 +4190,7 @@ so.
 | the **solos** of every track | **built.** Every track is unsoloed at once, and the document is heard whole again (§809) | §809 |
 | the **levels** of the outline | **built.** A sheet is shown down to an outline level, and the rows that are deeper than the level are hidden (§810) | §810 |
 | the **detail** of a group | **built.** The rows of a group of the outline are hidden and shown, and the group whose summary row is named is opened (§811) | §811 |
+| the **list filter** | **built.** A sheet is filtered by a list of values, and the rows whose cell shows one of them are kept (§812) | §812 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -24258,11 +24259,12 @@ more than ten are the rows the filter **hides**.
 ### What the port found
 
 - **The tree's filter has many kinds of criterion and this one has
-  one.** The tree's criterion may be a list of values, a pair of
+  two.** The tree's criterion may be a list of values, a pair of
   comparisons joined by and or or, a top-ten, an above-the-average or
   a colour. Here a criterion is **one** operation and **one** value —
-  the pair of comparisons — and the other kinds are commands of their
-  own when they come.
+  the pair of comparisons — and the **list of values** is a filter of
+  its own (`grid.filter.values`, §812); the other kinds are commands of
+  their own when they come.
 - **The tree's filter is over a range and this one's is over a
   column.** The tree's filter has a range and a criterion for each
   column of it. Here a sheet has **one** filter and it is over one
@@ -24297,9 +24299,9 @@ more than ten are the rows the filter **hides**.
 
 ### What it does not settle
 
-- **The tree's other criteria are not here.** A list of values, a
-  top-ten, an above-the-average and a colour are four criteria of
-  their own, and each of them is a command with its own rules.
+- **The tree's other criteria are not here.** A top-ten, an
+  above-the-average and a colour are three criteria of their own, and
+  each of them is a command with its own rules.
 - **The tree's sort is not here.** The tree may sort the rows of a
   filtered table, and the order of the rows is then a fact of the
   sheet. Here the rows are where they were put.
@@ -53393,3 +53395,64 @@ summary row of the group is not.
 - **The tree's collapsed mark is not written down here**: see the port
   above — the collapse is derived, and a group that was collapsed on
   its own cannot always be told from one that was not.
+
+## 812. The filter that keeps a list of values
+
+The tree's **list filter**: a filter that keeps the rows whose cell
+shows one of a list of values.
+
+### What was built
+
+- The command **`grid.filter.values`** filters a sheet by a list of
+  values: the tree's own list filter, as a command.
+- The rules are the tree's own:
+  - the rows whose cell shows **one of the values** are kept, and the
+    others are hidden: the tree's own rule;
+  - the comparison is of the **text** the cell shows, and it is
+    **without case**: the tree's own rule;
+  - an **empty** cell is kept when blanks are asked for, and hidden
+    when they are not: the tree's own rule;
+  - the rows a filter hides are still **derived**: they are worked out
+    from the cells each time they are asked for.
+
+### What the port found
+
+- **The tree's list filter is one criterion among many.** The tree's
+  filter holds a criterion for every column of its range, and the list
+  of values is one of those criteria. Here a sheet has **one** filter,
+  and this is a third kind of it: a column and one criterion
+  (`grid.filter.set`), a column and a **list of values**
+  (`grid.filter.values`), or **groups** of criteria
+  (`grid.filter.groups.set`).
+- **The tree's values are the texts the cells show**, and here they
+  are too: a cell that shows a number is compared as its text, so the
+  value `10` keeps the cell that shows `10`.
+- **The tree's list is not bounded and this one is.** A list filter
+  holds a **thousand and twenty-four values** or fewer, and a value
+  holds **two hundred and fifty-five characters** or fewer; a list
+  that is longer is refused, and not made shorter.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/filtervalues.rs`): eight
+  tests — the rows that show one of the values being kept, the
+  comparison without case, the cell that shows a number, the empty cell
+  and the blanks, the list that is not a list, the value that is not
+  text, the list that is too long, and the filter being cleared.
+- **One new command**: the grid battery now carries **164** commands
+  and the MCP server **1009** — one more than §811. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **The filter of the book grew a kind**: a column and a list of
+  values, beside the column and the criterion and the groups. The rows
+  a filter hides are still derived, and nothing was written down that
+  could be wrong.
+
+### What it does not settle
+
+- **The tree's slicer is not here**: the slicer is a front-end over
+  this filter — a widget that writes a list of values into it — and
+  the widget is not in this tree yet.
+- **The tree's other criteria are not here**: a top-ten, an
+  above-the-average and a colour are three criteria of their own, and
+  each of them is a command with its own rules.
