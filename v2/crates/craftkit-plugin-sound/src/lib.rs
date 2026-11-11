@@ -484,6 +484,10 @@ mod locks;
 // The **marks** on a clip: what a person has said about it.
 mod marks;
 
+// The **markers** on the timeline: the named places, and the way the playhead goes
+// to them.
+mod markers;
+
 // The **auto rename** of a clip: the names editing gives the pieces it
 // separates.
 mod autoname;
@@ -557,6 +561,7 @@ pub use inactive::SetTrackInactive;
 pub use keys::{KeyKind, ReadKeys, SetKey};
 pub use locks::{EditLock, TimeLock};
 pub use loudness::ReadLoudness;
+pub use markers::{NextMarker, PreviousMarker, RecallMarker};
 pub use marks::SetRating;
 pub use midi::{
     DurationMidi, ExportMidi, ImportMidi, ImportMidiTracks, QuantizeMidi, ReadMidi, ReadMidiNames,
@@ -8292,6 +8297,9 @@ craftkit_sdk::plugin_anchor!(
     EditLock,
     TimeLock,
     SetRating,
+    RecallMarker,
+    NextMarker,
+    PreviousMarker,
     GroupKind,
     Group,
     Ungroup,
