@@ -23,7 +23,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session};
+use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session, Text};
 
 use crate::formula::CellRef;
 
@@ -76,12 +76,24 @@ fn refused(what: &str, id: &str) -> EngineError {
 ///
 /// A sheet that is not protected, or a protection that does not lock
 /// the cells, says nothing.
+///
+/// A cell may be **unlocked of its own**, and then it may be changed
+/// even though the sheet is protected: the tree's own rule, and the
+/// tree's cells are locked by their own style.
 pub fn refuse_locked(node: &Node, cells: &[CellRef], id: &str) -> Result<(), EngineError> {
     let Some(protection) = Protection::of(node) else { return Ok(()) };
     if !protection.locked {
         return Ok(());
     }
-    let cell = match cells.first() {
+    let unlocked = |cell: CellRef| {
+        node.data
+            .get("cells")
+            .and_then(|cells| cells.get(cell.to_text()))
+            .and_then(|entry| entry.get("locked"))
+            .and_then(|locked| locked.as_bool())
+            == Some(false)
+    };
+    let cell = match cells.iter().find(|cell| !unlocked(**cell)) {
         Some(cell) => cell.to_text(),
         None => return Ok(()),
     };
@@ -206,6 +218,68 @@ impl UnprotectSheet {
         Ok(Outcome::changed(format!("unprotected the sheet `{}`", node.name)).with_data(json!({
             "sheet": sheet,
             "was_there": was_there,
+        })))
+    }
+}
+
+/// **Lock** a cell, or let it be changed.
+///
+/// The tree's Lock Cell: a button, and a button pressed twice does the
+/// opposite.
+///
+/// A lock matters only when the sheet is **protected**: a cell that is
+/// unlocked may be changed even then, and a cell that is locked may
+/// not. A cell that says nothing follows the sheet.
+#[derive(Command)]
+#[command(id = "grid.cell.lock", area = "grid", layer = "grid", icon = "lock", mutates, undoable)]
+pub struct LockCell {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The cell's address.
+    pub cell: Text,
+    /// Whether the cell is locked: the opposite of what it is when
+    /// this is not named.
+    pub locked: Option<Bool>,
+}
+
+impl LockCell {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.cell.lock".to_string();
+        let sheet = self.sheet.0;
+        let cell = crate::cell_at(&self.cell.0, &id)?;
+        let Some(node) = session.document_mut()?.node_mut(sheet) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{sheet}` is not a sheet"),
+            });
+        }
+        crate::protection::refuse_format(node, &id)?;
+        let cells = crate::cells_of(node);
+        let now = cells.locked(cell);
+        let locked = match self.locked {
+            Some(locked) => locked.0,
+            // A button pressed twice does the opposite: the tree's own
+            // rule.
+            None => now == Some(false),
+        };
+        let mut cells = crate::sheet_cells_mut(node);
+        cells.set_locked(cell, Some(locked));
+        node.data["cells"] = crate::cells_into(&cells);
+        Ok(Outcome::changed(format!(
+            "the cell {} is {}",
+            cell.to_text(),
+            if locked { "locked" } else { "unlocked" }
+        ))
+        .with_data(json!({
+            "sheet": sheet,
+            "cell": cell.to_text(),
+            "locked": locked,
         })))
     }
 }

@@ -473,7 +473,7 @@ pub use pivots::{
 pub use printing::{
     ReadPages, ReadSetup, SetMargins, SetOrientation, SetPaper, SetPrintArea, SetPrintBreak, SetPrintTitles,
 };
-pub use protection::{ProtectSheet, UnprotectSheet};
+pub use protection::{LockCell, ProtectSheet, UnprotectSheet};
 pub use reading::ReadRange;
 pub use removal::RemoveSheet;
 pub use replacing::ReplaceText;
@@ -710,6 +710,7 @@ pub(crate) fn cells_of(node: &Node) -> Cells {
         let style = entry.get("style").and_then(|style| style.as_str()).map(|text| text.to_string());
         let align = entry.get("align").and_then(formula::Align::from_json);
         let font = entry.get("font").and_then(formula::Font::from_json);
+        let locked = entry.get("locked").and_then(|locked| locked.as_bool());
         match (value, formula) {
             (_, Some(formula)) => cells.set_formula(cell, formula),
             (Some(value), None) => cells.set_value(cell, value),
@@ -726,6 +727,9 @@ pub(crate) fn cells_of(node: &Node) -> Cells {
         }
         if let Some(font) = font {
             cells.set_font(cell, Some(font));
+        }
+        if let Some(locked) = locked {
+            cells.set_locked(cell, Some(locked));
         }
     }
     cells
@@ -753,6 +757,9 @@ pub(crate) fn cells_into(cells: &Cells) -> Json {
         }
         if let Some(font) = &entry.font {
             one.insert("font".to_string(), font.to_json());
+        }
+        if let Some(locked) = entry.locked {
+            one.insert("locked".to_string(), Json::Bool(locked));
         }
         map.insert(cell.to_text(), Json::Object(one));
     }
