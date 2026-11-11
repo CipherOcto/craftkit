@@ -4188,6 +4188,7 @@ so.
 | the **values** of the formulas | **built.** The formulas of a range that give a number become that number, and the format is kept (§807) | §807 |
 | the **mutes** of every track | **built.** Every track is unmuted at once, and the tracks that are mixed with one another are unmuted with it (§808) | §808 |
 | the **solos** of every track | **built.** Every track is unsoloed at once, and the document is heard whole again (§809) | §809 |
+| the **levels** of the outline | **built.** A sheet is shown down to an outline level, and the rows that are deeper than the level are hidden (§810) | §810 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -53264,3 +53265,64 @@ and the document is heard whole again.
   tree's one command that clears them all is not.
 - **The tree's undo of the clearing is one step**: here the command is
   one undoable step, as every command in this tree is.
+
+## 810. The sheet is shown to a level
+
+The tree's **level buttons** show a sheet down to an outline level: a
+level of one shows the top-level summaries only, and a deeper level
+shows more of the detail.
+
+### What was built
+
+- The command **`grid.outline.levels`** shows the rows or the columns of
+  a sheet down to an outline level: the tree's level buttons, as a
+  command.
+- The rules are the tree's own:
+  - a row of a group that is **deeper** than the level asked for is
+    hidden: the tree's own rule;
+  - a row of a group that is **not** deeper is shown: the tree's own
+    rule;
+  - a row that is **in no group** keeps its own hidden state — the
+    tree's own rule, and it touches only the rows that are in a group;
+  - the **columns** are shown the same way, and a command that names
+    neither the rows nor the columns is refused.
+
+### What the port found
+
+- **The tree's button works on the selection, and this tree names the
+  sheet.** The tree's button acts on the sheet of the selection; here
+  the sheet is named, and the rows and the columns are named apart.
+- **The tree's level is clamped and this one is refused.** The tree
+  takes a level outside one to eight and brings it into the range; here
+  such a level is refused, and the refusal says what the levels are.
+- **The tree's collapsed mark is a fact of the sheet and here it is
+  derived.** The tree writes a **+** beside a summary row when the
+  group is collapsed; here a group whose rows are all hidden is
+  collapsed, and that is worked out from the rows (§486). So the button
+  that shows a level needs no mark of its own.
+- **The tree's button marks the summary lines, and here it does not:**
+  a summary row is in no group, so the level does not hide it, and the
+  collapse of the group follows from the rows that are.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/outlinelevels.rs`): seven
+  tests — the level of one, the deeper level, the columns, the row that
+  is in no group, the level that is not one to eight, the level of
+  eight, and the command with no level.
+- **One new command**: the grid battery now carries **159** commands
+  and the MCP server **1004** — one more than §809. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **No new module**: the command lives with the outline it belongs to.
+
+### What it does not settle
+
+- **The tree's Hide Detail and Show Detail are not here**: the level
+  buttons show the sheet down to a level, and the tree's other two
+  buttons open one group and close it again, which is a command of its
+  own.
+- **The tree's summary row carries a formula and here it does not**:
+  the tree writes a SUBTOTAL into the summary row when the group is
+  made; here the summary row is the row after the group, and nothing is
+  written into it.
