@@ -1344,17 +1344,34 @@ pub struct FillPath {
     /// The path.
     pub path: NodeRef,
     /// The colour, as `#rrggbb`.
-    pub colour: Text,
+    pub colour: Option<Text>,
+    /// Take the fill away instead: the tree's **None** paint.
+    pub none: Option<craftkit_sdk::Bool>,
 }
 
 impl FillPath {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let mut vector = vector_of(session, self.path.0)?;
-        let colour = parse_colour(&self.colour.0)?;
+        // The tree's **None** paint: the path is filled with nothing,
+        // and the fill is there and paints nothing. It is the same
+        // rule as the line's own: the line may be taken away.
+        if self.none.map(|none| none.0).unwrap_or(false) {
+            vector.fill = Fill::Solid(Colour::NONE);
+            write_back(session, self.path.0, &vector)?;
+            return Ok(Outcome::changed("the path is filled with nothing")
+                .with_data(serde_json::json!({ "id": self.path.0, "fill": Json::Null })));
+        }
+        let Some(colour) = &self.colour else {
+            return Err(EngineError::Failed {
+                id: "vector.path.fill".to_string(),
+                message: "name the colour of the fill, or say that there is none".to_string(),
+            });
+        };
+        let colour = parse_colour(&colour.0)?;
         vector.fill = Fill::Solid(colour);
         write_back(session, self.path.0, &vector)?;
         Ok(Outcome::changed("the path is filled")
-            .with_data(serde_json::json!({ "id": self.path.0, "fill": self.colour.0 })))
+            .with_data(serde_json::json!({ "id": self.path.0, "fill": self.colour.as_ref().map(|colour| colour.0.clone()) })))
     }
 }
 
