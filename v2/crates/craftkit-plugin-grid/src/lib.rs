@@ -342,6 +342,7 @@ mod conditional;
 mod consolidating;
 mod criteria;
 mod database;
+mod datatable;
 mod dates;
 mod datetimes;
 mod daycounts;

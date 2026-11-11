@@ -20,7 +20,9 @@
 //! - **The tree's data table takes a whole range of inputs and lays
 //!   the results out beside them.** Here the inputs are a **list** and
 //!   the results are a **list** too: one input, one result, in the
-//!   order they were given.
+//!   order they were given. — **and the tree's own data table is here
+//!   too** (§835): a range of inputs, a range of results, and the
+//!   table written into the sheet (the module `datatable`).
 
 use craftkit_derive::Command;
 
