@@ -4207,6 +4207,7 @@ so.
 | the **trace** of every level | **built.** The flag `all` walks the chain of the precedents and of the dependents, all the way down (§826) | §826 |
 | the **generated** items | **built.** An item may play the black video, the transparent video, the bars and the tone, the counting leader or the colour matte (§827) | §827 |
 | the **lock** of a style | **built.** A style carries the tree's protection, and the cells that name it are locked or unlocked because it says so (§828) | §828 |
+| the **look** of a cell | **built.** A cell is read back with its alignment, its font, its fill and the lock that holds (§829) | §829 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -54462,3 +54463,56 @@ unlocked because the style says so.
 - **The tree's cell has one style and here a cell may say more than
   the style**: a cell that says of itself that it is unlocked is
   unlocked, whatever the style says.
+
+## 829. The look of a cell
+
+The tree's **style** as `cell.get` says it: the whole look of a cell —
+its alignment, its font, its fill and its lock — read back in one go.
+
+### What was built
+
+- **The look of a cell is read back**: `grid.cell.get` says the
+  **alignment**, the **font**, the **fill** and the **lock** of the
+  cell, beside the format and the style it already said.
+- The **lock** that is read back is the lock that **holds**: the
+  cell's own word, then the lock of the style it names (§828), and
+  then the sheet — so a cell that says nothing on a protected sheet
+  is read back as locked, and a cell that says it is unlocked is read
+  back as unlocked.
+
+### What the port found
+
+- **The tree's cell carries all of it in its style**, and the tree's
+  `cell.get` says the style — one object with the font, the fill, the
+  alignment, the protection and the number format in it. Here the cell
+  carries the alignment, the font and the fill **itself** (§816, §819,
+  §821) and the style carries the format (§316) and the lock (§828),
+  so the look of a cell is read as **four** things and not as one
+  style.
+- **The tree's `cell.get` says the style of the cell and the style is
+  the cell's**: there is no "effective" question in the tree, because
+  there is only one style. Here a cell may say more than the style it
+  names, so the lock that is read back is the one that holds and not
+  the one the cell says.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/lookofcell.rs`): five
+  tests — the alignment of a cell being read back, the font of a cell
+  being read back, the fill of a cell being read back, a cell that
+  says nothing having no look, and the lock that is read back being
+  the lock that holds.
+- **No new command**: the look of a cell is read by a command that was
+  already there, so the grid battery still carries **183** commands and
+  the MCP server **1030** — the counts do not move.
+
+### What it does not settle
+
+- **The tree's cell.get is still not whole**: the tree's also says
+  the **type** of the cell, the **input** it was typed as, the
+  **picture** in it and the **spill** it came from, and this tree
+  says the value, the formula, the text, the format, the style, the
+  note, the link, the merge and now the look.
+- **The style does not carry the alignment, the font or the fill
+  yet**: the look of a cell is the cell's own, and the style carries
+  the format and the lock.
