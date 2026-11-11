@@ -16,12 +16,11 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{
-    EngineError, FormatValue, NodeRef, Outcome, Path, Point, Segment, Session, SubPath, Text,
-};
+use craftkit_sdk::{EngineError, FormatValue, NodeRef, Outcome, Path, Point, Session, Text};
 
 use craftkit_vector_geom as geom;
 
+use crate::axis::Axis;
 use crate::components::components;
 use crate::{vector_of, write_back};
 
@@ -59,9 +58,6 @@ impl CutPathLine {
         let from =
             read_point(&self.from).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
         let to = read_point(&self.to).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        if (to.x - from.x).abs() < 1e-12 && (to.y - from.y).abs() < 1e-12 {
-            return Err(EngineError::Failed { id, message: "the line's two points must differ".to_string() });
-        }
         let vector = vector_of(session, self.path.0)?;
         if vector.path.subpaths.iter().any(|contour| !contour.closed) {
             return Err(EngineError::Failed {
@@ -72,12 +68,15 @@ impl CutPathLine {
         if vector.path.is_empty() {
             return Err(EngineError::Failed { id, message: "the path has no shape to cut".to_string() });
         }
+        let Some(axis) = Axis::through(from, to) else {
+            return Err(EngineError::Failed { id, message: "the line's two points must differ".to_string() });
+        };
         // The two **sides** of the line: each a half of the box around
         // the shape, cut by the line.
         let box_of = box_around(&vector.path);
         let mut pieces: Vec<Path> = Vec::new();
         for side in [1.0, -1.0] {
-            let Some(region) = half_plane(&box_of, from, to, side) else {
+            let Some(region) = axis.half_plane(side, box_of) else {
                 return Ok(
                     Outcome::new("the line did not reach the shape").with_data(json!({ "id": self.path.0 }))
                 );
@@ -138,44 +137,6 @@ fn add_piece(
 fn box_around(path: &Path) -> (f64, f64, f64, f64) {
     let bounds = geom::bounds(path);
     (bounds.x - REACH, bounds.y - REACH, bounds.x + bounds.w + REACH, bounds.y + bounds.h + REACH)
-}
-
-/// One **half** of a box, cut by a line: the part of the box on one
-/// side of it.
-///
-/// The box is a rectangle and the line is straight, so the half is the
-/// rectangle's corners on that side, with the line's crossings put in
-/// between them.
-fn half_plane(box_of: &(f64, f64, f64, f64), from: Point, to: Point, side: f64) -> Option<Path> {
-    let (x0, y0, x1, y1) = *box_of;
-    let corners = [Point::new(x0, y0), Point::new(x1, y0), Point::new(x1, y1), Point::new(x0, y1)];
-    // Which side of the line a point is on: the turn of the line at
-    // the point, times the side asked for.
-    let turn =
-        |point: Point| side * ((to.x - from.x) * (point.y - from.y) - (to.y - from.y) * (point.x - from.x));
-    let mut kept: Vec<Point> = Vec::with_capacity(corners.len() + 4);
-    for index in 0..corners.len() {
-        let a = corners[index];
-        let b = corners[(index + 1) % corners.len()];
-        let ta = turn(a);
-        let tb = turn(b);
-        if ta >= 0.0 {
-            kept.push(a);
-        }
-        if (ta >= 0.0) != (tb >= 0.0) {
-            let ratio = ta / (ta - tb);
-            kept.push(Point::new(a.x + ratio * (b.x - a.x), a.y + ratio * (b.y - a.y)));
-        }
-    }
-    if kept.len() < 3 {
-        return None;
-    }
-    let segments: Vec<Segment> = kept
-        .windows(2)
-        .map(|pair| Segment::Line { to: pair[1] })
-        .chain(std::iter::once(Segment::Line { to: kept[0] }))
-        .collect();
-    Some(Path::single(SubPath { start: kept[0], segments, closed: true }))
 }
 
 /// A **point**, as the caller gave it.

@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **sixty commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **sixty-one commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.create` makes a path out of path data or
@@ -28,7 +28,8 @@
 //!   a path at a point, `vector.path.erase` takes away the parts of a
 //!   path under a drag, `vector.path.knife` cuts a closed shape along a
 //!   run of points, `vector.path.cut.line` cuts a closed shape along a
-//!   line, `vector.path.cut.rect` cuts one to a rectangle, and
+//!   line, `vector.path.cut.rect` cuts one to a rectangle,
+//!   `vector.path.cut.mirror` mirrors one in an axis, and
 //!   `vector.path.freehand` draws a stroke by hand;
 //!   `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
@@ -85,6 +86,7 @@
 #![forbid(unsafe_code)]
 
 mod anchors;
+mod axis;
 mod colour;
 mod components;
 mod cutpath;
@@ -95,6 +97,7 @@ mod freehand;
 mod gradients;
 mod knife;
 mod linecut;
+mod mirrorcut;
 mod opacity;
 mod pathcreate;
 mod pathfinder;
@@ -116,6 +119,7 @@ pub use freehand::Freehand;
 pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
 pub use knife::KnifePath;
 pub use linecut::CutPathLine;
+pub use mirrorcut::MirrorCut;
 pub use opacity::{SetOpacity, fill_at, stroke_at};
 pub use pathcreate::CreatePath;
 pub use pathfinder::{CropPaths, DividePaths, MergePaths, TrimPaths};
@@ -2868,6 +2872,7 @@ craftkit_sdk::plugin_anchor!(
     KnifePath,
     CutPathLine,
     CutPathRect,
+    MirrorCut,
     CutPath,
     Freehand,
     UnitePaths,

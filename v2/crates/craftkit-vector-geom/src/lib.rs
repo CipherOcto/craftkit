@@ -143,7 +143,10 @@ impl Matrix {
             e: 0.0,
             f: 0.0,
         };
-        Some(Matrix::translate(from.x, from.y).then(&reflect).then(&Matrix::translate(-from.x, -from.y)))
+        // The point is taken **back** to the line, turned about it, and
+        // put **back** where it was: the order matters, and the other
+        // order mirrors about the line through the *negated* point.
+        Some(Matrix::translate(-from.x, -from.y).then(&reflect).then(&Matrix::translate(from.x, from.y)))
     }
 
     /// The matrix that does this one and **then** the other.
@@ -825,6 +828,25 @@ pub fn polygons(path: &Path, tolerance: f64) -> Vec<Vec<Point>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A matrix mirrors a point about the **line** it is given, and not
+    /// about the line through the negated point.
+    #[test]
+    fn a_mirror_is_about_the_line_it_is_given() {
+        let mirror = Matrix::mirror(Point::new(1.0, 0.0), Point::new(1.0, 10.0)).expect("the line");
+        let point = mirror.apply(Point::new(0.0, 0.0));
+        assert!((point.x - 2.0).abs() < 1e-9, "the point is across the line: {point:?}");
+        assert!((point.y - 0.0).abs() < 1e-9, "the point keeps its height: {point:?}");
+    }
+
+    /// A matrix mirrors a point about a **horizontal** line too.
+    #[test]
+    fn a_mirror_is_about_a_horizontal_line() {
+        let mirror = Matrix::mirror(Point::new(0.0, 5.0), Point::new(10.0, 5.0)).expect("the line");
+        let point = mirror.apply(Point::new(3.0, 1.0));
+        assert!((point.x - 3.0).abs() < 1e-9, "the point keeps its place: {point:?}");
+        assert!((point.y - 9.0).abs() < 1e-9, "the point is across the line: {point:?}");
+    }
 
     /// A square, as a path.
     fn square(x: f64, y: f64, size: f64) -> Path {
