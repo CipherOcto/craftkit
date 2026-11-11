@@ -4187,6 +4187,7 @@ so.
 | the **scrub** that joins the ends | **built.** The two ends nearest a drag are joined, and the two ends of one contour close it (§806) | §806 |
 | the **values** of the formulas | **built.** The formulas of a range that give a number become that number, and the format is kept (§807) | §807 |
 | the **mutes** of every track | **built.** Every track is unmuted at once, and the tracks that are mixed with one another are unmuted with it (§808) | §808 |
+| the **solos** of every track | **built.** Every track is unsoloed at once, and the document is heard whole again (§809) | §809 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -53204,8 +53205,62 @@ The tree's **Clear Mutes** unmutes every track of the session at once.
 
 ### What it does not settle
 
-- **The tree's Clear Solos is not here**: the solos are cleared one
-  track at a time, and the command that clears them all is not here.
+- **The tree's Clear Solos is here**: it came with §809, and the solos
+  of every track are cleared at once.
 - **The tree's mixer holds more than the mute**: the phase, the
   trimming and the sends of a track are here as commands of their own,
   and the tree's one command that clears them all is not.
+
+## 809. Every track is unsoloed at once
+
+The tree's **Clear Solos** unsoloes every track of the session at once,
+and the document is heard whole again.
+
+### What was built
+
+- The command **`sound.track.solo.clear`** clears the solo of every
+  track: the tree's Clear Solos, as a command.
+- The rules are the tree's own:
+  - every track of the document is **unsoloed** at once: the tree's own
+    rule;
+  - the flag that says a track is heard even when another is soloed —
+    the **solo safe** — is not a solo and is left as it is: the tree's
+    own rule;
+  - a document with no soloed track is left as it was, and the outcome
+    says that nothing changed.
+
+### What the port found
+
+- **The tree's command works on the session, and here it works on the
+  document.** The tree's command takes no parameters either — it is a
+  command of the mixer, and the mixer is the session's.
+- **The tree's solo is shared with the tracks that mix together, and
+  here it is not.** The tree's group shares the volume, the mute, the
+  solo and the record; here the solo is the track's own, because a solo
+  is a rule about the whole document (§ the track is soloed). The
+  clearing does not need the link: every track's own solo is cleared,
+  and a track that was not soloed was not changed by it.
+- **The tree's solo can be exclusive.** Its mixer has a mode where a
+  solo unsolos the tracks that were already soloed. There is no such
+  mode here: a solo is a flag on a track, and the mixer works out what
+  it means.
+
+### What it cost
+
+- **One new test** in the sound battery (`tests/clearsolos.rs`): five
+  tests — every soloed track unsoloed at once, the track that was not
+  soloed, the clearing putting the other tracks back, the solo safe
+  left as it is, and the solo of a mixed track being its own.
+- **One new command**: the sound battery now carries **140** commands
+  and the MCP server **1003** — one more than §808. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **No new module**: the command lives with the mixer it belongs to.
+
+### What it does not settle
+
+- **The tree's mixer holds more than the solo**: the phase, the trimming
+  and the sends of a track are here as commands of their own, and the
+  tree's one command that clears them all is not.
+- **The tree's undo of the clearing is one step**: here the command is
+  one undoable step, as every command in this tree is.
