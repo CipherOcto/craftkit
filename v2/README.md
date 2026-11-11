@@ -4215,6 +4215,7 @@ so.
 | the **summary** of the scenarios | **built.** A sheet of its own says what every scenario does to the book: the changing cells, the values and the results (§834) | §834 |
 | the **data table** of a sheet | **built.** A range holds the inputs and the formulas, and its body is written with the results (§835) | §835 |
 | the **special cells** of a sheet | **built.** A question is asked of a sheet and the cells that answer it are found: the blanks, the constants, the formulas, the comments, the notes, the errors, the numbers, the text, the visible cells, the cells a rule is about, the last cell and the current region (§836) | §836 |
+| the **way** the playhead goes to a marker | **built.** The playhead of a sound document is put at a marker — by its node or by its name — and it steps to the marker that is next and to the marker before it, and it does not move when there is none (§837) | §837 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -54973,3 +54974,68 @@ cells that answer it.
 - **A question about a range of more than a million cells is
   refused**, and the refusal says so; the tree's own bound is four
   million and it is not walked cell by cell as often as this one is.
+
+## 837. The marker the playhead goes to
+
+The tree's **markers**: the named places on the timeline, and the way
+the playhead goes to them.
+
+### What was built
+
+- **Three commands** in the sound battery:
+  - `sound.marker.recall` — the playhead goes to a marker;
+  - `sound.marker.next` — the playhead steps to the next marker;
+  - `sound.marker.previous` — the playhead steps to the previous marker.
+- The tree's rules are the tree's:
+  - a marker is **recalled** by its node or by its name: the recall
+    puts the playhead at the marker's start and **chooses** the marker;
+  - the **next** marker is the one that starts **after** where the
+    playhead is, and the **previous** one is the one that starts
+    **before** it — the tree's strictness, so a marker at the playhead's
+    own place is not stepped to;
+  - a step that has nowhere to go **says so** and changes nothing.
+- A marker that is not there is **refused by name**: `there is no
+  marker called chorus`.
+
+### What the port found
+
+- **The tree's markers are a list and this tree's are nodes.** The
+  tree keeps its markers in a list of the session, and each of them has
+  a number, a name, a colour and a comment. Here a marker is a
+  **node** with a name and a place, and it is chosen the way every
+  other node is chosen. So the tree's *number* is not here: the node is
+  the marker and the name finds it.
+- **The tree's step reads the selection and this tree's reads the
+  playhead.** The tree keeps a selection of time and a playhead, and it
+  steps from the selection; here the playhead is the place, and it is
+  both what is read and what is moved.
+- **The tree's transport is asked to locate and here the playhead is a
+  node.** The tree pushes a *locate* to its transport; here the
+  playhead is a node in the document and it is moved, so the move is in
+  the history and it may be undone.
+
+### What it cost
+
+- **One new test** in the sound battery (`tests/markers.rs`): seven
+  tests — the recall putting the playhead at the marker, the recall
+  finding the marker by its name, the recall choosing the marker, a
+  marker that is not there being refused, the next marker being the one
+  that starts after the playhead, the previous marker being the one
+  that starts before it, and a step with nowhere to go saying so.
+- **One new module**: `markers` — and it is not the module `marks`: a
+  **mark** is what a person has said about a clip, and a **marker** is a
+  named place on the timeline. **Three new commands**: the sound
+  battery now carries **144** commands and the MCP server **1039** —
+  three more than §836.
+
+### What it does not settle
+
+- **The tree's marker carries a colour and a comment**, and this tree's
+  carries a name and a place and nothing else; the two are still to
+  come.
+- **The tree's marker may be a *selection*** — a marker that holds a
+  span and not a point — and here a marker has a start and an end
+  already, but the recall puts the playhead at the start of it and the
+  end is not used yet.
+- **The tree's *go to* is one dialog** and here it is three commands:
+  the recall and the two steps are the tree's own three.
