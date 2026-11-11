@@ -147,7 +147,7 @@ fn add_piece(
 }
 
 /// The **drag**, as the caller gave it.
-fn read_drag(value: &Json) -> Result<Vec<Point>, String> {
+pub(crate) fn read_drag(value: &Json) -> Result<Vec<Point>, String> {
     let Some(list) = value.as_array() else {
         return Err("the drag is not a list of points".to_string());
     };
@@ -179,7 +179,7 @@ fn read_drag(value: &Json) -> Result<Vec<Point>, String> {
 ///
 /// The drag is a run of points, and the distance is to the run itself
 /// and not to its points.
-fn distance_to_drag(drag: &[Point], at: Point) -> f64 {
+pub(crate) fn distance_to_drag(drag: &[Point], at: Point) -> f64 {
     let mut best = f64::INFINITY;
     for window in drag.windows(2) {
         best = best.min(distance_to_line(window[0], window[1], at));
@@ -212,7 +212,11 @@ fn distance_to_line(one: Point, two: Point, at: Point) -> f64 {
 /// The contour is sampled, the parts under the drag are found by
 /// halving the way at every crossing, and what is left is the stretches
 /// that survive — each a stretch of the contour as it was.
-fn erase_contour(contour: &SubPath, step: f64, under: &dyn Fn(Point) -> bool) -> Option<Vec<SubPath>> {
+pub(crate) fn erase_contour(
+    contour: &SubPath,
+    step: f64,
+    under: &dyn Fn(Point) -> bool,
+) -> Option<Vec<SubPath>> {
     let sides = contour.segments.len();
     if sides == 0 {
         return None;

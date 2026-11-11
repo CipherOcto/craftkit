@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **sixty-four commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **sixty-five commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.create` makes a path out of path data or
@@ -98,6 +98,7 @@ mod cutpath;
 mod dashes;
 mod epsexport;
 mod erasepath;
+mod eraseregion;
 mod freehand;
 mod gradients;
 mod joinends;
@@ -123,6 +124,7 @@ pub use cutpath::CutPath;
 pub use dashes::DashPath;
 pub use epsexport::ExportEps;
 pub use erasepath::ErasePath;
+pub use eraseregion::EraseRegion;
 pub use freehand::Freehand;
 pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
 pub use joinends::JoinEnds;
@@ -2885,6 +2887,7 @@ craftkit_sdk::plugin_anchor!(
     MovePoints,
     JoinEnds,
     ErasePath,
+    EraseRegion,
     KnifePath,
     CutPathLine,
     CutPathRect,
