@@ -4183,6 +4183,7 @@ so.
 | the **moving** of many points | **built.** Many points move by one delta, and the handles move with the point they belong to (§802) | §802 |
 | the **joining** of two open contours | **built.** Two open contours are joined end to end, and the joined point may be a corner or smooth (§803) | §803 |
 | the **area** under a shaped tip | **built.** A closed shape loses the area under an elliptical tip, and an open path loses the outline under it (§804) | §804 |
+| the **brush** that paints on a shape | **built.** A brush stroke is painted onto a shape, and the shape grows where the brush went (§805) | §805 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52986,3 +52987,65 @@ under it.
   them is not here either.
 - **The tree's eraser works on the selected paths**: here one path is
   erased by one drag.
+
+## 805. A shape is painted by a brush
+
+The tree's **Blob Brush** paints a stroke of a brush's width onto the
+shapes it touches, and the shape grows where the brush went.
+
+### What was built
+
+- The command **`vector.path.blob`** paints a brush stroke onto a
+  shape: the tree's Blob Brush, as a command. The brush's stroke is a
+  run of points, the **size** is the width of the brush — 10 if it is
+  not given — and a **fidelity** may be named.
+- The rules are the tree's own:
+  - the brush's **size** is the width of the stroke and must be a
+    positive number: the tree's own rule;
+  - with a **fidelity**, the brush follows the stroke fitted by the
+    tree's own fitting, and without one it follows every point: the
+    tree's own rule;
+  - the stroke is **round** at its ends and **round** at its corners:
+    the tree's own rule;
+  - the shape is the shape and the brush **joined**, so the shape is
+    bigger where the brush went: the tree's own rule;
+  - a stroke of **one point** is a line of a hundredth of a point, so
+    that the brush has something to sweep: the tree's own rule.
+
+### What the port found
+
+- **The tree's blob merges the brush with every shape it touches** —
+  the shapes of the same fill with no line — and here the shape is
+  **named**, as every other command in this tree names what it works
+  on.
+- **The tree's brush is a brush, and a brush is a shape of its own.**
+  The tree's library of brushes is not here: the brush here is a round
+  one, the size of it.
+- **The outline of a stroke comes back open, although it closes on
+  itself.** The geometry library's outline of a stroke ends where it
+  begins and does not say so, and a boolean cannot take an open
+  contour. The library now takes the **degenerate** sides away — a side
+  that ends where it begins is a point — and closes the contours that
+  close on themselves.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/blob.rs`): six tests —
+  the brush that paints, the bigger brush that paints more, the brush
+  that misses, the size that is not positive, the fidelity outside the
+  bounds, and the sample that carries the pen's pressure.
+- **One new test** in the geometry library (`craftkit-vector-geom`): a
+  degenerate side is taken away.
+- **One new command**: the vector battery now carries **66** commands
+  and the MCP server **999** — one more than §804. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`blob`), and the brush and the freehand stroke
+  share the reader of the samples and the fitting of the stroke.
+
+### What it does not settle
+
+- **The tree's own library of brushes is not here**: the tree's brush
+  takes a shape of its own, and the shapes it can take are not here.
+- **The tree's blob keeps the selection and merges only what is
+  selected**: here one named shape is painted on.
