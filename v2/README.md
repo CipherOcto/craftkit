@@ -4194,6 +4194,7 @@ so.
 | the **slicer** of a table | **built.** A slicer filters a column of a table by the values that are kept, and it writes them into the filter of the sheet (§813) | §813 |
 | the **decimals** of a format | **built.** The decimals of the format of a cell move up and down, and the rest of the format is kept (§814) | §814 |
 | the **sends** of a track | **built.** Every send of a track is muted at once, and a muted send is a copy of nothing (§815) | §815 |
+| the **alignment** of a cell | **built.** The text of a cell lies across it and down it, and the text is indented and wraps (§816) | §816 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -53639,3 +53640,63 @@ The tree's **Mute Sends**: every send of a track is muted at once.
 - **The tree's mute of the sends is the mixer of the track, and here
   it is the mute of every send**: the group that shares the mixer does
   not share it (§ the group of tracks).
+
+## 816. The alignment of a cell
+
+The tree's **alignment** of a cell: how its text lies across it and how
+it lies down it, and how far it is indented and whether it wraps.
+
+### What was built
+
+- The command **`grid.cell.align`** aligns a cell: the tree's Home >
+  Alignment, as a command.
+- The rules are the tree's own:
+  - the **horizontal** alignment is general, left, center, right, fill,
+    justify or center-across: the tree's own names;
+  - the **vertical** alignment is top, middle or bottom: the tree's own
+    names;
+  - **naming the alignment a cell already has returns it to general** —
+    the tree's own rule: clicking the alignment that is active again is
+    clicking the general one;
+  - the **indent** is from zero to two hundred and fifty;
+  - an **indent** above zero makes the horizontal alignment **left**
+    when it is general, center, fill, justify or center-across: the
+    tree's own rule, because an indented text is a text that starts at
+    the left;
+  - the **wrap** is a yes or a no.
+
+### What the port found
+
+- **The tree's alignment is a style and this one's is the cell's own**
+  (§271): the alignment of a cell is the cell's own, as its format is,
+  and a hundred cells with one alignment carry a hundred alignments.
+- **The tree's alignment is a range and this one's is a cell**: the
+  tree's button aligns the selection, and here the cell is named.
+- **The tree clamps the indent and here it is refused**: the tree
+  brings an indent outside the range into it, and here such an indent
+  is refused and the cell is left as it was.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/cellalign.rs`): nine tests
+  — the text across the cell, the text down the cell, the alignment
+  that is already there returning to general, the indent making the
+  text start at the left, the indent that is not one of them being
+  refused, the wrap, the name that is not an alignment being refused,
+  the command that names nothing being refused, and the alignment
+  staying when the cell's value changes.
+- **One new command**: the grid battery now carries **171** commands
+  and the MCP server **1017** — one more than §815. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **The cell grew a field**: the alignment is the cell's own field,
+  beside the value, the formula, the format and the style, and it is
+  written with the cell and read with it.
+
+### What it does not settle
+
+- **The tree's style carries the font, the fill and the borders, and
+  this tree's cell carries the format and the alignment**: the rest of
+  the style is not here.
+- **The tree's alignment of a range is one command for many cells**:
+  here the cell is named, and a range is aligned a cell at a time.
