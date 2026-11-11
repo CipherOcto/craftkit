@@ -4211,6 +4211,7 @@ so.
 | the **look** of a style | **built.** A style carries the alignment and the font, and the cells that name it and say nothing are written with them (§830) | §830 |
 | the **paint** that is nothing | **built.** A path's fill may be taken away, and the fill is there and paints nothing (§831) | §831 |
 | the **colour** of a colour matte | **built.** A colour matte may be recoloured, and an item that is not a matte is refused by name (§832) | §832 |
+| the **fill** of a conditional format | **built.** A rule may carry a fill and a stop, and the rules layer: each part is the first rule that says something about it (§833) | §833 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -24471,7 +24472,8 @@ without the colours.
 - **The tree's rule is a style and this one's is a format.** The
   tree's conditional format carries a style — a fill, a font colour, an
   icon set — and a style is shared between cells. Here it carries a
-  **number format**, which is a cell's own thing in this tree.
+  **number format**, which is a cell's own thing in this tree. — **and
+  a fill since §833**; the font colour and the icon set are not here.
 - **The tree's criteria are many and this one's is one.** The tree's
   rule may be a comparison, a colour scale, a data bar, an icon set or
   an expression. Here a rule is a **comparison** — the same criterion
@@ -24508,7 +24510,9 @@ without the colours.
 - **The tree's colours are not here.** A conditional format in the
   tree is a fill and a font colour and an icon set, and this tree's
   grid has number formats and no colours — so a rule that says "this
-  cell is red" has no place to say it.
+  cell is red" has no place to say it. — **the fill is here since
+  §833**: a rule may say "this cell is red"; the font colour and the
+  icon set are still not here.
 - **The tree's colour scales, data bars and icon sets are not here**,
   and neither is its **expression** rule: a rule that is a formula
   judged for every cell of the range.
@@ -54688,3 +54692,66 @@ and an item that is not a matte may not.
 - **The tree's matte has a colour and a kind of its own in the file
   format**, and here the colour and the kind are the generator's own
   fields of the item.
+
+## 833. The fill of a conditional format
+
+The tree's conditional format carries a **fill**, and the tree's rules
+**layer**: every rule that matches is tried, and where two of them set
+the same part of a cell the one seen first wins. And the tree's **stop
+if true**: a rule that ends the walk when it matched.
+
+### What was built
+
+- **A rule may carry a fill**: `grid.conditional.set` takes a `fill` —
+  a colour — beside the `format`, and a rule may carry the fill and
+  **no** format, or the format and no fill, or both.
+- The rules **layer**, and the rule is the tree's own:
+  - for each **part** of the look — the format and the fill — the rule
+    that is **seen first** and says something about it wins;
+  - the **stop**: a rule that matched and says stop ends the walk, and
+    the rules after it are not tried.
+- The **fill** is on top of the cell's own fill, as the rule is on top
+  of the cell — and the fill of a cell is read back with it (§829).
+
+### What the port found
+
+- **The tree's rule is a style and this one's is a look of two parts.**
+  The tree's conditional format carries a style — a fill, a font
+  colour, an icon set — and the style is shared between cells. Here a
+  rule carries a **number format** and a **fill**, and both are the
+  cell's own things (§821). The tree's font colour and its icon set
+  are still not here.
+- **The tree's stop-if-true had nothing to stop here**: with a rule
+  that carried one part, the first match was the end of the walk, and
+  a flag that says "stop here" could not say anything a rule did not
+  already say. With **two** parts the flag says what it says in the
+  tree: a rule that matched and says stop keeps the rules after it
+  from setting the other part.
+- **The tree's rule that fills a cell is on top of the cell's own
+  fill**, and here it is too: the cell's fill is what the cell says and
+  the rule's fill is what the rule says, and the rule is on top.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/conditionalfill.rs`):
+  six tests — a rule carrying a fill, a rule with a fill and no format
+  leaving the format alone, the rules layering, a rule that says stop
+  ending the walk, a fill that is not a colour being refused, and a
+  rule that says neither the format nor the fill being refused.
+- **No new command**: the fill and the stop are parameters of a command
+  that was already there, so the grid battery still carries **185**
+  commands and the MCP server **1032** — the counts do not move.
+- **One change to a command's shape**: the format of a rule is now
+  **optional**, because a rule may say the fill and no format.
+
+### What it does not settle
+
+- **The tree's font colour and its icon set are not here**: a rule
+  carries a fill and a number format, and not the colour of the text
+  nor the icons in the cell.
+- **The tree's colour scales, data bars and its expression rule are
+  not here**: a rule is a comparison, and the other kinds are commands
+  of their own when they come.
+- **A range may carry one rule**, so two rules on one range is a
+  replacement and not a pair — and the layering is therefore seen
+  between rules that cover **overlapping** ranges.
