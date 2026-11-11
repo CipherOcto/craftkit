@@ -8,7 +8,14 @@
 //! - two sections — the first for the positive numbers and the zero,
 //!   the second for the negative ones;
 //! - three sections — the first for the positive numbers, the second
-//!   for the negative ones and the third for the zero.
+//!   for the negative ones and the third for the zero;
+//! - four sections — the first three as above and the fourth for the
+//!   **text**.
+//!
+//! And a code with fewer than four sections may still have a text
+//! section: the **last** one is the text's own when it is a text
+//! section (the module `textsection`), and the ones before it are the
+//! numbers' sections.
 //!
 //! The tree's rule about the **negative** section is the one that
 //! matters: a negative section shows the **absolute value** and the
@@ -18,8 +25,6 @@
 //!
 //! # What it does not do
 //!
-//! - **The text section is not here.** The tree's fourth section is
-//!   the text's own, and here a text is written as it is.
 //! - **The conditions are not here.** The tree's sections may carry a
 //!   condition — `[>100]` — and pick the section by the number's
 //!   value. Here the sections are picked by the number's **sign** and
@@ -27,6 +32,8 @@
 //! - **An empty section is refused.** The tree's empty section shows
 //!   nothing for the numbers it covers; here a code with an empty
 //!   section is not a format this tree has.
+//! - **A fifth section is refused**, and so is a fourth section that
+//!   is not a text section.
 
 /// The **sections** a code has.
 ///

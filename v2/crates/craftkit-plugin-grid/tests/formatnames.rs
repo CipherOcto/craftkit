@@ -203,17 +203,20 @@ fn an_accounting_name_is_refused_with_the_reason() {
     assert!(message.contains("fill"), "and says why: {message}");
 }
 
-/// The name of a **text** format is refused: this tree does not keep
-/// the text a number was written with.
+/// The name of a **text** format says the code `@`: the tree's own
+/// name, and it is written.
 #[test]
-fn a_text_name_is_refused_with_the_reason() {
+fn a_text_name_says_the_placeholder() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
-    let error = session
+    set(&mut session, sheet, "A1", 1234.5);
+    session
         .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "text" }))
-        .expect_err("the name is refused");
-    let message = error.to_string();
-    assert!(message.contains("does not keep the text"), "the refusal says why: {message}");
+        .expect("the format is set");
+    let outcome =
+        session.execute("grid.cell.get", &json!({ "sheet": sheet, "cell": "A1" })).expect("the cell is read");
+    assert_eq!(outcome.data["format"], json!("@"), "the code the name said is what is kept");
+    assert_eq!(text_of(&mut session, sheet, "A1"), "1234.5", "and the number is written as its own text");
 }
 
 /// A name this tree does not know is **refused**, and the refusal says

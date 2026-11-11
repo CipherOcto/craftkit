@@ -140,18 +140,21 @@ fn a_semicolon_in_a_literal_is_not_a_separator() {
     assert_eq!(text_of(&mut session, sheet, "A1"), "a;b1.50", "the symbol has a semicolon in it");
 }
 
-/// A format with **four** sections is refused: the text section is not
-/// here.
+/// A format with a **fourth** section is refused when that section is
+/// not a text section: the text section is here, and a number's shape
+/// is not one.
 #[test]
-fn four_sections_are_refused() {
+fn a_fourth_section_that_is_not_a_text_section_is_refused() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
     session
         .execute("grid.cell.set", &json!({ "sheet": sheet, "cell": "A1", "value": 1.0 }))
         .expect("the value is set");
-    let refused = session
-        .execute("grid.cell.format", &json!({ "sheet": sheet, "cell": "A1", "format": "0.00;0.00;0.00;@" }));
-    assert!(refused.is_err(), "the text section is not here");
+    let refused = session.execute(
+        "grid.cell.format",
+        &json!({ "sheet": sheet, "cell": "A1", "format": "0.00;0.00;0.00;0.00" }),
+    );
+    assert!(refused.is_err(), "a number's shape is not a text section");
 }
 
 /// A format with an **empty** section is refused.

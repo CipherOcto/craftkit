@@ -18,8 +18,10 @@
 //! - the **scientific**: `0.00E+00` — a mantissa and an exponent, and
 //!   the exponent moves one place at a time;
 //! - the **sections**: a code with a semicolon in it has a different
-//!   code for the positive numbers, the negative ones and the zero
-//!   (the module `sections`);
+//!   code for the positive numbers, the negative ones, the zero and
+//!   the **text** (the module `sections`);
+//! - the **text**: a code of `@` writes the text of a cell, and a
+//!   number is written as its own text (the module `textsection`);
 //! - the **dates**: `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`,
 //!   `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`.
 //! - the **times**: `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`,
@@ -82,14 +84,23 @@
 //!   date format that is not one of them is refused.
 //! - **The tree's sections are here, and the tree's conditions are
 //!   not**: a format may have a different code for the positive
-//!   numbers, the negative ones and the zero (the module `sections`),
-//!   but the sections are picked by the number's sign and by whether
-//!   it is zero, and not by a condition the code carries.
+//!   numbers, the negative ones, the zero and the text (the module
+//!   `sections`), but the sections are picked by the number's sign and
+//!   by whether it is zero, and not by a condition the code carries.
+//! - **The tree's text section is here** (the module `textsection`):
+//!   the `@` writes the text of a cell and the literals around it are
+//!   written as they are. The tree's text section may hold anything
+//!   the tree's tokenizer reads — an unquoted word, a colour, a
+//!   bracket — and here it holds the `@`s and the literals in quotes
+//!   and nothing else; a section with anything else in it is not a
+//!   text section here, and a fourth section that is not a text
+//!   section is **refused**.
 
 use crate::dates::{self, Date};
 use crate::formula::Value;
 use crate::fractions;
 use crate::sections;
+use crate::textsection;
 
 /// The most characters a format code may have.
 ///
@@ -159,6 +170,12 @@ pub enum Format {
         /// Whether the exponent's head is an `E` or an `e`.
         upper: bool,
     },
+    /// A **text section**: the format writes the text of a cell, and a
+    /// number is written as its own text.
+    Text {
+        /// The section: the text is written between its literals.
+        section: textsection::TextSection,
+    },
     /// A format with **sections**: a different code for the positive
     /// numbers, the negative ones and the zero.
     Sections {
@@ -170,6 +187,8 @@ pub enum Format {
         negative: Option<Box<Format>>,
         /// The code of the zero.
         zero: Option<Box<Format>>,
+        /// The code of the **text**: the tree's fourth section.
+        text: Option<Box<Format>>,
     },
 }
 
@@ -391,7 +410,7 @@ impl Format {
         if code.contains(';') {
             let parts = sections::split(code)?;
             if parts.len() > 1 {
-                if parts.len() > 3 {
+                if parts.len() > 4 {
                     return None;
                 }
                 // An **empty** section is refused: the tree's empty
@@ -400,17 +419,40 @@ impl Format {
                 if parts.iter().any(|part| part.is_empty()) {
                     return None;
                 }
-                let positive = Box::new(Format::parse(&parts[0])?);
-                let negative = match parts.get(1) {
+                // The tree's rule for the **text section**: a code with
+                // four sections has the fourth for the text, and a code
+                // with fewer has the last one for the text when that
+                // one is a text section. A fourth section that is not a
+                // text section is **refused**: the tree writes a text
+                // with the literals of that section, and this tree
+                // does not write a text with the shape of a number.
+                let text = if parts.len() == 4 {
+                    textsection::TextSection::parse(&parts[3])?;
+                    Some(Box::new(Format::parse(&parts[3])?))
+                } else if textsection::TextSection::parse(&parts[parts.len() - 1]).is_some() {
+                    Some(Box::new(Format::parse(&parts[parts.len() - 1])?))
+                } else {
+                    None
+                };
+                // The **number** sections are the ones that are left.
+                let numbers =
+                    if text.is_some() && parts.len() < 4 { &parts[..parts.len() - 1] } else { &parts[..] };
+                let positive = Box::new(Format::parse(&numbers[0])?);
+                let negative = match numbers.get(1) {
                     Some(code) => Some(Box::new(Format::parse(code)?)),
                     None => None,
                 };
-                let zero = match parts.get(2) {
+                let zero = match numbers.get(2) {
                     Some(code) => Some(Box::new(Format::parse(code)?)),
                     None => None,
                 };
-                return Some(Format::Sections { positive, negative, zero });
+                return Some(Format::Sections { positive, negative, zero, text });
             }
+        }
+        // A **text section** is a shape of its own: the `@` and the
+        // literals around it. The tree's text format is `@`.
+        if let Some(section) = textsection::TextSection::parse(code) {
+            return Some(Format::Text { section });
         }
         // A **date** is a shape of its own, and it is asked for before
         // the number: `yyyy` is not a number with two decimals. A
@@ -481,7 +523,7 @@ impl Format {
                 }
                 // A format with **sections**: the section that the
                 // number belongs to is the one that writes it.
-                Format::Sections { positive, negative, zero } => {
+                Format::Sections { positive, negative, zero, .. } => {
                     if *number < 0.0
                         && let Some(negative) = negative
                     {
@@ -497,10 +539,21 @@ impl Format {
                         positive.text(value, system)
                     }
                 }
+                // A **text section** writes a number as its own text:
+                // the tree's rule, and the reason the text format of a
+                // number is the number as it is.
+                Format::Text { section } => section.text(&general(*number)),
             },
-            // A format does not change a text: the tree's text sections
-            // are not here.
-            Value::Text(text) => text.clone(),
+            // A format may write a **text**: the text section writes it,
+            // and a format with no text section writes the text as it
+            // is.
+            Value::Text(text) => match self {
+                Format::Text { section } => section.text(text),
+                Format::Sections { text: Some(section), .. } => {
+                    section.text(&Value::Text(text.clone()), system)
+                }
+                _ => text.clone(),
+            },
             Value::Bool(value) => match self {
                 // A **checkbox** is a box: a ticked one and an empty
                 // one.

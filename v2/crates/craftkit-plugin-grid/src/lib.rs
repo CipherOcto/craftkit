@@ -411,6 +411,7 @@ mod tabs;
 mod tabsorder;
 mod textcolumns;
 mod texts;
+mod textsection;
 mod textvalue;
 mod trendlines;
 mod trigonometry;
