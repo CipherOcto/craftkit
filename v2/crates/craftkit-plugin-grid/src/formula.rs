@@ -2025,6 +2025,16 @@ impl Book {
         self.sheets.get_mut(name)
     }
 
+    /// The **cells** of a sheet.
+    pub fn sheet(&self, name: &str) -> Option<&Cells> {
+        self.sheets.get(name)
+    }
+
+    /// The **sheets** of the book, by name.
+    pub fn sheets(&self) -> impl Iterator<Item = (&String, &Cells)> {
+        self.sheets.iter()
+    }
+
     /// The **value** of a cell in a sheet.
     pub fn value_of(&self, sheet: &str, cell: CellRef) -> Value {
         self.value_of_guarded(sheet, cell, &mut Vec::new())

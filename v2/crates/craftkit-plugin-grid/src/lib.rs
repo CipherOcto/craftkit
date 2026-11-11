@@ -413,6 +413,7 @@ mod textcolumns;
 mod texts;
 mod textsection;
 mod textvalue;
+mod trace;
 mod trendlines;
 mod trigonometry;
 mod units;
@@ -424,7 +425,9 @@ mod workbookreading;
 
 use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
+use craftkit_sdk::{
+    Bool, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text,
+};
 
 pub use advancedfilter::AdvancedFilter;
 pub use align::SetAlign;
@@ -1658,6 +1661,12 @@ impl ClearCell {
 }
 
 /// The **precedents** of a cell: the areas its formula reads.
+///
+/// The tree's own flag: `all` says the trace is at **every** level and
+/// not only the first one, and then the answer is the **cells** the
+/// chain reads and not the areas — the tree's own rule, because at the
+/// first level the areas are what a formula reads and at every level
+/// the cells are what is read.
 #[derive(Command)]
 #[command(id = "grid.precedents", area = "grid", layer = "grid", icon = "list")]
 pub struct ReadPrecedents {
@@ -1665,6 +1674,8 @@ pub struct ReadPrecedents {
     pub sheet: NodeRef,
     /// The cell's address.
     pub cell: Text,
+    /// Whether the trace is at **every** level and not only the first.
+    pub all: Option<Bool>,
 }
 
 impl ReadPrecedents {
@@ -1695,6 +1706,21 @@ impl ReadPrecedents {
             message: error.message,
         })?;
         let book = book_of(session.document());
+        let name = node.name.clone();
+        // The trace at **every** level: the cells the chain reads.
+        if self.all.unwrap_or(Bool(false)).0 {
+            let cells = trace::precedent_cells(&book, &name, cell);
+            let count = cells.len();
+            return Ok(Outcome::new(format!("{count} cell(s)")).with_data(json!({
+                "sheet": sheet,
+                "cell": cell.to_text(),
+                "all": true,
+                "precedents": cells
+                    .iter()
+                    .map(|(sheet, cell)| json!({ "sheet": sheet, "cell": cell.to_text() }))
+                    .collect::<Vec<_>>(),
+            })));
+        }
         let areas = formula::precedents(&expression, book.names());
         Ok(Outcome::new(format!("{} area(s)", areas.len())).with_data(json!({
             "sheet": sheet,
@@ -1719,6 +1745,8 @@ pub struct ReadDependents {
     pub sheet: NodeRef,
     /// The cell's address.
     pub cell: Text,
+    /// Whether the trace is at **every** level and not only the first.
+    pub all: Option<Bool>,
 }
 
 impl ReadDependents {
@@ -1736,6 +1764,21 @@ impl ReadDependents {
         // sheet **or in another**: a formula in `Sheet2` that reads
         // `Sheet1!A1` depends on it.
         let book = book_of(session.document());
+        // The trace at **every** level: the cells that read the cell,
+        // and the cells that read those.
+        if self.all.unwrap_or(Bool(false)).0 {
+            let cells = trace::dependent_cells(&book, &name, cell);
+            let count = cells.len();
+            return Ok(Outcome::new(format!("{count} dependent(s)")).with_data(json!({
+                "sheet": sheet,
+                "cell": cell.to_text(),
+                "all": true,
+                "dependents": cells
+                    .iter()
+                    .map(|(sheet, cell)| json!({ "sheet": sheet, "cell": cell.to_text() }))
+                    .collect::<Vec<_>>(),
+            })));
+        }
         let mut dependents: Vec<Json> = Vec::new();
         for sheet_node in session.document().walk().filter(|node| node.kind == "grid.sheet") {
             let cells = cells_of(sheet_node);
@@ -1743,8 +1786,11 @@ impl ReadDependents {
                 let Some(formula) = &entry.formula else { continue };
                 let Ok(expression) = formula::parse(formula) else { continue };
                 for reference in formula::precedents(&expression, book.names()) {
-                    // A reference in another sheet does not read this cell.
-                    if reference.sheet.as_deref().is_some_and(|other| other != name) {
+                    // A reference that names no sheet is a reference to
+                    // the sheet the formula is in, and a reference that
+                    // names another sheet does not read this cell.
+                    let read = reference.sheet.as_deref().unwrap_or(sheet_node.name.as_str());
+                    if read != name {
                         continue;
                     }
                     if reference.area.covers(cell) {
