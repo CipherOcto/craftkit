@@ -357,6 +357,7 @@ mod fill;
 mod filters;
 mod finance;
 mod finding;
+mod findspecial;
 mod flash;
 mod font;
 mod format;

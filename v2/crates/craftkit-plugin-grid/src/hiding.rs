@@ -31,7 +31,7 @@ use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
 
 /// The **rows** of a sheet that are hidden.
-fn hidden_rows(node: &craftkit_sdk::Node) -> Vec<u64> {
+pub(crate) fn hidden_rows(node: &craftkit_sdk::Node) -> Vec<u64> {
     node.data
         .get("hidden_rows")
         .and_then(|rows| rows.as_array())
@@ -40,7 +40,7 @@ fn hidden_rows(node: &craftkit_sdk::Node) -> Vec<u64> {
 }
 
 /// The **columns** of a sheet that are hidden.
-fn hidden_columns(node: &craftkit_sdk::Node) -> Vec<String> {
+pub(crate) fn hidden_columns(node: &craftkit_sdk::Node) -> Vec<String> {
     node.data
         .get("hidden_columns")
         .and_then(|columns| columns.as_array())
