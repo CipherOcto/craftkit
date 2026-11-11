@@ -4213,6 +4213,7 @@ so.
 | the **colour** of a colour matte | **built.** A colour matte may be recoloured, and an item that is not a matte is refused by name (§832) | §832 |
 | the **fill** of a conditional format | **built.** A rule may carry a fill and a stop, and the rules layer: each part is the first rule that says something about it (§833) | §833 |
 | the **summary** of the scenarios | **built.** A sheet of its own says what every scenario does to the book: the changing cells, the values and the results (§834) | §834 |
+| the **data table** of a sheet | **built.** A range holds the inputs and the formulas, and its body is written with the results (§835) | §835 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -30323,7 +30324,9 @@ then.
 - **The tree's data table takes a whole range of inputs and lays the
   results out beside them.** Here the inputs are a **list** and the
   results are a **list** too: one input, one result, in the order they
-  were given.
+  were given. — **and the tree's own data table is here since §835**:
+  a range of inputs, a range of results and the table written into the
+  sheet.
 
 ### What it cost
 
@@ -30343,7 +30346,8 @@ then.
   target is a search, and the search's bounds are not written.
 - **The tree's data table lays its results out in cells and here they
   are a list**: a what-if here says what it would say and does not
-  write it down.
+  write it down. — **the tree's own data table writes them down since
+  §835**: `grid.data.table` lays them out in the body of the range.
 
 ## 452. The goal of a sheet
 
@@ -54819,4 +54823,68 @@ values, the values of every scenario and the results.
   named, and the book does not move to it.
 - **The tree's data table is not here**: a table of results computed
   by substitution is a command of its own, and it writes values that
-  are a snapshot and not a live formula.
+  are a snapshot and not a live formula. — **it is here since §835**:
+  `grid.data.table` writes that table.
+
+## 835. The data table of a sheet
+
+The tree's **data table**: a range that holds the inputs and the
+formulas, and the body of the range is written with the results.
+
+### What was built
+
+- **One command** in the grid battery: `grid.data.table` — the table
+  of what the sheet would say for a list of inputs.
+- The tree's rules are the tree's:
+  - the range needs at least **two rows and two columns**;
+  - **one** of the inputs is enough, and **both** make a table of two
+    variables;
+  - an **input cell** may not be **inside** the table;
+  - the results are **static**: a snapshot of what the sheet said, and
+    not a live `{=TABLE()}`.
+- The three layouts are the tree's own:
+  - the **column** of inputs: the values down the first column and the
+    formulas in the first row;
+  - the **row** of inputs: the values across the first row and the
+    formulas down the first column;
+  - the table of **two variables**: the formula in the corner, the
+    values across the top row tried in the **row input** and the values
+    down the first column tried in the **column input**.
+
+### What the port found
+
+- **The tree's data table and this tree's what-if are two questions.**
+  The tree's data table takes a **range** of inputs and lays the
+  results out **beside** them, in the cells of a range; the what-if
+  here takes a **list** of values and says what each of them gives.
+  They are both here now, and they are two commands.
+- **The tree's data table writes into the sheet**, and here it writes
+  too: the results are **values** in the cells of the body, and the
+  formulas that were there are gone — a table is a snapshot and not a
+  live formula.
+- **The tree's trial is a copy of the book**, and here it is too: the
+  sheet is asked in a copy of the workbook and the copy is thrown away,
+  so the table is written and the sheet is otherwise as it was.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/datatable.rs`): six
+  tests — the column of inputs being tried down the table, the row of
+  inputs being tried across the table, the table of two variables
+  being written, the results being static, a table with no input being
+  refused, and an input cell inside the table being refused.
+- **One new module**: `datatable`. **One new command**: the grid
+  battery now carries **187** commands and the MCP server **1035** —
+  one more than §834.
+- **One bound**: the body of a table is at most **100 000** cells —
+  the tree's own bound.
+
+### What it does not settle
+
+- **The tree's table is a live `{=TABLE()}` in a spreadsheet**, and
+  here it is a **snapshot**: the values are written and they do not
+  change when the sheet changes.
+- **The tree's what-if and the tree's data table are one thing in the
+  tree's ribbon** and two here, and the tree's data table may name a
+  range on **another sheet** for its inputs; here the inputs are cells
+  of the sheet the table is on.
