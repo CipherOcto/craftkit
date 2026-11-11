@@ -1192,6 +1192,144 @@ pub struct Cells {
     cells: BTreeMap<CellRef, Cell>,
 }
 
+/// How the text of a cell lies **across** it.
+///
+/// The tree's own names: general, left, center, right, fill, justify
+/// and center-across.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AlignH {
+    /// The text is as the numbers and the text of the cell say: the
+    /// numbers to the right and the text to the left.
+    General,
+    /// The text is to the left.
+    Left,
+    /// The text is in the middle.
+    Center,
+    /// The text is to the right.
+    Right,
+    /// The text is stretched over the width of the cell.
+    Fill,
+    /// The text is spread over the width of the cell.
+    Justify,
+    /// The text is in the middle, over the cells it is centered in.
+    CenterAcross,
+}
+
+impl AlignH {
+    /// The **name** of the alignment.
+    pub fn to_text(self) -> &'static str {
+        match self {
+            AlignH::General => "general",
+            AlignH::Left => "left",
+            AlignH::Center => "center",
+            AlignH::Right => "right",
+            AlignH::Fill => "fill",
+            AlignH::Justify => "justify",
+            AlignH::CenterAcross => "center-across",
+        }
+    }
+
+    /// The alignment of a **name**, and nothing when the name is not
+    /// one of them.
+    pub fn parse(text: &str) -> Option<AlignH> {
+        match text.trim().to_lowercase().as_str() {
+            "general" => Some(AlignH::General),
+            "left" => Some(AlignH::Left),
+            "center" | "centre" => Some(AlignH::Center),
+            "right" => Some(AlignH::Right),
+            "fill" => Some(AlignH::Fill),
+            "justify" => Some(AlignH::Justify),
+            "center-across" | "center_across" | "centeracross" => Some(AlignH::CenterAcross),
+            _ => None,
+        }
+    }
+}
+
+/// How the text of a cell lies **down** it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AlignV {
+    /// The text is at the top of the cell.
+    Top,
+    /// The text is in the middle of the cell.
+    Middle,
+    /// The text is at the bottom of the cell.
+    Bottom,
+}
+
+impl AlignV {
+    /// The **name** of the alignment.
+    pub fn to_text(self) -> &'static str {
+        match self {
+            AlignV::Top => "top",
+            AlignV::Middle => "middle",
+            AlignV::Bottom => "bottom",
+        }
+    }
+
+    /// The alignment of a **name**, and nothing when the name is not
+    /// one of them.
+    pub fn parse(text: &str) -> Option<AlignV> {
+        match text.trim().to_lowercase().as_str() {
+            "top" => Some(AlignV::Top),
+            "middle" | "center" | "centre" => Some(AlignV::Middle),
+            "bottom" => Some(AlignV::Bottom),
+            _ => None,
+        }
+    }
+}
+
+/// The **alignment** of a cell: how its text lies across it and how it
+/// lies down it, and how far it is indented and whether it wraps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Align {
+    /// How the text lies across the cell.
+    pub horizontal: AlignH,
+    /// How the text lies down the cell.
+    pub vertical: AlignV,
+    /// How far the text is indented, in steps of the width of a
+    /// character.
+    pub indent: u8,
+    /// Whether the text wraps at the width of the cell.
+    pub wrap: bool,
+}
+
+impl Align {
+    /// The alignment a cell has when it names none: the general one,
+    /// the text at the top, no indent and no wrap.
+    pub fn plain() -> Align {
+        Align { horizontal: AlignH::General, vertical: AlignV::Top, indent: 0, wrap: false }
+    }
+
+    /// The alignment, as the sheet keeps it.
+    pub fn to_json(self) -> serde_json::Value {
+        serde_json::json!({
+            "horizontal": self.horizontal.to_text(),
+            "vertical": self.vertical.to_text(),
+            "indent": self.indent,
+            "wrap": self.wrap,
+        })
+    }
+
+    /// The alignment of a sheet's own record, and nothing when the
+    /// record is not one this tree writes.
+    pub fn from_json(value: &serde_json::Value) -> Option<Align> {
+        let horizontal = value.get("horizontal").and_then(|horizontal| horizontal.as_str());
+        let vertical = value.get("vertical").and_then(|vertical| vertical.as_str());
+        let horizontal = match horizontal {
+            Some(horizontal) => AlignH::parse(horizontal)?,
+            None => AlignH::General,
+        };
+        let vertical = match vertical {
+            Some(vertical) => AlignV::parse(vertical)?,
+            None => AlignV::Top,
+        };
+        let indent = value.get("indent").and_then(|indent| indent.as_u64()).unwrap_or(0);
+        let indent = u8::try_from(indent).ok()?;
+        let wrap = value.get("wrap").and_then(|wrap| wrap.as_bool()).unwrap_or(false);
+        Some(Align { horizontal, vertical, indent, wrap })
+    }
+}
+
 /// A cell: a value, or a formula.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cell {
@@ -1210,6 +1348,11 @@ pub struct Cell {
     /// The **style** the cell names: the name of a style of the
     /// workbook, when it names one.
     pub style: Option<String>,
+    /// The **alignment** of the cell, when it has one.
+    ///
+    /// The tree's alignment is a style and a style is shared between
+    /// cells; here the alignment is the cell's own, as the format is.
+    pub align: Option<Align>,
 }
 
 impl Cells {
@@ -1230,7 +1373,8 @@ impl Cells {
     pub fn set_value(&mut self, cell: CellRef, value: Value) {
         let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
         let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
-        self.cells.insert(cell, Cell { value: Some(value), formula: None, format, style });
+        let align = self.cells.get(&cell).and_then(|entry| entry.align);
+        self.cells.insert(cell, Cell { value: Some(value), formula: None, format, style, align });
     }
 
     /// Put a formula in a cell.
@@ -1240,7 +1384,8 @@ impl Cells {
     pub fn set_formula(&mut self, cell: CellRef, formula: String) {
         let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
         let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
-        self.cells.insert(cell, Cell { value: None, formula: Some(formula), format, style });
+        let align = self.cells.get(&cell).and_then(|entry| entry.align);
+        self.cells.insert(cell, Cell { value: None, formula: Some(formula), format, style, align });
     }
 
     /// The **number format** of a cell, if it has one.
@@ -1257,7 +1402,8 @@ impl Cells {
             Some(entry) => entry.format = format,
             None => {
                 let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
-                self.cells.insert(cell, Cell { value: None, formula: None, format, style });
+                let align = self.cells.get(&cell).and_then(|entry| entry.align);
+                self.cells.insert(cell, Cell { value: None, formula: None, format, style, align });
             }
         }
     }
@@ -1276,7 +1422,28 @@ impl Cells {
             Some(entry) => entry.style = style,
             None => {
                 let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
-                self.cells.insert(cell, Cell { value: None, formula: None, format, style });
+                let align = self.cells.get(&cell).and_then(|entry| entry.align);
+                self.cells.insert(cell, Cell { value: None, formula: None, format, style, align });
+            }
+        }
+    }
+
+    /// The **alignment** of a cell, if it has one.
+    pub fn align(&self, cell: CellRef) -> Option<&Align> {
+        self.cells.get(&cell)?.align.as_ref()
+    }
+
+    /// Put an **alignment** on a cell, keeping what the cell holds.
+    ///
+    /// A cell that is not there is made: a cell may be aligned before
+    /// it has a value.
+    pub fn set_align(&mut self, cell: CellRef, align: Option<Align>) {
+        match self.cells.get_mut(&cell) {
+            Some(entry) => entry.align = align,
+            None => {
+                let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
+                let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
+                self.cells.insert(cell, Cell { value: None, formula: None, format, style, align });
             }
         }
     }

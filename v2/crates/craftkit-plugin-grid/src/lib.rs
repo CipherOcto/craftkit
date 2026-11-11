@@ -322,6 +322,7 @@
 #![forbid(unsafe_code)]
 
 mod advancedfilter;
+mod align;
 mod arithmetic;
 mod autofit;
 mod bonds;
@@ -423,6 +424,7 @@ use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
 pub use advancedfilter::AdvancedFilter;
+pub use align::SetAlign;
 pub use autofit::{AutofitColumn, AutofitRow};
 pub use borders::{ClearBorder, GetBorder, SetBorder};
 pub use cellread::ReadCell;
@@ -704,6 +706,7 @@ pub(crate) fn cells_of(node: &Node) -> Cells {
         let value = entry.get("value").map(Value::from_json);
         let format = entry.get("format").and_then(|format| format.as_str()).map(|text| text.to_string());
         let style = entry.get("style").and_then(|style| style.as_str()).map(|text| text.to_string());
+        let align = entry.get("align").and_then(formula::Align::from_json);
         match (value, formula) {
             (_, Some(formula)) => cells.set_formula(cell, formula),
             (Some(value), None) => cells.set_value(cell, value),
@@ -714,6 +717,9 @@ pub(crate) fn cells_of(node: &Node) -> Cells {
         }
         if let Some(style) = style {
             cells.set_style(cell, Some(style));
+        }
+        if let Some(align) = align {
+            cells.set_align(cell, Some(align));
         }
     }
     cells
@@ -735,6 +741,9 @@ pub(crate) fn cells_into(cells: &Cells) -> Json {
         }
         if let Some(style) = &entry.style {
             one.insert("style".to_string(), Json::String(style.clone()));
+        }
+        if let Some(align) = entry.align {
+            one.insert("align".to_string(), align.to_json());
         }
         map.insert(cell.to_text(), Json::Object(one));
     }
