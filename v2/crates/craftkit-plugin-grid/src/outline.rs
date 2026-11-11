@@ -43,7 +43,7 @@ use std::collections::BTreeMap;
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session, Text};
 
 /// The **deepest** level a group may have: the tree's own.
 const MAX_LEVEL: u8 = 7;
@@ -636,4 +636,110 @@ impl ReadColumnGroups {
         Ok(Outcome::new(format!("the sheet `{sheet}` has {} column group(s)", groups.len()))
             .with_data(json!({ "sheet": sheet, "groups": groups })))
     }
+}
+
+/// **Show** the rows or the columns down to an outline level.
+///
+/// The tree's level buttons: a level of **one** shows the top-level
+/// summaries only, and a deeper level shows more of the detail. The
+/// rows of a group that is deeper than the level asked for are hidden,
+/// and the rows of a group that is not deeper are shown.
+///
+/// The tree's **collapsed** mark — the little **+** beside a summary
+/// row — is not written here: a group whose rows are all hidden is
+/// collapsed, and that is worked out from the rows.
+#[derive(Command)]
+#[command(id = "grid.outline.levels", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct ShowLevels {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The level of the rows to show: one is only the top-level
+    /// summaries.
+    pub rows: Option<Number>,
+    /// The level of the columns to show.
+    pub cols: Option<Number>,
+}
+
+impl ShowLevels {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.outline.levels".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, sheet, &id)?;
+        if self.rows.is_none() && self.cols.is_none() {
+            return Err(EngineError::Failed {
+                id,
+                message: "give `rows` or `cols`: the outline level to show (one is only the top-level summaries)"
+                    .to_string(),
+            });
+        }
+        let rows = match self.rows {
+            Some(level) => Some(level_of(level.0, &id)?),
+            None => None,
+        };
+        let cols = match self.cols {
+            Some(level) => Some(level_of(level.0, &id)?),
+            None => None,
+        };
+        let Some(node) = session.document().node(sheet).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let mut hidden_row_numbers = hidden_rows(&node);
+        if let Some(level) = rows {
+            for (row, row_level) in levels_of(&node) {
+                if row_level >= level {
+                    if !hidden_row_numbers.contains(&row) {
+                        hidden_row_numbers.push(row);
+                    }
+                } else {
+                    hidden_row_numbers.retain(|other| *other != row);
+                }
+            }
+            hidden_row_numbers.sort_unstable();
+        }
+        let mut hidden_column_texts: Vec<String> = hidden_columns(&node)
+            .into_iter()
+            .map(crate::formula::CellRef::column_text)
+            .collect();
+        if let Some(level) = cols {
+            for (column, column_level) in column_levels_of(&node) {
+                let text = crate::formula::CellRef::column_text(column);
+                if column_level >= level {
+                    if !hidden_column_texts.contains(&text) {
+                        hidden_column_texts.push(text);
+                    }
+                } else {
+                    hidden_column_texts.retain(|other| *other != text);
+                }
+            }
+            hidden_column_texts.sort();
+        }
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["hidden_rows"] = json!(hidden_row_numbers);
+            node.data["hidden_columns"] = json!(hidden_column_texts);
+        }
+        Ok(Outcome::changed(format!("the outline of the sheet `{sheet}` is shown to a level"))
+            .with_data(json!({
+                "sheet": sheet,
+                "rows": rows,
+                "cols": cols,
+            })))
+    }
+}
+
+/// An outline **level**: from one to the tree's seven levels and one
+/// more, which is the level of everything.
+fn level_of(level: f64, id: &str) -> Result<u8, EngineError> {
+    if !level.is_finite() || level < 1.0 || level > MAX_LEVEL as f64 + 1.0 {
+        return Err(EngineError::Failed {
+            id: id.to_string(),
+            message: format!(
+                "the outline level is from one to {}, and {level} is not one of them",
+                MAX_LEVEL + 1
+            ),
+        });
+    }
+    Ok(level as u8)
 }
