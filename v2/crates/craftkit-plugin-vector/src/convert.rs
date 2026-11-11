@@ -122,7 +122,7 @@ fn point_at(subpath: &SubPath, index: usize) -> Point {
 /// way to that side's neighbour. A point that is already smooth keeps
 /// its handles, and a point whose neighbours are one point has no
 /// direction and is left as it is.
-fn smooth_by_neighbours(subpath: &mut SubPath, point: usize) -> bool {
+pub(crate) fn smooth_by_neighbours(subpath: &mut SubPath, point: usize) -> bool {
     // The **closing side** of a closed contour is made explicit: the
     // neighbours of a point are its sides, and a side that is not
     // there holds no handle.

@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **sixty-three commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **sixty-four commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.create` makes a path out of path data or
@@ -38,7 +38,8 @@
 //!   `vector.path.offset` work on whole paths; `vector.path.move` and
 //!   `vector.path.handle` move a point of a path and set the handles of
 //!   the curves that leave and arrive at it, and
-//!   `vector.path.move.points` moves many points by one drag;
+//!   `vector.path.move.points` moves many points by one drag, and
+//!   `vector.path.join.ends` joins two open contours into one;
 //!   `vector.path.average`
 //!   puts the points of a path on one line, in one column, or all in
 //!   one place; `vector.path.anchor.remove` takes an anchor away, and
@@ -99,6 +100,7 @@ mod epsexport;
 mod erasepath;
 mod freehand;
 mod gradients;
+mod joinends;
 mod knife;
 mod linecut;
 mod mirrorcut;
@@ -123,6 +125,7 @@ pub use epsexport::ExportEps;
 pub use erasepath::ErasePath;
 pub use freehand::Freehand;
 pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
+pub use joinends::JoinEnds;
 pub use knife::KnifePath;
 pub use linecut::CutPathLine;
 pub use mirrorcut::MirrorCut;
@@ -2880,6 +2883,7 @@ craftkit_sdk::plugin_anchor!(
     AddMiddleAnchors,
     ConvertAnchors,
     MovePoints,
+    JoinEnds,
     ErasePath,
     KnifePath,
     CutPathLine,
