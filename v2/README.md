@@ -4193,6 +4193,7 @@ so.
 | the **list filter** | **built.** A sheet is filtered by a list of values, and the rows whose cell shows one of them are kept (§812) | §812 |
 | the **slicer** of a table | **built.** A slicer filters a column of a table by the values that are kept, and it writes them into the filter of the sheet (§813) | §813 |
 | the **decimals** of a format | **built.** The decimals of the format of a cell move up and down, and the rest of the format is kept (§814) | §814 |
+| the **sends** of a track | **built.** Every send of a track is muted at once, and a muted send is a copy of nothing (§815) | §815 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -53587,3 +53588,54 @@ a cell gains a decimal or loses one.
   alignment, and this tree's format is the number format only**: the
   decimals of a format are the only thing here that moves a format.
 - **The tree's decimals move on a range**: here the cell is named.
+
+## 815. The sends of a track are muted at once
+
+The tree's **Mute Sends**: every send of a track is muted at once.
+
+### What was built
+
+- The command **`sound.track.sends.mute`** mutes the sends of a track,
+  or lets them be heard: the tree's Mute Sends, as a command.
+- The rules are the tree's own:
+  - every send of the track is **muted** at once: the tree's own rule;
+  - a muted send is a **copy of nothing** — the track is still heard on
+    its own and the bus hears nothing: the tree's own rule;
+  - a track with **no sends** is left as it was, and the outcome says
+    that nothing changed.
+
+### What the port found
+
+- **The tree's sends are in slots and here they are things.** The tree
+  keeps ten sends on every track, in slots, and its command mutes the
+  slots it names — the sends of the first five, the sends of the last
+  five, or all of them. Here a send is a **node** of its own, with a
+  level, a pan and a mute of its own, and every send of the track is
+  the one that is muted.
+- **The tree's command works on the selection and this one names the
+  track.**
+- **The tree's button mutes and its second button unmutes**: here the
+  command says which, and a send that is already as it is asked to be
+  is left as it was.
+
+### What it cost
+
+- **One new test** in the sound battery (`tests/sendsmute.rs`): seven
+  tests — every send muted at once, the sends heard again, the send
+  that is already as it is asked to be, the track with no sends, the
+  send of another track, the muted send being a copy of nothing in the
+  render, and the node that is not a track being refused.
+- **One new command**: the sound battery now carries **141** commands
+  and the MCP server **1016** — one more than §814. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **No new module**: the command lives with the mixer it belongs to.
+
+### What it does not settle
+
+- **The tree's sends are in slots and its two other buttons mute the
+  sends of the first five and of the last five**: here a send is a node
+  and there are no slots, so the two buttons are not here.
+- **The tree's mute of the sends is the mixer of the track, and here
+  it is the mute of every send**: the group that shares the mixer does
+  not share it (§ the group of tracks).
