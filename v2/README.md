@@ -4178,6 +4178,7 @@ so.
 | the **cutting** of a closed shape | **built.** A closed shape is cut along a run of points, and a slit is left between the pieces (§797) | §797 |
 | the **splitting** of a shape along a line | **built.** A closed shape is split along a line that goes on for ever, and a hole travels with the shape it is in (§798) | §798 |
 | the **cropping** of a shape to a rectangle | **built.** A closed shape is cut to a rectangle — four numbers or two corners — and a shape wholly outside it is taken away (§799) | §799 |
+| the **mirroring** of a shape in an axis | **built.** A closed shape is cut at an axis and joined to its own mirror, so that what is left is symmetric (§800) | §800 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52634,3 +52635,79 @@ kept, and the part that is outside is taken away.
   half, and the result is one closed shape.
 - **The tree's rectangle cut crops every selected shape at once**: here
   one path is cut by one rectangle.
+
+## 800. A shape is mirrored in an axis
+
+The tree's **Mirror & Cut** cuts the shapes it is given at an axis,
+keeps the **side** that is named, and joins what is kept to its own
+**mirror** across the axis — so that the shape that is left is
+**symmetric** about the axis.
+
+### What was built
+
+- The command **`vector.path.cut.mirror`** mirrors a closed shape in an
+  axis: the tree's Mirror & Cut, as a command. The axis is `vertical`
+  (the default), `horizontal` or `free` — a line through two points —
+  and the side that is kept is `left`, `right`, `top` or `bottom`.
+- The rules are the tree's own:
+  - a vertical or horizontal axis runs through the point it is given,
+    and the **centre** of the shape when no point is named: the tree's
+    own rule;
+  - the side that is kept is left, right, top or bottom, and the
+    default is **left** — or **top** when the axis runs more across
+    than down: the tree's own rule;
+  - a side that is **not a side of the axis** is refused: the tree's
+    own rule;
+  - an axis that is not one of the three, and a side that is not one of
+    the four, are refused: the tree's own rule;
+  - what is kept is the shape **cut** at the axis, and the result is
+    the shape **joined** to its mirror: the tree's own rule;
+  - a shape that is wholly on the **other** side is taken away: the
+    tree's own rule.
+
+### What the port found
+
+- **The tree's mirror cuts an open path too, and this one refuses it.**
+  The tree joins an open run to its mirror where the two meet at the
+  axis; here the command names one path, and a closed shape is what it
+  cuts, so an open path is refused by name. The knife's rule (§797) and
+  the line cut's rule (§798) are the same.
+- **The tree's mirror works on the selection and this one names the
+  path.**
+- **The geometry library's mirror was about the wrong line.** The
+  library's `Matrix::mirror` turned a point about the line through the
+  **negated** point: a line through the origin was right, and every
+  other line was wrong. The order is fixed — the point is taken back to
+  the line, turned about it, and put back — and the library has two
+  tests of its own now. The tree's own `vector.path.mirror`, which
+  makes a copy of a shape mirrored in a line, mirrored it about the
+  wrong line too, and is right now.
+- **The axis is a thing of its own.** The line cut (§798) and the
+  mirror cut both cut a box with a line, and they now share one module,
+  `axis`, which knows which side of the line a point is on.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/mirrorcut.rs`): ten
+  tests — the shape mirrored and joined, the shape that is left
+  symmetric, the side that is named, the unknown axis, the unknown
+  side, the side that is not a side of the axis, the free axis with two
+  equal points, the free axis, the shape wholly on the other side, and
+  the open path.
+- **Two new tests** in the geometry library (`craftkit-vector-geom`): a
+  mirror is about the line it is given, and about a horizontal line
+  too.
+- **One new command**: the vector battery now carries **61** commands
+  and the MCP server **994** — one more than §799. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **Two new modules**: `mirrorcut`, for the command, and `axis`, for
+  the line — which the line cut uses as well.
+
+### What it does not settle
+
+- **The tree's mirror joins an open run to its mirror where the two
+  meet at the axis**: here an open path is refused, and nothing is
+  joined.
+- **The tree's mirror works on the selected shapes**: here one path is
+  mirrored in one axis.
