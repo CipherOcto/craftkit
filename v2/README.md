@@ -4185,6 +4185,7 @@ so.
 | the **area** under a shaped tip | **built.** A closed shape loses the area under an elliptical tip, and an open path loses the outline under it (§804) | §804 |
 | the **brush** that paints on a shape | **built.** A brush stroke is painted onto a shape, and the shape grows where the brush went (§805) | §805 |
 | the **scrub** that joins the ends | **built.** The two ends nearest a drag are joined, and the two ends of one contour close it (§806) | §806 |
+| the **values** of the formulas | **built.** The formulas of a range that give a number become that number, and the format is kept (§807) | §807 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -53112,3 +53113,53 @@ or the two ends of one path, which closes it.
 - **The tree's own brush symbols are not here**: the tree's Eraser and
   its Blob Brush take a brush, and the library of brushes is not here
   either.
+
+## 807. The formulas of a range become their values
+
+The tree's **Convert to Number** turns the formulas of a range into
+the numbers they give: a formula that gives a word, or a date's text,
+or a text result, is left as it is.
+
+### What was built
+
+- The command **`grid.formula.values`** turns the formulas of a range
+  into the values they give: the tree's Convert to Number, as a
+  command. The sheet and the **range** are named.
+- The rules are the tree's own:
+  - the cells of a **range** are the ones that are converted: the
+    tree's own rule;
+  - a formula that gives a **number** becomes that number: the tree's
+    own rule;
+  - the **format** of the cell is kept: the tree's own rule;
+  - a cell whose formula gives anything else — a word, a date's text,
+    a text result — is left as it is: the tree's own rule.
+
+### What the port found
+
+- **The tree's command works on the selection when no range is named,
+  and this tree has no selection.** The range is named here, and a
+  range that is not a range is refused by name.
+- **The tree's values are numbers or words, and this tree's values have
+  kinds.** A formula that gives a **boolean** here is left as it is: it
+  is not a number, and turning it into one would lose what it says.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/formulavalues.rs`): seven
+  tests — the formula that gives a number, the format that is kept, the
+  formula that gives text, the cell with no formula, the value another
+  formula reads, the range that is not a range, and the sheet that is
+  not there.
+- **One new command**: the grid battery now carries **158** commands
+  and the MCP server **1001** — one more than §806. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`formulavalues`), and the value of a formula is
+  the one the workbook computes.
+
+### What it does not settle
+
+- **The tree's own undo of the conversion is one step**: here the
+  command is one undoable step, as every command in this tree is.
+- **The tree's conversion works on the selection**: here a range is
+  named.
