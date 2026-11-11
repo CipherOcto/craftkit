@@ -668,8 +668,9 @@ impl ShowLevels {
         if self.rows.is_none() && self.cols.is_none() {
             return Err(EngineError::Failed {
                 id,
-                message: "give `rows` or `cols`: the outline level to show (one is only the top-level summaries)"
-                    .to_string(),
+                message:
+                    "give `rows` or `cols`: the outline level to show (one is only the top-level summaries)"
+                        .to_string(),
             });
         }
         let rows = match self.rows {
@@ -699,10 +700,8 @@ impl ShowLevels {
             }
             hidden_row_numbers.sort_unstable();
         }
-        let mut hidden_column_texts: Vec<String> = hidden_columns(&node)
-            .into_iter()
-            .map(crate::formula::CellRef::column_text)
-            .collect();
+        let mut hidden_column_texts: Vec<String> =
+            hidden_columns(&node).into_iter().map(crate::formula::CellRef::column_text).collect();
         if let Some(level) = cols {
             for (column, column_level) in column_levels_of(&node) {
                 let text = crate::formula::CellRef::column_text(column);
@@ -720,12 +719,13 @@ impl ShowLevels {
             node.data["hidden_rows"] = json!(hidden_row_numbers);
             node.data["hidden_columns"] = json!(hidden_column_texts);
         }
-        Ok(Outcome::changed(format!("the outline of the sheet `{sheet}` is shown to a level"))
-            .with_data(json!({
+        Ok(Outcome::changed(format!("the outline of the sheet `{sheet}` is shown to a level")).with_data(
+            json!({
                 "sheet": sheet,
                 "rows": rows,
                 "cols": cols,
-            })))
+            }),
+        ))
     }
 }
 
@@ -742,4 +742,353 @@ fn level_of(level: f64, id: &str) -> Result<u8, EngineError> {
         });
     }
     Ok(level as u8)
+}
+
+/// The **group** a command is about: the deepest group that holds the
+/// lines named, or the one whose summary is among them.
+///
+/// The tree's own rule: a group that holds the lines, and the deepest
+/// of those; and when no group holds them, the group whose summary
+/// line is one of them, and the deepest of those.
+fn group_of(groups: &[Group], first: u64, last: u64, level: Option<u8>) -> Option<Group> {
+    let at_level = |group: &Group| level.is_none_or(|level| group.level == level);
+    let holds = groups
+        .iter()
+        .filter(|group| at_level(group) && group.start <= last && group.end >= first)
+        .copied()
+        .collect::<Vec<_>>();
+    if !holds.is_empty() {
+        let deepest = holds.iter().map(|group| group.level).max().unwrap_or(0);
+        return holds.into_iter().find(|group| group.level == deepest);
+    }
+    let summaries = groups
+        .iter()
+        .filter(|group| {
+            at_level(group) && group.has_summary && group.summary >= first && group.summary <= last
+        })
+        .copied()
+        .collect::<Vec<_>>();
+    let deepest = summaries.iter().map(|group| group.level).max().unwrap_or(0);
+    summaries.into_iter().find(|group| group.level == deepest)
+}
+
+/// The **rows** of a group: the rows of its range that are in it.
+fn rows_in(levels: &BTreeMap<u64, u8>, group: &Group) -> Vec<u64> {
+    levels
+        .range(group.start..=group.end)
+        .filter(|(_, level)| **level >= group.level)
+        .map(|(row, _)| *row)
+        .collect()
+}
+
+/// The **detail** of a group: the group itself, the lines that are in
+/// it, and the lines of the inner groups that are collapsed on their
+/// own.
+fn detail_of(
+    levels: &BTreeMap<u64, u8>,
+    groups: &[Group],
+    first: u64,
+    last: u64,
+    level: Option<u8>,
+    is_hidden: &dyn Fn(u64) -> bool,
+) -> Option<(Group, Vec<u64>, Vec<u64>)> {
+    let group = group_of(groups, first, last, level)?;
+    let rows = rows_in(levels, &group);
+    // An inner group that is **collapsed on its own** — every one of
+    // its rows is hidden and its summary line is still there — keeps
+    // its rows hidden.
+    let collapsed: Vec<u64> = groups
+        .iter()
+        .filter(|other| {
+            other.level > group.level
+                && other.start >= group.start
+                && other.end <= group.end
+                && other.has_summary
+                && other.summary != group.summary
+        })
+        .filter(|other| {
+            let rows = rows_in(levels, other);
+            !rows.is_empty() && rows.iter().all(|row| is_hidden(*row)) && !is_hidden(other.summary)
+        })
+        .flat_map(|other| rows_in(levels, other))
+        .collect();
+    Some((group, rows, collapsed))
+}
+
+/// The **levels** of the columns of a sheet, by their number.
+fn column_numbers_of(node: &Node) -> BTreeMap<u64, u8> {
+    column_levels_of(node).into_iter().map(|(column, level)| (column as u64, level)).collect()
+}
+
+/// **Hide** the **detail** of a group of rows.
+///
+/// The tree's Hide Detail: the rows of the group are hidden, and the
+/// summary row of the group is not — it is not in the group.
+#[derive(Command)]
+#[command(id = "grid.row.detail.hide", area = "grid", layer = "grid", icon = "eye", mutates, undoable)]
+pub struct HideDetail {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The rows of the group: `5:8`.
+    pub rows: Text,
+    /// The level of the group, when the rows are in more than one.
+    pub level: Option<Number>,
+}
+
+impl HideDetail {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.row.detail.hide".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, sheet, &id)?;
+        let (first, last) = rows_of(&self.rows.0, &id)?;
+        let level = match self.level {
+            Some(level) => Some(level_of(level.0, &id)?),
+            None => None,
+        };
+        let Some(node) = session.document().node(sheet).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let hidden = hidden_rows(&node);
+        let is_hidden = |row: u64| hidden.contains(&row);
+        let Some((group, rows, _)) =
+            detail_of(&levels_of(&node), &groups_of(&node), first, last, level, &is_hidden)
+        else {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("there is no group of the rows {first}:{last}"),
+            });
+        };
+        let mut hidden = hidden;
+        for row in &rows {
+            if !hidden.contains(row) {
+                hidden.push(*row);
+            }
+        }
+        hidden.sort_unstable();
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["hidden_rows"] = json!(hidden);
+        }
+        Ok(Outcome::changed(format!("the detail of the group {first}:{last} is hidden")).with_data(json!({
+            "sheet": sheet,
+            "start": group.start,
+            "end": group.end,
+            "level": group.level,
+            "hidden": rows,
+        })))
+    }
+}
+
+/// **Show** the **detail** of a group of rows.
+///
+/// The tree's Show Detail: the rows of the group are shown, and the
+/// rows of an inner group that is **collapsed on its own** stay
+/// hidden.
+///
+/// The tree writes a mark beside a summary row when a group is
+/// collapsed on its own. Here a group is collapsed when all of its
+/// rows are hidden, and a group that is collapsed on its own is one
+/// whose summary row is still there.
+#[derive(Command)]
+#[command(id = "grid.row.detail.show", area = "grid", layer = "grid", icon = "eye", mutates, undoable)]
+pub struct ShowDetail {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The rows of the group: `5:8`.
+    pub rows: Text,
+    /// The level of the group, when the rows are in more than one.
+    pub level: Option<Number>,
+}
+
+impl ShowDetail {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.row.detail.show".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, sheet, &id)?;
+        let (first, last) = rows_of(&self.rows.0, &id)?;
+        let level = match self.level {
+            Some(level) => Some(level_of(level.0, &id)?),
+            None => None,
+        };
+        let Some(node) = session.document().node(sheet).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let hidden = hidden_rows(&node);
+        let is_hidden = |row: u64| hidden.contains(&row);
+        let Some((group, rows, collapsed)) =
+            detail_of(&levels_of(&node), &groups_of(&node), first, last, level, &is_hidden)
+        else {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("there is no group of the rows {first}:{last}"),
+            });
+        };
+        let mut hidden = hidden;
+        for row in &rows {
+            if collapsed.contains(row) {
+                continue;
+            }
+            hidden.retain(|other| other != row);
+        }
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["hidden_rows"] = json!(hidden);
+        }
+        Ok(Outcome::changed(format!("the detail of the group {first}:{last} is shown")).with_data(json!({
+            "sheet": sheet,
+            "start": group.start,
+            "end": group.end,
+            "level": group.level,
+            "shown": rows,
+        })))
+    }
+}
+
+/// **Hide** the **detail** of a group of columns.
+///
+/// The tree's Hide Detail, on the columns: the columns of the group
+/// are hidden, and the summary column of the group is not — it is not
+/// in the group.
+#[derive(Command)]
+#[command(id = "grid.column.detail.hide", area = "grid", layer = "grid", icon = "eye", mutates, undoable)]
+pub struct HideColumnDetail {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The columns of the group: `B:E`.
+    pub columns: Text,
+    /// The level of the group, when the columns are in more than one.
+    pub level: Option<Number>,
+}
+
+impl HideColumnDetail {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.column.detail.hide".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, sheet, &id)?;
+        let (first, last) = columns_of(&self.columns.0, &id)?;
+        let level = match self.level {
+            Some(level) => Some(level_of(level.0, &id)?),
+            None => None,
+        };
+        let Some(node) = session.document().node(sheet).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let hidden: Vec<u32> = hidden_columns(&node);
+        let is_hidden = |column: u64| hidden.contains(&(column as u32));
+        let Some((group, columns, _)) = detail_of(
+            &column_numbers_of(&node),
+            &column_groups_of(&node),
+            first as u64,
+            last as u64,
+            level,
+            &is_hidden,
+        ) else {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("there is no group of the columns {first}:{last}"),
+            });
+        };
+        let mut hidden = hidden;
+        for column in &columns {
+            let column = *column as u32;
+            if !hidden.contains(&column) {
+                hidden.push(column);
+            }
+        }
+        hidden.sort_unstable();
+        let mut texts: Vec<String> = hidden.into_iter().map(crate::formula::CellRef::column_text).collect();
+        texts.sort();
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["hidden_columns"] = json!(texts);
+        }
+        Ok(Outcome::changed(format!("the detail of the group {first}:{last} is hidden")).with_data(json!({
+            "sheet": sheet,
+            "start": crate::formula::CellRef::column_text(group.start as u32),
+            "end": crate::formula::CellRef::column_text(group.end as u32),
+            "level": group.level,
+            "hidden": columns
+                .iter()
+                .map(|column| crate::formula::CellRef::column_text(*column as u32))
+                .collect::<Vec<_>>(),
+        })))
+    }
+}
+
+/// **Show** the **detail** of a group of columns.
+///
+/// The tree's Show Detail, on the columns: the columns of the group
+/// are shown, and the columns of an inner group that is **collapsed
+/// on its own** stay hidden.
+#[derive(Command)]
+#[command(id = "grid.column.detail.show", area = "grid", layer = "grid", icon = "eye", mutates, undoable)]
+pub struct ShowColumnDetail {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The columns of the group: `B:E`.
+    pub columns: Text,
+    /// The level of the group, when the columns are in more than one.
+    pub level: Option<Number>,
+}
+
+impl ShowColumnDetail {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.column.detail.show".to_string();
+        let sheet = self.sheet.0;
+        sheet_of(session, sheet, &id)?;
+        let (first, last) = columns_of(&self.columns.0, &id)?;
+        let level = match self.level {
+            Some(level) => Some(level_of(level.0, &id)?),
+            None => None,
+        };
+        let Some(node) = session.document().node(sheet).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        let hidden: Vec<u32> = hidden_columns(&node);
+        let is_hidden = |column: u64| hidden.contains(&(column as u32));
+        let Some((group, columns, collapsed)) = detail_of(
+            &column_numbers_of(&node),
+            &column_groups_of(&node),
+            first as u64,
+            last as u64,
+            level,
+            &is_hidden,
+        ) else {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("there is no group of the columns {first}:{last}"),
+            });
+        };
+        let mut hidden = hidden;
+        for column in &columns {
+            if collapsed.contains(column) {
+                continue;
+            }
+            hidden.retain(|other| other != &(*column as u32));
+        }
+        let mut texts: Vec<String> = hidden.into_iter().map(crate::formula::CellRef::column_text).collect();
+        texts.sort();
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["hidden_columns"] = json!(texts);
+        }
+        Ok(Outcome::changed(format!("the detail of the group {first}:{last} is shown")).with_data(json!({
+            "sheet": sheet,
+            "start": crate::formula::CellRef::column_text(group.start as u32),
+            "end": crate::formula::CellRef::column_text(group.end as u32),
+            "level": group.level,
+            "shown": columns
+                .iter()
+                .map(|column| crate::formula::CellRef::column_text(*column as u32))
+                .collect::<Vec<_>>(),
+        })))
+    }
 }

@@ -44,7 +44,13 @@ fn a_sheet(session: &mut Session) -> u64 {
 /// The **rows** of a sheet that are hidden.
 fn hidden_rows(session: &Session, sheet: u64) -> Vec<u64> {
     let node = session.document().node(sheet).expect("the sheet is there");
-    node.data["hidden_rows"].as_array().cloned().expect("the sheet has the hidden rows").iter().filter_map(|row| row.as_u64()).collect()
+    node.data["hidden_rows"]
+        .as_array()
+        .cloned()
+        .expect("the sheet has the hidden rows")
+        .iter()
+        .filter_map(|row| row.as_u64())
+        .collect()
 }
 
 /// The **columns** of a sheet that are hidden.
@@ -71,8 +77,12 @@ fn groups_of(session: &mut Session, sheet: u64) -> Vec<craftkit_sdk::serde_json:
 fn a_level_of_one_shows_the_top_level_summaries_only() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
-    session.execute("grid.row.group", &json!({ "sheet": sheet, "rows": "5:8" })).expect("the rows are grouped");
-    session.execute("grid.outline.levels", &json!({ "sheet": sheet, "rows": 1 })).expect("the level is shown");
+    session
+        .execute("grid.row.group", &json!({ "sheet": sheet, "rows": "5:8" }))
+        .expect("the rows are grouped");
+    session
+        .execute("grid.outline.levels", &json!({ "sheet": sheet, "rows": 1 }))
+        .expect("the level is shown");
     assert_eq!(hidden_rows(&session, sheet), vec![5, 6, 7, 8], "the rows of the group are hidden");
     let groups = groups_of(&mut session, sheet);
     assert_eq!(groups[0]["collapsed"], json!(true), "the group is collapsed: {groups:?}");
@@ -83,11 +93,19 @@ fn a_level_of_one_shows_the_top_level_summaries_only() {
 fn a_deeper_level_shows_more_of_the_detail() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
-    session.execute("grid.row.group", &json!({ "sheet": sheet, "rows": "5:8" })).expect("the rows are grouped");
-    session.execute("grid.row.group", &json!({ "sheet": sheet, "rows": "6:7" })).expect("the rows are grouped again");
-    session.execute("grid.outline.levels", &json!({ "sheet": sheet, "rows": 2 })).expect("the level is shown");
+    session
+        .execute("grid.row.group", &json!({ "sheet": sheet, "rows": "5:8" }))
+        .expect("the rows are grouped");
+    session
+        .execute("grid.row.group", &json!({ "sheet": sheet, "rows": "6:7" }))
+        .expect("the rows are grouped again");
+    session
+        .execute("grid.outline.levels", &json!({ "sheet": sheet, "rows": 2 }))
+        .expect("the level is shown");
     assert_eq!(hidden_rows(&session, sheet), vec![6, 7], "the deeper rows are hidden");
-    session.execute("grid.outline.levels", &json!({ "sheet": sheet, "rows": 1 })).expect("the level is shown");
+    session
+        .execute("grid.outline.levels", &json!({ "sheet": sheet, "rows": 1 }))
+        .expect("the level is shown");
     assert_eq!(hidden_rows(&session, sheet), vec![5, 6, 7, 8], "the whole group is hidden");
 }
 
@@ -99,9 +117,17 @@ fn the_columns_are_shown_to_a_level() {
     session
         .execute("grid.column.group", &json!({ "sheet": sheet, "columns": "B:C" }))
         .expect("the columns are grouped");
-    session.execute("grid.outline.levels", &json!({ "sheet": sheet, "cols": 1 })).expect("the level is shown");
-    assert_eq!(hidden_columns(&session, sheet), vec!["B".to_string(), "C".to_string()], "the columns are hidden");
-    session.execute("grid.outline.levels", &json!({ "sheet": sheet, "cols": 2 })).expect("the level is shown");
+    session
+        .execute("grid.outline.levels", &json!({ "sheet": sheet, "cols": 1 }))
+        .expect("the level is shown");
+    assert_eq!(
+        hidden_columns(&session, sheet),
+        vec!["B".to_string(), "C".to_string()],
+        "the columns are hidden"
+    );
+    session
+        .execute("grid.outline.levels", &json!({ "sheet": sheet, "cols": 2 }))
+        .expect("the level is shown");
     assert!(hidden_columns(&session, sheet).is_empty(), "the columns are shown again");
 }
 
@@ -111,8 +137,12 @@ fn a_row_in_no_group_keeps_its_own_hidden_state() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
     session.execute("grid.row.hide", &json!({ "sheet": sheet, "row": 2 })).expect("the row is hidden");
-    session.execute("grid.row.group", &json!({ "sheet": sheet, "rows": "5:8" })).expect("the rows are grouped");
-    session.execute("grid.outline.levels", &json!({ "sheet": sheet, "rows": 1 })).expect("the level is shown");
+    session
+        .execute("grid.row.group", &json!({ "sheet": sheet, "rows": "5:8" }))
+        .expect("the rows are grouped");
+    session
+        .execute("grid.outline.levels", &json!({ "sheet": sheet, "rows": 1 }))
+        .expect("the level is shown");
     assert_eq!(hidden_rows(&session, sheet), vec![2, 5, 6, 7, 8], "the row of no group is still hidden");
 }
 
@@ -132,8 +162,12 @@ fn a_level_that_is_not_one_to_eight_is_refused() {
 fn a_level_of_eight_shows_everything() {
     let mut session = session();
     let sheet = a_sheet(&mut session);
-    session.execute("grid.row.group", &json!({ "sheet": sheet, "rows": "5:8" })).expect("the rows are grouped");
-    session.execute("grid.outline.levels", &json!({ "sheet": sheet, "rows": 8 })).expect("the level is shown");
+    session
+        .execute("grid.row.group", &json!({ "sheet": sheet, "rows": "5:8" }))
+        .expect("the rows are grouped");
+    session
+        .execute("grid.outline.levels", &json!({ "sheet": sheet, "rows": 8 }))
+        .expect("the level is shown");
     assert!(hidden_rows(&session, sheet).is_empty(), "every row is shown");
 }
 
