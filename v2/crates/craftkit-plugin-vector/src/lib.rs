@@ -17,15 +17,16 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **sixty-one commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **sixty-two commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.create` makes a path out of path data or
 //!   out of anchors, `vector.path.spline` makes one that curves
 //!   through a list of points, and `vector.path.anchors.set` sets the
 //!   anchors of a path that is already there, `vector.path.anchors.middle`
-//!   puts a point in the middle of every side of it, `vector.path.cut` cuts
-//!   a path at a point, `vector.path.erase` takes away the parts of a
+//!   puts a point in the middle of every side of it,
+//!   `vector.path.anchors.convert` turns points into smooth points or
+//!   into corners, `vector.path.cut` cuts a path at a point, `vector.path.erase` takes away the parts of a
 //!   path under a drag, `vector.path.knife` cuts a closed shape along a
 //!   run of points, `vector.path.cut.line` cuts a closed shape along a
 //!   line, `vector.path.cut.rect` cuts one to a rectangle,
@@ -89,6 +90,7 @@ mod anchors;
 mod axis;
 mod colour;
 mod components;
+mod convert;
 mod cutpath;
 mod dashes;
 mod epsexport;
@@ -111,6 +113,7 @@ mod svgimport;
 pub use anchors::{AddMiddleAnchors, SetAnchors};
 pub use colour::{ColourGamut, ConvertColour};
 pub use components::components;
+pub use convert::ConvertAnchors;
 pub use cutpath::CutPath;
 pub use dashes::DashPath;
 pub use epsexport::ExportEps;
@@ -2180,8 +2183,11 @@ fn anchor_ending_at(subpath: &SubPath, index: usize) -> crate::spline::Anchor {
 /// point that has no handles at it is a corner already.
 ///
 /// The tree's `path.convertAnchors` is one command with a `to` that
-/// says `corner` or `smooth`. This tree has one command for each, and
-/// this one is the corner; the smooth one is `vector.path.smooth`.
+/// says `corner` or `smooth`, and it turns **many** points at once.
+/// This tree has one command for each point — this one is the corner
+/// and `vector.path.smooth` is the smooth — and
+/// `vector.path.anchors.convert` is the tree's own command, which
+/// turns many points at once by the tree's **neighbours'** rule.
 #[derive(Command)]
 #[command(
     id = "vector.path.corner",
@@ -2868,6 +2874,7 @@ craftkit_sdk::plugin_anchor!(
     AddSpline,
     SetAnchors,
     AddMiddleAnchors,
+    ConvertAnchors,
     ErasePath,
     KnifePath,
     CutPathLine,
