@@ -366,3 +366,118 @@ impl MergeAcross {
         })))
     }
 }
+
+/// **Merge** a range of cells and **centre** its text.
+///
+/// The tree's Merge and Center: the range becomes one cell and its text
+/// is centred.
+///
+/// The tree's own rule: a range that is **already merged** is
+/// unmerged again — the button is a button and a button pressed twice
+/// does the opposite.
+#[derive(Command)]
+#[command(id = "grid.merge.center", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct MergeCenter {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The range that is merged: `A1:B2`.
+    pub range: Text,
+}
+
+impl MergeCenter {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.merge.center".to_string();
+        let sheet = self.sheet.0;
+        let Some(node) = session.document().node(sheet) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{sheet}` is not a sheet"),
+            });
+        }
+        let text = self.range.0.trim().to_string();
+        let Some((_, area)) = parse_area(&text) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("`{text}` is not a range of cells"),
+            });
+        };
+        if area.start == area.end {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("a merge of one cell is not a merge: {text}"),
+            });
+        }
+        let merges = merges_of(node);
+        let merged = merges.iter().any(|merge| merge.start == area.start && merge.end == area.end);
+        if merged {
+            // The range is already merged: the button pressed twice
+            // unmerges it — the tree's own rule.
+            let list: Vec<String> = merges
+                .iter()
+                .filter(|other| other.start != area.start || other.end != area.end)
+                .map(|area| format!("{}:{}", area.start.to_text(), area.end.to_text()))
+                .collect();
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["merges"] = json!(list);
+            }
+            return Ok(Outcome::changed(format!("the range {text} is unmerged")).with_data(json!({
+                "sheet": sheet,
+                "range": text,
+                "merged": false,
+            })));
+        }
+        for merge in &merges {
+            if areas_touch(merge, &area) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the range {text} touches the merge {}:{}, and a cell that is in two regions is in none of them",
+                        merge.start.to_text(),
+                        merge.end.to_text()
+                    ),
+                });
+            }
+        }
+        // The **cells** of the region but the top left one: they hold
+        // nothing, or the merge is refused.
+        let cells = crate::cells_of(node);
+        for cell in cells_of(&area).iter().skip(1) {
+            let Some(entry) = cells.get(*cell) else { continue };
+            let holds = entry.formula.is_some()
+                || matches!(&entry.value, Some(value) if value != &crate::formula::Value::Empty);
+            if holds {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the cell {} holds a value, and the value of a merged region is the value of its top left cell",
+                        cell.to_text()
+                    ),
+                });
+            }
+        }
+        let mut list: Vec<String> =
+            merges.iter().map(|area| format!("{}:{}", area.start.to_text(), area.end.to_text())).collect();
+        list.push(format!("{}:{}", area.start.to_text(), area.end.to_text()));
+        // The text of the region is the text of its top left cell, and
+        // it is **centred**: the tree's own rule.
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            let mut cells = crate::sheet_cells_mut(node);
+            let mut align = cells.align(area.start).copied().unwrap_or_else(crate::formula::Align::plain);
+            align.horizontal = crate::formula::AlignH::Center;
+            cells.set_align(area.start, Some(align));
+            node.data["merges"] = json!(list);
+            node.data["cells"] = crate::cells_into(&cells);
+        }
+        Ok(Outcome::changed(format!("the range {text} is merged and its text is centred")).with_data(json!({
+            "sheet": sheet,
+            "range": text,
+            "merged": true,
+        })))
+    }
+}
