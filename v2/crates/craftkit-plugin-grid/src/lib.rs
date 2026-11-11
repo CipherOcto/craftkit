@@ -484,7 +484,9 @@ pub use reading::ReadRange;
 pub use removal::RemoveSheet;
 pub use replacing::ReplaceText;
 pub use scaling::{SetFit, SetScale};
-pub use scenarios::{AddScenario, DeleteScenario, ListScenarios, ScenarioKind, ShowScenario};
+pub use scenarios::{
+    AddScenario, DeleteScenario, ListScenarios, ScenarioKind, ShowScenario, SummariseScenarios,
+};
 pub use sheetnames::RenameSheet;
 pub use sheetreading::ReadSheet;
 pub use sizes::{SetColumnWidth, SetRowHeight};
@@ -1973,6 +1975,7 @@ craftkit_sdk::plugin_anchor!(
     ListScenarios,
     ShowScenario,
     DeleteScenario,
+    SummariseScenarios,
     ReadSparkline,
     RemoveSparkline,
     CreatePivot,

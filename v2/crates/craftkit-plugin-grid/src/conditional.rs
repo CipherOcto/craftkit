@@ -107,7 +107,7 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
 }
 
 /// The **area** a conditional format's range names.
-fn area_of(range: &str) -> Option<Area> {
+pub(crate) fn area_of(range: &str) -> Option<Area> {
     let trimmed = range.trim();
     let area = match trimmed.split_once(':') {
         Some((first, second)) => {

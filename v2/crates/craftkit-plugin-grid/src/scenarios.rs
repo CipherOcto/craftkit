@@ -29,8 +29,8 @@
 //! # What it does not settle
 //!
 //! - The tree's own **summary** of the scenarios — a sheet that says
-//!   what every scenario does to the book — is not here: it is a sheet
-//!   of its own, and it is a trial of the book as well.
+//!   what every scenario does to the book — is **here** (§834): it is a
+//!   sheet of its own and a trial of the book as well.
 
 use craftkit_derive::Command;
 
@@ -458,4 +458,259 @@ impl DeleteScenario {
         Ok(Outcome::changed(format!("the scenario `{name}` is taken away"))
             .with_data(json!({ "workbook": workbook, "name": name })))
     }
+}
+
+/// The **summary** of the scenarios of a sheet: a sheet of its own that
+/// says what every scenario does to the book.
+///
+/// The tree's own `data.scenarioSummary`: the title, the current values
+/// and the values of every scenario, the changing cells and the result
+/// cells, and a note that says what the current values are.
+#[derive(Command)]
+#[command(id = "grid.scenario.summary", area = "grid", layer = "grid", icon = "list", mutates, undoable)]
+pub struct SummariseScenarios {
+    /// The workbook the scenarios are in.
+    pub workbook: NodeRef,
+    /// The sheet the scenarios are on.
+    pub sheet: NodeRef,
+    /// The **result cells**: `B10` or `B10:B12,D4`. The default is
+    /// none, and then the summary says the changing cells only.
+    pub result_cells: Option<Text>,
+}
+
+/// The tree's own **bound** on the cells of a list of addresses.
+const MAX_CELLS_IN_A_LIST: usize = 255;
+
+/// The **cells** a list of addresses names: `B10`, `B10:B12`, `D4`.
+fn cell_list(text: &str, id: &str) -> Result<Vec<crate::formula::CellRef>, EngineError> {
+    let mut cells: Vec<crate::formula::CellRef> = Vec::new();
+    for part in text.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+        match part.split_once(':') {
+            Some(_) => {
+                let Some(area) = crate::conditional::area_of(part) else {
+                    return Err(EngineError::Failed {
+                        id: id.to_string(),
+                        message: format!("`{part}` is not a range of cells"),
+                    });
+                };
+                for row in area.start.row..=area.end.row {
+                    for col in area.start.col..=area.end.col {
+                        cells.push(crate::formula::CellRef { col, row });
+                    }
+                }
+            }
+            None => {
+                let Some(cell) = crate::formula::CellRef::parse(part) else {
+                    return Err(EngineError::Failed {
+                        id: id.to_string(),
+                        message: format!("`{part}` is not a cell"),
+                    });
+                };
+                cells.push(cell);
+            }
+        }
+        if cells.len() > MAX_CELLS_IN_A_LIST {
+            return Err(EngineError::Failed {
+                id: id.to_string(),
+                message: format!("a list of cells is at most {MAX_CELLS_IN_A_LIST} cells long"),
+            });
+        }
+    }
+    Ok(cells)
+}
+
+/// The **address** of a cell, as the tree writes it: `$A$1`.
+fn address_of(cell: crate::formula::CellRef) -> String {
+    format!("${}${}", crate::formula::CellRef::column_text(cell.col), cell.row + 1)
+}
+
+impl SummariseScenarios {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.scenario.summary".to_string();
+        let workbook = self.workbook.0;
+        let sheet = self.sheet.0;
+        let Some(node) = session.document().node(sheet) else {
+            return Err(EngineError::Failed { id, message: format!("there is no sheet `{sheet}`") });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+            });
+        }
+        let sheet_name = node.name.clone();
+        // The **scenarios** of this sheet: the tree's rule, and a sheet
+        // with no scenario has no summary.
+        let scenarios: Vec<u64> = scenarios_of(session, workbook)
+            .into_iter()
+            .filter(|scenario| sheet_of(session, *scenario) == sheet)
+            .collect();
+        if scenarios.is_empty() {
+            return Err(EngineError::Failed {
+                id,
+                message: "there are no scenarios on this sheet".to_string(),
+            });
+        }
+        // The **result cells**: they are on this sheet, for they are
+        // named without a sheet.
+        let results = match &self.result_cells {
+            Some(text) => cell_list(&text.0, &id)?,
+            None => Vec::new(),
+        };
+        // The **changing cells** of every scenario, in the order they
+        // are first seen, and each scenario's values.
+        let mut changing: Vec<crate::formula::CellRef> = Vec::new();
+        let mut per: Vec<Vec<(crate::formula::CellRef, Json)>> = Vec::new();
+        for scenario in &scenarios {
+            let (cells, values) = changing_of(session, *scenario);
+            let mut pairs = Vec::new();
+            for (address, value) in cells.iter().zip(values.iter()) {
+                let Some(cell) = crate::formula::CellRef::parse(address) else { continue };
+                if !changing.contains(&cell) {
+                    changing.push(cell);
+                }
+                pairs.push((cell, value.clone()));
+            }
+            per.push(pairs);
+        }
+        // The **current values**: the cells as they are now.
+        let book = crate::book_of(session.document());
+        let current: Vec<crate::formula::Value> =
+            changing.iter().map(|cell| book.value_of(&sheet_name, *cell)).collect();
+        let current_results: Vec<crate::formula::Value> =
+            results.iter().map(|cell| book.value_of(&sheet_name, *cell)).collect();
+        // The **results** of every scenario: a trial — the scenario's
+        // values in the changing cells, and the result cells read.
+        let scenario_results: Vec<Vec<crate::formula::Value>> = per
+            .iter()
+            .map(|pairs| {
+                let mut trial = crate::book_of(session.document());
+                if let Some(cells) = trial.sheet_mut(&sheet_name) {
+                    for (cell, value) in pairs {
+                        cells.set_value(*cell, crate::formula::Value::from_json(value));
+                    }
+                }
+                results.iter().map(|cell| trial.value_of(&sheet_name, *cell)).collect()
+            })
+            .collect();
+        // The **sheet** of the summary: the tree's own name, and the
+        // tree's own rule when the name is taken.
+        let taken: Vec<String> = session
+            .document()
+            .node(workbook)
+            .map(|node| {
+                node.children
+                    .iter()
+                    .filter(|child| child.kind == "grid.sheet")
+                    .map(|child| child.name.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut name = String::from("Scenario Summary");
+        let mut number = 2;
+        while taken.iter().any(|other| other.eq_ignore_ascii_case(&name)) {
+            name = format!("Scenario Summary {number}");
+            number += 1;
+        }
+        // The **cells** of the summary: the tree's own layout.
+        let mut cells = crate::formula::Cells::new();
+        let put = |cells: &mut crate::formula::Cells,
+                   cell: crate::formula::CellRef,
+                   value: crate::formula::Value,
+                   bold: bool| {
+            cells.set_value(cell, value);
+            if bold {
+                cells.set_font(cell, Some(bold_font()));
+            }
+        };
+        let cell_at = |row: u32, col: u32| crate::formula::CellRef { row, col };
+        put(&mut cells, cell_at(1, 1), crate::formula::Value::Text("Scenario Summary".to_string()), true);
+        put(&mut cells, cell_at(2, 2), crate::formula::Value::Text("Current Values:".to_string()), true);
+        for (index, scenario) in scenarios.iter().enumerate() {
+            put(
+                &mut cells,
+                cell_at(2, 3 + index as u32),
+                crate::formula::Value::Text(name_of(session, *scenario)),
+                true,
+            );
+        }
+        put(&mut cells, cell_at(3, 0), crate::formula::Value::Text("Changing Cells:".to_string()), true);
+        let mut row = 4u32;
+        for (index, cell) in changing.iter().enumerate() {
+            put(&mut cells, cell_at(row, 1), crate::formula::Value::Text(address_of(*cell)), false);
+            put(
+                &mut cells,
+                cell_at(row, 2),
+                current.get(index).cloned().unwrap_or(crate::formula::Value::Empty),
+                false,
+            );
+            for (scenario, pairs) in per.iter().enumerate() {
+                let value = pairs
+                    .iter()
+                    .find(|(other, _)| other == cell)
+                    .map(|(_, value)| crate::formula::Value::from_json(value))
+                    .unwrap_or_else(|| current.get(index).cloned().unwrap_or(crate::formula::Value::Empty));
+                put(&mut cells, cell_at(row, 3 + scenario as u32), value, false);
+            }
+            row += 1;
+        }
+        if !results.is_empty() {
+            put(&mut cells, cell_at(row, 1), crate::formula::Value::Text("Result Cells:".to_string()), true);
+            row += 1;
+            for (index, cell) in results.iter().enumerate() {
+                put(&mut cells, cell_at(row, 1), crate::formula::Value::Text(address_of(*cell)), false);
+                put(
+                    &mut cells,
+                    cell_at(row, 2),
+                    current_results.get(index).cloned().unwrap_or(crate::formula::Value::Empty),
+                    false,
+                );
+                for (scenario, values) in scenario_results.iter().enumerate() {
+                    put(
+                        &mut cells,
+                        cell_at(row, 3 + scenario as u32),
+                        values.get(index).cloned().unwrap_or(crate::formula::Value::Empty),
+                        false,
+                    );
+                }
+                row += 1;
+            }
+        }
+        put(
+            &mut cells,
+            cell_at(row + 1, 1),
+            crate::formula::Value::Text(
+                "Notes: Current Values column represents values of changing cells at time Scenario Summary Report was created."
+                    .to_string(),
+            ),
+            false,
+        );
+        let id_node = session.document_mut()?.add_node_with_under(
+            Some(workbook),
+            name.clone(),
+            "grid.sheet",
+            None,
+            json!({
+                "cells": crate::cells_into(&cells),
+                "view": crate::view::SheetView::default().to_json(),
+                "zoom": 100,
+            }),
+        );
+        Ok(Outcome::changed(format!("the summary of the scenarios is the sheet `{name}`")).with_data(json!({
+            "id": id_node,
+            "sheet": name,
+            "scenarios": scenarios.len(),
+            "changing_cells": changing.len(),
+            "result_cells": results.len(),
+        })))
+    }
+}
+
+/// The **bold** font the headings of the summary are written with.
+fn bold_font() -> crate::formula::Font {
+    crate::formula::Font { bold: true, ..crate::formula::Font::plain() }
 }
