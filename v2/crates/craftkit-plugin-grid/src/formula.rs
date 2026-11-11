@@ -1330,6 +1330,161 @@ impl Align {
     }
 }
 
+/// The **underline** of a cell's text.
+///
+/// The tree's own names: none, single, double, single accounting and
+/// double accounting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Underline {
+    /// There is no underline.
+    None,
+    /// A single line under the text.
+    Single,
+    /// Two lines under the text.
+    Double,
+    /// A single line under the text, and the line is as long as the
+    /// numbers of the cell are wide.
+    SingleAccounting,
+    /// Two lines under the text, and the lines are as long as the
+    /// numbers of the cell are wide.
+    DoubleAccounting,
+}
+
+impl Underline {
+    /// The **name** of the underline.
+    pub fn to_text(self) -> &'static str {
+        match self {
+            Underline::None => "none",
+            Underline::Single => "single",
+            Underline::Double => "double",
+            Underline::SingleAccounting => "single-accounting",
+            Underline::DoubleAccounting => "double-accounting",
+        }
+    }
+
+    /// The underline of a **name**, and nothing when the name is not
+    /// one of them.
+    pub fn parse(text: &str) -> Option<Underline> {
+        match text.trim().to_lowercase().replace('_', "-").as_str() {
+            "none" => Some(Underline::None),
+            "single" => Some(Underline::Single),
+            "double" => Some(Underline::Double),
+            "single-accounting" => Some(Underline::SingleAccounting),
+            "double-accounting" => Some(Underline::DoubleAccounting),
+            _ => None,
+        }
+    }
+}
+
+/// Where the text of a cell sits **above or below** its line.
+///
+/// The tree's own names: baseline, superscript and subscript.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Vert {
+    /// On the line of the text.
+    Baseline,
+    /// Above the line of the text.
+    Superscript,
+    /// Below the line of the text.
+    Subscript,
+}
+
+impl Vert {
+    /// The **name** of the place.
+    pub fn to_text(self) -> &'static str {
+        match self {
+            Vert::Baseline => "baseline",
+            Vert::Superscript => "superscript",
+            Vert::Subscript => "subscript",
+        }
+    }
+
+    /// The place of a **name**, and nothing when the name is not one
+    /// of them.
+    pub fn parse(text: &str) -> Option<Vert> {
+        match text.trim().to_lowercase().as_str() {
+            "baseline" | "base" => Some(Vert::Baseline),
+            "superscript" | "super" => Some(Vert::Superscript),
+            "subscript" | "sub" => Some(Vert::Subscript),
+            _ => None,
+        }
+    }
+}
+
+/// The **font** of a cell: the face of its text, the size of it, and
+/// the marks that are put on it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Font {
+    /// The **name** of the face, when the cell names one.
+    pub name: Option<String>,
+    /// The **size** of the text, when the cell names one.
+    pub size: Option<f64>,
+    /// Whether the text is **bold**.
+    pub bold: bool,
+    /// Whether the text is **italic**.
+    pub italic: bool,
+    /// Whether the text is **struck through**.
+    pub strike: bool,
+    /// The **underline** of the text.
+    pub underline: Underline,
+    /// Where the text sits above or below its line.
+    pub vert: Vert,
+}
+
+impl Font {
+    /// The font a cell has when it names none: the face of the sheet,
+    /// the size of the sheet, and no marks at all.
+    pub fn plain() -> Font {
+        Font {
+            name: None,
+            size: None,
+            bold: false,
+            italic: false,
+            strike: false,
+            underline: Underline::None,
+            vert: Vert::Baseline,
+        }
+    }
+
+    /// The font, as the sheet keeps it.
+    pub fn to_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "name": match &self.name {
+                Some(name) => serde_json::Value::String(name.clone()),
+                None => serde_json::Value::Null,
+            },
+            "size": match self.size {
+                Some(size) => serde_json::Value::from(size),
+                None => serde_json::Value::Null,
+            },
+            "bold": self.bold,
+            "italic": self.italic,
+            "strike": self.strike,
+            "underline": self.underline.to_text(),
+            "vert": self.vert.to_text(),
+        })
+    }
+
+    /// The font of a sheet's own record, and nothing when the record is
+    /// not one this tree writes.
+    pub fn from_json(value: &serde_json::Value) -> Option<Font> {
+        let name = value.get("name").and_then(|name| name.as_str()).map(|name| name.to_string());
+        let size = value.get("size").and_then(|size| size.as_f64());
+        let bold = value.get("bold").and_then(|bold| bold.as_bool()).unwrap_or(false);
+        let italic = value.get("italic").and_then(|italic| italic.as_bool()).unwrap_or(false);
+        let strike = value.get("strike").and_then(|strike| strike.as_bool()).unwrap_or(false);
+        let underline = match value.get("underline").and_then(|underline| underline.as_str()) {
+            Some(underline) => Underline::parse(underline)?,
+            None => Underline::None,
+        };
+        let vert = match value.get("vert").and_then(|vert| vert.as_str()) {
+            Some(vert) => Vert::parse(vert)?,
+            None => Vert::Baseline,
+        };
+        Some(Font { name, size, bold, italic, strike, underline, vert })
+    }
+}
+
 /// A cell: a value, or a formula.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cell {
@@ -1353,6 +1508,12 @@ pub struct Cell {
     /// The tree's alignment is a style and a style is shared between
     /// cells; here the alignment is the cell's own, as the format is.
     pub align: Option<Align>,
+    /// The **font** of the cell, when it has one.
+    ///
+    /// The tree's font is a style and a style is shared between cells;
+    /// here the font is the cell's own, as the format and the
+    /// alignment are.
+    pub font: Option<Font>,
 }
 
 impl Cells {
@@ -1374,7 +1535,8 @@ impl Cells {
         let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
         let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
         let align = self.cells.get(&cell).and_then(|entry| entry.align);
-        self.cells.insert(cell, Cell { value: Some(value), formula: None, format, style, align });
+        let font = self.cells.get(&cell).and_then(|entry| entry.font.clone());
+        self.cells.insert(cell, Cell { value: Some(value), formula: None, format, style, align, font });
     }
 
     /// Put a formula in a cell.
@@ -1385,7 +1547,8 @@ impl Cells {
         let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
         let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
         let align = self.cells.get(&cell).and_then(|entry| entry.align);
-        self.cells.insert(cell, Cell { value: None, formula: Some(formula), format, style, align });
+        let font = self.cells.get(&cell).and_then(|entry| entry.font.clone());
+        self.cells.insert(cell, Cell { value: None, formula: Some(formula), format, style, align, font });
     }
 
     /// The **number format** of a cell, if it has one.
@@ -1403,7 +1566,8 @@ impl Cells {
             None => {
                 let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
                 let align = self.cells.get(&cell).and_then(|entry| entry.align);
-                self.cells.insert(cell, Cell { value: None, formula: None, format, style, align });
+                let font = self.cells.get(&cell).and_then(|entry| entry.font.clone());
+                self.cells.insert(cell, Cell { value: None, formula: None, format, style, align, font });
             }
         }
     }
@@ -1423,7 +1587,8 @@ impl Cells {
             None => {
                 let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
                 let align = self.cells.get(&cell).and_then(|entry| entry.align);
-                self.cells.insert(cell, Cell { value: None, formula: None, format, style, align });
+                let font = self.cells.get(&cell).and_then(|entry| entry.font.clone());
+                self.cells.insert(cell, Cell { value: None, formula: None, format, style, align, font });
             }
         }
     }
@@ -1443,7 +1608,29 @@ impl Cells {
             None => {
                 let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
                 let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
-                self.cells.insert(cell, Cell { value: None, formula: None, format, style, align });
+                let font = self.cells.get(&cell).and_then(|entry| entry.font.clone());
+                self.cells.insert(cell, Cell { value: None, formula: None, format, style, align, font });
+            }
+        }
+    }
+
+    /// The **font** of a cell, if it has one.
+    pub fn font(&self, cell: CellRef) -> Option<&Font> {
+        self.cells.get(&cell)?.font.as_ref()
+    }
+
+    /// Put a **font** on a cell, keeping what the cell holds.
+    ///
+    /// A cell that is not there is made: a cell may have a font before
+    /// it has a value.
+    pub fn set_font(&mut self, cell: CellRef, font: Option<Font>) {
+        match self.cells.get_mut(&cell) {
+            Some(entry) => entry.font = font,
+            None => {
+                let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
+                let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
+                let align = self.cells.get(&cell).and_then(|entry| entry.align);
+                self.cells.insert(cell, Cell { value: None, formula: None, format, style, align, font });
             }
         }
     }

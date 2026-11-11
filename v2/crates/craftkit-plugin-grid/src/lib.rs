@@ -356,6 +356,7 @@ mod filters;
 mod finance;
 mod finding;
 mod flash;
+mod font;
 mod format;
 mod formatdecimals;
 mod formatnames;
@@ -444,6 +445,7 @@ use fill::FillRange;
 pub use filters::{ClearFilter, FilteredRows, SetFilter, SetFilterGroups};
 pub use finding::FindCells;
 use flash::FlashFill;
+pub use font::{SetBold, SetFont, SetItalic, SetStrike};
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 pub use formatdecimals::SetFormatDecimals;
 use formula::{Book, CellRef, Cells, Value};
@@ -707,6 +709,7 @@ pub(crate) fn cells_of(node: &Node) -> Cells {
         let format = entry.get("format").and_then(|format| format.as_str()).map(|text| text.to_string());
         let style = entry.get("style").and_then(|style| style.as_str()).map(|text| text.to_string());
         let align = entry.get("align").and_then(formula::Align::from_json);
+        let font = entry.get("font").and_then(formula::Font::from_json);
         match (value, formula) {
             (_, Some(formula)) => cells.set_formula(cell, formula),
             (Some(value), None) => cells.set_value(cell, value),
@@ -720,6 +723,9 @@ pub(crate) fn cells_of(node: &Node) -> Cells {
         }
         if let Some(align) = align {
             cells.set_align(cell, Some(align));
+        }
+        if let Some(font) = font {
+            cells.set_font(cell, Some(font));
         }
     }
     cells
@@ -744,6 +750,9 @@ pub(crate) fn cells_into(cells: &Cells) -> Json {
         }
         if let Some(align) = entry.align {
             one.insert("align".to_string(), align.to_json());
+        }
+        if let Some(font) = &entry.font {
+            one.insert("font".to_string(), font.to_json());
         }
         map.insert(cell.to_text(), Json::Object(one));
     }
