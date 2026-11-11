@@ -177,3 +177,54 @@ impl AddGenerator {
             .with_data(json!({ "id": id_node, "item": item as u64, "name": name, "kind": kind, "duration": frames as u64 })))
     }
 }
+
+/// The **colour** of a colour matte is changed.
+///
+/// The tree's rule: the colour must be `#rrggbb`, and the item must
+/// be a colour matte — an item that is not one is refused by name.
+///
+/// The colour is the item's own, so every clip that plays the matte
+/// is changed with it.
+#[derive(Command)]
+#[command(id = "film.item.matte.colour", area = "film", layer = "film", icon = "paint", mutates, undoable)]
+pub struct SetMatteColour {
+    /// The item: the colour matte.
+    pub item: NodeRef,
+    /// The colour of the matte: `#rrggbb`.
+    pub colour: Text,
+}
+
+impl SetMatteColour {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "film.item.matte.colour".to_string();
+        let item = self.item.0;
+        let Some(node) = session.document().node(item) else {
+            return Err(EngineError::Failed { id, message: format!("there is no item `{item}`") });
+        };
+        // The item must be a **colour matte**: the tree's own rule.
+        let kind = node
+            .data
+            .get("generator")
+            .and_then(|generator| generator.get("kind"))
+            .and_then(|kind| kind.as_str());
+        if kind != Some("Color Matte") {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("the item `{item}` is not a Color Matte"),
+            });
+        }
+        // The **colour**: `#rrggbb`, and nothing else.
+        let colour =
+            Colour::from_hex(&self.colour.0).map_err(|message| EngineError::Failed { id, message })?;
+        let hex = format!(
+            "#{:02x}{:02x}{:02x}",
+            (colour.0[0] * 255.0).round() as u8,
+            (colour.0[1] * 255.0).round() as u8,
+            (colour.0[2] * 255.0).round() as u8
+        );
+        if let Some(node) = session.document_mut()?.node_mut(item) {
+            node.data["generator"]["colour"] = json!(hex.clone());
+        }
+        Ok(Outcome::changed(format!("the matte is {hex}")).with_data(json!({ "item": item, "colour": hex })))
+    }
+}

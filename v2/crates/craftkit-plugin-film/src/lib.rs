@@ -283,7 +283,7 @@ pub use fcp7import::ImportFcp7;
 pub use fcpxml::ExportFcpxml;
 pub use fcpxmlimport::ImportFcpxml;
 pub use gaps::CloseGap;
-pub use generators::AddGenerator;
+pub use generators::{AddGenerator, SetMatteColour};
 pub use hold::{DeleteHold, SetHold};
 pub use inserting::InsertClip;
 pub use itemnaming::{RenameBin, RenameItem};
@@ -1009,6 +1009,7 @@ craftkit_sdk::plugin_anchor!(
     AddBin,
     AddItem,
     AddGenerator,
+    SetMatteColour,
     AddTrack,
     AddClip,
     ExportEdl,
