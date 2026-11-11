@@ -78,11 +78,15 @@ impl ReadCell {
             },
             None => Value::Empty,
         };
+        // The **look** the conditional formats of the sheet give the
+        // cell: the format and the fill, each of them from the rule
+        // that is seen first and says something about it.
+        let looks = crate::conditional::looks_for(node, cell, &value);
         // The **text** the cell shows: the value written with the
         // format of the cell — the conditional format that matches it
         // first, and the format of the style it names otherwise.
-        let format = match crate::conditional::format_for(node, cell, &value) {
-            Some(code) => crate::format::Format::parse(&code).unwrap_or(crate::format::Format::General),
+        let format = match &looks.format {
+            Some(code) => crate::format::Format::parse(code).unwrap_or(crate::format::Format::General),
             None => crate::format_of(session, sheet, &cells, cell),
         };
         let text = format.text(&value, crate::system_of(session, sheet));
@@ -142,7 +146,9 @@ impl ReadCell {
                     None => Json::Null,
                 },
             },
-            "fill": match entry.as_ref().and_then(|entry| entry.fill.clone()) {
+            // The **fill**: the rule's fill is on top of the cell's
+            // own, as the rule is on top of the cell.
+            "fill": match looks.fill.clone().or_else(|| entry.as_ref().and_then(|entry| entry.fill.clone())) {
                 Some(fill) => json!(fill),
                 None => Json::Null,
             },

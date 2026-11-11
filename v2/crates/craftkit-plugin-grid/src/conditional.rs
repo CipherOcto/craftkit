@@ -1,11 +1,17 @@
 //! The **conditional formats** of a sheet.
 //!
 //! A conditional format is a **range** of cells, a **criterion** and a
-//! **format**: the cells of the range whose value matches the
-//! criterion are written with that format. It is the tree's
-//! conditional formatting without the colours: the tree's rule is a
-//! *style* and a style is a colour and a font, and this tree's grid
-//! has number formats and no colours.
+//! **look**: the cells of the range whose value matches the criterion
+//! are written with it. The look is a **number format** and a **fill**,
+//! and each of them is a part of its own: a rule may carry the format
+//! and no fill, and a rule may carry the fill and no format.
+//!
+//! The rules **layer**: every rule that matches is tried, and for each
+//! part of the look the rule that is **seen first** and says something
+//! about it wins — the tree's own rule, where two rules set the same
+//! part of a cell the one seen first wins. And the tree's **stop if
+//! true**: a rule that matched and says stop ends the walk, and the
+//! rules after it are not tried.
 //!
 //! And the format a cell is **written with** is **derived**: the
 //! conditional format that matches it wins over the cell's own format,
@@ -15,12 +21,14 @@
 //!
 //! # What the port found
 //!
-//! - **The tree's rule is a style and this one's is a format.** The
+//! - **The tree's rule is a style and this one's is a look.** The
 //!   tree's conditional format carries a style — a fill, a font
 //!   colour, an icon set — and the style is shared between cells. Here
-//!   it carries a **number format**, which is a cell's own thing (the
-//!   tree's format is a style too, and this tree's format is the
-//!   cell's own).
+//!   it carries a **number format** and a **fill**: the format is a
+//!   cell's own thing (the tree's format is a style too, and this
+//!   tree's format is the cell's own), and the fill is a cell's own
+//!   thing too (§821). The tree's font colour and its icon set are
+//!   still not here.
 //! - **The tree's criteria are many and this one's is one.** The
 //!   tree's rule may be a comparison, a colour scale, a data bar, an
 //!   icon set or an expression. Here a rule is a **comparison** — the
@@ -34,11 +42,17 @@
 //!   ones that do, in the order the sheet holds it. The tree renumbers
 //!   the priorities when a rule comes or goes; here the priority is
 //!   **named** and it stays where it is.
+//! - **The tree's rules layer and here they layer too.** The tree
+//!   applies every rule that matches and where two of them set the
+//!   same part of a cell the one seen first wins; here each part of
+//!   the look is the part of the first rule that matched and said
+//!   something about it. And the tree's **stop if true** — a rule
+//!   that ends the walk when it matched — is here as a **stop**.
 
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Session, Text};
 
 use crate::formula::{Area, CellRef, Criterion, FILTER_OPS};
 
@@ -48,8 +62,16 @@ pub struct Conditional {
     pub range: String,
     /// The criterion a cell's value is judged by.
     pub criterion: Criterion,
-    /// The **format code** the matching cells are written with.
-    pub format: String,
+    /// The **format code** the matching cells are written with, when
+    /// the rule names one.
+    pub format: Option<String>,
+    /// The **fill** the matching cells are filled with, when the rule
+    /// names one.
+    pub fill: Option<String>,
+    /// The **stop**: the tree's *stop if true*. A rule that matched
+    /// and says stop ends the walk, and the rules after it are not
+    /// tried.
+    pub stop: Option<bool>,
     /// The **priority** of the rule, when it names one: the lower the
     /// number, the earlier the rule is tried.
     pub priority: Option<u32>,
@@ -65,7 +87,9 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
         let Some(range) = entry.get("range").and_then(|range| range.as_str()) else { continue };
         let op = entry.get("op").and_then(|op| op.as_str()).unwrap_or("=").to_string();
         let value = entry.get("value").and_then(|value| value.as_str()).unwrap_or("").to_string();
-        let format = entry.get("format").and_then(|format| format.as_str()).unwrap_or("general").to_string();
+        let format = entry.get("format").and_then(|format| format.as_str()).map(|format| format.to_string());
+        let fill = entry.get("fill").and_then(|fill| fill.as_str()).map(|fill| fill.to_string());
+        let stop = entry.get("stop").and_then(|stop| stop.as_bool());
         let priority = entry
             .get("priority")
             .and_then(|priority| priority.as_u64())
@@ -74,6 +98,8 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
             range: range.to_string(),
             criterion: Criterion { op, value },
             format,
+            fill,
+            stop,
             priority,
         });
     }
@@ -112,21 +138,53 @@ pub fn ordered_conditionals(node: &craftkit_sdk::Node) -> Vec<Conditional> {
     conditionals
 }
 
-/// The conditional format that **writes** a cell, if one does.
+/// What a **conditional format** says about a cell.
+#[derive(Debug, Clone, Default)]
+pub struct Looks {
+    /// The **format code** the cell is written with.
+    pub format: Option<String>,
+    /// The **fill** the cell is filled with.
+    pub fill: Option<String>,
+}
+
+/// The **look** the conditional formats of a sheet give a cell.
 ///
-/// The first one that matches wins, and the rules are tried in
-/// priority.
-pub fn format_for(node: &craftkit_sdk::Node, cell: CellRef, value: &crate::formula::Value) -> Option<String> {
+/// The rules are tried in **priority**, and for each **part** of the
+/// look the rule that is seen first and says something about it wins:
+/// the tree's own rule, where two rules set the same part of a cell
+/// the one seen first wins.
+///
+/// And the tree's **stop if true**: a rule that matched and says stop
+/// ends the walk, and the rules after it are not tried.
+pub fn looks_for(node: &craftkit_sdk::Node, cell: CellRef, value: &crate::formula::Value) -> Looks {
+    let mut looks = Looks::default();
     for conditional in ordered_conditionals(node) {
         let Some(area) = area_of(&conditional.range) else { continue };
         if !area.covers(cell) {
             continue;
         }
-        if conditional.criterion.matches(value) {
-            return Some(conditional.format);
+        if !conditional.criterion.matches(value) {
+            continue;
+        }
+        if looks.format.is_none() {
+            looks.format = conditional.format.clone();
+        }
+        if looks.fill.is_none() {
+            looks.fill = conditional.fill.clone();
+        }
+        if conditional.stop.unwrap_or(false) {
+            break;
         }
     }
-    None
+    looks
+}
+
+/// The conditional format that **writes** a cell, if one does.
+///
+/// The first one that matches wins, and the rules are tried in
+/// priority.
+pub fn format_for(node: &craftkit_sdk::Node, cell: CellRef, value: &crate::formula::Value) -> Option<String> {
+    looks_for(node, cell, value).format
 }
 
 /// Put a **conditional format** on a range of cells.
@@ -144,8 +202,15 @@ pub struct SetConditional {
     pub op: Text,
     /// The value it compares with.
     pub value: Text,
-    /// The format the matching cells are written with.
-    pub format: Text,
+    /// The format the matching cells are written with. A rule may
+    /// carry the format, the fill, or both.
+    pub format: Option<Text>,
+    /// The fill the matching cells are filled with: `#rrggbb`. A rule
+    /// may carry the fill and no format.
+    pub fill: Option<Text>,
+    /// The tree's **stop if true**: the walk ends at this rule when it
+    /// matched, and the rules after it are not tried.
+    pub stop: Option<Bool>,
     /// The **priority** of the rule: the lower the number, the earlier
     /// the rule is tried.
     pub priority: Option<Number>,
@@ -191,22 +256,60 @@ impl SetConditional {
                 message: format!("the operation `{op}` compares numbers, and `{value}` is not one"),
             });
         }
-        let given = self.format.0.trim().to_string();
-        if given.chars().count() > crate::format::MAX_FORMAT_CHARS {
+        // The **format**: the tree's rule says the format of the
+        // cells, and a rule may say the fill and no format.
+        let format = match &self.format {
+            Some(given) => {
+                let given = given.0.trim().to_string();
+                if given.chars().count() > crate::format::MAX_FORMAT_CHARS {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "a format is at most {} characters long",
+                            crate::format::MAX_FORMAT_CHARS
+                        ),
+                    });
+                }
+                match crate::formatnames::resolve(&given) {
+                    Ok(code) => Some(code),
+                    Err(refusal) => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: crate::formatnames::message(&given, &refusal),
+                        });
+                    }
+                }
+            }
+            None => None,
+        };
+        // The **fill**: a colour, and nothing else.
+        let fill = match &self.fill {
+            Some(given) => {
+                let Some(colour) = crate::colours::colour_of(&given.0) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("`{}` is not a colour: a colour is `#rrggbb`", given.0.trim()),
+                    });
+                };
+                match colour {
+                    Some(colour) => Some(colour),
+                    None => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "a rule's fill is a colour, and `none` is not one".to_string(),
+                        });
+                    }
+                }
+            }
+            None => None,
+        };
+        if format.is_none() && fill.is_none() {
             return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a format is at most {} characters long", crate::format::MAX_FORMAT_CHARS),
+                id,
+                message: "name what the rule says: the format, the fill, or both".to_string(),
             });
         }
-        let format = match crate::formatnames::resolve(&given) {
-            Ok(code) => code,
-            Err(refusal) => {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: crate::formatnames::message(&given, &refusal),
-                });
-            }
-        };
+        let stop = self.stop.map(|stop| stop.0);
         let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
         // The **priority** is a whole number, and it is not a negative
         // one.
@@ -231,6 +334,8 @@ impl SetConditional {
                     "op": conditional.criterion.op,
                     "value": conditional.criterion.value,
                     "format": conditional.format,
+                    "fill": conditional.fill,
+                    "stop": conditional.stop,
                     "priority": conditional.priority,
                 })
             })
@@ -243,13 +348,24 @@ impl SetConditional {
             "op": op,
             "value": value,
             "format": format,
+            "fill": fill,
+            "stop": stop,
             "priority": priority,
         }));
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
             node.data["conditionals"] = json!(list);
         }
-        Ok(Outcome::changed(format!("the range {range} of the sheet `{sheet}` is conditional"))
-            .with_data(json!({ "sheet": sheet, "range": range, "op": op, "value": value, "format": format })))
+        Ok(Outcome::changed(format!("the range {range} of the sheet `{sheet}` is conditional")).with_data(
+            json!({
+                "sheet": sheet,
+                "range": range,
+                "op": op,
+                "value": value,
+                "format": format,
+                "fill": fill,
+                "stop": stop,
+            }),
+        ))
     }
 }
 
@@ -303,6 +419,8 @@ impl ClearConditional {
                     "op": conditional.criterion.op,
                     "value": conditional.criterion.value,
                     "format": conditional.format,
+                    "fill": conditional.fill,
+                    "stop": conditional.stop,
                     "priority": conditional.priority,
                 })
             })

@@ -27,7 +27,7 @@ use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
 /// away.
 ///
 /// `None` when the name is not a colour.
-fn colour_of(given: &str) -> Option<Option<String>> {
+pub(crate) fn colour_of(given: &str) -> Option<Option<String>> {
     let text = given.trim();
     if text.eq_ignore_ascii_case("none") {
         return Some(None);
