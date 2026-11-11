@@ -475,7 +475,7 @@ pub use pivots::{
 pub use printing::{
     ReadPages, ReadSetup, SetMargins, SetOrientation, SetPaper, SetPrintArea, SetPrintBreak, SetPrintTitles,
 };
-pub use protection::{LockCell, ProtectSheet, UnprotectSheet};
+pub use protection::{LockCell, ProtectSheet, ReadEditRanges, SetEditRanges, UnprotectSheet};
 pub use reading::ReadRange;
 pub use removal::RemoveSheet;
 pub use replacing::ReplaceText;

@@ -72,6 +72,21 @@ fn refused(what: &str, id: &str) -> EngineError {
     }
 }
 
+/// The **edit ranges** of a sheet: the ranges that stay editable on a
+/// protected sheet.
+pub fn edit_ranges_of(node: &Node) -> Vec<crate::formula::Area> {
+    let mut areas = Vec::new();
+    let Some(list) = node.data.get("edit_ranges").and_then(|ranges| ranges.as_array()) else {
+        return areas;
+    };
+    for range in list {
+        let Some(text) = range.as_str() else { continue };
+        let Some((_, area)) = crate::merges::parse_area(text) else { continue };
+        areas.push(area);
+    }
+    areas
+}
+
 /// Refuse a change to the **contents** of a cell of a locked sheet.
 ///
 /// A sheet that is not protected, or a protection that does not lock
@@ -85,6 +100,9 @@ pub fn refuse_locked(node: &Node, cells: &[CellRef], id: &str) -> Result<(), Eng
     if !protection.locked {
         return Ok(());
     }
+    // A cell in an **edit range** may be changed even though the sheet
+    // is protected: the tree's own rule.
+    let editable = |cell: CellRef| edit_ranges_of(node).iter().any(|area| area.covers(cell));
     let unlocked = |cell: CellRef| {
         node.data
             .get("cells")
@@ -93,7 +111,7 @@ pub fn refuse_locked(node: &Node, cells: &[CellRef], id: &str) -> Result<(), Eng
             .and_then(|locked| locked.as_bool())
             == Some(false)
     };
-    let cell = match cells.iter().find(|cell| !unlocked(**cell)) {
+    let cell = match cells.iter().find(|cell| !unlocked(**cell) && !editable(**cell)) {
         Some(cell) => cell.to_text(),
         None => return Ok(()),
     };
@@ -280,6 +298,125 @@ impl LockCell {
             "sheet": sheet,
             "cell": cell.to_text(),
             "locked": locked,
+        })))
+    }
+}
+
+/// The most **edit ranges** a sheet may hold.
+const MAX_EDIT_RANGES: usize = 64;
+
+/// **Set** the **edit ranges** of a sheet: the ranges that stay
+/// editable while the sheet is protected.
+///
+/// The tree's Allow Edit Ranges: the ranges may only be set while the
+/// sheet is **not protected** — the tree's own rule.
+#[derive(Command)]
+#[command(id = "grid.sheet.edit.set", area = "grid", layer = "grid", icon = "lock", mutates, undoable)]
+pub struct SetEditRanges {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The **ranges** that stay editable: `["A1:B2", "D4"]`.
+    pub ranges: craftkit_sdk::serde_json::Value,
+}
+
+impl SetEditRanges {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.sheet.edit.set".to_string();
+        let sheet = self.sheet.0;
+        let Some(node) = session.document().node(sheet) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{sheet}` is not a sheet"),
+            });
+        }
+        // The ranges may only be set while the sheet is not protected:
+        // the tree's own rule.
+        if Protection::of(node).is_some() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "the sheet `{sheet}` is protected: unprotect it before changing its edit ranges"
+                ),
+            });
+        }
+        let Some(given) = self.ranges.as_array() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "the edit ranges of a sheet are a list of ranges".to_string(),
+            });
+        };
+        if given.len() > MAX_EDIT_RANGES {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("a sheet holds {MAX_EDIT_RANGES} edit ranges or fewer"),
+            });
+        }
+        let mut list: Vec<String> = Vec::with_capacity(given.len());
+        for range in given {
+            let Some(text) = range.as_str() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "an edit range is a range of cells".to_string(),
+                });
+            };
+            if crate::merges::parse_area(text).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{text}` is not a range of cells"),
+                });
+            }
+            list.push(text.trim().to_string());
+        }
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["edit_ranges"] = json!(list);
+        }
+        Ok(Outcome::changed(format!("the sheet `{sheet}` has {} edit range(s)", list.len())).with_data(
+            json!({
+                "sheet": sheet,
+                "ranges": list,
+            }),
+        ))
+    }
+}
+
+/// **Read** the **edit ranges** of a sheet: the ranges that stay
+/// editable while the sheet is protected.
+#[derive(Command)]
+#[command(id = "grid.sheet.edit.read", area = "grid", layer = "grid", icon = "lock")]
+pub struct ReadEditRanges {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+}
+
+impl ReadEditRanges {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.sheet.edit.read".to_string();
+        let sheet = self.sheet.0;
+        let Some(node) = session.document().node(sheet) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{sheet}` is not a sheet"),
+            });
+        }
+        let ranges: Vec<String> = edit_ranges_of(node)
+            .iter()
+            .map(|area| format!("{}:{}", area.start.to_text(), area.end.to_text()))
+            .collect();
+        Ok(Outcome::new(format!("the sheet `{sheet}` has {} edit range(s)", ranges.len())).with_data(json!({
+            "sheet": sheet,
+            "ranges": ranges,
         })))
     }
 }
