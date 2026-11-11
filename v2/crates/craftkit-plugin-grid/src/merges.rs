@@ -264,3 +264,105 @@ fn areas_touch(one: &Area, other: &Area) -> bool {
     let columns = one.start.col.max(other.start.col)..=one.end.col.min(other.end.col);
     rows.start() <= rows.end() && columns.start() <= columns.end()
 }
+
+/// **Merge** a range of cells **across** its rows.
+///
+/// The tree's Merge Across: every row of the range is merged on its
+/// own, so a range of three rows and two columns becomes three merges
+/// of two cells each — and not one merge of six cells.
+///
+/// The rule of a merge here is the rule of every merge here: the
+/// cells of the row but the first may not hold a value, and the merge
+/// is refused when one of them does.
+#[derive(Command)]
+#[command(id = "grid.merge.across", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct MergeAcross {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// The range that is merged across: `A1:B3`.
+    pub range: Text,
+}
+
+impl MergeAcross {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.merge.across".to_string();
+        let sheet = self.sheet.0;
+        let Some(node) = session.document().node(sheet) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{sheet}` is not a sheet"),
+            });
+        }
+        let text = self.range.0.trim().to_string();
+        let Some((_, area)) = parse_area(&text) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("`{text}` is not a range of cells"),
+            });
+        };
+        if area.start.col == area.end.col {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("a merge across needs a range of more than one column, and {text} has one"),
+            });
+        }
+        // The **rows** of the range, each one a merge of its own.
+        let mut rows: Vec<Area> = Vec::new();
+        for row in area.start.row..=area.end.row {
+            rows.push(Area::new(CellRef { col: area.start.col, row }, CellRef { col: area.end.col, row }));
+        }
+        let merges = merges_of(node);
+        for row in &rows {
+            for merge in &merges {
+                if areas_touch(merge, row) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "the range {text} touches the merge {}:{}, and a cell that is in two regions is in none of them",
+                            merge.start.to_text(),
+                            merge.end.to_text()
+                        ),
+                    });
+                }
+            }
+        }
+        // The **cells** of every row but the first one: they hold
+        // nothing, or the merge is refused.
+        let cells = crate::cells_of(node);
+        for row in &rows {
+            for cell in cells_of(row).iter().skip(1) {
+                let Some(entry) = cells.get(*cell) else { continue };
+                let holds = entry.formula.is_some()
+                    || matches!(&entry.value, Some(value) if value != &crate::formula::Value::Empty);
+                if holds {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "the cell {} holds a value, and the value of a merged region is the value of its top left cell",
+                            cell.to_text()
+                        ),
+                    });
+                }
+            }
+        }
+        let mut list: Vec<String> =
+            merges.iter().map(|area| format!("{}:{}", area.start.to_text(), area.end.to_text())).collect();
+        for row in &rows {
+            list.push(format!("{}:{}", row.start.to_text(), row.end.to_text()));
+        }
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["merges"] = json!(list);
+        }
+        Ok(Outcome::changed(format!("the range {text} is merged across its rows")).with_data(json!({
+            "sheet": sheet,
+            "range": text,
+            "merges": rows.iter().map(|row| format!("{}:{}", row.start.to_text(), row.end.to_text())).collect::<Vec<_>>(),
+        })))
+    }
+}
