@@ -637,6 +637,17 @@ pub(crate) fn book_of(document: &Document) -> Book {
                 if !groups.is_empty() {
                     book.set_filter(&node.name, formula::Filter::Groups(groups));
                 }
+            } else if let Some(values) = filter.get("values").and_then(|values| values.as_array()) {
+                // The tree's own **list** filter: a column and the
+                // values that are kept.
+                let column =
+                    filter.get("column").and_then(|column| column.as_str()).and_then(CellRef::column_index);
+                let blanks = filter.get("blanks").and_then(|blanks| blanks.as_bool()).unwrap_or(false);
+                let values: Vec<String> =
+                    values.iter().filter_map(|value| value.as_str().map(|value| value.to_string())).collect();
+                if let Some(column) = column {
+                    book.set_filter(&node.name, formula::Filter::Values { column, values, blanks });
+                }
             } else {
                 let column =
                     filter.get("column").and_then(|column| column.as_str()).and_then(CellRef::column_index);

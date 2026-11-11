@@ -537,6 +537,20 @@ pub enum Filter {
         /// The criterion the column's cells are judged by.
         criterion: Criterion,
     },
+    /// One column and a **list of values**: the tree's own list
+    /// filter.
+    ///
+    /// The rows whose cell shows one of the values are kept, and the
+    /// others are hidden. The comparison is of the **text** the cell
+    /// shows and it is without case.
+    Values {
+        /// The column it filters, counted from zero.
+        column: u32,
+        /// The values that are kept.
+        values: Vec<String>,
+        /// Whether an empty cell is kept.
+        blanks: bool,
+    },
     /// Groups of criteria: the columns of a group are judged together.
     Groups(Vec<Vec<(u32, Criterion)>>),
     /// The tree's own **advanced filter**: a **list** of rows under a row
@@ -1430,6 +1444,17 @@ impl Book {
             // a row that matches **any** group is kept.
             let hidden = match filter {
                 Filter::Column { column, criterion } => !criterion.matches(&value_at(*column, cell.row)),
+                Filter::Values { column, values, blanks } => {
+                    // The **text** the cell shows, and it is without
+                    // case: the tree's own rule.
+                    let text = display_text(&value_at(*column, cell.row));
+                    let kept = if text.is_empty() {
+                        *blanks
+                    } else {
+                        values.iter().any(|value| value.eq_ignore_ascii_case(&text))
+                    };
+                    !kept
+                }
                 Filter::Groups(groups) => !groups.iter().any(|group| {
                     group.iter().all(|(column, criterion)| criterion.matches(&value_at(*column, cell.row)))
                 }),

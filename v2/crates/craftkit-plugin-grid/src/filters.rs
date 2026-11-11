@@ -24,15 +24,17 @@
 //! # What the port found
 //!
 //! - **The tree's filter has many kinds of criterion and this one has
-//!   one.** The tree's criterion may be a list of values, a pair of
+//!   two.** The tree's criterion may be a list of values, a pair of
 //!   comparisons joined by and or or, a top-ten, an above-the-average
 //!   or a colour. Here a criterion is **one** operation and **one**
-//!   value — the pair of comparisons — and the other kinds are
+//!   value — the pair of comparisons — and the **list of values** is a
+//!   filter of its own (`grid.filter.values`); the other kinds are
 //!   commands of their own when they come.
 //! - **The tree's filter is over a range and this one's is over a
 //!   column.** The tree's filter has a range and a criterion for each
 //!   column of it. Here a sheet has **one** filter, and it is either
-//!   over one column (`grid.filter.set`) or over **groups** of
+//!   over one column (`grid.filter.set`), over one column and a
+//!   **list of values** (`grid.filter.values`) or over **groups** of
 //!   criteria (`grid.filter.groups.set`) — the columns of a group are
 //!   judged together and the groups are judged one by one. The rows it
 //!   hides are the rows of the sheet either way.
@@ -47,7 +49,7 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Session, Text};
 
 use crate::formula::{CellRef, Criterion, FILTER_OPS};
 
@@ -307,5 +309,107 @@ impl FilteredRows {
             "sheet": sheet,
             "rows": rows,
         })))
+    }
+}
+
+/// The most **values** a list filter may hold.
+const MAX_VALUES: usize = 1024;
+
+/// The most **characters** one value of a list filter may hold.
+const MAX_VALUE_CHARS: usize = 255;
+
+/// **Filter** a sheet by a **list of values**.
+///
+/// The tree's own list filter: the rows whose cell shows one of the
+/// values are kept, and the others are hidden. The comparison is of
+/// the **text** the cell shows, and it is without case — the tree's
+/// own rule.
+///
+/// An empty cell is kept when **blanks** is asked for, and hidden when
+/// it is not: the tree's own rule.
+#[derive(Command)]
+#[command(id = "grid.filter.values", area = "grid", layer = "grid", icon = "filter", mutates, undoable)]
+pub struct SetFilterValues {
+    /// The sheet it is in.
+    pub sheet: NodeRef,
+    /// Which column it filters: `A`, `B`, `AA`.
+    pub column: Text,
+    /// The **values** that are kept: a list of texts.
+    pub values: craftkit_sdk::serde_json::Value,
+    /// Whether an empty cell is kept.
+    pub blanks: Option<Bool>,
+}
+
+impl SetFilterValues {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.filter.values".to_string();
+        let sheet = self.sheet.0;
+        let Some(node) = session.document().node(sheet) else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no sheet `{sheet}`"),
+            });
+        };
+        if node.kind != "grid.sheet" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{sheet}` is not a sheet"),
+            });
+        }
+        crate::protection::refuse_filter(node, &id)?;
+        let column = self.column.0.trim().to_uppercase();
+        if CellRef::column_index(&column).is_none() {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("`{column}` is not a column: a column is `A`, `B` or `AA`"),
+            });
+        }
+        let Some(values) = self.values.as_array() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: "the values of a filter are a list".to_string(),
+            });
+        };
+        if values.len() > MAX_VALUES {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "a filter holds {MAX_VALUES} values or fewer, and this one holds {}",
+                    values.len()
+                ),
+            });
+        }
+        let mut read: Vec<String> = Vec::with_capacity(values.len());
+        for value in values {
+            let Some(value) = value.as_str() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a value of a filter is text".to_string(),
+                });
+            };
+            if value.chars().count() > MAX_VALUE_CHARS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a value of a filter holds {MAX_VALUE_CHARS} characters or fewer"),
+                });
+            }
+            read.push(value.to_string());
+        }
+        let blanks = self.blanks.map(|blanks| blanks.0).unwrap_or(false);
+        if let Some(node) = session.document_mut()?.node_mut(sheet) {
+            node.data["filter"] = json!({
+                "column": column,
+                "values": read,
+                "blanks": blanks,
+            });
+        }
+        Ok(Outcome::changed(format!("the sheet `{sheet}` is filtered by the column {column}")).with_data(
+            json!({
+                "sheet": sheet,
+                "column": column,
+                "values": read,
+                "blanks": blanks,
+            }),
+        ))
     }
 }
