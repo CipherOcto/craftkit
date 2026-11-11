@@ -4189,6 +4189,7 @@ so.
 | the **mutes** of every track | **built.** Every track is unmuted at once, and the tracks that are mixed with one another are unmuted with it (§808) | §808 |
 | the **solos** of every track | **built.** Every track is unsoloed at once, and the document is heard whole again (§809) | §809 |
 | the **levels** of the outline | **built.** A sheet is shown down to an outline level, and the rows that are deeper than the level are hidden (§810) | §810 |
+| the **detail** of a group | **built.** The rows of a group of the outline are hidden and shown, and the group whose summary row is named is opened (§811) | §811 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -53318,11 +53319,77 @@ shows more of the detail.
 
 ### What it does not settle
 
-- **The tree's Hide Detail and Show Detail are not here**: the level
-  buttons show the sheet down to a level, and the tree's other two
-  buttons open one group and close it again, which is a command of its
-  own.
+- **The tree's Hide Detail and Show Detail are here**: they came with
+  §811, and a group of the outline is opened and closed by name.
 - **The tree's summary row carries a formula and here it does not**:
   the tree writes a SUBTOTAL into the summary row when the group is
   made; here the summary row is the row after the group, and nothing is
   written into it.
+
+## 811. The detail of a group of the outline
+
+The tree's **Hide Detail** and **Show Detail** open a group of the
+outline and close it again: the rows of the group are hidden, and the
+summary row of the group is not.
+
+### What was built
+
+- **Four commands** in the grid battery: `grid.row.detail.hide`,
+  `grid.row.detail.show`, `grid.column.detail.hide` and
+  `grid.column.detail.show`: the tree's two commands, one for the rows
+  and one for the columns.
+- The rules are the tree's own:
+  - the group that holds the lines named is the **deepest** of those
+    that hold them: the tree's own rule;
+  - when no group holds them, the group whose **summary line** is one
+    of them is the one: the tree's own rule;
+  - the **level** names the group when the lines are in more than one:
+    the tree's own rule;
+  - the lines of the group are hidden and the summary line of the
+    group is not — it is not in the group: the tree's own rule;
+  - the lines of an inner group that is **collapsed on its own** stay
+    hidden when the group around it is shown: the tree's own rule;
+  - lines that are in no group are **refused** by name.
+
+### What the port found
+
+- **The tree's command works on the selection, and this tree names the
+  lines.** The tree's button acts on the lines of the selection; here
+  the rows or the columns are named, and so is the level when the lines
+  are in more than one group.
+- **The tree's one command is four here.** The tree's button works on
+  the rows and on the columns alike, and this tree keeps the rows and
+  the columns apart, as it keeps their groups apart (§486, §487).
+- **The tree's collapsed mark is a fact of the sheet and here it is
+  derived.** The tree writes a **+** beside a summary row when a group
+  is collapsed on its own; here a group whose rows are all hidden is
+  collapsed (§486), and a group that is collapsed **on its own** is one
+  whose summary row is still there. So a group that was collapsed on
+  its own and then hidden inside a bigger group cannot be told apart
+  from one that was only hidden by the bigger group, and showing the
+  bigger group opens the inner one as well. The tree keeps them apart
+  because it writes the mark down.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/outlinedetail.rs`): eight
+  tests — the rows of the group hidden, the rows shown again, the
+  deepest group that holds the lines, the level that names the group,
+  the group whose summary row is named, the inner group that is
+  collapsed on its own, the columns hidden and shown, and the lines
+  that are in no group being refused.
+- **Four new commands**: the grid battery now carries **163** commands
+  and the MCP server **1008** — four more than §810. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **No new module**: the commands live with the outline they belong to.
+
+### What it does not settle
+
+- **The tree's summary row carries a formula and here it does not**:
+  the tree writes a SUBTOTAL into the summary row when the group is
+  made; here the summary row is the row after the group, and nothing is
+  written into it.
+- **The tree's collapsed mark is not written down here**: see the port
+  above — the collapse is derived, and a group that was collapsed on
+  its own cannot always be told from one that was not.
