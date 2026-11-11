@@ -4192,6 +4192,7 @@ so.
 | the **detail** of a group | **built.** The rows of a group of the outline are hidden and shown, and the group whose summary row is named is opened (§811) | §811 |
 | the **list filter** | **built.** A sheet is filtered by a list of values, and the rows whose cell shows one of them are kept (§812) | §812 |
 | the **slicer** of a table | **built.** A slicer filters a column of a table by the values that are kept, and it writes them into the filter of the sheet (§813) | §813 |
+| the **decimals** of a format | **built.** The decimals of the format of a cell move up and down, and the rest of the format is kept (§814) | §814 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -53530,3 +53531,59 @@ the values that are chosen.
 - **The tree's slicer filters the range of its table and this one
   filters the sheet**: the difference the filter of a sheet already has
   (§347), and it is named above.
+
+## 814. The decimals of a format move
+
+The tree's **Increase Decimal** and **Decrease Decimal**: the format of
+a cell gains a decimal or loses one.
+
+### What was built
+
+- The command **`grid.cell.format.decimals`** moves the decimals of the
+  format of a cell: the tree's two buttons, as one command.
+- The rules are the tree's own:
+  - a cell whose format is the **General** one has the decimals of the
+    **number it shows**, and the format that is written is a plain `0`
+    with that many decimals: the tree's own rule;
+  - the last **digit placeholder** of a section — a `0` or a `#` — is
+    the one that counts: the tree's own rule;
+  - a format with **sections** — `0.00;0.000` — has its sections moved
+    one by one: the tree's own rule;
+  - a section with **no digit placeholder** — a date, say — is left as
+    it is: the tree's own rule;
+  - everything else of the format is kept: the thousands, the percent
+    sign and the rest.
+
+### What the port found
+
+- **The tree's format is a style and this one's is the cell's own**
+  (§271): the decimals that move are the decimals of the cell and not
+  of a style that other cells share.
+- **The tree takes the last decimal away and leaves an empty section**:
+  the format `0` becomes the empty text, which is not a format. Here a
+  format that has no decimals to take away is **refused**, and the cell
+  is left as it was.
+- **The tree's step is one and here it may be more.** The step is a
+  whole number, and it moves the decimals by **fifteen or fewer** at a
+  time — the tree's own bound on the decimals of a format.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/formatdecimals.rs`): eight
+  tests — the General format taking the decimals of the number, the
+  format gaining a decimal, the format losing one, the format with no
+  decimals being refused, the thousands being kept, the sections being
+  moved one by one, the date with no decimals to move, and the step
+  that is not a whole number being refused.
+- **One new command**: the grid battery now carries **170** commands
+  and the MCP server **1015** — one more than §813. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`formatdecimals`), beside the format it moves.
+
+### What it does not settle
+
+- **The tree's style carries the font, the fill, the borders and the
+  alignment, and this tree's format is the number format only**: the
+  decimals of a format are the only thing here that moves a format.
+- **The tree's decimals move on a range**: here the cell is named.
