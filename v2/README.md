@@ -4212,6 +4212,7 @@ so.
 | the **paint** that is nothing | **built.** A path's fill may be taken away, and the fill is there and paints nothing (§831) | §831 |
 | the **colour** of a colour matte | **built.** A colour matte may be recoloured, and an item that is not a matte is refused by name (§832) | §832 |
 | the **fill** of a conditional format | **built.** A rule may carry a fill and a stop, and the rules layer: each part is the first rule that says something about it (§833) | §833 |
+| the **summary** of the scenarios | **built.** A sheet of its own says what every scenario does to the book: the changing cells, the values and the results (§834) | §834 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -51828,7 +51829,8 @@ The **scenario** — the tree's own **what-if** — is now a thing of the
 
 - **The tree's own summary of the scenarios is not here**: the tree
   writes a sheet that says what every scenario does to the book, and
-  that is a trial of the book as well as a sheet of its own.
+  that is a trial of the book as well as a sheet of its own. — **it is
+  here since §834**: `grid.scenario.summary` writes that sheet.
 - **The tree's own source of the scenarios is not here**: the tree
   reads them from a hidden name, and here they are nodes of the
   workbook.
@@ -51964,7 +51966,8 @@ a filter hides are **derived**.
   and here such a cell is **refused**.
 - **The tree's own summary of the scenarios is not here**: the tree
   writes a sheet that says what every scenario does to the book, and
-  that is a trial of the book as well as a sheet of its own.
+  that is a trial of the book as well as a sheet of its own. — **it is
+  here since §834**: `grid.scenario.summary` writes that sheet.
 
 ## 789. A path is made by hand
 
@@ -54755,3 +54758,65 @@ if true**: a rule that ends the walk when it matched.
 - **A range may carry one rule**, so two rules on one range is a
   replacement and not a pair — and the layering is therefore seen
   between rules that cover **overlapping** ranges.
+
+## 834. The summary of the scenarios
+
+The tree's **Scenario Summary**: a sheet of its own that says what
+every scenario does to the book — the changing cells, the current
+values, the values of every scenario and the results.
+
+### What was built
+
+- **One command** in the grid battery: `grid.scenario.summary` — the
+  summary of the scenarios of a sheet, as a **sheet of its own**.
+- The tree's rules are the tree's:
+  - the scenarios are the ones of the **sheet**, and a sheet with no
+    scenario has **no summary** — the refusal says so by the tree's
+    own words;
+  - the **changing cells** are the union of the scenarios' changing
+    cells, in the order they are **first seen**;
+  - the **current values** are the cells as they are now, and each
+    scenario's value is the cell's current value when that scenario
+    does not change it;
+  - the **results** are the result cells as they are now and as they
+    would be **under** each scenario — a trial: the scenario's values
+    in the changing cells, and the result cells read;
+  - the sheet is named **Scenario Summary**, and **Scenario Summary 2**
+    and so on when the name is taken;
+  - the **layout** is the tree's own: the title in `B2`, the headings
+    in `C3` and `A4`, the changing cells below them, the result cells
+    below those, and the note that says what the current values are.
+
+### What the port found
+
+- **The tree's summary switches the book to the new sheet**, for the
+  tree has an **active sheet**. This tree has none — every command
+  names the sheet it works on — so the summary is made and its name is
+  said, and the book stays where it was.
+- **The tree's headings are bold because of a style**, and here they
+  are bold because the **cell's font** says so (§819): the tree's style
+  is the cell's own here, and a heading is a cell like any other.
+- **The tree's numbers keep the format of the cell they came from**,
+  and here the values are put in the summary as they are: the format
+  of a cell is the cell's own, and the summary is a sheet of its own.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/scenariosummary.rs`):
+  four tests — the summary saying the changing cells and the values,
+  the summary saying the results, a sheet with no scenario having no
+  summary, and the name of the summary being taken when there is one
+  already.
+- **One new command**: the grid battery now carries **186** commands
+  and the MCP server **1034** — one more than §833.
+- **One helper**: the list of cells a list of addresses names —
+  `B10`, `B10:B12,D4` — is read in one place, with the tree's own
+  bound of **255** cells.
+
+### What it does not settle
+
+- **The tree's active sheet is not here**: the summary is made and
+  named, and the book does not move to it.
+- **The tree's data table is not here**: a table of results computed
+  by substitution is a command of its own, and it writes values that
+  are a snapshot and not a live formula.
