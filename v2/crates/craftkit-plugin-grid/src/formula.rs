@@ -1429,6 +1429,8 @@ pub struct Font {
     pub underline: Underline,
     /// Where the text sits above or below its line.
     pub vert: Vert,
+    /// The **colour** of the text, when it has one.
+    pub colour: Option<String>,
 }
 
 impl Font {
@@ -1443,6 +1445,7 @@ impl Font {
             strike: false,
             underline: Underline::None,
             vert: Vert::Baseline,
+            colour: None,
         }
     }
 
@@ -1462,6 +1465,10 @@ impl Font {
             "strike": self.strike,
             "underline": self.underline.to_text(),
             "vert": self.vert.to_text(),
+            "colour": match &self.colour {
+                Some(colour) => serde_json::Value::String(colour.clone()),
+                None => serde_json::Value::Null,
+            },
         })
     }
 
@@ -1481,7 +1488,8 @@ impl Font {
             Some(vert) => Vert::parse(vert)?,
             None => Vert::Baseline,
         };
-        Some(Font { name, size, bold, italic, strike, underline, vert })
+        let colour = value.get("colour").and_then(|colour| colour.as_str()).map(|colour| colour.to_string());
+        Some(Font { name, size, bold, italic, strike, underline, vert, colour })
     }
 }
 
@@ -1521,6 +1529,13 @@ pub struct Cell {
     /// cell's own, and a cell with no lock of its own follows the
     /// sheet.
     pub locked: Option<bool>,
+    /// The **fill** of the cell: the colour behind its text, when it
+    /// has one.
+    ///
+    /// The tree's fill is a style and a style is shared between cells;
+    /// here the fill is the cell's own, as the format, the alignment
+    /// and the font are.
+    pub fill: Option<String>,
 }
 
 impl Cells {
@@ -1544,8 +1559,11 @@ impl Cells {
         let align = self.cells.get(&cell).and_then(|entry| entry.align);
         let font = self.cells.get(&cell).and_then(|entry| entry.font.clone());
         let locked = self.cells.get(&cell).and_then(|entry| entry.locked);
-        self.cells
-            .insert(cell, Cell { value: Some(value), formula: None, format, style, align, font, locked });
+        let fill = self.cells.get(&cell).and_then(|entry| entry.fill.clone());
+        self.cells.insert(
+            cell,
+            Cell { value: Some(value), formula: None, format, style, align, font, locked, fill },
+        );
     }
 
     /// Put a formula in a cell.
@@ -1558,8 +1576,11 @@ impl Cells {
         let align = self.cells.get(&cell).and_then(|entry| entry.align);
         let font = self.cells.get(&cell).and_then(|entry| entry.font.clone());
         let locked = self.cells.get(&cell).and_then(|entry| entry.locked);
-        self.cells
-            .insert(cell, Cell { value: None, formula: Some(formula), format, style, align, font, locked });
+        let fill = self.cells.get(&cell).and_then(|entry| entry.fill.clone());
+        self.cells.insert(
+            cell,
+            Cell { value: None, formula: Some(formula), format, style, align, font, locked, fill },
+        );
     }
 
     /// The **number format** of a cell, if it has one.
@@ -1575,12 +1596,19 @@ impl Cells {
         match self.cells.get_mut(&cell) {
             Some(entry) => entry.format = format,
             None => {
-                let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
-                let align = self.cells.get(&cell).and_then(|entry| entry.align);
-                let font = self.cells.get(&cell).and_then(|entry| entry.font.clone());
-                let locked = self.cells.get(&cell).and_then(|entry| entry.locked);
-                self.cells
-                    .insert(cell, Cell { value: None, formula: None, format, style, align, font, locked });
+                self.cells.insert(
+                    cell,
+                    Cell {
+                        value: None,
+                        formula: None,
+                        style: None,
+                        align: None,
+                        font: None,
+                        locked: None,
+                        fill: None,
+                        format,
+                    },
+                );
             }
         }
     }
@@ -1598,12 +1626,19 @@ impl Cells {
         match self.cells.get_mut(&cell) {
             Some(entry) => entry.style = style,
             None => {
-                let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
-                let align = self.cells.get(&cell).and_then(|entry| entry.align);
-                let font = self.cells.get(&cell).and_then(|entry| entry.font.clone());
-                let locked = self.cells.get(&cell).and_then(|entry| entry.locked);
-                self.cells
-                    .insert(cell, Cell { value: None, formula: None, format, style, align, font, locked });
+                self.cells.insert(
+                    cell,
+                    Cell {
+                        value: None,
+                        formula: None,
+                        format: None,
+                        align: None,
+                        font: None,
+                        locked: None,
+                        fill: None,
+                        style,
+                    },
+                );
             }
         }
     }
@@ -1621,12 +1656,19 @@ impl Cells {
         match self.cells.get_mut(&cell) {
             Some(entry) => entry.align = align,
             None => {
-                let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
-                let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
-                let font = self.cells.get(&cell).and_then(|entry| entry.font.clone());
-                let locked = self.cells.get(&cell).and_then(|entry| entry.locked);
-                self.cells
-                    .insert(cell, Cell { value: None, formula: None, format, style, align, font, locked });
+                self.cells.insert(
+                    cell,
+                    Cell {
+                        value: None,
+                        formula: None,
+                        format: None,
+                        style: None,
+                        font: None,
+                        locked: None,
+                        fill: None,
+                        align,
+                    },
+                );
             }
         }
     }
@@ -1644,12 +1686,19 @@ impl Cells {
         match self.cells.get_mut(&cell) {
             Some(entry) => entry.font = font,
             None => {
-                let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
-                let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
-                let align = self.cells.get(&cell).and_then(|entry| entry.align);
-                let locked = self.cells.get(&cell).and_then(|entry| entry.locked);
-                self.cells
-                    .insert(cell, Cell { value: None, formula: None, format, style, align, font, locked });
+                self.cells.insert(
+                    cell,
+                    Cell {
+                        value: None,
+                        formula: None,
+                        format: None,
+                        style: None,
+                        align: None,
+                        locked: None,
+                        fill: None,
+                        font,
+                    },
+                );
             }
         }
     }
@@ -1667,12 +1716,49 @@ impl Cells {
         match self.cells.get_mut(&cell) {
             Some(entry) => entry.locked = locked,
             None => {
-                let format = self.cells.get(&cell).and_then(|entry| entry.format.clone());
-                let style = self.cells.get(&cell).and_then(|entry| entry.style.clone());
-                let align = self.cells.get(&cell).and_then(|entry| entry.align);
-                let font = self.cells.get(&cell).and_then(|entry| entry.font.clone());
-                self.cells
-                    .insert(cell, Cell { value: None, formula: None, format, style, align, font, locked });
+                self.cells.insert(
+                    cell,
+                    Cell {
+                        value: None,
+                        formula: None,
+                        format: None,
+                        style: None,
+                        align: None,
+                        font: None,
+                        fill: None,
+                        locked,
+                    },
+                );
+            }
+        }
+    }
+
+    /// The **fill** of a cell, if it has one.
+    pub fn fill(&self, cell: CellRef) -> Option<&str> {
+        self.cells.get(&cell)?.fill.as_deref()
+    }
+
+    /// Put a **fill** on a cell, keeping what the cell holds.
+    ///
+    /// A cell that is not there is made: a cell may be filled before it
+    /// has a value.
+    pub fn set_fill(&mut self, cell: CellRef, fill: Option<String>) {
+        match self.cells.get_mut(&cell) {
+            Some(entry) => entry.fill = fill,
+            None => {
+                self.cells.insert(
+                    cell,
+                    Cell {
+                        value: None,
+                        formula: None,
+                        format: None,
+                        style: None,
+                        align: None,
+                        font: None,
+                        locked: None,
+                        fill,
+                    },
+                );
             }
         }
     }

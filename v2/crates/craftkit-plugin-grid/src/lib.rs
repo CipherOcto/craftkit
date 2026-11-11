@@ -332,6 +332,7 @@ mod cellread;
 mod charts;
 mod checkboxes;
 mod clearing;
+mod colours;
 mod columndeleting;
 mod columninserting;
 mod combinations;
@@ -432,6 +433,7 @@ pub use cellread::ReadCell;
 pub use charts::{AddChart, ChartElement, ReadChart, RemoveChart, SetChart};
 pub use checkboxes::{SetCheckbox, ToggleCheckbox};
 pub use clearing::{ClearContents, ClearFormat};
+pub use colours::{SetFill, SetTextColour};
 pub use columndeleting::DeleteColumn;
 pub use columninserting::InsertColumn;
 pub use comments::{DeleteComment, GetComment, ReplyComment, ResolveComment, SetComment};
@@ -711,6 +713,7 @@ pub(crate) fn cells_of(node: &Node) -> Cells {
         let align = entry.get("align").and_then(formula::Align::from_json);
         let font = entry.get("font").and_then(formula::Font::from_json);
         let locked = entry.get("locked").and_then(|locked| locked.as_bool());
+        let fill = entry.get("fill").and_then(|fill| fill.as_str()).map(|fill| fill.to_string());
         match (value, formula) {
             (_, Some(formula)) => cells.set_formula(cell, formula),
             (Some(value), None) => cells.set_value(cell, value),
@@ -730,6 +733,9 @@ pub(crate) fn cells_of(node: &Node) -> Cells {
         }
         if let Some(locked) = locked {
             cells.set_locked(cell, Some(locked));
+        }
+        if let Some(fill) = fill {
+            cells.set_fill(cell, Some(fill));
         }
     }
     cells
@@ -760,6 +766,9 @@ pub(crate) fn cells_into(cells: &Cells) -> Json {
         }
         if let Some(locked) = entry.locked {
             one.insert("locked".to_string(), Json::Bool(locked));
+        }
+        if let Some(fill) = &entry.fill {
+            one.insert("fill".to_string(), Json::String(fill.clone()));
         }
         map.insert(cell.to_text(), Json::Object(one));
     }
