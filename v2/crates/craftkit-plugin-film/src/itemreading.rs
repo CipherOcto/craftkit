@@ -52,6 +52,8 @@ impl ReadItem {
         let item_id = node.data.get("item").cloned().unwrap_or(Json::Null);
         let duration = node.data.get("duration").cloned().unwrap_or(Json::Null);
         let offline = node.data.get("offline").cloned().unwrap_or(Json::Null);
+        // The **generator**: what the item plays when it is not a file.
+        let generator = node.data.get("generator").cloned().unwrap_or(Json::Null);
         Ok(Outcome::new(format!("the item `{item}`")).with_data(json!({
             "id": item,
             "name": node.name,
@@ -59,6 +61,7 @@ impl ReadItem {
             "path": path,
             "duration": duration,
             "offline": offline,
+            "generator": generator,
             "label": label,
             "bin": bin,
             "clips": clips,

@@ -215,6 +215,7 @@ mod fcp7import;
 mod fcpxml;
 mod fcpxmlimport;
 mod gaps;
+mod generators;
 mod hold;
 mod inserting;
 mod itemnaming;
@@ -282,6 +283,7 @@ pub use fcp7import::ImportFcp7;
 pub use fcpxml::ExportFcpxml;
 pub use fcpxmlimport::ImportFcpxml;
 pub use gaps::CloseGap;
+pub use generators::AddGenerator;
 pub use hold::{DeleteHold, SetHold};
 pub use inserting::InsertClip;
 pub use itemnaming::{RenameBin, RenameItem};
@@ -418,6 +420,7 @@ impl ItemKind {
             "path": node.data.get("path").cloned().unwrap_or(serde_json::Value::Null),
             "duration": node.data.get("duration").cloned().unwrap_or(serde_json::Value::Null),
             "offline": node.data.get("offline").cloned().unwrap_or(serde_json::Value::Null),
+            "generator": node.data.get("generator").cloned().unwrap_or(serde_json::Value::Null),
         }))
     }
 }
@@ -1005,6 +1008,7 @@ craftkit_sdk::plugin_anchor!(
     ClipKind,
     AddBin,
     AddItem,
+    AddGenerator,
     AddTrack,
     AddClip,
     ExportEdl,
