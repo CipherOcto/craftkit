@@ -4206,6 +4206,7 @@ so.
 | the **long date** | **built.** The shape `dddd, mmmm dd, yyyy` says the weekday, the month by name, the day and the year at once (§825) | §825 |
 | the **trace** of every level | **built.** The flag `all` walks the chain of the precedents and of the dependents, all the way down (§826) | §826 |
 | the **generated** items | **built.** An item may play the black video, the transparent video, the bars and the tone, the counting leader or the colour matte (§827) | §827 |
+| the **lock** of a style | **built.** A style carries the tree's protection, and the cells that name it are locked or unlocked because it says so (§828) | §828 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -22038,8 +22039,8 @@ formats. Now a cell may name a **style**.
 - **The tree's style is a whole thing.** The tree's style carries the
   font, the fill, the border, the alignment and the number format, and
   the tree's cell holds a style. Here a style carries a **format** and
-  nothing else, because a format is the only thing this tree writes on
-  a cell.
+  a **lock** (§828), and the font, the fill and the alignment stay on
+  the cell (§816, §819, §821).
 - **The tree's named styles are built in.** The tree's `home.cellStyle`
   finds a style in a list of the tree's own — *Normal*, *Title*,
   *Explanatory Text*, *Comma*, *Currency*, *Percent* and the rest — or
@@ -22055,8 +22056,8 @@ formats. Now a cell may name a **style**.
   The tree's number-format styles — *Comma*, *Currency*, *Percent* —
   change the number format and nothing else; and a style whose number
   format is *General* leaves the cell's own number format alone. Here
-  a style carries a format and nothing else, so the second half of the
-  rule is the whole of it.
+  a style carries a format and a lock (§828), so the second half of
+  the rule is the whole of it.
 
 ### What it cost
 
@@ -22077,7 +22078,7 @@ formats. Now a cell may name a **style**.
 ### What it does not settle
 
 - **The tree's style carries more than a format**: the font, the
-  colour and the alignment are not here.
+  colour and the alignment are not here — the **lock** is (§828).
 - **The tree's built-in styles are not here**: there is no *Normal* and
   no *Title*; a style is one the workbook has.
 - **The tree's style is not written here by the tree**: the tree's
@@ -53915,7 +53916,9 @@ unlocked may be changed even while the sheet is protected.
 
 - **The tree's lock is a flag of the style of the cell, and here it is
   the cell's own**: as the format, the alignment and the font are
-  (§816, §819).
+  (§816, §819). — **and a style may carry a lock too since §828**, so
+  the cell's own word comes first and the style's word comes before
+  the sheet's protection.
 - **The tree's protection locks every cell of the sheet, and here it
   locks every cell that has not said otherwise.** A protected sheet's
   cells may not be changed — as before — and a cell that says it is
@@ -54390,3 +54393,72 @@ leader and the colour matte.
   generator says what it plays and not how big it is.
 - **The tree's counting leader and its bars and tone have a picture
   of their own**, and here they are a kind and a length.
+
+## 828. The lock of a style
+
+The tree's **protection**: the cells that name a style are locked or
+unlocked because the style says so.
+
+### What was built
+
+- **One command** in the grid battery: `grid.style.lock` — the lock a
+  style carries.
+- The tree's rules are the tree's:
+  - the lock of a style is the lock of the **cells that name it**, and
+    it is **derived**: changing the style changes every cell that names
+    it, and a hundred cells that name one style are locked or
+    unlocked together;
+  - the lock says nothing on a sheet that is **not protected** — it
+    is the sheet's protection that locks the cells;
+  - a style that is **not there** may not be locked, and the refusal
+    says so by name.
+- **One rule that is this tree's own**: a cell that says of itself
+  whether it is locked says **more** than the style it names. The
+  tree has no such a word on the cell — the tree's cell has one style
+  and the style says everything — so the order is the cell's word,
+  then the style's, then the sheet's protection.
+
+### What the port found
+
+- **The tree's style carries a font, a fill, a border, an alignment,
+  a protection and a number format**, and the tree's cell has **one**
+  style. Here the cell has a format and a lock of its own (§820) and
+  may name a style that carries a format (§316) — and now a lock. The
+  style is the **fallback**: the cell's own word comes first.
+- **The tree's styles are built in** — a list of them that the tree
+  knows, the `Normal` and the `Accent1` and the rest — and here a
+  style is one the workbook has and the user names. The lock of a
+  built-in style is not here, because the built-in styles are not.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/stylelock.rs`): seven
+  tests — a style that says unlocked letting the cells be changed, a
+  style that says locked locking them, the lock being derived, the
+  cell saying more than the style, the format of a style not taking
+  its lock away, a sheet that is not protected saying nothing, and a
+  style that is not there being refused.
+- **One new command**: the grid battery now carries **183** commands
+  and the MCP server **1030** — one more than §827.
+- **Two repairs** came with it:
+  - `grid.style.set` wrote the **format** of a style and dropped
+    everything else the style carried — so setting the format of a
+    style took its **lock** away. The lock is kept now;
+  - `grid.style.remove` and `grid.style.add` wrote the list of the
+    styles again, and they keep the lock of the styles they do not
+    touch.
+- **One change in every door that writes to a cell**: the lock of a
+  cell is now read from the cell, then from the style it names, and
+  then from the sheet — so every command that refuses a change to a
+  locked cell reads the styles as well.
+
+### What it does not settle
+
+- **The tree's style still carries no font, no fill, no border and no
+  alignment here**: the cell keeps those of its own (§816, §819,
+  §821), and the style carries the format and the lock.
+- **The tree's built-in styles are not here**, and so their locks are
+  not: a style is one the workbook has.
+- **The tree's cell has one style and here a cell may say more than
+  the style**: a cell that says of itself that it is unlocked is
+  unlocked, whatever the style says.
