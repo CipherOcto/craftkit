@@ -4197,6 +4197,7 @@ so.
 | the **alignment** of a cell | **built.** The text of a cell lies across it and down it, and the text is indented and wraps (§816) | §816 |
 | the **merge across** of a range | **built.** Every row of a range is merged on its own, and the value of a merged region is the value of its top left cell (§817) | §817 |
 | the **merge and centre** of a range | **built.** A range is merged and its text is centred, and a range that is already merged is unmerged again (§818) | §818 |
+| the **font** of a cell | **built.** The face, the size and the marks of the text of a cell are set, and a button pressed twice does the opposite (§819) | §819 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -53802,3 +53803,64 @@ is centred.
   it is refused**: the refusal says which cell holds a value.
 - **The tree's centre is a style and here it is the alignment of one
   cell**: a range of many cells would be centred a cell at a time.
+
+## 819. The font of a cell
+
+The tree's **Home > Font**: the face of the text of a cell, the size of
+it, and the marks that are put on it.
+
+### What was built
+
+- **Four commands** in the grid battery: `grid.cell.font` (the face, the
+  size, the underline and the place of the text), `grid.cell.font.bold`,
+  `grid.cell.font.italic` and `grid.cell.font.strike`: the tree's font
+  family, as commands.
+- The rules are the tree's own:
+  - the **face** is the name of a face: the tree's own rule;
+  - the **size** is from one to four hundred and nine, and it is
+    **rounded** to the nearest half: the tree's own rule;
+  - the **underline** is none, single, double, single accounting or
+    double accounting, and naming the underline a cell already has
+    **takes it away**: the tree's own rule;
+  - the **vertical place** is baseline, superscript or subscript, and
+    naming the place a cell already has takes it back to the
+    **baseline**: the tree's own rule;
+  - the **bold**, the **italic** and the **strike** are buttons, and a
+    button pressed twice does the opposite — naming no value takes the
+    opposite of what the cell has, and naming a value takes that value:
+    the tree's own rule.
+
+### What the port found
+
+- **The tree's font is a style and this one's is the cell's own**
+  (§271): the font of a cell is the cell's own, as its format and its
+  alignment are.
+- **The tree's font is a range and this one's is a cell**: the tree's
+  button takes the selection, and here the cell is named.
+- **The tree's font carries a charset and a family beside the face,
+  and naming a face clears them.** Here a font is the face, the size
+  and the marks, so there is nothing to clear.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/cellfont.rs`): ten tests
+  — the bold and the button pressed twice, the bold that is named, the
+  italic and the strike, the underline taken away when it is named
+  again, the place going back to the baseline, the face, the size
+  rounded to the nearest half, the size that is not one of them, the
+  names that are not an underline or a place, and the font staying when
+  the cell's value changes.
+- **Four new commands**: the grid battery now carries **177** commands
+  and the MCP server **1023** — four more than §818. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **The cell grew a field**: the font is the cell's own field, beside
+  the value, the formula, the format, the style and the alignment.
+
+### What it does not settle
+
+- **The tree's size has a ladder of sixteen sizes and its buttons step
+  along it**: here the size is named and rounded, and there is no
+  ladder.
+- **The tree's font is a style and other cells share it**: here every
+  cell carries its own font, and a range is set a cell at a time.
