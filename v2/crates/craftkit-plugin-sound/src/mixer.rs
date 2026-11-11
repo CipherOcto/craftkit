@@ -34,6 +34,8 @@ use craftkit_sdk::serde_json::Value as Json;
 
 use crate::timeline;
 
+use craftkit_sdk::serde_json::json;
+
 /// The kind of a bus.
 ///
 /// A bus is a **destination**: the mixer sends to it. It is a node, and
@@ -2223,5 +2225,76 @@ mod tests {
         assert!(ecosystem.commands.get("sound.send.add").is_some());
         assert!(ecosystem.commands.get("sound.insert.add").is_some());
         assert!(ecosystem.commands.get("sound.lane.add").is_some());
+    }
+}
+
+/// The **mutes** of every track cleared.
+///
+/// The tree's Clear Mutes: every track of the document is unmuted at
+/// once. A track that is **mixed** with others is unmuted with them —
+/// the mix link is the tree's own, and a change to the mute of one of
+/// them is a change to the mute of all of them.
+#[derive(Command)]
+#[command(
+    id = "sound.track.mute.clear",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Track", "Mute"),
+    mutates,
+    undoable
+)]
+pub struct ClearMutes {}
+
+impl ClearMutes {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let tracks: Vec<u64> =
+            session.document().walk().filter(|node| node.kind == "sound.track").map(|node| node.id).collect();
+        let mut cleared = 0usize;
+        for track in tracks {
+            let Some(node) = session.document().node(track) else {
+                continue;
+            };
+            let Ok(mut payload) = crate::TrackPayload::from_json(&node.data) else {
+                continue;
+            };
+            if !payload.mute {
+                continue;
+            }
+            payload.mute = false;
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(track) else {
+                continue;
+            };
+            node.data = data;
+            cleared += 1;
+            // The **mix link**: the tracks that are mixed with this one
+            // are unmuted with it.
+            for sibling in crate::group::mix_siblings(session.document(), track) {
+                if sibling == track {
+                    continue;
+                }
+                let Some(node) = session.document().node(sibling) else {
+                    continue;
+                };
+                let Ok(mut other) = crate::TrackPayload::from_json(&node.data) else {
+                    continue;
+                };
+                if !other.mute {
+                    continue;
+                }
+                other.mute = false;
+                let data = other.to_json();
+                if let Some(node) = session.document_mut()?.node_mut(sibling) {
+                    node.data = data;
+                    cleared += 1;
+                }
+            }
+        }
+        if cleared == 0 {
+            return Ok(Outcome::new("no track was muted").with_data(json!({ "cleared": 0 })));
+        }
+        Ok(Outcome::changed(format!("cleared the mute of {cleared} track(s)"))
+            .with_data(json!({ "cleared": cleared })))
     }
 }
