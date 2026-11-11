@@ -4184,6 +4184,7 @@ so.
 | the **joining** of two open contours | **built.** Two open contours are joined end to end, and the joined point may be a corner or smooth (§803) | §803 |
 | the **area** under a shaped tip | **built.** A closed shape loses the area under an elliptical tip, and an open path loses the outline under it (§804) | §804 |
 | the **brush** that paints on a shape | **built.** A brush stroke is painted onto a shape, and the shape grows where the brush went (§805) | §805 |
+| the **scrub** that joins the ends | **built.** The two ends nearest a drag are joined, and the two ends of one contour close it (§806) | §806 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -53049,3 +53050,65 @@ shapes it touches, and the shape grows where the brush went.
   takes a shape of its own, and the shapes it can take are not here.
 - **The tree's blob keeps the selection and merges only what is
   selected**: here one named shape is painted on.
+
+## 806. The ends near a drag are joined
+
+The tree's **Join Scrub** drags along the ends of open paths, and the
+two ends that are nearest the drag are joined: the ends of two paths,
+or the two ends of one path, which closes it.
+
+### What was built
+
+- The command **`vector.path.join.scrub`** joins the ends that are near
+  a drag: the tree's Join Scrub, as a command. The scrub is a run of
+  points, and the **tolerance** is how near the ends have to be — 12
+  if it is not given.
+- The rules are the tree's own:
+  - the ends that are **near the scrub** are the ones that are joined,
+    and so are the ends near the scrub's **first** and **last** point:
+    the tree's own rule;
+  - the ends are **ordered along the scrub** — the ends on it by how
+    far along they are, the ends near its first point before
+    everything and the ends near its last point after everything — and
+    the **first two** are the ones that are joined: the tree's own
+    rule;
+  - the two ends of **one** contour **close** it, and the curve that
+    came into the last point comes into the first point: the tree's own
+    rule;
+  - the two ends of **two** contours are joined into **one** contour:
+    the tree's own rule.
+
+### What the port found
+
+- **The tree's scrub joins paths of several nodes, and this one joins
+  the ends of one.** A command works on one node here, so the ends are
+  the ends of one path's contours.
+- **The tree's scrub merges two ends that are one place into a closed
+  contour, and this one closes the contour with the curve.** The
+  contour's last side is taken away, its first point moves to the
+  **middle** of the two ends, and the curve that came into the last
+  point comes into the first point instead — the tree's own rule.
+- **The tree's tolerance is never negative, and this tree refuses one
+  that is.** The tree keeps it at zero and above; a number this tree
+  would have to change is refused.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/joinscrub.rs`): six
+  tests — the two ends joined, the ends ordered along the scrub, the
+  two ends of one contour, the scrub with fewer than two ends, the
+  tolerance that is negative, and the scrub that is not a list.
+- **One new command**: the vector battery now carries **67** commands
+  and the MCP server **1000** — one more than §805. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`joinscrub`), and the joining of two contours is
+  the one the joining command uses.
+
+### What it does not settle
+
+- **The tree's scrub joins the ends of paths of different nodes**: here
+  one path's ends are joined.
+- **The tree's own brush symbols are not here**: the tree's Eraser and
+  its Blob Brush take a brush, and the library of brushes is not here
+  either.
