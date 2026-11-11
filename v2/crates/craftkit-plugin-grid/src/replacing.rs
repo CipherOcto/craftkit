@@ -173,7 +173,7 @@ impl ReplaceText {
         // The cells that are **locked** or **covered** are not written.
         for (sheet, cell, _) in &changes {
             let Some(node) = session.document().node(*sheet) else { continue };
-            crate::protection::refuse_locked(node, &[*cell], &id)?;
+            crate::protection::refuse_locked(node, &crate::style_locks(session, *sheet), &[*cell], &id)?;
             crate::merges::refuse_covered(node, &[*cell], &id)?;
         }
         // The **writing**: the cells are changed in the order they

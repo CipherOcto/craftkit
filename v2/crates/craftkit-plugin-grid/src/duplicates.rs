@@ -183,7 +183,7 @@ impl RemoveDuplicates {
                 targets.push(CellRef { col: column, row: *row });
             }
         }
-        crate::protection::refuse_locked(node, &targets, &id)?;
+        crate::protection::refuse_locked(node, &crate::style_locks(session, sheet), &targets, &id)?;
         let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed {
                 id: id.clone(),

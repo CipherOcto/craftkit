@@ -820,7 +820,7 @@ impl FillRange {
         if let Some(node) = session.document().node(sheet) {
             let cells: Vec<crate::formula::CellRef> = writes.iter().map(|write| write.cell).collect();
             crate::merges::refuse_covered(node, &cells, &id)?;
-            crate::protection::refuse_locked(node, &cells, &id)?;
+            crate::protection::refuse_locked(node, &crate::style_locks(session, sheet), &cells, &id)?;
         }
         let mut written: Vec<serde_json::Value> = Vec::new();
         if let Some(node) = session.document_mut()?.node_mut(sheet) {

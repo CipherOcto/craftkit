@@ -56,6 +56,9 @@ impl SetCheckbox {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = "grid.cell.checkbox.set".to_string();
         let sheet = self.sheet.0;
+        // The **locks** the styles of the workbook carry: they are
+        // read before the document is borrowed for the change.
+        let locks = crate::style_locks(session, sheet);
         let cell = crate::cell_at(&self.cell.0, &id)?;
         let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed {
@@ -70,7 +73,7 @@ impl SetCheckbox {
             });
         }
         crate::merges::refuse_covered(node, &[cell], &id)?;
-        crate::protection::refuse_locked(node, &[cell], &id)?;
+        crate::protection::refuse_locked(node, &locks, &[cell], &id)?;
         let mut cells = crate::cells_of(node);
         // The cell keeps what it holds, and an **empty** cell starts
         // **unchecked**.
@@ -107,6 +110,9 @@ impl ToggleCheckbox {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = "grid.cell.checkbox.toggle".to_string();
         let sheet = self.sheet.0;
+        // The **locks** the styles of the workbook carry: they are
+        // read before the document is borrowed for the change.
+        let locks = crate::style_locks(session, sheet);
         let cell = crate::cell_at(&self.cell.0, &id)?;
         let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed {
@@ -121,7 +127,7 @@ impl ToggleCheckbox {
             });
         }
         crate::merges::refuse_covered(node, &[cell], &id)?;
-        crate::protection::refuse_locked(node, &[cell], &id)?;
+        crate::protection::refuse_locked(node, &locks, &[cell], &id)?;
         let mut cells = crate::cells_of(node);
         let Some(entry) = cells.get(cell).cloned() else {
             return Ok(Outcome::new(format!("the cell {} holds nothing", cell.to_text())).with_data(json!({

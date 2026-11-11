@@ -41,6 +41,9 @@ impl ClearContents {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = "grid.cell.clear.contents".to_string();
         let sheet = self.sheet.0;
+        // The **locks** the styles of the workbook carry: they are
+        // read before the document is borrowed for the change.
+        let locks = crate::style_locks(session, sheet);
         let cell = crate::cell_at(&self.cell.0, &id)?;
         let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed {
@@ -55,7 +58,7 @@ impl ClearContents {
             });
         }
         crate::merges::refuse_covered(node, &[cell], &id)?;
-        crate::protection::refuse_locked(node, &[cell], &id)?;
+        crate::protection::refuse_locked(node, &locks, &[cell], &id)?;
         let mut cells = crate::cells_of(node);
         // The **checkbox** of the cell: the tree's own rule is that
         // delete on a checkbox works in two passes, as it does in

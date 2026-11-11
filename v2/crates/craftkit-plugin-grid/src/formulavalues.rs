@@ -77,7 +77,7 @@ impl FormulaValues {
                 .with_data(json!({ "sheet": sheet, "converted": 0 })));
         }
         crate::merges::refuse_covered(node, &converted, &id)?;
-        crate::protection::refuse_locked(node, &converted, &id)?;
+        crate::protection::refuse_locked(node, &crate::style_locks(session, sheet), &converted, &id)?;
         let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed { id, message: format!("there is no sheet `{sheet}`") });
         };

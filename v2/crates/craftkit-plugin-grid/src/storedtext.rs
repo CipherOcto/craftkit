@@ -246,7 +246,7 @@ impl NumbersConvert {
         }
         // The cells that are **locked** or **covered** are not written.
         let addresses: Vec<CellRef> = found.iter().map(|(cell, _)| *cell).collect();
-        crate::protection::refuse_locked(node, &addresses, &id)?;
+        crate::protection::refuse_locked(node, &crate::style_locks(session, sheet), &addresses, &id)?;
         crate::merges::refuse_covered(node, &addresses, &id)?;
         // The **writing**: every cell holds the number it stood for.
         let mut written = 0usize;

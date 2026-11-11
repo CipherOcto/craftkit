@@ -87,6 +87,23 @@ pub fn edit_ranges_of(node: &Node) -> Vec<crate::formula::Area> {
     areas
 }
 
+/// The **lock** of a cell: what it says of itself, and then what the
+/// style it names says.
+///
+/// The cell's own word comes first: a cell that says of itself that
+/// it is unlocked says more than the style it names. The style's word
+/// comes next: the tree's cell is locked by its style. And a cell that
+/// says nothing and names a style that says nothing is locked by the
+/// sheet.
+pub fn lock_of(node: &Node, locks: &[(String, Option<bool>)], cell: CellRef) -> Option<bool> {
+    let entry = node.data.get("cells").and_then(|cells| cells.get(cell.to_text()));
+    if let Some(locked) = entry.and_then(|entry| entry.get("locked")).and_then(|locked| locked.as_bool()) {
+        return Some(locked);
+    }
+    let name = entry.and_then(|entry| entry.get("style")).and_then(|style| style.as_str())?;
+    locks.iter().find(|(style, _)| style.eq_ignore_ascii_case(name)).and_then(|(_, locked)| *locked)
+}
+
 /// Refuse a change to the **contents** of a cell of a locked sheet.
 ///
 /// A sheet that is not protected, or a protection that does not lock
@@ -94,8 +111,14 @@ pub fn edit_ranges_of(node: &Node) -> Vec<crate::formula::Area> {
 ///
 /// A cell may be **unlocked of its own**, and then it may be changed
 /// even though the sheet is protected: the tree's own rule, and the
-/// tree's cells are locked by their own style.
-pub fn refuse_locked(node: &Node, cells: &[CellRef], id: &str) -> Result<(), EngineError> {
+/// tree's cells are locked by their own style — and here the style may
+/// say so too.
+pub fn refuse_locked(
+    node: &Node,
+    locks: &[(String, Option<bool>)],
+    cells: &[CellRef],
+    id: &str,
+) -> Result<(), EngineError> {
     let Some(protection) = Protection::of(node) else { return Ok(()) };
     if !protection.locked {
         return Ok(());
@@ -103,14 +126,7 @@ pub fn refuse_locked(node: &Node, cells: &[CellRef], id: &str) -> Result<(), Eng
     // A cell in an **edit range** may be changed even though the sheet
     // is protected: the tree's own rule.
     let editable = |cell: CellRef| edit_ranges_of(node).iter().any(|area| area.covers(cell));
-    let unlocked = |cell: CellRef| {
-        node.data
-            .get("cells")
-            .and_then(|cells| cells.get(cell.to_text()))
-            .and_then(|entry| entry.get("locked"))
-            .and_then(|locked| locked.as_bool())
-            == Some(false)
-    };
+    let unlocked = |cell: CellRef| lock_of(node, locks, cell) == Some(false);
     let cell = match cells.iter().find(|cell| !unlocked(**cell) && !editable(**cell)) {
         Some(cell) => cell.to_text(),
         None => return Ok(()),

@@ -493,7 +493,7 @@ pub use solver::SolveProgram;
 pub use sorting::SortRange;
 pub use sparklines::{ReadSparkline, RemoveSparkline, SetSparkline};
 pub use storedtext::{NumbersConvert, NumbersStoredAsText};
-pub use styles::{AddStyle, RemoveStyle, SetCellStyle, SetStyle};
+pub use styles::{AddStyle, LockStyle, RemoveStyle, SetCellStyle, SetStyle};
 pub use subtotals::Subtotal;
 pub use tables::{
     CreateTable, ReadTableFields, ReadTables, RemoveTable, RenameTable, ResizeTable, SetTableColumnWay,
@@ -842,26 +842,22 @@ pub fn system_of(session: &Session, sheet: u64) -> dates::System {
 ///
 /// A style is a **named format** of the workbook, and it is shared: a
 /// hundred cells that name one style carry one format.
-pub fn styles_of(session: &Session, sheet: u64) -> Vec<(String, String)> {
+pub fn styles_of(session: &Session, sheet: u64) -> Vec<crate::styles::Style> {
     let Some(book) =
         session.document().walk().find(|node| node.children.iter().any(|child| child.id == sheet))
     else {
         return Vec::new();
     };
-    book.data
-        .get("styles")
-        .and_then(|styles| styles.as_array())
-        .map(|styles| {
-            styles
-                .iter()
-                .filter_map(|style| {
-                    let name = style.get("name")?.as_str()?.to_string();
-                    let format = style.get("format")?.as_str()?.to_string();
-                    Some((name, format))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+    crate::styles::styles_of_book(book)
+}
+
+/// The **locks** the styles of a workbook carry.
+///
+/// The styles are the workbook's, and the lock of a style is the lock
+/// of the cells that name it: the lock is read where the cells are
+/// checked, and the styles are read there too.
+pub fn style_locks(session: &Session, sheet: u64) -> Vec<(String, Option<bool>)> {
+    styles_of(session, sheet).into_iter().map(|style| (style.name, style.locked)).collect()
 }
 
 /// The **format** a cell is written with.
@@ -887,10 +883,10 @@ pub fn format_of(session: &Session, sheet: u64, cells: &Cells, cell: CellRef) ->
 pub fn format_code_of(session: &Session, sheet: u64, cells: &Cells, cell: CellRef) -> Option<String> {
     if let Some(name) = cells.style(cell) {
         let styles = styles_of(session, sheet);
-        if let Some((_, code)) = styles.iter().find(|(style, _)| style == name) {
-            let format = Format::parse(code).unwrap_or(Format::General);
+        if let Some(style) = styles.iter().find(|style| style.name == name) {
+            let format = Format::parse(&style.format).unwrap_or(Format::General);
             if format != Format::General {
-                return Some(code.clone());
+                return Some(style.format.clone());
             }
         }
     }
@@ -1191,6 +1187,9 @@ impl SetCell {
         let sheet = self.sheet.0;
         let cell = cell_at(&self.cell.0, "grid.cell.set")?;
         let value = Value::from_json(&self.value);
+        // The **locks** the styles of the workbook carry: they are
+        // read before the document is borrowed for the change.
+        let locks = crate::style_locks(session, sheet);
         let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed {
                 id: "grid.cell.set".to_string(),
@@ -1204,7 +1203,7 @@ impl SetCell {
             });
         }
         merges::refuse_covered(node, &[cell], "grid.cell.set")?;
-        crate::protection::refuse_locked(node, &[cell], "grid.cell.set")?;
+        crate::protection::refuse_locked(node, &locks, &[cell], "grid.cell.set")?;
         let mut cells = sheet_cells_mut(node);
         cells.set_value(cell, value.clone());
         node.data["cells"] = cells_into(&cells);
@@ -1309,6 +1308,9 @@ impl SetDate {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = "grid.cell.date".to_string();
         let sheet = self.sheet.0;
+        // The **locks** the styles of the workbook carry: they are
+        // read before the document is borrowed for the change.
+        let locks = crate::style_locks(session, sheet);
         let cell = cell_at(&self.cell.0, &id)?;
         // The **date system** of the workbook the sheet is in: the
         // date is written in that calendar and the serial is that
@@ -1363,7 +1365,7 @@ impl SetDate {
             });
         }
         merges::refuse_covered(node, &[cell], &id)?;
-        crate::protection::refuse_locked(node, &[cell], &id)?;
+        crate::protection::refuse_locked(node, &locks, &[cell], &id)?;
         let mut cells = sheet_cells_mut(node);
         cells.set_value(cell, Value::Number(serial));
         cells.set_format(cell, Some(style.code().to_string()));
@@ -1407,6 +1409,9 @@ impl SetTime {
         let id = "grid.cell.time".to_string();
         let sheet = self.sheet.0;
         let cell = cell_at(&self.cell.0, &id)?;
+        // The **locks** the styles of the workbook carry: they are
+        // read before the document is borrowed for the change.
+        let locks = crate::style_locks(session, sheet);
         let (time, shape) = dates::parse_time(&self.time.0).ok_or_else(|| EngineError::Failed {
             id: id.clone(),
             message: format!(
@@ -1454,7 +1459,7 @@ impl SetTime {
             });
         }
         merges::refuse_covered(node, &[cell], &id)?;
-        crate::protection::refuse_locked(node, &[cell], &id)?;
+        crate::protection::refuse_locked(node, &locks, &[cell], &id)?;
         let mut cells = sheet_cells_mut(node);
         cells.set_value(cell, Value::Number(serial));
         cells.set_format(cell, Some(style.code().to_string()));
@@ -1552,6 +1557,8 @@ impl SetFormula {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let sheet = self.sheet.0;
         let cell = cell_at(&self.cell.0, "grid.formula.set")?;
+        // The **locks** the styles of the workbook carry.
+        let locks = crate::style_locks(session, sheet);
         let text = self.formula.0.trim().to_string();
         let expression = formula::parse(&text).map_err(|error| EngineError::Failed {
             id: "grid.formula.set".to_string(),
@@ -1570,7 +1577,7 @@ impl SetFormula {
             });
         }
         merges::refuse_covered(node, &[cell], "grid.formula.set")?;
-        crate::protection::refuse_locked(node, &[cell], "grid.formula.set")?;
+        crate::protection::refuse_locked(node, &locks, &[cell], "grid.formula.set")?;
         let name = node.name.clone();
         let mut cells = cells_of(node);
         // The cycle check: with the new formula in place, does the cell
@@ -1620,13 +1627,16 @@ impl ClearCell {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let sheet = self.sheet.0;
         let cell = cell_at(&self.cell.0, "grid.cell.clear")?;
+        // The **locks** the styles of the workbook carry: they are
+        // read before the document is borrowed for the change.
+        let locks = crate::style_locks(session, sheet);
         let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed {
                 id: "grid.cell.clear".to_string(),
                 message: format!("there is no sheet `{sheet}`"),
             });
         };
-        crate::protection::refuse_locked(node, &[cell], "grid.cell.clear")?;
+        crate::protection::refuse_locked(node, &locks, &[cell], "grid.cell.clear")?;
         let mut cells = sheet_cells_mut(node);
         let was_there = cells.clear(cell);
         node.data["cells"] = cells_into(&cells);

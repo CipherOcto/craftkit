@@ -5,23 +5,55 @@
 //! style changes every cell that names it.
 //!
 //! The tree's style is a whole thing — a font, a fill, a border, an
-//! alignment and a number format — and the tree's named styles are
-//! **built in**: a list of them that the tree knows, plus the ones the
-//! file carries. Here a style carries a **format** and nothing else,
-//! because a format is the only thing this tree writes on a cell.
+//! alignment, a **protection** and a number format — and the tree's
+//! named styles are **built in**: a list of them that the tree knows,
+//! plus the ones the file carries. Here a style carries a **format**
+//! and a **lock**, and the lock is the tree's protection: the tree's
+//! cell is locked or unlocked by its style and not by itself.
 //!
-//! The tree's rule that is here: a style whose format is *General* does
-//! not change the cell's format — the cell keeps its own. And the tree
-//! finds a style by its name, without regard to case, so two styles
-//! whose names differ only in case are one style.
+//! The tree's rules that are here:
+//!
+//! - a style whose format is *General* does not change the cell's
+//!   format — the cell keeps its own;
+//! - the tree finds a style by its name, without regard to case, so
+//!   two styles whose names differ only in case are one style;
+//! - the **lock** of a style is the lock of the cells that name it,
+//!   and it is **derived**: changing the style changes every cell that
+//!   names it.
+//!
+//! And the one rule that is **this tree's own**: a cell that says of
+//! itself whether it is locked says more than the style, so the
+//! cell's own word comes first, and the style's word comes before the
+//! sheet's protection. The tree has no such a word on the cell — the
+//! tree's cell has one style and the style says everything.
 
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Session, Text};
+
+/// A **style** of a workbook: a name, a format and a lock.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Style {
+    /// The name the style is found by.
+    pub name: String,
+    /// The **format code** the style carries.
+    pub format: String,
+    /// The **lock** the style carries: the cells that name it are
+    /// locked when the sheet is protected, and `None` is a style that
+    /// says nothing.
+    pub locked: Option<bool>,
+}
+
+impl Style {
+    /// The style, as the payload carries it.
+    pub fn to_json(&self) -> craftkit_sdk::serde_json::Value {
+        json!({ "name": self.name, "format": self.format, "locked": self.locked })
+    }
+}
 
 /// The **styles** of a workbook, from its payload.
-fn styles_of_book(node: &craftkit_sdk::Node) -> Vec<(String, String)> {
+pub fn styles_of_book(node: &craftkit_sdk::Node) -> Vec<Style> {
     node.data
         .get("styles")
         .and_then(|styles| styles.as_array())
@@ -31,7 +63,8 @@ fn styles_of_book(node: &craftkit_sdk::Node) -> Vec<(String, String)> {
                 .filter_map(|style| {
                     let name = style.get("name")?.as_str()?.to_string();
                     let format = style.get("format")?.as_str()?.to_string();
-                    Some((name, format))
+                    let locked = style.get("locked").and_then(|locked| locked.as_bool());
+                    Some(Style { name, format, locked })
                 })
                 .collect()
         })
@@ -92,17 +125,14 @@ impl AddStyle {
             }
         };
         let styles = session.document().node(workbook).map(styles_of_book).unwrap_or_default();
-        if styles.iter().any(|(style, _)| style.eq_ignore_ascii_case(&name)) {
+        if styles.iter().any(|style| style.name.eq_ignore_ascii_case(&name)) {
             return Err(EngineError::Failed {
                 id,
                 message: format!("the style `{name}` is already in the workbook"),
             });
         }
-        let mut styles = styles
-            .into_iter()
-            .map(|(name, format)| json!({ "name": name, "format": format }))
-            .collect::<Vec<_>>();
-        styles.push(json!({ "name": name, "format": code }));
+        let mut styles = styles.iter().map(Style::to_json).collect::<Vec<_>>();
+        styles.push(Style { name: name.clone(), format: code.clone(), locked: None }.to_json());
         if let Some(node) = session.document_mut()?.node_mut(workbook) {
             node.data["styles"] = json!(styles);
         }
@@ -143,19 +173,21 @@ impl SetStyle {
             }
         };
         let styles = session.document().node(workbook).map(styles_of_book).unwrap_or_default();
-        if !styles.iter().any(|(style, _)| style.eq_ignore_ascii_case(&name)) {
+        if !styles.iter().any(|style| style.name.eq_ignore_ascii_case(&name)) {
             return Err(EngineError::Failed {
                 id,
                 message: format!("there is no style `{name}` in the workbook"),
             });
         }
+        // The **lock** of the style is kept: the format is what this
+        // command changes, and the lock is the style's own.
         let styles: Vec<_> = styles
             .into_iter()
-            .map(|(style, format)| {
-                if style.eq_ignore_ascii_case(&name) {
-                    json!({ "name": style, "format": code })
+            .map(|style| {
+                if style.name.eq_ignore_ascii_case(&name) {
+                    Style { format: code.clone(), ..style }.to_json()
                 } else {
-                    json!({ "name": style, "format": format })
+                    style.to_json()
                 }
             })
             .collect();
@@ -164,6 +196,57 @@ impl SetStyle {
         }
         Ok(Outcome::changed(format!("the style `{name}` carries `{code}`"))
             .with_data(json!({ "workbook": workbook, "name": name, "format": code })))
+    }
+}
+
+/// The **lock** of a style is changed.
+///
+/// The lock is the tree's **protection**: the cells that name the style
+/// are locked when the sheet is protected, and a style that says
+/// nothing leaves the cells to the sheet.
+///
+/// The lock is **derived**: the cells that name the style are locked or
+/// unlocked because the style says so, and changing the style changes
+/// every cell that names it.
+#[derive(Command)]
+#[command(id = "grid.style.lock", area = "grid", layer = "grid", icon = "lock", mutates, undoable)]
+pub struct LockStyle {
+    /// The workbook the style belongs to.
+    pub workbook: NodeRef,
+    /// The name of the style.
+    pub name: Text,
+    /// Whether the cells that name it are locked.
+    pub locked: Bool,
+}
+
+impl LockStyle {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.style.lock".to_string();
+        let workbook = the_workbook(session, self.workbook.0, &id)?;
+        let name = self.name.0.trim().to_string();
+        let styles = session.document().node(workbook).map(styles_of_book).unwrap_or_default();
+        if !styles.iter().any(|style| style.name.eq_ignore_ascii_case(&name)) {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("there is no style `{name}` in the workbook"),
+            });
+        }
+        let locked = self.locked.0;
+        let styles: Vec<_> = styles
+            .into_iter()
+            .map(|style| {
+                if style.name.eq_ignore_ascii_case(&name) {
+                    Style { locked: Some(locked), ..style }.to_json()
+                } else {
+                    style.to_json()
+                }
+            })
+            .collect();
+        if let Some(node) = session.document_mut()?.node_mut(workbook) {
+            node.data["styles"] = json!(styles);
+        }
+        Ok(Outcome::changed(format!("the style `{name}` is {}", if locked { "locked" } else { "unlocked" }))
+            .with_data(json!({ "workbook": workbook, "name": name, "locked": locked })))
     }
 }
 
@@ -187,7 +270,7 @@ impl RemoveStyle {
         let workbook = the_workbook(session, self.workbook.0, &id)?;
         let name = self.name.0.trim().to_string();
         let styles = session.document().node(workbook).map(styles_of_book).unwrap_or_default();
-        if !styles.iter().any(|(style, _)| style.eq_ignore_ascii_case(&name)) {
+        if !styles.iter().any(|style| style.name.eq_ignore_ascii_case(&name)) {
             return Err(EngineError::Failed {
                 id,
                 message: format!("there is no style `{name}` in the workbook"),
@@ -195,8 +278,8 @@ impl RemoveStyle {
         }
         let styles: Vec<_> = styles
             .into_iter()
-            .filter(|(style, _)| !style.eq_ignore_ascii_case(&name))
-            .map(|(name, format)| json!({ "name": name, "format": format }))
+            .filter(|style| !style.name.eq_ignore_ascii_case(&name))
+            .map(|style| style.to_json())
             .collect();
         if let Some(node) = session.document_mut()?.node_mut(workbook) {
             node.data["styles"] = json!(styles);
@@ -231,7 +314,7 @@ impl SetCellStyle {
         let name = self.style.0.trim().to_string();
         if !name.is_empty() {
             let styles = crate::styles_of(session, sheet);
-            if !styles.iter().any(|(style, _)| style.eq_ignore_ascii_case(&name)) {
+            if !styles.iter().any(|style| style.name.eq_ignore_ascii_case(&name)) {
                 return Err(EngineError::Failed {
                     id,
                     message: format!("there is no style `{name}` in the workbook"),

@@ -94,7 +94,7 @@ impl SetPicture {
         }
         let cell = crate::cell_at(self.cell.0.trim(), &id)?;
         crate::merges::refuse_covered(&node, &[cell], &id)?;
-        crate::protection::refuse_locked(&node, &[cell], &id)?;
+        crate::protection::refuse_locked(&node, &crate::style_locks(session, sheet), &[cell], &id)?;
         let path = self.path.0.trim().to_string();
         if path.is_empty() {
             return Err(EngineError::Failed {

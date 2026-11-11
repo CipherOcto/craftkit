@@ -104,6 +104,9 @@ impl TextColumns {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = "grid.text.columns".to_string();
         let sheet = self.sheet.0;
+        // The **locks** the styles of the workbook carry: they are
+        // read before the document is borrowed for the change.
+        let locks = crate::style_locks(session, sheet);
         let source = CellRef::column_index(self.column.0.trim()).ok_or_else(|| EngineError::Failed {
             id: id.clone(),
             message: format!("`{}` is not a column", self.column.0.trim()),
@@ -203,7 +206,7 @@ impl TextColumns {
         // sheet's protection are not written.
         let targets: Vec<CellRef> = plan.iter().map(|(cell, _)| *cell).collect();
         crate::merges::refuse_covered(node, &targets, "grid.text.columns")?;
-        crate::protection::refuse_locked(node, &targets, "grid.text.columns")?;
+        crate::protection::refuse_locked(node, &locks, &targets, "grid.text.columns")?;
         let mut cells = crate::sheet_cells_mut(node);
         for (target, value) in plan {
             if value == Value::Empty {
