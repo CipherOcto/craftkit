@@ -4204,6 +4204,7 @@ so.
 | the **priority** of a rule | **built.** The rules of a sheet are tried in priority, and the rule that names the lower number is the one that writes the cell (§823) | §823 |
 | the **text** of a cell | **built.** The code `@` writes the text of a cell, and a format may end with a section that is the text's own (§824) | §824 |
 | the **long date** | **built.** The shape `dddd, mmmm dd, yyyy` says the weekday, the month by name, the day and the year at once (§825) | §825 |
+| the **trace** of every level | **built.** The flag `all` walks the chain of the precedents and of the dependents, all the way down (§826) | §826 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -54258,3 +54259,66 @@ the month by name, the day and the year **at once**.
 - **The tree's fills are still not here**: the accounting and comma
   formats fill the space the number does not take, and this tree has
   no fill.
+
+## 826. The trace of every level
+
+The tree's **trace**: the cells a cell reads and the cells that read
+it — and the tree's own flag `all`, which walks the chain all the way
+down.
+
+### What was built
+
+- **The flag `all`** on `grid.precedents` and `grid.dependents`: the
+  trace is at **every** level and not only at the first one. The
+  flag is the tree's own, and the tree's own shortcut with the shift
+  key — `Ctrl+Shift+[` and `Ctrl+Shift+]` — is its flag too.
+- The tree's rules are the tree's:
+  - at the **first** level the answer is the **areas** a formula
+    reads, and at **every** level it is the **cells** — because at the
+    first level the areas are what a formula reads, and at every level
+    the cells are what is read;
+  - the walk goes through the **stored** cells of an area: a blank is
+    never one of the cells that are read;
+  - only a cell that holds a **formula** carries the walk on;
+  - the cell the walk starts at is **not** one of its own precedents
+    and not one of its own dependents.
+
+### What the port found
+
+- **A formula that names no sheet reads the sheet it is in**, and this
+  tree said otherwise until now: a formula in `Sheet2` that says
+  `=A1` was taken to read `Sheet1!A1` — the sheet that was asked
+  about — and not `Sheet2!A1`. The rule is the tree's, and the answer
+  is now the tree's.
+- **The tree's trace at every level is a walk over a graph**, and the
+  graph is built by the tree's calculation engine. Here the walk is
+  worked out from the **formulas themselves**: the cells of a sheet
+  are read, and the areas each formula reads are looked for.
+- **The tree's commands at every level select the cells** — the tree
+  has a selection and this tree has none, so the answer is a **list**
+  of the cells and not a selection.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/trace.rs`): five tests
+  — the trace at every level walking the whole chain, the dependents
+  at every level walking the chain, the first level being the direct
+  one, a formula that names no sheet reading the sheet it is in, and a
+  blank cell inside an area not being read.
+- **One new module**: `trace` — the walk of the precedents and of the
+  dependents. **No new command**: the flag is a parameter of two
+  commands that were already there, so the grid battery still carries
+  **182** commands and the MCP server **1028** — the counts do not
+  move.
+- **One repair**: the answer of `grid.dependents` about a cell in
+  another sheet was **wrong** before, because of the rule above. A
+  test in the grid battery (`tests/trace.rs`) says so now.
+
+### What it does not settle
+
+- **The tree's selection is not here**: the tree's trace at every
+  level **selects** the cells it finds, and this tree answers with a
+  list of them.
+- **The tree's graph is not here**: the tree builds a graph of the
+  dependencies once and asks it, and here the formulas are read again
+  for every question.
