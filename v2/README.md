@@ -4182,6 +4182,7 @@ so.
 | the **converting** of many points | **built.** Many points become smooth by the tree's neighbours' rule, or become corners by retracting their handles (§801) | §801 |
 | the **moving** of many points | **built.** Many points move by one delta, and the handles move with the point they belong to (§802) | §802 |
 | the **joining** of two open contours | **built.** Two open contours are joined end to end, and the joined point may be a corner or smooth (§803) | §803 |
+| the **area** under a shaped tip | **built.** A closed shape loses the area under an elliptical tip, and an open path loses the outline under it (§804) | §804 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52441,11 +52442,12 @@ stretch of the path as it was.
 
 ### What it does not settle
 
-- **The tree's own eraser with a shaped tip is not here**: the tree's
-  Eraser takes an elliptical tip — a size, an angle and a roundness —
-  and takes the **area** of a closed shape away as well; here the
-  eraser is a round one, the width of it, and it takes the outline
-  away.
+- **The tree's own eraser with a shaped tip was not here, and is now**:
+  the tree's Eraser takes an elliptical tip — a size, an angle and a
+  roundness — and takes the **area** of a closed shape away as well;
+  that tip is here now as `vector.path.erase.region` (§804), and the
+  eraser of §796 is the round one, the width of it, and it takes the
+  outline away.
 - **The tree's own eraser works on the selected paths**: here the
   command names the path it works on.
 
@@ -52915,3 +52917,72 @@ joined meet, and the joined point may be made a **corner** or
 - **The tree's own merge of anchors that lie on one another is not
   here**: that is the tree's other way of joining, and it is not this
   command.
+
+## 804. The area under a shaped tip is taken away
+
+The tree's **Eraser** takes a **tip** — a size, an angle and a
+roundness — and the tip is an **ellipse**, not a circle. A closed shape
+loses the **area** under the tip, and an open path loses the **outline**
+under it.
+
+### What was built
+
+- The command **`vector.path.erase.region`** takes the area under a
+  shaped tip away: the tree's Eraser with its tip, as a command. The
+  drag is a run of points, and the tip is a **size**, an **angle** in
+  degrees and a **roundness** in percent.
+- The rules are the tree's own:
+  - the tip's **long axis** is the size and its **short axis** is the
+    roundness — a percentage of the long one: the tree's own rule;
+  - the tip's long axis runs at the **angle**: the tree's own rule;
+  - the area the tip covers along the drag is the drag **squashed** by
+    the tip's map, **stroked** round, and **stretched** back: the
+    tree's own rule;
+  - a closed shape loses the **area** under the tip, and an open path
+    loses the **outline** under it: the tree's own rule;
+  - a shape that is wholly under the tip is **taken away**: the tree's
+    own rule;
+  - the parts of an open path that are left are **one path per piece**,
+    the rule of §796.
+- The tip's **roundness** is kept between **one percent** and **a
+  hundred**, and a roundness outside that is **refused** — the tree
+  keeps it within those bounds by clamping it, and this tree refuses
+  a number it would have to change.
+
+### What the port found
+
+- **The tree's eraser works on the selected paths, and this one names
+  the path it works on** — as §796's eraser does.
+- **The tree's tip is a map, and the map is a matrix.** The tree's tip
+  takes a circle to an ellipse; the squashing and the stretching are
+  that map and its undoing, and this tree has no matrix that scales —
+  so the map is written out here, in its two halves and its inverse.
+- **The tree strokes a line of a hundredth of a point for a drag of
+  one point, and this tree draws the ellipse.** The two shapes are the
+  same to within that hundredth of a point, and the ellipse has no
+  degenerate side in it.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/eraseregion.rs`):
+  eight tests — the area under the tip, the tip that misses, the shape
+  wholly under the tip, the outline of an open path, the roundness
+  that makes the tip flat, the size that is not positive, the roundness
+  outside the bounds, and the drag that is not a list.
+- **One new command**: the vector battery now carries **65** commands
+  and the MCP server **998** — one more than §803. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`eraseregion`), and the eraser of §796 and this
+  one share the reader of a drag, the distance to it and the parts that
+  are under it.
+- **One note corrected in place**: §796 said the tree's shaped tip was
+  not here, and it is now.
+
+### What it does not settle
+
+- **The tree's own brush symbols are not here**: the tree's Eraser
+  takes a brush, and a brush is a shape of its own, and the library of
+  them is not here either.
+- **The tree's eraser works on the selected paths**: here one path is
+  erased by one drag.
