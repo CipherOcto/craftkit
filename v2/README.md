@@ -4203,6 +4203,7 @@ so.
 | the **edit ranges** of a sheet | **built.** The ranges that stay editable while the sheet is protected are named, and a cell in one of them may be changed (§822) | §822 |
 | the **priority** of a rule | **built.** The rules of a sheet are tried in priority, and the rule that names the lower number is the one that writes the cell (§823) | §823 |
 | the **text** of a cell | **built.** The code `@` writes the text of a cell, and a format may end with a section that is the text's own (§824) | §824 |
+| the **long date** | **built.** The shape `dddd, mmmm dd, yyyy` says the weekday, the month by name, the day and the year at once (§825) | §825 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -19300,7 +19301,9 @@ is **written**.
   sections; and it **never fails** — an unknown part of a code becomes
   literal text, and a code that is too long becomes General, with the
   code kept as it is. Here a code that is neither a number format of
-  this shape nor one of the nine dates is **refused**: the tree
+  this shape nor one of the date shapes is **refused** — there are
+  ten of them since §825, and there were nine when this was written:
+  the tree
   degrades quietly, and a format that is quietly ignored is a format
   the user believes in and the program does not have.
 - **The number formats of this tree are a grammar, and the date
@@ -19312,9 +19315,9 @@ is **written**.
   the number formats are a small **grammar** — the thousands, a whole
   part of placeholders with at least one `0` in it, up to fifteen
   decimals and a percent sign — and that the date formats are a **list**
-  of nine, because the tree's date formats are a language and this one
-  has nine shapes of it (§276). The claim is corrected here, and the
-  crate's own words with it.
+  of nine — ten since §825 — because the tree's date formats are a
+  language and this one has nine shapes of it (§276). The claim is
+  corrected here, and the crate's own words with it.
 - **The tree's General format is about a screen.** The tree's General
   format fits the number to the **width of the column** — fewer
   decimals, then scientific notation, then `####` — because a cell is
@@ -19348,7 +19351,8 @@ is **written**.
   formats are not here**, and neither are the tree's **sections** — a
   format with one code for positive numbers and another for negative
   ones is not here. The tree's **dates** are here now, and they are a
-  list of nine shapes (§276), and its **times** are here (§287).
+  list of nine shapes (§276), and ten since §825, and its **times**
+  are here (§287).
 - **The tree's style is not here**: a style is shared between cells and
   carries a font, a fill, borders, an alignment and a protection, and
   here the format is the cell's own.
@@ -19708,7 +19712,8 @@ things that are missing. They are here now.
   and `h` and `s` in it, with sections, with colours and with fills;
   `mmm` is the month in three letters and `dddd` is the day of the week
   in full, and the tree renders them. Here a date format is one of
-  nine shapes and a code that is not one of them is refused.
+  nine shapes — ten since §825 — and a code that is not one of them is
+  refused.
 - **The tree turns what you type into a date, and it reads the month
   first.** The tree's `parse_date` reads `2026-10-26` as the year
   first, `10/26/2026` as the **month** first — so `26/10/2026` is not
@@ -19886,8 +19891,8 @@ formats, so the reason is gone — and the reason was wrong in any case.
   here: the number formats are a small **grammar** — the thousands, a
   whole part of placeholders with at least one `0` in it, up to
   fifteen decimals and a percent sign — and the date formats are a
-  **list** of nine, because the tree's date formats are a language
-  and this one has nine shapes of it.
+  **list** of nine — ten since §825 — because the tree's date formats
+  are a language and this one has nine shapes of it.
 - **A format that is refused by `grid.cell.format` is not refused by
   `TEXT`, and that is a difference worth naming.** The command refuses
   a code it does not have, because a command that sets a format is a
@@ -19913,7 +19918,8 @@ formats, so the reason is gone — and the reason was wrong in any case.
 ### What it does not settle
 
 - **The tree's `TEXT` takes the tree's whole format language** and
-  this one takes the grammar and the nine dates of this tree: a code
+  this one takes the grammar and the dates of this tree — ten of them
+  since §825: a code
   with a section, a colour or a fill is an error here and a text in
   the tree.
 - **The tree's other functions are not here**: its `IF`, its `INDEX`,
@@ -26376,10 +26382,10 @@ tree's ribbon names its formats.
   exponent, and the exponent moves one place at a time. A mantissa
   that rounds up to ten moves the exponent one place on, and a zero
   has no exponent to move.
-- The names this tree **does not write** — `accounting`, `comma` and
-  `long date` — are **refused with the reason**: the tree's fills and
-  the tree's long date. The name `text` was refused then too, and it
-  is **written** since §824.
+- The names this tree **does not write** — `accounting` and `comma` —
+  are **refused with the reason**: the tree's fills. The name `text`
+  was refused then too, and it is **written** since §824; the name
+  `long date` was refused then too, and it is **written** since §825.
 - Every door that takes a format takes a name: `grid.cell.format`,
   `grid.style.add`, `grid.style.set`, `grid.conditional.set`, and the
   `format` of `grid.cell.date` and `grid.cell.time`.
@@ -26421,7 +26427,8 @@ tree's ribbon names its formats.
 - **The tree's fills, its long date and its text format are not here.**
   Each of them is refused with the reason, and the reason is a
   statement about this tree and not about the tree. — **the text format
-  is here since §824**; the fills and the long date are still refused.
+  is here since §824 and the long date since §825**; the fills are
+  still refused.
 - **The tree's scientific step is not here.** A code whose mantissa has
   more than one whole placeholder is refused.
 - **The tree's locale tags are not here.** The tree's `Time` is
@@ -54192,8 +54199,62 @@ own.
 - **The tree's accounting and comma formats are still not here**: they
   **fill** the space the number does not take with spaces, and this
   tree has no fill.
-- **The tree's long date is still not here**: the nine date shapes are
-  here apart, and no shape that is all of them at once.
+- **The tree's long date is here since §825**: the ten date shapes are
+  here, and the long date is the one that says the weekday, the month
+  by name, the day and the year at once.
 - **The tree's text section may hold more than `@`s and quoted
   literals** — a colour, a condition, an unquoted word — and here it
   does not, and a code that says so is refused.
+
+## 825. The long date
+
+The tree's **Long Date**: the shape of a date that says the weekday,
+the month by name, the day and the year **at once**.
+
+### What was built
+
+- **A date shape**: `dddd, mmmm dd, yyyy` — the weekday by name, the
+  month by name, the day with **two** digits and the year. The tree's
+  own shape for it, and the shape the tree's ribbon names.
+- The **name** `long date` is the tree's own and it is **honoured**
+  now: it says the code `dddd, mmmm dd, yyyy`, and the code is what
+  the cell keeps.
+- The date shapes are **ten** now, and the long date is the tenth.
+
+### What the port found
+
+- **The tree's code for the long date carries a locale tag**:
+  `[$-F800]dddd, mmmm dd, yyyy`. The tag says which calendar the
+  words are written in, and this tree has no locale: the shape is here
+  and the tag is not, so the code with the tag is **refused** and the
+  name says the code without it.
+- **The tree's date formats are a language and here they are a list**,
+  and the long date shows the difference most plainly: the tree reads
+  `dddd, mmmm dd, yyyy` as a code with four parts and writes it, and
+  here it is one of ten shapes that a code may be.
+- **The tree's day of the month is `dd` and its weekday is `dddd`**,
+  and here they are the same: the day has two digits and the weekday
+  is its name.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/longdate.rs`): five
+  tests — the long date saying the weekday, the month, the day and the
+  year, the name saying the code, the code being given as it is, the
+  day being written with two digits, and the code with the locale tag
+  being refused.
+- **No new module** and **no new command**: a date shape is a format
+  this tree already had, and the grid battery still carries **182**
+  commands and the MCP server **1028** — the counts do not move.
+- **The format names** this tree honours are **ten** now, and the
+  names it knows but does not write are **two**: `accounting` and
+  `comma`.
+
+### What it does not settle
+
+- **The tree's locale tags are still not here**: the tree's `Time` is
+  `[$-F400]h:mm:ss AM/PM` and its long date is
+  `[$-F800]dddd, mmmm dd, yyyy`, and here the codes have no tag.
+- **The tree's fills are still not here**: the accounting and comma
+  formats fill the space the number does not take, and this tree has
+  no fill.
