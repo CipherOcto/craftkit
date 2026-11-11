@@ -4201,6 +4201,7 @@ so.
 | the **locked cell** | **built.** A cell may be unlocked while the sheet is protected, and the lock of a cell is a button (§820) | §820 |
 | the **colours** of a cell | **built.** The text of a cell takes a colour and the cell takes a fill, and `none` takes them away (§821) | §821 |
 | the **edit ranges** of a sheet | **built.** The ranges that stay editable while the sheet is protected are named, and a cell in one of them may be changed (§822) | §822 |
+| the **priority** of a rule | **built.** The rules of a sheet are tried in priority, and the rule that names the lower number is the one that writes the cell (§823) | §823 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -54023,3 +54024,84 @@ the sheet is protected.
 - **The tree's ranges may be listed, added, modified and deleted by
   one command with an action**: here the ranges are set and read, and
   a list that is empty takes them all away.
+
+## 823. The priority of a conditional format
+
+The tree's **priority**: the rules of a sheet are tried in priority,
+and the rule that names the lower number is seen first.
+
+### What was built
+
+- **A parameter** on `grid.conditional.set`: the `priority` of the
+  rule. The tree's own rule, as a number that is **named** and that
+  **stays** where it is put.
+- The rules are the tree's own:
+  - the rule that names the **lower** priority is tried first, and the
+    first rule that matches is the one that writes the cell;
+  - a rule that names **no** priority is tried after the ones that do,
+    in the order the sheet holds them;
+  - two rules that name the **same** priority keep the order of the
+    sheet;
+  - a priority that is not a **whole** number, or that is negative, is
+    **refused** by name.
+- **Two repairs** came with it, both found while the arc was built:
+  - `grid.conditional.clear` **dropped** the priority of the rules it
+    did not take away — it wrote the list again without the field — so
+    a rule that was meant to be tried first was not;
+  - `grid.conditional.check` read the rules in the order of the sheet
+    and not in the order they are tried, so it named the cells of the
+    wrong rule. It now reads them in priority, like the cell is
+    written.
+
+### What the port found
+
+- **The tree's numbers are the program's own and here they are the
+  user's.** The tree puts a new rule at the front with the priority
+  `1` and **renumbers** the rest, and a rule that is taken away
+  renumbers them again; the number a rule carries is a fact about
+  where the rule sits, not a fact about the rule. Here the priority is
+  **named** and it **stays**: a rule that comes or goes moves no other
+  rule's number.
+- **The tree's rules layer and here the first match wins.** In the
+  tree every rule that matches applies, and where two of them set the
+  same part of a cell the one seen first wins; here a rule writes a
+  whole **format**, and a second rule would have nothing to add to a
+  format that is already written — so the first match wins and the
+  rules after it are not tried.
+- **The tree's rule may cover many ranges and here it covers one.** A
+  rule in the tree carries a **list** of ranges; here a rule is about
+  one range, and a range may carry **one** rule: a second rule for the
+  same range **replaces** the first. That was already so before the
+  priority, and the priority does not change it — which is why the
+  priority shows itself between two rules that cover **overlapping**
+  ranges.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/conditionalpriority.rs`):
+  six tests — the rule with the lower priority writing the cell, the
+  rule that names no priority being tried after the ones that do, two
+  rules with the same priority keeping the order of the sheet, the
+  priority surviving another rule being taken away, a priority that is
+  not a whole number being refused, and the priority being saved.
+- **No new command**: the grid battery still carries **182** commands
+  and the MCP server **1028** — the counts do not move, because the
+  priority is a parameter of a command that was already there.
+- **One bound**: a priority is a whole number from **zero** to
+  **4 294 967 295**; a number outside that, or one that has a
+  fraction, is refused.
+
+### What it does not settle
+
+- **The layering of several rules is still not here.** Two rules that
+  both match the same cell do not both write it: the first one wins
+  and the second is not applied, and the tree would have the two
+  together.
+- **The tree's stop-if-true is not here.** In the tree the flag stops
+  the walk at a rule that matched; here the walk stops at the first
+  match anyway, so there is nothing for the flag to say — and there is
+  no way to say "this rule ends the walk even when it does not match".
+- **The tree's renumbering is not here**: the numbers of the tree's
+  rules move when a rule comes or goes, and here they do not.
+- **A range may carry one rule**, so two rules on one range is a
+  replacement and not a pair.
