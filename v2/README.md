@@ -4195,6 +4195,7 @@ so.
 | the **decimals** of a format | **built.** The decimals of the format of a cell move up and down, and the rest of the format is kept (§814) | §814 |
 | the **sends** of a track | **built.** Every send of a track is muted at once, and a muted send is a copy of nothing (§815) | §815 |
 | the **alignment** of a cell | **built.** The text of a cell lies across it and down it, and the text is indented and wraps (§816) | §816 |
+| the **merge across** of a range | **built.** Every row of a range is merged on its own, and the value of a merged region is the value of its top left cell (§817) | §817 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -53700,3 +53701,53 @@ it lies down it, and how far it is indented and whether it wraps.
   the style is not here.
 - **The tree's alignment of a range is one command for many cells**:
   here the cell is named, and a range is aligned a cell at a time.
+
+## 817. A range is merged across its rows
+
+The tree's **Merge Across**: every row of a range is merged on its own.
+
+### What was built
+
+- The command **`grid.merge.across`** merges a range across its rows:
+  the tree's Merge Across, as a command.
+- The rules are the tree's own:
+  - every row of the range is merged **on its own**, so a range of
+    three rows and two columns becomes three merges of two cells each
+    and not one merge of six cells: the tree's own rule;
+  - the value of a merged region is the value of its **top left cell**:
+    the tree's own rule, and here the merge is **refused** when a cell
+    of the row but the first holds a value, as every merge here is
+    refused;
+  - a merge may not **overlap** another merge, because a cell that is
+    in two regions is in none of them: the tree's own rule.
+
+### What the port found
+
+- **The tree's merge across keeps the first value of each row and
+  clears the others**, and the tree asks before it does. Here the
+  merge is refused when a cell of the row holds a value, and nothing
+  is lost quietly — the rule of every merge in this tree (§ the merges
+  of a sheet).
+- **The tree's merge across is a command on a range and so is this
+  one**: the range is named by its own text.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/mergeacross.rs`): five
+  tests — every row merged on its own, the range of one row, the range
+  of one column being refused, the cell that holds a value being
+  refused, and the range that touches a merge being refused.
+- **One new command**: the grid battery now carries **172** commands
+  and the MCP server **1018** — one more than §816. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **No new module**: the command lives with the merges it belongs to.
+
+### What it does not settle
+
+- **The tree's merge that centres the text is not here**: it is the
+  tree's Merge and Center, and it needs the alignment of a range
+  (§816) — which is here for a cell and not for a range.
+- **The tree's merge across may be made over a range that holds
+  values, and the tree asks**: here it is refused, and the refusal says
+  which cell holds a value.
