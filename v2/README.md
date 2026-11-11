@@ -4210,6 +4210,7 @@ so.
 | the **look** of a cell | **built.** A cell is read back with its alignment, its font, its fill and the lock that holds (§829) | §829 |
 | the **look** of a style | **built.** A style carries the alignment and the font, and the cells that name it and say nothing are written with them (§830) | §830 |
 | the **paint** that is nothing | **built.** A path's fill may be taken away, and the fill is there and paints nothing (§831) | §831 |
+| the **colour** of a colour matte | **built.** A colour matte may be recoloured, and an item that is not a matte is refused by name (§832) | §832 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -54643,3 +54644,47 @@ is there and paints nothing.
 - **The tree's None for the *stroke* paints nothing rather than
   removing the stroke**: here the line is taken away entirely, and
   that was already the case.
+
+## 832. The colour of a colour matte
+
+The tree's **Color Matte Color**: a colour matte may be recoloured,
+and an item that is not a matte may not.
+
+### What was built
+
+- **One command** in the film battery: `film.item.matte.colour` — the
+  colour of a colour matte.
+- The tree's rules are the tree's:
+  - the colour must be **`#rrggbb`**, and anything else is refused;
+  - the item must be a **colour matte**, and an item that is not one
+    is **refused by name** — the tree's own words;
+  - the colour is the **item's own**, so every clip that plays the
+    matte is changed with it, and the undo brings the old colour back.
+
+### What the port found
+
+- **The tree's command takes the item or the selection**, and it says
+  so: *"select one Color Matte (or pass `item`)"*. This tree has no
+  selection, so the item is **named** — and an item that is not there
+  is refused by name.
+- **The tree's matte is a media file with a colour inside it**, and
+  here it is a **generator** that says what it plays (§827) and the
+  colour it plays in: the colour is part of the generator, and the
+  generator is part of the item.
+
+### What it cost
+
+- **One new test** in the film battery (`tests/mattecolour.rs`): four
+  tests — the colour of a matte being changed, an item that is not a
+  matte being refused, a colour that is not a colour being refused,
+  and an item that is not there being refused.
+- **One new command**: the film battery now carries **113** commands
+  and the MCP server **1033** — one more than §831.
+
+### What it does not settle
+
+- **The tree's selection is not here**: the item is named, and the
+  tree's command would take the selection when there is one.
+- **The tree's matte has a colour and a kind of its own in the file
+  format**, and here the colour and the kind are the generator's own
+  fields of the item.
