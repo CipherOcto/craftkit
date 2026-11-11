@@ -4209,6 +4209,7 @@ so.
 | the **lock** of a style | **built.** A style carries the tree's protection, and the cells that name it are locked or unlocked because it says so (§828) | §828 |
 | the **look** of a cell | **built.** A cell is read back with its alignment, its font, its fill and the lock that holds (§829) | §829 |
 | the **look** of a style | **built.** A style carries the alignment and the font, and the cells that name it and say nothing are written with them (§830) | §830 |
+| the **paint** that is nothing | **built.** A path's fill may be taken away, and the fill is there and paints nothing (§831) | §831 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52010,7 +52011,8 @@ their handles. Both are here now, in one command.
   tree draws an open path that has neither a fill nor a line with a
   black line, so that it can be seen at all. Here a path **always**
   carries a fill — there is no "no fill" to say — so the rule cannot
-  fire, and an open path is filled black instead.
+  fire, and an open path is filled black instead. — **a fill of
+  nothing may be said since §831**, so the rule may fire now.
 - **The tree takes a path of one anchor and this tree refuses it.** A
   path of one anchor has no side at all, and a path here with no side
   has no shape; so the one-anchor path is refused by name.
@@ -54588,3 +54590,56 @@ them.
 - **The tree's cell has one style and here a cell may say more than
   the style**: the cell's own words come first, and the style's come
   before the sheet's.
+
+## 831. The paint that is nothing
+
+The tree's **None**: a shape may be filled with nothing, and the fill
+is there and paints nothing.
+
+### What was built
+
+- **The `none` of `vector.path.fill`**: the path's fill is taken away
+  and the path is filled with **nothing**.
+- The rule is the tree's own rule and the one the tree's **line** has
+  already here: the line may be taken away (`vector.path.stroke` with
+  `none`), and now the fill may be taken away too.
+- A fill that says **neither** the colour nor the none is **refused**,
+  and the refusal says what to name.
+
+### What the port found
+
+- **The tree's None is a command of its own** — `paint.none` — and it
+  sets the **active proxy** to none: the fill or the stroke, whichever
+  is in front. This tree has no proxy and no selection, so the fill
+  and the line have their **own** commands, and the None is a
+  parameter of each: the tree's one command is two here.
+- **The tree's fill is a paint and the tree's paint is a list** — a
+  solid, a gradient, a pattern, a none — and here the fill is a
+  **colour or nothing**: the gradient is its own command
+  (`vector.path.gradient`) and there is no pattern.
+- **The fill that paints nothing is there**: it is a colour with no
+  **alpha**, and that is the kit's own way of saying "nothing" — the
+  same way a node with no fill at all is read.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/paintnone.rs`): three
+  tests — a path being filled with nothing, the fill that paints
+  nothing being there, and a fill that says neither being refused.
+- **No new command**: the None is a parameter of a command that was
+  already there, so the vector battery still carries **67** commands
+  and the MCP server **1032** — the counts do not move.
+- **One change to a command's shape**: the colour of
+  `vector.path.fill` is now optional, because the fill may be taken
+  away instead of coloured.
+
+### What it does not settle
+
+- **The tree's proxy is not here**: the tree's None takes the fill or
+  the line, whichever is in front, and here the fill and the line have
+  their own commands.
+- **The tree's patterns are not here**: a fill is a colour, a
+  gradient or nothing.
+- **The tree's None for the *stroke* paints nothing rather than
+  removing the stroke**: here the line is taken away entirely, and
+  that was already the case.
