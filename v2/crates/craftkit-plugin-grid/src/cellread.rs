@@ -97,9 +97,16 @@ impl ReadCell {
         let merge = crate::merges::covering(&merges, cell);
         // The **look** of the cell: its alignment, its font and its
         // fill, and the lock it is under. The lock is the cell's own
-        // word, then the style it names, and then the sheet.
+        // word, then the style it names, and then the sheet; and the
+        // alignment and the font are the cell's own, and then the
+        // style's.
         let locks = crate::style_locks(session, sheet);
         let locked = crate::protection::is_locked(node, &locks, cell);
+        let styles = crate::styles_of(session, sheet);
+        let style = entry
+            .as_ref()
+            .and_then(|entry| entry.style.as_deref())
+            .and_then(|name| styles.iter().find(|style| style.name == name));
         Ok(Outcome::new(format!("{name}!{address} holds {}", kind_of(&value))).with_data(json!({
             "sheet": sheet,
             "cell": address,
@@ -123,11 +130,17 @@ impl ReadCell {
             },
             "align": match entry.as_ref().and_then(|entry| entry.align) {
                 Some(align) => align.to_json(),
-                None => Json::Null,
+                None => match style.and_then(|style| style.align) {
+                    Some(align) => align.to_json(),
+                    None => Json::Null,
+                },
             },
             "font": match entry.as_ref().and_then(|entry| entry.font.as_ref()) {
                 Some(font) => font.to_json(),
-                None => Json::Null,
+                None => match style.and_then(|style| style.font.as_ref()) {
+                    Some(font) => font.to_json(),
+                    None => Json::Null,
+                },
             },
             "fill": match entry.as_ref().and_then(|entry| entry.fill.clone()) {
                 Some(fill) => json!(fill),

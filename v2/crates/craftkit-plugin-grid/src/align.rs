@@ -38,6 +38,110 @@ use crate::formula::{Align, AlignH, AlignV};
 /// The most **indent** a cell may have: the tree's own bound.
 const MAX_INDENT: u8 = 250;
 
+/// The **parts** of an alignment: what the parameters name.
+///
+/// The tree's alignment is a style's, and a cell here carries one of
+/// its own, so the parts are read once and are used by both.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct AlignParts {
+    /// How the text lies **across** the cell.
+    pub horizontal: Option<AlignH>,
+    /// How the text lies **down** the cell.
+    pub vertical: Option<AlignV>,
+    /// How far the text is indented.
+    pub indent: Option<u8>,
+    /// Whether the text wraps.
+    pub wrap: Option<bool>,
+}
+
+impl AlignParts {
+    /// The parts the parameters name, and the error that says they do
+    /// not.
+    pub(crate) fn parse(
+        id: &str,
+        horizontal: Option<&Text>,
+        vertical: Option<&Text>,
+        indent: Option<Number>,
+        wrap: Option<Bool>,
+    ) -> Result<AlignParts, EngineError> {
+        let horizontal = match horizontal {
+            Some(horizontal) => Some(AlignH::parse(&horizontal.0).ok_or_else(|| EngineError::Failed {
+                id: id.to_string(),
+                message: format!(
+                    "`{}` is not an alignment: it is general, left, center, right, fill, justify or center-across",
+                    horizontal.0
+                ),
+            })?),
+            None => None,
+        };
+        let vertical = match vertical {
+            Some(vertical) => Some(AlignV::parse(&vertical.0).ok_or_else(|| EngineError::Failed {
+                id: id.to_string(),
+                message: format!(
+                    "`{}` is not an alignment down the cell: it is top, middle or bottom",
+                    vertical.0
+                ),
+            })?),
+            None => None,
+        };
+        let indent = match indent {
+            Some(indent) => {
+                let number = indent.0;
+                if !number.is_finite() || number.fract() != 0.0 || number < 0.0 || number > MAX_INDENT as f64
+                {
+                    return Err(EngineError::Failed {
+                        id: id.to_string(),
+                        message: format!(
+                            "the indent of a cell is from zero to {MAX_INDENT}, and {number} is not one of them"
+                        ),
+                    });
+                }
+                Some(number as u8)
+            }
+            None => None,
+        };
+        let wrap = wrap.map(|wrap| wrap.0);
+        Ok(AlignParts { horizontal, vertical, indent, wrap })
+    }
+
+    /// Whether the parts say **nothing** at all.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.horizontal.is_none() && self.vertical.is_none() && self.indent.is_none() && self.wrap.is_none()
+    }
+
+    /// The alignment these parts make of the one that is there.
+    ///
+    /// The tree's own rules: naming the alignment that is there takes
+    /// it back to general, and an indented text lies at the left.
+    pub(crate) fn apply(&self, mut align: Align) -> Align {
+        if let Some(horizontal) = self.horizontal {
+            // **Naming the alignment a cell already has returns it to
+            // general**: the tree's own rule.
+            align.horizontal = if align.horizontal == horizontal { AlignH::General } else { horizontal };
+        }
+        if let Some(vertical) = self.vertical {
+            align.vertical = vertical;
+        }
+        if let Some(indent) = self.indent {
+            align.indent = indent;
+            // An indented text is a text that starts at the left: the
+            // tree's own rule.
+            if indent > 0
+                && matches!(
+                    align.horizontal,
+                    AlignH::General | AlignH::Center | AlignH::Fill | AlignH::Justify | AlignH::CenterAcross
+                )
+            {
+                align.horizontal = AlignH::Left;
+            }
+        }
+        if let Some(wrap) = self.wrap {
+            align.wrap = wrap;
+        }
+        align
+    }
+}
+
 /// **Align** a cell: how its text lies across it and how it lies down
 /// it, and how far it is indented and whether it wraps.
 #[derive(Command)]
@@ -74,42 +178,8 @@ impl SetAlign {
                     .to_string(),
             });
         }
-        let horizontal = match &self.horizontal {
-            Some(horizontal) => Some(AlignH::parse(&horizontal.0).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "`{}` is not an alignment: it is general, left, center, right, fill, justify or center-across",
-                    horizontal.0
-                ),
-            })?),
-            None => None,
-        };
-        let vertical = match &self.vertical {
-            Some(vertical) => Some(AlignV::parse(&vertical.0).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "`{}` is not an alignment down the cell: it is top, middle or bottom",
-                    vertical.0
-                ),
-            })?),
-            None => None,
-        };
-        let indent = match self.indent {
-            Some(indent) => {
-                let number = indent.0;
-                if !number.is_finite() || number.fract() != 0.0 || number < 0.0 || number > MAX_INDENT as f64
-                {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!(
-                            "the indent of a cell is from zero to {MAX_INDENT}, and {number} is not one of them"
-                        ),
-                    });
-                }
-                Some(number as u8)
-            }
-            None => None,
-        };
+        let parts =
+            AlignParts::parse(&id, self.horizontal.as_ref(), self.vertical.as_ref(), self.indent, self.wrap)?;
         let Some(node) = session.document_mut()?.node_mut(sheet) else {
             return Err(EngineError::Failed {
                 id: id.clone(),
@@ -124,31 +194,7 @@ impl SetAlign {
         }
         crate::protection::refuse_format(node, &id)?;
         let cells = crate::cells_of(node);
-        let mut align = cells.align(cell).copied().unwrap_or_else(Align::plain);
-        if let Some(horizontal) = horizontal {
-            // **Naming the alignment a cell already has returns it to
-            // general**: the tree's own rule.
-            align.horizontal = if align.horizontal == horizontal { AlignH::General } else { horizontal };
-        }
-        if let Some(vertical) = vertical {
-            align.vertical = vertical;
-        }
-        if let Some(indent) = indent {
-            align.indent = indent;
-            // An indented text is a text that starts at the left: the
-            // tree's own rule.
-            if indent > 0
-                && matches!(
-                    align.horizontal,
-                    AlignH::General | AlignH::Center | AlignH::Fill | AlignH::Justify | AlignH::CenterAcross
-                )
-            {
-                align.horizontal = AlignH::Left;
-            }
-        }
-        if let Some(wrap) = self.wrap {
-            align.wrap = wrap.0;
-        }
+        let align = parts.apply(cells.align(cell).copied().unwrap_or_else(Align::plain));
         let mut cells = crate::sheet_cells_mut(node);
         cells.set_align(cell, Some(align));
         node.data["cells"] = crate::cells_into(&cells);

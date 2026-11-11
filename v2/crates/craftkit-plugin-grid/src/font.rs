@@ -120,9 +120,48 @@ impl SetFont {
                     .to_string(),
             });
         }
-        let underline = match &self.underline {
+        let parts = FontParts::parse(
+            &id,
+            self.name.as_ref(),
+            self.size,
+            self.underline.as_ref(),
+            self.vert.as_ref(),
+        )?;
+        let font = font_of(session, sheet, cell);
+        let font = parts.apply(font);
+        write_font(session, sheet, cell, font, &id)
+    }
+}
+
+/// The **parts** of a font: what the parameters name.
+///
+/// The tree's font is a style's, and a cell here carries one of its
+/// own, so the parts are read once and are used by both.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct FontParts {
+    /// The **name** of the face.
+    pub name: Option<String>,
+    /// The **size** of the text.
+    pub size: Option<f64>,
+    /// The **underline**.
+    pub underline: Option<Underline>,
+    /// Where the text sits **above or below** its line.
+    pub vert: Option<Vert>,
+}
+
+impl FontParts {
+    /// The parts the parameters name, and the error that says they do
+    /// not.
+    pub(crate) fn parse(
+        id: &str,
+        name: Option<&Text>,
+        size: Option<Number>,
+        underline: Option<&Text>,
+        vert: Option<&Text>,
+    ) -> Result<FontParts, EngineError> {
+        let underline = match underline {
             Some(underline) => Some(Underline::parse(&underline.0).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
+                id: id.to_string(),
                 message: format!(
                     "`{}` is not an underline: it is none, single, double, single accounting or double accounting",
                     underline.0
@@ -130,9 +169,9 @@ impl SetFont {
             })?),
             None => None,
         };
-        let vert = match &self.vert {
+        let vert = match vert {
             Some(vert) => Some(Vert::parse(&vert.0).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
+                id: id.to_string(),
                 message: format!(
                     "`{}` is not a place for the text: it is baseline, superscript or subscript",
                     vert.0
@@ -140,12 +179,12 @@ impl SetFont {
             })?),
             None => None,
         };
-        let name = match &self.name {
+        let name = match name {
             Some(name) => {
                 let name = name.0.trim().to_string();
                 if name.is_empty() {
                     return Err(EngineError::Failed {
-                        id: id.clone(),
+                        id: id.to_string(),
                         message: "a face has a name".to_string(),
                     });
                 }
@@ -153,12 +192,12 @@ impl SetFont {
             }
             None => None,
         };
-        let size = match self.size {
+        let size = match size {
             Some(size) => {
                 let number = size.0;
                 if !number.is_finite() || number < MIN_SIZE || number > MAX_SIZE {
                     return Err(EngineError::Failed {
-                        id: id.clone(),
+                        id: id.to_string(),
                         message: format!(
                             "the size of a font is from {MIN_SIZE} to {MAX_SIZE}, and {number} is not one of them"
                         ),
@@ -170,8 +209,21 @@ impl SetFont {
             }
             None => None,
         };
-        let mut font = font_of(session, sheet, cell);
-        if let Some(underline) = underline {
+        Ok(FontParts { name, size, underline, vert })
+    }
+
+    /// Whether the parts say **nothing** at all.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.name.is_none() && self.size.is_none() && self.underline.is_none() && self.vert.is_none()
+    }
+
+    /// The font these parts make of the one that is there.
+    ///
+    /// The tree's own rules: naming the underline that is there takes
+    /// it away, and naming the place that is there takes the text back
+    /// to the baseline.
+    pub(crate) fn apply(&self, mut font: Font) -> Font {
+        if let Some(underline) = self.underline {
             // Naming the underline a cell already has takes it away:
             // the tree's own rule.
             font.underline = if underline == Underline::None || font.underline == underline {
@@ -180,7 +232,7 @@ impl SetFont {
                 underline
             };
         }
-        if let Some(vert) = vert {
+        if let Some(vert) = self.vert {
             // Naming the place a cell already has takes it back to the
             // baseline: the tree's own rule.
             font.vert = match vert {
@@ -194,13 +246,13 @@ impl SetFont {
                 }
             };
         }
-        if let Some(name) = name {
-            font.name = Some(name);
+        if let Some(name) = &self.name {
+            font.name = Some(name.clone());
         }
-        if let Some(size) = size {
+        if let Some(size) = self.size {
             font.size = Some(size);
         }
-        write_font(session, sheet, cell, font, &id)
+        font
     }
 }
 

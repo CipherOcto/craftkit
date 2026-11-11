@@ -30,10 +30,12 @@
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Session, Text};
+
+use crate::formula::{Align, Font};
 
 /// A **style** of a workbook: a name, a format and a lock.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Style {
     /// The name the style is found by.
     pub name: String,
@@ -43,12 +45,24 @@ pub struct Style {
     /// locked when the sheet is protected, and `None` is a style that
     /// says nothing.
     pub locked: Option<bool>,
+    /// The **alignment** the style carries, and `None` is a style that
+    /// says nothing.
+    pub align: Option<Align>,
+    /// The **font** the style carries, and `None` is a style that
+    /// says nothing.
+    pub font: Option<Font>,
 }
 
 impl Style {
     /// The style, as the payload carries it.
     pub fn to_json(&self) -> craftkit_sdk::serde_json::Value {
-        json!({ "name": self.name, "format": self.format, "locked": self.locked })
+        json!({
+            "name": self.name,
+            "format": self.format,
+            "locked": self.locked,
+            "align": self.align.map(|align| align.to_json()),
+            "font": self.font.as_ref().map(|font| font.to_json()),
+        })
     }
 }
 
@@ -64,7 +78,9 @@ pub fn styles_of_book(node: &craftkit_sdk::Node) -> Vec<Style> {
                     let name = style.get("name")?.as_str()?.to_string();
                     let format = style.get("format")?.as_str()?.to_string();
                     let locked = style.get("locked").and_then(|locked| locked.as_bool());
-                    Some(Style { name, format, locked })
+                    let align = style.get("align").and_then(Align::from_json);
+                    let font = style.get("font").and_then(Font::from_json);
+                    Some(Style { name, format, locked, align, font })
                 })
                 .collect()
         })
@@ -132,7 +148,10 @@ impl AddStyle {
             });
         }
         let mut styles = styles.iter().map(Style::to_json).collect::<Vec<_>>();
-        styles.push(Style { name: name.clone(), format: code.clone(), locked: None }.to_json());
+        styles.push(
+            Style { name: name.clone(), format: code.clone(), locked: None, align: None, font: None }
+                .to_json(),
+        );
         if let Some(node) = session.document_mut()?.node_mut(workbook) {
             node.data["styles"] = json!(styles);
         }
@@ -247,6 +266,160 @@ impl LockStyle {
         }
         Ok(Outcome::changed(format!("the style `{name}` is {}", if locked { "locked" } else { "unlocked" }))
             .with_data(json!({ "workbook": workbook, "name": name, "locked": locked })))
+    }
+}
+
+/// The **alignment** of a style is changed.
+///
+/// The tree's alignment is a style's, and here a style may carry one:
+/// the cells that name the style and say nothing of their own are
+/// aligned by it.
+///
+/// The alignment is **derived**: the cells that name the style are
+/// aligned because the style says so, and changing the style changes
+/// every cell that names it.
+#[derive(Command)]
+#[command(id = "grid.style.align", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct AlignStyle {
+    /// The workbook the style belongs to.
+    pub workbook: NodeRef,
+    /// The name of the style.
+    pub name: Text,
+    /// How the text lies **across** the cell: general, left, center,
+    /// right, fill, justify or center-across.
+    pub horizontal: Option<Text>,
+    /// How the text lies **down** the cell: top, middle or bottom.
+    pub vertical: Option<Text>,
+    /// How far the text is indented.
+    pub indent: Option<Number>,
+    /// Whether the text wraps.
+    pub wrap: Option<Bool>,
+}
+
+impl AlignStyle {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.style.align".to_string();
+        let workbook = the_workbook(session, self.workbook.0, &id)?;
+        let name = self.name.0.trim().to_string();
+        let parts = crate::align::AlignParts::parse(
+            &id,
+            self.horizontal.as_ref(),
+            self.vertical.as_ref(),
+            self.indent,
+            self.wrap,
+        )?;
+        if parts.is_empty() {
+            return Err(EngineError::Failed {
+                id,
+                message: "name what to align: the alignment across the cell, down it, the indent or the wrap"
+                    .to_string(),
+            });
+        }
+        let styles = session.document().node(workbook).map(styles_of_book).unwrap_or_default();
+        if !styles.iter().any(|style| style.name.eq_ignore_ascii_case(&name)) {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("there is no style `{name}` in the workbook"),
+            });
+        }
+        // The **alignment** of the style: the tree's own rules, and
+        // naming the alignment that is there takes it back to general.
+        let styles: Vec<_> = styles
+            .into_iter()
+            .map(|style| {
+                if style.name.eq_ignore_ascii_case(&name) {
+                    let align = parts.apply(style.align.unwrap_or_else(Align::plain));
+                    Style { align: Some(align), ..style }.to_json()
+                } else {
+                    style.to_json()
+                }
+            })
+            .collect();
+        if let Some(node) = session.document_mut()?.node_mut(workbook) {
+            node.data["styles"] = json!(styles);
+        }
+        Ok(Outcome::changed(format!("the style `{name}` is aligned")).with_data(json!({
+            "workbook": workbook,
+            "name": name,
+        })))
+    }
+}
+
+/// The **font** of a style is changed.
+///
+/// The tree's font is a style's, and here a style may carry one: the
+/// cells that name the style and say nothing of their own are written
+/// with it.
+///
+/// The font is **derived**: the cells that name the style are written
+/// with the font because the style says so, and changing the style
+/// changes every cell that names it.
+#[derive(Command)]
+#[command(id = "grid.style.font", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
+pub struct FontStyle {
+    /// The workbook the style belongs to.
+    pub workbook: NodeRef,
+    /// The name of the style.
+    pub name: Text,
+    /// The **name** of the face. It is the face's name and not the
+    /// style's, so it is called `face` here.
+    pub face: Option<Text>,
+    /// The **size** of the text.
+    pub size: Option<Number>,
+    /// The **underline**: none, single, double, single accounting or
+    /// double accounting.
+    pub underline: Option<Text>,
+    /// Where the text sits **above or below** its line: baseline,
+    /// superscript or subscript.
+    pub vert: Option<Text>,
+}
+
+impl FontStyle {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "grid.style.font".to_string();
+        let workbook = the_workbook(session, self.workbook.0, &id)?;
+        let name = self.name.0.trim().to_string();
+        let parts = crate::font::FontParts::parse(
+            &id,
+            self.face.as_ref(),
+            self.size,
+            self.underline.as_ref(),
+            self.vert.as_ref(),
+        )?;
+        if parts.is_empty() {
+            return Err(EngineError::Failed {
+                id,
+                message: "name what to set: the face, the size, the underline or the place of the text"
+                    .to_string(),
+            });
+        }
+        let styles = session.document().node(workbook).map(styles_of_book).unwrap_or_default();
+        if !styles.iter().any(|style| style.name.eq_ignore_ascii_case(&name)) {
+            return Err(EngineError::Failed {
+                id,
+                message: format!("there is no style `{name}` in the workbook"),
+            });
+        }
+        // The **font** of the style: the tree's own rules, and naming
+        // the underline that is there takes it away.
+        let styles: Vec<_> = styles
+            .into_iter()
+            .map(|style| {
+                if style.name.eq_ignore_ascii_case(&name) {
+                    let font = parts.apply(style.font.unwrap_or_else(Font::plain));
+                    Style { font: Some(font), ..style }.to_json()
+                } else {
+                    style.to_json()
+                }
+            })
+            .collect();
+        if let Some(node) = session.document_mut()?.node_mut(workbook) {
+            node.data["styles"] = json!(styles);
+        }
+        Ok(Outcome::changed(format!("the style `{name}` has a font")).with_data(json!({
+            "workbook": workbook,
+            "name": name,
+        })))
     }
 }
 

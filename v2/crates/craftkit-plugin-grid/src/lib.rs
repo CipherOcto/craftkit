@@ -493,7 +493,7 @@ pub use solver::SolveProgram;
 pub use sorting::SortRange;
 pub use sparklines::{ReadSparkline, RemoveSparkline, SetSparkline};
 pub use storedtext::{NumbersConvert, NumbersStoredAsText};
-pub use styles::{AddStyle, LockStyle, RemoveStyle, SetCellStyle, SetStyle};
+pub use styles::{AddStyle, AlignStyle, FontStyle, LockStyle, RemoveStyle, SetCellStyle, SetStyle};
 pub use subtotals::Subtotal;
 pub use tables::{
     CreateTable, ReadTableFields, ReadTables, RemoveTable, RenameTable, ResizeTable, SetTableColumnWay,
