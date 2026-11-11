@@ -4200,6 +4200,7 @@ so.
 | the **font** of a cell | **built.** The face, the size and the marks of the text of a cell are set, and a button pressed twice does the opposite (§819) | §819 |
 | the **locked cell** | **built.** A cell may be unlocked while the sheet is protected, and the lock of a cell is a button (§820) | §820 |
 | the **colours** of a cell | **built.** The text of a cell takes a colour and the cell takes a fill, and `none` takes them away (§821) | §821 |
+| the **edit ranges** of a sheet | **built.** The ranges that stay editable while the sheet is protected are named, and a cell in one of them may be changed (§822) | §822 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -25914,7 +25915,9 @@ A sheet may be **protected**.
   the protection of the sheet locks the **cells of the sheet**, and
   there is no range that is let through: the whole sheet is locked.
   A cell may say that it is **unlocked** (§820), and then it may be
-  changed all the same; a range is still not a thing here.
+  changed all the same; and a sheet may carry **edit ranges** (§822),
+  the ranges that stay editable, and a cell in one of them may be
+  changed too.
 - **The tree's protection may carry a password and this one's may
   not.** The tree stores the **hash** of the password and never the
   password, and the tree's *unprotect* asks for it. Here a sheet may
@@ -26581,8 +26584,9 @@ and everything that is said about it.
 
 ### What it does not settle
 
-- **The tree's edit ranges are not here**, and so the locked flag of a
-  cell's style is not here either: a sheet here is locked as a whole.
+- **The tree's edit ranges are here** (§822), and so is the locked
+  flag of a cell (§820): a sheet here is locked as a whole, and a
+  cell may be let out of it.
 - **The tree's charts, images, shapes, sparklines, slicers and pivot
   tables are not here as things a sheet carries.** The charts, the
   pictures, the sparklines, the tables, the filters, the pivot tables
@@ -53969,3 +53973,53 @@ of a cell, and the colour behind it.
   is six digits of hex.
 - **The tree's colours are in the style of the cell, and other cells
   that name the style share them**: here every cell carries its own.
+
+## 822. The edit ranges of a protected sheet
+
+The tree's **Allow Edit Ranges**: the ranges that stay editable while
+the sheet is protected.
+
+### What was built
+
+- **Two commands** in the grid battery: `grid.sheet.edit.set` (the
+  ranges that stay editable) and `grid.sheet.edit.read` (the ranges a
+  sheet has): the tree's Allow Edit Ranges, as commands.
+- The rules are the tree's own:
+  - a cell in one of the **edit ranges** may be changed even though the
+    sheet is protected: the tree's own rule;
+  - the ranges may only be set while the sheet is **not protected**:
+    the tree's own rule, and the tree says so in the refusal;
+  - a range that is not a range of cells is **refused** by name.
+
+### What the port found
+
+- **The tree's ranges are titled and may carry a password, and here
+  they are neither.** The tree's range is found by its title, and a
+  range with a password is unlocked for the session with it; here a
+  range is a range of cells and every range may be changed.
+- **The tree's range beats the lock of the cell**, and here it does
+  too: a cell in an edit range may be changed even when the cell says
+  it is locked.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/editranges.rs`): five
+  tests — the cell in a range being changed, the cell that is not in a
+  range being refused, the ranges refused on a protected sheet, the
+  range that is not one of them being refused, and the sheet with no
+  ranges.
+- **Two new commands**: the grid battery now carries **182** commands
+  and the MCP server **1028** — two more than §821. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One bound**: a sheet holds **sixty-four edit ranges** or fewer,
+  and a list that is longer is refused.
+
+### What it does not settle
+
+- **The tree's ranges are titled and may be locked with a password**:
+  here a range is a range of cells, and there is no title and no
+  password.
+- **The tree's ranges may be listed, added, modified and deleted by
+  one command with an action**: here the ranges are set and read, and
+  a list that is empty takes them all away.
