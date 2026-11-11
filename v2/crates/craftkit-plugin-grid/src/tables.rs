@@ -173,7 +173,7 @@ fn header_text(cells: &Cells, cell: CellRef) -> Result<String, String> {
 }
 
 /// The **fields** of a table: the text of its header cells.
-fn fields_of(table: &Table, cells: &Cells) -> Result<Vec<(CellRef, String)>, String> {
+pub(crate) fn fields_of(table: &Table, cells: &Cells) -> Result<Vec<(CellRef, String)>, String> {
     let mut fields = Vec::new();
     for col in table.range.start.col..=table.range.end.col {
         let cell = CellRef { col, row: table.range.start.row };

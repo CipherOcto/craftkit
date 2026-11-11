@@ -393,6 +393,7 @@ mod securities;
 mod sheetnames;
 mod sheetreading;
 mod sizes;
+mod slicers;
 mod solver;
 mod sorting;
 mod sparklines;
@@ -475,6 +476,7 @@ pub use scenarios::{AddScenario, DeleteScenario, ListScenarios, ScenarioKind, Sh
 pub use sheetnames::RenameSheet;
 pub use sheetreading::ReadSheet;
 pub use sizes::{SetColumnWidth, SetRowHeight};
+pub use slicers::{AddSlicer, ClearSlicer, ReadSlicer, RemoveSlicer, ToggleSlicer};
 pub use solver::SolveProgram;
 pub use sorting::SortRange;
 pub use sparklines::{ReadSparkline, RemoveSparkline, SetSparkline};
@@ -689,7 +691,7 @@ pub(crate) fn book_of(document: &Document) -> Book {
 }
 
 /// The cells of a sheet, from its payload.
-fn cells_of(node: &Node) -> Cells {
+pub(crate) fn cells_of(node: &Node) -> Cells {
     let mut cells = Cells::new();
     let Some(map) = node.data.get("cells").and_then(|cells| cells.as_object()) else {
         return cells;

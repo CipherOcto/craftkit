@@ -609,7 +609,7 @@ impl Criterion {
 }
 
 /// The **text** of a value, as a cell shows it.
-fn display_text(value: &Value) -> String {
+pub fn display_text(value: &Value) -> String {
     match value {
         Value::Empty => String::new(),
         Value::Number(number) => {
