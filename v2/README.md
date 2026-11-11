@@ -4217,6 +4217,7 @@ so.
 | the **special cells** of a sheet | **built.** A question is asked of a sheet and the cells that answer it are found: the blanks, the constants, the formulas, the comments, the notes, the errors, the numbers, the text, the visible cells, the cells a rule is about, the last cell and the current region (§836) | §836 |
 | the **way** the playhead goes to a marker | **built.** The playhead of a sound document is put at a marker — by its node or by its name — and it steps to the marker that is next and to the marker before it, and it does not move when there is none (§837) | §837 |
 | the **fill** of a format | **built.** The tree's accounting and comma formats fill the cell: the symbol at the left, the number at the right, and the space between them is the width of the column (§838) | §838 |
+| the **table** of a drawing | **built.** A drawing holds a table of cells, and the cells may be merged: the merge is written in its anchor, the texts are joined into it, and a merge of one cell is refused (§839) | §839 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -55104,7 +55105,7 @@ cell, and write the symbol at one edge and the number at the other.
   having no fill, and a text longer than the column being written as
   it is.
 - **Two formats** and the **fill** they write. The grid battery still
-  carries **188** commands and the MCP server **1036** — the same as
+  carries **188** commands and the MCP server **1039** — the same as
   §837, because a format is not a command.
 - **One correction in place**: the names this tree did not write — the
   accounting and comma fills — are written now, and the test that
@@ -55123,3 +55124,78 @@ cell, and write the symbol at one edge and the number at the other.
 - **The fill is written where the text of a cell is read** —
   `grid.cell.text`, `grid.cell.get` and `grid.find` — and not in a
   renderer, because this tree has no renderer to write it in.
+
+## 839. The table of a drawing
+
+The tree's **table**: a grid of cells in a drawing, and the tree's own
+rules for the merging of them.
+
+### What was built
+
+- **Six commands** in the cad battery:
+  - `cad.table.add` — a table of rows and columns at a point;
+  - `cad.table.set` — the text of a cell;
+  - `cad.table.insert.row` — a row before the row that is named;
+  - `cad.table.delete.row` — a row that goes;
+  - `cad.table.merge` — cells merged into one;
+  - `cad.table.unmerge` — the merge taken away.
+- The tree's rules are the tree's:
+  - a table is a **grid** of cells, and the tree's own defaults are
+    here: a column is **2.5** wide and a row is **1.3** high, in the
+    world's units;
+  - a **merged** cell is written in its **anchor**: the cell that
+    holds the merge, and the cells it covers have no text of their
+    own;
+  - **writing into a covered cell writes its anchor**;
+  - a merge of **one cell** is refused — a merge is at least two
+    cells;
+  - the **texts** of the cells that are merged are **joined** into the
+    anchor, with a space between them;
+  - a merge that **overlaps** another one **absorbs** it;
+  - a table keeps **at least one row**;
+  - a row is **inserted before** the row that is named, or at the end
+    when none is named, and the **merges move with the rows**;
+  - the tree's own bounds are here: a table has at most **2000** rows
+    and at most **200** columns.
+
+### What the port found
+
+- **The tree clamps the size of a table and this tree refuses it.** The
+  tree's table takes at most two thousand rows and two hundred
+  columns, and it says so by making the table *smaller* than it was
+  asked for. Here a table that is asked for too much is **refused**,
+  because a table that is not the one that was asked for is a lie.
+- **The tree clamps the range that is merged and this tree refuses
+  it**: the tree merges what fits of the range that is named, and here
+  a merge that goes past the edge of the table is **refused**.
+- **The tree's table is an entity of a closed kind and here it is an
+  entity of an open kind**, like every other entity of this drawing.
+- **The tree's table has a title, a header row and a style of its
+  own**, and it may be broken into parts and linked to a file; here
+  the table is a grid of cells and nothing else.
+
+### What it cost
+
+- **One new test** in the cad battery (`tests/tables.rs`): ten tests —
+  a table being a grid of cells, the text of a cell being written, a
+  merge joining the texts, writing into a covered cell writing its
+  anchor, a merge of one cell being refused, a merge past the edge
+  being refused, an unmerge taking the merge away, a row being
+  inserted before the row that is named, a table keeping at least one
+  row, and a table with too many rows being refused.
+- **One new module**: `tables`. **Six new commands**: the cad battery
+  now carries **55** commands and the MCP server **1045** — six more
+  than §838.
+
+### What it does not settle
+
+- **The tree's columns may be inserted and deleted** and their widths
+  may be set; here the columns are as the table was made with, and
+  only the rows may be added and taken away.
+- **The tree's cell may hold a formula** and a cell style of its own;
+  here a cell holds its text and nothing else.
+- **The box of a table is not in the extents of the drawing yet**: the
+  tree's is.
+- **The tree's table is written to a DXF file** and read back from
+  one; here it is a node of the drawing, and the file is still to
+  come.
