@@ -23,7 +23,8 @@
 //! - the **text**: a code of `@` writes the text of a cell, and a
 //!   number is written as its own text (the module `textsection`);
 //! - the **dates**: `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`,
-//!   `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`.
+//!   `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`, and the
+//!   tree's **long date** `dddd, mmmm dd, yyyy`.
 //! - the **times**: `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`,
 //!   `h AM/PM`, `h:mm AM/PM`, `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`,
 //!   `[h]:mm`, `[h]:mm:ss` and `[mm]:ss`.
@@ -34,11 +35,11 @@
 //! decimals, and a percent sign at the end. So `0`, `0.00`, `#,##0`,
 //! `0.0000` and `0%` are all codes this tree has.
 //!
-//! The **date** formats are a **list** of nine, because the tree's
-//! date formats are a language and this one has nine shapes of it.
+//! The **date** formats are a **list** of ten, because the tree's
+//! date formats are a language and this one has ten shapes of it.
 //!
 //! A code that is neither a number format of that shape nor one of the
-//! nine dates is **refused**: a format that is quietly ignored is a
+//! ten dates is **refused**: a format that is quietly ignored is a
 //! format the user believes in and the program does not have.
 //!
 //! A **date** is a number with one of those on it: the number says
@@ -80,7 +81,7 @@
 //!   the accounting and comma fills, the long date and the text — are
 //!   refused with the reason.
 //! - **The tree's date formats are a language, and here they are a
-//!   list**: the nine shapes above are the ones this tree has, and a
+//!   list**: the ten shapes above are the ones this tree has, and a
 //!   date format that is not one of them is refused.
 //! - **The tree's sections are here, and the tree's conditions are
 //!   not**: a format may have a different code for the positive
@@ -309,7 +310,7 @@ impl TimeStyle {
 /// The tree's format is a whole language, and a date in it is a code
 /// with a `y` and a `d` and a `m` in it and anything else the tree
 /// likes. Here a date format is one of a **list**, and the list is
-/// this one — nine shapes, and the tree's own way of writing each of
+/// this one — ten shapes, and the tree's own way of writing each of
 /// them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DateStyle {
@@ -333,11 +334,14 @@ pub enum DateStyle {
     WeekdayFull,
     /// `yyyy` — the year, and nothing else.
     Year,
+    /// `dddd, mmmm dd, yyyy` — the weekday, the month by name, the day
+    /// and the year, in **one** shape: the tree's long date.
+    LongDate,
 }
 
 impl DateStyle {
     /// Every date format, and the code that says it.
-    pub const ALL: [(DateStyle, &'static str); 9] = [
+    pub const ALL: [(DateStyle, &'static str); 10] = [
         (DateStyle::Iso, "yyyy-mm-dd"),
         (DateStyle::DayFirst, "dd/mm/yyyy"),
         (DateStyle::MonthFirst, "m/d/yyyy"),
@@ -347,6 +351,7 @@ impl DateStyle {
         (DateStyle::WeekdayShort, "ddd"),
         (DateStyle::WeekdayFull, "dddd"),
         (DateStyle::Year, "yyyy"),
+        (DateStyle::LongDate, "dddd, mmmm dd, yyyy"),
     ];
 
     /// The style a code says, if it says one this tree knows.
@@ -377,6 +382,13 @@ impl DateStyle {
             DateStyle::WeekdayShort => dates::WEEKDAYS[weekday_index(date)].chars().take(3).collect(),
             DateStyle::WeekdayFull => dates::WEEKDAYS[weekday_index(date)].to_string(),
             DateStyle::Year => format!("{:04}", date.year),
+            DateStyle::LongDate => format!(
+                "{}, {} {:02}, {:04}",
+                dates::WEEKDAYS[weekday_index(date)],
+                dates::MONTHS[month_index(date)],
+                date.day,
+                date.year
+            ),
         }
     }
 }

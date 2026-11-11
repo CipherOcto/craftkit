@@ -1338,7 +1338,7 @@ impl SetDate {
                 DateStyle::parse(&said).ok_or_else(|| EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "`{said}` is not a date format: the date formats are `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd` and `yyyy`"
+                        "`{said}` is not a date format: the date formats are `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd`, `yyyy` and `dddd, mmmm dd, yyyy`"
                     ),
                 })?
             }
