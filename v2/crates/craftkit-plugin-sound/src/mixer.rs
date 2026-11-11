@@ -2350,3 +2350,74 @@ impl ClearSolos {
             .with_data(json!({ "cleared": cleared })))
     }
 }
+
+/// **Mute** the sends of a track, or let them be heard.
+///
+/// The tree's Mute Sends: every send of the track is muted at once.
+///
+/// A send is a **copy** of the track's signal, and a muted send is a
+/// copy of nothing: the track is still heard on its own and the bus
+/// hears nothing.
+#[derive(Command)]
+#[command(
+    id = "sound.track.sends.mute",
+    area = "sound",
+    layer = "sound",
+    icon = "music",
+    menu("Track", "Sends"),
+    mutates,
+    undoable
+)]
+pub struct MuteTrackSends {
+    /// The track.
+    pub track: NodeRef,
+    /// Whether the sends are silent.
+    pub muted: Bool,
+}
+
+impl MuteTrackSends {
+    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
+        let id = "sound.track.sends.mute".to_string();
+        let track = self.track.0;
+        let Some(node) = session.document().node(track).cloned() else {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no track `{track}`"),
+            });
+        };
+        if node.kind != "sound.track" {
+            return Err(EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+            });
+        }
+        let muted = self.muted.0;
+        let sends: Vec<u64> =
+            node.children.iter().filter(|child| child.kind == "sound.send").map(|child| child.id).collect();
+        let mut changed = 0usize;
+        for send in &sends {
+            let Some(node) = session.document().node(*send) else { continue };
+            let Ok(mut payload) = crate::SendPayload::from_json(&node.data) else { continue };
+            if payload.mute == muted {
+                continue;
+            }
+            payload.mute = muted;
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(*send) else { continue };
+            node.data = data;
+            changed += 1;
+        }
+        if changed == 0 {
+            let count = sends.len();
+            return Ok(Outcome::new(format!(
+                "the track `{track}` has {count} send(s) and none of them moved"
+            ))
+            .with_data(json!({ "track": track, "muted": muted, "sends": sends.len() })));
+        }
+        Ok(Outcome::changed(format!(
+            "the sends of the track `{track}` are {}",
+            if muted { "muted" } else { "heard" }
+        ))
+        .with_data(json!({ "track": track, "muted": muted, "sends": sends.len(), "changed": changed })))
+    }
+}
