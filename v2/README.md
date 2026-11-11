@@ -4216,6 +4216,7 @@ so.
 | the **data table** of a sheet | **built.** A range holds the inputs and the formulas, and its body is written with the results (§835) | §835 |
 | the **special cells** of a sheet | **built.** A question is asked of a sheet and the cells that answer it are found: the blanks, the constants, the formulas, the comments, the notes, the errors, the numbers, the text, the visible cells, the cells a rule is about, the last cell and the current region (§836) | §836 |
 | the **way** the playhead goes to a marker | **built.** The playhead of a sound document is put at a marker — by its node or by its name — and it steps to the marker that is next and to the marker before it, and it does not move when there is none (§837) | §837 |
+| the **fill** of a format | **built.** The tree's accounting and comma formats fill the cell: the symbol at the left, the number at the right, and the space between them is the width of the column (§838) | §838 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -19360,11 +19361,12 @@ is **written**.
 ### What it does not settle
 
 - **The tree's currency, accounting, fractions and scientific
-  formats are not here**, and neither are the tree's **sections** — a
-  format with one code for positive numbers and another for negative
-  ones is not here. The tree's **dates** are here now, and they are a
-  list of nine shapes (§276), and ten since §825, and its **times**
-  are here (§287).
+  formats are not here** — and that was true when this was written
+  and is **false now**: the currency, the fractions and the scientific
+  are here (§271), and the **accounting** and the **comma** came with
+  §838. The tree's **sections** are here too (§316). The tree's
+  **dates** are here, and they are a list of nine shapes (§276), and
+  ten since §825, and its **times** are here (§287).
 - **The tree's style is not here**: a style is shared between cells and
   carries a font, a fill, borders, an alignment and a protection, and
   here the format is the cell's own.
@@ -55039,3 +55041,85 @@ the playhead goes to them.
   end is not used yet.
 - **The tree's *go to* is one dialog** and here it is three commands:
   the recall and the two steps are the tree's own three.
+
+## 838. The formats that fill the cell
+
+The tree's **accounting** and **comma** formats: the two that fill the
+cell, and write the symbol at one edge and the number at the other.
+
+### What was built
+
+- **Two formats** in the grid battery: `accounting` and `comma` — the
+  tree's own two filling formats.
+- The tree's rules are the tree's:
+  - the **accounting** format puts the **symbol at the left** of the
+    cell and the **number at the right**, and the space between them
+    is the **fill**;
+  - the **comma** format is the accounting one with no symbol at all:
+    the number, with its thousands separated, at the right of the cell;
+  - a **negative** number is written in **parentheses** and a **zero**
+    is written as a **dash** — the tree's own rules, in the sections of
+    its own codes;
+  - the **symbol may be chosen**, and it is written in quotes:
+    `accounting "L"` — and the tree's own refusal is here too: a
+    symbol with a quote, a backslash or a control character in it is
+    **refused**;
+  - the fill is the **width of the column** — the command
+    `grid.column.width` — and the tree's trailing space is the last
+    character of it;
+  - a text that is **longer** than the column is written as it is and
+    is not cut;
+  - a column with **no width** has no fill.
+- The names `accounting` and `comma` are **written** now: every name
+  of the tree's ribbon is a name this tree writes.
+
+### What the port found
+
+- **The tree's fill is expanded by its renderer and here the format
+  writes the spaces itself.** The tree's code says
+  `_("$ "* #,##0.00_)` and the tree's renderer expands the fill to the
+  width of the column when it draws the cell. This tree has no
+  renderer: the text of a cell is what a command reads, so the format
+  writes the fill itself — and it needs the width of the column, which
+  is a fact of the sheet (`grid.column.width`).
+- **The tree's accounting is a code and here it is a shape.** The
+  tree's code is a whole format language with sections, and this
+  tree's format is a shape of a list; so the tree's two filling codes
+  are two shapes here, `accounting` and `comma`, and a code with a `_`
+  or a `*` in it is still refused.
+- **The tree's column has a default width and here it does not.** The
+  tree's column is eight and a half characters wide until it is set;
+  here a column with no width has no width, and so a cell in it has no
+  fill.
+- **The tree's four sections are here for the other formats and not
+  for these two**: the negative and the zero rules are the two
+  formats' own.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/accounting.rs`): seven
+  tests — the accounting format filling the cell, the comma format
+  filling the cell, a negative number written in parentheses, a zero
+  written as a dash, the symbol being chosen, a column with no width
+  having no fill, and a text longer than the column being written as
+  it is.
+- **Two formats** and the **fill** they write. The grid battery still
+  carries **188** commands and the MCP server **1036** — the same as
+  §837, because a format is not a command.
+- **One correction in place**: the names this tree did not write — the
+  accounting and comma fills — are written now, and the test that
+  said otherwise (`tests/formatnames.rs`) says so.
+
+### What it does not settle
+
+- **The tree's fill is a code and here it is a shape**: a code with a
+  `_` or a `*` in it is refused, and the tree's own general fill — the
+  one any code may ask for — is still to do.
+- **The tree's accounting code has four sections** and so has the
+  tree's comma code; here the two formats carry the negative and the
+  zero rules themselves, and there is no section to write.
+- **The tree's column width has a default** and here it does not, so
+  the fill needs a width to be set.
+- **The fill is written where the text of a cell is read** —
+  `grid.cell.text`, `grid.cell.get` and `grid.find` — and not in a
+  renderer, because this tree has no renderer to write it in.
