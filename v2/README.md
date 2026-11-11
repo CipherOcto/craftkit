@@ -4186,6 +4186,7 @@ so.
 | the **brush** that paints on a shape | **built.** A brush stroke is painted onto a shape, and the shape grows where the brush went (§805) | §805 |
 | the **scrub** that joins the ends | **built.** The two ends nearest a drag are joined, and the two ends of one contour close it (§806) | §806 |
 | the **values** of the formulas | **built.** The formulas of a range that give a number become that number, and the format is kept (§807) | §807 |
+| the **mutes** of every track | **built.** Every track is unmuted at once, and the tracks that are mixed with one another are unmuted with it (§808) | §808 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -53163,3 +53164,48 @@ or a text result, is left as it is.
   command is one undoable step, as every command in this tree is.
 - **The tree's conversion works on the selection**: here a range is
   named.
+
+## 808. Every track is unmuted at once
+
+The tree's **Clear Mutes** unmutes every track of the session at once.
+
+### What was built
+
+- The command **`sound.track.mute.clear`** clears the mute of every
+  track: the tree's Clear Mutes, as a command.
+- The rules are the tree's own:
+  - every track of the document is **unmuted** at once: the tree's own
+    rule;
+  - a track that is **mixed** with others is unmuted with them — the
+    mix link is the tree's own, and a change to the mute of one of them
+    is a change to the mute of all of them: the tree's own rule;
+  - a document with no muted track is left as it was, and the outcome
+    says that nothing changed.
+
+### What the port found
+
+- **The tree's command works on the session, and here it works on the
+  document.** The tree's command takes no parameters either — it is a
+  command of the mixer, and the mixer is the session's.
+- **The tree's mix link is here already.** A track that is mixed with
+  others shares its mute with them, and the clearing follows the link
+  — the tree's own rule, and not a new one.
+
+### What it cost
+
+- **One new test** in the sound battery (`tests/clearmutes.rs`): three
+  tests — every track unmuted at once, the track that was not muted,
+  and the mute of a track by name.
+- **One new command**: the sound battery now carries **139** commands
+  and the MCP server **1002** — one more than §807. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **No new module**: the command lives with the mixer it belongs to.
+
+### What it does not settle
+
+- **The tree's Clear Solos is not here**: the solos are cleared one
+  track at a time, and the command that clears them all is not here.
+- **The tree's mixer holds more than the mute**: the phase, the
+  trimming and the sends of a track are here as commands of their own,
+  and the tree's one command that clears them all is not.
