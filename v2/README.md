@@ -4181,6 +4181,7 @@ so.
 | the **mirroring** of a shape in an axis | **built.** A closed shape is cut at an axis and joined to its own mirror, so that what is left is symmetric (§800) | §800 |
 | the **converting** of many points | **built.** Many points become smooth by the tree's neighbours' rule, or become corners by retracting their handles (§801) | §801 |
 | the **moving** of many points | **built.** Many points move by one delta, and the handles move with the point they belong to (§802) | §802 |
+| the **joining** of two open contours | **built.** Two open contours are joined end to end, and the joined point may be a corner or smooth (§803) | §803 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52847,3 +52848,70 @@ with it: an anchor carries its two handles.
 - **The tree's own move of several paths at once is not here**: here one
   contour of one path moves, and the objects that are selected whole
   move as objects — which is the path's own transform.
+
+## 803. Two open contours are joined into one
+
+The tree's **Join** joins two open paths into one: the ends that are
+joined meet, and the joined point may be made a **corner** or
+**smooth**.
+
+### What was built
+
+- The command **`vector.path.join.ends`** joins two open contours of a
+  path into one: the tree's Join, as a command. The contours are named
+  by their **index**, the ends that are joined are named or not, and
+  the joined point may be `corner` or `smooth`.
+- The rules are the tree's own:
+  - the two contours must be **open**: the join needs open paths;
+  - the ends that are joined are the ones **named** — `first` or `last`
+    of each contour — or the **nearest** pair when none are named: the
+    tree's own rule;
+  - when the two ends are already **one place**, the curves are joined
+    without a jump: the handle that leaves the join is the one that
+    left the second contour: the tree's own rule;
+  - when they are two places, a **straight side** joins them: the
+    tree's own rule;
+  - the joined point may be a **corner** — its handles come back to it
+    — or **smooth**, by the tree's **neighbours'** rule (§801): the
+    tree's own rule;
+  - the joined contour takes the place of the first, and the second is
+    gone: the tree's own rule.
+
+### What the port found
+
+- **The tree's join joins paths of several nodes, and this one joins
+  contours of one.** A command works on one node here, so the two
+  contours are named by their index in one path, and the path has one
+  contour fewer afterwards.
+- **The tree's join may close a contour by joining it to itself, and
+  this one refuses that.** The tree's command closes an open path when
+  it is given one; here a contour cannot be joined to itself, and
+  `vector.path.close` is the command that closes one.
+- **The tree's join has a kind for the joined point, and this one has
+  the tree's two kinds.** The joined point is made a corner or smooth
+  by the tree's own rules — the neighbours' rule for smooth, which is
+  the rule §801 ports.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/joinends.rs`): ten
+  tests — the two contours joined, the ends that are one place, the
+  ends that are named, the joined point as a corner, the joined point
+  as smooth, the closed contour, the contour that is not there, the
+  contour joined to itself, the `to` that is neither, and the ends
+  that are not two of first and last.
+- **One new command**: the vector battery now carries **64** commands
+  and the MCP server **997** — one more than §802. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`joinends`), and the rule of a smooth point is
+  the one the converting command uses.
+
+### What it does not settle
+
+- **The tree's join joins paths of different nodes, and the first keeps
+  its id**: here one path's two contours are joined, and the other
+  node is not touched.
+- **The tree's own merge of anchors that lie on one another is not
+  here**: that is the tree's other way of joining, and it is not this
+  command.
