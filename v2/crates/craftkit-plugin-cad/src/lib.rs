@@ -11,7 +11,8 @@
 //! - a **block** — a node, and a table row that **contains** entities;
 //! - an **entity** — a node of an **open kind**: `cad.entity.line`,
 //!   `cad.entity.circle`, `cad.entity.arc`, `cad.entity.ellipse`,
-//!   `cad.entity.polyline`, `cad.entity.text` and `cad.entity.insert`;
+//!   `cad.entity.polyline`, `cad.entity.text`, `cad.entity.table` and
+//!   `cad.entity.insert`;
 //! - an entity's **layer** — a **relation**: an edge that says something,
 //!   not a parent;
 //! - a **block insert** — a node that **references** a block: an edge
@@ -94,6 +95,7 @@ mod modify;
 mod order;
 mod svgexport;
 mod svgimport;
+mod tables;
 
 pub use arcs::AddArc;
 pub use audits::AuditDrawing;
@@ -119,6 +121,7 @@ pub use modify::{MoveEntity, RemoveEntity, RotateEntity, ScaleEntity};
 pub use order::{BackwardEntity, BringToFront, ForwardEntity, ListEntities, SendToBack};
 pub use svgexport::ExportSvg;
 pub use svgimport::ImportSvg;
+pub use tables::{AddTable, DeleteRow, InsertRow, MergeCells, SetCell, UnmergeCells};
 
 /// The CAD layer.
 ///
