@@ -4208,6 +4208,7 @@ so.
 | the **generated** items | **built.** An item may play the black video, the transparent video, the bars and the tone, the counting leader or the colour matte (§827) | §827 |
 | the **lock** of a style | **built.** A style carries the tree's protection, and the cells that name it are locked or unlocked because it says so (§828) | §828 |
 | the **look** of a cell | **built.** A cell is read back with its alignment, its font, its fill and the lock that holds (§829) | §829 |
+| the **look** of a style | **built.** A style carries the alignment and the font, and the cells that name it and say nothing are written with them (§830) | §830 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -54455,9 +54456,10 @@ unlocked because the style says so.
 
 ### What it does not settle
 
-- **The tree's style still carries no font, no fill, no border and no
-  alignment here**: the cell keeps those of its own (§816, §819,
-  §821), and the style carries the format and the lock.
+- **The tree's style still carries no fill and no border here**: the
+  cell keeps those of its own (§818, §821), and the style carries the
+  format (§316), the lock and — **since §830** — the alignment and the
+  font (§816, §819).
 - **The tree's built-in styles are not here**, and so their locks are
   not: a style is one the workbook has.
 - **The tree's cell has one style and here a cell may say more than
@@ -54513,6 +54515,76 @@ its alignment, its font, its fill and its lock — read back in one go.
   **picture** in it and the **spill** it came from, and this tree
   says the value, the formula, the text, the format, the style, the
   note, the link, the merge and now the look.
-- **The style does not carry the alignment, the font or the fill
-  yet**: the look of a cell is the cell's own, and the style carries
-  the format and the lock.
+- **The style does not carry the fill**: the look of a cell is the
+  cell's own, and the style carries the format and the lock. — **the
+  alignment and the font are the style's too since §830**; the fill
+  is not, and the reason is there.
+
+## 830. The look of a style
+
+The tree's style carries a **font** and an **alignment** as well as a
+format and a protection, and the cells that name it are written with
+them.
+
+### What was built
+
+- **Two commands** in the grid battery: `grid.style.align` and
+  `grid.style.font` — the alignment and the font that a style carries.
+- The tree's rules are the tree's:
+  - the alignment and the font of a style are the alignment and the
+    font of the cells that name it **and say nothing of their own**;
+  - naming the alignment that is there takes it back to **general**,
+    and an **indented** text lies at the left: the tree's own rules;
+  - naming the underline that is there takes it **away**, and naming
+    the place that is there takes the text back to the **baseline**:
+    the tree's own rules;
+  - the look is **derived**: changing the style changes every cell
+    that names it.
+- The **cell says more than the style**: a cell that says how it is
+  aligned, or what font it is written with, keeps its own — the tree
+  has no such a word on the cell, because the tree's cell has one
+  style and the style says everything.
+
+### What the port found
+
+- **The tree's style carries the fill as well**, and here it does
+  not: the fill of a cell is the cell's own, and a cell that takes
+  the fill away and a cell that never had one are the **same thing**
+  here — so a cell that takes the fill away would take the style's
+  fill with it, and that is a rule this tree does not have.
+- **The tree's alignment is a style's and this one's is the cell's
+  own** (§271), and the tree's font is a style's too (§271): a
+  hundred cells with one alignment carry a hundred alignments here,
+  and a style may now carry the alignment and the font for the cells
+  that name it and say nothing.
+- **The parts of an alignment and of a font are read once** and are
+  used by both the cell's commands and the style's: the tree's rules
+  about naming the alignment that is there, about the indent, about
+  the underline and about the place of the text are the same rules
+  wherever they are read.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/stylelook.rs`): six
+  tests — the alignment of a style being the alignment of its cells,
+  the font of a style being the font of its cells, the cell saying
+  more than the style, the look of a style being derived, the format
+  of a style not taking its look away, and a style that is not there
+  being refused.
+- **Two new commands**: the grid battery now carries **185** commands
+  and the MCP server **1032** — two more than §829.
+- **Two commands moved into shared parts**: the reading of the
+  alignment's parts and of the font's parts is now in one place, and
+  the cell's commands and the style's commands use it — the tree's
+  rules are read once and not twice.
+
+### What it does not settle
+
+- **The tree's style carries no fill here**, and the reason is above:
+  the fill of a cell that is taken away and the fill of a cell that
+  was never there are the same thing in this tree.
+- **The tree's style carries no border and no fill colour**: the
+  borders are the cell's own (§818) and the fill is the cell's own.
+- **The tree's cell has one style and here a cell may say more than
+  the style**: the cell's own words come first, and the style's come
+  before the sheet's.
