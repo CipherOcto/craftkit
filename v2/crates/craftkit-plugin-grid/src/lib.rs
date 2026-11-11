@@ -358,6 +358,7 @@ mod flash;
 mod format;
 mod formatnames;
 mod formula;
+mod formulavalues;
 mod fractions;
 mod goals;
 mod headers;
@@ -441,6 +442,7 @@ pub use finding::FindCells;
 use flash::FlashFill;
 use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
 use formula::{Book, CellRef, Cells, Value};
+pub use formulavalues::FormulaValues;
 pub use goals::{GoalScan, GoalSeek};
 pub use headers::{SetFooter, SetHeader};
 pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
@@ -1882,6 +1884,7 @@ craftkit_sdk::plugin_anchor!(
     RemoveSheet,
     SetCell,
     SetFormula,
+    FormulaValues,
     SheetErrors,
     NumbersStoredAsText,
     NumbersConvert,
