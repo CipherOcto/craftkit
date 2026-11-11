@@ -4202,6 +4202,7 @@ so.
 | the **colours** of a cell | **built.** The text of a cell takes a colour and the cell takes a fill, and `none` takes them away (§821) | §821 |
 | the **edit ranges** of a sheet | **built.** The ranges that stay editable while the sheet is protected are named, and a cell in one of them may be changed (§822) | §822 |
 | the **priority** of a rule | **built.** The rules of a sheet are tried in priority, and the rule that names the lower number is the one that writes the cell (§823) | §823 |
+| the **text** of a cell | **built.** The code `@` writes the text of a cell, and a format may end with a section that is the text's own (§824) | §824 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -22456,7 +22457,8 @@ A format may have a different code for the **positive** numbers, the
   writing the zero with the first, three sections writing the zero
   with the third, a currency as a section, a fraction as a section, the
   sections being of different shapes, a semicolon in a literal, four
-  sections refused, an empty section refused, a section that is not a
+  sections refused — **a fourth section that is not a text section,
+  since §824** —, an empty section refused, a section that is not a
   format refused, and sections in a style.
 - **No new command**: a section is a **format**, and the grid battery
   still carries **21** commands and the MCP server **393**.
@@ -22470,6 +22472,8 @@ A format may have a different code for the **positive** numbers, the
   number's sign and by whether it is zero, and not by a condition the
   code carries.
 - **The tree's text section is not here**: a text is written as it is.
+  — **this changed in §824**: the text section is here now, and a text
+  is written by it.
 - **The tree's literals are not here**: every section is a format this
   tree has, so a section that is plain text is refused.
 
@@ -26372,9 +26376,10 @@ tree's ribbon names its formats.
   exponent, and the exponent moves one place at a time. A mantissa
   that rounds up to ten moves the exponent one place on, and a zero
   has no exponent to move.
-- The names this tree **does not write** — `accounting`, `comma`,
-  `long date` and `text` — are **refused with the reason**: the
-  tree's fills, the tree's long date and the tree's text.
+- The names this tree **does not write** — `accounting`, `comma` and
+  `long date` — are **refused with the reason**: the tree's fills and
+  the tree's long date. The name `text` was refused then too, and it
+  is **written** since §824.
 - Every door that takes a format takes a name: `grid.cell.format`,
   `grid.style.add`, `grid.style.set`, `grid.conditional.set`, and the
   `format` of `grid.cell.date` and `grid.cell.time`.
@@ -26396,7 +26401,9 @@ tree's ribbon names its formats.
   tree has no fill and writes no spaces that are not there.
 - **The tree's text format keeps the text a number was written with**,
   and this tree does not: a cell keeps its **value** and its **format**,
-  and the text of a number is written by the format.
+  and the text of a number is written by the format. — **this changed
+  in §824**: the text format is here now, and a number written with it
+  is written as its own text.
 
 ### What it cost
 
@@ -26413,7 +26420,8 @@ tree's ribbon names its formats.
 
 - **The tree's fills, its long date and its text format are not here.**
   Each of them is refused with the reason, and the reason is a
-  statement about this tree and not about the tree.
+  statement about this tree and not about the tree. — **the text format
+  is here since §824**; the fills and the long date are still refused.
 - **The tree's scientific step is not here.** A code whose mantissa has
   more than one whole placeholder is refused.
 - **The tree's locale tags are not here.** The tree's `Time` is
@@ -54105,3 +54113,87 @@ and the rule that names the lower number is seen first.
   rules move when a rule comes or goes, and here they do not.
 - **A range may carry one rule**, so two rules on one range is a
   replacement and not a pair.
+
+## 824. The text of a cell
+
+The tree's **Text** format and its **text section**: the `@` writes the
+text of a cell, and a format may end with a section that is the text's
+own.
+
+### What was built
+
+- **The text format**: the code `@` writes the **text** of a cell as it
+  is, and a **number** written with it is written as its **own text** —
+  the tree's rule, and the reason the text format of a number is the
+  number as it is.
+- **The name** `text` is the tree's own and it is **honoured** now: it
+  says the code `@`, and the code is what the cell keeps.
+- **The text section**: a format may end with a section that writes the
+  text, and the rules are the tree's own:
+  - a code with **four** sections: the fourth is the text's own, and
+    the first three are the positive numbers, the negative ones and the
+    zero;
+  - a code with **fewer** than four: the **last** one is the text's
+    own when it is a text section, and the ones before it are the
+    numbers' sections;
+  - a text section is a sequence of **literals** and **`@`**s, and the
+    literals are in **quotes**, as they are everywhere in a format
+    code: the text is written between them.
+- **Two refusals**, because a code that says something this tree does
+  not do is not a format this tree has:
+  - a code with a **fifth** section is refused;
+  - a fourth section that is **not** a text section is refused, and so
+    is a section that has a digit in it beside its `@`: the tree calls
+    that a number section with an `@` in it, and this tree does not
+    write a text with the shape of a number.
+
+### What the port found
+
+- **The tree's text section may hold anything its tokenizer reads**,
+  and here it holds the `@`s and the literals in quotes. The tree's
+  section may carry an unquoted word, a colour in brackets or a
+  condition, and here those are not a text section: a section is a text
+  section when it is made of `@`s and quoted literals and nothing else.
+- **The tree writes a text with the literals of a fourth section that
+  is not a text section**, and here such a code is **refused**: the
+  tree's writing is a number's shape with a text in it, and this tree
+  says no rather than write something odd.
+- **The tree's text format keeps the text a number was written with**,
+  and here the number is written as its own text: the tree's cell
+  holds the text it was typed with beside the number, and this tree's
+  cell holds the value and the format, and the text of a number is
+  written by the format.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/textformat.rs`): nine
+  tests — the text format writing a text, the text format writing a
+  number as its own text, the name `text` saying the code, the fourth
+  section being the text's own, the last section being the text's own
+  when it is a text section, the literals around the `@` being written,
+  a fifth section refused, a fourth section that is not a text section
+  refused, and a section with a digit in it refused.
+- **One test corrected**: `tests/formatnames.rs` said that the name
+  `text` is refused with a reason, and it is not refused any more: the
+  test now says that the name says the code `@`.
+- **One new module**: `textsection` — the parse of a text section and
+  the writing of a text through it. **No new command**: the grid
+  battery still carries **182** commands and the MCP server **1028** —
+  the counts do not move, because the text format is a code the
+  commands that take a format already took.
+- **One bound**: the format names this tree honours are **nine** now —
+  `general`, `number`, `currency`, `percentage`, `fraction`,
+  `scientific`, `short date`, `time` and `text` — and the names it
+  knows but does not write are **three**: `accounting`, `comma` and
+  `long date`.
+
+### What it does not settle
+
+- **The tree's accounting and comma formats are still not here**: they
+  **fill** the space the number does not take with spaces, and this
+  tree has no fill.
+- **The tree's long date is still not here**: the nine date shapes are
+  here apart, and no shape that is all of them at once.
+- **The tree's text section may hold more than `@`s and quoted
+  literals** — a colour, a condition, an unquoted word — and here it
+  does not, and a code that says so is refused.
