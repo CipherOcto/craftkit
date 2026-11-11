@@ -27,14 +27,18 @@
 //!   same criterion the filter of a sheet uses (§347) — and the other
 //!   kinds are commands of their own when they come.
 //! - **The tree's rules are ordered and the first that matches wins.**
-//!   The tree's rules are in a list and it walks them in order. Here
-//!   they are in a list too, and the **first** one that matches the
-//!   cell is the one that writes it.
+//!   The tree's rules are in a list and it walks them in **priority** —
+//!   the rule that names the lower number is seen first. Here they are
+//!   in a list too, and the rule that names the **lower priority** is
+//!   tried first; a rule that names no priority is tried after the
+//!   ones that do, in the order the sheet holds it. The tree renumbers
+//!   the priorities when a rule comes or goes; here the priority is
+//!   **named** and it stays where it is.
 
 use craftkit_derive::Command;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
 
 use crate::formula::{Area, CellRef, Criterion, FILTER_OPS};
 
@@ -46,6 +50,9 @@ pub struct Conditional {
     pub criterion: Criterion,
     /// The **format code** the matching cells are written with.
     pub format: String,
+    /// The **priority** of the rule, when it names one: the lower the
+    /// number, the earlier the rule is tried.
+    pub priority: Option<u32>,
 }
 
 /// The **conditional formats** of a sheet, in order.
@@ -59,7 +66,16 @@ pub fn conditionals_of(node: &craftkit_sdk::Node) -> Vec<Conditional> {
         let op = entry.get("op").and_then(|op| op.as_str()).unwrap_or("=").to_string();
         let value = entry.get("value").and_then(|value| value.as_str()).unwrap_or("").to_string();
         let format = entry.get("format").and_then(|format| format.as_str()).unwrap_or("general").to_string();
-        formats.push(Conditional { range: range.to_string(), criterion: Criterion { op, value }, format });
+        let priority = entry
+            .get("priority")
+            .and_then(|priority| priority.as_u64())
+            .and_then(|priority| u32::try_from(priority).ok());
+        formats.push(Conditional {
+            range: range.to_string(),
+            criterion: Criterion { op, value },
+            format,
+            priority,
+        });
     }
     formats
 }
@@ -81,12 +97,27 @@ fn area_of(range: &str) -> Option<Area> {
     Some(area)
 }
 
+/// The **conditional formats** of a sheet, in the order they are
+/// tried.
+///
+/// The rules are tried in **priority**: the rule that names the lower
+/// number is tried first, and a rule that names none is tried after
+/// the ones that do, in the order the sheet holds them. The tree
+/// numbers the rules the same way — the rule that names the lower
+/// number is seen first, and where two rules set the same part of a
+/// cell the one seen first wins.
+pub fn ordered_conditionals(node: &craftkit_sdk::Node) -> Vec<Conditional> {
+    let mut conditionals = conditionals_of(node);
+    conditionals.sort_by_key(|conditional| conditional.priority.unwrap_or(u32::MAX));
+    conditionals
+}
+
 /// The conditional format that **writes** a cell, if one does.
 ///
-/// The first one that matches wins, and the list is in the order the
-/// sheet holds it.
+/// The first one that matches wins, and the rules are tried in
+/// priority.
 pub fn format_for(node: &craftkit_sdk::Node, cell: CellRef, value: &crate::formula::Value) -> Option<String> {
-    for conditional in conditionals_of(node) {
+    for conditional in ordered_conditionals(node) {
         let Some(area) = area_of(&conditional.range) else { continue };
         if !area.covers(cell) {
             continue;
@@ -115,6 +146,9 @@ pub struct SetConditional {
     pub value: Text,
     /// The format the matching cells are written with.
     pub format: Text,
+    /// The **priority** of the rule: the lower the number, the earlier
+    /// the rule is tried.
+    pub priority: Option<Number>,
 }
 
 impl SetConditional {
@@ -174,6 +208,21 @@ impl SetConditional {
             }
         };
         let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
+        // The **priority** is a whole number, and it is not a negative
+        // one.
+        let priority = match self.priority {
+            Some(priority) => {
+                let number = priority.0;
+                if !number.is_finite() || number.fract() != 0.0 || number < 0.0 || number > u32::MAX as f64 {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the priority of a rule is a whole number, and {number} is not one"),
+                    });
+                }
+                Some(number as u32)
+            }
+            None => None,
+        };
         let mut list = conditionals_of(node)
             .into_iter()
             .map(|conditional| {
@@ -182,6 +231,7 @@ impl SetConditional {
                     "op": conditional.criterion.op,
                     "value": conditional.criterion.value,
                     "format": conditional.format,
+                    "priority": conditional.priority,
                 })
             })
             .collect::<Vec<_>>();
@@ -193,6 +243,7 @@ impl SetConditional {
             "op": op,
             "value": value,
             "format": format,
+            "priority": priority,
         }));
         if let Some(node) = session.document_mut()?.node_mut(sheet) {
             node.data["conditionals"] = json!(list);
@@ -252,6 +303,7 @@ impl ClearConditional {
                     "op": conditional.criterion.op,
                     "value": conditional.criterion.value,
                     "format": conditional.format,
+                    "priority": conditional.priority,
                 })
             })
             .collect();
@@ -299,7 +351,7 @@ impl CheckConditional {
                 message: format!("`{range}` is not a range of cells"),
             });
         };
-        let conditionals = conditionals_of(node);
+        let conditionals = ordered_conditionals(node);
         let book = crate::book_of(session.document());
         let name = node.name.clone();
         let mut cells: Vec<Json> = Vec::new();
