@@ -4180,6 +4180,7 @@ so.
 | the **cropping** of a shape to a rectangle | **built.** A closed shape is cut to a rectangle — four numbers or two corners — and a shape wholly outside it is taken away (§799) | §799 |
 | the **mirroring** of a shape in an axis | **built.** A closed shape is cut at an axis and joined to its own mirror, so that what is left is symmetric (§800) | §800 |
 | the **converting** of many points | **built.** Many points become smooth by the tree's neighbours' rule, or become corners by retracting their handles (§801) | §801 |
+| the **moving** of many points | **built.** Many points move by one delta, and the handles move with the point they belong to (§802) | §802 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52795,3 +52796,54 @@ of them at once.
   points one by one.
 - **The tree's command works on the chosen points of many paths**: here
   one contour of one path is converted in one go.
+
+## 802. Many points move by one drag
+
+The tree's **Move Anchors** moves the anchors that are chosen by a
+**delta** — the distance of a drag — and the handles of an anchor move
+with it: an anchor carries its two handles.
+
+### What was built
+
+- The command **`vector.path.move.points`** moves many points of a
+  contour by one delta: the tree's Move Anchors, as a command. The
+  points are named by their **index**, and the delta is `dx` and `dy` —
+  across and down.
+- The rules are the tree's own:
+  - the move is a **delta**: two numbers, across and down;
+  - the numbers must be **numbers**: a move that is not a number is
+    refused;
+  - every point named must be **there**: a point that is not is refused
+    by name;
+  - the **handles** move with the point they belong to: the tree's own
+    rule.
+
+### What the port found
+
+- **The tree's command moves the chosen anchors of several paths, and
+  this one names them.** A command works on one node here, so the
+  points are named by their index in one contour, and the delta moves
+  them all.
+- **The tree's command has a delta and this tree's own move has a
+  place.** `vector.path.move` puts one point where the caller says it
+  is; this command moves many points by one distance. The two are the
+  same move said two ways, and the tree's is the delta.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/movepoints.rs`): six
+  tests — the points moved by the delta, many points in one go, the
+  handles that move with the point, the point that is not there, the
+  move that is not a number, and the points that are not a list.
+- **One new command**: the vector battery now carries **63** commands
+  and the MCP server **996** — one more than §801. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`movepoints`), and the reader of a list of points
+  is the one the converting command uses.
+
+### What it does not settle
+
+- **The tree's own move of several paths at once is not here**: here one
+  contour of one path moves, and the objects that are selected whole
+  move as objects — which is the path's own transform.
