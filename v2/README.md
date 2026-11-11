@@ -4214,6 +4214,7 @@ so.
 | the **fill** of a conditional format | **built.** A rule may carry a fill and a stop, and the rules layer: each part is the first rule that says something about it (§833) | §833 |
 | the **summary** of the scenarios | **built.** A sheet of its own says what every scenario does to the book: the changing cells, the values and the results (§834) | §834 |
 | the **data table** of a sheet | **built.** A range holds the inputs and the formulas, and its body is written with the results (§835) | §835 |
+| the **special cells** of a sheet | **built.** A question is asked of a sheet and the cells that answer it are found: the blanks, the constants, the formulas, the comments, the notes, the errors, the numbers, the text, the visible cells, the cells a rule is about, the last cell and the current region (§836) | §836 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -54888,3 +54889,87 @@ formulas, and the body of the range is written with the results.
   tree's ribbon** and two here, and the tree's data table may name a
   range on **another sheet** for its inputs; here the inputs are cells
   of the sheet the table is on.
+
+## 836. The special cells of a sheet
+
+The tree's **go to special**: a question asked of a sheet, and the
+cells that answer it.
+
+### What was built
+
+- **One command** in the grid battery: `grid.find.special` — the
+  special cells of a sheet.
+- The tree's kinds are the tree's own, and they are the kinds here:
+  - **blanks**, **constants**, **formulas**, **comments**, **notes**,
+    **errors**, **numbers**, **text**, **visible**, **conditional
+    formats**, **data validation**, the **last cell** and the **current
+    region**;
+  - the **scope** is the range the question is asked about, and the
+    **used range** of the sheet when no range is given;
+  - a kind that is not one of them is **refused by name**, and the
+    refusal says what the kinds are;
+  - the cells are found in the order a reader reads them in: the rows
+    first, and the columns in a row;
+  - the **last cell** is the far corner of the used range, and it is
+    `A1` on a sheet that holds nothing;
+  - the **current region** is the block of data around a cell: it
+    grows while the line next to it — the diagonals included — has
+    something in it.
+- The **names** are the tree's own spelling, and the words are the
+  same kind: the spaces, the underscores and the hyphens are taken out
+  before the kind is looked for, and the case does not matter, so
+  `conditionalFormats`, `conditional formats` and
+  `conditional_formats` are one kind and not three.
+
+### What the port found
+
+- **The tree's comment and its note are one thing and here they are
+  two.** The tree keeps a note in the map of the comments, and the
+  *go to special* finds a note by asking for `comments` or for
+  `notes` — the same answer twice. Here a comment is a thread and a
+  note is the yellow box in the corner, and they are two kinds: a
+  cell that has a comment is not a cell that has a note.
+- **The tree's selection is the scope and this tree has none.** The
+  tree asks of the sheet that is chosen and of the cells that are
+  chosen in it. Here the sheet is named and the range is named, and a
+  range that is not given is the used range of the sheet.
+- **The tree's *go to special* refuses when nothing is found.** Here
+  the answer is a count of zero, as `grid.find` answers, because a
+  question with no answer is an answer and not a failure.
+- **The tree's answer is a selection and this tree's is data.** The
+  tree sets the selection of the sheet to the cells it found; here the
+  cells are **read back** and the sheet is not changed, because a
+  question does not move anything.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/findspecial.rs`):
+  twelve tests — the blank cells of a range being found, the
+  constants and the formulas being told apart, the comments and the
+  notes being found, the numbers, the text and the errors being told
+  apart, the hidden cells not being visible, the conditional formats
+  and the validations being found, the last cell being the far corner,
+  the last cell of an empty sheet being `A1`, the current region being
+  the block around a cell, the current region starting at the cell that
+  is named, an unknown kind being refused by name, and the tree's
+  spelling and the words being one kind.
+- **One new module**: `findspecial`. **One new command**: the grid
+  battery now carries **188** commands and the MCP server **1036** —
+  one more than §835.
+- **Two bounds**: a question looks at at most **1 000 000** cells, and
+  the answer lists at most **1 000** of them — the count is always the
+  whole truth, and the answer says so when the list is short of it.
+
+### What it does not settle
+
+- **The tree's *go to* itself is not here**: the list of the names of
+  the workbook, the last ten places it went, and the jump to a name
+  or to a range are still to do.
+- **The tree's scope is the selection**, and there is no selection of
+  cells in a sheet here; the range is named every time, and the used
+  range is the standing scope.
+- **The tree's last cell and its current region are set as the
+  selection**, and here they are read back as data.
+- **A question about a range of more than a million cells is
+  refused**, and the refusal says so; the tree's own bound is four
+  million and it is not walked cell by cell as often as this one is.
