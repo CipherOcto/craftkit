@@ -4198,6 +4198,7 @@ so.
 | the **merge across** of a range | **built.** Every row of a range is merged on its own, and the value of a merged region is the value of its top left cell (§817) | §817 |
 | the **merge and centre** of a range | **built.** A range is merged and its text is centred, and a range that is already merged is unmerged again (§818) | §818 |
 | the **font** of a cell | **built.** The face, the size and the marks of the text of a cell are set, and a button pressed twice does the opposite (§819) | §819 |
+| the **locked cell** | **built.** A cell may be unlocked while the sheet is protected, and the lock of a cell is a button (§820) | §820 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -25911,6 +25912,8 @@ A sheet may be **protected**.
   set of ranges of a protected sheet that may still be changed. Here
   the protection of the sheet locks the **cells of the sheet**, and
   there is no range that is let through: the whole sheet is locked.
+  A cell may say that it is **unlocked** (§820), and then it may be
+  changed all the same; a range is still not a thing here.
 - **The tree's protection may carry a password and this one's may
   not.** The tree stores the **hash** of the password and never the
   password, and the tree's *unprotect* asks for it. Here a sheet may
@@ -32162,8 +32165,8 @@ in a colour.
   `#rrggbb` or it is refused.
 - **The tree's cells are locked by their own style**, and a style is
   locked unless the style says otherwise; here a protected sheet locks
-  its cells wholesale, and the border follows the sheet's own
-  protection of the **formatting**.
+  its cells unless a cell says that it is unlocked (§820), and the
+  border follows the sheet's own protection of the **formatting**.
 
 ### What it cost
 
@@ -53864,3 +53867,59 @@ it, and the marks that are put on it.
   ladder.
 - **The tree's font is a style and other cells share it**: here every
   cell carries its own font, and a range is set a cell at a time.
+
+## 820. The locked cell
+
+The tree's **Lock Cell**: a cell may be locked, and a cell that is
+unlocked may be changed even while the sheet is protected.
+
+### What was built
+
+- The command **`grid.cell.lock`** locks a cell, or lets it be changed:
+  the tree's Lock Cell, as a command.
+- The rules are the tree's own:
+  - the lock is a **button**, and a button pressed twice does the
+    opposite: the tree's own rule;
+  - a cell that says nothing **follows the sheet**, and the cells of a
+    protected sheet are locked: the tree's own rule;
+  - a cell that is **unlocked** may be changed even though the sheet is
+    protected: the tree's own rule, and the tree's cells are locked by
+    their own style;
+  - a lock matters only when the sheet is **protected**: the tree's own
+    rule.
+
+### What the port found
+
+- **The tree's lock is a flag of the style of the cell, and here it is
+  the cell's own**: as the format, the alignment and the font are
+  (§816, §819).
+- **The tree's protection locks every cell of the sheet, and here it
+  locks every cell that has not said otherwise.** A protected sheet's
+  cells may not be changed — as before — and a cell that says it is
+  unlocked may be changed all the same.
+- **The tree's button is refused on a protected sheet, and here it is
+  too**: the lock is a formatting, and the protection says what may
+  still be done to the sheet.
+
+### What it cost
+
+- **One new test** in the grid battery (`tests/celllock.rs`): six tests
+  — the button pressed twice doing the opposite, the lock that is
+  named, the protected sheet's cells not being changed, the unlocked
+  cell being changed all the same, the cell that is not named still
+  being locked, and the sheet that is not protected being changed.
+- **One new command**: the grid battery now carries **178** commands
+  and the MCP server **1024** — one more than §819. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **The cell grew a field**: the lock is the cell's own field, beside
+  the value, the formula, the format, the style, the alignment and the
+  font.
+
+### What it does not settle
+
+- **The tree's protection has a password and here it has none**: a
+  sheet may be unprotected by anyone who may change it.
+- **The tree's lock may be part of a style and here it is not**: a
+  style of the workbook carries a format, and the lock of a cell is the
+  cell's own.
