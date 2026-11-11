@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **sixty-six commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **sixty-seven commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.create` makes a path out of path data or
@@ -40,7 +40,8 @@
 //!   `vector.path.handle` move a point of a path and set the handles of
 //!   the curves that leave and arrive at it, and
 //!   `vector.path.move.points` moves many points by one drag, and
-//!   `vector.path.join.ends` joins two open contours into one;
+//!   `vector.path.join.ends` joins two open contours into one, and
+//!   `vector.path.join.scrub` joins the ends that are near a drag;
 //!   `vector.path.average`
 //!   puts the points of a path on one line, in one column, or all in
 //!   one place; `vector.path.anchor.remove` takes an anchor away, and
@@ -104,6 +105,7 @@ mod eraseregion;
 mod freehand;
 mod gradients;
 mod joinends;
+mod joinscrub;
 mod knife;
 mod linecut;
 mod mirrorcut;
@@ -131,6 +133,7 @@ pub use eraseregion::EraseRegion;
 pub use freehand::Freehand;
 pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
 pub use joinends::JoinEnds;
+pub use joinscrub::JoinScrub;
 pub use knife::KnifePath;
 pub use linecut::CutPathLine;
 pub use mirrorcut::MirrorCut;

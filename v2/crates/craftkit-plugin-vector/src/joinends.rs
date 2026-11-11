@@ -25,7 +25,7 @@ use crate::convert::smooth_by_neighbours;
 use crate::{reverse_subpath, vector_of, write_back};
 
 /// How close two points must be to be **one place**.
-const SAME_PLACE: f64 = 1e-6;
+pub(crate) const SAME_PLACE: f64 = 1e-6;
 
 /// Join two open contours of a path into one.
 #[derive(Command)]
@@ -97,32 +97,7 @@ impl JoinEnds {
             }
             None => nearest_ends(&one, &two),
         };
-        let one = if reverse_one { reverse_subpath(&one) } else { one };
-        let two = if reverse_two { reverse_subpath(&two) } else { two };
-        // The two ends that meet.
-        let here = one.end();
-        let there = two.start;
-        let mut segments: Vec<Segment> = one.segments.clone();
-        let junction = segments.len();
-        if distance(here, there) < SAME_PLACE {
-            // The ends are **one place**: the curves are joined without
-            // a jump, and no side is put between them.
-            segments.extend(two.segments.clone());
-        } else {
-            // The ends are two places: a **straight side** joins them.
-            segments.push(Segment::Line { to: there });
-            segments.extend(two.segments.clone());
-        }
-        let mut joined = SubPath { start: one.start, segments, closed: false };
-        // The **joined point**: a corner, or smooth by the neighbours'
-        // rule.
-        if let Some(smooth) = kind {
-            if smooth {
-                smooth_by_neighbours(&mut joined, junction);
-            } else {
-                make_corner(&mut joined, junction, here);
-            }
-        }
+        let joined = join_contours(&one, &two, reverse_one, reverse_two, kind);
         // The joined contour takes the place of the first, and the
         // second is gone.
         let mut subpaths = vector.path.subpaths.clone();
@@ -138,6 +113,42 @@ impl JoinEnds {
         Ok(Outcome::changed("the paths are one now")
             .with_data(json!({ "id": self.path.0, "contour": first.min(second) })))
     }
+}
+
+/// The contour that is two contours **joined**: the ends that meet,
+/// and the joined point's kind.
+///
+/// The tree's own rules: when the two ends are already **one place**
+/// the curves are joined without a jump, and when they are two places
+/// a **straight side** joins them.
+pub(crate) fn join_contours(
+    one: &SubPath,
+    two: &SubPath,
+    reverse_one: bool,
+    reverse_two: bool,
+    kind: Option<bool>,
+) -> SubPath {
+    let one = if reverse_one { reverse_subpath(one) } else { one.clone() };
+    let two = if reverse_two { reverse_subpath(two) } else { two.clone() };
+    let here = one.end();
+    let there = two.start;
+    let mut segments: Vec<Segment> = one.segments.clone();
+    let junction = segments.len();
+    if distance(here, there) < SAME_PLACE {
+        segments.extend(two.segments.clone());
+    } else {
+        segments.push(Segment::Line { to: there });
+        segments.extend(two.segments.clone());
+    }
+    let mut joined = SubPath { start: one.start, segments, closed: false };
+    if let Some(smooth) = kind {
+        if smooth {
+            smooth_by_neighbours(&mut joined, junction);
+        } else {
+            make_corner(&mut joined, junction, here);
+        }
+    }
+    joined
 }
 
 /// The joined point is a **corner**: its handles come back to it.
@@ -194,6 +205,6 @@ fn nearest_ends(one: &SubPath, two: &SubPath) -> (bool, bool) {
 }
 
 /// How far two points are **apart**.
-fn distance(a: Point, b: Point) -> f64 {
+pub(crate) fn distance(a: Point, b: Point) -> f64 {
     ((a.x - b.x).powi(2) + (a.y - b.y).powi(2)).sqrt()
 }
