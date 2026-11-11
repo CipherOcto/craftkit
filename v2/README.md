@@ -4205,6 +4205,7 @@ so.
 | the **text** of a cell | **built.** The code `@` writes the text of a cell, and a format may end with a section that is the text's own (§824) | §824 |
 | the **long date** | **built.** The shape `dddd, mmmm dd, yyyy` says the weekday, the month by name, the day and the year at once (§825) | §825 |
 | the **trace** of every level | **built.** The flag `all` walks the chain of the precedents and of the dependents, all the way down (§826) | §826 |
+| the **generated** items | **built.** An item may play the black video, the transparent video, the bars and the tone, the counting leader or the colour matte (§827) | §827 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -54322,3 +54323,70 @@ down.
 - **The tree's graph is not here**: the tree builds a graph of the
   dependencies once and asks it, and here the formulas are read again
   for every question.
+
+## 827. The generated items
+
+The tree's **generators**: an item that plays something the project
+**makes** and not a file it reads — the black video, the transparent
+video, the bars and the tone of a test card, the universal counting
+leader and the colour matte.
+
+### What was built
+
+- **One command** in the film battery: `film.item.generator` — a
+  generated item in a bin, of the tree's own kinds: `Black Video`,
+  `Transparent Video`, `Bars and Tone`, `Universal Counting Leader`
+  and `Color Matte`.
+- The tree's rules are the tree's:
+  - a generator is **five seconds** long unless it says otherwise, and
+    the bars and the tone are **ten**;
+  - the colour matte is the tree's own **dark grey** unless it says
+    otherwise, and a colour on another generator is **refused** — the
+    colour is the matte's own;
+  - a generator is made at the **rate of the sequence**, and the rate
+    may be named: `25`, `23.976`, … — the tree's own default is
+    `23.976`.
+- The item **says what it is**: the kind and the colour are read back
+  with `film.item.get`, and the item's meaning carries them too.
+
+### What the port found
+
+- **The tree's generator is a media file in a pool**, made by the
+  project and put in the pool like any other file, and it carries the
+  **width**, the **height** and the **frame rate** of the sequence it
+  was made for. Here a generator is an **item** of a bin — the tree's
+  own item — and it carries the kind it is; the width and the height
+  are not here, because nothing here draws.
+- **The tree's generator is made at the rate of the *active*
+  sequence**, and here the rate is **named**: a generator that is made
+  for a sequence that is not the active one cannot know its rate, and
+  a rate that is named is a rate that is there.
+- **The tree's length is in seconds and this tree's is in frames.** The
+  tree's generator asks for **seconds**, and so does this one; the
+  length that is kept is in frames, at the rate that was named.
+
+### What it cost
+
+- **One new test** in the film battery (`tests/generators.rs`): seven
+  tests — a generator being five seconds long, the bars and the tone
+  being ten, the rate being named, the matte taking a colour and
+  having the tree's dark grey by default, a colour on a generator that
+  is not a matte being refused, a kind that is not a generator being
+  refused, and the name of the matte being written either way.
+- **One new module**: `generators`. **One new command**: the film
+  battery now carries **112** commands and the MCP server **1029** —
+  one more than §826.
+- **One bound**: a generator's length in seconds is a number that is
+  there, and the length in frames that comes of it at the rate is a
+  whole number of frames.
+
+### What it does not settle
+
+- **The tree's adjustment layer is not here**: it is not a media file
+  but a layer over the sequence, and here an item is a thing that is
+  played.
+- **The tree's generators are made with the width and the height of
+  the sequence**, and here they are not: nothing here draws, so a
+  generator says what it plays and not how big it is.
+- **The tree's counting leader and its bars and tone have a picture
+  of their own**, and here they are a kind and a length.
