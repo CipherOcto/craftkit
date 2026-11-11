@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **sixty-five commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **sixty-six commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.create` makes a path out of path data or
@@ -31,7 +31,8 @@
 //!   run of points, `vector.path.cut.line` cuts a closed shape along a
 //!   line, `vector.path.cut.rect` cuts one to a rectangle,
 //!   `vector.path.cut.mirror` mirrors one in an axis, and
-//!   `vector.path.freehand` draws a stroke by hand;
+//!   `vector.path.freehand` draws a stroke by hand, and
+//!   `vector.path.blob` paints a brush stroke onto a shape;
 //!   `vector.path.unite`,
 //!   `vector.path.subtract`, `vector.path.intersect`,
 //!   `vector.path.exclude`, `vector.path.simplify` and
@@ -91,6 +92,7 @@
 
 mod anchors;
 mod axis;
+mod blob;
 mod colour;
 mod components;
 mod convert;
@@ -117,6 +119,7 @@ mod svgexport;
 mod svgimport;
 
 pub use anchors::{AddMiddleAnchors, SetAnchors};
+pub use blob::BlobPath;
 pub use colour::{ColourGamut, ConvertColour};
 pub use components::components;
 pub use convert::ConvertAnchors;
@@ -2883,6 +2886,7 @@ craftkit_sdk::plugin_anchor!(
     AddSpline,
     SetAnchors,
     AddMiddleAnchors,
+    BlobPath,
     ConvertAnchors,
     MovePoints,
     JoinEnds,

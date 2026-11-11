@@ -258,7 +258,13 @@ impl Tip {
         let round: Vec<Point> = drag.iter().map(|point| self.squash(*point)).collect();
         let segments: Vec<Segment> = round.windows(2).map(|pair| Segment::Line { to: pair[1] }).collect();
         let squashed = Path::single(SubPath { start: round[0], segments, closed: false });
-        let stroked = geom::outline_stroke(&squashed, self.size, Cap::Round, Join::Round, 4.0);
+        let stroked = geom::without_degenerate(&geom::outline_stroke(
+            &squashed,
+            self.size,
+            Cap::Round,
+            Join::Round,
+            4.0,
+        ));
         // The stroke is stretched back into the tip's own shape.
         Path {
             subpaths: stroked

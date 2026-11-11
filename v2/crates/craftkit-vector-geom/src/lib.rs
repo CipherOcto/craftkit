@@ -446,6 +446,60 @@ pub fn split_segment(subpath: &SubPath, index: usize, t: f64) -> Result<SubPath,
     Ok(SubPath { start: subpath.start, segments, closed: subpath.closed })
 }
 
+/// A path with the **degenerate** sides taken away, and its contours
+/// closed as they should be.
+///
+/// A side that ends where it begins is no side: it is a point, and a
+/// boolean cannot take a point. The outline of a stroke has such a
+/// side where its cap closes, and it is taken away here — the side
+/// that follows it begins in the same place, so the shape does not
+/// change.
+///
+/// The outline of a stroke also comes back **open**, although its last
+/// side ends where it begins: a contour that closes on itself is a
+/// closed contour, and it is closed here.
+pub fn without_degenerate(path: &Path) -> Path {
+    // The **tolerance**: two points that are the same place.
+    let scale = path
+        .subpaths
+        .iter()
+        .flat_map(|subpath| subpath.segments.iter().map(|segment| segment.end()))
+        .chain(path.subpaths.iter().map(|subpath| subpath.start))
+        .map(|point| point.x.abs().max(point.y.abs()))
+        .fold(1.0_f64, |held, value| held.max(value));
+    let same = 1e-9 * scale;
+    let is_same = |one: Point, two: Point| (one.x - two.x).abs() <= same && (one.y - two.y).abs() <= same;
+    let mut subpaths: Vec<SubPath> = Vec::with_capacity(path.subpaths.len());
+    for subpath in &path.subpaths {
+        // A contour whose **last side** ends where it begins is a
+        // closed contour: the outline of a stroke is one, and the
+        // conversion does not say so.
+        let closes = !subpath.closed
+            && !subpath.segments.is_empty()
+            && is_same(subpath.segments[subpath.segments.len() - 1].end(), subpath.start);
+        let closed = subpath.closed || closes;
+        let mut segments: Vec<Segment> = Vec::with_capacity(subpath.segments.len());
+        for (index, segment) in subpath.segments.iter().enumerate() {
+            let from = if index == 0 { subpath.start } else { subpath.segments[index - 1].end() };
+            let degenerate = is_same(from, segment.end());
+            if degenerate {
+                // The side that follows begins in the same place, so
+                // the contour does not change; and the side before it
+                // may already end where the contour starts.
+                let follows = index + 1 < subpath.segments.len();
+                let closes_already =
+                    index > 0 && closed && is_same(subpath.segments[index - 1].end(), subpath.start);
+                if follows || closes_already {
+                    continue;
+                }
+            }
+            segments.push(*segment);
+        }
+        subpaths.push(SubPath { start: subpath.start, segments, closed });
+    }
+    Path { subpaths, rule: path.rule }
+}
+
 /// The boolean operation of two paths.
 ///
 /// The result may have more than one contour: subtracting a shape from the
@@ -846,6 +900,17 @@ mod tests {
         let point = mirror.apply(Point::new(3.0, 1.0));
         assert!((point.x - 3.0).abs() < 1e-9, "the point keeps its place: {point:?}");
         assert!((point.y - 9.0).abs() < 1e-9, "the point is across the line: {point:?}");
+    }
+
+    /// A path with a **degenerate** side has it taken away.
+    #[test]
+    fn a_degenerate_side_is_taken_away() {
+        let mut path = square(0.0, 0.0, 10.0);
+        // A side that ends where it begins: a point, and not a side.
+        let start = path.subpaths[0].start;
+        path.subpaths[0].segments.insert(0, Segment::Line { to: start });
+        let cleaned = without_degenerate(&path);
+        assert_eq!(cleaned.subpaths[0].segments.len(), path.subpaths[0].segments.len() - 1);
     }
 
     /// A square, as a path.

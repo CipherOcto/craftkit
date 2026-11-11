@@ -103,7 +103,7 @@ impl Freehand {
 /// pen's **pressure** as a third number, and keeps it on the stroke;
 /// this tree has nowhere to keep it, so a sample that carries one is
 /// refused rather than quietly losing it.
-fn read_samples(value: &Json) -> Result<Vec<Point>, String> {
+pub(crate) fn read_samples(value: &Json) -> Result<Vec<Point>, String> {
     let Some(list) = value.as_array() else {
         return Err("the samples are not a list".to_string());
     };
@@ -146,7 +146,7 @@ fn read_samples(value: &Json) -> Result<Vec<Point>, String> {
 /// The tree's own rules: the jitter is dropped, the sharp turns stay
 /// corners, the rest is a spline through the samples, and the spline
 /// is simplified at the fidelity.
-fn stroke(samples: &[Point], fidelity: f64, closed: bool, fit: bool) -> Path {
+pub(crate) fn stroke(samples: &[Point], fidelity: f64, closed: bool, fit: bool) -> Path {
     if !fit {
         // The samples joined by straight sides.
         let anchors: Vec<Anchor> =
