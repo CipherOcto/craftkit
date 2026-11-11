@@ -4179,6 +4179,7 @@ so.
 | the **splitting** of a shape along a line | **built.** A closed shape is split along a line that goes on for ever, and a hole travels with the shape it is in (§798) | §798 |
 | the **cropping** of a shape to a rectangle | **built.** A closed shape is cut to a rectangle — four numbers or two corners — and a shape wholly outside it is taken away (§799) | §799 |
 | the **mirroring** of a shape in an axis | **built.** A closed shape is cut at an axis and joined to its own mirror, so that what is left is symmetric (§800) | §800 |
+| the **converting** of many points | **built.** Many points become smooth by the tree's neighbours' rule, or become corners by retracting their handles (§801) | §801 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -52306,8 +52307,8 @@ average of the two handles — and now it has the tree's.
   rule of its own: the two handles became the **average** of the two
   they were. So there were three rules for one thing, and there are
   two here now: the circle rule, which is the tree's own for a single
-  point, and the tree's own rule for many points, which this tree does
-  not have.
+  point, and the tree's own rule for many points, which is here now as
+  `vector.path.anchors.convert` (§801).
 - **The average could not make a corner smooth.** The tree's rule reads
   the **neighbours** and makes the handles; the average needed the
   handles to be there first, so a point with no handles had nothing to
@@ -52333,10 +52334,11 @@ average of the two handles — and now it has the tree's.
 
 ### What it does not settle
 
-- **The tree's own rule for many points at once is not here**: the
-  tree's `path.convertAnchors` makes many points smooth in one go with
-  the neighbours' rule, and here one point at a time is the circle
-  rule.
+- **The tree's own rule for many points at once was not here, and is
+  now**: the tree's `path.convertAnchors` makes many points smooth in
+  one go with the neighbours' rule, and that rule is here now as
+  `vector.path.anchors.convert` (§801). One point at a time is still
+  the circle rule, as it is in the tree.
 - **The tree's own smooth region is not here**: the tree's Smooth tool
   smooths the parts of a path near a drag.
 
@@ -52711,3 +52713,85 @@ keeps the **side** that is named, and joins what is kept to its own
   joined.
 - **The tree's mirror works on the selected shapes**: here one path is
   mirrored in one axis.
+
+## 801. Many points become smooth, or become corners
+
+The tree's **Convert Anchor Points** turns the points that are chosen
+into **smooth** points or into **corner** points, and it works on many
+of them at once.
+
+### What was built
+
+- The command **`vector.path.anchors.convert`** turns points of a path
+  into smooth points or into corners: the tree's Convert Anchor Points,
+  as a command. The points are named by their **index** in a contour,
+  and the `to` says `smooth` or `corner`.
+- The rules are the tree's own:
+  - a point made **smooth** takes the **neighbours' rule**: its two
+    handles are in line with the direction from the point before it to
+    the point after it, and each handle is a **third** of the way to
+    that side's neighbour: the tree's own rule;
+  - a point that is **already smooth** keeps its handles: the tree's
+    own rule;
+  - a point made a **corner** has its handles **retracted** — they come
+    back to the point itself: the tree's own rule;
+  - a point whose neighbours are **one point** has no direction, and it
+    is left as it is: the tree's own rule;
+  - an end of an open contour has **one** neighbour, and it takes that
+    neighbour's direction: the tree's own rule;
+  - the points are **many at once**, and the outcome says which were
+    converted and which were left as they were.
+- The **closing side** of a closed contour is made explicit before the
+  neighbours are read, as §795 and §796 do: a side that is not there
+  holds no handle.
+
+### What the port found
+
+- **The tree's one command is two here.** The tree's `path.convertAnchors`
+  is one command with a `to` that says `corner` or `smooth`, and this
+  tree already had one command for each of a single point —
+  `vector.path.smooth` and `vector.path.corner`. The tree's command is
+  here as well, because it is a command of its own: it turns **many**
+  points in one go.
+- **The tree's two smooth rules are both here, and they are not the
+  same.** The tree's `path.convertAnchor` — one point — uses the
+  curvature tool's rule, the circle through the point and its
+  neighbours; the tree's `path.convertAnchors` — many points — uses the
+  neighbours' rule. So one point at a time is the circle rule
+  (`vector.path.smooth`, §794) and many points at once is the
+  neighbours' rule (this command).
+- **The tree's kind of a point is not stored here, and the geometry
+  says it instead.** The tree keeps the handles of a point that is
+  already smooth and the kind says so. This tree has no kind — a
+  point's handles are in line or they are not — so a point whose
+  handles are already in line keeps them, and a point whose handles are
+  not in line is made smooth.
+- **The tree's command works on the chosen points, and this one names
+  them.** A point that is not there is refused by name, and so is a
+  point that is not a whole number.
+
+### What it cost
+
+- **One new test** in the vector battery (`tests/convertanchors.rs`):
+  ten tests — the point made smooth by the neighbours' rule, many
+  points at once, the point that keeps its handles, the point that
+  becomes a corner, the end of an open contour, the point whose
+  neighbours are one point, the `to` that is neither, the point that is
+  not there, the points that are not a list, and the point that is not
+  a whole number.
+- **One new command**: the vector battery now carries **62** commands
+  and the MCP server **995** — one more than §800. The battery is
+  counted by the source of its commands; the MCP server is counted by
+  the tool list it answers with.
+- **One new module** (`convert`), and the rule of a smooth point is the
+  rule the tree has for many points.
+- **Two notes corrected in place**: §794 said the tree's rule for many
+  points was not here, and it is now.
+
+### What it does not settle
+
+- **The tree's own smooth region is not here**: the tree's Smooth tool
+  smooths the parts of a path near a drag, and this command names the
+  points one by one.
+- **The tree's command works on the chosen points of many paths**: here
+  one contour of one path is converted in one go.
