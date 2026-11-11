@@ -246,7 +246,7 @@ fn distance(a: Point, b: Point) -> f64 {
 }
 
 /// The **points** the caller named: whole numbers, counting from zero.
-fn read_points(value: &Json) -> Result<Vec<usize>, String> {
+pub(crate) fn read_points(value: &Json) -> Result<Vec<usize>, String> {
     let Some(list) = value.as_array() else {
         return Err("the points are a list of whole numbers".to_string());
     };

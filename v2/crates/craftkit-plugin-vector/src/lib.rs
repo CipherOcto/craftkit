@@ -17,7 +17,7 @@
 //! - a **layer**, `vector`;
 //! - a **node kind**, `vector.path`, whose payload is a path, a fill and a
 //!   stroke;
-//! - **sixty-two commands**: `vector.rectangle`, `vector.ellipse` and
+//! - **sixty-three commands**: `vector.rectangle`, `vector.ellipse` and
 //!   `vector.polygon` make shapes, and `vector.star`, `vector.line` and
 //!   `vector.spiral` make the shapes the tree makes that are not
 //!   polygons; `vector.path.create` makes a path out of path data or
@@ -37,7 +37,9 @@
 //!   `vector.path.exclude`, `vector.path.simplify` and
 //!   `vector.path.offset` work on whole paths; `vector.path.move` and
 //!   `vector.path.handle` move a point of a path and set the handles of
-//!   the curves that leave and arrive at it; `vector.path.average`
+//!   the curves that leave and arrive at it, and
+//!   `vector.path.move.points` moves many points by one drag;
+//!   `vector.path.average`
 //!   puts the points of a path on one line, in one column, or all in
 //!   one place; `vector.path.anchor.remove` takes an anchor away, and
 //!   the contour becomes the stretches that are left; `vector.path.fill`
@@ -100,6 +102,7 @@ mod gradients;
 mod knife;
 mod linecut;
 mod mirrorcut;
+mod movepoints;
 mod opacity;
 mod pathcreate;
 mod pathfinder;
@@ -123,6 +126,7 @@ pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
 pub use knife::KnifePath;
 pub use linecut::CutPathLine;
 pub use mirrorcut::MirrorCut;
+pub use movepoints::MovePoints;
 pub use opacity::{SetOpacity, fill_at, stroke_at};
 pub use pathcreate::CreatePath;
 pub use pathfinder::{CropPaths, DividePaths, MergePaths, TrimPaths};
@@ -2875,6 +2879,7 @@ craftkit_sdk::plugin_anchor!(
     SetAnchors,
     AddMiddleAnchors,
     ConvertAnchors,
+    MovePoints,
     ErasePath,
     KnifePath,
     CutPathLine,
