@@ -82,8 +82,139 @@ fn commands_of(root: &Path, crate_name: &str) -> usize {
     for path in source_of(root, crate_name) {
         let bytes = fs::read(&path).expect("the file is there");
         total += count(&bytes, b"#[command(");
+        // A battery that is a **table** declares its commands in rows, and
+        // a row is not an attribute: the scan has to read both spellings,
+        // or it reads a table as a battery with no commands in it.
+        total += rows_in(&bytes);
     }
     total
+}
+
+/// How many **rows** a file's tables declare.
+///
+/// The rows are the table's **top level**: a row's own braces hold the
+/// parameters and the body, and what is inside them is not a row.
+///
+/// The scan is this file's own — the xtask reads the tree with another
+/// one, and the two have to agree.
+fn rows_in(bytes: &[u8]) -> usize {
+    let text = String::from_utf8_lossy(bytes);
+    let mut total = 0;
+    let mut offset = 0usize;
+    while let Some(at) = text[offset..].find("commands!") {
+        let start = offset + at;
+        let Some(open) = text[start..].find('{') else { break };
+        let body_start = start + open + 1;
+        let Some(end) = matching_brace(&text, body_start) else { break };
+        total += rows_of(&text[body_start..end]);
+        offset = end;
+    }
+    total
+}
+
+/// The rows of one table.
+fn rows_of(block: &str) -> usize {
+    let bytes = block.as_bytes();
+    let mut total = 0;
+    let mut at = 0usize;
+    let mut depth = 0usize;
+    let mut head_start = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    while at < bytes.len() {
+        let c = bytes[at] as char;
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            at += 1;
+            continue;
+        }
+        match c {
+            '"' => in_string = true,
+            '{' => {
+                if depth == 0 {
+                    let head = block[head_start..at].trim();
+                    let last = head.split_whitespace().last().unwrap_or("");
+                    if is_an_id(last) {
+                        total += 1;
+                    }
+                }
+                depth += 1;
+            }
+            '}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    head_start = at + 1;
+                }
+            }
+            _ => {}
+        }
+        at += 1;
+    }
+    total
+}
+
+/// Whether a word is a command's **id**: dotted, lower case.
+///
+/// The same rule the tree's index uses, and this file's own copy of it:
+/// two readers, and they have to agree.
+fn is_an_id(word: &str) -> bool {
+    let mut parts = word.split('.');
+    let Some(first) = parts.next() else { return false };
+    let ok = |part: &str| {
+        !part.is_empty() && part.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    };
+    if !ok(first) {
+        return false;
+    }
+    let mut more = false;
+    for part in parts {
+        if !ok(part) {
+            return false;
+        }
+        more = true;
+    }
+    more
+}
+
+/// Where the brace that closes the one at `body_start` is.
+fn matching_brace(text: &str, body_start: usize) -> Option<usize> {
+    let bytes = text.as_bytes();
+    let mut depth = 1usize;
+    let mut at = body_start;
+    let mut in_string = false;
+    let mut escaped = false;
+    while at < bytes.len() {
+        let c = bytes[at] as char;
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+        } else {
+            match c {
+                '"' => in_string = true,
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some(at);
+                    }
+                }
+                _ => {}
+            }
+        }
+        at += 1;
+    }
+    None
 }
 
 /// How many times a **needle** is in a **haystack**.

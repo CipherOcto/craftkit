@@ -140,6 +140,7 @@ pub fn build(root: &Path) -> Result<Index, String> {
                 .map_err(|e| format!("could not read {}: {e}", file.display()))?;
             let relative = relative_to(root, &file);
             index.commands.extend(commands_in(&text, &relative, &battery));
+            index.commands.extend(table_commands_in(&text, &relative, &battery));
             index.bounds.extend(bounds_in(&text, &relative, &battery));
         }
     }
@@ -180,6 +181,148 @@ pub fn commands_in(text: &str, file: &Path, battery: &str) -> Vec<Command> {
         offset = end;
     }
     found
+}
+
+/// The commands in a **table** of commands.
+///
+/// A table is the tree's second spelling of a command: `commands! { … }`
+/// declares a family of them, and a row says the id, the label, the doc
+/// and the flag. A tool that reads the source and does not know the table
+/// is a tool that is **wrong about a battery that is a table** — and the
+/// fx battery is one.
+///
+/// So the reader reads both, and the counts of the tree are the counts of
+/// the commands, however they are written.
+pub fn table_commands_in(text: &str, file: &Path, battery: &str) -> Vec<Command> {
+    let mut found = Vec::new();
+    let mut offset = 0usize;
+    while let Some(at) = text[offset..].find("commands!") {
+        let start = offset + at;
+        let Some(open) = text[start..].find('{') else { break };
+        let body_start = start + open + 1;
+        let Some((block, end)) = braces_of(text, body_start) else { break };
+        found.extend(rows_of(&block, text, body_start, file, battery));
+        offset = end;
+    }
+    found
+}
+
+/// The rows of a table: the commands it declares.
+///
+/// A row is an id and a block: `fx.layer.switch { … }`.
+fn rows_of(block: &str, text: &str, body_start: usize, file: &Path, battery: &str) -> Vec<Command> {
+    let mut found = Vec::new();
+    let mut offset = 0usize;
+    while offset < block.len() {
+        // The id is the text before the row's opening brace.
+        let Some(open) = block[offset..].find('{') else { break };
+        let head = block[offset..offset + open].trim();
+        let id: String = head.split_whitespace().last().unwrap_or("").to_string();
+        // **A row's id is dotted and lower case**, and nothing else is: a
+        // comment that ends in a full stop is not a row.
+        if !is_an_id(&id) {
+            // Not a row: the text is a comment, or a word.
+            offset += open + 1;
+            continue;
+        }
+        let row_start = offset + open + 1;
+        let Some((row, end)) = braces_of(block, row_start) else { break };
+        // The id's own place: the head may hold a comment, and the
+        // documentation is above the **id**.
+        let head_text = &block[offset..offset + open];
+        let id_at = offset + head_text.trim_end().len() - id.len();
+        let at = body_start + id_at;
+        let line = text[..at].lines().count().max(1);
+        found.push(Command {
+            id: id.clone(),
+            label: entry_of(&row, "label"),
+            // The documentation of a row is **inside** the table, above
+            // the row: the table is the file's own text and the row is
+            // part of it.
+            doc: doc_above(block, id_at),
+            file: file.to_path_buf(),
+            line,
+            battery: battery.to_string(),
+            example: has_flag(&row, "example"),
+        });
+        offset = end;
+    }
+    found
+}
+
+/// Whether a word is a command's **id**: dotted, lower case.
+///
+/// A row's id is `<area>.<thing>`, and a sentence that ends in a full
+/// stop is not an id. The reader that counts the rows has to tell them
+/// apart, or it counts the prose.
+pub fn is_an_id(word: &str) -> bool {
+    let mut parts = word.split('.');
+    let Some(first) = parts.next() else { return false };
+    if first.is_empty() || !first.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
+        return false;
+    }
+    let mut more = false;
+    for part in parts {
+        if part.is_empty() || !part.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        {
+            return false;
+        }
+        more = true;
+    }
+    more
+}
+
+/// The body of a block of braces, and where it ends.
+///
+/// **The braces are counted, and the strings are skipped.** A run body may
+/// hold a string with a brace in it, and a reader that stopped at the
+/// first `}` would read half a row and call it the whole.
+fn braces_of(text: &str, body_start: usize) -> Option<(String, usize)> {
+    let bytes = text.as_bytes();
+    let mut depth = 1usize;
+    let mut at = body_start;
+    let mut in_string = false;
+    let mut escaped = false;
+    while at < bytes.len() {
+        let c = bytes[at] as char;
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+        } else {
+            match c {
+                '"' => in_string = true,
+                '{' => depth += 1,
+                '}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return Some((text[body_start..at].to_string(), at + 1));
+                    }
+                }
+                _ => {}
+            }
+        }
+        at += 1;
+    }
+    None
+}
+
+/// An entry of a row: `name: "value"`.
+///
+/// The table writes a colon and the attribute writes an equals, and a
+/// reader that knows only one of them reads half a row.
+pub fn entry_of(block: &str, name: &str) -> Option<String> {
+    for needle in [format!("{name}: \""), format!("{name} = \"")] {
+        let Some(at) = block.find(&needle) else { continue };
+        let rest = &block[at + needle.len()..];
+        let end = rest.find('"')?;
+        return Some(rest[..end].to_string());
+    }
+    None
 }
 
 /// The body of an attribute, and where it ends.

@@ -80,6 +80,86 @@ pub struct CalcSheet;
     );
 }
 
+/// A **table** of commands is read the same way a declaration is: the id,
+/// the label, the documentation and the flag.
+#[test]
+fn a_table_of_commands_is_read() {
+    let source = r#"
+commands! {
+    /// Switch a layer on or off.
+    fx.layer.switch {
+        label: "Switch",
+        area: "fx",
+        layer: "fx",
+        icon: "eye",
+        mutates,
+        undoable,
+        params: {
+            /// The layer.
+            layer: NodeRef,
+        },
+        run: {
+            Ok(Outcome::changed("switched"))
+        }
+    }
+}
+"#;
+    let commands = index::table_commands_in(source, Path::new("crates/x/src/lib.rs"), "fx");
+    assert_eq!(commands.len(), 1, "the row is found");
+    assert_eq!(commands[0].id, "fx.layer.switch");
+    assert_eq!(commands[0].label.as_deref(), Some("Switch"));
+    assert_eq!(commands[0].doc.as_deref(), Some("Switch a layer on or off."));
+    assert!(commands[0].line > 0, "the row has a line");
+}
+
+/// The **example** flag is read out of a row, as it is out of an attribute.
+#[test]
+fn the_example_flag_is_read_out_of_a_row() {
+    let source = r#"
+commands! {
+    /// The example of the battery.
+    fx.comp.add {
+        example,
+        params: {},
+        run: {
+            Ok(Outcome::changed("added"))
+        }
+    }
+}
+"#;
+    let commands = index::table_commands_in(source, Path::new("crates/x/src/lib.rs"), "fx");
+    assert_eq!(commands.len(), 1);
+    assert!(commands[0].example, "the row is the example");
+}
+
+/// A table's rows are found whatever the table holds around them: a
+/// comment, a helper, a body with a brace in a string.
+#[test]
+fn a_table_with_a_string_in_it_is_read_whole() {
+    let source = r#"
+// A table of the battery's commands.
+commands! {
+    /// Say a word.
+    fx.word.say {
+        label: "Say",
+        params: {
+            /// The word.
+            word: Text,
+        },
+        run: {
+            let _ = "a } in a string";
+            Ok(Outcome::changed("said"))
+        }
+    }
+}
+"#;
+    let commands = index::table_commands_in(source, Path::new("crates/x/src/lib.rs"), "fx");
+    assert_eq!(commands.len(), 1, "the row is found: {commands:?}");
+    assert_eq!(commands[0].id, "fx.word.say");
+}
+
+/// The **counts** of the tree are the counts of the commands, however they
+/// are written: a battery that is a table is still a battery.
 #[test]
 fn the_index_of_the_tree_holds_every_command_of_every_battery() {
     let index = index::build(&root()).expect("the index is built");

@@ -53,11 +53,16 @@ pub const END: &str = "<!-- the counts of the tree: end -->";
 /// batteries the README counts, and they are not counted here either.
 pub const BATTERIES: [&str; 9] = ["grid", "prose", "pdf", "film", "layout", "cad", "fx", "sound", "vector"];
 
-/// The commands a crate has: the attributes that carry an id.
+/// The commands a crate has: the declarations that carry an id.
 ///
-/// **The count of the text**, which is the count of the commands: the derive
-/// writes one `#[command(` for each of them, and the tree's test compares
+/// **The count of the text**, which is the count of the commands: the
+/// derive writes one `#[command(` for each of them, and a battery that is
+/// a **table** writes one row for each of them. The tree's test compares
 /// this number with the registry's.
+///
+/// So the count is made by the **index** — the one reader of the tree that
+/// knows both spellings — and the tree's own test has its own reader, and
+/// the two have to agree.
 pub fn commands_in(root: &Path, crate_name: &str) -> Result<usize, String> {
     let directory = root.join("crates").join(format!("craftkit-plugin-{crate_name}")).join("src");
     let entries =
@@ -70,7 +75,9 @@ pub fn commands_in(root: &Path, crate_name: &str) -> Result<usize, String> {
         }
         let text = crate::tree::read_rust(&path, crate::tree::Subject::Everything)
             .map_err(|e| format!("could not read {}: {e}", path.display()))?;
-        total += text.matches("#[command(").count();
+        let file = Path::new("");
+        total += crate::index::commands_in(&text, file, crate_name).len();
+        total += crate::index::table_commands_in(&text, file, crate_name).len();
     }
     Ok(total)
 }
