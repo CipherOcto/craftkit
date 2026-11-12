@@ -4231,6 +4231,7 @@ so.
 | the **failures** the matrix found | **built.** The tests' temporary directories are unique per call, the paths are compared as paths, and a test that waits waits until a deadline (§843) | §843 |
 | the **check** that is the size of the change | **built.** The gate's own checks, over the packages a change can break: the ones that changed and the ones that depend on them — and the ones that were left out are named (§845) | §845 |
 | the **gate** that says what it did not check | **built.** The gate checks the packages a change can break, names the packages it left out, and the build machine still checks the whole tree (§846) | §846 |
+| the **delegation**, priced | **built.** The rule is in the prose — a sub-agent gets a bounded, mechanical brief, or it does not get spawned — and the gate checks that the prose still says it (§847) | §847 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -55736,3 +55737,57 @@ it left out.
   about something else.
 - **The whole-tree run is still the whole-tree run.** `ci --all` takes what
   it took before — the tree's cost has not gone down, only the desk's has.
+## 847. The delegation, priced
+
+Forty-one sub-agents were spawned on this tree. Six paid for themselves. This
+arc writes the rule down and makes the gate keep it.
+
+### What was built
+
+- **The rule, in the prose**: **a sub-agent gets a bounded, mechanical brief,
+  or it does not get spawned.** It is in `docs/agent-playbook.md` (for
+  whoever drives the tree) and in `AGENTS.md` (for whoever works in it).
+- **The gate checks that the rule is still there.** A rule of conduct decays
+  like every other rule: the sentence that was written once is forgotten,
+  and the tree goes back to spawning a survey for every question.
+- **The rule says what a good brief is**: one survey per battery, with a
+  written contract; mechanical work — a rewrite that touches every site of
+  one shape, a set of files that must agree, a document written from a list;
+  and **not** a question the tree can answer, and **not** the reading of what
+  a rule means.
+
+### What the port found
+
+- **The good cases were all mechanical.** The three that paid — the clippy
+  range rewrite, the door fallbacks, the standard's documentation — were
+  exactly the briefs with a boundary, a deliverable and an acceptance. The
+  thirty-six that did not were one-off surveys of a tree the reader could
+  read directly.
+- **A summary of a meaning is a second source of truth.** A survey can point
+  at a rule in a reference tree; it cannot decide what that rule means for
+  this tree. The rule keeps that with the reader, and says so.
+- **A rule that is only written is a rule that decays.** The tree's own
+  gates already work this way — "the bounds are named in the prose" — and
+  the delegation rule is now held the same way: the prose must say it, and
+  the gate asks.
+
+### What it cost
+
+- **One new test file**: `xtask/tests/delegation.rs` — four tests: the
+  playbook states the rule, the standard states the rule, the gate is happy
+  with the tree, and **the gate notices when the rule is gone** — the rule is
+  taken out of a copy of the tree and the gate is asked about that copy.
+- **One new check** in the outer gate, and two documents.
+
+### What it does not settle
+
+- **The rule cannot be enforced, only stated.** The gate can say that the
+  sentence is in the prose; it cannot say that no one spawns a survey. The
+  rule is priced, not enforced — and the price is visible: the tree's own
+  history says six out of forty-one.
+- **The sample is one session's.** Forty-one is a small number, and a
+  different session would have a different ratio. The rule is written so
+  that it holds for the small cases too.
+- **The rule names the tools that make it unnecessary.** `cargo xtask find`
+  and `cargo xtask brief` are the answer to "ask the tree instead" — and
+  they are the next arcs.
