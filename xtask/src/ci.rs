@@ -79,6 +79,13 @@ pub fn fmt(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 ///
 /// `--all-targets` matters: the tests are where the interesting code is, and a
 /// gate that does not look at them is not looking at most of the repository.
+///
+/// **`--all-features` matters more.** The batteries are optional features: a
+/// program that wants paths says so, and the studio does not say so by
+/// default. So a gate that builds without them compiles a tree in which the
+/// batteries are **not there** — their commands, their tests and their code
+/// all absent — and reports that green. The features are the tree's whole
+/// subject, so the gate turns them **all** on.
 pub fn clippy(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("clippy");
     cargo(
@@ -86,6 +93,7 @@ pub fn clippy(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
             "clippy",
             "--workspace",
             "--all-targets",
+            "--all-features",
             "--profile",
             "ci",
             "--",
@@ -266,7 +274,21 @@ fn workspace_packages(root: &Path) -> Result<Vec<Package>, String> {
 fn test_package(root: &Path, package: &Package) -> Result<(), String> {
     let built = crate::command(
         "cargo",
-        &["test", "--profile", "ci", "--package", &package.name, "--no-run", "--message-format", "json"],
+        &[
+            "test",
+            "--profile",
+            "ci",
+            "--package",
+            &package.name,
+            // The batteries are optional features, and a test that is behind a
+            // feature that is off is a test that does not exist. The gate turns
+            // them all on, so the batteries' own tests run — and the code that
+            // is behind them is compiled at all.
+            "--all-features",
+            "--no-run",
+            "--message-format",
+            "json",
+        ],
         root,
     )?;
     if !built.ok() {
@@ -298,7 +320,7 @@ fn test_package(root: &Path, package: &Package) -> Result<(), String> {
         }
     }
     if package.has_lib {
-        cargo(&["test", "--profile", "ci", "--package", &package.name, "--doc"], root)?;
+        cargo(&["test", "--profile", "ci", "--package", &package.name, "--all-features", "--doc"], root)?;
     }
     Ok(())
 }
