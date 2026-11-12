@@ -60,6 +60,21 @@ pub trait Contribution: Clone + Send + Sync + 'static {
         "core"
     }
 
+    /// The **area** it belongs to, when it has one.
+    ///
+    /// An area is the group a contribution is *listed* under: the `grid` in
+    /// `grid.pivot.set`. A command has one; a node kind, a tool and a panel
+    /// usually do not, and the default is the empty string, so a kind
+    /// without an area is in no area.
+    ///
+    /// **The area is a fact of the contribution, not of its name.** The id
+    /// and the area agree by rule, but the rule has an exception
+    /// (`no_prefix`), and a count that read the id would be counting
+    /// something else.
+    fn area(&self) -> &'static str {
+        ""
+    }
+
     /// Why an id of this kind is not well formed, if it is not.
     ///
     /// Most kinds are named `<area>.<thing>`, and a layer is named by one
@@ -195,6 +210,15 @@ impl<T: Contribution> Registry<T> {
     /// The contributions of one capability.
     pub fn of_capability(&self, capability: &str) -> Vec<&T> {
         self.items.iter().filter(|item| item.capability() == capability).collect()
+    }
+
+    /// The contributions of one area.
+    ///
+    /// **The area, not the id.** The two agree by rule and the rule has an
+    /// exception, and a count that read the id would be counting the
+    /// exception's spelling rather than the group.
+    pub fn of_area(&self, area: &str) -> Vec<&T> {
+        self.items.iter().filter(|item| item.area() == area).collect()
     }
 }
 

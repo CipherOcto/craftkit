@@ -30,6 +30,7 @@
 //! | [`bundle`] | the browser bundle is built, and written |
 //! | [`doctor`] | the machine is set up to build this at all |
 //! | [`ci`] | all of the above, in order, then the tests |
+//! | [`counts`] | the commands each battery carries, and the README's counted block |
 //! | [`verify`] | the same checks, over the packages a change can break |
 //!
 //! A gate that cannot run on this machine is reported as skipped with a reason,
@@ -48,6 +49,7 @@
 pub mod assets;
 pub mod ci;
 pub mod cleanroom;
+pub mod counts;
 pub mod deny;
 pub mod doctor;
 pub mod layers;
@@ -134,6 +136,11 @@ pub const COMMANDS: &[Subcommand] = &[
         run: run_ci,
     },
     Subcommand {
+        name: "counts",
+        what: "the commands each battery carries, and the README's counted block",
+        run: counts::run,
+    },
+    Subcommand {
         name: "verify",
         what: "fmt, clippy and test the packages a change can break (--package, --changed, --all)",
         run: verify::run,
@@ -163,6 +170,11 @@ pub const NOT_GATES: &[(&str, &str)] = &[
     ("doctor", "it reports on the machine, not on the code"),
     ("deny", "it needs the network and a licence database; CI runs it by name"),
     ("ci", "it is the runner"),
+    (
+        "counts",
+        "it writes the README's counted block; the tree's own test checks that block against the \
+         registry, and the registry is the truth",
+    ),
     (
         "verify",
         "it runs the gate's own checks over the packages a change can break; `ci` runs the same \

@@ -139,6 +139,10 @@ impl Contribution for CommandSpec {
     fn layer(&self) -> &'static str {
         self.layer
     }
+
+    fn area(&self) -> &'static str {
+        self.area
+    }
 }
 
 impl CommandSpec {

@@ -1,15 +1,54 @@
 //! The **counts** this README says are the counts of the tree.
 //!
-//! The README says how many commands each battery carries, and a
-//! number that is wrong is a claim that cannot be believed. This test
-//! checks the last count of every battery against the source of that
-//! battery, and it checks that the source of the tree is text.
+//! The README says how many commands each battery carries, and a number that
+//! is wrong is a claim that cannot be believed. This test checks the count of
+//! every battery against **the registry** — the commands the linker put in —
+//! and it checks the source of the tree is text.
+//!
+//! # Why the registry and not the source
+//!
+//! This test used to count the string `#[command(` in the source of each
+//! battery. That is a *spelling*, and a spelling can be wrong in ways a
+//! count cannot see: a command declared across two lines, a command in a
+//! file the scan does not read, a command whose area is not its crate's name.
+//!
+//! The registry is the truth: every command is a `CommandSpec` in a
+//! link-time inventory, and `Registry::from_inventory` reads it back. The
+//! text scan is **kept** here as a **cross-check** — the two must agree —
+//! because the tree's own tooling reads the source, and a tool that reads
+//! the source must be right about it.
+//!
+//! # The batteries that are linked in
+//!
+//! A battery is an optional feature of this application, so a build without
+//! the features has none of them linked in, and the registry has none of
+//! their commands. The test therefore checks the batteries **this build
+//! links**, by feature, and says so when it skips one.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The **batteries** this README counts, and the crate of each.
-const BATTERIES: [&str; 9] = ["grid", "prose", "pdf", "film", "layout", "cad", "fx", "sound", "vector"];
+use craftkit_sdk::ecosystem::Ecosystem;
+
+/// The **batteries** this README counts, and whether this build links each
+/// one in.
+///
+/// **The feature is the answer.** The batteries are optional features of this
+/// application, so the feature that turns a dependency on is exactly the
+/// question "is this battery in this build?" — and a build without the
+/// features has none of them linked in, and the registry has none of their
+/// commands.
+const BATTERIES: [(&str, bool); 9] = [
+    ("grid", cfg!(feature = "grid")),
+    ("prose", cfg!(feature = "prose")),
+    ("pdf", cfg!(feature = "pdf")),
+    ("film", cfg!(feature = "film")),
+    ("layout", cfg!(feature = "layout")),
+    ("cad", cfg!(feature = "cad")),
+    ("fx", cfg!(feature = "fx")),
+    ("sound", cfg!(feature = "sound")),
+    ("vector", cfg!(feature = "vector")),
+];
 
 /// The **root** of the tree: the folder that holds the crates and this
 /// README.
@@ -89,19 +128,109 @@ fn highest_count(readme: &str, battery: &str) -> Option<usize> {
     found
 }
 
-/// The count the README gives for a battery is the count of the
-/// battery: the highest one it says is the count of the tree.
+/// The ecosystem of this program: everything it was linked with.
+///
+/// **The application's own ecosystem**, not a bare inventory. Asking the
+/// application is what makes the batteries *linked in*: the build script
+/// writes the references that keep them, and this is the call that reaches
+/// them.
+fn the_ecosystem() -> Ecosystem {
+    craftkit_studio::ecosystem().expect("the ecosystem is built from what was linked in")
+}
+
+/// The count of a battery, by the registry, and by the source.
+///
+/// **Both, always.** The registry is the truth and the source is what the
+/// tree's own tools read, and a tool that reads the source must be right
+/// about it — so the two are compared, and a disagreement is a failure of
+/// one of them.
 #[test]
 fn the_counts_of_the_readme_are_the_counts_of_the_tree() {
     let root = root();
     let readme = readme(&root);
-    for battery in BATTERIES {
+    let ecosystem = the_ecosystem();
+    for (battery, linked) in BATTERIES {
+        if !linked {
+            // The battery is not in this build. The registry cannot be asked
+            // about it, and the README's number is not this build's number.
+            continue;
+        }
+        let by_registry = ecosystem.commands.of_area(battery).len();
         let claimed = highest_count(&readme, battery)
             .unwrap_or_else(|| panic!("the README counts the {battery} battery"));
-        let truth = commands_of(&root, battery);
         assert_eq!(
-            claimed, truth,
-            "the README says the {battery} battery carries {claimed} commands, and it carries {truth}"
+            claimed, by_registry,
+            "the README says the {battery} battery carries {claimed} commands, and it carries \
+             {by_registry}"
+        );
+        let by_source = commands_of(&root, battery);
+        assert_eq!(
+            by_registry, by_source,
+            "the registry says the {battery} battery carries {by_registry} commands, and its source \
+             carries {by_source}: the tools that read the source must agree with the tree"
+        );
+    }
+}
+
+/// Whether this build links a battery in.
+///
+/// The table says, and the table is the feature.
+fn linked_in(battery: &str) -> bool {
+    BATTERIES.iter().find(|(name, _)| *name == battery).map(|(_, linked)| *linked).unwrap_or(false)
+}
+
+/// The **counted block** of the README, and the counts it holds.
+///
+/// The block is where the tree's nine numbers are written down together:
+/// ```text
+/// <!-- the counts of the tree: begin -->
+/// | battery | commands |
+/// | grid | 188 |
+/// <!-- the counts of the tree: end -->
+/// ```
+/// It is written by `cargo xtask counts --write`, and it is checked here
+/// against the registry — so the block and the tree cannot disagree.
+fn the_counted_block(readme: &str) -> Vec<(String, usize)> {
+    let begin = "<!-- the counts of the tree: begin -->";
+    let end = "<!-- the counts of the tree: end -->";
+    let start = readme.find(begin).expect("the README has the counted block");
+    let stop = readme.find(end).expect("the README has the counted block");
+    assert!(stop > start, "the counted block's markers are the wrong way round");
+    let mut counts = Vec::new();
+    for line in readme[start..stop].lines() {
+        let line = line.trim();
+        let Some(rest) = line.strip_prefix('|') else { continue };
+        let Some(rest) = rest.strip_suffix('|') else { continue };
+        let mut parts = rest.split('|').map(str::trim);
+        let (Some(name), Some(number)) = (parts.next(), parts.next()) else { continue };
+        if parts.next().is_some() {
+            continue;
+        }
+        let Ok(count) = number.parse::<usize>() else { continue };
+        counts.push((name.to_string(), count));
+    }
+    counts
+}
+
+/// The counted block of the README is the registry's count.
+///
+/// **One place where the tree's numbers are written down**, and it is checked
+/// against the truth: the registry of the program.
+#[test]
+fn the_counted_block_is_the_registry() {
+    let readme = readme(&root());
+    let ecosystem = the_ecosystem();
+    let block = the_counted_block(&readme);
+    assert!(!block.is_empty(), "the counted block holds no counts");
+    for (battery, claimed) in &block {
+        if !linked_in(battery) {
+            continue;
+        }
+        let count = ecosystem.commands.of_area(battery).len();
+        assert_eq!(
+            count, *claimed,
+            "the README's counted block says the {battery} battery carries {claimed} commands, and \
+             it carries {count}"
         );
     }
 }
