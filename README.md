@@ -4238,6 +4238,7 @@ so.
 | the **example** of a battery | **built.** One command per battery is marked  in its own declaration, and  prints it — with the battery's other commands and a test of it (§852) | §852 |
 | the **port manifest** | **built.** One row per ported rule — the rule, where it came from, the crate, the module, the command, the test and the section — and the gate checks every row against the tree (§853) | §853 |
 | the **brief** of an arc | **built.** One call gives the arc the rule, the landing site, the conventions, the claims, the counts and the commands — every one of them read out of the tree (§854) | §854 |
+| the **shape** of a test | **built.** A macro writes the four lines a test of a command always writes, the refusal is not swallowed, and the session is left behind so the test can look at the document (§856) | §856 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -56155,3 +56156,77 @@ can be made true by machine.
   history — has no row and is not asked for one.
 - **The table is checked, not generated.** Generating it would mean
   generating the prose, and the prose is the part a person writes.
+
+## 856. The shape of a test, written by a macro
+
+Thirty-seven per cent of an arc's lines are tests, and much of that is the
+same four lines over and over: build a document, execute a command, assert
+the outcome, name the failure. The shape is not the interesting part of a
+test — the rule is.
+
+### What was built
+
+- **`craftkit_sdk::assert_command!`**, a macro that writes the shape of a
+  test of a command:
+  ```rust
+  let session = assert_command!(
+      id = "grid.workbook.add",
+      params = { "name": "Book" },
+      |session| { /* set the document up */ },
+      |outcome| { assert!(outcome.changed); },
+  );
+  ```
+  - it builds the session, runs the setup, executes the command through
+    `Session::execute` — the one way a command runs — and hands the outcome
+    to the assertion;
+  - the two closures' parameters are **typed by the helpers**, so a test
+    writes `|session| { … }` and nothing more;
+  - the macro **leaves the session behind**, so a test can look at the
+    document the command left.
+- **`craftkit_sdk::testing::session()`**, a session over every contribution
+  the binary was linked with, and the two helpers the macro calls.
+- **The refusal is not swallowed.** A command that is refused fails the
+  test with the refusal's own words, because the refusal is what the reader
+  of the test needs to see.
+
+### What the port found
+
+- **The setup closure cannot touch the document.** The session hands out the
+  document only to a command — that is the tree's rule, and a test does not
+  get an exception to it. So a test that needs a document sets it up by
+  **running a command**: the setup closure runs another command through the
+  same session, and the command under test sees what that one left. The
+  module says so in its own words, because a reader who assumes otherwise
+  will lose an afternoon to it.
+- **The interesting half of a test is the assertion, and the macro gets it
+  out of the way.** Four lines become two, and the two that remain are the
+  ones that say what the rule is.
+- **A refusal and a failure are different.** The macro does not turn a
+  refusal into a generic "the command failed": the refusal's own text is
+  the message, so a test that asserts the wrong thing says *why*.
+
+### What it cost
+
+- **One new module** in the SDK (`crates/craftkit-sdk/src/testing.rs`), one
+  line in the SDK's `lib.rs`.
+- **One new test file**: `crates/craftkit-sdk/tests/testing.rs` — seven
+  tests: the outcome is the command's own; the parameters reach the
+  command; a refused command fails with the refusal's words; a mutating
+  command changes the document; a non-mutating command does not; an unknown
+  parameter is refused rather than ignored; the setup runs before the
+  command.
+
+### What it does not settle
+
+- **The macro is not a test framework, and it does not want to be.** It
+  writes one shape of test: a command, a setup, an assertion. A test that
+  needs something else — a sequence of commands, a fixture file, a
+  particular document — writes it the long way, and that is fine.
+- **The tests that exist today have not been converted.** The macro is
+  available; the tree's 959 workspace test runs still write their own
+  shape. Converting them is a separate, mechanical arc, and a mechanical arc
+  is exactly the kind of arc that should be delegated (§847).
+- **The macro cannot see a command that is not linked.** The session is
+  built from the inventory, so a test of a battery's command needs that
+  battery linked into the test binary. That is the tree's arrangement, not
+  the macro's, and the macro does not work around it.
