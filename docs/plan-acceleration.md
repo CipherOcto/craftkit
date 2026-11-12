@@ -244,7 +244,7 @@ source*, it cannot go stale. It is read by a human too.
 *Acceptance*: every battery has exactly one marked example; `xtask example`
 prints it; a test fails when a battery has none.
 
-### §853 — the arc brief: everything one arc needs, in one call
+### §854 — the arc brief: everything one arc needs, in one call
 
 The brief is the whole of Wave 3 in one artefact. Before writing a command,
 the arc asks for its brief:
@@ -271,7 +271,7 @@ That is the eleven greps, replaced by one call whose output is a page.
 *Acceptance*: the brief contains every item above; a test asserts that each
 section is present and non-empty, so the brief cannot quietly lose a part.
 
-### §854 — the port manifest: the tree remembers where each rule came from
+### §853 — the port manifest: the tree remembers where each rule came from
 
 Today a port leaves no trace. The manifest is that trace, and it is data:
 
@@ -444,10 +444,10 @@ number is a shortcut that did not happen.
 | 1 | §845 `xtask verify` | the machine stops paying workspace prices | 1 day |
 | 2 | §851 `xtask find` | one call answers the tree's questions | half a day |
 | 3 | §852 the battery's example | the biggest search cost, gone | half a day |
-| 4 | §853 the arc brief | the whole arc's context, in one page | 1 day |
+| 4 | §854 the arc brief | the whole arc's context, in one page | 1 day |
 | 5 | §848 the counts from the registry | the README cannot drift | 1 day |
 | 6 | §846 the gate, scoped | the local gate is cheap | half a day |
-| 7 | §854 the port manifest | the ports become auditable | 1 day |
+| 7 | §853 the port manifest | the ports become auditable | 1 day |
 | 8 | §849 the claim index | a port cannot land unclaimed | half a day |
 | 9 | §850 the bounds, compiled | the gate stops re-parsing code | 1 day |
 | 10 | §855 the house digest | the rules stop being re-learned | half a day |
@@ -462,7 +462,7 @@ an example that already exists. They take the two largest costs out of the
 budget — the machine time and the searching — before anything is designed
 that has to be understood.
 
-The wave 3 arcs (§852, §853) are the ones that change the shape of an
+The wave 3 arcs (§852, §854) are the ones that change the shape of an
 arc: instead of *reading the tree to find out how it works*, the arc is
 *told*. That is the whole of the plan in one sentence, and it is why the plan
 is a context-engineering plan before it is a meta-programming one — the

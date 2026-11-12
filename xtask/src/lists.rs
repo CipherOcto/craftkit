@@ -698,6 +698,10 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     // The rule about delegation is in the prose, and the prose is in the tree.
     problems.extend(the_delegation_rule_is_stated(root)?);
 
+    // Every port of the manifest is still in the tree.
+    let index = crate::index::build(root).map_err(|e| format!("the tree could not be indexed: {e}"))?;
+    problems.extend(crate::ports::problems(root, &index));
+
     if problems.is_empty() {
         println!("   ok");
         return Ok(crate::Outcome::Ran);
