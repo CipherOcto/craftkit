@@ -4251,6 +4251,7 @@ so.
 | the **layout battery**, as a table | **built.** The battery of a page is a table; the rename follows the crate's export and not the word, because two modules hold a command with the same name (§864) | §864 |
 | the **prose battery**, as a table | **built.** The battery of a document is a table; the snapshot caught a rename that ate a word in a doc comment, and the rule is now that a rename touches code and nothing else (§865) | §865 |
 | the **film battery**, as a table | **built.** The battery of a cut is a table; what is between a declaration and its body stays, and the constants of a file are the file's own (§866) | §866 |
+| the **pdf battery**, as a table | **built.** The object model of a file is a table in 75 files, and the registry is pinned to what it was (§867) | §867 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -57196,4 +57197,54 @@ between a command's declaration and its body.
   comment, a word in a string. Every one of them was found by a check
   that compares the tree with what it was.
 - **Nothing here made a rule easier to read.** The body is still the
+  programmer's own text.
+
+## 867. The pdf battery is a table
+
+§866 converted film. pdf is the battery of a PDF document — the object
+model of a file format — and it is the biggest battery so far.
+
+### What was built
+
+- **The pdf battery is a table.** Its 119 commands, in its 75 files, are
+  now **one table per file** — `commands! { … }` — with a row per command.
+- **The registry is pinned.** `apps/craftkit-studio/tests/pdf_registry.rs`
+  holds all 119 commands as they were — every id, label, area, capability,
+  layer, icon, documentation, chord, menu path, parameter and flag — and
+  the test says whether the registry still says it.
+
+### What the port found
+
+- **The pdf battery is the object model of a file, and the file is
+  bigger than its commands.** 75 files for 119 commands: a PDF has a
+  dictionary, a stream, a page tree, an xref table and a trailer, and
+  each of them is a file of its own. The conversion did not care — a
+  table is a table — and the **shape of the crate** did not change.
+- **A battery's size is not its difficulty.** pdf is the second biggest
+  battery and the conversion was the same work as fx's: the same shape
+  of declaration, the same table, the same check. What made the earlier
+  ones hard was a **word** or a **constant**, not a count.
+- **The table is still not shorter.** pdf's diff is 13 668 lines in and
+  12 829 out — the largest diff so far, and the largest battery.
+
+### What it cost
+
+- **The battery**: 75 files, 119 commands, the plugin's anchor — and the
+  crate's exports.
+- **One new test file**: `apps/craftkit-studio/tests/pdf_registry.rs` —
+  one test, and 119 rows of snapshot: the registry the tree had before the
+  conversion.
+
+### What it does not settle
+
+- **The other two batteries are still declarations.** sound and grid are
+  each the same work and each needs its own snapshot — and they are the
+  two biggest: 144 and 188 commands.
+- **The conversion is a program that writes programs.** Every rule it
+  follows — what to keep, what to rename, what a word in a string means
+  — is a rule about **Rust**, and the tree does not have one place where
+  those rules are written down. The conversion was a script in a
+  temporary folder, and the tree is the result, not the script.
+- **Nothing here made a rule easier to read.** What the conversion bought
+  is one place where a command is declared; the body is still the
   programmer's own text.
