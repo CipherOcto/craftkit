@@ -4230,6 +4230,7 @@ so.
 | the **machines** the gate runs on | **built.** The fixtures are named for the platform that builds them, and the formatter runs one package at a time, so the gate is green on macOS and Windows as well as on Linux (§842) | §842 |
 | the **failures** the matrix found | **built.** The tests' temporary directories are unique per call, the paths are compared as paths, and a test that waits waits until a deadline (§843) | §843 |
 | the **check** that is the size of the change | **built.** The gate's own checks, over the packages a change can break: the ones that changed and the ones that depend on them — and the ones that were left out are named (§845) | §845 |
+| the **gate** that says what it did not check | **built.** The gate checks the packages a change can break, names the packages it left out, and the build machine still checks the whole tree (§846) | §846 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -55680,3 +55681,58 @@ tree. This arc makes the check the size of the change.
   workspace test was the cost is a fact about this tree's history; that
   959 runs is a fact about the way this tree was worked on, and a tree worked
   on differently would have a different count.
+## 846. The gate, and what it says it did not check
+
+The gate now checks the packages a change can break, and names the packages
+it left out.
+
+### What was built
+
+- **The gate's scope**, decided by two facts and stated in the report:
+  - `--all` asks for the whole tree, wherever the run happens;
+  - `CI` in the environment means a build machine, and a build machine checks
+    the whole tree;
+  - otherwise the scope is the packages the working tree changed and the
+    packages that depend on them.
+- **The report names what was left out**, by name, at the end of the run.
+- **The CI workflow asks for the whole tree** (`cargo xtask ci --all`), so the
+  two halves of the rule cannot drift apart.
+
+### What the port found
+
+- **A scoped check that does not say what it skipped reads as a whole
+  check.** So the gate says it, and the rule that a check which could not run
+  is never reported as one that passed now covers a check that was *not
+  asked for*.
+- **The rule was in two places and one of them was a file.** The scope was
+  decided by the Rust code; whether the build machine obeyed it was decided
+  by the workflow. A rule in the code and a rule in a file are two rules, and
+  they agree only by accident — so the workflow now says `--all`, and a test
+  reads the workflow and says so.
+- **The environment is shared by every test in a process.** The scope rule
+  reads `CI`, and a test that set `CI` would have decided the scope of every
+  test running beside it. So the rule is a function of two facts, and the
+  facts are passed to it.
+
+### What it cost
+
+- **One new test file**: `xtask/tests/scope.rs` — six tests: a desk checks
+  the blast radius, a build machine checks the whole tree, the flag asks for
+  the whole tree, a whole-tree run says nothing about what it left out, a
+  scoped run names the packages it left out, and the workflow asks for the
+  whole tree.
+- **The house standard was corrected in place**: `AGENTS.md` now says what
+  the gate checks and what it leaves out, and names the new command.
+
+### What it does not settle
+
+- **The local gate is no longer the whole tree.** That is the point of the
+  arc, and it is also the risk: a breakage in a package that the change
+  cannot reach is not caught on the desk. The build machine catches it, and
+  the desk's report says what it did not check.
+- **The scope is computed from the manifest graph, so a feature that turns a
+  dependency on without changing the manifest is not in the blast radius.**
+  The graph is the manifest; a rule that used something else would be a rule
+  about something else.
+- **The whole-tree run is still the whole-tree run.** `ci --all` takes what
+  it took before — the tree's cost has not gone down, only the desk's has.
