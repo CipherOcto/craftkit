@@ -10,6 +10,21 @@ use std::path::PathBuf;
 
 use craftkit_ffi::{Library, Plugins};
 
+/// The name of the shared library cargo writes for a fixture.
+///
+/// Cargo names a shared library differently on each platform, and the tree's
+/// tests open a **real** one, so the name has to be right on all three.
+fn fixture_name(crate_name: &str) -> String {
+    let stem = crate_name.replace('-', "_");
+    if cfg!(target_os = "windows") {
+        format!("{stem}.dll")
+    } else if cfg!(target_os = "macos") {
+        format!("lib{stem}.dylib")
+    } else {
+        format!("lib{stem}.so")
+    }
+}
+
 /// The shared library the tests open.
 ///
 /// It is a **dev dependency** of the loader, so cargo builds it before
@@ -23,7 +38,7 @@ fn library_path() -> PathBuf {
     let binary = std::env::current_exe().expect("the test binary knows where it is");
     let directory =
         binary.parent().and_then(|parent| parent.parent()).expect("the target directory is there");
-    directory.join("libcraftkit_plugin_shared.so")
+    directory.join(fixture_name("craftkit-plugin-shared"))
 }
 
 /// Open the shared library.

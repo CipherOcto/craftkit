@@ -9,6 +9,38 @@ use std::path::PathBuf;
 
 use craftkit_au::AuPlugin;
 
+/// The name of the shared library cargo writes for a fixture.
+///
+/// Cargo names a shared library differently on each platform, and the tree's
+/// tests open a **real** one, so the name has to be right on all three.
+fn fixture_name(crate_name: &str) -> String {
+    let stem = crate_name.replace('-', "_");
+    if cfg!(target_os = "windows") {
+        format!("{stem}.dll")
+    } else if cfg!(target_os = "macos") {
+        format!("lib{stem}.dylib")
+    } else {
+        format!("lib{stem}.so")
+    }
+}
+
+/// The name is the one cargo writes **here**.
+///
+/// The three platforms disagree about the name of a shared library, and
+/// this test cannot run on the other two, so it checks the shape it can
+/// see: the one this host is running on.
+#[test]
+fn the_fixture_name_is_the_one_cargo_writes_here() {
+    let name = fixture_name("craftkit-au-fixture");
+    if cfg!(target_os = "windows") {
+        assert_eq!(name, "craftkit_au_fixture.dll", "windows has no lib prefix");
+    } else if cfg!(target_os = "macos") {
+        assert_eq!(name, "libcraftkit_au_fixture.dylib", "macos writes a dylib");
+    } else {
+        assert_eq!(name, "libcraftkit_au_fixture.so", "the other unix writes a so");
+    }
+}
+
 /// The shared library the tests open.
 ///
 /// It is a **dev dependency** of the host, so cargo builds it before
@@ -22,7 +54,7 @@ fn library_path() -> PathBuf {
     let binary = std::env::current_exe().expect("the test binary knows where it is");
     let directory =
         binary.parent().and_then(|parent| parent.parent()).expect("the target directory is there");
-    directory.join("libcraftkit_au_fixture.so")
+    directory.join(fixture_name("craftkit-au-fixture"))
 }
 
 /// Open the unit.
@@ -122,7 +154,7 @@ fn a_unit_that_is_not_set_up_does_not_render() {
 /// A bundle that is not a unit is **refused**.
 #[test]
 fn a_bundle_that_is_not_a_unit_is_refused() {
-    let path = std::env::temp_dir().join("craftkit-v2-au-not-a-unit.so");
+    let path = std::env::temp_dir().join(fixture_name("craftkit-v2-au-not-a-unit"));
     std::fs::write(&path, b"this is not a shared library").expect("the file is written");
     let path = path.to_string_lossy().to_string();
     assert!(AuPlugin::open(&path).is_err(), "the bundle did not open");

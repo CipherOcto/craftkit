@@ -7,6 +7,21 @@
 
 use craftkit_sdk::serde_json::json;
 
+/// The name of the shared library cargo writes for a fixture.
+///
+/// Cargo names a shared library differently on each platform, and the tree's
+/// tests open a **real** one, so the name has to be right on all three.
+fn fixture_name(crate_name: &str) -> String {
+    let stem = crate_name.replace('-', "_");
+    if cfg!(target_os = "windows") {
+        format!("{stem}.dll")
+    } else if cfg!(target_os = "macos") {
+        format!("lib{stem}.dylib")
+    } else {
+        format!("lib{stem}.so")
+    }
+}
+
 /// The shared library the tests open.
 ///
 /// It is a **dev dependency** of the studio, so cargo builds it before
@@ -16,7 +31,7 @@ fn library_path() -> String {
     let binary = std::env::current_exe().expect("the test binary knows where it is");
     let directory =
         binary.parent().and_then(|parent| parent.parent()).expect("the target directory is there");
-    directory.join("libcraftkit_clap_fixture.so").to_string_lossy().to_string()
+    directory.join(fixture_name("craftkit-clap-fixture")).to_string_lossy().to_string()
 }
 
 /// The id of the reference plugin.
@@ -145,7 +160,7 @@ fn a_library_that_is_not_there_is_refused() {
 #[test]
 fn a_file_that_is_not_a_plugin_is_refused() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
-    let path = std::env::temp_dir().join("craftkit-v2-clap-not-a-plugin.so");
+    let path = std::env::temp_dir().join(fixture_name("craftkit-v2-clap-not-a-plugin"));
     std::fs::write(&path, b"this is not a shared library").expect("the file is written");
     let error = session
         .execute("clap.attach", &json!({ "path": path.to_string_lossy() }))
