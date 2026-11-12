@@ -702,6 +702,15 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     let index = crate::index::build(root).map_err(|e| format!("the tree could not be indexed: {e}"))?;
     problems.extend(crate::ports::problems(root, &index));
 
+    // The claim table is an index: what it cites exists, and what the tree
+    // made is claimed.
+    let readme = read_text(root.join("README.md")).map_err(|e| format!("could not read the README: {e}"))?;
+    let port_sections: Vec<usize> = crate::ports::PORTS
+        .iter()
+        .filter_map(|port| port.section.trim_start_matches('§').parse::<usize>().ok())
+        .collect();
+    problems.extend(crate::claims::problems(&readme, &port_sections));
+
     if problems.is_empty() {
         println!("   ok");
         return Ok(crate::Outcome::Ran);

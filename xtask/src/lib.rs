@@ -53,6 +53,7 @@
 pub mod assets;
 pub mod brief;
 pub mod ci;
+pub mod claims;
 pub mod cleanroom;
 pub mod counts;
 pub mod deny;
