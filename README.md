@@ -4233,6 +4233,7 @@ so.
 | the **gate** that says what it did not check | **built.** The gate checks the packages a change can break, names the packages it left out, and the build machine still checks the whole tree (§846) | §846 |
 | the **delegation**, priced | **built.** The rule is in the prose — a sub-agent gets a bounded, mechanical brief, or it does not get spawned — and the gate checks that the prose still says it (§847) | §847 |
 | the **counts**, from the registry | **built.** The counts of the batteries are read out of the registry — the commands the linker put in — and the source is checked against it, so neither can drift alone (§848) | §848 |
+| the tree's **answers**, in one call | **built.**  answers where a command lives, what an area holds and what a bound is — with the file and the line — from an index of the tree's own commands (§851) | §851 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -55871,3 +55872,64 @@ are checked now by asking the tree what it has.
 - **The counts are of the commands.** A command that is in the registry and
   is not in the source would show here, and that is the point: the two are
   compared, so neither can drift alone.
+## 851. The tree's answers, in one call
+
+Before an arc writes a line, it asks the tree three questions: where does
+this command live, what else is in this area, what does the tree already say
+about this. Each of them was a search. Now each of them is a call.
+
+### What was built
+
+- **`cargo xtask find`**, and the questions it answers:
+  - `find id <id>` — where a command lives, with its file and its line;
+  - `find area <area>` — every command of an area;
+  - `find battery <battery>` — a battery's commands, its modules and its
+    tests;
+  - `find command <words>` — the commands whose id holds the words;
+  - `find bound <name>` — what a bound is, and where it is written;
+  - `find text <words>` — the commands whose documentation says the words.
+- **The index** the answers come from: every command of every battery, with
+  its id, its documentation, its file, its line, and the bounds the batteries
+  declare.
+
+### What the port found
+
+- **The attribute may hold a path, and the `)` of the path is not the end of
+  the attribute.** A reader that stopped at the first `)` read half an
+  attribute and called it the whole — so the reader counts the parentheses
+  and skips the strings.
+- **The documentation of a command is above its derive, not above its
+  attribute.** The first reader looked above `#[command(` and found the
+  `#[derive(Command)]` line, and no documentation at all.
+- **The tree has 961 commands in eighteen batteries**, and the index finds
+  every one of them, with the nine batteries' counts the README says.
+- **A number that is not a bound is not a bound.** The first reader took
+  every `pub const` as a bound, and the tree's bounds are the numbers a
+  document may not exceed — so the reader says no to a constant that holds a
+  list.
+
+### What it cost
+
+- **One new test file**: `xtask/tests/find.rs` — ten tests: the questions
+  are read out of the arguments, a question without words is refused, an
+  attribute with a path in it is read whole, the documentation is the one
+  above the derive, the index holds every command of every battery, the
+  answers name the file and the line, an area holds its commands and nothing
+  else, a battery answers with its commands, modules and tests, a bound says
+  what it is and where it is, and the index covers the nine batteries the
+  README counts.
+- **Two new modules** (`index`, `find`) and one new command.
+
+### What it does not settle
+
+- **The index reads the source, not the registry.** The xtask links nothing
+  of the tree's own, on purpose: a checker that cannot be built when the
+  tree does not compile is a checker that is silent exactly when it is
+  needed. The tree's own test compares the index's count with the registry's
+  (§848), so the two readings cannot drift apart.
+- **A command's label is usually absent.** The label is derived from the id
+  when the attribute does not give one, so the index reads the label only
+  when it is written.
+- **The index is a reading of the tree as it is today.** A command declared
+  in a macro, or written by a script, is not in it — and the count it
+  reports is what the tree says about itself, not what the compiler knows.
