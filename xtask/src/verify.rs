@@ -36,6 +36,7 @@
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use crate::packages::{Package, blast_radius, owners_of, workspace_packages};
 use crate::{cargo, command, step};
@@ -50,6 +51,60 @@ pub enum Scope {
     /// The packages the working tree changed, and everything that depends on
     /// them.
     Changed,
+}
+
+/// The scope of **this run**, and the packages it names.
+///
+/// The gate and the verify command answer the same question — *what is being
+/// checked* — and they must answer it the same way. So the scope is a value
+/// the process carries, set once by whoever starts the run, and read by
+/// whichever phase needs it.
+///
+/// The default is the **whole tree**: a command that was not told otherwise
+/// checks everything, because a narrower default would make a check that
+/// nobody asked for quietly check less.
+static SCOPE: OnceLock<Scope> = OnceLock::new();
+
+/// The packages of this run's scope, resolved once.
+static RESOLUTION: OnceLock<Resolution> = OnceLock::new();
+
+/// The scope of this run.
+pub fn scope() -> Scope {
+    SCOPE.get().cloned().unwrap_or(Scope::All)
+}
+
+/// Set the scope of this run.
+///
+/// The first setting wins: a scope that changed halfway through a run would
+/// mean that two phases checked different sets of packages, which is exactly
+/// the kind of thing a report cannot describe.
+pub fn set_scope(scope: Scope) {
+    let _ = SCOPE.set(scope);
+}
+
+/// The packages this run checks, and the ones it does not.
+///
+/// Resolved once and kept: the answer costs a `cargo metadata` call, and
+/// three phases asking for it must get the same answer.
+pub fn resolution(root: &Path) -> Result<&'static Resolution, String> {
+    if let Some(resolved) = RESOLUTION.get() {
+        return Ok(resolved);
+    }
+    let packages = workspace_packages(root)?;
+    let scope = scope();
+    let changed = match scope {
+        Scope::Changed => match changed_files(root) {
+            Ok(files) => files,
+            Err(e) => {
+                crate::skipped("the changed files", &e);
+                Vec::new()
+            }
+        },
+        _ => Vec::new(),
+    };
+    let resolved = resolve(&scope, &packages, &changed)?;
+    let _ = RESOLUTION.set(resolved);
+    RESOLUTION.get().ok_or_else(|| "the scope could not be recorded".to_string())
 }
 
 /// The scope the flags asked for, and the packages it names.
@@ -239,6 +294,11 @@ pub fn run(root: &Path, args: &[String]) -> Result<crate::Outcome, String> {
 
     println!("   ok — {} of {} packages checked", resolution.selected.len(), packages.len());
     Ok(crate::Outcome::Ran)
+}
+
+/// The scope, in words.
+pub fn describe_scope(scope: &Scope) -> String {
+    describe(scope)
 }
 
 /// The scope, in words.

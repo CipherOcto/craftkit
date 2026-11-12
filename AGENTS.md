@@ -46,8 +46,13 @@ There are two gate systems in this tree, and they are not the same thing.
   prose". Run it with `cargo test -p craftkit-gates`.
 - **The outer gate** is `xtask/`, reached as `cargo xtask <command>`. Its
   commands are `doctor`, `ci`, `layers`, `assets`, `cleanroom`, `lists`, `web`,
-  `wasm`, `deny` and `bundle`. `cargo xtask ci` is the whole of it: fmt, assets,
-  cleanroom, lists, layers, web, clippy, tests, wasm.
+  `wasm`, `deny`, `bundle` and `verify`. `cargo xtask ci` is the whole of it:
+  fmt, assets, cleanroom, lists, layers, web, clippy, tests, wasm.
+  **`cargo xtask ci` checks the packages a change can break** — the ones the
+  working tree changed and the ones that depend on them — and it **names the
+  packages it left out**. On a build machine (`CI` in the environment) it
+  checks the whole tree, and `cargo xtask ci --all` asks for that anywhere.
+  `cargo xtask verify --changed` is the same check on its own.
 
 `KNOWN-GAPS.md` says what is true of each today. Read it before you trust
 either one to be green.
@@ -247,7 +252,8 @@ a local history, and the remote `git@github.com:CipherOcto/craftkit.git`.
 `git push` goes there — and only there. Before every commit:
 
 ```text
-cargo xtask ci          # fmt, anchors, assets, cleanroom, lists, layers, web, clippy, tests, wasm
+cargo xtask ci          # fmt, assets, cleanroom, lists, layers, web, clippy, tests, wasm
+                        # — over the packages the change can break; it says which it left out
 cargo test -p craftkit-gates
 ```
 

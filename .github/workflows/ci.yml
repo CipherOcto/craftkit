@@ -55,8 +55,12 @@ jobs:
         run: cargo xtask doctor
 
       # Stops at the first failure and says which one.
+      #
+      # `--all`: the whole tree. The gate checks the packages a change can
+      # break when it runs on a desk, and the whole tree on a build machine —
+      # and this is the build machine. §846.
       - name: The gate
-        run: cargo xtask ci
+        run: cargo xtask ci --all
 
       # The browser build, not just the wasm check: produce the bundle and
       # prove the page can load it.

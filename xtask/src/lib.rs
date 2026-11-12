@@ -182,8 +182,8 @@ fn run_doctor(root: &Path, _args: &[String]) -> Result<Outcome, String> {
 }
 
 /// `ci` as a command: the whole gate.
-fn run_ci(root: &Path, _args: &[String]) -> Result<Outcome, String> {
-    ci::run(root)?;
+fn run_ci(root: &Path, args: &[String]) -> Result<Outcome, String> {
+    ci::run(root, args)?;
     Ok(Outcome::Ran)
 }
 

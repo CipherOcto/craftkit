@@ -82,12 +82,24 @@ pub const PHASES: &[Phase] = &[
 /// file that is not formatted is reported against the crate it belongs to.
 pub fn fmt(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("fmt");
-    for package in workspace_packages(root)? {
+    for package in packages_in_scope(root)? {
         println!("   {}", package.name);
         cargo(&["fmt", "--package", &package.name, "--check"], root)?;
     }
     println!("   ok");
     Ok(crate::Outcome::Ran)
+}
+
+/// The packages this run checks.
+///
+/// **The scope, and not the whole tree.** The gate runs over the packages a
+/// change can break, and the packages it leaves out are named in the report.
+/// The scope is the whole tree when nothing narrower was asked for, so a
+/// command that was not told otherwise checks everything.
+fn packages_in_scope(root: &Path) -> Result<Vec<Package>, String> {
+    let resolution = crate::verify::resolution(root)?;
+    let all = workspace_packages(root)?;
+    Ok(all.into_iter().filter(|p| resolution.selected.contains(&p.name)).collect())
 }
 
 /// `cargo clippy` with warnings as errors, over every target.
@@ -103,22 +115,51 @@ pub fn fmt(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 /// subject, so the gate turns them **all** on.
 pub fn clippy(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("clippy");
-    cargo(
-        &[
-            "clippy",
-            "--workspace",
-            "--all-targets",
-            "--all-features",
-            "--profile",
-            "ci",
-            "--",
-            "-D",
-            "clippy::all",
-            "-D",
-            "warnings",
-        ],
-        root,
-    )?;
+    let packages = packages_in_scope(root)?;
+    let whole_tree = packages.len() == workspace_packages(root)?.len();
+    if whole_tree {
+        cargo(
+            &[
+                "clippy",
+                "--workspace",
+                "--all-targets",
+                "--all-features",
+                "--profile",
+                "ci",
+                "--",
+                "-D",
+                "clippy::all",
+                "-D",
+                "warnings",
+            ],
+            root,
+        )?;
+    } else {
+        // **One package at a time**, because a clippy that is given a list of
+        // packages is a clippy that is given the whole tree: `--workspace` is
+        // the only way cargo lints everything, and the scoped run is the one
+        // that must not lint everything.
+        for package in &packages {
+            println!("   {}", package.name);
+            cargo(
+                &[
+                    "clippy",
+                    "--package",
+                    &package.name,
+                    "--all-targets",
+                    "--all-features",
+                    "--profile",
+                    "ci",
+                    "--",
+                    "-D",
+                    "clippy::all",
+                    "-D",
+                    "warnings",
+                ],
+                root,
+            )?;
+        }
+    }
     println!("   ok");
     Ok(crate::Outcome::Ran)
 }
@@ -147,7 +188,7 @@ pub fn clippy(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 /// stdout, and the harness prints each test's name as it goes.
 pub fn tests(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("tests");
-    let packages = workspace_packages(root)?;
+    let packages = packages_in_scope(root)?;
     build_the_shared_libraries(root, &packages)?;
     for package in &packages {
         println!("   {}", package.name);
@@ -306,9 +347,68 @@ pub fn summary(elapsed_secs: f64, ran: &[&str], skipped: &[&str]) -> String {
     line
 }
 
+/// The scope of this run.
+///
+/// **The whole tree when the machine is a build machine, and the blast
+/// radius of the change when it is a desk.** The rule is a fact about where
+/// the run happens, and it is stated rather than guessed:
+///
+/// - `--all` asks for the whole tree, whatever else is true;
+/// - `CI` in the environment means a build machine, and a build machine
+///   checks the whole tree;
+/// - otherwise the scope is the packages the working tree changed and the
+///   packages that depend on them.
+///
+/// The last case is the one that saves the time, and the one that could hide
+/// a breakage — so the report says what was left out, by name.
+pub fn choose_scope(args: &[String]) -> crate::verify::Scope {
+    let all = args.iter().any(|a| a == "--all");
+    let on_a_build_machine = std::env::var("CI").map(|v| !v.is_empty()).unwrap_or(false)
+        || std::env::var("GITHUB_ACTIONS").map(|v| !v.is_empty()).unwrap_or(false);
+    choose_scope_in(all, on_a_build_machine)
+}
+
+/// The scope, from the two facts that decide it.
+///
+/// **A function of its own, so that the rule can be pinned by a test.** The
+/// rule it came from reads the environment, and the environment is shared by
+/// every test in the process: a test that set `CI` would decide the scope of
+/// every other test that ran beside it.
+pub fn choose_scope_in(all: bool, on_a_build_machine: bool) -> crate::verify::Scope {
+    if all || on_a_build_machine {
+        return crate::verify::Scope::All;
+    }
+    crate::verify::Scope::Changed
+}
+
+/// The line that names what was left out, when something was.
+///
+/// **None when nothing was left out**: a whole-tree run has nothing to
+/// report, and a report that says "not checked: nothing" every time is a
+/// line nobody reads.
+pub fn the_skipped_line(resolution: &crate::verify::Resolution) -> Option<String> {
+    if resolution.skipped.is_empty() {
+        return None;
+    }
+    let total = resolution.selected.len() + resolution.skipped.len();
+    Some(format!(
+        "   checked {} of {} packages; not checked: {}",
+        resolution.selected.len(),
+        total,
+        resolution.skipped.join(", ")
+    ))
+}
+
 /// The whole gate.
-pub fn run(root: &Path) -> Result<(), String> {
+pub fn run(root: &Path, args: &[String]) -> Result<(), String> {
     let started = Instant::now();
+
+    // The scope is set before anything runs, so that every phase answers the
+    // same question and the report can name the answer.
+    let scope = choose_scope(args);
+    println!("\n── scope");
+    println!("   {}", crate::verify::describe_scope(&scope));
+    crate::verify::set_scope(scope);
 
     // doctor runs first and only reports: it is not a gate, and a machine that
     // cannot build should say so before three minutes of compiler output.
@@ -325,6 +425,13 @@ pub fn run(root: &Path) -> Result<(), String> {
             Ok(outcome) => record(outcome, phase.name, &mut ran, &mut skipped),
             Err(e) => return Err(format!("`{}` failed\n\n{e}", phase.name)),
         }
+    }
+
+    // What was left out, by name. A scoped gate that does not say what it
+    // skipped reads as a whole gate.
+    let resolution = crate::verify::resolution(root)?;
+    if let Some(line) = the_skipped_line(resolution) {
+        println!("{line}");
     }
 
     println!("{}", summary(started.elapsed().as_secs_f64(), &ran, &skipped));
