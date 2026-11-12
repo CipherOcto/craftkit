@@ -8,17 +8,25 @@ re-purposed into an application or driven directly by an agent. It is not a
 product. Everything here exists so that the next change — whether a person's or
 yours — is cheap and safe.
 
+This tree is **v2**. Its thesis is one sentence:
+
+> A command is a struct whose fields are its parameters; the compiler writes the
+> declaration, the reader and the registration; the registry is a **value**, and
+> any crate linked in can put a command in it.
+
 ---
 
 ## Start every session here
 
 1. `cargo xtask doctor` — can this machine build the project at all?
 2. `cargo xtask ci` — is the tree green?
-3. `docs/architecture.md` — how the layers fit together, and why.
-4. `docs/agent-playbook.md` — how to drive craftkit from a tool, and how to read
+3. `cargo test -p craftkit-gates` — does the tree's **own** gate pass? This is
+   the gate that knows about v2 (see §The two gates below).
+4. `docs/architecture.md` — how the layers fit together, and why.
+5. `docs/agent-playbook.md` — how to drive craftkit from a tool, and how to read
    the results.
-5. `docs/recipes/` — the task you have is almost certainly one of these.
-6. `KNOWN-GAPS.md` — what this project does not do, and what its gates cannot
+6. `docs/recipes/` — the task you have is almost certainly one of these.
+7. `KNOWN-GAPS.md` — what this project does not do, and what its gates cannot
    see. Read it before concluding that something is missing because nobody
    mentioned it.
 
@@ -27,14 +35,33 @@ you are changing something, `skills/craftkit-checking` when something is broken.
 
 ---
 
+## The two gates
+
+There are two gate systems in this tree, and they are not the same thing.
+
+- **The tree's own gate** is `crates/craftkit-gates`. It is a crate with a
+  function `check(root) -> Vec<Finding>`, and it knows this tree: it checks the
+  house deny attribute, the layering, "a plugin is a plugin", the front end is
+  thin, "the bounds are named in the prose" and "the numbers agree with the
+  prose". Run it with `cargo test -p craftkit-gates`.
+- **The outer gate** is `xtask/`, reached as `cargo xtask <command>`. Its
+  commands are `doctor`, `ci`, `layers`, `assets`, `cleanroom`, `lists`, `web`,
+  `wasm`, `deny` and `bundle`. `cargo xtask ci` is the whole of it: fmt, assets,
+  cleanroom, lists, layers, web, clippy, tests, wasm.
+
+`KNOWN-GAPS.md` says what is true of each today. Read it before you trust
+either one to be green.
+
+---
+
 ## Never crash
 
-This outranks every other rule here. craftkit holds a user's plan; a crash
+This outranks every other rule here. craftkit holds a user's design; a crash
 loses it, and the user's trust in everything else.
 
 - **No panics in non-test code.** No `unwrap()`, `expect()`, `panic!`,
   `unreachable!`, `todo!`, `unimplemented!`, no `unsafe` (`forbid(unsafe_code)`).
-  Every production crate root carries:
+  Every crate root carries exactly this deny list, in this order:
 
   ```rust
   #![deny(
@@ -48,36 +75,36 @@ loses it, and the user's trust in everything else.
   #![forbid(unsafe_code)]
   ```
 
-  It is multi-line because `rustfmt.toml` sets `max_width = 110` and the single
-  line is 112 characters. `cargo xtask lists` normalises whitespace, case and the
-  `clippy::` prefix, so either form passes — but the lints must be the same lints
-  in the same order, because a deny list that varies between crates is a deny
-  list nobody can reason about.
+  It is multi-line because `rustfmt.toml` sets `max_width = 110`. The tree's own
+  gate (`crates/craftkit-gates`) compares the lints and ignores the formatting,
+  so either form passes — but the lints must be the same lints in the same
+  order, because a deny list that varies between crates is a deny list nobody
+  can reason about.
 
-- **One crate denies unsafe instead of forbidding it, and it is named.**
-  `apps/craftkit-android` is the Android package: Android's loader opens the
-  shared library and looks up `android_main` **by name**, and a function with a
+- **Ten crates deny unsafe instead of forbidding it, and they are named.** A
+  shared library's entry point is found **by name**, and a function with a
   fixed name needs `#[unsafe(no_mangle)]`. `forbid` cannot be relaxed by an
-  `allow` — it is a promise that can never be broken — so that crate carries
+  `allow` — it is a promise that can never be broken — so those crates carry
   `#![deny(unsafe_code)]` and **one** `#[allow(unsafe_code)]` on that one
-  function. The exception is the *attribute*, not the capability: the crate
-  holds no `unsafe` block, no `unsafe` function, no `unsafe` impl and no
-  `unsafe` trait, and `cargo xtask lists` checks that it still does not.
-  The list is one list, in `xtask/src/lists.rs` (`UNSAFE_DENY_EXCEPTIONS`),
-  and the workspace's own lint is the **backstop** — `deny`, not `forbid` —
-  because every crate root carries the `forbid` above, and that is the rule.
+  place. The list is one list, in `crates/craftkit-alloc/tests/gate.rs`:
 
-- **The tree builds its own packages for a phone, and it asks for what it
-  needs.** `scripts/build-android.sh` builds the default package — no Java, no
-  dex, the tree's own keyboard on a phone (§246) — and
-  `scripts/build-android-ime.sh` builds the **gated** one, the package with
-  the platform's own keyboard (§257). The steps they share live in
-  `scripts/android-package.sh`, and the ABI table is the tree's own gate's
-  (`cargo xtask android --abis`), so there is one list of the phone's ABIs.
-  Both packages ask for `android.permission.INTERNET`, because on a phone
-  opening a socket is an operation the platform **permits**, and the tree's
-  own control channel is a socket (§258). A package that asks for no
-  permission cannot be driven at all, and nothing on the screen says so.
+  | crate | why |
+  |---|---|
+  | `craftkit-alloc` | the counting allocator: a global allocator is unsafe by definition |
+  | `craftkit-ffi` | the plugin loader: opening a library and calling into it |
+  | `craftkit-plugin-shared` | a shared library's entry point, which is found by name |
+  | `craftkit-clap` | the CLAP host: opening a plugin and reading the entry it exports |
+  | `craftkit-clap-fixture` | a reference CLAP plugin: the entry point is a data symbol, found by name |
+  | `craftkit-vst3` | the VST3 host: opening a plugin and calling the factory it exports |
+  | `craftkit-vst3-fixture` | a reference VST3 plugin: the entry point is a function, called by name |
+  | `craftkit-au` | the AU host: opening a unit and calling the symbols it exports |
+  | `craftkit-au-fixture` | a reference AU: the symbols are found by name |
+  | `craftkit-wasm` | the browser door: the exports are found by name |
+
+  The exception is the *attribute*, not the capability: each of those crates
+  holds **exactly one** `allow(unsafe_code)`, and the only `unsafe impl` in the
+  tree is the counting allocator's. An eleventh exception is a line in that
+  file and a reason in it.
 
 - **`clippy.toml` re-enables the unwrap lints in tests only.** A test may panic;
   nothing else may.
@@ -86,61 +113,70 @@ loses it, and the user's trust in everything else.
   unfinished feature returns an error — `"not supported yet: …"` — it never
   panics and never silently does nothing.
 
-- **Input-derived numbers are hostile.** Command parameters, `.craftkit` files
-  and control-channel input all arrive from outside. Read them through
-  `craftkit_core::Params`' typed helpers; never index. The helpers are typed
-  and a typed value cannot be indexed; the one door out is
-  `Params::raw_json`, and it has two homes — `crates/foundation/src/params.rs` and
-  `crates/engine/src/params.rs` — and `cargo xtask lists` refuses the tree
-  when a third file opens it. Check finiteness, bound sizes, and cap loop
-  counts. `crates/foundation/src/params.rs` is the list.
+- **Input-derived numbers are hostile.** Parameters, `.craftkit` files and
+  control-channel input all arrive from outside. Read them through
+  `craftkit_sdk::Params`' typed helpers; never index. Check finiteness, bound
+  sizes, and cap loop counts. `crates/craftkit-sdk/src/params.rs` is the list.
 
 - **Two trust boundaries, in order:**
-  1. `craftkit_kernel::guard` — turns a panic inside code craftkit does not own
-     into `KernelError::Internal`.
-  2. `Session::execute` — clones the document, runs the command under
-     `catch_unwind`, and on a panic **restores the pre-command document** and
-     reports `EngineError::Internal`. A command that panics is a command that
-     did not happen.
+  1. `craftkit_sdk::guard` — turns a panic inside code craftkit does not own
+     into an error.
+  2. `Session::execute` — clones the document, runs the command, and on a
+     panic **restores the pre-command document** and reports the failure. A
+     command that panics is a command that did not happen.
 
-- **Prove it.** Every crash fix lands with a regression test. The engine has a
-  test-only `test.panic` command that exercises the real restore path; use it.
+- **Prove it.** Every crash fix lands with a regression test.
 
 ---
 
 ## Everything is a command
 
-User-visible behaviour = a `CommandSpec` in `crates/engine/src/commands.rs`.
-That one registry is what the toolbar, the dialogs, scripts, the CLI, the
-control channel and the MCP server all reach. There is no second path.
+User-visible behaviour = a `CommandSpec` in the registry. That one registry is
+what the terminal door, the agent door, the browser door, the bridge, the
+studio and the window all reach. There is no second path.
 
 ```text
 id       dotted, lower case, no underscores: <area>.<thing>[.<variant>]
-         e.g. solid.extrude, sketch.rectangle.two_point, doc.range
 label    what the button says
-area     toolbar tab and panel
-icon     from crates/ui/src/icons.rs — drawn in code, never a file
-shortcut optional
+area     the group the command is listed under
+icon     a name; the drawing is the front end's business, and there is no
+         icon file anywhere in the tree
 params   every parameter, documented, with its default
 enabled  a predicate over the session
 run      the JSON form: (session, params) -> Result<Outcome, EngineError>
 ```
 
-Adding behaviour anywhere else — a special case in the UI, a bespoke MCP tool, a
-flag on the CLI — is the mistake this rule exists to prevent. Add a command.
+A command is declared with `#[derive(Command)]` and `#[command(...)]` in
+`crates/craftkit-derive`, and its parameters are the **fields of a struct**:
+the compiler writes the declaration, the reader and the registration. A
+plugin names its own items with `craftkit_sdk::plugin_anchor!(...)`, so that
+the linker keeps them on every target.
 
-The rule is structural, not a promise. `Session`'s public methods are the
-registry (`execute`), the things that read a design, and the two that let the
-host open a file; a public method that changed a design would be a second
-path, and `cargo xtask lists` refuses the tree when one appears. The front
-ends are measured, and they honour it: the desktop app, the web app, the CLI,
-the control channel and the MCP server all reach the registry and nothing else
-that changes a design. §135.
+Adding behaviour anywhere else — a special case in a front end, a bespoke MCP
+tool, a flag on the CLI — is the mistake this rule exists to prevent. Add a
+command.
 
-**Programmatic calls never open dialogs.** `engine.execute` runs the JSON form.
-Only a front end's own entry point may ask a question — in this tree that is
-`craftkit_ui::shell::Shell::start`, which collects the parameters a command
-needs and then runs it. §118.
+**Programmatic calls never open dialogs.** `Session::execute` runs the JSON
+form. Only a front end's own entry point may ask a question.
+
+---
+
+## The rules of the modelling
+
+These are the house rules of the model, and they are the point of the tree:
+
+- **A node may have no place.** No location and no geometry is not an error;
+  it is a node that is not on a canvas.
+- **The document carries the payload; the tree is containment and relations.**
+- **Derived values are derived — never stored.** If it can be computed from
+  what is stored, it is not stored.
+- **Refuse, do not clamp.** An out-of-range parameter is an error, not a
+  silently clamped value.
+- **"Nothing" is an option, not a zero.** An absent value and a value of zero
+  are different things.
+- **Unknown names are refused.** A name that is not known is an error.
+- **Truthfulness beats tidiness.** A false note in a document is corrected in
+  place, not quietly left.
 
 ---
 
@@ -154,37 +190,27 @@ needs and then runs it. §118.
   measured, and not compared against. The rule and the table of products are in
   [`docs/clean-room.md`](docs/clean-room.md); `cargo xtask cleanroom` checks
   the tree against it, and fails with the file, the line and the name.
-- **Assets are absolutely essential.** craftkit contains **no iconography, images,
-  fonts or artwork of any kind.** Every UI icon is drawn in code from original
-  coordinates in `crates/ui/src/icons.rs`. `cargo xtask assets` fails the build
-  if anything embeds a non-source file, and if `ATTRIBUTION.md` is missing,
-  incomplete, or lists a file that is not in the tree.
-- **Rust only, and it is now checked.** Millimetres and radians internally; Z is
-  up. `cargo xtask assets` rejects any file in another language that is not in
-  `FOREIGN_SOURCE_EXCEPTIONS` (`xtask/src/assets.rs`). That list has five
-  entries, each with its reason, and it is not only the two JavaScript files the
-  browser insists on — it also holds `scripts/mutation-test-gates.sh`,
-  `scripts/fold-format-pending.sh` and `.github/workflows/ci.yml`. An earlier
-  version of this file claimed the JavaScript was the *only* exception, which was
-  untrue when it was written, and nothing noticed until a `.py` helper inside
-  `crates/ui` left `cargo xtask ci` green.
-- **Layering is enforced.** L0 `core` → L1 `model` → L2 `kernel` → L3 `eval`,
-  `io` → L4 `engine` → L5 `control`, `mcp` → L6 `ui` → the apps. A crate may
-  depend only on **strictly** lower layers, and nothing below L6 may name a UI
-  toolkit. `cargo xtask layers` checks it against every `Cargo.toml`.
-- **The UI is thin.** Panels read engine state and act through
-  `session.execute`. A panel never writes to the document, never calls the
-  evaluator, never caches a value the evaluator computes. All three are
-  checked: `cargo xtask lists` refuses a shell that names the evaluator, one
-  that puts a document into the session, and one whose state holds a value the
-  evaluator computes. `crates/ui` depends on `egui` and on no other UI
-  toolkit — no windowing, no renderer — which is what lets the same panels run
-  in a window, headlessly, and in a browser.
-- **One set of camera controls.** This tree has no canvas and no camera: the
-  window draws a node graph, a timeline and a properties panel. If a canvas is
-  added, it must have **one** set of camera controls — one module that owns
-  them, with its own caps — and every canvas must go through that module
-  rather than hand-rolling its own input.
+- **Assets are absolutely essential.** craftkit contains **no iconography,
+  images, fonts or artwork of any kind.** Every icon is drawn in code.
+  `cargo xtask assets` fails the build if anything embeds a non-source file, or
+  if `ATTRIBUTION.md` is missing, incomplete, or lists a file that is not in the
+  tree.
+- **Rust only.** The only non-Rust files in the tree are
+  `apps/craftkit-wasm/index.html`, `apps/craftkit-wasm/browser-check.mjs` (the
+  browser insists on JavaScript) and the CI workflow.
+- **Layering is enforced.** L0 → L1 → L2 → L3 → L4 → L5; a crate may depend
+  only on **strictly lower** layers, and the applications are exempt. The table
+  is `crates/craftkit-gates/src/lib.rs` (`pub const LAYERS`), and the gate
+  reads it. **A plugin may not depend on an app or on another plugin.**
+- **The UI is thin.** A front end reads the kit's state and acts through the
+  registry. A front end never writes to the document, never calls the
+  evaluator, never keeps a value the evaluator computes. The gate checks it:
+  `crates/craftkit-gates` refuses a front end that names `document_mut`,
+  `evaluators`, `Plan`, `PlanItem`, `undo` or `redo`.
+- **One set of camera controls.** The camera is `craftkit_sdk::camera::Camera`
+  — one type, with its own caps (`MIN_ZOOM`, `MAX_ZOOM`) — and the rasteriser
+  (`crates/craftkit-raster`) draws through it. A new canvas goes through that
+  camera rather than hand-rolling its own input.
 
 ---
 
@@ -195,59 +221,34 @@ run a long or repeated suite without saying so first.
 
 **Every rule in this section is about processes that run *here*, on this
 machine.** It is the owner's machine and other people's too. **Remote work is
-not covered by it**: CI runs on GitHub's runners, and so does any other
-remote processing — a job there takes nothing from this machine at all, so it
-needs no approval. **And that is where a heavy job belongs**: if something is
-expensive, put it in CI rather than running it here. (The owner's words:
-*"the rule is locally running processes, not for REMOTE and ONLY REMOTE CI and
-other REMOTE ONLY processing."*)
+not covered by it**: CI runs on GitHub's runners, and so does any other remote
+processing — a job there takes nothing from this machine at all, so it needs
+no approval. **And that is where a heavy job belongs**: if something is
+expensive, put it in CI rather than running it here.
 
 - **Check the load before a big build** (`cut -d' ' -f1 /proc/loadavg`) and
   build with `nice -n 15`.
 - **A test or suite that takes all the CPU for more than five minutes needs
   the owner's explicit approval first.** Ask, do not assume.
 - **Do not repeat a long suite to look for a rare failure without asking.**
-  One run of the mutation suite is twenty-five minutes on this machine and
-  about **seventy-five** on the runner CI uses (§228, measured on the run that
-  proved §224 to §227 and the run that measured §231 to §233; it was
-  sixty-seven before those arcs made the gate faster, fifty-one after them,
-  and fifty-four after the arcs that made it slower; **fifty-two** on the run
-  that carried the Android arc and its one new case — §237; and **seventy-five**
-  on the run that carried §251 to §255 and their seven new cases — measured
-  at 1 hour 14 minutes 49 seconds, so the number is re-measured when the
-  tree changes); twenty of them is
-  not a measurement, it is a way of
-  occupying a machine that other people are using. **One run of it is already
-  a CI job** — the `mutation` job of `.github/workflows/mutation.yml`, which
-  runs nightly, on demand and on every pull request (§252) — so it needs no
-  approval here — it needs a dispatch.
-- **The hunt for a rare failure is off, and it is not for here either.** Two
-  tests have failed once each and never again. A job that repeated them on
-  the runner was built and measured (§229) and the owner turned it off, so
-  the tree does not run it and nothing in the tree claims it does. If a
-  failure like that appears, say so in the tree's issue or commit — do not go
-  looking for it here.
-- **Prefer a bounded measurement to a brute-force loop.** A hundred cheap
-  runs of one test binary beat a hundred runs of the whole `ci`, and a
-  measurement of the *number* beats a repetition of the *suite*.
+- **Prefer a bounded measurement to a brute-force loop.** A hundred cheap runs
+  of one test binary beat a hundred runs of the whole `ci`.
 - **A measurement you wrote yourself is a test, and the rule above covers it.**
   A scratch program is not a free exception: before running one, say how long
   it runs and how much memory it holds, and keep both **bounded** — a fixed
-  iteration count, a fixed buffer, no read that can grow without limit. If
-  the bounds are not obvious, ask first. (2026-10-26: a scratch program that
-  collected a million entries in a `HashSet` and then read `/dev/urandom` with
-  `read_to_end` — an endless file — ran unapproved and was killed by the OOM
-  killer. The tree's own code says why, two lines above the same call site:
-  *"Read only what is asked for: `/dev/urandom` is endless."*)
+  iteration count, a fixed buffer, no read that can grow without limit.
+
+---
 
 ## Before you commit
 
-This **is** a git repository: branch `main`, a local history, and the remote
-`git@github.com:CipherOcto/craftkit.git` (the owner's decision, 2026-10-25).
+This **is** a git repository: branch `main` (the v2 work is on `exp/v2-root`),
+a local history, and the remote `git@github.com:CipherOcto/craftkit.git`.
 `git push` goes there — and only there. Before every commit:
 
 ```text
-cargo xtask ci          # fmt, anchors, assets, cleanroom, lists, layers, web, clippy, tests, fuzz, wasm
+cargo xtask ci          # fmt, anchors, assets, cleanroom, lists, layers, web, clippy, tests, wasm
+cargo test -p craftkit-gates
 ```
 
 Commit after every feature arc that builds, one topic per commit (see
@@ -255,82 +256,22 @@ Commit after every feature arc that builds, one topic per commit (see
 
 ---
 
-## Lists many changes add to
-
-These collide constantly. Keep them mechanical, and let the gate arbitrate:
-
-- the **deny attribute** in every crate root — one set of lints, identical
-  everywhere (`cargo xtask lists`);
-- the **layering table** in `xtask/src/layers.rs` *and* the matching table in
-  `docs/architecture.md` — they are compared, so change them together
-  (`cargo xtask lists`);
-- the **workspace `members` list** in `Cargo.toml`, sorted;
-- **`mod` groups**, sorted;
-- a **file-format change**, which is one new file at
-  `crates/io/src/format/pending/<name>.rs`. Never edit `FORMAT`, `JSON_STEPS`,
-  the history in `format.rs`, or a `v<N>/` folder.
-
-## Design file format
-
-`.craftkit` files carry a version tag (`craftkit/1`). To change what is saved,
-add **one** file under `crates/io/src/format/pending/`, with a `//!` note
-saying what it changes and why, and a `pub fn step` if older designs must be
-rewritten. The build works out the number. A release folds the pending changes
-into `v<N>/` with `scripts/fold-format-pending.sh` — that is a release step, not
-a change step.
-
----
-
-## Driving craftkit
-
-Every entry point reaches the same 25 commands.
-
-```bash
-# list them, with every parameter
-cargo run -q -p craftkit-cli --bin craftkit-cli -- commands
-
-# headless: run a script, evaluate a design, render a frame
-cargo run -q -p craftkit-cli --bin craftkit-cli -- run script.json --out plan.step
-cargo run -q -p craftkit-cli --bin craftkit-cli -- eval plan.craftkit
-cargo run -q -p craftkit-cli --bin craftkit-cli -- snapshot script.json --out shot.png
-
-# a window, with a control channel for you to drive it
-cargo run --release -p craftkit -- --sample --control 4711
-```
-
-The control channel is token-authenticated JSON lines over loopback; the token
-is in `~/.local/share/craftkit/control/<PORT>.token` unless `CRAFTKIT_CONTROL_TOKEN`
-says otherwise. Its methods are `engine.execute`, `engine.describe`,
-`session.state`, `diagnostics.list`, `diagnostics.crash_reports`, `ping`,
-`shutdown` and `ui` (`ui.click`, `ui.screenshot`, `ui.render`). `docs/agent-playbook.md` has the wire format, and `crates/control/src/protocol.rs`
-is where the methods are defined.
-
-`craftkit-cli mcp` speaks MCP over stdio, with one tool per command named
-`craftkit_<id>`. That is how an agent should drive this project: not by editing
-files, but by running commands.
-
----
-
 ## Where things are
 
 ```text
-crates/core     L0  ticks, values, ids, hostile parameters
-crates/model    L1  the document: nodes, properties, keyframes
-crates/kernel   L2  the numeric kernel, behind the panic guard
-crates/eval     L3  document -> plan
-crates/io       L3  the versioned .craftkit format
-crates/engine   L4  the command registry and the Session
-crates/control  L5  the loopback JSON-lines channel
-crates/mcp      L5  the MCP server
-crates/ui       L6  the egui shell, icons, automation names
-apps/craftkit       the desktop window
-apps/craftkit-cli   the headless CLI, renderer and MCP host
-apps/craftkit-web   the wasm build (index.html + sw.js + Rust)
-xtask               the gates
+crates/craftkit-sdk       L2  the whole surface a plugin needs
+crates/craftkit-derive    L0  the macro that writes the declaration, the reader, the registration
+crates/craftkit-gates     L0  the tree's own gate
+crates/craftkit-control   L3  the loopback JSON-lines channel
+crates/craftkit-mcp       L3  the MCP server
+crates/craftkit-plugin-*  L4  the batteries
+apps/craftkit-repl        L5  the terminal door
+apps/craftkit-mcp-server  L5  the agent door
+apps/craftkit-wasm        L5  the browser door
+apps/craftkit-window      L5  the window
+apps/craftkit-bridge      L5  the bridge (JSON-RPC over stdio)
+apps/craftkit-studio      L5  the studio: the ecosystem every front end builds
+xtask                     the outer gate
 ```
 
-## Reporting
-
-Report what actually happened: what passed, what failed, what was skipped and
-why, and what you did not check. A claim of success you have not verified is
-worse than an honest gap, because it stops the next person looking.
+The full layering table is in `docs/architecture.md`.

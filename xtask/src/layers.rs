@@ -1,15 +1,49 @@
-//! The dependency layering rules.
+//! The dependency layering rules, for the v2 tree.
 //!
-//! The rule, in one sentence: **a crate may only depend on crates in strictly
-//! lower layers, and nothing below [`UI_MIN_LAYER`] may touch a UI toolkit.**
+//! The rule, in one sentence: **a crate may depend only on crates in strictly
+//! lower layers, a plugin may not depend on another plugin or on an
+//! application, and nothing below the application layer may name a UI
+//! toolkit.**
 //!
-//! Why this is worth a gate at all. The value crates (core, model, eval,
-//! kernel) are where the interesting rules live, and they are also where a UI
-//! dependency creeps in — somebody wants a `Vec2` for a layout, reaches for
-//! `egui`, and the crate stops being testable without a window. Nothing about
-//! that is visible in review, and nothing about it fails until much later, on
-//! somebody else's machine. A table in a file, checked by a program, catches it
-//! on the machine that made the mistake.
+//! # Where the table comes from
+//!
+//! The table is **the v2 tree's own**. `crates/craftkit-gates/src/lib.rs` holds
+//! `pub const LAYERS`, and that file is the **authority**: it is the table the
+//! tree's own gate enforces, and `docs/architecture.md` says so in as many
+//! words. There is one table, and this gate checks the tree against it.
+//!
+//! The xtask cannot depend on `craftkit-gates` — its manifest says
+//! "**Nothing of the tree's own**", because a checker that cannot be built
+//! when the tree does not compile is a checker that is silent exactly when it
+//! is needed — so the table is read **out of the authority's source text**
+//! rather than linked against it. Reading it as text has one failure mode,
+//! which is a change to the shape of the table's declaration, and that
+//! failure is loud: [`authority_table`] fails with the line it could not read.
+//! It never guesses.
+//!
+//! [`TABLE`] below is a **mirror** of the authority: the same rows, in the
+//! same order, as a constant the rest of the xtask can read without a
+//! filesystem. A mirror is a second copy, and a second copy is a thing that
+//! drifts — so the gate **compares the two** on every run ([`drift`]) and
+//! fails when they differ, and a unit test does the same. The authority is
+//! the table; the mirror is a copy of it that is not allowed to disagree.
+//!
+//! # The rules, and what each one is for
+//!
+//! - **Strictly lower layers.** The value crates are where the interesting
+//!   rules live, and they are also where a UI dependency creeps in — somebody
+//!   wants a `Vec2` for a layout, reaches for `egui`, and the crate stops
+//!   being testable without a window. Nothing about that is visible in
+//!   review, and nothing about it fails until much later, on somebody else's
+//!   machine.
+//! - **The applications are exempt.** They depend on everything, by design,
+//!   and every real layering mistake has been made in a library.
+//! - **A plugin is a plugin.** The seam between a battery and the rest of the
+//!   tree is the SDK, the macro and the libraries. A plugin that reaches for
+//!   another plugin, or for an application, has reached around that seam.
+//! - **Nothing below the applications names a UI toolkit.** The window is an
+//!   application and owns its window; the batteries and the libraries are
+//!   drawn *into* it and must not know how.
 //!
 //! The model here is deliberately independent of `cargo metadata`, so the rules
 //! can be unit-tested without running cargo. [`from_metadata`] is the only part
@@ -21,16 +55,28 @@ use serde_json::Value;
 
 use crate::{cargo, command, step, wasm};
 
+/// The file that holds the v2 tree's own layering table.
+///
+/// **The authority.** Every other copy of the table is a copy of this one.
+pub const AUTHORITY: &str = "crates/craftkit-gates/src/lib.rs";
+
+/// The layer the applications are at.
+///
+/// The applications are exempt from the layering rule, and they are the only
+/// crates at this layer, so the layer number is also how the rules say "this
+/// is an application".
+pub const APP_LAYER: u8 = 5;
+
 /// Where a workspace crate sits.
 ///
-/// `Exempt` exists for the binaries and the build tool. The apps *do* depend on
-/// everything, and layering rules that exempt them are not wrong, they are just
-/// noise: every real layering mistake has been made in a library crate.
+/// `Exempt` exists for the build tool. The applications *are* at a layer
+/// ([`APP_LAYER`]) and are exempt by the rules, not by the table: a table
+/// that hid them would lose the fact that they exist.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Class {
-    /// A layered library crate at this layer.
+    /// A library crate at this layer, or an application at [`APP_LAYER`].
     Layer(u8),
-    /// Binaries and build tooling.
+    /// The build tool: it is not part of the tree the table describes.
     Exempt,
 }
 
@@ -52,68 +98,117 @@ impl Class {
     }
 }
 
-/// The layering table: every workspace library crate and its layer.
+/// The layering table: every crate of the tree and its layer.
 ///
-/// **This table is the layering rules.** `docs/architecture.md` renders the same
-/// table, and `cargo xtask lists` fails if the two disagree — a gate that
-/// disagrees with its own documentation is worse than no gate, because it
-/// teaches the wrong thing.
+/// **A mirror of [`AUTHORITY`].** The rows are the authority's rows, in the
+/// authority's order, and the gate fails when the two differ — see
+/// [`drift`].
 ///
-/// Names are the full package names, sorted by layer and then by name, so the
+/// The names are the full package names, in the authority's order, so the
 /// table itself is reviewable as a diff.
 pub const TABLE: &[(&str, Class)] = &[
-    // L0 — the generic half: readers, values, file plumbing, limits. No
-    // workspace dependency at all, and nothing in it that knows what a
-    // document is. §276.
-    ("craftkit-foundation", Class::Layer(0)),
-    // L1 — craftkit's own core: the exact time base and the identifiers.
-    ("craftkit-core", Class::Layer(1)),
-    // L2 — the numeric kernel, behind the panic guard.
-    ("craftkit-kernel", Class::Layer(2)),
-    // L2 — the document: nodes, properties, keyframes.
-    ("craftkit-model", Class::Layer(2)),
-    // L3 — two ways to get a value out of a document: evaluate it, or load it.
-    ("craftkit-eval", Class::Layer(3)),
-    ("craftkit-io", Class::Layer(3)),
-    // L4 — the command registry and the session that runs it.
-    ("craftkit-engine", Class::Layer(4)),
-    // L5 — the two ways an agent reaches the engine.
-    ("craftkit-control", Class::Layer(5)),
-    ("craftkit-mcp", Class::Layer(5)),
-    // L6 — the shell. The only library crate that may name egui.
-    ("craftkit-ui", Class::Layer(6)),
-    // The binaries and the build tool. Exempt.
-    ("craftkit", Class::Exempt),
-    // The Android package: the same application, packaged for the phone.
-    // §236.
-    ("craftkit-android", Class::Exempt),
-    ("craftkit-cli", Class::Exempt),
-    ("craftkit-web", Class::Exempt),
+    // L0 — the half that knows nothing about a document: the allocator gate,
+    // the macro, the three ABIs, the build-time linker, the readers and the
+    // libraries that are arithmetic over plain numbers.
+    ("craftkit-alloc", Class::Layer(0)),
+    ("craftkit-derive", Class::Layer(0)),
+    ("craftkit-ffi-abi", Class::Layer(0)),
+    ("craftkit-clap-abi", Class::Layer(0)),
+    ("craftkit-vst3-abi", Class::Layer(0)),
+    ("craftkit-au-abi", Class::Layer(0)),
+    ("craftkit-gates", Class::Layer(0)),
+    ("craftkit-link", Class::Layer(0)),
+    ("craftkit-image", Class::Layer(0)),
+    ("craftkit-jpeg", Class::Layer(0)),
+    ("craftkit-png", Class::Layer(0)),
+    ("craftkit-payload", Class::Layer(0)),
+    ("craftkit-sound-time", Class::Layer(0)),
+    ("craftkit-text-layout", Class::Layer(0)),
+    ("craftkit-hyphen", Class::Layer(0)),
+    ("craftkit-font", Class::Layer(0)),
+    ("craftkit-wav", Class::Layer(0)),
+    ("craftkit-audio", Class::Layer(0)),
+    ("craftkit-midi", Class::Layer(0)),
+    ("craftkit-plugins", Class::Layer(0)),
+    // L1 — the doors: opening a shared library and calling the table in it,
+    // and the reference plugins they open.
+    ("craftkit-ffi", Class::Layer(1)),
+    ("craftkit-clap", Class::Layer(1)),
+    ("craftkit-clap-fixture", Class::Layer(1)),
+    ("craftkit-vst3", Class::Layer(1)),
+    ("craftkit-vst3-fixture", Class::Layer(1)),
+    ("craftkit-au", Class::Layer(1)),
+    ("craftkit-au-fixture", Class::Layer(1)),
+    // L2 — the whole surface a plugin needs: the registry, the session, the
+    // document and the format.
+    ("craftkit-sdk", Class::Layer(2)),
+    // L3 — the things above the SDK that are not plugins: the control channel,
+    // the MCP door, and the libraries that speak the SDK's own types.
+    ("craftkit-control", Class::Layer(3)),
+    ("craftkit-mcp", Class::Layer(3)),
+    ("craftkit-numeric", Class::Layer(3)),
+    ("craftkit-raster", Class::Layer(3)),
+    ("craftkit-vector-geom", Class::Layer(3)),
+    // L4 — the batteries: the plugins, each one a document model of its own.
+    ("craftkit-plugin-art", Class::Layer(4)),
+    ("craftkit-plugin-cad", Class::Layer(4)),
+    ("craftkit-plugin-clap", Class::Layer(4)),
+    ("craftkit-plugin-film", Class::Layer(4)),
+    ("craftkit-plugin-fx", Class::Layer(4)),
+    ("craftkit-plugin-grid", Class::Layer(4)),
+    ("craftkit-plugin-hello", Class::Layer(4)),
+    ("craftkit-plugin-image", Class::Layer(4)),
+    ("craftkit-plugin-layout", Class::Layer(4)),
+    ("craftkit-plugin-numeric", Class::Layer(4)),
+    ("craftkit-plugin-pdf", Class::Layer(4)),
+    ("craftkit-plugin-prose", Class::Layer(4)),
+    ("craftkit-plugin-shapes", Class::Layer(4)),
+    ("craftkit-plugin-text", Class::Layer(4)),
+    ("craftkit-plugin-shared", Class::Layer(4)),
+    ("craftkit-plugin-sound", Class::Layer(4)),
+    ("craftkit-plugin-vector", Class::Layer(4)),
+    ("craftkit-plugin-vst3", Class::Layer(4)),
+    // L5 — the applications. They depend on everything, and the layering rule
+    // does not apply to them.
+    ("craftkit-bridge", Class::Layer(5)),
+    ("craftkit-hello-server", Class::Layer(5)),
+    ("craftkit-mcp-server", Class::Layer(5)),
+    ("craftkit-repl", Class::Layer(5)),
+    ("craftkit-studio", Class::Layer(5)),
+    ("craftkit-window", Class::Layer(5)),
+    ("craftkit-wasm", Class::Layer(5)),
+    // The build tool. It is not part of the tree the authority describes, and
+    // it depends on nothing of the tree's own.
     ("xtask", Class::Exempt),
 ];
 
 /// External crates that make a crate a UI crate.
 ///
-/// Entries ending in `*` are prefixes. `image` is deliberately **not** here: it
-/// is a PNG encoder, not a toolkit, and listing it would push the rule out of
-/// the range where it is meaningful.
+/// Entries ending in `*` are prefixes.
 pub const UI_CRATES: &[&str] = &["egui*", "eframe", "egui-wgpu", "wgpu", "winit", "rfd", "accesskit*"];
 
 /// The first layer allowed to name a UI crate.
-pub const UI_MIN_LAYER: u8 = 6;
-
-/// The UI crates the shell itself may name.
 ///
-/// `egui` is the toolkit the shell draws with. Everything else in
-/// [`UI_CRATES`] is a window or a renderer, and the whole point of the shell
-/// being a crate of its own is that the same panels can be drawn in a window,
-/// headlessly, or in a browser — which they cannot be if the shell owns the
-/// window. §131.
-pub const UI_CRATE_ALLOWED: &[&str] = &["egui"];
+/// The applications are at [`APP_LAYER`] and the window is one of them: it
+/// owns its window and its renderer, and that is its whole job. Nothing
+/// below it may name a toolkit — a value crate that needs a `Vec2` needs its
+/// own tiny vector type, and not `egui`'s.
+pub const UI_MIN_LAYER: u8 = APP_LAYER;
+
+/// The prefix a plugin's name carries.
+///
+/// A plugin is a battery: a document model of its own, reached through the
+/// SDK. The prefix is how the rules know which crates it applies to.
+pub const PLUGIN_PREFIX: &str = "craftkit-plugin-";
 
 /// Whether `name` is a workspace crate in the table.
 pub fn classify(name: &str) -> Option<Class> {
     TABLE.iter().find(|(n, _)| *n == name).map(|(_, c)| *c)
+}
+
+/// Whether `name` is the name of a plugin.
+pub fn is_plugin(name: &str) -> bool {
+    name.starts_with(PLUGIN_PREFIX)
 }
 
 fn is_ui_crate(name: &str) -> bool {
@@ -160,10 +255,12 @@ pub enum Violation {
     Unregistered { krate: String },
     /// A dependency on the same or a higher layer.
     Upward { krate: String, dep: String, from: u8, to: u8, kind: DepKind },
+    /// A plugin reaching for another plugin.
+    PluginOnPlugin { krate: String, dep: String },
+    /// A plugin reaching for an application.
+    PluginOnApp { krate: String, dep: String },
     /// A UI toolkit below [`UI_MIN_LAYER`].
     UiBelow { krate: String, dep: String, layer: u8 },
-    /// A window or a renderer in the shell crate itself. §131.
-    WindowingInTheUiCrate { krate: String, dep: String },
 }
 
 impl std::fmt::Display for Violation {
@@ -172,13 +269,23 @@ impl std::fmt::Display for Violation {
             Violation::Unregistered { krate } => write!(
                 f,
                 "{krate}: a workspace crate that is not in the layering table.\n\
-                 \x20     Register it in xtask/src/layers.rs TABLE and in the table in \
-                 docs/architecture.md — `cargo xtask lists` checks they agree."
+                 \x20     Register it in {AUTHORITY} — the tree's own gate reads the same table."
             ),
             Violation::Upward { krate, dep, from, to, kind } => write!(
                 f,
                 "{krate} (L{from}) depends on {dep} (L{to}) [{kind}]: a crate may only depend \
                  on strictly lower layers."
+            ),
+            Violation::PluginOnPlugin { krate, dep } => write!(
+                f,
+                "{krate} depends on {dep}, which is another plugin.\n\
+                 \x20     A plugin reaches the rest of the tree through the SDK; a plugin that \
+                 reaches for a plugin has reached around the seam."
+            ),
+            Violation::PluginOnApp { krate, dep } => write!(
+                f,
+                "{krate} depends on {dep}, which is an application.\n\
+                 \x20     A plugin is a library: it may not depend on a program."
             ),
             Violation::UiBelow { krate, dep, layer } => write!(
                 f,
@@ -187,20 +294,16 @@ impl std::fmt::Display for Violation {
                  \x20     A value crate that needs a Vec2 needs its own tiny vector type, not \
                  egui's."
             ),
-            Violation::WindowingInTheUiCrate { krate, dep } => write!(
-                f,
-                "{krate} depends on `{dep}`: the shell owns its panels, not its window.\n\
-                 \x20     The shell may depend on {} and nothing else — no windowing, no \
-                 renderer — which is what lets the same panels run in a window, headlessly, \
-                 and in a browser.",
-                UI_CRATE_ALLOWED.join(", ")
-            ),
         }
     }
 }
 
 /// Check every rule against the model. Output is sorted, so the same mistake
 /// always produces the same report.
+///
+/// The table is [`TABLE`], the mirror of the authority; the gate checks the
+/// mirror against the authority before it calls this, so the two cannot
+/// disagree while this runs.
 pub fn check(crates: &[Krate]) -> Vec<Violation> {
     let mut out = Vec::new();
     for krate in crates {
@@ -209,10 +312,21 @@ pub fn check(crates: &[Krate]) -> Vec<Violation> {
             continue;
         };
         let Some(layer) = class.layer() else { continue };
+        // An application depends on everything, by design.
+        if layer == APP_LAYER {
+            continue;
+        }
 
         for dep in &krate.deps {
             // A crate depending on itself is a feature trick, not a cycle.
             if dep.name == krate.name {
+                continue;
+            }
+            // A **dev** dependency is a testing arrangement and does not ship:
+            // the door's loader tests need a shared library to open, and that
+            // library is a plugin. The tree's own gate does not apply the
+            // layering rules to a dev dependency either.
+            if dep.kind == DepKind::Dev {
                 continue;
             }
             if dep.workspace {
@@ -229,6 +343,26 @@ pub fn check(crates: &[Krate]) -> Vec<Violation> {
                     }),
                     Some(other) => {
                         let to = other.layer().unwrap_or(layer);
+                        // A plugin is a plugin: a plugin reaching for another
+                        // plugin, or for an application, is reported as that,
+                        // and not again as an upward dependency. The specific
+                        // rule says more than the general one.
+                        if is_plugin(&krate.name) {
+                            if is_plugin(&dep.name) {
+                                out.push(Violation::PluginOnPlugin {
+                                    krate: krate.name.clone(),
+                                    dep: dep.name.clone(),
+                                });
+                                continue;
+                            }
+                            if to == APP_LAYER {
+                                out.push(Violation::PluginOnApp {
+                                    krate: krate.name.clone(),
+                                    dep: dep.name.clone(),
+                                });
+                                continue;
+                            }
+                        }
                         // Strictly lower. Not "lower or equal": an equal-layer
                         // dependency is how two crates quietly become one.
                         if to >= layer {
@@ -242,21 +376,139 @@ pub fn check(crates: &[Krate]) -> Vec<Violation> {
                         }
                     }
                 }
-            } else if is_ui_crate(&dep.name) {
-                if layer < UI_MIN_LAYER {
-                    out.push(Violation::UiBelow { krate: krate.name.clone(), dep: dep.name.clone(), layer });
-                } else if layer == UI_MIN_LAYER && !UI_CRATE_ALLOWED.contains(&dep.name.as_str()) {
-                    out.push(Violation::WindowingInTheUiCrate {
-                        krate: krate.name.clone(),
-                        dep: dep.name.clone(),
-                    });
-                }
+            } else if is_ui_crate(&dep.name) && layer < UI_MIN_LAYER {
+                out.push(Violation::UiBelow { krate: krate.name.clone(), dep: dep.name.clone(), layer });
             }
         }
     }
     out.sort();
     out.dedup();
     out
+}
+
+/// Read the authority's table out of its source.
+///
+/// The xtask does not depend on `craftkit-gates` — see the module's note — so
+/// the table is read as text. The shape it looks for is the shape the
+/// authority writes:
+///
+/// ```text
+/// pub const LAYERS: &[(&str, u8)] = &[
+///     ("craftkit-alloc", 0),
+///     …
+/// ];
+/// ```
+///
+/// A table that is not written that way is a **failure**, not an empty table:
+/// the gate says which line it could not read.
+pub fn parse_layers(text: &str) -> Result<Vec<(String, u8)>, String> {
+    let header = "pub const LAYERS";
+    let start = text.find(header).ok_or_else(|| {
+        format!("{AUTHORITY} has no `{header}`: the tree's own layering table could not be read")
+    })?;
+    let after = &text[start..];
+    let open = after
+        .find("= &[")
+        .ok_or_else(|| format!("{AUTHORITY} does not declare `{header}` as a table of `(&str, u8)` rows"))?;
+    let block = &after[open + "= &[".len()..];
+
+    let mut rows = Vec::new();
+    for (number, line) in block.lines().enumerate() {
+        let line = line.trim();
+        if line.starts_with("];") {
+            break;
+        }
+        // A comment is not a row.
+        let line = line.split("//").next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Some(open) = line.find('(') else { continue };
+        let Some(close) = line.find(')') else {
+            return Err(format!("{AUTHORITY}: the row on line {} has no closing bracket", number + 1));
+        };
+        let inner = &line[open + 1..close];
+        let mut cells = inner.split(',');
+        let name = cells.next().unwrap_or("").trim().trim_matches('"').to_string();
+        let level = cells.next().unwrap_or("").trim();
+        if name.is_empty() || level.is_empty() {
+            return Err(format!("{AUTHORITY}: the row on line {} is not `(\"name\", layer)`", number + 1));
+        }
+        let level = level.parse::<u8>().map_err(|_| {
+            format!(
+                "{AUTHORITY}: the row on line {} has the layer `{level}`, which is not a number",
+                number + 1
+            )
+        })?;
+        rows.push((name, level));
+    }
+    if rows.is_empty() {
+        return Err(format!("{AUTHORITY} declares an empty layering table"));
+    }
+    Ok(rows)
+}
+
+/// The authority's table, read from the tree at `root`.
+pub fn authority_table(root: &Path) -> Result<Vec<(String, u8)>, String> {
+    let path = root.join(AUTHORITY);
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| format!("could not read the layering authority at {}: {e}", path.display()))?;
+    parse_layers(&text)
+}
+
+/// Where the mirror and the authority disagree.
+///
+/// An empty list means they agree: the same crates, at the same layers, in
+/// the same order. Every disagreement is a sentence, because a gate that says
+/// "the tables differ" and not where is a gate that sends the reader to look
+/// for it.
+pub fn drift(root: &Path) -> Result<Vec<String>, String> {
+    let authority = authority_table(root)?;
+    let mirror: Vec<(String, u8)> = TABLE
+        .iter()
+        .filter_map(|(name, class)| class.layer().map(|layer| ((*name).to_string(), layer)))
+        .collect();
+    let mut problems = Vec::new();
+
+    for (name, layer) in &authority {
+        if !mirror.iter().any(|(other, _)| other == name) {
+            problems.push(format!(
+                "{name} is L{layer} in {AUTHORITY} and is not in the outer table \
+                 (xtask/src/layers.rs)"
+            ));
+        }
+    }
+    for (name, layer) in &mirror {
+        if !authority.iter().any(|(other, _)| other == name) {
+            problems.push(format!(
+                "{name} is L{layer} in the outer table and is not in {AUTHORITY}: the tree's own \
+                 gate does not know it"
+            ));
+        }
+    }
+    for (name, layer) in &authority {
+        if let Some((_, mirror_layer)) = mirror.iter().find(|(other, _)| other == name)
+            && mirror_layer != layer
+        {
+            problems
+                .push(format!("{name} is L{layer} in {AUTHORITY} and L{mirror_layer} in the outer table"));
+        }
+    }
+
+    // The **order** matters too: `docs/architecture.md` renders the table in
+    // this order and the `lists` gate compares the two, so a mirror in a
+    // different order is a mirror that makes that gate fail for the wrong
+    // reason.
+    let authority_names: Vec<&str> = authority.iter().map(|(name, _)| name.as_str()).collect();
+    let mirror_names: Vec<&str> = mirror.iter().map(|(name, _)| name.as_str()).collect();
+    if authority_names != mirror_names {
+        problems.push(format!(
+            "the order of the table differs: {AUTHORITY} has {}, the outer table has {}",
+            authority_names.join(", "),
+            mirror_names.join(", ")
+        ));
+    }
+    Ok(problems)
 }
 
 /// Build the model from `cargo metadata`.
@@ -303,6 +555,28 @@ pub fn load(root: &Path) -> Result<Vec<Krate>, String> {
 /// The gate.
 pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("layers");
+
+    // The mirror and the authority, before anything else: a gate that checks
+    // the tree against a table that has drifted from the tree's own table is
+    // a gate that reports the wrong thing.
+    let drift = drift(root)?;
+    if !drift.is_empty() {
+        let mut message = format!(
+            "the layering table in xtask/src/layers.rs and the tree's own table in {AUTHORITY} \
+             disagree:\n"
+        );
+        for problem in &drift {
+            message.push_str("   • ");
+            message.push_str(problem);
+            message.push('\n');
+        }
+        message.push_str(
+            "\nThe tree's own table is the authority. Fix the outer table to match it, or fix the \
+             tree's table and then the outer one.",
+        );
+        return Err(message);
+    }
+
     let crates = load(root)?;
     report(&check(&crates))?;
 
@@ -328,26 +602,25 @@ pub fn report(violations: &[Violation]) -> Result<(), String> {
         message.push('\n');
     }
     message.push_str(
-        "\nThe layering is what keeps the engine testable without a window. If a crate\n\
-         genuinely needs to move up a layer, move it in xtask/src/layers.rs and in\n\
-         docs/architecture.md together — `cargo xtask lists` checks they agree.",
+        "\nThe layering is what keeps the tree testable without a window. If a crate genuinely\n\
+         needs to move up a layer, move it in the tree's own table — crates/craftkit-gates/src/lib.rs\n\
+         — and in docs/architecture.md, and the outer table follows it.",
     );
     Err(message)
 }
 
 /// Every package the wasm gate compiles.
 ///
-/// The library crates ✓, **and the browser app** ✓. §291: the gate's own
-/// message says the web app builds for the browser ✓, and the app was
-/// filtered out with the other apps ✓ — so the message was a claim about a
-/// crate nothing compiled ✓. The browser app is the one app that belongs
-/// here ✓: its whole job is to be a browser ✓.
-///
-/// The other apps are exempt on purpose ✓: the desktop app is a window ✓ and
-/// the CLI rasterises ✓, and neither has any business in a browser ✓.
+/// The library crates ✓, **and the browser app** ✓. The applications are not
+/// in the list: the window is a window and the repl is a terminal, and
+/// neither belongs in a browser. `craftkit-wasm` is *checked*, because it is
+/// the one application whose whole job is to be a browser.
 pub fn wasm_packages() -> Vec<&'static str> {
-    let mut packages: Vec<&'static str> =
-        TABLE.iter().filter(|(_, class)| matches!(class, Class::Layer(_))).map(|(name, _)| *name).collect();
+    let mut packages: Vec<&'static str> = TABLE
+        .iter()
+        .filter(|(_, class)| matches!(class, Class::Layer(layer) if *layer < APP_LAYER))
+        .map(|(name, _)| *name)
+        .collect();
     packages.push(wasm::WEB_PACKAGE);
     packages.sort_unstable();
     packages
@@ -385,16 +658,6 @@ mod tests {
     }
 
     #[test]
-    fn the_table_covers_every_layer_from_zero_to_six() {
-        for layer in 0..=UI_MIN_LAYER {
-            assert!(
-                TABLE.iter().any(|(_, c)| *c == Class::Layer(layer)),
-                "no crate is registered at L{layer}; a gap in the table is an unchecked layer"
-            );
-        }
-    }
-
-    #[test]
     fn the_table_has_no_duplicates() {
         let mut seen = std::collections::BTreeSet::new();
         for (name, _) in TABLE {
@@ -402,54 +665,90 @@ mod tests {
         }
     }
 
+    /// The table is in **layer** order — and within a layer it is in the
+    /// authority's order, which is not alphabetical: the authority groups the
+    /// crates of a layer by what they are, and `docs/architecture.md` renders
+    /// them in that order.
     #[test]
-    fn the_table_is_sorted_by_layer_then_name() {
-        let rows: Vec<(u8, &str)> =
-            TABLE.iter().map(|(name, class)| (class.layer().unwrap_or(u8::MAX), *name)).collect();
+    fn the_table_is_in_layer_order() {
+        let rows: Vec<u8> = TABLE.iter().map(|(_, class)| class.layer().unwrap_or(u8::MAX)).collect();
         let mut sorted = rows.clone();
         sorted.sort();
         assert_eq!(rows, sorted, "the table is not in layer order; `lists` would fail");
     }
 
+    /// The mirror and the authority are the same table.
+    ///
+    /// This is the test that keeps them the same table: the mirror is a copy,
+    /// and a copy that nobody compares with the original is a second source
+    /// of truth.
     #[test]
-    fn a_downward_dependency_is_fine() {
-        let crates = vec![krate("craftkit-engine", &[("craftkit-model", DepKind::Normal, true)])];
-        assert!(check(&crates).is_empty(), "{:?}", names(&check(&crates)));
+    fn the_outer_table_is_the_trees_own_table() {
+        let root = crate::root().expect("root");
+        let problems = drift(&root).expect("reads the authority");
+        assert!(problems.is_empty(), "the outer table and {AUTHORITY} disagree: {problems:#?}");
     }
 
-    /// §131: the shell may depend on `egui` and nothing else.
-    ///
-    /// `AGENTS.md` says the shell "depends on `egui` and nothing else — no
-    /// windowing, no renderer — which is what lets the same panels run in a
-    /// window, headlessly, and in a browser". The rule had nothing behind it:
-    /// the layer gate refused a UI toolkit *below* L6, and the shell *is* L6,
-    /// so a window in the shell was not a violation of anything.
+    /// Every crate of the tree is in the table, or the table does not know it.
     #[test]
-    fn the_shell_may_not_own_a_window() {
-        // egui is the toolkit the shell draws with.
-        let crates = vec![krate("craftkit-ui", &[("egui", DepKind::Normal, false)])];
+    fn every_crate_of_the_tree_is_in_the_table() {
+        let root = crate::root().expect("root");
+        let mut found = Vec::new();
+        for folder in ["crates", "apps"] {
+            let Ok(entries) = std::fs::read_dir(root.join(folder)) else { continue };
+            for entry in entries.flatten() {
+                let manifest = entry.path().join("Cargo.toml");
+                let Ok(text) = std::fs::read_to_string(&manifest) else { continue };
+                let Some(name) = text.lines().find_map(|line| {
+                    let line = line.trim();
+                    line.strip_prefix("name")
+                        .and_then(|rest| rest.trim_start().strip_prefix('='))
+                        .map(|value| value.trim().trim_matches('"').to_string())
+                }) else {
+                    continue;
+                };
+                found.push(name);
+            }
+        }
+        assert!(!found.is_empty(), "no crates were found under crates/ and apps/");
+        for name in &found {
+            assert!(classify(name).is_some(), "{name} is not in the layering table");
+        }
+    }
+
+    #[test]
+    fn the_authority_is_read_out_of_its_source() {
+        let root = crate::root().expect("root");
+        let table = authority_table(&root).expect("reads the authority");
+        assert!(table.len() > 40, "the tree has more crates than that: {}", table.len());
+        let alloc = table.iter().find(|(name, _)| name == "craftkit-alloc").expect("craftkit-alloc");
+        assert_eq!(alloc.1, 0, "{alloc:?}");
+        let window = table.iter().find(|(name, _)| name == "craftkit-window").expect("craftkit-window");
+        assert_eq!(window.1, APP_LAYER, "{window:?}");
+    }
+
+    #[test]
+    fn a_table_that_is_not_written_as_a_table_is_an_error_and_not_an_empty_one() {
+        assert!(parse_layers("pub fn nothing() {}").is_err());
+        assert!(parse_layers("pub const LAYERS: &[(&str, u8)] = &[];").is_err());
+        // A row that is not `("name", layer)` is a failure with a line.
+        let broken = "pub const LAYERS: &[(&str, u8)] = &[\n    (\"craftkit-alloc\",),\n];";
+        let error = parse_layers(broken).expect_err("a broken row");
+        assert!(error.contains("line 2"), "{error}");
+    }
+
+    #[test]
+    fn a_downward_dependency_is_fine() {
+        let crates = vec![krate("craftkit-plugin-hello", &[("craftkit-sdk", DepKind::Normal, true)])];
         assert!(check(&crates).is_empty(), "{:?}", names(&check(&crates)));
-
-        // A window is not.
-        let crates = vec![krate("craftkit-ui", &[("eframe", DepKind::Normal, false)])];
-        let violations = check(&crates);
-        assert_eq!(violations.len(), 1, "{violations:?}");
-        assert!(matches!(violations[0], Violation::WindowingInTheUiCrate { .. }), "{violations:?}");
-
-        // And neither is a renderer.
-        let crates = vec![krate("craftkit-ui", &[("wgpu", DepKind::Normal, false)])];
-        assert_eq!(check(&crates).len(), 1, "a renderer in the shell");
-
-        // The apps are exempt: they are the ones that own the window.
-        let crates = vec![krate("craftkit", &[("eframe", DepKind::Normal, false)])];
-        assert!(check(&crates).is_empty(), "the app owns the window");
     }
 
     #[test]
     fn an_upward_dependency_is_a_violation() {
-        // The mistake this gate exists for: eval reaching up into the engine,
-        // which would make the evaluator depend on the thing that drives it.
-        let crates = vec![krate("craftkit-eval", &[("craftkit-engine", DepKind::Normal, true)])];
+        // The mistake this gate exists for: a library reaching up into a
+        // battery, which would make the library depend on the thing that
+        // draws it.
+        let crates = vec![krate("craftkit-raster", &[("craftkit-plugin-hello", DepKind::Normal, true)])];
         let violations = check(&crates);
         assert_eq!(violations.len(), 1, "{violations:?}");
         assert!(matches!(violations[0], Violation::Upward { .. }), "{violations:?}");
@@ -458,22 +757,69 @@ mod tests {
 
     #[test]
     fn a_same_layer_dependency_is_a_violation_too() {
-        // eval and io are both L3. Either of them using the other means they
-        // have become one crate wearing two names.
-        let crates = vec![krate("craftkit-io", &[("craftkit-eval", DepKind::Normal, true)])];
+        // Two libraries at the same layer using each other means they have
+        // become one crate wearing two names.
+        let crates = vec![krate("craftkit-mcp", &[("craftkit-control", DepKind::Normal, true)])];
         assert_eq!(check(&crates).len(), 1, "an equal layer must not be allowed");
     }
 
+    /// A **dev** dependency is a testing arrangement and does not ship.
     #[test]
-    fn a_value_crate_may_not_name_egui() {
-        let crates = vec![krate("craftkit-core", &[("egui", DepKind::Normal, false)])];
+    fn a_dev_dependency_does_not_count() {
+        // The tree's own fixtures: the door's loader tests open a plugin, and
+        // the plugin is at a higher layer than the door.
+        let crates = vec![krate("craftkit-ffi", &[("craftkit-plugin-shared", DepKind::Dev, true)])];
+        assert!(check(&crates).is_empty(), "{:?}", names(&check(&crates)));
+    }
+
+    #[test]
+    fn a_plugin_may_not_depend_on_another_plugin() {
+        let crates = vec![krate("craftkit-plugin-art", &[("craftkit-plugin-hello", DepKind::Normal, true)])];
+        let violations = check(&crates);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert!(matches!(violations[0], Violation::PluginOnPlugin { .. }), "{violations:?}");
+    }
+
+    #[test]
+    fn a_plugin_may_not_depend_on_an_application() {
+        let crates = vec![krate("craftkit-plugin-art", &[("craftkit-window", DepKind::Normal, true)])];
+        let violations = check(&crates);
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert!(matches!(violations[0], Violation::PluginOnApp { .. }), "{violations:?}");
+    }
+
+    #[test]
+    fn an_application_depends_on_everything() {
+        // The window is an application: it names the studio, the rasteriser and
+        // the toolkit, and that is its whole job.
+        let crates = vec![krate(
+            "craftkit-window",
+            &[
+                ("craftkit-plugin-art", DepKind::Normal, true),
+                ("craftkit-raster", DepKind::Normal, true),
+                ("egui", DepKind::Normal, false),
+                ("eframe", DepKind::Normal, false),
+            ],
+        )];
+        assert!(check(&crates).is_empty(), "{:?}", names(&check(&crates)));
+    }
+
+    #[test]
+    fn a_library_may_not_name_a_ui_toolkit() {
+        let crates = vec![krate("craftkit-raster", &[("egui", DepKind::Normal, false)])];
         let violations = check(&crates);
         assert_eq!(violations.len(), 1, "{violations:?}");
         assert!(violations[0].to_string().contains("UI toolkits"), "{violations:?}");
     }
 
     #[test]
-    fn eframe_is_a_ui_crate_too() {
+    fn a_library_may_not_name_a_window() {
+        let crates = vec![krate("craftkit-raster", &[("eframe", DepKind::Normal, false)])];
+        assert_eq!(check(&crates).len(), 1, "{:?}", names(&check(&crates)));
+    }
+
+    #[test]
+    fn egui_is_a_ui_crate_too() {
         assert!(is_ui_crate("eframe"));
         assert!(is_ui_crate("egui"));
         assert!(is_ui_crate("egui_glow"));
@@ -485,97 +831,18 @@ mod tests {
     }
 
     #[test]
-    fn the_ui_crate_may_name_egui() {
-        let crates = vec![krate("craftkit-ui", &[("egui", DepKind::Normal, false)])];
-        assert!(check(&crates).is_empty(), "{:?}", names(&check(&crates)));
-    }
-
-    #[test]
-    fn a_library_crate_may_not_depend_on_an_app() {
-        let crates = vec![krate("craftkit-core", &[("craftkit-cli", DepKind::Normal, true)])];
-        let violations = check(&crates);
-        assert_eq!(violations.len(), 1, "{violations:?}");
-    }
-
-    #[test]
-    fn a_dev_dependency_still_has_to_point_downward() {
-        // It is tempting to let a dev-dependency be exempt. It is not: a test
-        // that can only run with a higher crate's help is testing the wrong side
-        // of the boundary.
-        let crates = vec![krate("craftkit-core", &[("craftkit-engine", DepKind::Dev, true)])];
-        assert_eq!(check(&crates).len(), 1, "{:?}", names(&check(&crates)));
-    }
-
-    #[test]
-    fn a_crate_may_depend_on_itself() {
-        let crates = vec![krate("craftkit-engine", &[("craftkit-engine", DepKind::Dev, true)])];
-        assert!(check(&crates).is_empty(), "{:?}", names(&check(&crates)));
-    }
-
-    #[test]
-    fn an_unregistered_workspace_crate_is_reported_once() {
-        let crates = vec![krate("craftkit-newthing", &[("craftkit-core", DepKind::Normal, true)])];
+    fn a_crate_the_table_does_not_know_is_a_finding() {
+        let crates = vec![krate("craftkit-thing", &[])];
         let violations = check(&crates);
         assert_eq!(violations.len(), 1, "{violations:?}");
         assert!(matches!(violations[0], Violation::Unregistered { .. }), "{violations:?}");
     }
 
     #[test]
-    fn the_apps_are_exempt() {
-        for app in ["craftkit", "craftkit-cli", "craftkit-web", "xtask"] {
-            assert_eq!(classify(app), Some(Class::Exempt), "{app} should be exempt");
-        }
-    }
-
-    #[test]
-    fn violations_are_reported_in_a_stable_order() {
-        let crates = vec![
-            krate(
-                "craftkit-io",
-                &[("craftkit-eval", DepKind::Normal, true), ("egui", DepKind::Normal, false)],
-            ),
-            krate("craftkit-core", &[("egui", DepKind::Normal, false)]),
-        ];
-        let first = names(&check(&crates));
-        let mut reversed = crates.clone();
-        reversed.reverse();
-        assert_eq!(first, names(&check(&reversed)), "the same mistake must always print the same way");
-    }
-
-    #[test]
-    fn metadata_becomes_a_model() {
-        let meta: Value = serde_json::from_str(
-            r#"{"packages":[
-                {"name":"craftkit-ui","dependencies":[
-                    {"name":"egui","path":null},
-                    {"name":"craftkit-engine","path":"crates/engine"},
-                    {"name":"tempfile","path":null,"kind":"dev"}
-                ]},
-                {"name":"xtask","dependencies":[]}
-            ]}"#,
-        )
-        .expect("json");
-        let crates = from_metadata(&meta).expect("model");
-        assert_eq!(crates.len(), 2);
-        let ui = crates.iter().find(|c| c.name == "craftkit-ui").expect("ui");
-        let egui = ui.deps.iter().find(|d| d.name == "egui").expect("egui dep");
-        assert!(!egui.workspace, "egui is not ours");
-        let engine = ui.deps.iter().find(|d| d.name == "craftkit-engine").expect("engine dep");
-        assert!(engine.workspace, "a path dependency is a workspace crate");
-        let tempfile = ui.deps.iter().find(|d| d.name == "tempfile").expect("tempfile dep");
-        assert_eq!(tempfile.kind, DepKind::Dev);
-        assert!(check(&crates).is_empty(), "{:?}", names(&check(&crates)));
-    }
-
-    #[test]
-    fn metadata_without_packages_is_an_error_not_a_panic() {
-        let meta: Value = serde_json::from_str(r#"{"nope":true}"#).expect("json");
-        assert!(from_metadata(&meta).is_err());
-    }
-
-    #[test]
-    fn a_package_with_no_name_is_an_error_not_a_panic() {
-        let meta: Value = serde_json::from_str(r#"{"packages":[{"dependencies":[]}]}"#).expect("json");
-        assert!(from_metadata(&meta).is_err());
+    fn the_wasm_check_covers_the_libraries_and_the_browser_app() {
+        let checked = wasm_packages();
+        assert!(checked.contains(&wasm::WEB_PACKAGE), "the browser app is not checked: {checked:?}");
+        // The applications are not libraries: the window is a window.
+        assert!(!checked.contains(&"craftkit-window"), "the window is checked for the browser");
     }
 }

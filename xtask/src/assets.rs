@@ -1,22 +1,30 @@
 //! Two rules about files, both of which have to be checked rather than trusted.
 //!
-//! # 1. Every icon is drawn in code
+//! # 1. Nothing is embedded, and nothing is drawn from a file
 //!
-//! The UI's icons are vector paths in `crates/ui/src/icons.rs`, drawn from
-//! original coordinates. There is no icon file, no sprite sheet, no font with
-//! pictographs in it, and no artwork of any kind in this repository.
+//! **The tree ships no icon, image, font or artwork file of any kind.** That
+//! is a rule about *provenance*, not about taste, and it is the rule most
+//! worth a gate in a project like this: it is trivially easy to add one PNG
+//! and trivially easy to be careless about where it came from. So the check is
+//! mechanical — no `include_bytes!`, `include_str!` or `include!` of anything
+//! that is not code, anywhere in the tree.
 //!
-//! That is a rule about *provenance*, not about taste, and it is the rule most
-//! worth a gate in a project like this: it is trivially easy to add one PNG and
-//! trivially easy to be careless about where it came from. So the check is
-//! mechanical — no `include_bytes!`, `include!` or `Image::from_bytes` of
-//! anything that is not code, anywhere in the crates that draw.
+//! What the tree has instead of a file:
 //!
-//! # 2. Every non-code file is attributed
+//! - **A command's `icon` is a name**, not a picture. The drawing is the
+//!   front end's business, and there is no icon file anywhere in the tree.
+//! - **The typeface is a table of strokes**, written in code, in
+//!   `crates/craftkit-font`. A glyph is a set of lines and a width.
+//! - **The window draws with `egui`**, and every command it offers is a text
+//!   button. `apps/craftkit-window/src/` holds `lib.rs`, `main.rs` and
+//!   `pointer.rs`, and no icon module.
 //!
-//! If a file does get added — a licence notice, a template, a test fixture —
-//! it needs a row in `ATTRIBUTION.md` saying what it is and where it came from.
-//! Generated build output is exempt, and so is anything under `target/`.
+//! # 2. Every non-source file is attributed
+//!
+//! The tree's files that are not Rust source are few and they are all named
+//! in [`FOREIGN_SOURCE_EXCEPTIONS`], each with the reason it is here. Every
+//! one of them needs a row in `ATTRIBUTION.md` saying what it is and where it
+//! came from, so that a reader can tell what is original and what is not.
 //!
 //! The two rules are in one gate because they are the same rule seen from two
 //! sides: the origin of every byte that reaches a user.
@@ -44,61 +52,29 @@ pub const ASSET_EXTENSIONS: &[&str] = &[
 /// JavaScript files a browser insists on, and the tree also holds two shell
 /// scripts and the CI workflow.
 ///
-/// Nothing enforced any of it. A Python build helper inside `crates/ui`, a
-/// stray `.js` in the web app and a `deploy.sh` inside `crates/core` all left
-/// `cargo xtask ci` green, because `is_asset` only knows about binary and media
-/// formats and a script is not one.
+/// Nothing enforced any of it. A Python build helper inside a crate, a stray
+/// `.js` in an app and a `deploy.sh` inside a library all left
+/// `cargo xtask ci` green, because `is_asset` only knows about binary and
+/// media formats and a script is not one.
 pub const FOREIGN_SOURCE_EXTENSIONS: &[&str] = &[
     "js", "mjs", "cjs", "jsx", "ts", "tsx", "py", "rb", "sh", "bash", "zsh", "pl", "php", "go", "c", "h",
     "cc", "cpp", "hpp", "java", "cs", "kt", "swift", "lua",
 ];
 
-/// The non-Rust files the tree is allowed to hold, and why each one is here.
+/// The files of the tree that are not Rust source, and why each one is here.
 ///
 /// Each row is a decision somebody made. Adding a file to this list is how you
 /// say "yes, really", and the reason is what stops the next person wondering.
+/// Every one of them needs a row in `ATTRIBUTION.md` as well: a file the tree
+/// ships and cannot account for is a file nobody may use.
 pub const FOREIGN_SOURCE_EXCEPTIONS: &[(&str, &str)] = &[
-    ("apps/craftkit-web/sw.js", "a service worker; a browser only runs one as JavaScript"),
-    ("apps/craftkit-web/index.html", "holds the module script the page imports"),
-    ("scripts/mutation-test-gates.sh", "the gate instrument, and bash is what CI has"),
+    ("apps/craftkit-wasm/index.html", "the page the browser door serves; a browser only reads HTML"),
     (
-        "scripts/live-window-check.sh",
-        "drives the real window on a real display; bash is what the display has",
-    ),
-    ("scripts/fold-format-pending.sh", "runs once, by hand, at a release"),
-    (
-        "apps/craftkit-android/java/org/craftocto/craftkit/CraftkitActivity.java",
-        "the gated package's activity; the platform's keyboard needs a view that serves the connection (§257)",
-    ),
-    (
-        "apps/craftkit-android/java/org/craftocto/craftkit/CraftkitInputView.java",
-        "the gated package's view; it is the view the platform asks for the connection (§257)",
-    ),
-    (
-        "apps/craftkit-android/java/org/craftocto/craftkit/CraftkitInputConnection.java",
-        "the gated package's connection; it is where the platform's committed text arrives (§257)",
-    ),
-    (
-        "apps/craftkit-android/java/org/craftocto/craftkit/CraftkitTestIme.java",
-        "the gated package's instrument keyboard; it is how the platform's half is measured (§257)",
-    ),
-    (
-        "scripts/build-android-ime.sh",
-        "builds the gated package; the SDK's own tools are what package an Android app (§257)",
-    ),
-    (
-        "scripts/build-android.sh",
-        "builds the default package; the tree's own manifest is what says what the package asks for (§258)",
-    ),
-    (
-        "scripts/android-package.sh",
-        "the one home for the packaging steps the tree's two packages share (§258)",
+        "apps/craftkit-wasm/browser-check.mjs",
+        "drives the browser door's WebAssembly module from Node; the browser's own language is \
+         what runs a WebAssembly module",
     ),
     (".github/workflows/ci.yml", "continuous integration is YAML and runs nothing"),
-    (
-        "v2/apps/craftkit-wasm/browser-check.mjs",
-        "drives the browser door's WebAssembly module from Node; the browser's own language is what runs a WebAssembly module",
-    ),
 ];
 
 /// Whether a path is source code in a language other than Rust.
@@ -139,12 +115,14 @@ pub struct Findings {
     pub malformed: Vec<String>,
     /// Source in a language other than Rust, that no exception allows.
     pub foreign: Vec<String>,
+    /// A file of the tree that is not Rust source and that no row in
+    /// `ATTRIBUTION.md` claims.
+    pub unsourced: Vec<String>,
     /// Whether `ATTRIBUTION.md` is there at all.
     pub have_attribution: bool,
 }
 
 impl Findings {
-    /// Whether everything is in order.
     /// Whether everything is in order.
     ///
     /// Every field, deliberately. It once forgot `malformed`, so a test called
@@ -157,6 +135,7 @@ impl Findings {
             && self.stale.is_empty()
             && self.malformed.is_empty()
             && self.foreign.is_empty()
+            && self.unsourced.is_empty()
     }
 
     pub fn count(&self) -> usize {
@@ -165,6 +144,7 @@ impl Findings {
             + self.stale.len()
             + self.malformed.len()
             + self.foreign.len()
+            + self.unsourced.len()
             + usize::from(!self.have_attribution)
     }
 }
@@ -254,9 +234,9 @@ pub fn find_embedded(root: &Path, sources: &[PathBuf]) -> Result<Vec<String>, St
 /// and an editor appended to it — is not a table row, so `attributed_files`
 /// cannot see it and the row silently stops counting. This one can.
 ///
-/// That is not hypothetical: `scripts/mutation-test-gates.sh` appended a row to a
-/// file with no trailing newline, the stale-row check reported nothing, and that
-/// is how the missing newline was found in the first place.
+/// That is not hypothetical: a script appended a row to a file with no
+/// trailing newline, the stale-row check reported nothing, and that is how the
+/// missing newline was found in the first place.
 pub fn mentioned_files(text: &str) -> BTreeSet<String> {
     let mut names = BTreeSet::new();
     let mut in_fence = false;
@@ -319,6 +299,42 @@ pub fn attributed_files(text: &str) -> BTreeSet<String> {
     names
 }
 
+/// The paths `ATTRIBUTION.md` claims, read out of its table.
+///
+/// The rule the tree's own non-source files fall under: a row that names the
+/// **path** of the file accounts for it. The path is matched as a whole, in
+/// the tree's one way of writing a path (`/`-separated), and it is matched
+/// anywhere in the row — the same deliberate looseness as
+/// [`attributed_files`], for the same reason.
+pub fn attributed_paths(text: &str) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    let mut in_fence = false;
+    for line in text.lines() {
+        if line.trim_start().starts_with("```") {
+            in_fence = !in_fence;
+            continue;
+        }
+        if in_fence {
+            continue;
+        }
+        let trimmed = line.trim();
+        if !trimmed.starts_with('|') {
+            continue;
+        }
+        for cell in trimmed.split('|') {
+            for token in cell.split(|c: char| c == '`' || c.is_whitespace()) {
+                let token = token.trim_start_matches('*');
+                // A path has a directory in it. A file name on its own is an
+                // asset, and the assets have their own rule.
+                if !token.is_empty() && token.contains('/') {
+                    names.insert(token.to_string());
+                }
+            }
+        }
+    }
+    names
+}
+
 /// Run the checks against `root`.
 pub fn inspect(root: &Path) -> Result<Findings, String> {
     let attribution = root.join("ATTRIBUTION.md");
@@ -355,12 +371,22 @@ pub fn inspect(root: &Path) -> Result<Findings, String> {
         .collect();
     malformed.sort();
 
+    // The files the tree ships that are not Rust source: each one needs a row
+    // that names its path.
+    let claimed_paths = attributed_paths(&text);
+    let unsourced: Vec<String> = FOREIGN_SOURCE_EXCEPTIONS
+        .iter()
+        .map(|(path, _)| *path)
+        .filter(|path| !claimed_paths.contains(*path))
+        .map(str::to_string)
+        .collect();
+
     let sources = find_sources(root)?;
     let embedded = find_embedded(root, &sources)?;
 
     let foreign = find_foreign_source(root)?;
 
-    Ok(Findings { unattributed, embedded, stale, malformed, foreign, have_attribution })
+    Ok(Findings { unattributed, embedded, stale, malformed, foreign, unsourced, have_attribution })
 }
 
 /// The gate.
@@ -370,7 +396,7 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     if !findings.have_attribution {
         return Err("there is no ATTRIBUTION.md.\n\
-             Every non-code file needs a row saying what it is and where it came from.\n\
+             Every non-source file needs a row saying what it is and where it came from.\n\
              An empty table with a sentence explaining why it is empty is fine; a missing file\n\
              is not, because the next person cannot tell whether the check ran."
             .to_string());
@@ -380,8 +406,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     for hit in &findings.embedded {
         problems.push_str(&format!("   • {hit}\n"));
         problems.push_str(
-            "     Icons are drawn in code from original coordinates (crates/ui/src/icons.rs).\n\
-             \x20    No image file is embedded in a program. Draw it instead.\n",
+            "     The tree ships no image, font or artwork file: nothing is drawn from a file.\n\
+             \x20    A command's `icon` is a name and the drawing is the front end's business,\n\
+             \x20    and the tree's typeface is a table of strokes written in code.\n",
         );
     }
     for path in &findings.unattributed {
@@ -397,6 +424,13 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
              of the line before it — or it is prose and belongs inside a fenced code block.\n"
         ));
     }
+    for path in &findings.unsourced {
+        problems.push_str(&format!(
+            "   • {path} is a file of the tree that is not Rust source and no row in \
+             ATTRIBUTION.md claims it.\n     \
+             Give it a row that names the path, what it is and where it came from.\n"
+        ));
+    }
 
     for name in &findings.foreign {
         problems.push_str(&format!(
@@ -410,16 +444,16 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     if problems.is_empty() {
         println!(
-            "   ok: no embedded image assets, every asset is attributed, and nothing outside \
-             Rust crept in"
+            "   ok: nothing is embedded from a file, every asset is attributed, and nothing \
+             outside Rust crept in"
         );
         Ok(crate::Outcome::Ran)
     } else {
         Err(format!(
             "{} asset problem(s):\n{problems}\n\
-             For a new asset, add a row to ATTRIBUTION.md naming the file, what it is and\n\
-             where it came from. For an icon, draw it: crates/ui/src/icons.rs takes an\n\
-             `Icon` of line segments and that is the whole of the icon system.",
+             For a new file, add a row to ATTRIBUTION.md naming the file, what it is and\n\
+             where it came from. For an icon, do not draw one from a file: a command's `icon` is\n\
+             a name, and the front end decides what it looks like.",
             findings.count()
         ))
     }
@@ -477,29 +511,28 @@ mod tests {
     #[test]
     fn the_walk_finds_assets_and_skips_build_output() {
         let temp = Temp::new("walk");
-        temp.write("crates/ui/src/icons.rs", "pub const ICONS: u8 = 0;");
-        temp.write("crates/ui/assets/splash.png", "not really a png");
+        temp.write("crates/craftkit-font/src/lib.rs", "pub const GLYPHS: u8 = 0;");
+        temp.write("crates/craftkit-font/assets/splash.png", "not really a png");
         temp.write("target/debug/thing.png", "build output");
-        temp.write(".hidden/secret.png", "hidden");
 
         let found = find_assets(temp.path()).expect("walks");
         // The tree's path form, on every platform. §225.
         let names: Vec<String> = found.iter().map(|p| crate::tree::relative_name(temp.path(), p)).collect();
-        assert_eq!(names, vec!["crates/ui/assets/splash.png".to_string()]);
+        assert_eq!(names, vec!["crates/craftkit-font/assets/splash.png".to_string()]);
     }
 
     #[test]
     fn an_embedded_image_is_found_with_its_line() {
         let temp = Temp::new("embed");
         temp.write(
-            "crates/ui/src/icons.rs",
-            "\n// a comment\nconst ICONS: &[u8] = include_bytes!(\"icons.png\");\n",
+            "crates/craftkit-font/src/lib.rs",
+            "\n// a comment\nconst GLYPHS: &[u8] = include_bytes!(\"glyphs.png\");\n",
         );
 
         let sources = find_sources(temp.path()).expect("sources");
         let hits = find_embedded(temp.path(), &sources).expect("scans");
         assert_eq!(hits.len(), 1, "{hits:?}");
-        assert!(hits[0].contains("icons.png"), "{hits:?}");
+        assert!(hits[0].contains("glyphs.png"), "{hits:?}");
         assert!(hits[0].contains(":3:"), "the line number matters: {hits:?}");
     }
 
@@ -560,7 +593,7 @@ mod tests {
     #[test]
     fn an_attributed_file_is_not_reported() {
         let temp = Temp::new("attributed");
-        temp.write("crates/ui/assets/splash.png", "png");
+        temp.write("crates/craftkit-font/assets/splash.png", "png");
         temp.write(
             "ATTRIBUTION.md",
             "| File | What | Source |\n|---|---|---|\n| splash.png | splash | original |\n",
@@ -569,7 +602,9 @@ mod tests {
         let findings = inspect(temp.path()).expect("inspects");
         assert!(findings.unattributed.is_empty(), "{findings:?}");
         assert!(findings.have_attribution);
-        assert!(findings.is_clean(), "{findings:?}");
+        // The tree's own non-source files are not in this temporary tree, so
+        // they are reported: the rule is about the tree's files.
+        assert_eq!(findings.unsourced.len(), FOREIGN_SOURCE_EXCEPTIONS.len(), "{findings:?}");
     }
 
     #[test]
@@ -585,7 +620,7 @@ mod tests {
     #[test]
     fn an_unattributed_file_is_reported() {
         let temp = Temp::new("unattributed");
-        temp.write("crates/ui/assets/splash.png", "png");
+        temp.write("crates/craftkit-font/assets/splash.png", "png");
         temp.write("ATTRIBUTION.md", "Everything is original.\n");
 
         let findings = inspect(temp.path()).expect("inspects");
@@ -648,15 +683,15 @@ mod tests {
         // and a `.sh` all left `cargo xtask ci` green, because `is_asset` only
         // knows binary and media formats.
         let dir = crate::temp::dir("foreign").expect("a temporary folder");
-        std::fs::create_dir_all(dir.join("crates/ui/src")).expect("temp tree");
+        std::fs::create_dir_all(dir.join("crates/craftkit-font/src")).expect("temp tree");
 
-        std::fs::write(dir.join("crates/ui/build.py"), "print('x')").expect("write");
+        std::fs::write(dir.join("crates/craftkit-font/build.py"), "print('x')").expect("write");
         let found = find_foreign_source(&dir).expect("scans");
-        assert_eq!(found, vec!["crates/ui/build.py".to_string()], "{found:?}");
+        assert_eq!(found, vec!["crates/craftkit-font/build.py".to_string()], "{found:?}");
 
         // The same file, listed as an exception, is not a finding.
         let mut allowed = FOREIGN_SOURCE_EXCEPTIONS.to_vec();
-        allowed.push(("crates/ui/build.py", "a test exception"));
+        allowed.push(("crates/craftkit-font/build.py", "a test exception"));
         let hidden = found
             .iter()
             .filter(|name| !allowed.iter().any(|(a, _)| a == *name))
@@ -677,6 +712,7 @@ mod tests {
             stale: vec![],
             malformed: vec![],
             foreign: vec![],
+            unsourced: vec![],
             have_attribution: true,
         };
         assert!(base.is_clean());
@@ -686,9 +722,13 @@ mod tests {
         assert!(!broken.is_clean(), "a malformed row is not clean");
         assert_eq!(broken.count(), 1);
 
-        let foreign = Findings { foreign: vec!["a.py".into()], ..base };
+        let foreign = Findings { foreign: vec!["a.py".into()], ..base.clone() };
         assert!(!foreign.is_clean(), "source outside Rust is not clean");
         assert_eq!(foreign.count(), 1);
+
+        let unsourced = Findings { unsourced: vec!["a.html".into()], ..base };
+        assert!(!unsourced.is_clean(), "an unattributed file of the tree is not clean");
+        assert_eq!(unsourced.count(), 1);
     }
 
     #[test]
@@ -703,6 +743,41 @@ mod tests {
 
         let findings = inspect(temp.path()).expect("inspects");
         assert_eq!(findings.stale, vec!["gone.png".to_string()], "{findings:?}");
+    }
+
+    /// The **row format**: a table row whose cell names the path of the file.
+    #[test]
+    fn a_row_that_names_the_path_claims_the_file() {
+        let markdown = "| File | What | Source |\n|---|---|---|\n\
+             | `apps/craftkit-wasm/index.html` | the page | original |\n";
+        let claimed = attributed_paths(markdown);
+        assert!(claimed.contains("apps/craftkit-wasm/index.html"), "{claimed:?}");
+        // A file name on its own is not a path: the assets have their own rule.
+        assert!(!claimed.contains("index.html"), "{claimed:?}");
+    }
+
+    /// Every file the tree ships that is not Rust source is either accounted
+    /// for by a row or reported — never both and never neither.
+    #[test]
+    fn every_non_source_file_is_accounted_for_or_reported() {
+        let root = crate::root().expect("root");
+        let text = std::fs::read_to_string(root.join("ATTRIBUTION.md")).expect("ATTRIBUTION.md");
+        let claimed = attributed_paths(&text);
+        let findings = inspect(&root).expect("inspects");
+        for (path, why) in FOREIGN_SOURCE_EXCEPTIONS {
+            assert!(!why.trim().is_empty(), "{path} has no reason given");
+            assert!(
+                claimed.contains(*path) || findings.unsourced.contains(&path.to_string()),
+                "{path} is neither claimed nor reported"
+            );
+        }
+        // And nothing else is reported: the list is the tree's own.
+        for path in &findings.unsourced {
+            assert!(
+                FOREIGN_SOURCE_EXCEPTIONS.iter().any(|(allowed, _)| allowed == path),
+                "{path} is reported and is not one of the tree's non-source files"
+            );
+        }
     }
 
     #[test]

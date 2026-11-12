@@ -20,7 +20,6 @@
 //!
 //! | Command | What it protects |
 //! |---|---|
-//! | [`anchors`] | the mutation script's anchors and its file list are in the tree, its labels and its texts are literals the shell cannot change, its header names every way to run it, and it checks itself before it starts |
 //! | [`layers`] | the dependency layering, and the UI boundary |
 //! | [`assets`] | "every icon is drawn in code; every file is attributed" |
 //! | [`cleanroom`] | "no product's name is in the tree outside prose" |
@@ -28,8 +27,6 @@
 //! | [`web`] | the browser entry page and its service worker |
 //! | [`wasm`] | everything below the apps still builds for `wasm32` |
 //! | [`deny`] | the dependency policy: licences, bans, sources, advisories |
-//! | [`android`] | the tree still builds for a phone, and exports the symbol the platform looks up by name |
-//! | [`fuzz`] | the design-file reader, fuzzed: broken files in, crashes out |
 //! | [`bundle`] | the browser bundle is built, and written |
 //! | [`doctor`] | the machine is set up to build this at all |
 //! | [`ci`] | all of the above, in order, then the tests |
@@ -47,14 +44,11 @@
 )]
 #![forbid(unsafe_code)]
 
-pub mod anchors;
-pub mod android;
 pub mod assets;
 pub mod ci;
 pub mod cleanroom;
 pub mod deny;
 pub mod doctor;
-pub mod fuzz;
 pub mod layers;
 pub mod lists;
 pub mod temp;
@@ -91,11 +85,6 @@ pub struct Subcommand {
 /// accepts is one list.
 pub const COMMANDS: &[Subcommand] = &[
     Subcommand {
-        name: "anchors",
-        what: "the mutation script's anchors and its file list are in the tree, and it checks itself before it starts",
-        run: anchors::run,
-    },
-    Subcommand {
         name: "layers",
         what: "enforce the crate dependency layering (docs/architecture.md)",
         run: layers::run,
@@ -127,16 +116,6 @@ pub const COMMANDS: &[Subcommand] = &[
         run: deny::run,
     },
     Subcommand {
-        name: "android",
-        what: "the tree still builds for a phone, and exports the symbol the platform looks up",
-        run: android::run,
-    },
-    Subcommand {
-        name: "fuzz",
-        what: "fuzz the design-file reader: broken files in, crashes out",
-        run: fuzz::command,
-    },
-    Subcommand {
         name: "bundle",
         what: "build the browser bundle (it writes files; `ci` does not run it)",
         run: wasm::bundle,
@@ -148,7 +127,7 @@ pub const COMMANDS: &[Subcommand] = &[
     },
     Subcommand {
         name: "ci",
-        what: "fmt --check, anchors, assets, cleanroom, lists, layers, web, clippy -D warnings, tests, fuzz, wasm",
+        what: "fmt --check, assets, cleanroom, lists, layers, web, clippy -D warnings, tests, wasm",
         run: run_ci,
     },
 ];
@@ -175,7 +154,6 @@ pub const NOT_GATES: &[(&str, &str)] = &[
     ("bundle", "it writes files into the tree"),
     ("doctor", "it reports on the machine, not on the code"),
     ("deny", "it needs the network and a licence database; CI runs it by name"),
-    ("android", "it needs the Android NDK; CI runs it by name"),
     ("ci", "it is the runner"),
 ];
 

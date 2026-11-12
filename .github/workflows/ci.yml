@@ -54,163 +54,43 @@ jobs:
       - name: Can this machine build it?
         run: cargo xtask doctor
 
-      # Stops at the first failure and says which one. Measured warm: 84 seconds on
-      # the Linux runner, 144 seconds on the macOS runner (section 224).
+      # Stops at the first failure and says which one.
       - name: The gate
         run: cargo xtask ci
 
-      # The instrument runs here too.
+      # The browser build, not just the wasm check: produce the bundle and
+      # prove the page can load it.
       #
-      # The mutation script is the tree's own proof that its gates can fail,
-      # and until now it had only ever run on Linux -- so "the gates can fail"
-      # was a fact about one platform. The self-test is cheap (measured: under
-      # two seconds, no cargo) and it is the negative of the whole exercise:
-      # the script must fail when a gate stops catching. It also has to leave
-      # the tree exactly as it found it, which is asserted here rather than
-      # assumed. Section 227.
-      - name: The instrument runs here too
-        shell: bash
-        run: |
-          code=0
-          scripts/mutation-test-gates.sh --self-test || code=$?
-          if [[ $code -ne 1 ]]; then
-            echo "::error::the mutation self-test exited $code, not 1"
-            exit 1
-          fi
-          if [[ -n "$(git status --porcelain)" ]]; then
-            echo "::error::the mutation self-test left the tree changed"
-            git status --porcelain
-            exit 1
-          fi
-          echo "ok: the mutation script's self-test works on this platform"
-
-      # The browser build, not just the wasm check: install a wasm-bindgen CLI
-      # whose version matches the crate, and prove the bundle is actually
-      # produced. `cargo xtask wasm` only compiles; it writes nothing, which is
-      # how a page that 404s on every load sat behind four green checks.
-      - name: Install a matching wasm-bindgen-cli
-        # **bash, on every platform.** The default shell of a Windows runner is
-        # PowerShell, and this step is written in bash: it read `version=$(...)`
-        # as the name of a command and failed. §226.
-        shell: bash
-        run: |
-          version=$(grep -A 1 '^name = "wasm-bindgen"$' Cargo.lock | awk '/^version/ {print $3; exit}' | tr -d '"')
-          echo "installing wasm-bindgen-cli $version"
-          cargo install wasm-bindgen-cli --version "$version" --locked
-
+      # The v2 tree has no `wasm-bindgen`: the browser door is a plain
+      # WebAssembly module, and the tree's own bundler
+      # (`apps/craftkit-wasm/src/bin/bundle.rs`) copies it and the page into
+      # `dist/`. So there is no CLI to install and no version to match — the
+      # bundler is this tree's own code, and it cannot drift from the page.
       - name: Produce the browser bundle
         run: cargo xtask bundle
 
-      - name: The page imports the bundle this job just produced
-        # bash for the same reason as the step above. §226.
+      - name: The page loads the module this job just produced
+        # bash for the same reason as the step above.
         shell: bash
         run: |
           # Read the one constant the page and the bundler both come from, and
           # require the file to exist. A version of this step that only ran
           # `cargo xtask wasm` passed on a page that 404s.
-          expected="./dist/$(sed -n 's/.*const BUNDLE_NAME: &str = "\(.*\)";.*/\1/p' xtask/src/wasm.rs).js"
-          cd apps/craftkit-web
-          for f in "$expected" ./dist/*_bg.wasm; do
-            test -f "$f" || { echo "::error::apps/craftkit-web/$f was not produced"; exit 1; }
-          done
-          grep -q "$expected" index.html || {
-            echo "::error::index.html does not import $expected"; exit 1; }
-          echo "ok: the page imports $expected and the job produced it"
+          name=$(sed -n 's/.*const BUNDLE_NAME: &str = "\(.*\)";.*/\1/p' xtask/src/wasm.rs)
+          echo "the module is named $name"
+          cd apps/craftkit-wasm
+          test -f "dist/$name.wasm" || {
+            echo "::error::apps/craftkit-wasm/dist/$name.wasm was not produced"; exit 1; }
+          test -f dist/index.html || {
+            echo "::error::apps/craftkit-wasm/dist/index.html was not produced"; exit 1; }
+          grep -q "./$name.wasm" index.html || {
+            echo "::error::index.html does not fetch ./$name.wasm"; exit 1; }
+          echo "ok: the page fetches ./$name.wasm and the job produced it"
 
-  # The phone build.
-  #
-  # The recipe for a phone was a document - §230 - and a recipe in a document
-  # is not a recipe that runs. This job makes it one: the tree still builds
-  # for both ABIs a phone has, and the built library still exports the symbol
-  # the platform's loader looks up **by name**.
-  #
-  # It is a job and not a phase of `cargo xtask ci` because it needs a tool
-  # the tree's other gates do not - the Android NDK - and a gate that fails
-  # for want of a tool gets switched off. So the tool is installed here, at
-  # the version the tree was measured with, and the gate is `cargo xtask
-  # android` by name. §85, §236.
-  android:
-    name: android (the tree still builds for a phone, on ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    # The gate, on every platform the tree claims to build for.
-    #
-    # §241: the gate that builds for a phone names the NDK's **host**
-    # directory, and that directory is a fact about the machine - and the
-    # first version of the gate knew about macOS and treated everything else
-    # as Linux, so on Windows it looked for the toolchain in a directory that
-    # does not exist there. The fix was a guess, and a guess is not a
-    # measurement.
-    #
-    # So the job runs where the tree claims to work: the NDK's own layout is
-    # then **measured** on each host by the job that builds with it, instead
-    # of being asserted in a table. `fail-fast` is off on purpose: one
-    # platform's failure should not hide the other two's result.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android, armv7-linux-androideabi
-
-      - uses: Swatinem/rust-cache@v2
-
-      # The NDK, at the version the tree was measured with.
-      #
-      # The gate finds it through `ANDROID_NDK_HOME`, and the version is
-      # pinned so that a runner whose image brings a different one builds the
-      # same thing the tree was measured on. The gate would say *skipped* if
-      # the NDK were missing, and CI requires it - so a machine that could
-      # not provide it fails here, with a message, instead of turning the
-      # rule into a green skip.
-      - name: The Android NDK
-        shell: bash
-        run: |
-          set -euo pipefail
-          home="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-          if [ -z "$home" ]; then
-            echo "::error::this runner has no Android SDK, and the phone build needs the NDK"
-            exit 1
-          fi
-          # What the runner has, printed - and **nothing downloaded**.
-          #
-          # The gate finds the NDK itself: `ANDROID_NDK_HOME`, then
-          # `ANDROID_NDK_LATEST_HOME`, then the newest under
-          # `$ANDROID_HOME/ndk`. The runner's image already carries three,
-          # and the tree builds with every NDK that was tried - measured:
-          # 23.1, 24.0, 25.2 and 26.1 each build both ABIs and export the
-          # entry point.
-          #
-          # The first version of this step downloaded the pinned NDK, and it
-          # failed twice for reasons that had nothing to do with the tree: the
-          # command-line tools are not on the PATH, and `yes |` under
-          # `pipefail` fails on the SIGPIPE that a successful install causes.
-          # A job that fails for want of a tool gets switched off, so the job
-          # uses what the machine has.
-          echo "the Android SDK is at $home"
-          ls "$home/ndk" 2>/dev/null || echo "the SDK has no ndk directory"
-
-      - name: The tree builds for a phone, and exports the entry point
-        run: cargo xtask android
-
-  # The instrument used to be here. §252.
-  #
-  # It is now its own workflow, `.github/workflows/mutation.yml`, and the
-  # reason is a measurement rather than a taste: this workflow's eight other
-  # jobs finish in five minutes and sixteen seconds, and the instrument needs
-  # about seventy-five (measured: 1 hour 14 minutes 49 seconds, §251–§255).
-  # The concurrency rule below — "a new push supersedes an
-  # in-flight run" — is right for a job that takes minutes and wrong for a job
-  # that takes an hour, so every push cancelled the instrument and with it the
-  # whole run. Eight consecutive runs were cancelled, and the tree had no
-  # green verdict between eleven o'clock and ten past ten at night.
-  #
-  # The instrument now runs nightly, on demand, and on every pull request,
-  # and a push no longer cancels it.
+      # The module is driven with no browser at all, under Node. A page that
+      # loads a module the script cannot drive is a page that only looks right.
+      - name: Drive the module without a browser
+        run: node apps/craftkit-wasm/browser-check.mjs apps/craftkit-wasm/dist/craftkit_wasm.wasm
 
   # What a Linux build machine cannot tell you.
   portability:
@@ -236,8 +116,7 @@ jobs:
   #
   # It is a gate all the same, and it has a name in the tree: `cargo xtask
   # deny`. The workflow runs that command, so the rule and the check that
-  # applies it live in the same place, and the header at the top of this file
-  # is true of every gate here. §173.
+  # applies it live in the same place.
   policy:
     name: policy
     runs-on: ubuntu-latest
@@ -251,24 +130,14 @@ jobs:
       # The tool the tree's own gate needs, installed where the gate can find
       # it.
       #
-      # The action this used was `EmbarkStudios/cargo-deny-action@v2` with
-      # `command: fetch`, and it **did not put `cargo-deny` on the PATH**: the
-      # action runs its own copy inside its own container, and the next step
-      # — the tree's gate — found no tool. The tree's rule is that a tool
-      # which is not installed is **not a pass**, and in CI it is an error
-      # rather than a skip, so the job failed with *"cargo-deny is required
-      # here and is not installed"*. The gate was right and the workflow was
-      # wrong. §217.
-      #
-      # So the tool is installed the way the tree's own documentation says:
+      # The tool is installed the way the tree's own documentation says:
       # `cargo install cargo-deny --locked`, into `$CARGO_HOME/bin`, which is
       # on the PATH of every later step.
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
 
       # Licences, bans, sources and advisories. `deny.toml` is in the
-      # repository; `cargo xtask deny` reads it. The rule, and the table of
-      # licences, are in docs/dependency-policy.md.
+      # repository; `cargo xtask deny` reads it.
       - name: Licence and advisory policy
         run: cargo xtask deny
 

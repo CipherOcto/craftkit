@@ -10,7 +10,7 @@ tree against it.
 
 ## 1. The rule
 
-**Behaviour is designed from public specifications, general CAD conventions and
+**Behaviour is designed from public specifications, general conventions and
 user feedback.** Nothing is copied from another project's source.
 
 **No commercial product's material is used.** Not its code, icons, artwork,
@@ -23,9 +23,9 @@ that, and a clean-room claim that rests on an act their terms forbid is not a
 clean-room claim.
 
 **And no copyleft project's source is read.** Not OpenCASCADE, not FreeCAD,
-not SolveSpace, not CadQuery, not LibreCAD, not QCAD. Their code may not be
-read, so it cannot be ported, and no part of this tree may carry their names
-outside prose.
+not SolveSpace, not CadQuery, not LibreCAD, not QCAD, not OpenSCAD, not
+Blender. Their code may not be read, so it cannot be ported, and no part of
+this tree may carry their names outside prose.
 
 ---
 
@@ -38,7 +38,9 @@ in a fixture, not in a file name.
 
 The names are written the way a person would not write them by accident:
 `Fusion 360` and not `Fusion`, `Autodesk Inventor` and not `Inventor`. A
-shorter name would match ordinary English and the gate would cry wolf.
+shorter name would match ordinary English and the gate would cry wolf. The
+same reason keeps single ordinary words out of the list: a name like `Live`
+would match a line of prose about something else entirely.
 
 | Product | Kind | Why it is here |
 |---|---|---|
@@ -64,6 +66,16 @@ shorter name would match ordinary English and the gate would cry wolf.
 | 3ds Max | commercial | Autodesk's modelling product |
 | Cinema 4D | commercial | Maxon's animation product |
 | Houdini | commercial | SideFX's effects product |
+| Affinity Designer | commercial | Serif's vector product |
+| Inkscape | commercial | the vector editor this tree's vector battery resembles |
+| Krita | commercial | the raster editor this tree's image battery resembles |
+| Scrivener | commercial | the writing program this tree's prose battery resembles |
+| Ableton | commercial | the audio program this tree's sound battery resembles |
+| Pro Tools | commercial | the audio program this tree's sound battery resembles |
+| DaVinci Resolve | commercial | the video program this tree's film battery resembles |
+| Final Cut Pro | commercial | Apple's video editor |
+| MuseScore | commercial | the notation program |
+| Sibelius | commercial | the notation program |
 | OpenCASCADE | copyleft | LGPL; its source may not be read |
 | FreeCAD | copyleft | LGPL; its source may not be read |
 | SolveSpace | copyleft | GPL; its source may not be read |
@@ -78,9 +90,9 @@ shorter name would match ordinary English and the gate would cry wolf.
 ## 3. What the gate checks, and what it cannot
 
 **It checks** that no name in that table appears, in any file of the tree that
-is not prose, and that no file's *path* carries one either. A file called
-`solidworks-export.dxf` is as much a copy of somebody else's work as a
-function that writes one.
+is not prose (`.md` is prose), and that no file's *path* carries one either.
+A file called `solidworks-export.dxf` is as much a copy of somebody else's
+work as a function that writes one.
 
 **It cannot check** that the tree contains nothing copied. Copied code does not
 carry the product's name. A gate that checked that would be a gate that could
@@ -92,22 +104,20 @@ to look for, and a reviewer who has never been told does not.
 
 ---
 
-## 4. The rule this tree was built from
+## 4. The stricter of the two readings
 
-Two repos in the family stated this rule, and they said opposite things about
-whether the product may be *observed*:
+There are two readings of the rule, and they say opposite things about whether
+a product may be *observed*:
 
-- one allowed it — *"may be observed black-box: run it, use its UI with
-  synthetic sessions, take screenshots by window id"* — with the screenshots
-  kept out of the repository;
-- the other forbade it, because the competitor's own terms forbid reverse
+- one allows it — run it, use its interface with synthetic sessions, take
+  screenshots — with the screenshots kept out of the repository;
+- the other forbids it, because the competitor's own terms forbid reverse
   engineering, *"including observing a program's inputs and outputs to recreate
   it"*.
 
-The stricter one is the rule here. **The terms belong to the other party**, and
-a rule that depends on what their licence happens to allow is a rule that
-changes when their lawyers read it. §172 of `KNOWN-GAPS.md` has the
-measurement.
+**The stricter one is the rule here.** The terms belong to the other party,
+and a rule that depends on what their licence happens to allow is a rule that
+changes when their lawyers read it.
 
 ---
 

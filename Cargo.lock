@@ -87,6 +87,9 @@ name = "arrayvec"
 version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "as-raw-xcb-connection"
@@ -112,16 +115,7 @@ version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3"
 dependencies = [
- "bit-vec 0.8.0",
-]
-
-[[package]]
-name = "bit-set"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56d87354e4229f54a44f7bf2435906a4656dba36026ab6eaca629a2c436a691c"
-dependencies = [
- "bit-vec 0.10.1",
+ "bit-vec",
 ]
 
 [[package]]
@@ -129,16 +123,6 @@ name = "bit-vec"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
-
-[[package]]
-name = "bit-vec"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5727b15fa97d4f4fee0a3b7c3d550ed0269f54329207b86388de918604e31269"
-dependencies = [
- "borsh",
- "serde",
-]
 
 [[package]]
 name = "bitflags"
@@ -159,30 +143,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c132eebf10f5cad5289222520a4a058514204aed6d791f1cf4fe8088b82d15f"
 dependencies = [
  "objc2 0.5.3",
-]
-
-[[package]]
-name = "borsh"
-version = "1.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "553c5d846a6ba5150c65e3b1b8ec073bcf1abc20f9b7220de384a4443ea4e20a"
-dependencies = [
- "borsh-derive",
- "bytes",
- "cfg_aliases",
-]
-
-[[package]]
-name = "borsh-derive"
-version = "1.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12cdfe656708a01f89b451a7d36466e6fe6c414de0aa18fc54f864f6f9ca9f56"
-dependencies = [
- "once_cell",
- "proc-macro-crate",
- "proc-macro2",
- "quote",
- "syn 3.0.9",
 ]
 
 [[package]]
@@ -307,21 +267,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "chacha20"
-version = "0.10.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65c35e4b699c7e15ccbe7ee35c005e4fc0a278d22238a2857e6ce2dadeda1b06"
-dependencies = [
- "cfg-if",
- "cpufeatures",
- "rand_core",
-]
-
-[[package]]
 name = "clipboard-win"
-version = "5.4.1"
+version = "5.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bde03770d3df201d4fb868f2c9c59e66a3e4e2bd06692a0fe701e7103c7e84d4"
+checksum = "052af7878466feccda12ba7a6a67d019d712f296809559b47c12c8cc196d3a9a"
 dependencies = [
  "error-code",
 ]
@@ -395,210 +344,462 @@ dependencies = [
 ]
 
 [[package]]
-name = "core_detect"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f8f80099a98041a3d1622845c271458a2d73e688351bf3cb999266764b81d48"
+name = "craftkit-alloc"
+version = "0.2.0"
 
 [[package]]
-name = "cpufeatures"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
+name = "craftkit-au"
+version = "0.2.0"
 dependencies = [
- "libc",
+ "craftkit-au-abi",
+ "craftkit-au-fixture",
 ]
 
 [[package]]
-name = "craftkit"
-version = "0.1.0"
+name = "craftkit-au-abi"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-au-fixture"
+version = "0.2.0"
 dependencies = [
- "craftkit-control",
- "craftkit-core",
- "craftkit-engine",
- "craftkit-foundation",
- "craftkit-io",
- "craftkit-ui",
- "eframe",
- "log",
- "serde",
- "serde_json",
- "winit",
+ "craftkit-au-abi",
 ]
 
 [[package]]
-name = "craftkit-android"
-version = "0.1.0"
+name = "craftkit-audio"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-bridge"
+version = "0.2.0"
 dependencies = [
- "craftkit",
- "craftkit-foundation",
- "eframe",
- "jni",
- "winit",
+ "craftkit-link",
+ "craftkit-plugin-hello",
+ "craftkit-plugin-shapes",
+ "craftkit-plugin-sound",
+ "craftkit-plugin-vector",
+ "craftkit-sdk",
 ]
 
 [[package]]
-name = "craftkit-cli"
-version = "0.1.0"
+name = "craftkit-clap"
+version = "0.2.0"
 dependencies = [
- "craftkit-core",
- "craftkit-engine",
- "craftkit-foundation",
- "craftkit-io",
- "craftkit-mcp",
- "craftkit-model",
- "craftkit-ui",
- "log",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
+ "craftkit-clap-abi",
+ "craftkit-clap-fixture",
+]
+
+[[package]]
+name = "craftkit-clap-abi"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-clap-fixture"
+version = "0.2.0"
+dependencies = [
+ "craftkit-clap-abi",
 ]
 
 [[package]]
 name = "craftkit-control"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
- "craftkit-core",
- "craftkit-engine",
- "craftkit-foundation",
- "log",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
+ "craftkit-sdk",
 ]
 
 [[package]]
-name = "craftkit-core"
-version = "0.1.0"
+name = "craftkit-derive"
+version = "0.2.0"
 dependencies = [
- "craftkit-foundation",
- "proptest",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
-name = "craftkit-engine"
-version = "0.1.0"
+name = "craftkit-ffi"
+version = "0.2.0"
 dependencies = [
- "craftkit-core",
- "craftkit-eval",
- "craftkit-foundation",
- "craftkit-io",
- "craftkit-kernel",
- "craftkit-model",
- "log",
- "proptest",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
+ "craftkit-ffi-abi",
+ "craftkit-plugin-shared",
 ]
 
 [[package]]
-name = "craftkit-eval"
-version = "0.1.0"
+name = "craftkit-ffi-abi"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-font"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-gates"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-hello-server"
+version = "0.2.0"
 dependencies = [
- "craftkit-core",
- "craftkit-foundation",
- "craftkit-kernel",
- "craftkit-model",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
+ "craftkit-plugin-hello",
+ "craftkit-sdk",
 ]
 
 [[package]]
-name = "craftkit-foundation"
-version = "0.1.0"
-dependencies = [
- "proptest",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
-]
+name = "craftkit-hyphen"
+version = "0.2.0"
 
 [[package]]
-name = "craftkit-io"
-version = "0.1.0"
-dependencies = [
- "craftkit-core",
- "craftkit-foundation",
- "craftkit-model",
- "log",
- "proptest",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
-]
+name = "craftkit-image"
+version = "0.2.0"
 
 [[package]]
-name = "craftkit-kernel"
-version = "0.1.0"
-dependencies = [
- "craftkit-core",
- "craftkit-foundation",
- "log",
- "serde",
- "thiserror 2.0.21",
-]
+name = "craftkit-jpeg"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-link"
+version = "0.2.0"
 
 [[package]]
 name = "craftkit-mcp"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
- "craftkit-core",
- "craftkit-engine",
- "craftkit-foundation",
- "craftkit-model",
- "log",
- "serde",
+ "craftkit-plugin-prose",
+ "craftkit-sdk",
  "serde_json",
- "thiserror 2.0.21",
 ]
 
 [[package]]
-name = "craftkit-model"
-version = "0.1.0"
+name = "craftkit-mcp-server"
+version = "0.2.0"
 dependencies = [
- "craftkit-core",
- "craftkit-foundation",
- "serde",
+ "craftkit-mcp",
+ "craftkit-sdk",
+ "craftkit-studio",
  "serde_json",
- "thiserror 2.0.21",
 ]
 
 [[package]]
-name = "craftkit-ui"
-version = "0.1.0"
+name = "craftkit-midi"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-numeric"
+version = "0.2.0"
 dependencies = [
- "craftkit-core",
- "craftkit-engine",
- "craftkit-eval",
- "craftkit-foundation",
- "craftkit-model",
- "egui",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-payload"
+version = "0.2.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
+name = "craftkit-plugin-art"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-cad"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-clap"
+version = "0.2.0"
+dependencies = [
+ "craftkit-clap",
+ "craftkit-derive",
+ "craftkit-sdk",
+ "craftkit-sound-time",
+]
+
+[[package]]
+name = "craftkit-plugin-film"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-font",
+ "craftkit-png",
+ "craftkit-raster",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-fx"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-grid"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-image",
+ "craftkit-raster",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-hello"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-image"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-image",
+ "craftkit-jpeg",
+ "craftkit-png",
+ "craftkit-raster",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-layout"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-numeric"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-numeric",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-pdf"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-png",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-prose"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-shapes"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-plugin-shared"
+version = "0.2.0"
+dependencies = [
+ "craftkit-ffi-abi",
+ "craftkit-plugin-shared",
+]
+
+[[package]]
+name = "craftkit-plugin-sound"
+version = "0.2.0"
+dependencies = [
+ "craftkit-audio",
+ "craftkit-derive",
+ "craftkit-font",
+ "craftkit-midi",
+ "craftkit-plugins",
+ "craftkit-sdk",
+ "craftkit-sound-time",
+ "craftkit-wav",
+]
+
+[[package]]
+name = "craftkit-plugin-text"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-font",
+ "craftkit-hyphen",
+ "craftkit-payload",
+ "craftkit-sdk",
+ "craftkit-text-layout",
+]
+
+[[package]]
+name = "craftkit-plugin-vector"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+ "craftkit-vector-geom",
+]
+
+[[package]]
+name = "craftkit-plugin-vst3"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-sdk",
+ "craftkit-vst3",
+]
+
+[[package]]
+name = "craftkit-plugins"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-png"
+version = "0.2.0"
+dependencies = [
+ "craftkit-raster",
+ "craftkit-sdk",
+ "flate2",
  "image",
- "log",
- "serde",
+]
+
+[[package]]
+name = "craftkit-raster"
+version = "0.2.0"
+dependencies = [
+ "craftkit-font",
+ "craftkit-sdk",
+]
+
+[[package]]
+name = "craftkit-repl"
+version = "0.2.0"
+dependencies = [
+ "craftkit-sdk",
+ "craftkit-studio",
+]
+
+[[package]]
+name = "craftkit-sdk"
+version = "0.2.0"
+dependencies = [
+ "craftkit-derive",
+ "craftkit-ffi",
+ "inventory",
  "serde_json",
 ]
 
 [[package]]
-name = "craftkit-web"
-version = "0.1.0"
+name = "craftkit-sound-time"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-studio"
+version = "0.2.0"
 dependencies = [
- "craftkit-core",
- "craftkit-engine",
- "craftkit-io",
- "craftkit-ui",
+ "craftkit-alloc",
+ "craftkit-audio",
+ "craftkit-clap-fixture",
+ "craftkit-derive",
+ "craftkit-jpeg",
+ "craftkit-link",
+ "craftkit-plugin-art",
+ "craftkit-plugin-cad",
+ "craftkit-plugin-clap",
+ "craftkit-plugin-film",
+ "craftkit-plugin-fx",
+ "craftkit-plugin-grid",
+ "craftkit-plugin-hello",
+ "craftkit-plugin-image",
+ "craftkit-plugin-layout",
+ "craftkit-plugin-numeric",
+ "craftkit-plugin-pdf",
+ "craftkit-plugin-prose",
+ "craftkit-plugin-shapes",
+ "craftkit-plugin-shared",
+ "craftkit-plugin-sound",
+ "craftkit-plugin-text",
+ "craftkit-plugin-vector",
+ "craftkit-plugin-vst3",
+ "craftkit-png",
+ "craftkit-raster",
+ "craftkit-sdk",
+ "craftkit-vst3-fixture",
+]
+
+[[package]]
+name = "craftkit-text-layout"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-vector-geom"
+version = "0.2.0"
+dependencies = [
+ "craftkit-sdk",
+ "kurbo",
+ "linesweeper",
+]
+
+[[package]]
+name = "craftkit-vst3"
+version = "0.2.0"
+dependencies = [
+ "craftkit-vst3-abi",
+ "craftkit-vst3-fixture",
+]
+
+[[package]]
+name = "craftkit-vst3-abi"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-vst3-fixture"
+version = "0.2.0"
+dependencies = [
+ "craftkit-vst3-abi",
+]
+
+[[package]]
+name = "craftkit-wasm"
+version = "0.2.0"
+dependencies = [
+ "craftkit-repl",
+ "craftkit-studio",
+]
+
+[[package]]
+name = "craftkit-wav"
+version = "0.2.0"
+
+[[package]]
+name = "craftkit-window"
+version = "0.2.0"
+dependencies = [
+ "craftkit-control",
+ "craftkit-raster",
+ "craftkit-sdk",
+ "craftkit-studio",
  "eframe",
- "log",
- "serde",
- "serde_json",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
+ "egui",
 ]
 
 [[package]]
@@ -861,10 +1062,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b5343afd4a8365a643ac588dab4cf234a190c7f6c88c9f6dd6ffe00837661b7"
 
 [[package]]
-name = "fastrand"
-version = "2.5.0"
+name = "euclid"
+version = "0.22.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
+checksum = "f1a05365e3b1c6d1650318537c7460c6923f1abdd272ad6842baa2b509957a06"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "fax"
@@ -897,12 +1101,6 @@ dependencies = [
  "miniz_oxide 0.9.1",
  "zlib-rs",
 ]
-
-[[package]]
-name = "fnv"
-version = "1.0.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "foldhash"
@@ -1001,7 +1199,6 @@ dependencies = [
  "cfg-if",
  "libc",
  "r-efi 6.0.0",
- "rand_core",
 ]
 
 [[package]]
@@ -1261,6 +1458,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "inventory"
+version = "0.3.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6928282826c822ad91bf1c9a1cb90a30ba1c26770749929b4656cd6be829cd7c"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1352,6 +1558,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
+name = "kurbo"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2"
+dependencies = [
+ "arrayvec",
+ "euclid",
+ "polycool",
+ "serde",
+ "smallvec",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1383,6 +1602,19 @@ dependencies = [
  "libc",
  "plain",
  "redox_syscall 0.9.5",
+]
+
+[[package]]
+name = "linesweeper"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a25df1b0c5432893f41bba817150e323703ee5f6d974f3a6808ac7fd7f046d18"
+dependencies = [
+ "arrayvec",
+ "kurbo",
+ "polycool",
+ "rustc-hash 2.1.3",
+ "smallvec",
 ]
 
 [[package]]
@@ -1485,7 +1717,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "066cf25f0e8b11ee0df221219010f213ad429855f57c494f995590c861a9a7d8"
 dependencies = [
  "arrayvec",
- "bit-set 0.8.0",
+ "bit-set",
  "bitflags 2.13.2",
  "cfg-if",
  "cfg_aliases",
@@ -1962,6 +2194,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "polycool"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50596ddc09eb5ad5f75cacd40209568e66df71baf86e1499a0e99c4cff12a5a6"
+dependencies = [
+ "arrayvec",
+]
+
+[[package]]
 name = "portable-atomic"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2010,36 +2251,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
-name = "proptest"
-version = "1.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8530004ccb15eae51c7e40009fbe317f341f804db54dc033eec1c50be28cfa0"
-dependencies = [
- "bit-set 0.11.1",
- "bit-vec 0.10.1",
- "bitflags 2.13.2",
- "chacha20",
- "core_detect",
- "num-traits",
- "rand",
- "rand_xorshift",
- "regex-syntax",
- "rusty-fork",
- "tempfile",
- "unarray",
-]
-
-[[package]]
 name = "pxfm"
 version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
-
-[[package]]
-name = "quick-error"
-version = "1.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
 name = "quick-error"
@@ -2078,31 +2293,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
-name = "rand"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65c9fb96cbc91e3478eaae79a69fcd3f1ae4ad052e471fe6732fff548984b4af"
-dependencies = [
- "getrandom 0.4.3",
- "rand_core",
-]
-
-[[package]]
-name = "rand_core"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
-
-[[package]]
-name = "rand_xorshift"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60aa6af80be32871323012e02e6e65f8a7cc7890931ae421d217ad8fe0df2ccf"
-dependencies = [
- "rand_core",
-]
-
-[[package]]
 name = "raw-window-handle"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2134,12 +2324,6 @@ checksum = "580c875845b41ecb1564ad1ae4703044cef774145e3d7a94dc2b3fa7c97868fd"
 dependencies = [
  "bitflags 2.13.2",
 ]
-
-[[package]]
-name = "regex-syntax"
-version = "0.8.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "renderdoc-sys"
@@ -2199,18 +2383,6 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
-
-[[package]]
-name = "rusty-fork"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc6bf79ff24e648f6da1f8d1f011e9cac26491b619e6b9280f2b47f1774e6ee2"
-dependencies = [
- "fnv",
- "quick-error 1.2.3",
- "tempfile",
- "wait-timeout",
-]
 
 [[package]]
 name = "same-file"
@@ -2327,9 +2499,12 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.16.3"
+version = "1.16.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b3dc8af474f516a851ff4bd12db780f948b9250ad37211e4eec0bccea54e01b"
+checksum = "d0d5d4b1981b8bbbb7aed204cae5726d683d5d6ac7e74ec54122ea28f315e7c8"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "smithay-client-toolkit"
@@ -2449,19 +2624,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tempfile"
-version = "3.27.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
-dependencies = [
- "fastrand",
- "getrandom 0.4.3",
- "once_cell",
- "rustix 1.1.5",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2510,7 +2672,7 @@ dependencies = [
  "fax",
  "flate2",
  "half",
- "quick-error 2.0.1",
+ "quick-error",
  "weezl",
  "zune-jpeg",
 ]
@@ -2527,9 +2689,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.53.3"
+version = "1.54.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce3335fa71841cda333a58d7615b03901380ecf09d59b3296d21f8bbac0dde4e"
+checksum = "b52fd3255258d26fac7264ab5a76b53c13367136dc011d3d6ad4f8ed070396a3"
 dependencies = [
  "pin-project-lite",
 ]
@@ -2597,12 +2759,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "unarray"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
-
-[[package]]
 name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2643,15 +2799,6 @@ name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
-
-[[package]]
-name = "wait-timeout"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
-dependencies = [
- "libc",
-]
 
 [[package]]
 name = "walkdir"
@@ -2935,8 +3082,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "27a75de515543b1897b26119f93731b385a19aea165a1ec5f0e3acecc229cae7"
 dependencies = [
  "arrayvec",
- "bit-set 0.8.0",
- "bit-vec 0.8.0",
+ "bit-set",
+ "bit-vec",
  "bitflags 2.13.2",
  "bytemuck",
  "cfg_aliases",
@@ -3244,7 +3391,7 @@ checksum = "e450f9b2ed1dff33c94c12589a87338689467b9c4f5d8a5710bd09a847d2c8a7"
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",

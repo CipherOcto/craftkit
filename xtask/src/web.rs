@@ -1,152 +1,87 @@
-//! The browser build's two hand-written files.
+//! The browser door's hand-written files.
 //!
-//! Everything else in the web build is Rust. `index.html` and `sw.js` are
-//! JavaScript because browsers only accept JavaScript in those two places, and
-//! they are the entire reason the web build needs a gate of its own: a service
-//! worker that caches the wrong thing is invisible until a user is offline.
+//! The v2's browser door is a **page** and a **WebAssembly module**, and the
+//! two are joined by four exported functions and two buffers. Everything in
+//! that boundary is Rust; the two files that are not are the page itself and
+//! the node script that drives the same module without a browser.
 //!
 //! # What is checked
 //!
-//! - **The canvas id matches.** `index.html` and `CANVAS_ID` in Rust are two
-//!   copies of one string, and the failure mode of a mismatch is a blank page.
-//! - **The bundle path matches the crate name.** `craftkit-web` produces
-//!   `craftkit_web.js`. A rename that misses this file is a broken deploy.
-//! - **The worker precaches the bundle.** The page and the worker each hold a
-//!   copy of the bundle's name, and for a long time only the page's copy was
-//!   checked — so the worker could precache a file that does not exist while
-//!   this gate said the two agreed. §67.
-//! - **The service worker is safe.** It must not answer a non-GET, must not
-//!   cache another origin, and must not cache a non-200. Those three rules are
-//!   what keep a convenience feature from becoming a data leak.
-//! - **The scripts parse.** With `node --check` when node is installed. Without
-//!   node the step is reported as skipped, never as passed.
+//! - **The page fetches the module the bundler writes.** The page does
+//!   `fetch("./craftkit_wasm.wasm")` and the bundler writes
+//!   `craftkit_wasm.wasm` into `dist/`. They are two copies of one name, and
+//!   the failure of a mismatch is a 404 on every load — behind a green gate.
+//!   The name is compared against **one** constant, `wasm::BUNDLE_NAME`.
+//! - **The module exports what the page calls.** The page calls
+//!   `craftkit_wasm_request_address`, `craftkit_wasm_run` and
+//!   `craftkit_wasm_response_address`, and reads `exports.memory`. If the
+//!   module stops exporting one of them, the page breaks at run time and
+//!   nothing else in the tree notices.
+//! - **The page and the node script call the same names.** They are two
+//!   copies of one protocol: `browser-check.mjs` drives the module the way
+//!   the page does, without a browser. If they drift, one of the two is
+//!   broken, and the drift is invisible until somebody opens the page.
+//! - **The page can reach the module's memory.** The page reads
+//!   `exports.memory`, and only a `cdylib` gets its memory exported by the
+//!   linker. Nothing in the Rust source declares it, so the manifest is what
+//!   has to say it.
+//! - **The script parses.** With `node --check` when node is installed.
+//!   Without node the step is reported as skipped, never as passed.
+//!
+//! The v1 file checked a canvas element and a service worker. The v2's page
+//! has neither: it is a form and an answer, not a canvas, and it has no
+//! service worker — so those checks are gone rather than rewritten.
 
 use std::path::Path;
 
 use crate::{command, skipped, step};
 
-/// The hand-written files, relative to the web app.
-pub const INDEX: &str = "apps/craftkit-web/index.html";
-pub const SERVICE_WORKER: &str = "apps/craftkit-web/sw.js";
+/// The page, relative to the workspace root.
+pub const INDEX: &str = "apps/craftkit-wasm/index.html";
 
-/// The element id `eframe` draws into. Kept in step with
-/// `apps/craftkit-web/src/stash.rs`.
-pub const CANVAS_ID: &str = "craftkit-canvas";
+/// The node script that drives the module without a browser.
+pub const BROWSER_CHECK: &str = "apps/craftkit-wasm/browser-check.mjs";
 
-/// The generated bundle the page imports.
-/// The path the page imports, derived from the name the bundler is given.
+/// The module's own source: where the exports are declared.
+pub const MODULE_SOURCE: &str = "apps/craftkit-wasm/src/lib.rs";
+
+/// The bundler: where the module's name is written down.
+pub const BUNDLER_SOURCE: &str = "apps/craftkit-wasm/src/bin/bundle.rs";
+
+/// The browser door's manifest: where the `crate-type` is declared.
+pub const MANIFEST: &str = "apps/craftkit-wasm/Cargo.toml";
+
+/// Every export the module makes by name.
 ///
-/// Not a literal. An earlier version spelled it out here *and* explained it
-/// with a claim that was false: "craftkit-web produces `craftkit_web.js` (the
-/// dashes become underscores)". `wasm-bindgen` does not do that — it writes
-/// whatever name it is handed, and left to itself it uses the crate's, dashes
-/// and all. So the page imported `craftkit_web.js`, the bundler wrote
-/// `craftkit-web.js`, and every compile check in this project was green over a
-/// page that 404s on every load. Found by opening it in a browser; see
-/// `KNOWN-GAPS.md` §11.
-///
-/// **Derived, not written twice.** An intermediate version of this fix kept a
-/// second literal and had the check read *that* one, so renaming
-/// `wasm::BUNDLE_NAME` changed nothing the gate could see — which the mutation
-/// "the bundler is told to emit a name the page does not import" reported as
-/// MISSED on its first run. One constant, or the claim that there is one is
-/// another thing written down and not checked.
-pub fn bundle_path() -> String {
-    format!("./dist/{}.js", crate::wasm::BUNDLE_NAME)
-}
-
-/// The path the bundler writes the wasm module to.
-///
-/// The bundle is two files: the JavaScript module the page imports and the
-/// wasm behind it. `wasm-bindgen --out-name` writes both, and the second one
-/// is named after the first. §67.
-pub fn wasm_path() -> String {
-    format!("./dist/{}_bg.wasm", crate::wasm::BUNDLE_NAME)
-}
-
-/// The paths the service worker precaches.
-///
-/// Parsed out of the `SHELL` array rather than searched for in the file: a
-/// substring search over the whole worker stays true when the bundle's name
-/// survives in a comment, which is the same trap
-/// [`canvas_element_is_correctly_identified`] exists to avoid — and a check
-/// that a comment can satisfy is not a check.
-///
-/// A line that is only a comment is not an entry, so a commented-out path does
-/// not count either.
-pub fn worker_shell(worker: &str) -> Vec<String> {
-    const OPEN: &str = "const SHELL = [";
-    let Some(start) = worker.find(OPEN) else {
-        return Vec::new();
-    };
-    let rest = &worker[start + OPEN.len()..];
-    let Some(end) = rest.find("];") else {
-        return Vec::new();
-    };
-    rest[..end]
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.starts_with("//"))
-        .filter_map(|line| {
-            let quote = line.find('"')?;
-            let after = &line[quote + 1..];
-            let close = after.find('"')?;
-            Some(after[..close].to_string())
-        })
-        .collect()
-}
-
-/// Whether the worker precaches the bundle the page imports.
-///
-/// Both files are needed: the JavaScript module the page imports, and the wasm
-/// module behind it. Missing either means the page is cached and the
-/// application is not — the page loads from the network, the worker has
-/// nothing to fall back on, and the user who is offline gets a page that
-/// cannot start.
-pub fn worker_caches_the_bundle(worker: &str) -> bool {
-    let shell = worker_shell(worker);
-    shell.iter().any(|entry| entry == &bundle_path()) && shell.iter().any(|entry| entry == &wasm_path())
-}
-
-/// A rule the service worker must not break.
-pub struct Rule {
-    pub what: &'static str,
-    pub why: &'static str,
-    /// The text that must appear, with the rule stated positively.
-    pub needle: &'static str,
-    /// Text that would mean the rule has been broken.
-    pub forbidden: &'static [&'static str],
-}
-
-/// The service worker's rules, in the order they are reported.
-pub const RULES: &[Rule] = &[
-    Rule {
-        what: "only GET is answered",
-        why: "answering a non-GET from a cache turns a bug into a data bug",
-        needle: "request.method !== \"GET\"",
-        forbidden: &[],
-    },
-    Rule {
-        what: "only same-origin is answered",
-        why: "a service worker must never serve another origin's response",
-        needle: "url.origin !== self.location.origin",
-        forbidden: &[],
-    },
-    Rule {
-        what: "only a 200 is stored",
-        why: "an opaque or redirected response is not ours to keep",
-        needle: "response.status === 200",
-        forbidden: &[],
-    },
-    Rule {
-        what: "the network is tried first",
-        why: "a stale cached bundle is worse than a slow one",
-        needle: "await fetch(request)",
-        forbidden: &["cache.match(request)\n        return"],
-    },
+/// These are the four functions of the boundary, and they are declared in
+/// `apps/craftkit-wasm/src/lib.rs` as `#[unsafe(no_mangle)] pub extern "C"
+/// fn`. The page uses three of them; the fourth says how long the answer is,
+/// and the page takes that from `craftkit_wasm_run`'s return value instead.
+/// The module exports all four, and the gate holds it to that.
+pub const EXPORTS: &[&str] = &[
+    "craftkit_wasm_request_address",
+    "craftkit_wasm_run",
+    "craftkit_wasm_response_address",
+    "craftkit_wasm_response_length",
 ];
 
-/// A problem with the web build's hand-written files.
+/// The exports the page and the node script call.
+///
+/// The protocol, in the order it is used: make room for the command, run it,
+/// find the answer. The length of the answer comes back from `run`, so the
+/// page does not need `craftkit_wasm_response_length` — but the module still
+/// exports it, and the Rust test in `apps/craftkit-wasm/tests/door.rs` uses
+/// it.
+pub const CALLED: &[&str] =
+    &["craftkit_wasm_request_address", "craftkit_wasm_run", "craftkit_wasm_response_address"];
+
+/// The module's memory, as the page sees it: `exports.memory`.
+///
+/// Not declared in Rust: the linker exports the memory of a `cdylib`, and
+/// nothing else. So the thing that has to say so is the manifest.
+pub const MEMORY: &str = "memory";
+
+/// A problem with the browser door's hand-written files.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Problem {
     pub file: String,
@@ -159,145 +94,195 @@ impl std::fmt::Display for Problem {
     }
 }
 
-/// Whether the page carries an element whose **id attribute** is [`CANVAS_ID`].
+/// The four files the checks read, taken as text.
 ///
-/// Not a substring search. `craftkit-canvas` also appears in the stylesheet and in
-/// a comment, so `contains(CANVAS_ID)` stays true after someone renames the
-/// element — which `scripts/mutation-test-gates.sh` demonstrated, and which
-/// this function exists because of. A gate that cannot see the one edit it was
-/// written for is worse than no gate, because it teaches the reader to trust it.
-pub fn canvas_element_is_correctly_identified(html: &str) -> bool {
-    html.lines()
-        .map(str::trim)
-        .filter_map(|line| {
-            if !line.starts_with("<canvas") {
-                return None;
-            }
-            // Cut at the first `>` so `<canvas id="x"></canvas>` yields the tag
-            // and not the whole line — the closing tag is a neighbour, not an
-            // attribute value.
-            let end = line.find('>')?;
-            Some(&line[..=end])
-        })
-        .flat_map(|tag| tag.split_whitespace())
-        .filter_map(|attribute| attribute.strip_prefix("id="))
-        // Trim punctuation rather than just quotes: the token may still carry
-        // the `>` from the cut above, and may be quoted with either character.
-        .any(|value| value.trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '_') == CANVAS_ID)
+/// Taken rather than read, so the rules are testable without a repository on
+/// disk.
+#[derive(Debug, Clone)]
+pub struct Sources<'a> {
+    pub page: &'a str,
+    pub browser_check: &'a str,
+    pub module: &'a str,
+    pub bundler: &'a str,
+    pub manifest: &'a str,
 }
 
-/// Whether the stylesheet has a rule for `#CANVAS_ID`.
+/// The names a script calls on the module's exports.
 ///
-/// A separate rule from the element, and checked separately: renaming one and not
-/// the other leaves the page loading and rendering at the wrong size, which no
-/// check on the id alone would notice.
-pub fn styles_the_canvas_as_full_bleed(html: &str) -> bool {
-    html.lines().map(str::trim).any(|line| line == format!("#{CANVAS_ID} {{"))
+/// Every `exports.<name>` in the script, in the order it appears. The page
+/// and the node script both reach the module only this way, so this is the
+/// whole of what they ask of it.
+pub fn called_exports(script: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut rest = script;
+    while let Some(at) = rest.find("exports.") {
+        let after = &rest[at + "exports.".len()..];
+        let end = after.find(|c: char| !(c.is_alphanumeric() || c == '_')).unwrap_or(after.len());
+        if end > 0 {
+            names.push(after[..end].to_string());
+        }
+        rest = &after[end..];
+    }
+    names
 }
 
-/// Check the entry page and the service worker.
+/// The names a script calls that the module does not export.
 ///
-/// Takes their contents rather than reading them, so the rules are testable
-/// without a repository on disk.
-pub fn check(index: &str, worker: &str) -> Vec<Problem> {
+/// A call to a name the module does not have is a `TypeError` at run time,
+/// in the browser, on the first keystroke — and nothing else in the tree
+/// would say so.
+pub fn unknown_exports(script: &str) -> Vec<String> {
+    called_exports(script)
+        .into_iter()
+        .filter(|name| name != MEMORY && !EXPORTS.contains(&name.as_str()))
+        .collect()
+}
+
+/// Whether the module's source declares the export.
+///
+/// Looked for as the declaration itself — `pub extern "C" fn <name>` — and
+/// not as a substring of the name: a comment that names an export is not an
+/// export. So a commented-out declaration does not count, the same trap the
+/// v1's service-worker shell had.
+pub fn module_exports(source: &str, name: &str) -> bool {
+    let declaration = format!("pub extern \"C\" fn {name}(");
+    source.lines().any(|line| {
+        let trimmed = line.trim();
+        !trimmed.starts_with("//") && trimmed.contains(&declaration)
+    })
+}
+
+/// The names a script calls, sorted and without repeats.
+///
+/// Two scripts that call the same names in a different order are calling the
+/// same names: the order is the script's business, and the protocol is not
+/// about order.
+pub fn called_exports_set(script: &str) -> Vec<String> {
+    let mut names = called_exports(script);
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// Whether the manifest makes the module a `cdylib`.
+///
+/// Only a `cdylib` gets its memory exported by the linker, and the page
+/// reads `exports.memory`. A manifest that lost the `cdylib` would leave the
+/// page reading an export that is not there.
+pub fn is_a_cdylib(manifest: &str) -> bool {
+    manifest.contains("\"cdylib\"")
+}
+
+/// Check the browser door's hand-written files.
+///
+/// The rules, in the order they are reported.
+pub fn check(sources: &Sources<'_>) -> Vec<Problem> {
     let mut problems = Vec::new();
 
-    if !canvas_element_is_correctly_identified(index) {
-        problems.push(Problem {
-            file: INDEX.to_string(),
-            message: format!("no element with id `{CANVAS_ID}`; eframe will not find a canvas to draw into"),
-        });
-    }
-    if !styles_the_canvas_as_full_bleed(index) {
-        problems.push(Problem {
-            file: INDEX.to_string(),
-            message: format!(
-                "the stylesheet does not rule on #{CANVAS_ID}. A canvas that is not sized to the \
-                 viewport renders at its default 300x150 and the application looks broken — and \
-                 `scripts/mutation-test-gates.sh` showed that a rename in one place while the \
-                 other keeps the old name slips past a substring search"
-            ),
-        });
-    }
-    if !index.contains(&bundle_path()) {
+    // The name the bundler writes, and the name the page fetches, are two
+    // copies of one string. Both are compared against the one constant.
+    let module = crate::wasm::module_file_name();
+    let fetched = crate::wasm::module_path();
+    if !sources.page.contains(&format!("\"{fetched}\"")) {
         problems.push(Problem {
             file: INDEX.to_string(),
             message: format!(
-                "no import of `{}`.\n     \
-                 `cargo xtask bundle` emits `{}` and nothing else, so this path and \
-                 the `--out-name` it is given are the same constant for a reason.",
-                bundle_path(),
-                crate::wasm::BUNDLE_NAME
+                "the page does not fetch `{fetched}`.\n     \
+                 `cargo xtask bundle` writes `{module}` and the page beside it, so this \
+                 path and the module's name are the same constant for a reason."
             ),
         });
     }
-    if !index.contains("sw.js") {
+    if !sources.bundler.contains(&format!("\"{module}\"")) {
         problems.push(Problem {
-            file: INDEX.to_string(),
-            message: "the service worker is never registered, so the build will not work offline".to_string(),
-        });
-    }
-    // The page and the worker each hold a copy of the bundle's name, and the
-    // page's copy was checked while the worker's was not — so the worker could
-    // precache a bundle that does not exist, and the gate said the two agreed.
-    // §67.
-    if !worker_caches_the_bundle(worker) {
-        problems.push(Problem {
-            file: SERVICE_WORKER.to_string(),
+            file: BUNDLER_SOURCE.to_string(),
             message: format!(
-                "the shell it precaches does not include the bundle.\n     \
-                 `cargo xtask bundle` writes {} and {}, and the page imports {}.\n     \
-                 The page is cached and the application is not, so a user who goes \
-                 offline gets a page that cannot start — and the only trace is the \
-                 console warning the install step prints.",
-                wasm_path(),
-                bundle_path(),
-                bundle_path()
+                "the bundler does not write `{module}`.\n     \
+                 The page fetches `{fetched}`; a bundle that writes a different file is a \
+                 404 on every load."
             ),
-        });
-    }
-    // A page that fails to start must say so. Without this the only symptom is
-    // a blank window, and the console is not somewhere a user looks.
-    if !index.contains("fallback") {
-        problems.push(Problem {
-            file: INDEX.to_string(),
-            message: "no failure notice: a wasm build that does not start would be a blank page with no explanation".to_string(),
-        });
-    }
-    // The failure box is the only instruction a reader sees when the page is
-    // broken, and it used to name the one command that cannot fix it:
-    // `cargo xtask wasm` only *checks* that the crates compile. `KNOWN-GAPS.md`
-    // §11 recorded that page as a 404 behind four green checks; the authoring
-    // instructions were corrected, and this second copy was not — which is the
-    // lesson of §11 arriving one file later.
-    //
-    // Checked as a sentence rather than a substring: `wasm` appears in this page
-    // legitimately in the comment explaining why `bundle` is the right command.
-    if index.contains("Run:  cargo xtask wasm") {
-        problems.push(Problem {
-            file: INDEX.to_string(),
-            message: "the failure box tells the reader to run `cargo xtask wasm`, which only checks \
-                      that the crates compile and writes nothing.\n     \
-                      `cargo xtask bundle` is the command that produces the file this page imports."
-                .to_string(),
         });
     }
 
-    for rule in RULES {
-        if !worker.contains(rule.needle) {
+    // The module has to export what the page calls.
+    for name in EXPORTS {
+        if !module_exports(sources.module, name) {
             problems.push(Problem {
-                file: SERVICE_WORKER.to_string(),
-                message: format!("the rule “{}” is missing ({})", rule.what, rule.why),
+                file: MODULE_SOURCE.to_string(),
+                message: format!(
+                    "the module does not export `{name}`.\n     \
+                     The page calls it by name, and a name that is not exported is a \
+                     TypeError in the browser on the first keystroke."
+                ),
             });
         }
-        for forbidden in rule.forbidden {
-            if worker.contains(forbidden) {
+    }
+
+    // The page and the node script are two copies of one protocol. Both must
+    // call the exports, and neither may call something the module does not
+    // have.
+    for (file, script) in [(INDEX, sources.page), (BROWSER_CHECK, sources.browser_check)] {
+        for name in CALLED {
+            if !script.contains(&format!("exports.{name}")) {
                 problems.push(Problem {
-                    file: SERVICE_WORKER.to_string(),
-                    message: format!("the rule “{}” is broken ({})", rule.what, rule.why),
+                    file: file.to_string(),
+                    message: format!(
+                        "the script never calls `exports.{name}`.\n     \
+                         The protocol is: make room for the command, run it, find the answer."
+                    ),
                 });
             }
         }
+        if !script.contains(&format!("exports.{MEMORY}")) {
+            problems.push(Problem {
+                file: file.to_string(),
+                message: format!(
+                    "the script never reads `exports.{MEMORY}`.\n     \
+                     The answer comes out of the module's memory, and the module's memory \
+                     is an export."
+                ),
+            });
+        }
+        for name in unknown_exports(script) {
+            problems.push(Problem {
+                file: file.to_string(),
+                message: format!(
+                    "the script calls `exports.{name}`, which the module does not export.\n     \
+                     The module exports: {}.",
+                    EXPORTS.join(", ")
+                ),
+            });
+        }
+    }
+
+    // The two copies of the protocol must agree. If they drift, one of them is
+    // broken and the other one is what everybody reads.
+    let page_calls = called_exports_set(sources.page);
+    let check_calls = called_exports_set(sources.browser_check);
+    if page_calls != check_calls {
+        problems.push(Problem {
+            file: BROWSER_CHECK.to_string(),
+            message: format!(
+                "the page and the node script do not call the same exports.\n     \
+                 The page calls {page_calls:?}; the script calls {check_calls:?}.\n     \
+                 They are two copies of one protocol, so a drift means one of the two is \
+                 broken."
+            ),
+        });
+    }
+
+    // `exports.memory` is the linker's doing, not the source's, so the
+    // manifest is the only place that can say the module is the kind of
+    // module that has an exported memory.
+    if !is_a_cdylib(sources.manifest) {
+        problems.push(Problem {
+            file: MANIFEST.to_string(),
+            message: format!(
+                "the manifest does not declare `cdylib`.\n     \
+                 Only a cdylib gets its memory exported by the linker, and the page reads \
+                 `exports.{MEMORY}`."
+            ),
+        });
     }
 
     problems
@@ -306,30 +291,46 @@ pub fn check(index: &str, worker: &str) -> Vec<Problem> {
 /// The gate.
 pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("web");
-    let index = read(root, INDEX)?;
-    let worker = read(root, SERVICE_WORKER)?;
+    let page = read(root, INDEX)?;
+    let browser_check = read(root, BROWSER_CHECK)?;
+    let module = read_rust(root, MODULE_SOURCE)?;
+    let bundler = read_rust(root, BUNDLER_SOURCE)?;
+    let manifest = read(root, MANIFEST)?;
+    let sources = Sources {
+        page: &page,
+        browser_check: &browser_check,
+        module: &module,
+        bundler: &bundler,
+        manifest: &manifest,
+    };
 
-    let problems = check(&index, &worker);
+    let problems = check(&sources);
     if !problems.is_empty() {
-        let mut message = format!("{} problem(s) in the browser build:\n", problems.len());
+        let mut message = format!("{} problem(s) in the browser door:\n", problems.len());
         for problem in &problems {
             message.push_str(&format!("   • {problem}\n"));
         }
         return Err(message);
     }
-    println!("   ok: the canvas, the bundle path, the worker's shell and its rules all agree");
+    println!(
+        "   ok: the page fetches {}, the module exports the four names, and the page and \
+         the node script call the same ones",
+        crate::wasm::module_file_name()
+    );
 
-    // index.html is not a standalone script — the module inside it is, and node
-    // cannot check HTML — so only the worker is handed to the parser. When there
-    // is no parser, this is skipped, not passed.
-    match command("node", &["--check", SERVICE_WORKER], root) {
+    // The page's script is inline in the HTML, so `node --check` does not
+    // apply to it — node cannot read HTML, and the module inside it is
+    // checked by the browser. The node script *is* a script, so it is the
+    // one that is parsed. When there is no parser, this is skipped, not
+    // passed.
+    match command("node", &["--check", BROWSER_CHECK], root) {
         Ok(out) if out.ok() => {
-            println!("   ok: {SERVICE_WORKER} parses");
+            println!("   ok: {BROWSER_CHECK} parses");
             Ok(crate::Outcome::Ran)
         }
-        Ok(out) => Err(format!("{SERVICE_WORKER} does not parse:\n\n{}", out.all())),
+        Ok(out) => Err(format!("{BROWSER_CHECK} does not parse:\n\n{}", out.all())),
         Err(_) => {
-            skipped(SERVICE_WORKER, "node is not installed");
+            skipped(BROWSER_CHECK, "node is not installed");
             Ok(crate::Outcome::Skipped)
         }
     }
@@ -340,215 +341,221 @@ fn read(root: &Path, relative: &str) -> Result<String, String> {
     crate::tree::read_text(&path).map_err(|e| format!("could not read {}: {e}", path.display()))
 }
 
+/// Read a Rust file for the production code it ships.
+///
+/// The exports are production code, and the tree's one reader asks which
+/// view it wants: this gate wants the code the tree ships.
+fn read_rust(root: &Path, relative: &str) -> Result<String, String> {
+    let path = root.join(relative);
+    crate::tree::read_rust(&path, crate::tree::Subject::Production)
+        .map_err(|e| format!("could not read {}: {e}", path.display()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const GOOD_INDEX: &str = r#"<style>
-#craftkit-canvas {
-  width: 100vw;
-}
-</style>
-<canvas id="craftkit-canvas"></canvas>
-<script type="module">const { default: init } = await import("./dist/craftkit_web.js"); init();</script>
-<div id="fallback"></div>
-navigator.serviceWorker.register("./sw.js");"#;
-
-    /// The worker's safety rules, without its shell.
-    const GOOD_WORKER_RULES: &str = r#"
-if (request.method !== "GET") return;
-if (url.origin !== self.location.origin) return;
-const response = await fetch(request);
-if (response && response.status === 200) { await cache.put(request, response.clone()); }
-"#;
-
-    /// A worker that precaches the bundle the page imports.
+    /// A page that fetches the module and calls the protocol.
     ///
-    /// Built from the *derived* paths rather than spelled out, so a rename of
-    /// `wasm::BUNDLE_NAME` cannot quietly make this fixture wrong — which is
-    /// exactly what a hand-written fixture did. §67.
-    fn good_worker() -> String {
-        let shell = format!(
-            "const SHELL = [\n  \"./\",\n  \"./index.html\",\n  \"{}\",\n  \"{}\",\n];\n",
-            bundle_path(),
-            wasm_path()
-        );
-        format!("{shell}{GOOD_WORKER_RULES}")
-    }
-
-    #[test]
-    fn the_failure_box_names_the_command_that_actually_builds_the_page() {
-        // §11's falsehood, one file later: the authoring instructions said
-        // `bundle` and the error box a broken page shows still said `wasm`.
-        let root = crate::root().expect("root");
-        let index = crate::tree::read_text(root.join(INDEX)).expect("the page is readable");
-        let worker = crate::tree::read_text(root.join(SERVICE_WORKER)).expect("worker");
-        let problems = check(&index, &worker);
-        assert!(problems.is_empty(), "the page in the tree has a problem: {problems:#?}");
-        assert!(index.contains("cargo xtask bundle"), "no run-this instruction at all");
-    }
-
-    #[test]
-    fn a_good_pair_produces_no_problems() {
-        assert!(check(GOOD_INDEX, &good_worker()).is_empty(), "{:?}", check(GOOD_INDEX, &good_worker()));
-    }
-
-    #[test]
-    fn a_renamed_canvas_element_is_caught() {
-        // Renaming the element's own `id`.
-        let index = GOOD_INDEX.replace("<canvas id=\"craftkit-canvas\"", "<canvas id=\"canvas\"");
-        let problems = check(&index, &good_worker());
-        assert!(
-            problems.iter().any(|p| p.message.contains("no element with id")),
-            "the element's id changed and nothing noticed: {problems:?}"
-        );
-    }
-
-    #[test]
-    fn a_rename_that_leaves_the_name_elsewhere_is_still_caught() {
-        // The exact mutation the substring search missed: the name survives in
-        // the stylesheet and in a comment, so `contains(CANVAS_ID)` is still true.
-        let index = format!(
-            "<style>#{CANVAS_ID} {{ width: 100vw }}</style>\n\
-             <!-- see {CANVAS_ID} -->\n\
-             <canvas id=\"c-canvas\" tabindex=\"0\"></canvas>\n\
-             <div id=\"fallback\"></div>\n\
-             <script>import(\"./dist/craftkit_web.js\"); register(\"./sw.js\");</script>"
-        );
-        assert!(
-            index.contains(CANVAS_ID),
-            "the name is still in the file; a substring check would pass this"
-        );
-        let problems = check(&index, &good_worker());
-        assert!(
-            problems.iter().any(|p| p.message.contains("no element with id")),
-            "the substring check is not enough and must not be used: {problems:?}"
-        );
-    }
-
-    #[test]
-    fn a_stylesheet_that_stops_styling_the_canvas_is_caught() {
-        let index = GOOD_INDEX.replace(&format!("#{CANVAS_ID} {{"), "#something-else {");
-        let problems = check(&index, &good_worker());
-        assert!(problems.iter().any(|p| p.message.contains("stylesheet")), "{problems:?}");
-    }
-
-    #[test]
-    fn a_bundle_path_the_bundler_would_not_emit_is_caught() {
-        // The failure this catches is the one a real browser found: the page
-        // imported `craftkit_web.js` while `wasm-bindgen` was writing
-        // `craftkit-web.js`, so every load was a 404 with every compile check
-        // green. The message says which command produces the bundle, because
-        // "the dashes become underscores" was the false explanation this
-        // replaced.
-        let index = GOOD_INDEX.replace("craftkit_web.js", "craftkit.js");
-        let problems = check(&index, &good_worker());
-        assert!(problems.iter().any(|p| p.message.contains("cargo xtask bundle")), "{problems:?}");
-        assert!(
-            !problems.iter().any(|p| p.message.contains("dashes become underscores")),
-            "the old message claimed something false and must not come back"
-        );
-    }
-
-    #[test]
-    fn the_bundle_path_is_derived_from_the_bundlers_name() {
-        // One constant, so a rename on either side is a compile-time fact
-        // rather than a 404.
-        assert_eq!(bundle_path(), format!("./dist/{}.js", crate::wasm::BUNDLE_NAME));
-    }
-
-    #[test]
-    fn the_wasm_path_is_derived_from_the_bundlers_name() {
-        // The bundle is two files, and the worker has to cache both of them.
-        assert_eq!(wasm_path(), format!("./dist/{}_bg.wasm", crate::wasm::BUNDLE_NAME));
-    }
-
-    #[test]
-    fn a_worker_that_precaches_a_different_bundle_is_caught() {
-        // §67: the page and the worker each hold a copy of the bundle's name,
-        // and the worker's copy was not checked — so the worker could precache
-        // a file that does not exist while the gate said the two agreed.
-        let worker = good_worker().replace(&bundle_path(), "./dist/something_else.js");
-        let problems = check(GOOD_INDEX, &worker);
-        assert!(
-            problems.iter().any(|p| p.message.contains("precaches")),
-            "the worker precaches a bundle the page does not import and nothing noticed: {problems:?}"
-        );
-    }
-
-    #[test]
-    fn a_bundle_named_only_in_a_comment_is_not_in_the_shell() {
-        // The trap the canvas id has its own function for: a substring search
-        // over the whole file stays true when the name survives in a comment,
-        // so the shell is parsed rather than searched.
-        let worker = format!("// {}\nconst SHELL = [\n  \"./\",\n];\n", bundle_path());
-        assert!(worker.contains(&bundle_path()), "the name is still in the file");
-        assert!(!worker_caches_the_bundle(&worker), "a comment is not an entry");
-    }
-
-    #[test]
-    fn the_worker_in_the_tree_precaches_the_bundle_the_page_imports() {
-        let root = crate::root().expect("root");
-        let worker = crate::tree::read_text(root.join(SERVICE_WORKER)).expect("sw.js");
-        assert!(worker_caches_the_bundle(&worker), "sw.js does not precache the bundle");
-    }
-
-    #[test]
-    fn an_unregistered_service_worker_is_caught() {
-        let index = GOOD_INDEX.replace("sw.js", "offline.js");
-        let problems = check(&index, &good_worker());
-        assert!(problems.iter().any(|p| p.message.contains("offline")), "{problems:?}");
-    }
-
-    #[test]
-    fn a_page_with_no_failure_notice_is_caught() {
-        let index = GOOD_INDEX.replace("fallback", "something-else");
-        let problems = check(&index, &good_worker());
-        assert!(problems.iter().any(|p| p.message.contains("blank page")), "{problems:?}");
-    }
-
-    #[test]
-    fn a_service_worker_that_answers_any_method_is_caught() {
-        let worker = good_worker().replace(r#"if (request.method !== "GET") return;"#, "");
-        let problems = check(GOOD_INDEX, &worker);
-        assert!(problems.iter().any(|p| p.message.contains("only GET")), "{problems:?}");
-    }
-
-    #[test]
-    fn a_service_worker_that_caches_another_origin_is_caught() {
-        let worker = good_worker().replace("if (url.origin !== self.location.origin) return;", "");
-        let problems = check(GOOD_INDEX, &worker);
-        assert!(problems.iter().any(|p| p.message.contains("same-origin")), "{problems:?}");
-    }
-
-    #[test]
-    fn a_service_worker_that_stores_a_non_200_is_caught() {
-        let worker = good_worker().replace("response.status === 200", "true");
-        let problems = check(GOOD_INDEX, &worker);
-        assert!(problems.iter().any(|p| p.message.contains("200")), "{problems:?}");
-    }
-
-    #[test]
-    fn the_repository_web_files_pass() {
-        let root = crate::root().expect("root");
-        let index = crate::tree::read_text(root.join(INDEX)).expect("index.html");
-        let worker = crate::tree::read_text(root.join(SERVICE_WORKER)).expect("sw.js");
-        let problems = check(&index, &worker);
-        assert!(problems.is_empty(), "{problems:?}");
-    }
-
-    #[test]
-    fn the_canvas_id_matches_the_rust_constant() {
-        // Two copies of one string; this is the test that keeps them together.
-        let root = crate::root().expect("root");
-        let stash = crate::tree::read_rust(
-            root.join("apps/craftkit-web/src/stash.rs"),
-            crate::tree::Subject::Production,
+    /// Built from the *derived* names rather than spelled out, so a rename of
+    /// `wasm::BUNDLE_NAME` cannot quietly make this fixture wrong.
+    fn good_page() -> String {
+        format!(
+            r#"<pre id="answer"></pre>
+<form id="prompt"><input id="line" /></form>
+<p class="status" id="status">loading…</p>
+<script type="module">
+const address = exports.craftkit_wasm_request_address(bytes.length);
+const length = exports.craftkit_wasm_run();
+const where_ = exports.craftkit_wasm_response_address();
+const view = new Uint8Array(exports.memory.buffer);
+const module = await fetch("./{module}");
+</script>"#,
+            module = crate::wasm::module_file_name()
         )
-        .expect("stash.rs");
-        assert!(
-            stash.contains(&format!("\"{CANVAS_ID}\"")),
-            "stash.rs does not use {CANVAS_ID}; update both"
+    }
+
+    /// The node script, doing what the page does.
+    fn good_browser_check() -> String {
+        format!(
+            r#"const address = exports.craftkit_wasm_request_address(encoded.length);
+const length = exports.craftkit_wasm_run();
+const where_ = exports.craftkit_wasm_response_address();
+const view = new Uint8Array(exports.memory.buffer);
+const module = await readFile("{module}");
+"#,
+            module = crate::wasm::module_file_name()
+        )
+    }
+
+    /// The module's source, exporting the four names.
+    fn good_module() -> String {
+        EXPORTS
+            .iter()
+            .map(|name| format!("pub extern \"C\" fn {name}(length: u32) -> u32 {{ 0 }}"))
+            .collect::<Vec<String>>()
+            .join("\n")
+    }
+
+    /// The bundler, writing the module's name.
+    fn good_bundler() -> String {
+        format!("let out = directory.join(\"{}\");", crate::wasm::module_file_name())
+    }
+
+    /// The manifest, making the module a cdylib.
+    fn good_manifest() -> String {
+        "crate-type = [\"cdylib\", \"rlib\"]".to_string()
+    }
+
+    /// The five files, as owned strings, so a test can change one of them
+    /// and ask again.
+    struct Fixtures {
+        page: String,
+        browser_check: String,
+        module: String,
+        bundler: String,
+        manifest: String,
+    }
+
+    impl Fixtures {
+        fn good() -> Fixtures {
+            Fixtures {
+                page: good_page(),
+                browser_check: good_browser_check(),
+                module: good_module(),
+                bundler: good_bundler(),
+                manifest: good_manifest(),
+            }
+        }
+
+        fn sources(&self) -> Sources<'_> {
+            Sources {
+                page: &self.page,
+                browser_check: &self.browser_check,
+                module: &self.module,
+                bundler: &self.bundler,
+                manifest: &self.manifest,
+            }
+        }
+    }
+
+    #[test]
+    fn a_good_set_of_files_produces_no_problems() {
+        let fixtures = Fixtures::good();
+        let problems = check(&fixtures.sources());
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// The failure a real browser found in the v1: the page imported a file
+    /// the bundler never wrote, so every load was a 404 with every compile
+    /// check green.
+    #[test]
+    fn a_page_that_fetches_another_module_is_caught() {
+        let mut fixtures = Fixtures::good();
+        fixtures.page = fixtures.page.replace(&crate::wasm::module_file_name(), "craftkit.wasm");
+        let problems = check(&fixtures.sources());
+        assert!(problems.iter().any(|p| p.message.contains("does not fetch")), "{problems:?}");
+    }
+
+    /// The other copy of the name: the bundler writes the file the page
+    /// fetches, and if it stops doing so the page 404s.
+    #[test]
+    fn a_bundler_that_writes_another_module_is_caught() {
+        let mut fixtures = Fixtures::good();
+        fixtures.bundler = fixtures.bundler.replace(&crate::wasm::module_file_name(), "craftkit.wasm");
+        let problems = check(&fixtures.sources());
+        assert!(problems.iter().any(|p| p.message.contains("does not write")), "{problems:?}");
+    }
+
+    #[test]
+    fn a_module_that_stops_exporting_a_name_is_caught() {
+        let mut fixtures = Fixtures::good();
+        fixtures.module = fixtures.module.replace(
+            "pub extern \"C\" fn craftkit_wasm_response_address(",
+            "pub extern \"C\" fn craftkit_wasm_response_where(",
         );
+        let problems = check(&fixtures.sources());
+        assert!(problems.iter().any(|p| p.message.contains("does not export")), "{problems:?}");
+    }
+
+    /// A name in a comment is not an export.
+    #[test]
+    fn an_export_named_only_in_a_comment_is_not_an_export() {
+        let source = "// pub extern \"C\" fn craftkit_wasm_run(";
+        assert!(!module_exports(source, "craftkit_wasm_run"));
+    }
+
+    #[test]
+    fn a_page_that_calls_an_export_the_module_does_not_have_is_caught() {
+        let mut fixtures = Fixtures::good();
+        fixtures.page =
+            fixtures.page.replace("exports.craftkit_wasm_run()", "exports.craftkit_wasm_run_it()");
+        let problems = check(&fixtures.sources());
+        assert!(problems.iter().any(|p| p.message.contains("does not export")), "{problems:?}");
+    }
+
+    /// The two copies of the protocol: if they drift, one of them is broken.
+    #[test]
+    fn a_page_and_a_script_that_call_different_exports_are_caught() {
+        let mut fixtures = Fixtures::good();
+        fixtures.browser_check = fixtures.browser_check.replace("exports.craftkit_wasm_run()", "");
+        let problems = check(&fixtures.sources());
+        assert!(problems.iter().any(|p| p.message.contains("do not call the same exports")), "{problems:?}");
+    }
+
+    /// `exports.memory` is the linker's doing, so the manifest is the only
+    /// place that can say the module has one.
+    #[test]
+    fn a_manifest_without_a_cdylib_is_caught() {
+        let mut fixtures = Fixtures::good();
+        fixtures.manifest = fixtures.manifest.replace("\"cdylib\"", "\"rlib\"");
+        let problems = check(&fixtures.sources());
+        assert!(problems.iter().any(|p| p.message.contains("cdylib")), "{problems:?}");
+    }
+
+    #[test]
+    fn the_called_names_are_read_out_of_the_script() {
+        let names = called_exports("exports.craftkit_wasm_run(); exports.memory.buffer");
+        assert_eq!(names, vec!["craftkit_wasm_run".to_string(), "memory".to_string()]);
+    }
+
+    #[test]
+    fn a_manifest_without_a_cdylib_is_not_a_cdylib() {
+        assert!(is_a_cdylib("crate-type = [\"cdylib\", \"rlib\"]"));
+        assert!(!is_a_cdylib("crate-type = [\"rlib\"]"));
+    }
+
+    /// The files in the tree, as they are.
+    #[test]
+    fn the_repository_browser_door_passes() {
+        let root = crate::root().expect("root");
+        let page = read(&root, INDEX).expect("index.html");
+        let browser_check = read(&root, BROWSER_CHECK).expect("browser-check.mjs");
+        let module = read_rust(&root, MODULE_SOURCE).expect("lib.rs");
+        let bundler = read_rust(&root, BUNDLER_SOURCE).expect("bundle.rs");
+        let manifest = read(&root, MANIFEST).expect("Cargo.toml");
+        let sources = Sources {
+            page: &page,
+            browser_check: &browser_check,
+            module: &module,
+            bundler: &bundler,
+            manifest: &manifest,
+        };
+        let problems = check(&sources);
+        assert!(problems.is_empty(), "{problems:#?}");
+    }
+
+    /// The page and the node script in the tree call the same names, and the
+    /// names are the module's.
+    #[test]
+    fn the_tree_s_page_and_script_agree_with_the_module() {
+        let root = crate::root().expect("root");
+        let page = read(&root, INDEX).expect("index.html");
+        let script = read(&root, BROWSER_CHECK).expect("browser-check.mjs");
+        let module = read_rust(&root, MODULE_SOURCE).expect("lib.rs");
+        assert_eq!(called_exports_set(&page), called_exports_set(&script));
+        for name in EXPORTS {
+            assert!(module_exports(&module, name), "{name} is not exported");
+        }
     }
 }

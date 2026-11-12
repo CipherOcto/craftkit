@@ -4,35 +4,23 @@
 //!
 //! ```text
 //! fmt --check        a second, and a diff to read
-//! anchors            a second
 //! assets             a second
 //! lists              a second
 //! layers             a second
 //! web                a second
 //! clippy -D warnings minutes
 //! tests              minutes
-//! fuzz               seconds
 //! wasm               minutes
 //! ```
 //!
 //! The cheap file-reading gates come first so a formatting slip is reported in
 //! a second rather than after a compile. The expensive gates come last.
 //!
-//! The **anchors** phase is second because it protects the instrument every
-//! other measurement comes from: `scripts/mutation-test-gates.sh` finds a moved
-//! anchor when the case that uses it is reached, which is up to twenty-five
-//! minutes into a run. Checked up front, it is a second. §184.
-//!
 //! The wasm check is *not* run concurrently with the tests, and the reason is
 //! worth stating because it looks like an oversight: both are cargo builds into
 //! the same target directory, so the second one blocks on cargo's build lock
 //! anyway. Running them at once would print interleaved output and make the
 //! failure of either harder to read, for no time saved.
-//!
-//! The fuzz phase sits between the tests and the wasm check for two reasons.
-//! It needs the CLI the tests have just built, so it must come after them; and
-//! a crash it finds is worth more than a wasm build that takes four minutes to
-//! find out about, so it must come before.
 //!
 //! # What it stops at
 //!
@@ -49,7 +37,7 @@
 use std::path::Path;
 use std::time::Instant;
 
-use crate::{anchors, assets, cargo, cleanroom, doctor, fuzz, layers, lists, step, wasm, web};
+use crate::{assets, cargo, cleanroom, doctor, layers, lists, step, wasm, web};
 
 /// One step of the gate.
 pub struct Phase {
@@ -69,7 +57,6 @@ pub struct Phase {
 /// the phases that ran, and `the_closing_line_names_what_actually_ran` pins it.
 pub const PHASES: &[Phase] = &[
     Phase { name: "fmt", run: fmt },
-    Phase { name: "anchors", run: anchors::run },
     Phase { name: "assets", run: assets::run },
     Phase { name: "cleanroom", run: cleanroom::run },
     Phase { name: "lists", run: lists::run },
@@ -77,7 +64,6 @@ pub const PHASES: &[Phase] = &[
     Phase { name: "web", run: web::run },
     Phase { name: "clippy", run: clippy },
     Phase { name: "tests", run: tests },
-    Phase { name: "fuzz", run: fuzz::command },
     Phase { name: "wasm", run: wasm::run },
 ];
 
@@ -138,12 +124,41 @@ pub fn clippy(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 /// stdout, and the harness prints each test's name as it goes.
 pub fn tests(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("tests");
-    for package in workspace_packages(root)? {
+    let packages = workspace_packages(root)?;
+    build_the_shared_libraries(root, &packages)?;
+    for package in &packages {
         println!("   {}", package.name);
-        test_package(root, &package)?;
+        test_package(root, package)?;
     }
     println!("   ok");
     Ok(crate::Outcome::Ran)
+}
+
+/// Build every package whose library is also a shared library.
+///
+/// **Before** the tests, and for a reason that is not obvious: cargo writes a
+/// package's `.so` when the package is **built**, and not when it is used as
+/// another package's dependency. The fixtures are dev-dependencies — nothing
+/// that ships links them — so `cargo test --package craftkit-au` never writes
+/// `libcraftkit_au_fixture.so`, and the host's test opens a file that is not
+/// there.
+///
+/// So the shared libraries are built here, first, and the tests that `dlopen`
+/// one find it. The rule this keeps is the tree's: the host's test is against
+/// a **real** shared library, not a mock, and a mock would have been the easy
+/// way to make the failure go away.
+fn build_the_shared_libraries(root: &Path, packages: &[Package]) -> Result<(), String> {
+    let mut names: Vec<&str> = packages.iter().filter(|p| p.is_cdylib).map(|p| p.name.as_str()).collect();
+    if names.is_empty() {
+        return Ok(());
+    }
+    names.sort_unstable();
+    let mut args: Vec<&str> = vec!["build", "--profile", "ci"];
+    for name in &names {
+        args.push("--package");
+        args.push(name);
+    }
+    cargo(&args, root)
 }
 
 /// One package of the workspace, and where its tests live.
@@ -160,6 +175,15 @@ struct Package {
     dir: std::path::PathBuf,
     /// Whether the package has a library target, and therefore doc tests.
     has_lib: bool,
+    /// Whether the package's library is also a **shared library**.
+    ///
+    /// A shared library is a file on disk, and a test that opens it with
+    /// `dlopen` needs the file to exist before the test runs. Cargo writes
+    /// that file only when the package is **built**, not when it is used as a
+    /// dependency — so a package that is only ever a dev-dependency of another
+    /// package never gets its `.so` written, and the test that opens it fails
+    /// with a file that is not there.
+    is_cdylib: bool,
 }
 
 /// The packages of the workspace, in the order cargo lists them.
@@ -210,7 +234,19 @@ fn workspace_packages(root: &Path) -> Result<Vec<Package>, String> {
                 })
             })
             .unwrap_or(false);
-        found.push(Package { name, id, dir, has_lib });
+        let is_cdylib = entry
+            .get("targets")
+            .and_then(|t| t.as_array())
+            .map(|targets| {
+                targets.iter().any(|t| {
+                    t.get("crate_types")
+                        .and_then(|c| c.as_array())
+                        .map(|kinds| kinds.iter().any(|k| k.as_str() == Some("cdylib")))
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false);
+        found.push(Package { name, id, dir, has_lib, is_cdylib });
     }
     found.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(found)
@@ -374,39 +410,25 @@ mod tests {
         let names: Vec<&str> = PHASES.iter().map(|p| p.name).collect();
         assert_eq!(
             names,
-            vec![
-                "fmt",
-                "anchors",
-                "assets",
-                "cleanroom",
-                "lists",
-                "layers",
-                "web",
-                "clippy",
-                "tests",
-                "fuzz",
-                "wasm",
-            ],
+            vec!["fmt", "assets", "cleanroom", "lists", "layers", "web", "clippy", "tests", "wasm",],
             "the order is chosen so the cheapest gates run first, and `tests` and `wasm` must \
              still be in it: they used to be called after the loop, where deleting the call was \
              invisible — `ci` reported them as run on a build that ran neither"
         );
     }
 
-    /// The fuzz phase runs after the tests, because it fuzzes the binary the
-    /// tests built.
+    /// The tests phase runs before the wasm check, because the wasm check
+    /// builds the same crates the tests have just built.
     ///
     /// It is a phase and not a separate command somebody has to remember:
     /// a check that runs only when somebody remembers it is the same defect
     /// as a check that does not exist (§169).
     #[test]
-    fn the_fuzz_phase_runs_after_the_tests_and_before_the_wasm_check() {
+    fn the_tests_phase_runs_before_the_wasm_check() {
         let names: Vec<&str> = PHASES.iter().map(|p| p.name).collect();
         let tests = names.iter().position(|n| *n == "tests").expect("tests is a phase");
-        let fuzz = names.iter().position(|n| *n == "fuzz").expect("fuzz is a phase");
         let wasm = names.iter().position(|n| *n == "wasm").expect("wasm is a phase");
-        assert!(tests < fuzz, "the fuzzer runs before the CLI it fuzzes is built");
-        assert!(fuzz < wasm, "a crash is worth more than a four-minute wasm build");
+        assert!(tests < wasm, "the tests run before the wasm build");
     }
 
     #[test]

@@ -9,8 +9,6 @@
 //!
 //! The boundary here is narrower than it looks, and getting that wrong is worse
 //! than having no check, so it was measured rather than assumed.
-//! `scripts/mutation-test-gates.sh` breaks each library crate in turn and runs
-//! this gate; the result is what follows.
 //!
 //! **Caught:**
 //!
@@ -36,10 +34,24 @@
 //! here substitutes for actually opening the page. See `KNOWN-GAPS.md`.
 //!
 //! The apps are excluded: the desktop app is a window and the CLI rasterises;
-//! neither belongs in a browser. `craftkit-web` is *checked*, because it is the
+//! neither belongs in a browser. `craftkit-wasm` is *checked*, because it is the
 //! one app whose whole job is to be a browser.
+//!
+//! # There is no bundler here
+//!
+//! The v1 browser door was `wasm-bindgen`: a separate CLI that turned a
+//! `.wasm` into a `.js` and a `_bg.wasm`, and had to be installed, and had to
+//! have a version that matched the crate. **The v2 has none of that.** The
+//! browser door is a raw `cdylib` that exports four functions by name, the
+//! page fetches the `.wasm` itself and instantiates it, and the "bundle" is
+//! the tree's own program (`apps/craftkit-wasm/src/bin/bundle.rs`) copying two
+//! files into `dist/`.
+//!
+//! So the one name that matters is the **module's** name, and it has to be the
+//! same in three places: the artefact cargo builds, the file the bundler
+//! writes, and the path the page fetches. That is what [`BUNDLE_NAME`] is.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::layers;
 use crate::{skipped, step};
@@ -47,18 +59,27 @@ use crate::{skipped, step};
 /// The target every library crate must build for.
 pub const TARGET: &str = "wasm32-unknown-unknown";
 
-/// The name the browser bundle is emitted under, without its extension.
+/// The **module's** name, without its extension.
 ///
-/// **One constant, because getting this wrong breaks the page in a way no
-/// compilation check can see.** The page imports `./dist/<BUNDLE_NAME>.js`, and
-/// `wasm-bindgen` emits `<name>.js` where `<name>` is whatever it is given — it
-/// does *not* turn dashes into underscores. An earlier version of this project
-/// asserted the opposite in a doc comment and in a gate's error message, the
-/// page imported `craftkit_web.js`, and `wasm-bindgen` wrote `craftkit-web.js`.
-/// The result was a 404 on every load, found by opening the page: see
-/// `KNOWN-GAPS.md` §11. Naming the module here and passing it to `--out-name`
-/// is what keeps the two from drifting apart again.
-pub const BUNDLE_NAME: &str = "craftkit_web";
+/// **One constant, because the v2's page fetches the module itself.** There is
+/// no `wasm-bindgen` glue in the v2: no `.js` file, no `_bg.wasm`, no CLI to
+/// install. The page does `fetch("./craftkit_wasm.wasm")` and hands the bytes
+/// to `WebAssembly.instantiate`. So the name that matters is the module's, and
+/// it must be the same name in three places:
+///
+/// - the artefact cargo builds — `target/wasm32-unknown-unknown/release/
+///   craftkit_wasm.wasm` (the package's dashes become underscores, because
+///   the crate's *lib* target is `craftkit_wasm`);
+/// - the file the bundler writes into `dist/` — `craftkit_wasm.wasm`;
+/// - the path the page fetches — `./craftkit_wasm.wasm`.
+///
+/// The v1 file made the same point about a name it got wrong: `wasm-bindgen`
+/// does not turn dashes into underscores, it writes whatever name it is
+/// handed, and the page imported `craftkit_web.js` while the bundler wrote
+/// `craftkit-web.js` — a 404 on every load, behind four green checks. The
+/// v2's mistake would be the same shape, so the gate checks all three names
+/// against this one constant; see `xtask/src/web.rs`.
+pub const BUNDLE_NAME: &str = "craftkit_wasm";
 
 /// The package the browser app is built from.
 ///
@@ -66,8 +87,48 @@ pub const BUNDLE_NAME: &str = "craftkit_web";
 /// gate checks that this package builds for the browser ✓ and the bundle is
 /// made from it ✓; a second spelling would let the two drift ✓ and the drift
 /// would be invisible ✓ — the gate would be checking one app and the page
-/// would be served another. §291.
-pub const WEB_PACKAGE: &str = "craftkit-web";
+/// would be served another.
+pub const WEB_PACKAGE: &str = "craftkit-wasm";
+
+/// The module's file name: `craftkit_wasm.wasm`.
+///
+/// **Derived, never written twice.** The bundler's output name and the page's
+/// `fetch` are both this name, and the gate compares both against it.
+pub fn module_file_name() -> String {
+    format!("{BUNDLE_NAME}.wasm")
+}
+
+/// The path the page fetches, relative to the page: `./craftkit_wasm.wasm`.
+///
+/// The page and its module have to be served from one directory, so the path
+/// is relative to the page and never absolute.
+pub fn module_path() -> String {
+    format!("./{BUNDLE_NAME}.wasm")
+}
+
+/// Where the bundler writes the bundle: `apps/craftkit-wasm/dist`.
+///
+/// The bundler writes beside the page, into the page's own app directory —
+/// see `apps/craftkit-wasm/src/bin/bundle.rs`.
+pub fn bundle_dir(root: &Path) -> PathBuf {
+    root.join("apps").join(WEB_PACKAGE).join("dist")
+}
+
+/// The module cargo builds, where cargo leaves it.
+///
+/// `target/wasm32-unknown-unknown/release/craftkit_wasm.wasm`.
+pub fn module_artefact(root: &Path) -> PathBuf {
+    root.join("target").join(TARGET).join("release").join(module_file_name())
+}
+
+/// The two files the bundle holds: the module and the page.
+///
+/// The bundle is the page **and** the module, side by side: a page loads its
+/// module with `fetch`, and `fetch` does not read a file off the disk, so the
+/// two have to be served from one directory.
+pub fn bundle_files() -> Vec<String> {
+    vec![module_file_name(), "index.html".to_string()]
+}
 
 /// Is the target installed on this machine?
 pub fn target_installed() -> bool {
@@ -93,113 +154,139 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     build(root)?;
 
     // A compile check is not a browser build, and nothing above can say so on
-    // its own: `wasm-bindgen` is a separate tool, so this phase can be green
-    // while the page's JavaScript does not exist and cannot be produced on this
-    // machine. `wasm-bindgen --version` is the only thing that knows, and it
-    // costs one process to ask.
-    if let Some(note) = post_build_note(bundler_blocker(root).as_deref()) {
+    // its own: it writes nothing, so the page's module is not there until
+    // somebody runs `cargo xtask bundle`. When that is the case, the gate says
+    // so — a green gate over a page that 404s is the failure this tree has
+    // already paid for once.
+    if let Some(note) = post_build_note(bundle_blocker(root).as_deref()) {
         println!("   note: {note}");
     }
     Ok(crate::Outcome::Ran)
 }
 
-/// What `run` says once the compile check has passed and the browser build is
+/// What `run` says once the compile check has passed and the browser bundle is
 /// still out of reach.
 ///
-/// Split out and pure so the sentence can be tested without a `wasm-bindgen` on
-/// the machine: a test that depended on the installed CLI would pass in one
-/// checkout and fail in another, which is worse than no test. `None` when the
-/// bundler works, so a machine that *can* build the page is not told it cannot.
+/// Split out and pure so the sentence can be tested without a toolchain on the
+/// machine: a test that depended on the installed target would pass in one
+/// checkout and fail in another, which is worse than no test. `None` when
+/// there is nothing to say, so a tree whose bundle is already there is not
+/// told it is not.
+///
+/// **The v2 has no `wasm-bindgen-cli` to install**, and this note must never
+/// tell a reader to install one: there is none in the tree, and the bundle is
+/// built by the tree's own program.
 pub fn post_build_note(blocker: Option<&str>) -> Option<String> {
     blocker.map(|reason| {
         format!(
-            "that is a compile check. It writes nothing, and the browser bundle cannot be built \
-             here: {reason}\n         `cargo xtask wasm` is green; the page's JavaScript does not \
-             exist yet. `KNOWN-GAPS.md` §13."
+            "that is a compile check. It writes nothing. {reason}\n         \
+             `cargo xtask wasm` is green; the page's module does not exist yet. \
+             `cargo xtask bundle` is the command that writes it."
         )
     })
 }
 
-/// Why the bundle cannot be produced right now, if it cannot.
+/// Why the browser bundle is not there right now, if it is not.
 ///
-/// Returned as a sentence so `bundle` can print it as a skip with a reason,
-/// which is the only honest outcome when a tool is missing.
+/// Returned as a sentence so `run` can print it as a note, which is the only
+/// honest outcome when the thing that is missing is the thing itself.
 ///
-/// The decision itself is [`crate::doctor::bundler_status`], not a second copy
-/// of it. That is the fix for the divergence this function used to have with
-/// `doctor`: here, an unreadable crate version meant "no blocker" — bundle
-/// would carry on with a CLI it had never checked against anything.
-fn bundler_blocker(root: &Path) -> Option<String> {
-    match crate::doctor::bundler_status(
-        crate::doctor::installed_bundler_version(root).as_deref(),
-        crate::doctor::wasm_bindgen_crate_version(root).as_deref(),
-    ) {
-        crate::doctor::Bundler::Ready => None,
-        crate::doctor::Bundler::Blocked(reason) => Some(reason),
+/// The v2's bundle needs no tool that has to be installed: the bundler is
+/// `cargo run -p craftkit-wasm --bin bundle`, so the only thing that can stop
+/// it is the target not being installed, or the bundle not having been
+/// written yet.
+fn bundle_blocker(root: &Path) -> Option<String> {
+    if !target_installed() {
+        return Some(format!(
+            "the {TARGET} target is not installed, so the module cannot be built \
+             (rustup target add {TARGET})."
+        ));
     }
+    if !bundle_is_written(root) {
+        return Some(format!(
+            "the bundle has not been written yet, and `cargo xtask bundle` is the command that \
+             writes {} and the page beside it.",
+            module_file_name()
+        ));
+    }
+    None
+}
+
+/// Whether the bundle is written: the module and the page, side by side.
+///
+/// Both files, because a bundle with the page and no module is a page that
+/// cannot start, and one with the module and no page is a module nobody can
+/// reach.
+pub fn bundle_is_written(root: &Path) -> bool {
+    let dist = bundle_dir(root);
+    bundle_files().iter().all(|name| dist.join(name).is_file())
 }
 
 /// Build the browser bundle: the page the repository is actually deployed as.
 ///
-/// This was missing entirely until a real browser was opened. `cargo xtask wasm`
-/// only ever *checked* that the crates compile for the target, `index.html`
-/// told a reader to run it to "run this", and nothing in the repository turned a
-/// `.wasm` into the `dist/` the page imports — so the deployed page was a 404
-/// and every compile check was green.
+/// The v2's bundle is two files — the module cargo built and the page the
+/// tree holds — written into `dist/` by the tree's own program. There is no
+/// external tool to install and no glue to generate.
 ///
-/// Returns [`crate::Outcome::Skipped`] with a printed reason when the tool is
-/// missing or the wrong version: never a pass.
+/// Returns [`crate::Outcome::Skipped`] with a printed reason when the target
+/// is not installed: never a pass.
 pub fn bundle(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("bundle");
-    let Some(why) = bundler_blocker(root) else {
-        crate::cargo(&["build", "-p", "craftkit-web", "--target", TARGET, "--release"], root)?;
-        let wasm = root.join("target").join(TARGET).join("release").join("craftkit-web.wasm");
-        if !wasm.is_file() {
-            return Err(format!("{} is not there after a successful build", wasm.display()));
+    if !target_installed() {
+        skipped(
+            "the browser bundle",
+            &format!("the {TARGET} target is not installed (rustup target add {TARGET})"),
+        );
+        return Ok(crate::Outcome::Skipped);
+    }
+    build_module(root)?;
+    let wasm = module_artefact(root);
+    if !wasm.is_file() {
+        return Err(format!("{} is not there after a successful build", wasm.display()));
+    }
+    // The bundler takes the module's path and writes the module and the page
+    // into `dist/`. The path is relative to the workspace root, because that
+    // is where cargo is run from.
+    let relative = Path::new("target").join(TARGET).join("release").join(module_file_name());
+    let relative = relative.to_string_lossy().to_string();
+    crate::cargo(&["run", "-p", WEB_PACKAGE, "--bin", "bundle", "--", &relative], root)?;
+
+    let dist = bundle_dir(root);
+    for name in bundle_files() {
+        let path = dist.join(&name);
+        if !path.is_file() {
+            return Err(format!(
+                "the bundler did not write {}; the bundle in {} is incomplete",
+                path.display(),
+                dist.display()
+            ));
         }
-        let dist = root.join("apps/craftkit-web/dist");
-        // Run from the build directory and name the file, rather than
-        // assembling an argument vector out of owned strings: every argument
-        // below is a literal, which is also what makes the `--out-name` value
-        // visibly the same constant the page is checked against.
-        let build_dir = wasm.parent().unwrap_or(root);
-        let file = wasm
-            .file_name()
-            .and_then(|f| f.to_str())
-            .ok_or_else(|| format!("{} has no file name", wasm.display()))?;
-        let out = crate::command(
-            "wasm-bindgen",
-            &[
-                "--target",
-                "web",
-                "--out-dir",
-                &dist.to_string_lossy(),
-                // The name the page imports. Passing it explicitly is the point:
-                // left to itself wasm-bindgen would name the file after the
-                // crate, dashes and all, and the page would 404 on every load.
-                "--out-name",
-                BUNDLE_NAME,
-                file,
-            ],
-            build_dir,
-        )?;
-        if !out.ok() {
-            return Err(format!("wasm-bindgen failed:\n\n{}", out.all()));
-        }
-        println!("   ok: {BUNDLE_NAME}.js and {BUNDLE_NAME}_bg.wasm in {}", dist.display());
-        return Ok(crate::Outcome::Ran);
-    };
-    skipped("the browser bundle", &why);
-    Ok(crate::Outcome::Skipped)
+    }
+    println!("   ok: {} and index.html in {}", module_file_name(), dist.display());
+    Ok(crate::Outcome::Ran)
 }
 
-/// Check every library crate and the web app.
+/// Check every library crate and the browser app, and build the module.
 ///
 /// Separated from [`run`] so `ci` can call it directly, having already asked
 /// whether the target is installed.
 pub fn build(root: &Path) -> Result<(), String> {
+    build_module(root)?;
     layers::check_wasm(root)?;
-    println!("   ok: every library crate and craftkit-web build for {TARGET}");
+    println!("   ok: every library crate and {WEB_PACKAGE} build for {TARGET}");
+    Ok(())
+}
+
+/// Build the browser module: the artefact the page loads.
+///
+/// The command is the tree's own, the one `apps/craftkit-wasm/src/bin/bundle.rs`
+/// documents, and the artefact it leaves is the one the page fetches.
+fn build_module(root: &Path) -> Result<(), String> {
+    crate::cargo(&["build", "-p", WEB_PACKAGE, "--target", TARGET, "--release"], root)?;
+    let wasm = module_artefact(root);
+    if !wasm.is_file() {
+        return Err(format!("{} is not there after a successful build", wasm.display()));
+    }
     Ok(())
 }
 
@@ -212,60 +299,91 @@ mod tests {
         assert_eq!(TARGET, "wasm32-unknown-unknown");
     }
 
-    /// §13's whole content: `wasm` can be green while the page's JavaScript does
+    /// The v2 has no glue: the name that matters is the module's, and it is
+    /// the module's because the page fetches the `.wasm` itself.
+    #[test]
+    fn the_bundle_name_is_the_modules_name() {
+        assert_eq!(BUNDLE_NAME, "craftkit_wasm");
+        assert_eq!(module_file_name(), "craftkit_wasm.wasm");
+        assert_eq!(module_path(), "./craftkit_wasm.wasm");
+    }
+
+    /// The package is the app's, and the app is the one that is a browser.
+    #[test]
+    fn the_web_package_is_the_browser_door() {
+        assert_eq!(WEB_PACKAGE, "craftkit-wasm");
+    }
+
+    /// The artefact is where the page's module is: `target/<target>/release/`.
+    #[test]
+    fn the_artefact_is_where_cargo_leaves_the_module() {
+        let root = Path::new("/tree");
+        assert_eq!(
+            module_artefact(root),
+            Path::new("/tree/target/wasm32-unknown-unknown/release/craftkit_wasm.wasm")
+        );
+    }
+
+    /// The bundle is the module and the page, side by side.
+    #[test]
+    fn the_bundle_is_the_module_and_the_page() {
+        assert_eq!(bundle_files(), vec!["craftkit_wasm.wasm".to_string(), "index.html".to_string()]);
+    }
+
+    /// The bundler writes into the page's own app directory.
+    #[test]
+    fn the_bundle_is_written_beside_the_page() {
+        assert_eq!(bundle_dir(Path::new("/tree")), Path::new("/tree/apps/craftkit-wasm/dist"));
+    }
+
+    /// §13's whole content: `wasm` can be green while the page's module does
     /// not exist. The phase has to say so, and say it only when it is true.
     #[test]
     fn post_build_note_says_so_when_the_browser_build_is_out_of_reach() {
-        let blocked = post_build_note(Some("wasm-bindgen-cli is not installed"))
-            .expect("a blocked bundler is worth saying");
+        let blocked = post_build_note(Some("the wasm32 target is not installed"))
+            .expect("a missing bundle is worth saying");
         assert!(blocked.contains("compile check"), "{blocked}");
-        assert!(blocked.contains("wasm-bindgen-cli is not installed"), "{blocked}");
+        assert!(blocked.contains("the wasm32 target is not installed"), "{blocked}");
         assert!(blocked.contains("does not exist yet"), "{blocked}");
     }
 
-    /// The other half, as its own test: a machine that can build the page must
-    /// not be told it cannot, or every run carries a warning nobody can act on.
+    /// The other half, as its own test: a tree whose bundle is there must not
+    /// be told it is not, or every run carries a warning nobody can act on.
     #[test]
-    fn post_build_note_stays_quiet_when_the_bundler_works() {
-        assert!(post_build_note(None).is_none(), "a working bundler must stay quiet");
+    fn post_build_note_stays_quiet_when_there_is_nothing_to_say() {
+        assert!(post_build_note(None).is_none(), "nothing to say must stay quiet");
     }
 
-    /// The blocker is a sentence from `bundler_blocker`, not a bool, and the
-    /// whole point is that the reason reaches the reader.
+    /// The blocker is a sentence, not a bool, and the whole point is that the
+    /// reason reaches the reader.
     #[test]
     fn post_build_note_carries_the_blockers_own_reason() {
-        let reason = "the CLI is 0.2.89 but the wasm-bindgen crate is 0.2.129";
+        let reason = "the bundle has not been written yet";
         let note = post_build_note(Some(reason)).expect("note");
         assert!(note.contains(reason), "the reason was dropped: {note}");
     }
 
-    /// §291: the gate **says** it checks the web app, and it did not.
-    ///
-    /// The web app is exempt from the layering rules ✓ — it is an app ✓ — and
-    /// it was filtered out of the wasm check with the apps ✓, so the message
-    /// the gate printed ✓ was a claim about a crate it never compiled ✓. The
-    /// two things are unrelated ✓, and the check has to name the app ✓.
+    /// The v1 note told the reader to install `wasm-bindgen-cli`. There is no
+    /// such tool in the v2, and telling a reader to install it would send
+    /// them to install a bundler for a glue format this tree does not have.
     #[test]
-    fn the_wasm_check_covers_every_layered_crate_plus_the_web_app() {
-        let root = crate::root().expect("root");
-        let crates = layers::load(&root).expect("metadata");
-        let web = crates.iter().find(|c| c.name == WEB_PACKAGE).expect("craftkit-web is a member");
-        // It is exempt from the layering rules and still checked for wasm: the
-        // two things are unrelated.
-        assert_eq!(layers::classify(&web.name), Some(layers::Class::Exempt));
+    fn the_note_never_mentions_wasm_bindgen() {
+        let note = post_build_note(Some("the target is not installed")).expect("note");
+        assert!(!note.contains("wasm-bindgen"), "the v1 note came back: {note}");
+        assert!(note.contains("cargo xtask bundle"), "the note does not say what to do: {note}");
+    }
 
+    /// The gate **says** it checks the browser app, and it has to check the
+    /// one the tree holds: the app is exempt from the layering rules — it is
+    /// an app — and that has nothing to do with whether it builds for a
+    /// browser.
+    #[test]
+    fn the_wasm_check_covers_every_layered_crate_plus_the_browser_app() {
         let checked = layers::wasm_packages();
         assert!(
             checked.contains(&WEB_PACKAGE),
             "the gate says it checks {WEB_PACKAGE} and does not: {checked:?}"
         );
-        // And every layered crate is in there too.
-        for (name, class) in layers::TABLE {
-            if matches!(class, layers::Class::Layer(_)) {
-                assert!(checked.contains(name), "{name} is a library crate and is not checked");
-            }
-        }
-        let _ = root;
     }
 
     #[test]

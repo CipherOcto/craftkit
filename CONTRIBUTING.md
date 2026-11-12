@@ -1,233 +1,155 @@
 # Contributing
 
-craftkit is a scaffold, so the contribution here is rarely a feature. It is
-usually one of:
+This tree is a **scaffold**: a working, tested workspace meant to be copied and
+re-purposed, or driven directly by an agent. Contributions here are usually
+small, and they are usually about **making the kit do one more thing**.
 
-- a **decision** made explicit and checked, so the next change does not have to
-  re-derive it;
-- a **gate** that turns a mistake someone will actually make into a failure at
-  the moment they make it;
-- a **recipe**, so the next agent does not have to work out the same sequence.
+---
 
-Those three are worth more here than features, because they are what survives
-being copied into somebody else's project.
+## 1. The rules that are not negotiable
 
-## Before you start
+These are the tree's rules. A contribution that breaks one of them is not a
+contribution; it is a rewrite.
 
-```bash
-cargo xtask doctor    # can this machine build it?
-cargo xtask ci        # seconds on a warm tree, minutes cold
-```
+- **Never crash.** No `unwrap()`, `expect()`, `panic!`, `todo!`,
+  `unimplemented!` or `unreachable!` in non-test code, and no `unsafe` outside
+  the ten named crates. Every crate root carries the same deny list, in the
+  same order.
+- **Everything is a command.** A command is a struct with
+  `#[derive(Command)]`; the fields are the parameters. Behaviour added
+  anywhere else — a special case in a front end, a bespoke tool, a flag on a
+  command line — is the mistake this rule exists to prevent.
+- **Independent.** No commercial product's material, and no commercial
+  product run, measured or compared against. `docs/clean-room.md` has the
+  rule and the table.
+- **No assets.** No iconography, images, fonts or artwork: everything is drawn
+  in code, and `cargo xtask assets` fails the build if anything embeds a
+  non-source file.
+- **Rust only.** The only non-Rust files are `apps/craftkit-wasm/index.html`,
+  `apps/craftkit-wasm/browser-check.mjs` and the CI workflow.
+- **The layering holds.** A crate may depend only on crates in **strictly
+  lower** layers. A plugin may not depend on an application or on another
+  plugin.
+- **The UI is thin.** A front end reads the kit's state and acts through the
+  registry. It never writes the document, never calls the evaluator, never
+  keeps a value the evaluator computes.
+- **The rules of the modelling.** A node may have no place; the document
+  carries the payload and the tree is containment and relations; derived
+  values are derived and never stored; **refuse, do not clamp**; "nothing" is
+  an option and not a zero; unknown names are refused.
+- **Every rule has a test.** A rule with no test is a habit.
 
-Then read `AGENTS.md`. It is the rules; this file is the process.
+---
 
-## The shape of a change
-
-**One topic.** One change, one branch, one commit when it builds. A change that
-adds a command, changes the file format and refactors the evaluator is three
-changes, and the one that gets reviewed properly is the one that did one thing.
-
-**Land the gate before the gate.** If you add a rule, add the check in the same
-change. A rule nobody enforces is a comment; a check with no rule is a gate that
-blocks people for no stated reason.
-
-**A recipe is part of the change.** If your change makes an existing recipe
-wrong, fix the recipe in the same commit. Documentation that describes a
-workflow you have just changed is worse than no documentation.
-
-## Style
-
-The rules are in `AGENTS.md`. What they are *for* is worth restating once.
-
-```rust
-#![deny(
-    clippy::unwrap_used,
-    clippy::expect_used,
-    clippy::panic,
-    clippy::unimplemented,
-    clippy::todo,
-    clippy::unreachable
-)]
-#![forbid(unsafe_code)]
-```
-
-at the top of every production crate root, and:
-
-```rust
-match params.num("distance", 10.0) {
-    Ok(distance) => { /* … */ }
-    Err(e) => return Err(e.into()),
-}
-```
-
-rather than `params["distance"].as_f64().unwrap_or(10.0)`.
-
-The first says *this may not panic*. The second says *this cannot panic even if
-the input is hostile*. The second is the one that matters, and it is why
-`crates/foundation/src/params.rs` exists as a separate crate instead of a helper
-function: it is the boundary, and putting it at layer 0 means nothing below it
-can get at the raw JSON by accident.
-
-Formatting is `cargo fmt` with `rustfmt.toml` (`max_width = 110`,
-`use_small_heuristics = "Max"`). That is why the deny attribute above is
-multi-line: it is 112 characters on one line, and rustfmt reflows it. Paste the
-block as written, then let `cargo fmt` have it.
-
-`cargo xtask lists` compares the attribute after normalising whitespace, case
-and the `clippy::` prefix, so the one-line and multi-line forms both pass — but
-the lints must match in **order**, and they must be all six.
-
-Comments explain **why**, in prose, for the person who arrives in six months —
-not what the next line does.
-
-## Adding things
-
-- **A command**: `crates/engine/src/commands.rs`, plus tests. Nothing else may
-  change a document. See `docs/recipes/add-a-command.md`.
-- **A saved field**: one new file at `crates/io/src/format/pending/<name>.rs`.
-  Never edit `FORMAT`, `JSON_STEPS`, the history in `format.rs`, or a `v<N>/`
-  folder. See `docs/recipes/change-the-file-format.md`.
-- **An icon**: draw it. `crates/ui/src/icons.rs` is a list of line segments and
-  arcs; add one and draw it. Do not add a file.
-- **A crate**: pick its layer, add the deny attribute, add it to
-  `xtask/src/layers.rs::TABLE` *and* to the table in `docs/architecture.md` in
-  the same commit (`cargo xtask lists` compares them), keep `members` sorted,
-  and add it to the table in `AGENTS.md` and `README.md` if it is a library
-  crate.
-- **A control-channel method or an MCP tool**: read
-  `docs/recipes/add-a-control-channel-method.md` first. The short answer is that
-  a control method is usually one match arm and nothing else, because the
-  commands already exist.
-
-## Adding a gate
-
-A gate earns its place by preventing a mistake that has happened, or that is
-obvious enough that it will. Write it in `xtask/src/`, in the house style — no
-`unwrap`, errors as `Result`, because a gate that panics on a malformed manifest
-is a gate that lies.
-
-Then:
-
-1. **Unit-test the rules**, not the file reading. The interesting part is the
-   comparison, and it should be testable without a repository on disk — see
-   `xtask/src/layers.rs`, where `check` takes a model and `from_metadata` builds
-   it.
-2. **Add a test asserting the rule against this repository**, so the gate cannot
-   quietly stop checking anything (`the_project_ships_no_image_assets`,
-   `the_real_architecture_table_matches_the_code_table`).
-3. **Make it skip, not pass, when it cannot run** — with a reason, printed where
-   it cannot be missed.
-4. **Register it** in `xtask/src/ci.rs::PHASES` if it belongs in `ci`, and in
-   `USAGE`. There is a test that the usage text and the phase list agree, and
-   `PHASES` is the only list: `ci::run` iterates it, so a phase you add there is
-   one that runs, and a phase you remove is a failing test rather than a silent
-   omission.
-
-Order matters in `ci`: the cheap file-reading gates come first so a formatting
-slip is reported in a second rather than after a compile.
-
-A gate returns `Outcome::Ran` or `Outcome::Skipped`, and `ci`'s closing line is
-built from those outcomes rather than written out by hand. Keep it that way. The
-hand-written version listed `tests` and `wasm` on a build where the call that ran
-them had been deleted, so `cargo xtask ci` reported green without running either.
-
-### Show the gate that fails
-
-A gate nobody has ever seen fail is a gate nobody can vouch for. When you add
-one, add a line to `scripts/mutation-test-gates.sh` that breaks the rule and
-asserts the gate rejects the tree. Four gates in this project had been quietly
-unable to fail — a substring search, a check that existed only as a unit test, a
-table reader that could not see a row glued onto the end of a line of prose, and
-`ci` itself, which reported gates it had not run — and that script found all
-four. The script found a fifth in itself: it printed its missed mutations in red
-and exited 0.
-
-Give each mutation its own line and its own label. Three of them once shared a
-single check, so the label named one of the three things it actually verified.
-
-The script refuses to run a mutation that does not apply, compares checksums at
-the end so it cannot leave the tree changed, and exits non-zero when a gate
-misses. All three exist because it got all three wrong once. It also counts the
-cases it runs rather than dividing by a hardcoded total, so the ratio it prints
-cannot drift away from the checks it actually did.
-
-**A mutation's target file must also be in `scripts/mutation-files.txt`.** That
-file is the list: the script reads it on every run, and the array it fills is
-rebuilt from it each time, so a path added to the script's own array is lost
-before the first case runs. The snapshot, the restore and the checksum all walk
-that one list, so a mutation against a file that is not on it is restored by
-nothing and checked by nothing:
-the tree keeps the broken source and the run still prints "Tree unchanged" and
-exits 0. That happened once, and the next ordinary `cargo test` was what noticed
-it — not the script that made the mess. `swap` and `append` now refuse a target
-that is not listed, so you will be told rather than left to remember.
-
-`scripts/mutation-test-gates.sh` runs in CI as the `mutation` job of
-`.github/workflows/mutation.yml` — its own workflow, because it takes about
-an hour and a push must not cancel it (§252). It runs nightly, on demand
-(`workflow_dispatch`) and on every pull request; the fast gates run on every
-push. `--self-test` asserts the script itself still fails when a gate stops
-catching. Run both locally before you claim a new gate works:
+## 2. Before you start
 
 ```bash
-scripts/mutation-test-gates.sh --self-test   # must exit non-zero
-scripts/mutation-test-gates.sh               # must exit zero, tree unchanged
+cargo xtask doctor        # can this machine build the project at all?
+cargo test -p craftkit-gates   # is the tree's own gate green?
 ```
 
-## Running the real window
+Read `AGENTS.md`, then `docs/architecture.md` and the recipe that matches
+your task under `docs/recipes/`.
 
-One check cannot run in CI, because CI has no display: `scripts/live-window-check.sh`
-drives the real binary on a real display and compares the window's own pixels
-before and after a command arrives over the control channel. It found the defect
-in `KNOWN-GAPS.md` §21 — the window used to keep painting a frame from before
-the command, while the engine had already moved on.
+**This is a shared machine.** Check the load before a big build
+(`cut -d' ' -f1 /proc/loadavg`), build with `nice -n 15`, and do not run a
+suite that takes all the CPU for more than five minutes without asking. If a
+job is expensive, put it in CI rather than running it here.
 
-```bash
-DISPLAY=:1 scripts/live-window-check.sh   # 0 passed, 1 failed, 77 no display
+---
+
+## 3. The gates that must be green
+
+| Gate | What it checks |
+|---|---|
+| `cargo fmt --check` | the formatting |
+| `cargo clippy --workspace -- -D warnings` | the lints, including the house deny list |
+| `cargo test` | the tests, one per rule |
+| `cargo test -p craftkit-gates` | the tree's own gate: the deny attribute, the layering, "a plugin is a plugin", the thin front end, the bounds in the prose |
+| `cargo xtask ci` | the whole outer gate — see `KNOWN-GAPS.md` §1 for what it does in this tree today |
+| `cargo xtask cleanroom` | no prohibited product's name outside prose |
+| `cargo xtask assets` | no un-attributed file, and no embedded asset |
+
+`cargo xtask ci` is the last thing you run before you commit.
+
+---
+
+## 4. One topic per commit
+
+A commit is one idea. If the message needs an "and", it is two commits.
+
+The message form is:
+
+```text
+feat(<scope>): <what it does> — §NNN
+docs: <what it does> — §NNN
 ```
 
-It exits **77**, not 0, when it cannot run. A check that reports success where it
-could not run is the same defect it exists to catch, so there is no default that
-looks like a pass. Captures are left in `target/live-window-check/` — the check
-keeps its evidence, because a check that deletes what it saw is one nobody can
-look at afterwards.
+- `feat(<scope>)` for a change that makes the kit do something, where
+  `<scope>` is the battery, the crate or the area it belongs to;
+- `docs` for the prose that goes with it — the README's section, in its own
+  commit, because the prose and the code are reviewed by different eyes;
+- `fix(<scope>)` for a crash fix, and `test(<scope>)` for a test that lands
+  on its own;
+- `§NNN` is the number of the README section the work belongs to. The README
+  is the design and the sections are numbered; a commit that changes
+  behaviour points at the section that describes it.
 
-It measures **this application's** window, matched by the pid that owns it
-(`_NET_WM_PID`), because a second instance has a window with the same name and
-the check used to measure whichever the X server listed first — reporting
-*"the engine changed and the window did not"* about a window that had never
-received the commands (`KNOWN-GAPS.md` §56). The part that decides which
-window to measure is pure, so it has a self-test that needs no display:
+Examples from this tree's history:
 
-```bash
-scripts/live-window-check.sh --self-test   # 0 when the window picker still holds
+```text
+feat(cad): the table of a drawing — §1600
+docs(v2): the table of a drawing — §1600
+fix(sound): the clip that read past its end — §812
 ```
 
-## Never break the browser
+Commit after every arc that builds. Never commit `target*/`; `.gitignore`
+already excludes it.
 
-Everything below the apps must build for `wasm32-unknown-unknown`; `cargo xtask
-wasm` checks it and `cargo xtask ci` runs it. It catches a dependency that does
-not build for the browser, and a `cfg` branch that stopped compiling.
+---
 
-It does **not** catch `std::fs`, `std::net`, `std::thread` or `std::env`: all of
-those compile for `wasm32-unknown-unknown` and fail at run time instead. This was
-measured, not assumed — see `scripts/mutation-test-gates.sh` and `KNOWN-GAPS.md`.
-Nothing replaces opening the page.
+## 5. What a review will look for
 
-## Honest reporting
+- **The rule, and the test that breaks when the rule is broken.** A feature
+  with no failing test is a feature nobody checked.
+- **Refusals, not clamps.** An out-of-range value is an error. A value that is
+  silently brought into range is a bug that shows up later, somewhere else.
+- **Hostile input.** Everything from outside is bounded, checked and finite.
+- **The prose.** The README says what the change does and what it refuses, and
+  every public bound it introduces is named there **with the number the code
+  has**.
+- **No new path.** The command is the way; the front ends reach it and
+  nothing else does.
 
-Say what passed, what failed, what was skipped and why, and what you did not
-check. A claim of success you have not verified is worse than an admitted gap,
-because it stops the next person from looking. This applies to agents exactly as
-it applies to people.
+---
 
-## What is not accepted
+## 6. The clean room, once more
 
-- A panicking path in non-test code, however unlikely.
-- A dependency from a higher layer to a lower-numbered one.
-- An image, font, audio or model file anywhere in the tree.
-- A UI toolkit below L6.
-- A behaviour that lives outside the command registry.
-- A rule without a gate.
-- Another product's code, artwork, icons, text, or data — commercial or not.
-  Behaviour comes from public specifications and general conventions.
+Behaviour is designed from public specifications, general conventions and
+user feedback. No commercial product's code, icons, artwork, help text,
+tooltips, templates, test data, measurements or generated files — and no
+commercial product is launched, scripted, screenshotted, measured or compared
+against. `docs/clean-room.md` has the table of products, and
+`cargo xtask cleanroom` checks the tree against it.
+
+---
+
+## 7. Where things are
+
+```text
+crates/craftkit-sdk       L2  the whole surface a plugin needs
+crates/craftkit-derive    L0  the macro that writes the declaration, the reader, the registration
+crates/craftkit-gates     L0  the tree's own gate
+crates/craftkit-control   L3  the loopback JSON-lines channel
+crates/craftkit-mcp       L3  the MCP server
+crates/craftkit-plugin-*  L4  the batteries
+apps/craftkit-repl        L5  the terminal door
+apps/craftkit-mcp-server  L5  the agent door
+apps/craftkit-wasm        L5  the browser door
+apps/craftkit-window      L5  the window
+xtask                     the outer gate
+```
+
+`docs/architecture.md` has the layering table and the seams;
+`docs/agent-playbook.md` has how to drive the kit; `KNOWN-GAPS.md` has what
+the tree does not do and what its gates cannot see.

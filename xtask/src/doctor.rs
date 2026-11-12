@@ -3,7 +3,7 @@
 //! Every other gate here reports a *mistake*. This one reports the machine. It
 //! exists because the failure modes it catches are the ones that waste the most
 //! time: a toolchain older than the workspace's declared minimum, a target not
-//! installed, a `wasm-bindgen` CLI whose version does not match the crate.
+//! installed, and a Node that is missing when a check needs to parse a script.
 //!
 //! Each finding is one of three kinds, and the difference matters:
 //!
@@ -70,65 +70,6 @@ pub fn compare_versions(a: &str, b: &str) -> Option<std::cmp::Ordering> {
     Some(parse(a)?.cmp(&parse(b)?))
 }
 
-/// What the machine can tell us about the tool that produces the browser bundle.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Bundler {
-    /// The CLI matches the crate the workspace resolves; the bundle can be built.
-    Ready,
-    /// It cannot, and this is exactly why.
-    Blocked(String),
-}
-
-/// Decide **once**, for every caller, whether `wasm-bindgen` can produce a bundle.
-///
-/// `cli` is the version the installed CLI reported, or `None` when it is not
-/// installed. `crate_version` is what the workspace resolves, or `None` when
-/// that could not be read out of `Cargo.lock`.
-///
-/// It lives here rather than in each caller because `doctor` and
-/// `cargo xtask bundle` both need the answer, and two copies of one policy is
-/// how they came to disagree: when the crate version was unreadable, `bundle`
-/// read that as "no blocker" while `doctor` filed it as `info`.
-///
-/// The case that matters is the second `None`. **"I could not read the version
-/// I need to compare against" is not "they match."** There is no comparison
-/// there to be right about, so this answers `Blocked` — the same rule
-/// `Outcome::Skipped` and `live-window-check.sh`'s exit 77 exist to keep: a
-/// check that could not run does not report that it passed.
-pub fn bundler_status(cli: Option<&str>, crate_version: Option<&str>) -> Bundler {
-    let Some(cli) = cli else {
-        return Bundler::Blocked(
-            "wasm-bindgen-cli is not installed (cargo install wasm-bindgen-cli --version \
-             <the wasm-bindgen crate version>)"
-                .to_string(),
-        );
-    };
-    let Some(want) = crate_version else {
-        return Bundler::Blocked(format!(
-            "the wasm-bindgen crate version could not be read from Cargo.lock, so the CLI {cli} \
-             cannot be checked against it"
-        ));
-    };
-    match compare_versions(cli, want) {
-        Some(std::cmp::Ordering::Equal) => Bundler::Ready,
-        Some(_) => Bundler::Blocked(format!(
-            "the CLI is {cli} but the wasm-bindgen crate is {want}; wasm-bindgen refuses a bundle \
-             whose schema versions differ"
-        )),
-        None => Bundler::Blocked(format!("could not compare the CLI version {cli} with {want}")),
-    }
-}
-
-/// The version string in `wasm-bindgen --version`, if the CLI is installed.
-///
-/// Only the last word is a version: the command prints `wasm-bindgen 0.2.129`,
-/// and handing the whole line to the comparator makes it refuse — which the
-/// first run of this proved the hard way.
-pub fn installed_bundler_version(root: &Path) -> Option<String> {
-    let out = command("wasm-bindgen", &["--version"], root).ok().filter(|o| o.ok())?;
-    Some(out.stdout.trim().rsplit(' ').next().unwrap_or_default().to_string())
-}
-
 /// One line of the report.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Finding {
@@ -147,23 +88,6 @@ impl std::fmt::Display for Finding {
         }
         Ok(())
     }
-}
-
-/// The `wasm-bindgen` crate version the workspace resolves to, if it does.
-pub fn wasm_bindgen_crate_version(root: &Path) -> Option<String> {
-    let lock = crate::tree::read_text(root.join("Cargo.lock")).ok()?;
-    let mut lines = lock.lines();
-    while let Some(line) = lines.next() {
-        if line.trim() != "name = \"wasm-bindgen\"" {
-            continue;
-        }
-        // The version line is the next one that starts with "version".
-        return lines
-            .find(|l| l.trim_start().starts_with("version"))
-            .and_then(|l| l.split('"').nth(1))
-            .map(str::to_string);
-    }
-    None
 }
 
 /// Gather the findings. Kept separate from printing so it is testable.
@@ -230,59 +154,26 @@ pub fn examine(root: &Path) -> Vec<Finding> {
             fix: Some(format!("rustup target add {}", wasm::TARGET)),
         });
     }
-    match command("wasm-bindgen", &["--version"], root) {
-        Ok(out) if out.ok() => {
-            let cli = out.stdout.trim().rsplit(' ').next().unwrap_or_default().to_string();
-            // The same decision `cargo xtask bundle` makes, by the same
-            // function, so the two can no longer answer differently. It used to
-            // be written twice, and when the crate version was unreadable this
-            // half called it `info` while the other half called it fine.
-            match bundler_status(Some(&cli), wasm_bindgen_crate_version(root).as_deref()) {
-                Bundler::Ready => {}
-                Bundler::Blocked(reason) => findings.push(Finding {
-                    // Degraded, not blocking: nothing in `ci` runs this tool.
-                    // Only the final bundling step needs it, and a report that
-                    // cries blocking about the one thing that is not blocking
-                    // trains people to ignore the severity.
-                    severity: Severity::Degraded,
-                    subject: "wasm-bindgen".to_string(),
-                    message: reason,
-                    fix: Some(
-                        "cargo install wasm-bindgen-cli --version <the crate version> --force".to_string(),
-                    ),
-                }),
-            }
-        }
-        Ok(out) => findings.push(Finding {
-            severity: Severity::Degraded,
-            subject: "wasm-bindgen".to_string(),
-            message: format!("wasm-bindgen --version failed:\n{}", out.all()),
-            fix: Some("cargo install wasm-bindgen-cli".to_string()),
-        }),
-        Err(_) => findings.push(Finding {
-            severity: Severity::Degraded,
-            subject: "wasm-bindgen".to_string(),
-            message: "not installed; `cargo xtask wasm` will build the .wasm but cannot bundle it"
-                .to_string(),
-            fix: Some("cargo install wasm-bindgen-cli".to_string()),
-        }),
-    }
-
-    // The optional tool that parses the service worker.
+    // The Node that parses the browser door's script.
+    //
+    // The v2 tree has no `wasm-bindgen`: the browser door is a plain
+    // WebAssembly module, and the tree's own bundler writes it. So there is
+    // no CLI whose version has to match a crate's, and nothing to check but
+    // Node.
     if command("node", &["--version"], Path::new(".")).is_ok_and(|out| out.ok()) {
         findings.push(Finding {
             severity: Severity::Info,
             subject: "node".to_string(),
-            message: "installed; `cargo xtask web` parses the service worker".to_string(),
+            message: "installed; `cargo xtask web` parses the browser door's script".to_string(),
             fix: None,
         });
     } else {
         findings.push(Finding {
             severity: Severity::Degraded,
             subject: "node".to_string(),
-            message: "not installed; the service worker is checked by reading it, not by parsing it"
+            message: "not installed; the browser door's script is checked by reading it, not by parsing it"
                 .to_string(),
-            fix: Some("install node, or read apps/craftkit-web/sw.js yourself".to_string()),
+            fix: Some("install node, or read apps/craftkit-wasm/browser-check.mjs yourself".to_string()),
         });
     }
 
@@ -333,42 +224,6 @@ mod tests {
         assert_eq!(compare_versions("1.95", "banana"), None);
     }
 
-    /// The whole point of `bundler_status` living in one place: the case where the
-    /// workspace version cannot be read used to mean "fine" to `cargo xtask
-    /// bundle` and "info" to `doctor`. It is not fine — it is unknown, and an
-    /// unknown is not a match.
-    #[test]
-    fn bundler_status_blocks_when_the_crate_version_cannot_be_read() {
-        match bundler_status(Some("0.2.89"), None) {
-            Bundler::Blocked(reason) => {
-                assert!(reason.contains("could not be read"), "{reason}");
-                // The CLI version belongs in the sentence: it is what the reader
-                // has to go and fix.
-                assert!(reason.contains("0.2.89"), "{reason}");
-            }
-            Bundler::Ready => panic!("an unverifiable CLI was accepted as ready"),
-        }
-    }
-
-    #[test]
-    fn bundler_status_blocks_when_the_cli_is_missing_and_says_what_to_do() {
-        match bundler_status(None, Some("0.2.129")) {
-            Bundler::Blocked(reason) => {
-                assert!(reason.contains("not installed"), "{reason}");
-                assert!(reason.contains("cargo install"), "{reason}");
-            }
-            Bundler::Ready => panic!("a missing CLI was accepted as ready"),
-        }
-    }
-
-    #[test]
-    fn bundler_status_is_ready_only_when_the_cli_matches_the_crate() {
-        assert_eq!(bundler_status(Some("0.2.129"), Some("0.2.129")), Bundler::Ready);
-        assert!(matches!(bundler_status(Some("0.2.89"), Some("0.2.129")), Bundler::Blocked(_)));
-        // Unparseable on either side is unknown, not equal.
-        assert!(matches!(bundler_status(Some("nightly"), Some("0.2.129")), Bundler::Blocked(_)));
-    }
-
     #[test]
     fn the_workspace_declares_its_minimum_and_it_is_the_documented_one() {
         let root = crate::root().expect("root");
@@ -376,15 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn the_wasm_bindgen_crate_version_can_be_read_from_the_lock_file() {
-        let root = crate::root().expect("root");
-        let version = wasm_bindgen_crate_version(&root);
-        assert!(version.as_deref().is_some_and(|v| v.starts_with("0.2.")), "{version:?}");
-    }
-
-    #[test]
     fn a_missing_lock_file_is_none_not_a_panic() {
-        assert_eq!(wasm_bindgen_crate_version(Path::new("/nonexistent")), None);
         assert_eq!(declared_msrv(Path::new("/nonexistent")), None);
     }
 
