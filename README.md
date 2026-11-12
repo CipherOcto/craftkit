@@ -4247,6 +4247,7 @@ so.
 | the **fx battery**, as a table | **built.** The smallest battery's 47 commands are thirteen tables of rows; the table learned the layer, the icon, the menu and the rest, the tools read both spellings, and the registry is pinned to what it was (§860) | §860 |
 | the **measurement**, and its procedure | **built.** The session-side half of the census has its procedure in the playbook — the rule, the baseline and the wave exits — and the gate says so when the procedure goes (§861) | §861 |
 | the **cad battery**, as a table | **built.** The battery of a drawing is now one table per file; the table learned an id that is a word in Rust and a command's own methods, and the registry is pinned to what it was (§862) | §862 |
+| the **vector battery**, as a table | **built.** The battery of a path is a table in 26 files; the table says a menu as a tuple and holds a command's helper, and the registry is pinned to what it was (§863) | §863 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -56925,3 +56926,93 @@ commands are named after what they do to a *group*, a *constraint* and a
 - **The rename is not in the registry.** A command's *name* is the one
   thing the conversion changed that no snapshot can see, so the anchor
   and the compiler are the only witnesses that the rename was complete.
+
+## 863. The vector battery is a table
+
+§862 converted cad and said the batteries are uniform. vector is the first
+that is **not**: it carries 57 **menu paths**, and one of its commands has
+a **helper** of its own. Both are things the table had to say.
+
+### What was built
+
+- **The vector battery is a table.** Its 67 commands, in its 26 files, are
+  now **one table per file** — `commands! { … }` — with a row per command:
+  ```rust
+  commands! {
+      /// Mirror a closed shape in an axis, and join it to its mirror.
+      vector.path.cut.mirror {
+          area: "vector",
+          layer: "vector",
+          icon: "path",
+          menu: ("Path", "Mirror and cut"),
+          mutates,
+          undoable,
+          params: {
+              /// The path.
+              path: NodeRef,
+              /// The axis: `vertical` (the default), `horizontal` or `free`.
+              axis: Option<Text>,
+              …
+          },
+          methods: {
+              /// The point a **vertical** or **horizontal** axis runs through.
+              fn at(&self, vector: &crate::VectorNode) -> Result<Point, EngineError> { … }
+          },
+          run: { … }
+      }
+  }
+  ```
+- **The table says a menu as a tuple.** The attribute says
+  `menu("Path", "Mirror and cut")`; the table says
+  `menu: ("Path", "Mirror and cut")` — a row says what a thing **is**, and
+  a tuple is what a thing is.
+- **The registry is pinned.** `apps/craftkit-studio/tests/vector_registry.rs`
+  holds all 67 commands as they were — every id, label, area, capability,
+  layer, icon, documentation, chord, menu path, parameter and flag — and
+  the test says whether the registry still says it.
+
+### What the port found
+
+- **A battery's uniformity is not the tree's uniformity.** fx and cad are
+  four entries and a list of fields; vector is the same, plus a menu path
+  on 57 of its 67 commands and a helper on one of them. The table could
+  not be a battery until it could say both.
+- **The menu is a path, and the path is the command's place.** Every menu
+  path in the registry survived the conversion byte for byte — which is
+  the only proof that the table's tuple is the attribute's call.
+- **A command's helper is part of the command.** `vector.path.cut.mirror`
+  has a method that finds the point the axis runs through; leaving it
+  behind as a struct would have meant the battery was *not* a table. The
+  table now holds it: the row's `methods` block is read as ordinary Rust
+  items and written into the command's own `impl`.
+- **The session's import is the compiler's to take away.** The table
+  writes the session by its path — `craftkit_sdk::Session` — so a file
+  whose own code does not name the type does not need the import, and 18
+  files lost one. A script that guessed which imports were unused would
+  have been wrong: `FormatValue` is used by a *method*, and no text
+  search sees it. The compiler knows, and the compiler was asked.
+
+### What it cost
+
+- **The battery**: 26 files, 67 commands, the plugin's anchor — 4 217
+  lines in and 4 129 out.
+- **One new test file**: `apps/craftkit-studio/tests/vector_registry.rs` —
+  one test, and 67 rows of snapshot: the registry the tree had before the
+  conversion.
+- **The table**: the menu as a tuple, and the `methods` entry §862 added.
+
+### What it does not settle
+
+- **The other six batteries are still declarations.** layout, prose, film,
+  pdf, sound and grid are each the same work and each needs its own
+  snapshot. sound is the one to watch: it has 132 menu paths and three
+  commands with helpers of their own.
+- **A table's row is not a struct's field list.** The row repeats the id
+  and the types in the table's own shape, and the diff is *larger* than
+  the structs were. What is bought is one place where a command is
+  declared, and the compiler writing the reader, the registration and the
+  spec around it.
+- **The body is still the programmer's own text.** Nothing in this arc made
+  a rule easier to read; that is the trade §858 named, and the three
+  batteries that are left are the ones that will say whether it was worth
+  it.
