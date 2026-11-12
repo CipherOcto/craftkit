@@ -4246,6 +4246,7 @@ so.
 | the **census** of the tree | **built.** One call measures the history — the arcs, the lines and the files each one touched, the gap between them, the commands per battery and per file — and the scope is found, not remembered (§859) | §859 |
 | the **fx battery**, as a table | **built.** The smallest battery's 47 commands are thirteen tables of rows; the table learned the layer, the icon, the menu and the rest, the tools read both spellings, and the registry is pinned to what it was (§860) | §860 |
 | the **measurement**, and its procedure | **built.** The session-side half of the census has its procedure in the playbook — the rule, the baseline and the wave exits — and the gate says so when the procedure goes (§861) | §861 |
+| the **cad battery**, as a table | **built.** The battery of a drawing is now one table per file; the table learned an id that is a word in Rust and a command's own methods, and the registry is pinned to what it was (§862) | §862 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -56822,3 +56823,105 @@ It was not there.
   not happened, whatever it did to the tree. That is a rule about how the
   numbers are **read**, and it is not the tree's business to enforce it —
   which is why the procedure is a procedure and not a gate.
+
+## 862. The cad battery is a table
+
+§860 converted fx and said the rest would be the same work. cad is the next
+one, and it is where the table met the tree's **vocabulary**: a CAD drawing's
+commands are named after what they do to a *group*, a *constraint* and a
+*block* — and `move` is a word in Rust.
+
+### What was built
+
+- **The cad battery is a table.** Its 55 commands, in its 20 files, are now
+  **one table per file** — `commands! { … }` — with a row per command:
+  ```rust
+  commands! {
+      /// Move a group of entities.
+      cad.group.move {
+          area: "cad",
+          layer: "cad",
+          icon: "move",
+          mutates,
+          undoable,
+          params: {
+              /// The group that is moved.
+              group: NodeRef,
+              /// Where it is moved to.
+              to: Json,
+          },
+          run: { … }
+      }
+  }
+  ```
+- **The table learned an id that is a word in Rust.** `cad.group.move`,
+  `cad.layer.set`, `prose.block.move` — the id is a **name in the tree**,
+  not a name in Rust, so the table's parser reads it with
+  `Ident::parse_any` and `move`, `box` and `ref` are ids like any other.
+- **The table learned a command's own methods.** A command is a struct, and
+  a struct may have a helper the body calls. The row writes it with the
+  command:
+  ```rust
+  methods: {
+      /// The point a **vertical** axis runs through.
+      fn at(&self, vector: &crate::VectorNode) -> Result<Point, EngineError> { … }
+  },
+  ```
+- **The gate builds the whole tree's shared libraries.** A scoped run
+  built the shared libraries of its **scope**, and the studio's test opens
+  a **fixture** — a shared library of a package that is not in the scope,
+  because a fixture is a dev-dependency. So the run failed on a file that
+  was never missing, only never built: the gate now builds every shared
+  library of the tree, and the scoped gate and the whole gate do the same.
+- **The registry is pinned.** `apps/craftkit-studio/tests/cad_registry.rs`
+  holds all 55 commands as they were — every id, label, area, capability,
+  layer, icon, documentation, chord, menu path, parameter and flag — and
+  the test says whether the registry still says it.
+
+### What the port found
+
+- **The batteries are more uniform than the plan said.** cad's 55 commands
+  carry an id, an area, a layer, an icon, the flags and the fields — no
+  menu path, no capability of their own — so the conversion needed no
+  vocabulary the table did not already have. The batteries that *do* carry
+  menu paths are vector, sound and pdf.
+- **The keyword ids are in every battery.** `cad.group.move` is the first
+  one the converter met, and the table refused it: the id was read as a
+  Rust path, and `move` is not one. This was not a detail of cad — it is
+  in every battery — so the table had to learn it before any of them could
+  be converted.
+- **A conversion renames the battery's commands.** `MoveGroup` became
+  `CadGroupMove`, and the plugin's anchor with it: the name is the id's
+  own shape, so a reader can find the struct from the id without being
+  told. The **registry does not hold the names**, so the snapshot could
+  not see the rename — the compiler is what holds it to account.
+- **The table is not shorter than the struct.** cad's diff is *larger*:
+  3 013 lines in, 2 672 out, with the body of the command written out in
+  full. What the conversion bought is not fewer lines; it is that the
+  **declaration** of a command is one row.
+
+- **The gate**: the shared libraries of the whole tree, and not only of
+  the scope — in the scoped gate and in the whole one.
+
+### What it cost
+
+- **The table**: the id parser that takes any word, and the `methods`
+  entry that carries a command's helper.
+- **The battery**: 20 files, 55 commands, the plugin's anchor.
+- **One new test file**: `apps/craftkit-studio/tests/cad_registry.rs` — one
+  test, and 55 rows of snapshot: the registry the tree had before the
+  conversion.
+
+### What it does not settle
+
+- **The other seven batteries are still declarations.** layout, prose,
+  film, pdf, sound and grid are each the same work and each needs its own
+  snapshot — and each is a decision about a battery, not about the table.
+- **A method in a table is a method in a macro.** The reader reads it as
+  an ordinary Rust item, so an error in it is a **proc-macro** error and
+  not a type error, and the span points into the macro. The house's rule
+  is that an error says what is wrong and where; inside a table, "where"
+  is the table.
+- **The rename is not in the registry.** A command's *name* is the one
+  thing the conversion changed that no snapshot can see, so the anchor
+  and the compiler are the only witnesses that the rename was complete.
