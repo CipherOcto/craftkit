@@ -1,12 +1,10 @@
 # Build output. Never committed; never in a crash report either.
 /target/
 /target-*/
-/v2/target/
 
 # The browser door's build output: the module the bundler copies into `dist/`,
 # and the copy of the page that goes with it. Build output, not source.
 /apps/craftkit-wasm/dist/
-/v2/apps/craftkit-wasm/dist/
 
 # Crash reports contain the user's plan. They are theirs, and they are local.
 /crash-reports/
