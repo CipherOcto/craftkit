@@ -4239,6 +4239,7 @@ so.
 | the **port manifest** | **built.** One row per ported rule — the rule, where it came from, the crate, the module, the command, the test and the section — and the gate checks every row against the tree (§853) | §853 |
 | the **brief** of an arc | **built.** One call gives the arc the rule, the landing site, the conventions, the claims, the counts and the commands — every one of them read out of the tree (§854) | §854 |
 | the **shape** of a test | **built.** A macro writes the four lines a test of a command always writes, the refusal is not swallowed, and the session is left behind so the test can look at the document (§856) | §856 |
+| the **layering**, checked at build time | **built.** A build script reads the manifests and the authority's table as text, and a crate that reaches upward — or a plugin that reaches for a plugin — fails the build with a sentence, not a panic (§857) | §857 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -56230,3 +56231,71 @@ test — the rule is.
   built from the inventory, so a test of a battery's command needs that
   battery linked into the test binary. That is the tree's arrangement, not
   the macro's, and the macro does not work around it.
+
+## 857. The layering, checked when the tool is built
+
+The layering is a fact about the tree's manifests. A fact checked when the
+gate *runs* is a fact checked **late**: the gate is the last thing an arc
+runs, so a layering mistake that only shows up there is a mistake that was
+written, compiled, and believed to be right.
+
+### What was built
+
+- **A build script** (`xtask/build.rs`) that checks the layering **when the
+  tool is built**:
+  - a crate may depend only on crates in **strictly lower** layers;
+  - the **applications** are exempt: they depend on everything, by design;
+  - a **plugin** may not depend on another plugin, nor on an application;
+  - a **dev** dependency does not count: a testing arrangement does not
+    ship, so the layering rules do not apply to it.
+- **A violation is a message, not a panic.** The script names the crate and
+  the dependency, on stderr, and exits. A build script that panics takes the
+  build down with a stack trace instead of a sentence.
+- **The script has no table of its own.** It reads the authority —
+  `crates/craftkit-gates/src/lib.rs` — as text, and it reads the manifests as
+  text. It does not run `cargo metadata`, which would make the build slow
+  and would make the script depend on a toolchain.
+
+### What the port found
+
+- **The rules are now written twice, on purpose.** The xtask's manifest says
+  "**Nothing of the tree's own**", and that is the whole reason this file is
+  not a call into `xtask::layers`: a checker that cannot be built when the
+  tree does not compile is a checker that is silent exactly when it is
+  needed. So the script reads the tree **as text** — the manifests and the
+  layering table — and the two copies are kept honest by the gate, which
+  compares its own table with the authority's.
+- **The layering table is the one table there is.** The script has no copy:
+  it reads the authority's `LAYERS`. A table that is not written as a table
+  is a **failure**, and not an empty table — the script says which line it
+  could not read.
+- **The plugin rule says more than the general rule.** A plugin reaching
+  for another plugin, or for an application, is reported as *that*, and not
+  again as an upward dependency. The specific rule is the one a reader
+  needs; the general one is a second way of saying the same mistake.
+- **A dev dependency is not a dependency.** The door's loader tests need a
+  shared library to open, and that library is a plugin. Counting it would
+  have been a false alarm on every one of those crates.
+
+### What it cost
+
+- **One new file**: `xtask/build.rs`, and one line in `xtask/Cargo.toml`.
+- **No new test file**: the script was verified on a throwaway tree outside
+  the repository — it caught upward, plugin-on-plugin and plugin-on-app
+  dependencies, ignored dev-dependencies, and passed a clean tree. A
+  script that reads the tree as text cannot be tested by the tree, because
+  the tree it would test is the tree it is checking; the throwaway tree is
+  the honest way to test it.
+
+### What it does not settle
+
+- **The script says nothing about the crates the table does not know.** A
+  crate with no layer has nothing to compare, and the tree's own gate says
+  so where the crate's name is. The script does not invent a layer for it.
+- **The script cannot check the layering of a dependency that is not a path
+  dependency.** A crate named by version — from a registry — is outside the
+  tree, and the layering has nothing to say about it.
+- **Build time is not gate time.** The script catches a mistake while the
+  tool is being built; `cargo xtask layers` still runs the same rules over
+  the same manifests and reports them the way the gate reports everything
+  else. The two are not one another's replacement.
