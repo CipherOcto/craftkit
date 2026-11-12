@@ -4243,6 +4243,7 @@ so.
 | a **battery as a declaration** | **built.** A table declares a family of commands and the compiler writes the struct, the reader and the registration for every row — with the compilers own checks, and one of its own (§858) | §858 |
 | the **bounds**, checked where the compiler is | **built.** The SDK publishes each of its bounds and the number is the constant itself, so the prose is checked against the code — and a number that cannot be worked out is a failure, not a skip (§850) | §850 |
 | the **conventions** of the house | **built.** One call prints the rules of the house, each quoted from the file that writes it, and the conventions of a battery — and a rule that has gone is a failure, not a line of prose (§855) | §855 |
+| the **census** of the tree | **built.** One call measures the history — the arcs, the lines and the files each one touched, the gap between them, the commands per battery and per file — and the scope is found, not remembered (§859) | §859 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -56573,3 +56574,81 @@ by searching, arc after arc, because there was no single place to look.
   is a failure of the digest until its marker is moved with it. That is
   the intended friction: the digest and the prose are edited together or
   not at all.
+
+## 859. The census: what an arc costs, measured from the tree
+
+The survey measured what the v2 work cost **in the session that made it**:
+the calls, the round trips, the machine time. Those numbers describe a
+*model*, and a different model writes different numbers.
+
+The other half is a property of the **tree**: how big an arc is, how many
+files it touches, how long it takes from one arc to the next. That half
+generalises — it says how big an arc is, whatever wrote it.
+
+### What was built
+
+- **`cargo xtask census`**, which measures the tree's own history:
+  - **the scope** — the v2 tree's own history, from the commit that
+    created it. The commit is *found*, not remembered: the census asks git
+    which commit added `v2/Cargo.toml`. The repository holds the v1
+    tree's arcs as well, and their § numbers mean other things, so a
+    scope that guessed would measure the wrong thing;
+  - **the arcs** — how many there were, and how big: the lines and the
+    files each one touched, the median and the largest;
+  - **the gap** — the time between one arc and the next;
+  - **the tree** — the commands each crate carries, and the commands each
+    file carries.
+- **The median, not the mean.** One arc of 237 013 lines — the move of the
+  tree to the repository root — would drag a mean away from what most
+  arcs look like.
+- **A census of the branch as it is** (measured at §859):
+  - 1 720 commits, of which 1 706 name a section;
+  - the median arc is **127 lines over 2 files**;
+  - the whole history is 690 247 lines;
+  - the median gap between two arcs is **a minute**;
+  - 961 commands, and the median file carries **one**.
+
+### What the port found
+
+- **An arc is small.** The median arc of this tree is 127 lines over two
+  files. The survey's 411-line average was an average over *ports*, and a
+  port is the largest kind of arc there is; the tree's own history says an
+  arc is usually a small thing.
+- **The gap is a minute.** Two arcs of this tree are usually committed
+  within the same minute of each other — which is the machine half of the
+  round trip, and the part that a faster model can change.
+- **The commands are spread thin.** The median file carries **one**
+  command, and the batteries carry 188, 144, 119, 113, 110, 73, 67, 55 and
+  47. A tree of small files is a tree an agent can hold in its head, and
+  the census says so with a number.
+- **The census measures a model, not a tree.** The lines-per-arc figure
+  describes the arcs of *this* history; it is the right baseline for this
+  session's successors and the wrong baseline for a different model. The
+  plan says so, and the census does not pretend otherwise.
+
+### What it cost
+
+- **One new module** in the xtask (`xtask/src/census.rs`) and one new
+  command.
+- **One new test file**: `xtask/tests/census.rs` — seven tests: the log is
+  read as arcs; the § of a subject is found; the median is the middle; the
+  census of the tree works; the census starts at the v2 tree; the arcs
+  name their sections; and an empty log is a census of nothing rather than
+  a crash.
+- **One git call**, and it is the expensive one: `git log --numstat` over
+  1 720 commits. The census is not a gate — it measures, and nothing
+  changes because it was measured.
+
+### What it does not settle
+
+- **The census does not measure the session.** The calls, the round trips
+  and the machine time are properties of the model that wrote the tree, and
+  they are measured where that session is recorded — the runtime's own
+  database, not the tree. The procedure lives in `docs/agent-playbook.md`,
+  and the survey's numbers are the baseline it is read against.
+- **The census cannot tell an arc from a fix.** A commit is an arc when it
+  names a §; a commit that fixes a crash names one too. The census counts
+  what the history says, and says so.
+- **The scope is a commit, and a commit can be wrong.** If the v2 tree's
+  first commit were rewritten, the census would measure a different
+  history — and it would say which one it measured, every time.
