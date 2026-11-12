@@ -390,7 +390,7 @@ fn indent_of(value: Option<Number>, id: &str) -> Result<Option<f64>, EngineError
         return Ok(None);
     };
     let points = value.0;
-    if !points.is_finite() || points < -MAX_INDENT || points > MAX_INDENT {
+    if !points.is_finite() || !(-MAX_INDENT..=MAX_INDENT).contains(&points) {
         return Err(EngineError::Failed {
             id: id.to_string(),
             message: format!(
@@ -467,7 +467,7 @@ fn spacing_of(value: Option<Number>, id: &str) -> Result<Option<f64>, EngineErro
         return Ok(None);
     };
     let points = value.0;
-    if !points.is_finite() || points < 0.0 || points > MAX_SPACING {
+    if !points.is_finite() || !(0.0..=MAX_SPACING).contains(&points) {
         return Err(EngineError::Failed {
             id: id.to_string(),
             message: format!("a space is between 0 and {MAX_SPACING} points, and {points} is not"),
@@ -548,7 +548,7 @@ impl SetLineSpacing {
         }
         let (kind, value) = if let Some(multiple) = self.multiple {
             let multiple = multiple.0;
-            if !multiple.is_finite() || multiple < MIN_MULTIPLE || multiple > MAX_MULTIPLE {
+            if !multiple.is_finite() || !(MIN_MULTIPLE..=MAX_MULTIPLE).contains(&multiple) {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
@@ -559,7 +559,7 @@ impl SetLineSpacing {
             ("multiple", multiple)
         } else if let Some(at_least) = self.at_least {
             let at_least = at_least.0;
-            if !at_least.is_finite() || at_least < 0.0 || at_least > MAX_LINE_SPACING {
+            if !at_least.is_finite() || !(0.0..=MAX_LINE_SPACING).contains(&at_least) {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
@@ -570,7 +570,7 @@ impl SetLineSpacing {
             ("at_least", at_least)
         } else {
             let exactly = self.exactly.map(|exactly| exactly.0).unwrap_or(0.0);
-            if !exactly.is_finite() || exactly < MIN_EXACT || exactly > MAX_LINE_SPACING {
+            if !exactly.is_finite() || !(MIN_EXACT..=MAX_LINE_SPACING).contains(&exactly) {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(

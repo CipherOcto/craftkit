@@ -166,7 +166,7 @@ impl SetStyleParagraph {
         }
         let indent = |value: Number, what: &str| -> Result<f64, EngineError> {
             let value = value.0;
-            if !value.is_finite() || value < 0.0 || value > MAX_INDENT {
+            if !value.is_finite() || !(0.0..=MAX_INDENT).contains(&value) {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!("{value} is not {what}: it is a number from zero to {MAX_INDENT}"),
@@ -184,7 +184,7 @@ impl SetStyleParagraph {
         }
         if let Some(value) = &self.indent_first {
             let value = value.0;
-            if !value.is_finite() || value < -MAX_INDENT || value > MAX_INDENT {
+            if !value.is_finite() || !(-MAX_INDENT..=MAX_INDENT).contains(&value) {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(

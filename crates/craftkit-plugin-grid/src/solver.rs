@@ -906,7 +906,7 @@ impl SolveProgram {
         // The **optimality** of an integer answer, in per cent.
         let gap = match self.gap.map(|value| value.0) {
             None => 0.0,
-            Some(value) if !value.is_finite() || value < 0.0 || value > 100.0 => {
+            Some(value) if !value.is_finite() || !(0.0..=100.0).contains(&value) => {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: "the optimality of an integer answer is a number from zero to a hundred"

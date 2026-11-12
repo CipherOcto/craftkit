@@ -126,7 +126,7 @@ impl SetGain {
                 Some(gain) => gain,
                 None => payload.gain_db + delta.unwrap_or(0.0),
             };
-            if gain < MIN_GAIN_DB || gain > MAX_GAIN_DB {
+            if !(MIN_GAIN_DB..=MAX_GAIN_DB).contains(&gain) {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(

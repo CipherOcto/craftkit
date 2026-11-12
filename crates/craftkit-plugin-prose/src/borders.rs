@@ -90,7 +90,7 @@ fn width_of(value: f64, id: &str) -> Result<f64, EngineError> {
             message: format!("a width of points is a number that is there: {value}"),
         });
     }
-    if value < THINNEST || value > THICKEST {
+    if !(THINNEST..=THICKEST).contains(&value) {
         return Err(EngineError::Failed {
             id: id.to_string(),
             message: format!("a border is from {THINNEST} points to {THICKEST} points, and {value} is not"),

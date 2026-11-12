@@ -459,7 +459,7 @@ pub struct AddPolygon {
 impl AddPolygon {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let sides = self.sides.0;
-        if !sides.is_finite() || sides < 3.0 || sides > 64.0 {
+        if !sides.is_finite() || !(3.0..=64.0).contains(&sides) {
             return Err(EngineError::Failed {
                 id: "vector.polygon".to_string(),
                 message: "a polygon has between three and sixty-four sides".to_string(),

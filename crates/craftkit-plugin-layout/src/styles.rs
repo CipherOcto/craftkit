@@ -281,7 +281,7 @@ impl SetStyleStroke {
         let weight = match &self.weight {
             Some(weight) => {
                 let weight = weight.0;
-                if !weight.is_finite() || weight < 0.0 || weight > crate::paint::MAX_WEIGHT {
+                if !weight.is_finite() || !(0.0..=crate::paint::MAX_WEIGHT).contains(&weight) {
                     return Err(EngineError::Failed {
                         id: id.clone(),
                         message: format!(

@@ -176,7 +176,7 @@ impl SetPan {
         if !pan.is_finite() {
             return Err(EngineError::Failed { id, message: "a pan is a number".to_string() });
         }
-        if pan < -MAX_PAN || pan > MAX_PAN {
+        if !(-MAX_PAN..=MAX_PAN).contains(&pan) {
             return Err(EngineError::Failed {
                 id,
                 message: format!("a pan is between -{MAX_PAN} and {MAX_PAN}, and {pan} is not"),

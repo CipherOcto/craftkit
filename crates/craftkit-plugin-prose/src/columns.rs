@@ -127,7 +127,7 @@ fn space_of(value: f64, id: &str) -> Result<f64, EngineError> {
             message: format!("a space of points is a number that is there: {value}"),
         });
     }
-    if value < 0.0 || value > MAX_SPACE {
+    if !(0.0..=MAX_SPACE).contains(&value) {
         return Err(EngineError::Failed {
             id: id.to_string(),
             message: format!("a space is from zero to {MAX_SPACE} points, and {value} is not"),

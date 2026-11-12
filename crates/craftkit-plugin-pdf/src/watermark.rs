@@ -313,7 +313,7 @@ impl AddWatermark {
             });
         }
         let opacity = self.opacity.map(|opacity| opacity.0).unwrap_or(0.5);
-        if !opacity.is_finite() || opacity < 0.0 || opacity > 1.0 {
+        if !opacity.is_finite() || !(0.0..=1.0).contains(&opacity) {
             return Err(EngineError::Failed {
                 id: COMMAND.to_string(),
                 message: "the opacity of the watermark is between zero and one".to_string(),

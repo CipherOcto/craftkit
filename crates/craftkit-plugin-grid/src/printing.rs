@@ -460,7 +460,7 @@ impl SetMargins {
         for (index, margin) in [self.left, self.right, self.top, self.bottom].iter().enumerate() {
             let Some(margin) = margin else { continue };
             let margin = margin.0;
-            if !margin.is_finite() || margin < 0.0 || margin > MAX_MARGIN {
+            if !margin.is_finite() || !(0.0..=MAX_MARGIN).contains(&margin) {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(

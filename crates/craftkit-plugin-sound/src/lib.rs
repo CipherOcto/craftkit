@@ -1898,8 +1898,7 @@ impl ClipPayload {
                 None => None,
                 Some(bpm) => {
                     if !bpm.is_finite()
-                        || bpm < crate::conform::MIN_SOURCE_BPM
-                        || bpm > crate::conform::MAX_SOURCE_BPM
+                        || !(crate::conform::MIN_SOURCE_BPM..=crate::conform::MAX_SOURCE_BPM).contains(&bpm)
                     {
                         return Err(format!(
                             "the tempo of the material is from {} to {} beats a minute, and {bpm} is not",

@@ -195,7 +195,7 @@ impl FontParts {
         let size = match size {
             Some(size) => {
                 let number = size.0;
-                if !number.is_finite() || number < MIN_SIZE || number > MAX_SIZE {
+                if !number.is_finite() || !(MIN_SIZE..=MAX_SIZE).contains(&number) {
                     return Err(EngineError::Failed {
                         id: id.to_string(),
                         message: format!(

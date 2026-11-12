@@ -70,7 +70,7 @@ impl Freehand {
     fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
         let id = "vector.path.freehand".to_string();
         let fidelity = self.fidelity.as_ref().map(|fidelity| fidelity.0).unwrap_or(DEFAULT_FIDELITY);
-        if !fidelity.is_finite() || fidelity < MIN_FIDELITY || fidelity > MAX_FIDELITY {
+        if !fidelity.is_finite() || !(MIN_FIDELITY..=MAX_FIDELITY).contains(&fidelity) {
             return Err(EngineError::Failed {
                 id,
                 message: format!(

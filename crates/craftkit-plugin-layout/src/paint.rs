@@ -142,7 +142,7 @@ impl SetStroke {
         let weight = match &self.weight {
             Some(weight) => {
                 let weight = weight.0;
-                if !weight.is_finite() || weight < 0.0 || weight > MAX_WEIGHT {
+                if !weight.is_finite() || !(0.0..=MAX_WEIGHT).contains(&weight) {
                     return Err(EngineError::Failed {
                         id: id.clone(),
                         message: format!(

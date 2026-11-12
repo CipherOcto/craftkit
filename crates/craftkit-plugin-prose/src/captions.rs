@@ -243,7 +243,7 @@ impl SetCaption {
         }
         if let Some(chapter) = &self.chapter {
             let level = chapter.0;
-            if !level.is_finite() || level < 1.0 || level > 9.0 || level.fract() != 0.0 {
+            if !level.is_finite() || !(1.0..=9.0).contains(&level) || level.fract() != 0.0 {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!("the chapter `{level}` is not one of the tree's nine levels"),
