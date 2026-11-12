@@ -41,6 +41,7 @@ fn library_path() -> PathBuf {
 /// The instance borrows the factory, which borrows the plugin, so the
 /// three of them live in one block: a macro is the way to say that
 /// once.
+#[cfg(unix)]
 macro_rules! with_instance {
     (|$plugin:ident, $instance:ident| $body:block) => {{
         let path = library_path();
@@ -58,6 +59,7 @@ macro_rules! with_instance {
 /// The reference plugin marks its state dirty when a value changes,
 /// and the host keeps the word until it saves the state or gives it
 /// back.
+#[cfg(unix)]
 #[test]
 fn the_plugin_says_its_state_has_changed() {
     with_instance!(|plugin, instance| {
@@ -78,6 +80,7 @@ fn the_plugin_says_its_state_has_changed() {
 /// After the save, what the host holds is what the plugin holds, and
 /// the flag is cleared: a host that kept saying "dirty" forever would
 /// be a host that saves on every block.
+#[cfg(unix)]
 #[test]
 fn the_word_is_good_until_the_state_is_saved() {
     with_instance!(|plugin, instance| {
@@ -98,6 +101,7 @@ fn the_word_is_good_until_the_state_is_saved() {
 ///
 /// The plugin has been given its state, so what the host holds is what
 /// the plugin holds — the same rule, the other way round.
+#[cfg(unix)]
 #[test]
 fn giving_the_state_back_clears_the_word() {
     with_instance!(|plugin, instance| {
@@ -115,4 +119,16 @@ fn giving_the_state_back_clears_the_word() {
         instance.load_state(&saved).expect("the state is given back");
         assert!(!instance.state_dirty(), "and the host and the plugin agree again");
     });
+}
+
+/// Where there is no shared library, the door **refuses**, and says why.
+///
+/// This test runs on every target that is not unix, so the door is not
+/// untested there: it is tested for what it does, which is refuse.
+#[cfg(not(unix))]
+#[test]
+fn a_shared_library_cannot_be_opened_on_this_target() {
+    let path = library_path().to_string_lossy().to_string();
+    let error = ClapPlugin::open(&path).expect_err("there is no door on this target");
+    assert!(error.to_string().contains("a shared library cannot be opened on this target"), "{error}");
 }

@@ -6,7 +6,10 @@
 
 use std::path::PathBuf;
 
-use craftkit_clap::{ClapBlock, ClapPlugin};
+#[cfg(unix)]
+use craftkit_clap::ClapBlock;
+use craftkit_clap::ClapPlugin;
+#[cfg(unix)]
 use craftkit_clap_abi::ClapProcessStatus;
 
 /// The name of the shared library cargo writes for a fixture.
@@ -41,6 +44,7 @@ fn library_path() -> PathBuf {
 /// The instance borrows the factory, which borrows the plugin, so the
 /// three of them live in one block: a macro is the way to say that
 /// once.
+#[cfg(unix)]
 macro_rules! with_instance {
     (|$plugin:ident, $instance:ident| $body:block) => {{
         let path = library_path();
@@ -58,6 +62,7 @@ macro_rules! with_instance {
 /// The ports are an extension: the host asks for it by name, and the
 /// plugin answers with its own table. The reference plugin is stereo —
 /// one port in and one port out, and two channels in each.
+#[cfg(unix)]
 #[test]
 fn a_plugin_says_how_many_channels_it_has() {
     with_instance!(|plugin, instance| {
@@ -83,6 +88,7 @@ fn a_plugin_says_how_many_channels_it_has() {
 /// The layout is asked for once, when the plugin is activated, and the
 /// host builds its blocks from it. A host that guessed would give this
 /// plugin one channel, and this plugin has two.
+#[cfg(unix)]
 #[test]
 fn the_host_asks_and_believes_the_answer() {
     with_instance!(|plugin, instance| {
@@ -106,6 +112,7 @@ fn the_host_asks_and_believes_the_answer() {
 /// and it writes nothing. That is the rule the format states — the
 /// plugin is activated with the layout it asked for — and a plugin that
 /// checks is a plugin that breaks a host that guesses.
+#[cfg(unix)]
 #[test]
 fn a_block_that_is_not_the_layout_is_refused() {
     with_instance!(|plugin, instance| {
@@ -129,6 +136,7 @@ fn a_block_that_is_not_the_layout_is_refused() {
 /// The same plugin, the same block, and the layout it said: two
 /// channels in, two out, and the samples arrive where the plugin
 /// expects them and leave where the host expects them.
+#[cfg(unix)]
 #[test]
 fn the_audio_crosses_with_the_layout_the_plugin_asked_for() {
     with_instance!(|plugin, instance| {
@@ -143,4 +151,16 @@ fn the_audio_crosses_with_the_layout_the_plugin_asked_for() {
         assert_eq!(block.outputs[0], vec![1.5; 2], "the first channel is the first channel plus one");
         assert_eq!(block.outputs[1], vec![1.25; 2], "and so is the second");
     });
+}
+
+/// Where there is no shared library, the door **refuses**, and says why.
+///
+/// This test runs on every target that is not unix, so the door is not
+/// untested there: it is tested for what it does, which is refuse.
+#[cfg(not(unix))]
+#[test]
+fn a_shared_library_cannot_be_opened_on_this_target() {
+    let path = library_path().to_string_lossy().to_string();
+    let error = ClapPlugin::open(&path).expect_err("there is no door on this target");
+    assert!(error.to_string().contains("a shared library cannot be opened on this target"), "{error}");
 }

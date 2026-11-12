@@ -5,10 +5,16 @@
 //! opens a file on disk with `dlopen`, finds the `clap_entry` symbol in
 //! it with `dlsym`, reads the pointer inside it, and calls through the
 //! plugin's own function pointers.
+//!
+//! The door only exists where a shared library can be opened. Every test
+//! that needs a **real** library is therefore unix-only, and the last
+//! test in this file is the one that runs everywhere else: it says what
+//! the tree does on a target with no shared libraries.
 
 use std::path::PathBuf;
 
 use craftkit_clap::ClapPlugin;
+#[cfg(unix)]
 use craftkit_clap_abi::ClapVersion;
 
 /// The name of the shared library cargo writes for a fixture.
@@ -42,7 +48,19 @@ fn library_path() -> PathBuf {
     directory.join(fixture_name("craftkit-clap-fixture"))
 }
 
+/// A shared library of the machine itself: it exists, and it is not a
+/// plugin.
+///
+/// Linux names the C maths library `libm.so.6`; macOS keeps the C
+/// library in `/usr/lib/libSystem.B.dylib`, which is a stub that still
+/// exists and is still openable.
+#[cfg(unix)]
+fn a_library_that_is_not_a_plugin() -> &'static str {
+    if cfg!(target_os = "macos") { "/usr/lib/libSystem.B.dylib" } else { "libm.so.6" }
+}
+
 /// Open the plugin.
+#[cfg(unix)]
 fn open() -> ClapPlugin {
     let path = library_path();
     let path = path.to_string_lossy().to_string();
@@ -50,6 +68,7 @@ fn open() -> ClapPlugin {
 }
 
 /// Open the plugin and initialise it.
+#[cfg(unix)]
 fn open_and_init() -> ClapPlugin {
     let plugin = open();
     plugin.init().unwrap_or_else(|error| panic!("the plugin initialises: {error}"));
@@ -57,6 +76,7 @@ fn open_and_init() -> ClapPlugin {
 }
 
 /// The host opens a CLAP plugin and finds the entry it exports.
+#[cfg(unix)]
 #[test]
 fn the_host_opens_a_plugin_and_finds_the_entry() {
     let plugin = open();
@@ -64,6 +84,7 @@ fn the_host_opens_a_plugin_and_finds_the_entry() {
 }
 
 /// The version is checked **before** anything in the plugin is called.
+#[cfg(unix)]
 #[test]
 fn the_version_is_checked_before_anything_is_called() {
     let plugin = open();
@@ -88,6 +109,7 @@ fn the_version_is_checked_before_anything_is_called() {
 }
 
 /// The factory is not asked for before the plugin is initialised.
+#[cfg(unix)]
 #[test]
 fn the_factory_comes_after_the_initialisation() {
     let plugin = open();
@@ -97,6 +119,7 @@ fn the_factory_comes_after_the_initialisation() {
 
 /// Initialising twice is refused: the format does not say what happens
 /// then.
+#[cfg(unix)]
 #[test]
 fn initialising_twice_is_refused() {
     let plugin = open_and_init();
@@ -105,6 +128,7 @@ fn initialising_twice_is_refused() {
 }
 
 /// The factory holds the plugin, and says how many it holds.
+#[cfg(unix)]
 #[test]
 fn the_factory_holds_the_plugin() {
     let plugin = open_and_init();
@@ -113,6 +137,7 @@ fn the_factory_holds_the_plugin() {
 }
 
 /// The descriptor comes back, field for field.
+#[cfg(unix)]
 #[test]
 fn the_descriptor_comes_back() {
     let plugin = open_and_init();
@@ -130,6 +155,7 @@ fn the_descriptor_comes_back() {
 }
 
 /// The features are a list of C strings, and they all come back.
+#[cfg(unix)]
 #[test]
 fn the_features_come_back() {
     let plugin = open_and_init();
@@ -143,6 +169,7 @@ fn the_features_come_back() {
 }
 
 /// An index the factory does not have is refused, by number.
+#[cfg(unix)]
 #[test]
 fn an_index_that_is_not_there_is_refused() {
     let plugin = open_and_init();
@@ -152,6 +179,7 @@ fn an_index_that_is_not_there_is_refused() {
 }
 
 /// A library that is not there is refused, by name.
+#[cfg(unix)]
 #[test]
 fn a_library_that_is_not_there_is_refused() {
     let error = ClapPlugin::open("/nonexistent/libcraftkit_nothing.so").expect_err("it is not there");
@@ -159,16 +187,18 @@ fn a_library_that_is_not_there_is_refused() {
 }
 
 /// A library that is not a CLAP plugin is refused too: it has no entry.
+#[cfg(unix)]
 #[test]
 fn a_library_without_an_entry_is_refused() {
     // The C library of the machine itself: it is a shared object, and it
     // is not a CLAP plugin.
-    let error = ClapPlugin::open("libm.so.6").expect_err("it has no entry");
+    let error = ClapPlugin::open(a_library_that_is_not_a_plugin()).expect_err("it has no entry");
     assert!(error.to_string().contains("clap_entry"), "{error}");
 }
 
 /// The plugin cannot be forgotten: the library is closed when the plugin
 /// is dropped, and the plugin is deinitialised first.
+#[cfg(unix)]
 #[test]
 fn the_plugin_is_deinitialised_when_it_is_dropped() {
     let plugin = open_and_init();
@@ -177,4 +207,16 @@ fn the_plugin_is_deinitialised_when_it_is_dropped() {
     drop(plugin);
     // The plugin is gone, and nothing of it is left open: the drop is
     // the only place that closes the library.
+}
+
+/// Where there is no shared library, the door **refuses**, and says why.
+///
+/// This test runs on every target that is not unix, so the door is not
+/// untested there: it is tested for what it does, which is refuse.
+#[cfg(not(unix))]
+#[test]
+fn a_shared_library_cannot_be_opened_on_this_target() {
+    let path = library_path().to_string_lossy().to_string();
+    let error = ClapPlugin::open(&path).expect_err("there is no door on this target");
+    assert!(error.to_string().contains("a shared library cannot be opened on this target"), "{error}");
 }

@@ -4,10 +4,18 @@
 //! factory, given a **host**, and then lived through — initialised,
 //! activated, deactivated, destroyed. These tests drive that life
 //! against the reference plugin, which is a real shared library.
+//!
+//! The door only exists where a shared library can be opened. Every test
+//! that needs a **real** library is therefore unix-only, and the last
+//! test in this file is the one that runs everywhere else: it says what
+//! the tree does on a target with no shared libraries.
 
 use std::path::PathBuf;
 
-use craftkit_clap::{ClapBlock, ClapPlugin, ClapTransport};
+use craftkit_clap::ClapPlugin;
+#[cfg(unix)]
+use craftkit_clap::{ClapBlock, ClapTransport};
+#[cfg(unix)]
 use craftkit_clap_abi::ClapProcessStatus;
 
 /// The name of the shared library cargo writes for a fixture.
@@ -42,6 +50,7 @@ fn library_path() -> PathBuf {
 /// The instance borrows the factory, which borrows the plugin, so the
 /// three of them live in one block: a macro is the way to say that
 /// once.
+#[cfg(unix)]
 macro_rules! with_instance {
     (|$plugin:ident, $instance:ident| $body:block) => {{
         let path = library_path();
@@ -56,6 +65,7 @@ macro_rules! with_instance {
 
 /// A plugin is **made** by the factory, and it is the plugin the
 /// factory described.
+#[cfg(unix)]
 #[test]
 fn a_plugin_is_made_by_its_id() {
     with_instance!(|plugin, instance| {
@@ -67,6 +77,7 @@ fn a_plugin_is_made_by_its_id() {
 }
 
 /// The plugin is given a **host**, and it reads the host's name.
+#[cfg(unix)]
 #[test]
 fn the_plugin_reads_the_host_it_was_given() {
     with_instance!(|plugin, instance| {
@@ -82,6 +93,7 @@ fn the_plugin_reads_the_host_it_was_given() {
 
 /// The instance has a **life**: it is initialised, activated at a
 /// rate, deactivated and destroyed.
+#[cfg(unix)]
 #[test]
 fn the_instance_has_a_life() {
     with_instance!(|plugin, instance| {
@@ -103,6 +115,7 @@ fn the_instance_has_a_life() {
 /// samples that come out say two things at once — that the input
 /// arrived where the plugin expected it, and that the output left
 /// where the host expected it.
+#[cfg(unix)]
 #[test]
 fn the_audio_crosses_the_boundary() {
     with_instance!(|plugin, instance| {
@@ -123,6 +136,7 @@ fn the_audio_crosses_the_boundary() {
 ///
 /// The plugin says so, and the host believes it: a plugin that is not
 /// ready must not be asked to work.
+#[cfg(unix)]
 #[test]
 fn an_instance_that_is_not_ready_does_no_audio() {
     with_instance!(|plugin, instance| {
@@ -139,6 +153,7 @@ fn an_instance_that_is_not_ready_does_no_audio() {
 /// The host asks the plugin for its parameters extension, and the
 /// plugin answers with its own table: how many, what each of them is,
 /// and what each of them is set to.
+#[cfg(unix)]
 #[test]
 fn the_plugin_says_what_parameters_it_holds() {
     with_instance!(|plugin, instance| {
@@ -167,6 +182,7 @@ fn the_plugin_says_what_parameters_it_holds() {
 /// offers, the plugin reads while it works, and the value is there
 /// afterwards. So the test sets the gain, processes a block, and reads
 /// the parameter back.
+#[cfg(unix)]
 #[test]
 fn a_parameter_moves_and_the_plugin_knows() {
     with_instance!(|plugin, instance| {
@@ -190,6 +206,7 @@ fn a_parameter_moves_and_the_plugin_knows() {
 /// says what it made of it, by **offering an event of its own** — so
 /// the test sees the tempo twice: in the plugin's own parameter, and in
 /// the events it pushed.
+#[cfg(unix)]
 #[test]
 fn the_transport_reaches_the_plugin_and_comes_back() {
     with_instance!(|plugin, instance| {
@@ -223,6 +240,7 @@ fn the_transport_reaches_the_plugin_and_comes_back() {
 /// and the plugin reads it while it works. The reference plugin counts
 /// the notes it was played, and says so through a parameter — so the
 /// test sees that the message arrived whole.
+#[cfg(unix)]
 #[test]
 fn a_note_reaches_the_plugin() {
     with_instance!(|plugin, instance| {
@@ -246,6 +264,7 @@ fn a_note_reaches_the_plugin() {
 /// it does not have to — it keeps the bytes and gives them back. So
 /// the test moves a parameter, saves the state, moves it again, gives
 /// the state back, and finds the parameter where it was.
+#[cfg(unix)]
 #[test]
 fn the_state_is_saved_and_given_back() {
     with_instance!(|plugin, instance| {
@@ -267,6 +286,7 @@ fn the_state_is_saved_and_given_back() {
 }
 
 /// An id the factory does not know is refused, by name.
+#[cfg(unix)]
 #[test]
 fn an_id_the_factory_does_not_know_is_refused() {
     let path = library_path();
@@ -279,6 +299,7 @@ fn an_id_the_factory_does_not_know_is_refused() {
 }
 
 /// The host has **no extensions** to give, and says so.
+#[cfg(unix)]
 #[test]
 fn the_host_has_no_extensions() {
     with_instance!(|plugin, instance| {
@@ -289,4 +310,16 @@ fn the_host_has_no_extensions() {
         // alive.
         assert!(instance.requests().restart, "the plugin asked for a restart and got nothing back");
     });
+}
+
+/// Where there is no shared library, the door **refuses**, and says why.
+///
+/// This test runs on every target that is not unix, so the door is not
+/// untested there: it is tested for what it does, which is refuse.
+#[cfg(not(unix))]
+#[test]
+fn a_shared_library_cannot_be_opened_on_this_target() {
+    let path = library_path().to_string_lossy().to_string();
+    let error = ClapPlugin::open(&path).expect_err("there is no door on this target");
+    assert!(error.to_string().contains("a shared library cannot be opened on this target"), "{error}");
 }

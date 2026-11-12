@@ -5,10 +5,17 @@
 //! opens a file on disk with `dlopen`, finds the `GetPluginFactory`
 //! symbol in it with `dlsym`, **calls** it, and calls through the
 //! plugin's own function pointers.
+//!
+//! The door only exists where a shared library can be opened. Every test
+//! that needs a **real** library is therefore unix-only, and the last
+//! test in this file is the one that runs everywhere else: it says what
+//! the tree does on a target with no shared libraries.
 
 use std::path::PathBuf;
 
-use craftkit_vst3::{BUS_DIRECTION_INPUT, BUS_DIRECTION_OUTPUT, Vst3Interface, Vst3Plugin};
+use craftkit_vst3::Vst3Plugin;
+#[cfg(unix)]
+use craftkit_vst3::{BUS_DIRECTION_INPUT, BUS_DIRECTION_OUTPUT, Vst3Interface};
 
 /// The name of the shared library cargo writes for a fixture.
 ///
@@ -42,6 +49,7 @@ fn library_path() -> PathBuf {
 }
 
 /// Open the plugin.
+#[cfg(unix)]
 fn open() -> Vst3Plugin {
     let path = library_path();
     let path = path.to_string_lossy().to_string();
@@ -49,6 +57,7 @@ fn open() -> Vst3Plugin {
 }
 
 /// The host opens a VST3 plugin and calls its entry.
+#[cfg(unix)]
 #[test]
 fn the_host_opens_a_plugin_and_calls_the_entry() {
     let plugin = open();
@@ -56,6 +65,7 @@ fn the_host_opens_a_plugin_and_calls_the_entry() {
 }
 
 /// The class says what it is, and the strings are the plugin's own.
+#[cfg(unix)]
 #[test]
 fn the_class_says_what_it_is() {
     let plugin = open();
@@ -70,6 +80,7 @@ fn the_class_says_what_it_is() {
 }
 
 /// An instance is made, and it is initialised.
+#[cfg(unix)]
 #[test]
 fn an_instance_is_made_and_initialised() {
     let plugin = open();
@@ -80,6 +91,7 @@ fn an_instance_is_made_and_initialised() {
 }
 
 /// The plugin's buses are its own: the host asks and does not guess.
+#[cfg(unix)]
 #[test]
 fn the_buses_are_the_plugins_own() {
     let plugin = open();
@@ -93,6 +105,7 @@ fn the_buses_are_the_plugins_own() {
 }
 
 /// The parameter is there, and its range is the plugin's.
+#[cfg(unix)]
 #[test]
 fn the_parameter_is_there() {
     let plugin = open();
@@ -107,6 +120,7 @@ fn the_parameter_is_there() {
 }
 
 /// A value that is set is a value that is read back.
+#[cfg(unix)]
 #[test]
 fn a_value_that_is_set_is_read_back() {
     let plugin = open();
@@ -120,6 +134,7 @@ fn a_value_that_is_set_is_read_back() {
 }
 
 /// The **state** is the plugin's own bytes, and they travel.
+#[cfg(unix)]
 #[test]
 fn the_state_travels() {
     let plugin = open();
@@ -135,6 +150,7 @@ fn the_state_travels() {
 }
 
 /// The audio goes through: what comes out is what went in, louder.
+#[cfg(unix)]
 #[test]
 fn the_audio_goes_through() {
     let plugin = open();
@@ -157,6 +173,7 @@ fn the_audio_goes_through() {
 /// through two tables. This tree's shape cannot say that — the table
 /// is the object's first word, and the first word is one thing — so
 /// the processor is a second instance, with a state of its own.
+#[cfg(unix)]
 #[test]
 fn the_audio_processor_is_an_instance_of_its_own() {
     let plugin = open();
@@ -179,6 +196,7 @@ fn the_audio_processor_is_an_instance_of_its_own() {
 }
 
 /// The processor is not the component, and the host says so.
+#[cfg(unix)]
 #[test]
 fn the_processor_is_not_the_component() {
     let plugin = open();
@@ -192,6 +210,7 @@ fn the_processor_is_not_the_component() {
 }
 
 /// A class that is not there is **refused**, and not guessed at.
+#[cfg(unix)]
 #[test]
 fn a_class_that_is_not_there_is_refused() {
     let plugin = open();
@@ -207,4 +226,19 @@ fn a_library_that_is_not_a_plugin_is_refused() {
     let path = path.to_string_lossy().to_string();
     let opened = Vst3Plugin::open(&path);
     assert!(opened.is_err(), "the library did not open");
+}
+
+/// Where there is no shared library, the door **refuses**, and says why.
+///
+/// This test runs on every target that is not unix, so the door is not
+/// untested there: it is tested for what it does, which is refuse.
+#[cfg(not(unix))]
+#[test]
+fn a_shared_library_cannot_be_opened_on_this_target() {
+    let path = library_path().to_string_lossy().to_string();
+    let error = match Vst3Plugin::open(&path) {
+        Ok(_) => panic!("there is no door on this target"),
+        Err(error) => error,
+    };
+    assert!(error.to_string().contains("a shared library cannot be opened on this target"), "{error}");
 }

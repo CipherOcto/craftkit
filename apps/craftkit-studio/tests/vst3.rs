@@ -4,6 +4,11 @@
 //! the document holds what the plugin *said*: its name, its parameters and
 //! its state — the plugin's own bytes, which the host never reads and the
 //! plugin always can.
+//!
+//! The door only exists where a shared library can be opened. Every test
+//! that needs a **real** library is therefore unix-only, and the last
+//! test in this file is the one that runs everywhere else: it says what
+//! the tree does on a target with no shared libraries.
 
 use craftkit_sdk::serde_json::json;
 
@@ -35,13 +40,14 @@ fn library_path() -> String {
 }
 
 /// The id of the reference plugin.
+#[cfg(unix)]
 const PLUGIN: &str = "Craftkit::Fixture";
 
 /// A plugin is **attached** to the document.
 ///
 /// The node says which plugin it is, and the payload holds the plugin's
 /// identity: the library it came from, its name and its class.
-#[cfg(feature = "vst3")]
+#[cfg(all(feature = "vst3", unix))]
 #[test]
 fn a_plugin_is_attached_to_the_document() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
@@ -58,7 +64,7 @@ fn a_plugin_is_attached_to_the_document() {
 }
 
 /// The **classes** in a library are read by the host.
-#[cfg(feature = "vst3")]
+#[cfg(all(feature = "vst3", unix))]
 #[test]
 fn the_classes_in_a_library_are_read() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
@@ -76,7 +82,7 @@ fn the_classes_in_a_library_are_read() {
 /// The payload carries the state as base64 — the same answer the PDF
 /// battery gives for a stream — and the bytes are the plugin's: the kit
 /// can say how many there are and nothing else.
-#[cfg(feature = "vst3")]
+#[cfg(all(feature = "vst3", unix))]
 #[test]
 fn the_state_is_the_plugins_own_bytes() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
@@ -101,7 +107,7 @@ fn the_state_is_the_plugins_own_bytes() {
 ///
 /// The parameter is named, because that is what the format names it by,
 /// and the value is the one a person sees.
-#[cfg(feature = "vst3")]
+#[cfg(all(feature = "vst3", unix))]
 #[test]
 fn a_parameter_moves_and_the_state_follows() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
@@ -123,7 +129,7 @@ fn a_parameter_moves_and_the_state_follows() {
 
 /// The **audio** goes through the plugin, and the document says what
 /// came out.
-#[cfg(feature = "vst3")]
+#[cfg(all(feature = "vst3", unix))]
 #[test]
 fn the_audio_goes_through_the_plugin() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
@@ -154,7 +160,7 @@ fn a_library_that_is_not_a_plugin_is_refused() {
 }
 
 /// A plugin is **detached**, and the node goes with it.
-#[cfg(feature = "vst3")]
+#[cfg(all(feature = "vst3", unix))]
 #[test]
 fn a_plugin_is_detached() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
@@ -162,4 +168,19 @@ fn a_plugin_is_detached() {
     let node = session.document().nodes.first().expect("there is a node");
     session.execute("vst3.detach", &json!({ "node": node.id })).expect("the plugin is detached");
     assert!(session.document().nodes.is_empty(), "and the node is gone");
+}
+
+/// Where there is no shared library, the door **refuses**, and says why.
+///
+/// This test runs on every target that is not unix, so the door is not
+/// untested there: it is tested for what it does, which is refuse.
+#[cfg(all(feature = "vst3", not(unix)))]
+#[test]
+fn a_shared_library_cannot_be_opened_on_this_target() {
+    let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    let error = session
+        .execute("vst3.attach", &json!({ "path": library_path() }))
+        .expect_err("there is no door on this target");
+    assert!(error.to_string().contains("a shared library cannot be opened on this target"), "{error}");
+    assert!(session.document().nodes.is_empty(), "the node was added anyway");
 }

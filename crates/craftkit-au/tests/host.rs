@@ -4,6 +4,11 @@
 //! built by cargo, exported by name. Nothing here is a mock: the host
 //! opens a file on disk with `dlopen`, finds the six symbols the format
 //! names with `dlsym`, and calls through them.
+//!
+//! The door only exists where a shared library can be opened. Every test
+//! that needs a **real** library is therefore unix-only, and the last
+//! test in this file is the one that runs everywhere else: it says what
+//! the tree does on a target with no shared libraries.
 
 use std::path::PathBuf;
 
@@ -58,6 +63,7 @@ fn library_path() -> PathBuf {
 }
 
 /// Open the unit.
+#[cfg(unix)]
 fn open() -> AuPlugin {
     let path = library_path();
     let path = path.to_string_lossy().to_string();
@@ -68,6 +74,7 @@ fn open() -> AuPlugin {
 ///
 /// The instance borrows the bundle, so the bundle is opened here and
 /// closed when this returns.
+#[cfg(unix)]
 fn with_instance(body: impl FnOnce(&craftkit_au::AuInstance<'_>)) {
     let plugin = open();
     let made = plugin.instance().expect("the instance is made");
@@ -75,6 +82,7 @@ fn with_instance(body: impl FnOnce(&craftkit_au::AuInstance<'_>)) {
 }
 
 /// The host opens a bundle and finds the symbols the format names.
+#[cfg(unix)]
 #[test]
 fn the_host_opens_a_bundle_and_finds_the_symbols() {
     let plugin = open();
@@ -82,12 +90,14 @@ fn the_host_opens_a_bundle_and_finds_the_symbols() {
 }
 
 /// An **instance** is made, through the tree's own door.
+#[cfg(unix)]
 #[test]
 fn an_instance_is_made() {
     with_instance(|made| made.initialize().expect("the unit initialises"));
 }
 
 /// The unit says the **rate** it works at, and takes a new one.
+#[cfg(unix)]
 #[test]
 fn the_unit_says_its_rate() {
     with_instance(|made| {
@@ -100,6 +110,7 @@ fn the_unit_says_its_rate() {
 }
 
 /// A rate that is not a rate is **refused**.
+#[cfg(unix)]
 #[test]
 fn a_rate_that_is_not_a_rate_is_refused() {
     with_instance(|made| {
@@ -109,6 +120,7 @@ fn a_rate_that_is_not_a_rate_is_refused() {
 }
 
 /// The unit says the **shape** of the audio it takes.
+#[cfg(unix)]
 #[test]
 fn the_unit_says_the_shape_of_the_audio() {
     with_instance(|made| {
@@ -120,6 +132,7 @@ fn the_unit_says_the_shape_of_the_audio() {
 }
 
 /// The unit says how many frames it takes in **one** slice.
+#[cfg(unix)]
 #[test]
 fn the_unit_says_its_slice() {
     with_instance(|made| {
@@ -129,6 +142,7 @@ fn the_unit_says_its_slice() {
 }
 
 /// The **audio** goes through the unit.
+#[cfg(unix)]
 #[test]
 fn the_audio_goes_through_the_unit() {
     with_instance(|made| {
@@ -142,6 +156,7 @@ fn the_audio_goes_through_the_unit() {
 }
 
 /// A unit that is not set up does not **render**.
+#[cfg(unix)]
 #[test]
 fn a_unit_that_is_not_set_up_does_not_render() {
     with_instance(|made| {
@@ -158,4 +173,19 @@ fn a_bundle_that_is_not_a_unit_is_refused() {
     std::fs::write(&path, b"this is not a shared library").expect("the file is written");
     let path = path.to_string_lossy().to_string();
     assert!(AuPlugin::open(&path).is_err(), "the bundle did not open");
+}
+
+/// Where there is no shared library, the door **refuses**, and says why.
+///
+/// This test runs on every target that is not unix, so the door is not
+/// untested there: it is tested for what it does, which is refuse.
+#[cfg(not(unix))]
+#[test]
+fn a_shared_library_cannot_be_opened_on_this_target() {
+    let path = library_path().to_string_lossy().to_string();
+    let error = match AuPlugin::open(&path) {
+        Ok(_) => panic!("there is no door on this target"),
+        Err(error) => error,
+    };
+    assert!(error.to_string().contains("a shared library cannot be opened on this target"), "{error}");
 }

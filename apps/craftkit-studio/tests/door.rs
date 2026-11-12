@@ -4,6 +4,11 @@
 //! session may have one open. The commands are `plugin.library.open`,
 //! `plugin.library.list` and `plugin.library.close`, and the library
 //! under test is a real `cdylib` that cargo builds.
+//!
+//! The door only exists where a shared library can be opened. Every test
+//! that needs a **real** library is therefore unix-only, and the last
+//! test in this file is the one that runs everywhere else: it says what
+//! the tree does on a target with no shared libraries.
 
 use craftkit_sdk::Ecosystem;
 use craftkit_sdk::serde_json::json;
@@ -52,6 +57,7 @@ fn the_door_is_in_the_registry() {
 }
 
 /// A session opens a library and asks it what it has.
+#[cfg(unix)]
 #[test]
 fn a_session_opens_a_library_and_asks_it_what_it_has() {
     let mut session = ecosystem().session();
@@ -71,6 +77,7 @@ fn a_session_opens_a_library_and_asks_it_what_it_has() {
 
 /// The library is **session state**: the undo does not touch it, and it
 /// is not in the document.
+#[cfg(unix)]
 #[test]
 fn the_library_is_session_state_and_not_in_the_document() {
     let mut session = ecosystem().session();
@@ -86,6 +93,7 @@ fn the_library_is_session_state_and_not_in_the_document() {
 }
 
 /// A library that is not there is refused, by name.
+#[cfg(unix)]
 #[test]
 fn a_library_that_is_not_there_is_refused() {
     let mut session = ecosystem().session();
@@ -97,6 +105,7 @@ fn a_library_that_is_not_there_is_refused() {
 }
 
 /// A library that is closed twice is refused the second time.
+#[cfg(unix)]
 #[test]
 fn a_library_that_is_closed_twice_is_refused() {
     let mut session = ecosystem().session();
@@ -104,4 +113,19 @@ fn a_library_that_is_closed_twice_is_refused() {
     session.execute("plugin.library.close", &json!({ "library": 1 })).expect("it closes");
     let error = session.execute("plugin.library.close", &json!({ "library": 1 })).expect_err("it is closed");
     assert!(error.to_string().contains("no library"), "{error}");
+}
+
+/// Where there is no shared library, the door **refuses**, and says why.
+///
+/// This test runs on every target that is not unix, so the door is not
+/// untested there: it is tested for what it does, which is refuse.
+#[cfg(not(unix))]
+#[test]
+fn a_shared_library_cannot_be_opened_on_this_target() {
+    let mut session = ecosystem().session();
+    let error = session
+        .execute("plugin.library.open", &json!({ "path": library_path() }))
+        .expect_err("there is no door on this target");
+    assert!(error.to_string().contains("a shared library cannot be opened on this target"), "{error}");
+    assert_eq!(session.plugins().len(), 0, "nothing was kept");
 }

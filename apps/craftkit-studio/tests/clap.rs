@@ -4,6 +4,11 @@
 //! the document holds what the plugin *said*: its name, its parameters and
 //! its state — the plugin's own bytes, which the host never reads and the
 //! plugin always can.
+//!
+//! The door only exists where a shared library can be opened. Every test
+//! that needs a **real** library is therefore unix-only, and the last
+//! test in this file is the one that runs everywhere else: it says what
+//! the tree does on a target with no shared libraries.
 
 use craftkit_sdk::serde_json::json;
 
@@ -35,13 +40,14 @@ fn library_path() -> String {
 }
 
 /// The id of the reference plugin.
+#[cfg(unix)]
 const PLUGIN: &str = "org.craftkit.fixture.clap";
 
 /// A plugin is **attached** to the document.
 ///
 /// The node says which plugin it is, and the payload holds the plugin's
 /// identity: the library it came from, its name and its id.
-#[cfg(feature = "clap")]
+#[cfg(all(feature = "clap", unix))]
 #[test]
 fn a_plugin_is_attached_to_the_document() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
@@ -63,7 +69,7 @@ fn a_plugin_is_attached_to_the_document() {
 /// The payload carries the state as base64 — the same answer the PDF
 /// battery gives for a stream — and the bytes are the plugin's: the kit
 /// can say how many there are and nothing else.
-#[cfg(feature = "clap")]
+#[cfg(all(feature = "clap", unix))]
 #[test]
 fn the_state_is_the_plugins_own_bytes() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
@@ -90,7 +96,7 @@ fn the_state_is_the_plugins_own_bytes() {
 /// while it works, and the state it saves afterwards is what the
 /// document keeps. So the document's copy of the state is never a copy
 /// of something the plugin did not do.
-#[cfg(feature = "clap")]
+#[cfg(all(feature = "clap", unix))]
 #[test]
 fn a_parameter_moves_and_the_state_follows() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
@@ -127,7 +133,7 @@ fn a_parameter_moves_and_the_state_follows() {
 ///
 /// It is a measurement, so it is not an undo step: the document is
 /// exactly as it was.
-#[cfg(feature = "clap")]
+#[cfg(all(feature = "clap", unix))]
 #[test]
 fn the_plugins_in_a_library_are_listed() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
@@ -175,7 +181,7 @@ fn a_file_that_is_not_a_plugin_is_refused() {
 /// The word comes from the plugin, through the host's own state
 /// extension: a value that moves is a state that changed, and a host
 /// that does not hear it would keep a state that is out of date.
-#[cfg(feature = "clap")]
+#[cfg(all(feature = "clap", unix))]
 #[test]
 fn the_document_is_refreshed_when_the_plugin_says_it_changed() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
@@ -206,7 +212,7 @@ fn the_document_is_refreshed_when_the_plugin_says_it_changed() {
 /// the meter the plugin is told about are worked out from it. Nothing
 /// is stored twice: the node holds the tick and the map, and the rest
 /// is derived.
-#[cfg(feature = "clap")]
+#[cfg(all(feature = "clap", unix))]
 #[test]
 fn the_transport_is_the_kits_own_time() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
@@ -228,7 +234,7 @@ fn the_transport_is_the_kits_own_time() {
 ///
 /// The tempo is a map and not a number: the tempo of a piece changes,
 /// and the change happens at a tick.
-#[cfg(feature = "clap")]
+#[cfg(all(feature = "clap", unix))]
 #[test]
 fn the_tempo_changes_and_the_transport_follows() {
     let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
@@ -265,4 +271,19 @@ fn the_tempo_changes_and_the_transport_follows() {
         .expect("there are tempo events");
     assert_eq!(tempos.len(), 2, "the map has two events: the first and the change");
     assert_eq!(tempos[1].get("bpm").and_then(|bpm| bpm.as_f64()), Some(60.0));
+}
+
+/// Where there is no shared library, the door **refuses**, and says why.
+///
+/// This test runs on every target that is not unix, so the door is not
+/// untested there: it is tested for what it does, which is refuse.
+#[cfg(all(feature = "clap", not(unix)))]
+#[test]
+fn a_shared_library_cannot_be_opened_on_this_target() {
+    let mut session = craftkit_studio::ecosystem().expect("the ecosystem is built").session();
+    let error = session
+        .execute("clap.attach", &json!({ "path": library_path() }))
+        .expect_err("there is no door on this target");
+    assert!(error.to_string().contains("a shared library cannot be opened on this target"), "{error}");
+    assert!(session.document().nodes.is_empty(), "the node was added anyway");
 }

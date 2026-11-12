@@ -3,10 +3,17 @@
 //! The transport says where the music is. The music does not stop
 //! between two blocks, so a host that offered the transport once would
 //! tell the plugin where the music *was* and then never again.
+//!
+//! The door only exists where a shared library can be opened. Every test
+//! that needs a **real** library is therefore unix-only, and the last
+//! test in this file is the one that runs everywhere else: it says what
+//! the tree does on a target with no shared libraries.
 
 use std::path::PathBuf;
 
-use craftkit_clap::{ClapBlock, ClapPlugin, ClapTransport, parameter_values};
+use craftkit_clap::ClapPlugin;
+#[cfg(unix)]
+use craftkit_clap::{ClapBlock, ClapTransport, parameter_values};
 
 /// The name of the shared library cargo writes for a fixture.
 ///
@@ -40,6 +47,7 @@ fn library_path() -> PathBuf {
 /// The instance borrows the factory, which borrows the plugin, so the
 /// three of them live in one block: a macro is the way to say that
 /// once.
+#[cfg(unix)]
 macro_rules! with_instance {
     (|$plugin:ident, $instance:ident| $body:block) => {{
         let path = library_path();
@@ -57,6 +65,7 @@ macro_rules! with_instance {
 /// The reference plugin counts the blocks that carried a transport and
 /// reports the count back, so the host can be seen to have offered it
 /// every time — and not once.
+#[cfg(unix)]
 #[test]
 fn the_transport_is_offered_with_every_block() {
     with_instance!(|plugin, instance| {
@@ -91,6 +100,7 @@ fn the_transport_is_offered_with_every_block() {
 ///
 /// Without a transport the plugin is offered no transport at all, and
 /// its count stays at nothing.
+#[cfg(unix)]
 #[test]
 fn no_transport_means_no_transport() {
     with_instance!(|plugin, instance| {
@@ -102,4 +112,16 @@ fn no_transport_means_no_transport() {
         let values = parameter_values(&pushed);
         assert!(!values.contains(&(4, 1.0)), "the plugin was offered no transport: {values:?}");
     });
+}
+
+/// Where there is no shared library, the door **refuses**, and says why.
+///
+/// This test runs on every target that is not unix, so the door is not
+/// untested there: it is tested for what it does, which is refuse.
+#[cfg(not(unix))]
+#[test]
+fn a_shared_library_cannot_be_opened_on_this_target() {
+    let path = library_path().to_string_lossy().to_string();
+    let error = ClapPlugin::open(&path).expect_err("there is no door on this target");
+    assert!(error.to_string().contains("a shared library cannot be opened on this target"), "{error}");
 }
