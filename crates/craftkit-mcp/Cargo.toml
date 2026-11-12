@@ -17,4 +17,4 @@ serde_json = { workspace = true }
 # commands: a catalogue of forty-nine commands is a catalogue, and a
 # test that proves the catalogue says what the registry says needs
 # more than one kind of command in it.
-craftkit-plugin-prose = { path = "../craftkit-plugin-prose" }
+craftkit-plugin-prose = { path = "../craftkit-plugin-prose", version = "0.2.0" }

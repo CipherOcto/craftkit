@@ -9,4 +9,4 @@ license.workspace = true
 [dependencies]
 craftkit-sdk = { workspace = true }
 # The studio: the ecosystem the door drives.
-craftkit-studio = { path = "../craftkit-studio" }
+craftkit-studio = { path = "../craftkit-studio", version = "0.2.0" }

@@ -21,7 +21,7 @@ craftkit-sdk = { workspace = true }
 # The **application**: the studio's ecosystem and its session. Every
 # battery is linked in, so the tool list is the whole kit and not one
 # part of it.
-craftkit-studio = { path = "../craftkit-studio", features = [
+craftkit-studio = { path = "../craftkit-studio", version = "0.2.0", features = [
     "vector",
     "sound",
     "pdf",

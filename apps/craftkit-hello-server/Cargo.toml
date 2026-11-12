@@ -10,4 +10,4 @@ license.workspace = true
 craftkit-sdk = { workspace = true }
 # The plugin whose commands are served. The server is a **program** that
 # happens to contain a plugin; the program is what the host starts.
-craftkit-plugin-hello = { path = "../../crates/craftkit-plugin-hello" }
+craftkit-plugin-hello = { path = "../../crates/craftkit-plugin-hello", version = "0.2.0" }

@@ -12,7 +12,7 @@ craftkit-derive = { workspace = true }
 # The **thirteenth battery**: the document model of a picture — a size
 # and a file. Off by default as well: a program that wants pictures says
 # so.
-craftkit-plugin-image = { path = "../../crates/craftkit-plugin-image", optional = true }
+craftkit-plugin-image = { path = "../../crates/craftkit-plugin-image", version = "0.2.0", optional = true }
 # The **JPEG decoder**: the family's own, and the pixels of a picture.
 craftkit-jpeg = { workspace = true }
 # The **PNG reader**: the pixels of a picture, and the inflate they come
@@ -24,64 +24,64 @@ craftkit-raster = { workspace = true }
 # A plugin. The application lists it because a plugin has to be *linked in*,
 # and for no other reason: no module of this crate names a symbol of it, and
 # a test says so.
-craftkit-plugin-hello = { path = "../../crates/craftkit-plugin-hello" }
+craftkit-plugin-hello = { path = "../../crates/craftkit-plugin-hello", version = "0.2.0" }
 # A second plugin, and it is the interesting one: it adds a layer, a kind of
 # node, a tool and a command.
-craftkit-plugin-shapes = { path = "../../crates/craftkit-plugin-shapes" }
+craftkit-plugin-shapes = { path = "../../crates/craftkit-plugin-shapes", version = "0.2.0" }
 # The **battery**: an optional plugin. With the `vector` feature on, it is
 # linked in and its commands are in the ecosystem; with it off, the crate is
 # not there at all and the program does not know it exists.
-craftkit-plugin-vector = { path = "../../crates/craftkit-plugin-vector", optional = true }
+craftkit-plugin-vector = { path = "../../crates/craftkit-plugin-vector", version = "0.2.0", optional = true }
 # The **second battery**: the sound document. Off by default as well: a
 # program that wants a tempo map says so.
-craftkit-plugin-sound = { path = "../../crates/craftkit-plugin-sound", optional = true }
+craftkit-plugin-sound = { path = "../../crates/craftkit-plugin-sound", version = "0.2.0", optional = true }
 # The **third battery**: the object model of a PDF document. Off by default
 # as well: a program that wants dictionaries and references says so.
-craftkit-plugin-pdf = { path = "../../crates/craftkit-plugin-pdf", optional = true }
+craftkit-plugin-pdf = { path = "../../crates/craftkit-plugin-pdf", version = "0.2.0", optional = true }
 # The **fourth battery**: the document model of a video editor. Off by
 # default as well: a program that wants bins, tracks and clips says so.
-craftkit-plugin-film = { path = "../../crates/craftkit-plugin-film", optional = true }
+craftkit-plugin-film = { path = "../../crates/craftkit-plugin-film", version = "0.2.0", optional = true }
 # The **fifth battery**: the document model of a compositing application.
 # Off by default as well: a program that wants comps and properties says
 # so.
-craftkit-plugin-fx = { path = "../../crates/craftkit-plugin-fx", optional = true }
+craftkit-plugin-fx = { path = "../../crates/craftkit-plugin-fx", version = "0.2.0", optional = true }
 # The **sixth battery**: the document model of an artist's IDE — projects,
 # scenes, tracks, elements, an opaque 3D stage and remote generations. Off
 # by default as well: a program that wants a timeline of media tokens says
 # so.
-craftkit-plugin-art = { path = "../../crates/craftkit-plugin-art", optional = true }
+craftkit-plugin-art = { path = "../../crates/craftkit-plugin-art", version = "0.2.0", optional = true }
 # The **seventh battery**: the document model of a spreadsheet. Off by
 # default as well: a program that wants a grid of cells and the formulas
 # between them says so.
-craftkit-plugin-grid = { path = "../../crates/craftkit-plugin-grid", optional = true }
+craftkit-plugin-grid = { path = "../../crates/craftkit-plugin-grid", version = "0.2.0", optional = true }
 # The **eighth battery**: the document model of a CAD drawing. Off by
 # default as well: a program that wants layers, blocks and entities says
 # so.
-craftkit-plugin-cad = { path = "../../crates/craftkit-plugin-cad", optional = true }
+craftkit-plugin-cad = { path = "../../crates/craftkit-plugin-cad", version = "0.2.0", optional = true }
 # The **ninth battery**: the document model of a word processor. Off by
 # default as well: a program that wants blocks, styles and media says
 # so.
-craftkit-plugin-prose = { path = "../../crates/craftkit-plugin-prose", optional = true }
+craftkit-plugin-prose = { path = "../../crates/craftkit-plugin-prose", version = "0.2.0", optional = true }
 # The **tenth battery**: the document model of a page layout application.
 # Off by default as well: a program that wants spreads, pages, items and
 # stories says so.
-craftkit-plugin-layout = { path = "../../crates/craftkit-plugin-layout", optional = true }
+craftkit-plugin-layout = { path = "../../crates/craftkit-plugin-layout", version = "0.2.0", optional = true }
 # The **eleventh battery**: the **typed value** — a length in millimetres
 # and an angle in radians. Off by default as well: a program that wants
 # a unit says so.
-craftkit-plugin-numeric = { path = "../../crates/craftkit-plugin-numeric", optional = true }
+craftkit-plugin-numeric = { path = "../../crates/craftkit-plugin-numeric", version = "0.2.0", optional = true }
 # The **twelfth battery**: the **text** — a paragraph, broken into lines.
 # Off by default as well: a program that wants a typeset paragraph says
 # so.
-craftkit-plugin-text = { path = "../../crates/craftkit-plugin-text", optional = true }
+craftkit-plugin-text = { path = "../../crates/craftkit-plugin-text", version = "0.2.0", optional = true }
 # The **fourteenth battery**: the document model of a CLAP plugin — an
 # identity and a state. Off by default as well: a program that wants
 # plugins says so.
-craftkit-plugin-clap = { path = "../../crates/craftkit-plugin-clap", optional = true }
+craftkit-plugin-clap = { path = "../../crates/craftkit-plugin-clap", version = "0.2.0", optional = true }
 # The **fifteenth battery**: the document model of a VST3 plugin — an
 # identity, a parameter list and a state. Off by default as well: a
 # program that wants plugins says so.
-craftkit-plugin-vst3 = { path = "../../crates/craftkit-plugin-vst3", optional = true }
+craftkit-plugin-vst3 = { path = "../../crates/craftkit-plugin-vst3", version = "0.2.0", optional = true }
 
 [features]
 default = []
@@ -133,25 +133,25 @@ vst3 = ["dep:craftkit-plugin-vst3"]
 # the lane's "must not allocate" rule a measurement rather than a claim.
 # It is a **dev** dependency: nothing in the application links it, and
 # the application itself still forbids unsafe.
-craftkit-alloc = { path = "../../crates/craftkit-alloc" }
+craftkit-alloc = { path = "../../crates/craftkit-alloc", version = "0.2.0" }
 # The **mixer**: the audio crate the sound battery mixes with, and the
 # tracks the lane's test hands it.
-craftkit-audio = { path = "../../crates/craftkit-audio" }
+craftkit-audio = { path = "../../crates/craftkit-audio", version = "0.2.0" }
 # A plugin that is **not part of the program**: a shared library, built
 # by cargo and opened by the door's tests. It is a dev dependency, so
 # nothing that ships links it.
-craftkit-plugin-shared = { path = "../../crates/craftkit-plugin-shared" }
+craftkit-plugin-shared = { path = "../../crates/craftkit-plugin-shared", version = "0.2.0" }
 # A **CLAP plugin that is not part of the program**: a shared library,
 # built by cargo and opened by the CLAP battery's tests. It is a dev
 # dependency, so nothing that ships links it.
-craftkit-clap-fixture = { path = "../../crates/craftkit-clap-fixture" }
+craftkit-clap-fixture = { path = "../../crates/craftkit-clap-fixture", version = "0.2.0" }
 # A **VST3 plugin that is not part of the program**: a shared library,
 # built by cargo and opened by the VST3 battery's tests. It is a dev
 # dependency, so nothing that ships links it.
-craftkit-vst3-fixture = { path = "../../crates/craftkit-vst3-fixture" }
+craftkit-vst3-fixture = { path = "../../crates/craftkit-vst3-fixture", version = "0.2.0" }
 
 [build-dependencies]
 # The wiring: the dependency list is the plugin list. It is a build
 # dependency, so it is compiled for the build script and is not in the
 # application's own dependency list.
-craftkit-link = { path = "../../crates/craftkit-link" }
+craftkit-link = { path = "../../crates/craftkit-link", version = "0.2.0" }

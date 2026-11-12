@@ -11,7 +11,7 @@ craftkit-sdk = { workspace = true }
 # The **application's ecosystem**: every battery the window links in is
 # in it, and the window names none of them. All of them are linked in:
 # a window that showed half the kit would be a window with a hole in it.
-craftkit-studio = { path = "../craftkit-studio", features = [
+craftkit-studio = { path = "../craftkit-studio", version = "0.2.0", features = [
     "vector",
     "sound",
     "pdf",

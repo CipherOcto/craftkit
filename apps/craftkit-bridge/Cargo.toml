@@ -11,15 +11,15 @@ craftkit-sdk = { workspace = true }
 # The plugins. They are here for the same reason the studio has them: a
 # plugin has to be *linked in*, and this program is a front end over the
 # same registry.
-craftkit-plugin-hello = { path = "../../crates/craftkit-plugin-hello" }
-craftkit-plugin-shapes = { path = "../../crates/craftkit-plugin-shapes" }
+craftkit-plugin-hello = { path = "../../crates/craftkit-plugin-hello", version = "0.2.0" }
+craftkit-plugin-shapes = { path = "../../crates/craftkit-plugin-shapes", version = "0.2.0" }
 # The **battery**: an optional plugin. With the `vector` feature on, it is
 # linked in and its commands are in the ecosystem; with it off, the crate is
 # not there at all and the program does not know it exists.
-craftkit-plugin-vector = { path = "../../crates/craftkit-plugin-vector", optional = true }
+craftkit-plugin-vector = { path = "../../crates/craftkit-plugin-vector", version = "0.2.0", optional = true }
 # The **second battery**: the sound document. Off by default as well: a
 # program that wants a tempo map says so.
-craftkit-plugin-sound = { path = "../../crates/craftkit-plugin-sound", optional = true }
+craftkit-plugin-sound = { path = "../../crates/craftkit-plugin-sound", version = "0.2.0", optional = true }
 
 [features]
 default = []
@@ -30,4 +30,4 @@ vector = ["dep:craftkit-plugin-vector"]
 sound = ["dep:craftkit-plugin-sound"]
 
 [build-dependencies]
-craftkit-link = { path = "../../crates/craftkit-link" }
+craftkit-link = { path = "../../crates/craftkit-link", version = "0.2.0" }

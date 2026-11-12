@@ -20,4 +20,4 @@ craftkit-ffi-abi = { workspace = true }
 # A plugin that is **not part of the program**: a shared library, built
 # by cargo and opened by the tests. It is a dev dependency, so nothing
 # that ships links it.
-craftkit-plugin-shared = { path = "../craftkit-plugin-shared" }
+craftkit-plugin-shared = { path = "../craftkit-plugin-shared", version = "0.2.0" }
