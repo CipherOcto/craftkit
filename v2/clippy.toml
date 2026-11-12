@@ -1,7 +1,0 @@
-# A test may panic; nothing else may.
-#
-# The lints are re-enabled in tests only, because a test that fails is
-# *meant* to panic: that is how it says it failed.
-allow-unwrap-in-tests = true
-allow-expect-in-tests = true
-allow-panic-in-tests = true
