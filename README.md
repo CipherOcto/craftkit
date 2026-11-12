@@ -4229,6 +4229,7 @@ so.
 | the **gates** that were running | **built.** The gate runs the batteries' tests, the range checks are written the way clippy asks for on every toolchain the gate uses, and the internal dependencies name their version (§841) | §841 |
 | the **machines** the gate runs on | **built.** The fixtures are named for the platform that builds them, and the formatter runs one package at a time, so the gate is green on macOS and Windows as well as on Linux (§842) | §842 |
 | the **failures** the matrix found | **built.** The tests' temporary directories are unique per call, the paths are compared as paths, and a test that waits waits until a deadline (§843) | §843 |
+| the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -55553,3 +55554,61 @@ was not about a platform at all.
   change does is remove the **string comparison** that was the cause, and
   that is a property of the standard library rather than of the machine the
   change was made on.
+## 844. The cost of the tree, and the plan to take it down
+
+This arc builds nothing that runs. It **measures** the cost of the work that
+built the tree, and writes down the plan to take that cost down.
+
+### What was built
+
+- **A survey** — `docs/survey-cost-and-meta.md`: what **826 arcs** of v2
+  work cost, measured rather than remembered.
+- **A plan** — `docs/plan-acceleration.md`: **fourteen arcs** that remove
+  that cost, each with the number that has to move.
+
+### What the port found
+
+- **The cost driver is the number of round trips, not the compiling.** The
+  work took **331.9 hours** of wall clock over **29 467 tool calls**; of
+  that, **53.2 hours** was a command running and the rest was the session
+  waiting on itself. The median gap between two calls is **19.1 seconds**,
+  and at that rate the calls alone are 156 hours.
+- **Half of every arc went into finding out what the tree already knew.**
+  An arc made **35.4 calls**; **17.8** of them were searches and reads, and
+  two thirds of those were looking for something the tree already had: an
+  example command, the place to put a new one, the shape of a test, the row
+  of the claim table.
+- **The verification was about thirty times more expensive than it needed to
+  be.** One package's tests ran in **0.8 seconds**; the whole workspace in
+  **27**, and **448** runs longer than half a minute held **94 %** of the
+  **26.8 hours** spent on 959 workspace runs.
+- **The ceremony was kept by hand while the truth was already a value.**
+  The README's **713** claim rows and its battery counts are written by
+  hand, and the counts are checked by counting the *string* `#[command(` in
+  the source — while every command is already a `CommandSpec` in a
+  link-time inventory the linker fills.
+- **The delegation was mostly noise.** Forty-one sub-agents were spawned:
+  **six** paid for themselves, four errored and two were aborted, and the
+  rest were one-off surveys of a tree the parent could read directly.
+- **The ports are invisible to the tree.** Nothing records which reference
+  rule became which command and which test, so the tree cannot check its own
+  ports.
+
+### What it cost
+
+- **Two documents** and no code: no new command, no new test, no change to
+  the tree's behaviour.
+- **The measurement itself**: the survey's numbers come from the git
+  history and from the runtime's own record of the session that made the
+  tree.
+
+### What it does not settle
+
+- **The model-time share is a remainder.** The machine's time is measured
+  exactly; the rest is what was left after subtracting it, and a different
+  model would leave a different remainder.
+- **Reading what a rule *means* is not overhead.** Three and a half searches
+  an arc go to the family trees, and that is the port itself — a manifest
+  turns "where is it" into a lookup and leaves "what does it mean" alone.
+- **The plan is fourteen arcs that do not exist yet.** This one measures and
+  writes; it builds none of them.
