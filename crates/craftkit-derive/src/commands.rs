@@ -89,10 +89,28 @@ struct Row {
     label: Option<String>,
     /// The group it is listed under.
     area: Option<String>,
+    /// The layer it belongs to.
+    layer: Option<String>,
+    /// The icon's name.
+    icon: Option<String>,
+    /// The chord it is advertised with.
+    shortcut: Option<String>,
+    /// What the command is for.
+    capability: Option<String>,
+    /// Where the command goes in the menu bar: a path.
+    menu: Vec<String>,
+    /// The predicate that says whether the command is enabled.
+    enabled: Option<syn::Path>,
     /// Whether it changes the document.
     mutates: bool,
     /// Whether it is undone.
     undoable: bool,
+    /// Whether a successful run is written in the journal.
+    no_journal: bool,
+    /// Whether the id's first part is dropped from the area.
+    no_prefix: bool,
+    /// Whether the battery marks this command as its example.
+    example: bool,
     /// Its parameters: the fields, and their types.
     params: Vec<Field>,
     /// The command's body.
@@ -135,8 +153,17 @@ impl Parse for Row {
             id,
             label: None,
             area: None,
+            layer: None,
+            icon: None,
+            shortcut: None,
+            capability: None,
+            menu: Vec::new(),
+            enabled: None,
             mutates: false,
             undoable: false,
+            no_journal: false,
+            no_prefix: false,
+            example: false,
             params: Vec::new(),
             run: Block { brace_token: Default::default(), stmts: Vec::new() },
             has_run: false,
@@ -158,6 +185,28 @@ impl Parse for Row {
                         let value: LitStr = body.parse()?;
                         row.area = Some(value.value());
                     }
+                    "layer" => {
+                        let value: LitStr = body.parse()?;
+                        row.layer = Some(value.value());
+                    }
+                    "icon" => {
+                        let value: LitStr = body.parse()?;
+                        row.icon = Some(value.value());
+                    }
+                    "shortcut" => {
+                        let value: LitStr = body.parse()?;
+                        row.shortcut = Some(value.value());
+                    }
+                    "capability" => {
+                        let value: LitStr = body.parse()?;
+                        row.capability = Some(value.value());
+                    }
+                    "menu" => {
+                        row.menu = menu_of(&body)?;
+                    }
+                    "enabled" => {
+                        row.enabled = Some(body.parse()?);
+                    }
                     "params" => {
                         let fields;
                         braced!(fields in body);
@@ -172,7 +221,8 @@ impl Parse for Row {
                             key.span(),
                             format!(
                                 "`{other}` is not an entry of a command: a command in a table has \
-                                 `label`, `area`, `params` and `run`"
+                                 `label`, `area`, `layer`, `icon`, `shortcut`, `capability`, \
+                                 `menu`, `enabled`, `params` and `run`"
                             ),
                         ));
                     }
@@ -181,12 +231,15 @@ impl Parse for Row {
                 match name.as_str() {
                     "mutates" => row.mutates = true,
                     "undoable" => row.undoable = true,
+                    "no_journal" => row.no_journal = true,
+                    "no_prefix" => row.no_prefix = true,
+                    "example" => row.example = true,
                     other => {
                         return Err(Error::new(
                             key.span(),
                             format!(
-                                "`{other}` is not a flag of a command: the flags are `mutates` and \
-                                 `undoable`"
+                                "`{other}` is not a flag of a command: the flags are `mutates`, \
+                                 `undoable`, `no_journal`, `no_prefix` and `example`"
                             ),
                         ));
                     }
@@ -231,6 +284,25 @@ fn id_of(input: ParseStream) -> Result<String> {
         id.push_str(&part.to_string());
     }
     Ok(id)
+}
+
+/// The menu of a command: the path from the bar down to it.
+///
+/// A tuple in the table — `menu: ("Path", "Points")` — and a call in the
+/// attribute. The table's shape is the tree's own: a row says what a
+/// thing is, and the attribute says what it does.
+fn menu_of(input: ParseStream) -> Result<Vec<String>> {
+    let content;
+    syn::parenthesized!(content in input);
+    let mut out = Vec::new();
+    while !content.is_empty() {
+        out.push(content.parse::<LitStr>()?.value());
+        if content.is_empty() {
+            break;
+        }
+        content.parse::<Token![,]>()?;
+    }
+    Ok(out)
 }
 
 /// The parameters of a command: the fields, and their types.
@@ -317,11 +389,44 @@ fn expand_row(sdk: &TokenStream2, row: &Row) -> Result<TokenStream2> {
         let area = LitStr::new(area, proc_macro2::Span::call_site());
         arguments.push(quote!(area = #area));
     }
+    if let Some(layer) = &row.layer {
+        let layer = LitStr::new(layer, proc_macro2::Span::call_site());
+        arguments.push(quote!(layer = #layer));
+    }
+    if let Some(icon) = &row.icon {
+        let icon = LitStr::new(icon, proc_macro2::Span::call_site());
+        arguments.push(quote!(icon = #icon));
+    }
+    if let Some(shortcut) = &row.shortcut {
+        let shortcut = LitStr::new(shortcut, proc_macro2::Span::call_site());
+        arguments.push(quote!(shortcut = #shortcut));
+    }
+    if let Some(capability) = &row.capability {
+        let capability = LitStr::new(capability, proc_macro2::Span::call_site());
+        arguments.push(quote!(capability = #capability));
+    }
+    if !row.menu.is_empty() {
+        let menu: Vec<LitStr> =
+            row.menu.iter().map(|name| LitStr::new(name, proc_macro2::Span::call_site())).collect();
+        arguments.push(quote!(menu(#(#menu),*)));
+    }
+    if let Some(enabled) = &row.enabled {
+        arguments.push(quote!(enabled = #enabled));
+    }
     if row.mutates {
         arguments.push(quote!(mutates));
     }
     if row.undoable {
         arguments.push(quote!(undoable));
+    }
+    if row.no_journal {
+        arguments.push(quote!(no_journal));
+    }
+    if row.no_prefix {
+        arguments.push(quote!(no_prefix));
+    }
+    if row.example {
+        arguments.push(quote!(example));
     }
     let attribute: Attribute = syn::parse_quote!(#[command(#(#arguments),*)]);
 
@@ -387,6 +492,11 @@ fn expand_row(sdk: &TokenStream2, row: &Row) -> Result<TokenStream2> {
             /// Written by the arc: the macro writes the edges, and the
             /// middle is the programmer's.
             fn run(&self, session: &mut #sdk::Session) -> Result<#sdk::Outcome, #sdk::EngineError> {
+                // The body of a row may not use the session, and the
+                // session is named here: a borrow says that it is not
+                // needed, and the warning that would follow it is not a
+                // warning about the row.
+                let _ = &session;
                 #run
             }
         }

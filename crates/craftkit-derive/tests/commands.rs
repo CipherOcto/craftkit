@@ -50,6 +50,18 @@ commands! {
             Ok(Outcome::new("counted"))
         }
     }
+
+    /// Export a workbook.
+    grid.workbook.export {
+        layer: "grid",
+        icon: "save",
+        capability: "exporter",
+        shortcut: "Ctrl+S",
+        menu: ("File", "Export"),
+        run: {
+            Ok(Outcome::new("exported"))
+        }
+    }
 }
 
 /// The registry, as the tree reads it.
@@ -61,9 +73,29 @@ fn registry() -> Registry<CommandSpec> {
 #[test]
 fn the_commands_reach_the_registry() {
     let registry = registry();
-    for id in ["grid.workbook.add", "grid.workbook.remove", "grid.workbook.count"] {
+    for id in ["grid.workbook.add", "grid.workbook.remove", "grid.workbook.count", "grid.workbook.export"] {
         assert!(registry.get(id).is_some(), "{id} is not in the registry");
     }
+}
+
+/// The **layer** and the **icon** of a row are the row's.
+#[test]
+fn the_layer_and_the_icon_are_the_rows() {
+    let registry = registry();
+    let export = registry.get("grid.workbook.export").expect("the command is there");
+    assert_eq!(export.layer, "grid", "the layer is not the row's");
+    assert_eq!(export.icon, "save", "the icon is not the row's");
+}
+
+/// The **capability**, the **chord** and the **menu** of a row are the
+/// row's.
+#[test]
+fn the_capability_the_chord_and_the_menu_are_the_rows() {
+    let registry = registry();
+    let export = registry.get("grid.workbook.export").expect("the command is there");
+    assert_eq!(export.capability, "exporter", "the capability is not the row's");
+    assert_eq!(export.shortcut, Some("Ctrl+S"), "the chord is not the row's");
+    assert_eq!(export.menu, ["File", "Export"], "the menu is not the row's");
 }
 
 /// The labels are the table's.
