@@ -45,7 +45,7 @@
 //!   to another never meets it — a case the tree answers with an error
 //!   and this one does not have.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
@@ -261,120 +261,133 @@ fn radius_of_kind(kind: &str, geometry: &Json) -> Option<f64> {
     }
 }
 
-/// The **length** of an entity's path.
-#[derive(Command)]
-#[command(id = "cad.measure.length", area = "cad", layer = "cad", icon = "ruler")]
-pub struct MeasureLength {
-    /// The entity.
-    pub entity: NodeRef,
-}
+commands! {
+    /// The **length** of an entity's path.
+    cad.measure.length {
+        area: "cad",
+        layer: "cad",
+        icon: "ruler",
+        params: {
+            /// The entity.
 
-impl MeasureLength {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.measure.length".to_string();
-        let entity = self.entity.0;
-        let node = the_entity(session, &id, entity)?;
-        let kind = node.kind.clone();
-        let geometry = the_geometry(node, &id, entity)?;
-        let Some(length) = length_of(&kind, geometry) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("not supported yet: the length of a `{kind}`"),
-            });
-        };
-        Ok(Outcome::new(format!("the `{kind}` `{entity}` is {length} long"))
-            .with_data(json!({ "entity": entity, "length": length })))
+            entity: NodeRef,
+        },
+        run: {
+
+            let id = "cad.measure.length".to_string();
+            let entity = self.entity.0;
+            let node = the_entity(session, &id, entity)?;
+            let kind = node.kind.clone();
+            let geometry = the_geometry(node, &id, entity)?;
+            let Some(length) = length_of(&kind, geometry) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("not supported yet: the length of a `{kind}`"),
+                });
+            };
+            Ok(Outcome::new(format!("the `{kind}` `{entity}` is {length} long"))
+                .with_data(json!({ "entity": entity, "length": length })))
+
+        }
     }
-}
+    /// The **area** an entity encloses.
+    cad.measure.area {
+        area: "cad",
+        layer: "cad",
+        icon: "rect",
+        params: {
+            /// The entity.
 
-/// The **area** an entity encloses.
-#[derive(Command)]
-#[command(id = "cad.measure.area", area = "cad", layer = "cad", icon = "rect")]
-pub struct MeasureArea {
-    /// The entity.
-    pub entity: NodeRef,
-}
+            entity: NodeRef,
+        },
+        run: {
 
-impl MeasureArea {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.measure.area".to_string();
-        let entity = self.entity.0;
-        let node = the_entity(session, &id, entity)?;
-        let kind = node.kind.clone();
-        let geometry = the_geometry(node, &id, entity)?;
-        let Some(area) = area_of(&kind, geometry) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("not supported yet: the area of a `{kind}`"),
-            });
-        };
-        Ok(Outcome::new(format!("the `{kind}` `{entity}` encloses {area}"))
-            .with_data(json!({ "entity": entity, "area": area })))
+            let id = "cad.measure.area".to_string();
+            let entity = self.entity.0;
+            let node = the_entity(session, &id, entity)?;
+            let kind = node.kind.clone();
+            let geometry = the_geometry(node, &id, entity)?;
+            let Some(area) = area_of(&kind, geometry) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("not supported yet: the area of a `{kind}`"),
+                });
+            };
+            Ok(Outcome::new(format!("the `{kind}` `{entity}` encloses {area}"))
+                .with_data(json!({ "entity": entity, "area": area })))
+
+        }
     }
-}
+    /// The **radius** of an entity.
+    cad.measure.radius {
+        area: "cad",
+        layer: "cad",
+        icon: "circle",
+        params: {
+            /// The entity.
 
-/// The **radius** of an entity.
-#[derive(Command)]
-#[command(id = "cad.measure.radius", area = "cad", layer = "cad", icon = "circle")]
-pub struct MeasureRadius {
-    /// The entity.
-    pub entity: NodeRef,
-}
+            entity: NodeRef,
+        },
+        run: {
 
-impl MeasureRadius {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.measure.radius".to_string();
-        let entity = self.entity.0;
-        let node = the_entity(session, &id, entity)?;
-        let kind = node.kind.clone();
-        let geometry = the_geometry(node, &id, entity)?;
-        let Some(radius) = radius_of_kind(&kind, geometry) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("not supported yet: the radius of a `{kind}`"),
-            });
-        };
-        Ok(Outcome::new(format!("the `{kind}` `{entity}` has the radius {radius}"))
-            .with_data(json!({ "entity": entity, "radius": radius, "diameter": radius * 2.0 })))
+            let id = "cad.measure.radius".to_string();
+            let entity = self.entity.0;
+            let node = the_entity(session, &id, entity)?;
+            let kind = node.kind.clone();
+            let geometry = the_geometry(node, &id, entity)?;
+            let Some(radius) = radius_of_kind(&kind, geometry) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("not supported yet: the radius of a `{kind}`"),
+                });
+            };
+            Ok(Outcome::new(format!("the `{kind}` `{entity}` has the radius {radius}"))
+                .with_data(json!({ "entity": entity, "radius": radius, "diameter": radius * 2.0 })))
+
+        }
     }
-}
+    /// The **angle** at a point, between two directions.
+    cad.measure.angle {
+        area: "cad",
+        layer: "cad",
+        icon: "rotate",
+        params: {
+            /// The point the angle is at.
 
-/// The **angle** at a point, between two directions.
-#[derive(Command)]
-#[command(id = "cad.measure.angle", area = "cad", layer = "cad", icon = "rotate")]
-pub struct MeasureAngle {
-    /// The point the angle is at.
-    pub vertex: Json,
-    /// The first direction: the point it points at.
-    pub first: Json,
-    /// The second direction: the point it points at.
-    pub second: Json,
-}
+            vertex: Json,
+            /// The first direction: the point it points at.
 
-impl MeasureAngle {
-    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.measure.angle".to_string();
-        let vertex = point_of(&self.vertex, &id, "the vertex")?;
-        let first = point_of(&self.first, &id, "the first direction")?;
-        let second = point_of(&self.second, &id, "the second direction")?;
-        if distance(vertex, first) <= f64::EPSILON || distance(vertex, second) <= f64::EPSILON {
-            return Err(EngineError::Failed {
-                id,
-                message: "a direction is a point that is not the vertex".to_string(),
-            });
+            first: Json,
+            /// The second direction: the point it points at.
+
+            second: Json,
+        },
+        run: {
+
+            let id = "cad.measure.angle".to_string();
+            let vertex = point_of(&self.vertex, &id, "the vertex")?;
+            let first = point_of(&self.first, &id, "the first direction")?;
+            let second = point_of(&self.second, &id, "the second direction")?;
+            if distance(vertex, first) <= f64::EPSILON || distance(vertex, second) <= f64::EPSILON {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a direction is a point that is not the vertex".to_string(),
+                });
+            }
+            let mut degrees = (angle_of(vertex, second) - angle_of(vertex, first)).to_degrees();
+            while degrees < 0.0 {
+                degrees += 360.0;
+            }
+            while degrees > 360.0 {
+                degrees -= 360.0;
+            }
+            // An angle is never more than a straight one: the two
+            // directions are the same either way round.
+            if degrees > 180.0 {
+                degrees = 360.0 - degrees;
+            }
+            Ok(Outcome::new(format!("the angle is {degrees} degrees")).with_data(json!({ "angle": degrees })))
+
         }
-        let mut degrees = (angle_of(vertex, second) - angle_of(vertex, first)).to_degrees();
-        while degrees < 0.0 {
-            degrees += 360.0;
-        }
-        while degrees > 360.0 {
-            degrees -= 360.0;
-        }
-        // An angle is never more than a straight one: the two
-        // directions are the same either way round.
-        if degrees > 180.0 {
-            degrees = 360.0 - degrees;
-        }
-        Ok(Outcome::new(format!("the angle is {degrees} degrees")).with_data(json!({ "angle": degrees })))
     }
 }

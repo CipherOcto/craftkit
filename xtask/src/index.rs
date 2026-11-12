@@ -243,7 +243,7 @@ fn rows_of(block: &str, text: &str, body_start: usize, file: &Path, battery: &st
             file: file.to_path_buf(),
             line,
             battery: battery.to_string(),
-            example: has_flag(&row, "example"),
+            example: has_row_flag(&row, "example"),
         });
         offset = end;
     }
@@ -277,6 +277,10 @@ pub fn is_an_id(word: &str) -> bool {
 /// **The braces are counted, and the strings are skipped.** A run body may
 /// hold a string with a brace in it, and a reader that stopped at the
 /// first `}` would read half a row and call it the whole.
+///
+/// **And the characters are skipped too.** A body may hold the character
+/// `'"'` — a quote, as a character — and a reader that took it for the
+/// start of a string would read the rest of the file as text.
 fn braces_of(text: &str, body_start: usize) -> Option<(String, usize)> {
     let bytes = text.as_bytes();
     let mut depth = 1usize;
@@ -372,6 +376,53 @@ fn block_of(text: &str, body_start: usize) -> Option<(String, usize)> {
 /// the word is looked for among them.
 pub fn has_flag(block: &str, flag: &str) -> bool {
     block.split(|c: char| !(c.is_alphanumeric() || c == '_')).any(|word| word == flag)
+}
+
+/// Whether a **row** carries a flag: a word of its own, at the row's level.
+///
+/// A row's flags are its own words: `mutates`, `undoable`, `example`. The
+/// row also holds the **parameters** and the **body**, and those hold
+/// words of their own — a parameter's documentation may say
+/// `https://example.com` — and a word in a parameter's documentation is
+/// not a flag of the command. So the row is read **by its braces**: only
+/// the words at the row's own level are its flags.
+pub fn has_row_flag(row: &str, flag: &str) -> bool {
+    let bytes = row.as_bytes();
+    let mut depth = 0i32;
+    let mut at = 0usize;
+    let mut word = String::new();
+    let mut in_string = false;
+    let mut escaped = false;
+    while at < bytes.len() {
+        let c = bytes[at] as char;
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+            at += 1;
+            continue;
+        }
+        if c == '"' {
+            in_string = true;
+        } else if c == '{' || c == '(' {
+            depth += 1;
+        } else if c == '}' || c == ')' {
+            depth -= 1;
+        } else if c.is_alphanumeric() || c == '_' {
+            word.push(c);
+        } else {
+            if depth == 0 && word == flag {
+                return true;
+            }
+            word.clear();
+        }
+        at += 1;
+    }
+    depth == 0 && word == flag
 }
 
 /// A field of an attribute block: `name = "value"`.

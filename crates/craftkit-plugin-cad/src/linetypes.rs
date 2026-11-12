@@ -17,10 +17,10 @@
 //! name that is not in the table is a name nothing defines, and the
 //! tree's own rule is that a layer's line type is a line type.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
+use craftkit_sdk::Outcome;
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Outcome, Session};
 
 /// A **line type**: a name, a description and a pattern.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -118,15 +118,20 @@ pub fn to_json(line_type: &LineType) -> Json {
     })
 }
 
-/// **Read** the line types of this tree.
-#[derive(Command)]
-#[command(id = "cad.linetype.list", area = "cad", layer = "cad", icon = "line")]
-pub struct ListLineTypes {}
+commands! {
+    /// **Read** the line types of this tree.
+    cad.linetype.list {
+        area: "cad",
+        layer: "cad",
+        icon: "line",
+        params: {
+        },
+        run: {
 
-impl ListLineTypes {
-    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
-        let types: Vec<Json> = TYPES.iter().map(to_json).collect();
-        Ok(Outcome::new(format!("this tree has {} line type(s)", types.len()))
-            .with_data(json!({ "linetypes": types })))
+            let types: Vec<Json> = TYPES.iter().map(to_json).collect();
+            Ok(Outcome::new(format!("this tree has {} line type(s)", types.len()))
+                .with_data(json!({ "linetypes": types })))
+
+        }
     }
 }

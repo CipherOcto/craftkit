@@ -34,10 +34,10 @@
 //!   box, the flip, the stroke and the decimals is the tree's; the
 //!   shape of an arc is this tree's own.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Text};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "cad.export.svg";
@@ -203,177 +203,183 @@ fn primitives_of(document: &craftkit_sdk::Document, block: &Node) -> (Vec<Primit
     (out, left_out)
 }
 
-/// **Write** a drawing as an **SVG file**.
-///
-/// The file is written where the caller says, and the answer says how
-/// many entities it holds and what it left out.
-#[derive(Command)]
-#[command(id = "cad.export.svg", area = "cad", layer = "cad", icon = "file")]
-pub struct ExportSvg {
-    /// Where to write the file.
-    pub path: Text,
-    /// The drawing to write.
-    pub drawing: NodeRef,
-}
+commands! {
+    /// **Write** a drawing as an **SVG file**.
+    ///
+    /// The file is written where the caller says, and the answer says how
+    /// many entities it holds and what it left out.
+    cad.export.svg {
+        area: "cad",
+        layer: "cad",
+        icon: "file",
+        params: {
+            /// Where to write the file.
 
-impl ExportSvg {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "a file has a path".to_string(),
-            });
-        }
-        let drawing_id = self.drawing.0;
-        let Some(drawing) = session.document().node(drawing_id).cloned() else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no drawing `{drawing_id}`"),
-            });
-        };
-        if drawing.kind != "cad.drawing" {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the node `{drawing_id}` is a `{}` and not a drawing", drawing.kind),
-            });
-        }
-        // The **block** the picture is of: the model space, or the
-        // first block of a drawing that has no model space.
-        let blocks: Vec<std::sync::Arc<Node>> =
-            drawing.children.iter().filter(|child| child.kind == "cad.block").cloned().collect();
-        let model = blocks.iter().find(|block| block.name == "*Model_Space");
-        let chosen = model.or_else(|| blocks.first());
-        let (primitives, left_out) = match chosen {
-            Some(block) => primitives_of(session.document(), block),
-            None => (Vec::new(), Vec::new()),
-        };
-        // The **box**: the extents of the drawing, with the margin.
-        let mut min_x = f64::INFINITY;
-        let mut max_x = f64::NEG_INFINITY;
-        let mut min_y = f64::INFINITY;
-        let mut max_y = f64::NEG_INFINITY;
-        for primitive in &primitives {
-            for (x, y) in &primitive.points {
-                min_x = min_x.min(*x - primitive.radius);
-                max_x = max_x.max(*x + primitive.radius);
-                min_y = min_y.min(*y - primitive.radius);
-                max_y = max_y.max(*y + primitive.radius);
+            path: Text,
+            /// The drawing to write.
+
+            drawing: NodeRef,
+        },
+        run: {
+
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "a file has a path".to_string(),
+                });
             }
-        }
-        let empty = !min_x.is_finite() || !max_x.is_finite();
-        let (width, height) =
-            if empty { (1.0, 1.0) } else { ((max_x - min_x).max(1e-9), (max_y - min_y).max(1e-9)) };
-        let margin = width.max(height) * MARGIN;
-        let (x0, y1) = if empty { (0.0, 1.0) } else { (min_x - margin, max_y + margin) };
-        let view_width = width + 2.0 * margin;
-        let view_height = height + 2.0 * margin;
-        // The **stroke** and the **decimals**: the tree's own rules.
-        let stroke = view_width.max(view_height) / 1500.0;
-        let decimals = (3.0 - stroke.log10().floor()).clamp(6.0, 15.0) as usize;
-        // The **world turned over**: the tree's Y is up and an SVG's Y
-        // is down.
-        let tx = |x: f64| x - x0;
-        let ty = |y: f64| y1 - y;
-        let mut out = String::new();
-        out.push_str(&format!(
-            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {} {}\" width=\"{}\" height=\"{}\"><rect width=\"100%\" height=\"100%\" fill=\"white\"/>",
-            number_text(view_width, decimals),
-            number_text(view_height, decimals),
-            WIDTH,
-            (WIDTH * view_height / view_width).round(),
-        ));
-        for primitive in &primitives {
-            match primitive.kind {
-                "path" => {
-                    let (from, to) = (primitive.points[0], primitive.points[1]);
-                    out.push_str(&format!(
-                        "<path fill=\"none\" stroke=\"{}\" stroke-width=\"{}\" d=\"M{} {}L{} {}\"/>",
-                        primitive.colour,
-                        number_text(stroke, decimals),
-                        number_text(tx(from.0), decimals),
-                        number_text(ty(from.1), decimals),
-                        number_text(tx(to.0), decimals),
-                        number_text(ty(to.1), decimals),
-                    ));
+            let drawing_id = self.drawing.0;
+            let Some(drawing) = session.document().node(drawing_id).cloned() else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no drawing `{drawing_id}`"),
+                });
+            };
+            if drawing.kind != "cad.drawing" {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the node `{drawing_id}` is a `{}` and not a drawing", drawing.kind),
+                });
+            }
+            // The **block** the picture is of: the model space, or the
+            // first block of a drawing that has no model space.
+            let blocks: Vec<std::sync::Arc<Node>> =
+                drawing.children.iter().filter(|child| child.kind == "cad.block").cloned().collect();
+            let model = blocks.iter().find(|block| block.name == "*Model_Space");
+            let chosen = model.or_else(|| blocks.first());
+            let (primitives, left_out) = match chosen {
+                Some(block) => primitives_of(session.document(), block),
+                None => (Vec::new(), Vec::new()),
+            };
+            // The **box**: the extents of the drawing, with the margin.
+            let mut min_x = f64::INFINITY;
+            let mut max_x = f64::NEG_INFINITY;
+            let mut min_y = f64::INFINITY;
+            let mut max_y = f64::NEG_INFINITY;
+            for primitive in &primitives {
+                for (x, y) in &primitive.points {
+                    min_x = min_x.min(*x - primitive.radius);
+                    max_x = max_x.max(*x + primitive.radius);
+                    min_y = min_y.min(*y - primitive.radius);
+                    max_y = max_y.max(*y + primitive.radius);
                 }
-                "circle" => {
-                    let center = primitive.points[0];
-                    out.push_str(&format!(
-                        "<circle fill=\"none\" stroke=\"{}\" stroke-width=\"{}\" cx=\"{}\" cy=\"{}\" r=\"{}\"/>",
-                        primitive.colour,
-                        number_text(stroke, decimals),
-                        number_text(tx(center.0), decimals),
-                        number_text(ty(center.1), decimals),
-                        number_text(primitive.radius, decimals),
-                    ));
-                }
-                "arc" => {
-                    let (from, to) = (primitive.points[0], primitive.points[1]);
-                    let large = primitive.span.abs() > std::f64::consts::PI;
-                    out.push_str(&format!(
-                        "<path fill=\"none\" stroke=\"{}\" stroke-width=\"{}\" d=\"M{} {}A{} {} 0 {} {} {} {}\"/>",
-                        primitive.colour,
-                        number_text(stroke, decimals),
-                        number_text(tx(from.0), decimals),
-                        number_text(ty(from.1), decimals),
-                        number_text(primitive.radius, decimals),
-                        number_text(primitive.radius, decimals),
-                        if large { 1 } else { 0 },
-                        if primitive.sweep { 1 } else { 0 },
-                        number_text(tx(to.0), decimals),
-                        number_text(ty(to.1), decimals),
-                    ));
-                }
-                _ => {
-                    let mut points = String::new();
-                    for (x, y) in &primitive.points {
-                        points.push_str(&format!(
-                            "{},{} ",
-                            number_text(tx(*x), decimals),
-                            number_text(ty(*y), decimals)
+            }
+            let empty = !min_x.is_finite() || !max_x.is_finite();
+            let (width, height) =
+                if empty { (1.0, 1.0) } else { ((max_x - min_x).max(1e-9), (max_y - min_y).max(1e-9)) };
+            let margin = width.max(height) * MARGIN;
+            let (x0, y1) = if empty { (0.0, 1.0) } else { (min_x - margin, max_y + margin) };
+            let view_width = width + 2.0 * margin;
+            let view_height = height + 2.0 * margin;
+            // The **stroke** and the **decimals**: the tree's own rules.
+            let stroke = view_width.max(view_height) / 1500.0;
+            let decimals = (3.0 - stroke.log10().floor()).clamp(6.0, 15.0) as usize;
+            // The **world turned over**: the tree's Y is up and an SVG's Y
+            // is down.
+            let tx = |x: f64| x - x0;
+            let ty = |y: f64| y1 - y;
+            let mut out = String::new();
+            out.push_str(&format!(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {} {}\" width=\"{}\" height=\"{}\"><rect width=\"100%\" height=\"100%\" fill=\"white\"/>",
+                number_text(view_width, decimals),
+                number_text(view_height, decimals),
+                WIDTH,
+                (WIDTH * view_height / view_width).round(),
+            ));
+            for primitive in &primitives {
+                match primitive.kind {
+                    "path" => {
+                        let (from, to) = (primitive.points[0], primitive.points[1]);
+                        out.push_str(&format!(
+                            "<path fill=\"none\" stroke=\"{}\" stroke-width=\"{}\" d=\"M{} {}L{} {}\"/>",
+                            primitive.colour,
+                            number_text(stroke, decimals),
+                            number_text(tx(from.0), decimals),
+                            number_text(ty(from.1), decimals),
+                            number_text(tx(to.0), decimals),
+                            number_text(ty(to.1), decimals),
                         ));
                     }
-                    // A **closed** polyline is a path that comes back
-                    // to where it began.
-                    if primitive.closed {
-                        let mut path = String::new();
-                        for (at, (x, y)) in primitive.points.iter().enumerate() {
-                            let command = if at == 0 { "M" } else { "L" };
-                            path.push_str(&format!(
-                                "{command}{} {} ",
+                    "circle" => {
+                        let center = primitive.points[0];
+                        out.push_str(&format!(
+                            "<circle fill=\"none\" stroke=\"{}\" stroke-width=\"{}\" cx=\"{}\" cy=\"{}\" r=\"{}\"/>",
+                            primitive.colour,
+                            number_text(stroke, decimals),
+                            number_text(tx(center.0), decimals),
+                            number_text(ty(center.1), decimals),
+                            number_text(primitive.radius, decimals),
+                        ));
+                    }
+                    "arc" => {
+                        let (from, to) = (primitive.points[0], primitive.points[1]);
+                        let large = primitive.span.abs() > std::f64::consts::PI;
+                        out.push_str(&format!(
+                            "<path fill=\"none\" stroke=\"{}\" stroke-width=\"{}\" d=\"M{} {}A{} {} 0 {} {} {} {}\"/>",
+                            primitive.colour,
+                            number_text(stroke, decimals),
+                            number_text(tx(from.0), decimals),
+                            number_text(ty(from.1), decimals),
+                            number_text(primitive.radius, decimals),
+                            number_text(primitive.radius, decimals),
+                            if large { 1 } else { 0 },
+                            if primitive.sweep { 1 } else { 0 },
+                            number_text(tx(to.0), decimals),
+                            number_text(ty(to.1), decimals),
+                        ));
+                    }
+                    _ => {
+                        let mut points = String::new();
+                        for (x, y) in &primitive.points {
+                            points.push_str(&format!(
+                                "{},{} ",
                                 number_text(tx(*x), decimals),
                                 number_text(ty(*y), decimals)
                             ));
                         }
-                        path.push('Z');
-                        out.push_str(&format!(
-                            "<path fill=\"none\" stroke=\"{}\" stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"{}\"/>",
-                            primitive.colour,
-                            number_text(stroke, decimals),
-                            path.trim_end(),
-                        ));
-                    } else {
-                        out.push_str(&format!(
-                            "<polyline fill=\"none\" stroke=\"{}\" stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"{}\"/>",
-                            primitive.colour,
-                            number_text(stroke, decimals),
-                            points.trim_end(),
-                        ));
+                        // A **closed** polyline is a path that comes back
+                        // to where it began.
+                        if primitive.closed {
+                            let mut path = String::new();
+                            for (at, (x, y)) in primitive.points.iter().enumerate() {
+                                let command = if at == 0 { "M" } else { "L" };
+                                path.push_str(&format!(
+                                    "{command}{} {} ",
+                                    number_text(tx(*x), decimals),
+                                    number_text(ty(*y), decimals)
+                                ));
+                            }
+                            path.push('Z');
+                            out.push_str(&format!(
+                                "<path fill=\"none\" stroke=\"{}\" stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"{}\"/>",
+                                primitive.colour,
+                                number_text(stroke, decimals),
+                                path.trim_end(),
+                            ));
+                        } else {
+                            out.push_str(&format!(
+                                "<polyline fill=\"none\" stroke=\"{}\" stroke-width=\"{}\" stroke-linecap=\"round\" stroke-linejoin=\"round\" points=\"{}\"/>",
+                                primitive.colour,
+                                number_text(stroke, decimals),
+                                points.trim_end(),
+                            ));
+                        }
                     }
                 }
             }
+            out.push_str("</svg>\n");
+            std::fs::write(&path, out.as_bytes()).map_err(|error| EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("the file cannot be written to `{path}`: {error}"),
+            })?;
+            Ok(Outcome::new(format!("wrote {path}")).with_data(json!({
+                "path": path,
+                "entities": primitives.len(),
+                "left_out": left_out,
+                "bytes": out.len(),
+            })))
+
         }
-        out.push_str("</svg>\n");
-        std::fs::write(&path, out.as_bytes()).map_err(|error| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("the file cannot be written to `{path}`: {error}"),
-        })?;
-        Ok(Outcome::new(format!("wrote {path}")).with_data(json!({
-            "path": path,
-            "entities": primitives.len(),
-            "left_out": left_out,
-            "bytes": out.len(),
-        })))
     }
 }

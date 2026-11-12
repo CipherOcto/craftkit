@@ -24,10 +24,10 @@
 //!   entities of one block — the model space, or the first block of a
 //!   drawing that has no model space — are the entities of the file.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Text};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "cad.export.dxf";
@@ -203,85 +203,91 @@ fn entities_of(document: &craftkit_sdk::Document, block: &Node) -> (Vec<String>,
     (out, count, left_out)
 }
 
-/// **Write** a drawing as a **DXF file**.
-///
-/// The file is written where the caller says, and the answer says how
-/// many entities it holds and what it left out.
-#[derive(Command)]
-#[command(id = "cad.export.dxf", area = "cad", layer = "cad", icon = "file")]
-pub struct ExportDxf {
-    /// Where to write the file.
-    pub path: Text,
-    /// The drawing to write.
-    pub drawing: NodeRef,
-}
+commands! {
+    /// **Write** a drawing as a **DXF file**.
+    ///
+    /// The file is written where the caller says, and the answer says how
+    /// many entities it holds and what it left out.
+    cad.export.dxf {
+        area: "cad",
+        layer: "cad",
+        icon: "file",
+        params: {
+            /// Where to write the file.
 
-impl ExportDxf {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed {
+            path: Text,
+            /// The drawing to write.
+
+            drawing: NodeRef,
+        },
+        run: {
+
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "a file has a path".to_string(),
+                });
+            }
+            let drawing_id = self.drawing.0;
+            let Some(drawing) = session.document().node(drawing_id).cloned() else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no drawing `{drawing_id}`"),
+                });
+            };
+            if drawing.kind != "cad.drawing" {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the node `{drawing_id}` is a `{}` and not a drawing", drawing.kind),
+                });
+            }
+            // The **block** the entities come from: the model space, or
+            // the first block of a drawing that has no model space.
+            let blocks: Vec<std::sync::Arc<Node>> =
+                drawing.children.iter().filter(|child| child.kind == "cad.block").cloned().collect();
+            let model = blocks.iter().find(|block| block.name == "*Model_Space");
+            let chosen = model.or_else(|| blocks.first());
+            let (entities, entity_count, left_out) = match chosen {
+                Some(block) => entities_of(session.document(), block),
+                None => (Vec::new(), 0, Vec::new()),
+            };
+            // The **file**.
+            let mut out: Vec<String> = Vec::new();
+            lines_of(&mut out, 0, "SECTION");
+            lines_of(&mut out, 2, "HEADER");
+            lines_of(&mut out, 9, "$ACADVER");
+            lines_of(&mut out, 1, VERSION);
+            lines_of(&mut out, 9, "$INSUNITS");
+            lines_of(&mut out, 70, UNITS.to_string());
+            lines_of(&mut out, 0, "ENDSEC");
+            lines_of(&mut out, 0, "SECTION");
+            lines_of(&mut out, 2, "TABLES");
+            lines_of(&mut out, 0, "TABLE");
+            lines_of(&mut out, 2, "LAYER");
+            let (layers, layer_count) = layers_of(&drawing);
+            lines_of(&mut out, 70, layer_count.to_string());
+            out.extend(layers);
+            lines_of(&mut out, 0, "ENDTAB");
+            lines_of(&mut out, 0, "ENDSEC");
+            lines_of(&mut out, 0, "SECTION");
+            lines_of(&mut out, 2, "ENTITIES");
+            out.extend(entities);
+            lines_of(&mut out, 0, "ENDSEC");
+            lines_of(&mut out, 0, "EOF");
+            let text = out.join("\n") + "\n";
+            std::fs::write(&path, text.as_bytes()).map_err(|error| EngineError::Failed {
                 id: COMMAND.to_string(),
-                message: "a file has a path".to_string(),
-            });
+                message: format!("the file cannot be written to `{path}`: {error}"),
+            })?;
+            Ok(Outcome::new(format!("wrote {path}")).with_data(json!({
+                "path": path,
+                "layers": layer_count,
+                "entities": entity_count,
+                "left_out": left_out,
+                "bytes": text.len(),
+            })))
+
         }
-        let drawing_id = self.drawing.0;
-        let Some(drawing) = session.document().node(drawing_id).cloned() else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no drawing `{drawing_id}`"),
-            });
-        };
-        if drawing.kind != "cad.drawing" {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the node `{drawing_id}` is a `{}` and not a drawing", drawing.kind),
-            });
-        }
-        // The **block** the entities come from: the model space, or
-        // the first block of a drawing that has no model space.
-        let blocks: Vec<std::sync::Arc<Node>> =
-            drawing.children.iter().filter(|child| child.kind == "cad.block").cloned().collect();
-        let model = blocks.iter().find(|block| block.name == "*Model_Space");
-        let chosen = model.or_else(|| blocks.first());
-        let (entities, entity_count, left_out) = match chosen {
-            Some(block) => entities_of(session.document(), block),
-            None => (Vec::new(), 0, Vec::new()),
-        };
-        // The **file**.
-        let mut out: Vec<String> = Vec::new();
-        lines_of(&mut out, 0, "SECTION");
-        lines_of(&mut out, 2, "HEADER");
-        lines_of(&mut out, 9, "$ACADVER");
-        lines_of(&mut out, 1, VERSION);
-        lines_of(&mut out, 9, "$INSUNITS");
-        lines_of(&mut out, 70, UNITS.to_string());
-        lines_of(&mut out, 0, "ENDSEC");
-        lines_of(&mut out, 0, "SECTION");
-        lines_of(&mut out, 2, "TABLES");
-        lines_of(&mut out, 0, "TABLE");
-        lines_of(&mut out, 2, "LAYER");
-        let (layers, layer_count) = layers_of(&drawing);
-        lines_of(&mut out, 70, layer_count.to_string());
-        out.extend(layers);
-        lines_of(&mut out, 0, "ENDTAB");
-        lines_of(&mut out, 0, "ENDSEC");
-        lines_of(&mut out, 0, "SECTION");
-        lines_of(&mut out, 2, "ENTITIES");
-        out.extend(entities);
-        lines_of(&mut out, 0, "ENDSEC");
-        lines_of(&mut out, 0, "EOF");
-        let text = out.join("\n") + "\n";
-        std::fs::write(&path, text.as_bytes()).map_err(|error| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("the file cannot be written to `{path}`: {error}"),
-        })?;
-        Ok(Outcome::new(format!("wrote {path}")).with_data(json!({
-            "path": path,
-            "layers": layer_count,
-            "entities": entity_count,
-            "left_out": left_out,
-            "bytes": text.len(),
-        })))
     }
 }

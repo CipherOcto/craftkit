@@ -26,7 +26,7 @@
 //! - **The array is not drawn.** The tree draws a preview of the array
 //!   while it is made, and there is no drawing here.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, Document, EngineError, Node, NodeRef, Number, Outcome, Relation, Session};
@@ -168,224 +168,238 @@ fn copy_of(
     Ok(copy)
 }
 
-/// **Array** an entity in a **grid**: the rows and the columns.
-#[derive(Command)]
-#[command(
-    id = "cad.entity.array.rectangular",
-    area = "cad",
-    layer = "cad",
-    icon = "array",
-    mutates,
-    undoable
-)]
-pub struct ArrayRectangular {
-    /// The entity to array.
-    pub entity: NodeRef,
-    /// How many rows.
-    pub rows: Number,
-    /// How many columns.
-    pub columns: Number,
-    /// The distance between the rows.
-    pub row_spacing: Number,
-    /// The distance between the columns.
-    pub column_spacing: Number,
-    /// The block the copies go in. The block of the entity itself when
-    /// it is not said.
-    pub block: Option<NodeRef>,
-}
+commands! {
+    /// **Array** an entity in a **grid**: the rows and the columns.
+    cad.entity.array.rectangular {
+        area: "cad",
+        layer: "cad",
+        icon: "array",
+        mutates,
+        undoable,
+        params: {
+            /// The entity to array.
 
-impl ArrayRectangular {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.entity.array.rectangular".to_string();
-        let entity = self.entity.0;
-        let node = the_entity(session, &id, entity)?;
-        crate::editable::may_edit(session.document(), entity, &id)?;
-        let rows = count_of(self.rows.0, &id, "the number of rows")?;
-        let columns = count_of(self.columns.0, &id, "the number of columns")?;
-        let items = rows * columns;
-        if items > MOST_COPIES {
-            return Err(EngineError::Failed {
+            entity: NodeRef,
+            /// How many rows.
+
+            rows: Number,
+            /// How many columns.
+
+            columns: Number,
+            /// The distance between the rows.
+
+            row_spacing: Number,
+            /// The distance between the columns.
+
+            column_spacing: Number,
+            /// The block the copies go in. The block of the entity itself when
+            /// it is not said.
+
+            block: Option<NodeRef>,
+        },
+        run: {
+
+            let id = "cad.entity.array.rectangular".to_string();
+            let entity = self.entity.0;
+            let node = the_entity(session, &id, entity)?;
+            crate::editable::may_edit(session.document(), entity, &id)?;
+            let rows = count_of(self.rows.0, &id, "the number of rows")?;
+            let columns = count_of(self.columns.0, &id, "the number of columns")?;
+            let items = rows * columns;
+            if items > MOST_COPIES {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("an array holds at most {MOST_COPIES} items"),
+                });
+            }
+            if !self.row_spacing.0.is_finite() || !self.column_spacing.0.is_finite() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a distance is a number of the world's units".to_string(),
+                });
+            }
+            let kind = node.kind.clone();
+            let geometry = node.data.get("geometry").cloned().ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
-                message: format!("an array holds at most {MOST_COPIES} items"),
-            });
-        }
-        if !self.row_spacing.0.is_finite() || !self.column_spacing.0.is_finite() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a distance is a number of the world's units".to_string(),
-            });
-        }
-        let kind = node.kind.clone();
-        let geometry = node.data.get("geometry").cloned().ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the entity `{entity}` has no geometry"),
-        })?;
-        let block = match self.block {
-            Some(block) => block.0,
-            None => block_of(session.document(), entity).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("the entity `{entity}` is in no block"),
-            })?,
-        };
-        let name = node.name.clone();
-        let carried = what_is_carried(session, entity);
-        // The **copies**: the entity is the first item, and the others
-        // are copies of it.
-        let mut made: Vec<u64> = Vec::new();
-        for row in 0..rows {
-            for column in 0..columns {
-                if row == 0 && column == 0 {
-                    continue;
+                message: format!("the entity `{entity}` has no geometry"),
+            })?;
+            let block = match self.block {
+                Some(block) => block.0,
+                None => block_of(session.document(), entity).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the entity `{entity}` is in no block"),
+                })?,
+            };
+            let name = node.name.clone();
+            let carried = what_is_carried(session, entity);
+            // The **copies**: the entity is the first item, and the others
+            // are copies of it.
+            let mut made: Vec<u64> = Vec::new();
+            for row in 0..rows {
+                for column in 0..columns {
+                    if row == 0 && column == 0 {
+                        continue;
+                    }
+                    let dx = column as f64 * self.column_spacing.0;
+                    let dy = row as f64 * self.row_spacing.0;
+                    let Some(new) = crate::modify::moved(&kind, &geometry, dx, dy) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("an entity of the kind `{kind}` may not be arrayed"),
+                        });
+                    };
+                    let copy = copy_of(
+                        session,
+                        &id,
+                        block,
+                        &format!("{name} {}", made.len() + 2),
+                        &kind,
+                        new,
+                        &carried,
+                    )?;
+                    made.push(copy);
                 }
-                let dx = column as f64 * self.column_spacing.0;
-                let dy = row as f64 * self.row_spacing.0;
-                let Some(new) = crate::modify::moved(&kind, &geometry, dx, dy) else {
+            }
+            let count = made.len();
+            Ok(Outcome::changed(format!("arrayed the entity `{entity}` in {items} item(s)")).with_data(json!({
+                "entity": entity,
+                "copies": made,
+                "count": count,
+                "items": items,
+                "rows": rows,
+                "columns": columns,
+            })))
+
+        }
+    }
+    /// **Array** an entity **about a centre**: the items go round it.
+    cad.entity.array.polar {
+        area: "cad",
+        layer: "cad",
+        icon: "array",
+        mutates,
+        undoable,
+        params: {
+            /// The entity to array.
+
+            entity: NodeRef,
+            /// The centre of the array.
+
+            centre: Json,
+            /// How many items the array holds.
+
+            count: Number,
+            /// The angle the array goes through, in degrees. A whole turn when
+            /// it is not said.
+
+            degrees: Option<Number>,
+            /// Whether the copies are turned with the array.
+
+            rotate: Option<Bool>,
+            /// The block the copies go in. The block of the entity itself when
+            /// it is not said.
+
+            block: Option<NodeRef>,
+        },
+        run: {
+
+            let id = "cad.entity.array.polar".to_string();
+            let entity = self.entity.0;
+            let node = the_entity(session, &id, entity)?;
+            crate::editable::may_edit(session.document(), entity, &id)?;
+            let count = count_of(self.count.0, &id, "the number of items")?;
+            if count > MOST_COPIES {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("an array holds at most {MOST_COPIES} items"),
+                });
+            }
+            let degrees = match &self.degrees {
+                Some(degrees) => degrees.0,
+                None => 360.0,
+            };
+            if !degrees.is_finite() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "an angle is a number of degrees".to_string(),
+                });
+            }
+            let centre = point_of(&self.centre, &id, "the centre")?;
+            let rotate = self.rotate.map(|rotate| rotate.0).unwrap_or(false);
+            let kind = node.kind.clone();
+            let geometry = node.data.get("geometry").cloned().ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the entity `{entity}` has no geometry"),
+            })?;
+            let Some(home) = centre_of(&geometry) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the entity `{entity}` has no centre to put about the centre"),
+                });
+            };
+            let block = match self.block {
+                Some(block) => block.0,
+                None => block_of(session.document(), entity).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the entity `{entity}` is in no block"),
+                })?,
+            };
+            let name = node.name.clone();
+            let carried = what_is_carried(session, entity);
+            // The **copies**: the entity is the first item, and the others
+            // go round the centre.
+            let step = degrees / count as f64;
+            let mut made: Vec<u64> = Vec::new();
+            for item in 1..count {
+                let angle = item as f64 * step;
+                let radians = angle.to_radians();
+                let (sin, cos) = radians.sin_cos();
+                // The **centre** of the item: the centre of the entity,
+                // turned about the centre of the array.
+                let (dx, dy) = (home.0 - centre.0, home.1 - centre.1);
+                let (turned_x, turned_y) = (dx * cos - dy * sin, dx * sin + dy * cos);
+                // The **place** of the centre of the item: the centre of
+                // the entity, turned about the centre of the array.
+                let place = (centre.0 + turned_x, centre.1 + turned_y);
+                let turned = if rotate {
+                    crate::modify::turned(&kind, &geometry, centre, angle)
+                } else {
+                    Some(geometry.clone())
+                };
+                let Some(turned) = turned else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("an entity of the kind `{kind}` may not be turned"),
+                    });
+                };
+                // The **shift**: the item is put where its centre belongs.
+                let Some(item) = centre_of(&turned) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the entity `{entity}` has no centre"),
+                    });
+                };
+                let shift = (place.0 - item.0, place.1 - item.1);
+                let Some(new) = crate::modify::moved(&kind, &turned, shift.0, shift.1) else {
                     return Err(EngineError::Failed {
                         id: id.clone(),
                         message: format!("an entity of the kind `{kind}` may not be arrayed"),
                     });
                 };
-                let copy = copy_of(
-                    session,
-                    &id,
-                    block,
-                    &format!("{name} {}", made.len() + 2),
-                    &kind,
-                    new,
-                    &carried,
-                )?;
+                let copy =
+                    copy_of(session, &id, block, &format!("{name} {}", made.len() + 2), &kind, new, &carried)?;
                 made.push(copy);
             }
-        }
-        let count = made.len();
-        Ok(Outcome::changed(format!("arrayed the entity `{entity}` in {items} item(s)")).with_data(json!({
-            "entity": entity,
-            "copies": made,
-            "count": count,
-            "items": items,
-            "rows": rows,
-            "columns": columns,
-        })))
-    }
-}
+            let items = made.len() + 1;
+            Ok(Outcome::changed(format!("arrayed the entity `{entity}` in {items} item(s)")).with_data(json!({
+                "entity": entity,
+                "copies": made,
+                "count": made.len(),
+                "items": items,
+                "centre": { "x": centre.0, "y": centre.1 },
+                "degrees": degrees,
+            })))
 
-/// **Array** an entity **about a centre**: the items go round it.
-#[derive(Command)]
-#[command(id = "cad.entity.array.polar", area = "cad", layer = "cad", icon = "array", mutates, undoable)]
-pub struct ArrayPolar {
-    /// The entity to array.
-    pub entity: NodeRef,
-    /// The centre of the array.
-    pub centre: Json,
-    /// How many items the array holds.
-    pub count: Number,
-    /// The angle the array goes through, in degrees. A whole turn when
-    /// it is not said.
-    pub degrees: Option<Number>,
-    /// Whether the copies are turned with the array.
-    pub rotate: Option<Bool>,
-    /// The block the copies go in. The block of the entity itself when
-    /// it is not said.
-    pub block: Option<NodeRef>,
-}
-
-impl ArrayPolar {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.entity.array.polar".to_string();
-        let entity = self.entity.0;
-        let node = the_entity(session, &id, entity)?;
-        crate::editable::may_edit(session.document(), entity, &id)?;
-        let count = count_of(self.count.0, &id, "the number of items")?;
-        if count > MOST_COPIES {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("an array holds at most {MOST_COPIES} items"),
-            });
         }
-        let degrees = match &self.degrees {
-            Some(degrees) => degrees.0,
-            None => 360.0,
-        };
-        if !degrees.is_finite() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "an angle is a number of degrees".to_string(),
-            });
-        }
-        let centre = point_of(&self.centre, &id, "the centre")?;
-        let rotate = self.rotate.map(|rotate| rotate.0).unwrap_or(false);
-        let kind = node.kind.clone();
-        let geometry = node.data.get("geometry").cloned().ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the entity `{entity}` has no geometry"),
-        })?;
-        let Some(home) = centre_of(&geometry) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the entity `{entity}` has no centre to put about the centre"),
-            });
-        };
-        let block = match self.block {
-            Some(block) => block.0,
-            None => block_of(session.document(), entity).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("the entity `{entity}` is in no block"),
-            })?,
-        };
-        let name = node.name.clone();
-        let carried = what_is_carried(session, entity);
-        // The **copies**: the entity is the first item, and the others
-        // go round the centre.
-        let step = degrees / count as f64;
-        let mut made: Vec<u64> = Vec::new();
-        for item in 1..count {
-            let angle = item as f64 * step;
-            let radians = angle.to_radians();
-            let (sin, cos) = radians.sin_cos();
-            // The **centre** of the item: the centre of the entity,
-            // turned about the centre of the array.
-            let (dx, dy) = (home.0 - centre.0, home.1 - centre.1);
-            let (turned_x, turned_y) = (dx * cos - dy * sin, dx * sin + dy * cos);
-            // The **place** of the centre of the item: the centre of
-            // the entity, turned about the centre of the array.
-            let place = (centre.0 + turned_x, centre.1 + turned_y);
-            let turned = if rotate {
-                crate::modify::turned(&kind, &geometry, centre, angle)
-            } else {
-                Some(geometry.clone())
-            };
-            let Some(turned) = turned else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("an entity of the kind `{kind}` may not be turned"),
-                });
-            };
-            // The **shift**: the item is put where its centre belongs.
-            let Some(item) = centre_of(&turned) else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the entity `{entity}` has no centre"),
-                });
-            };
-            let shift = (place.0 - item.0, place.1 - item.1);
-            let Some(new) = crate::modify::moved(&kind, &turned, shift.0, shift.1) else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("an entity of the kind `{kind}` may not be arrayed"),
-                });
-            };
-            let copy =
-                copy_of(session, &id, block, &format!("{name} {}", made.len() + 2), &kind, new, &carried)?;
-            made.push(copy);
-        }
-        let items = made.len() + 1;
-        Ok(Outcome::changed(format!("arrayed the entity `{entity}` in {items} item(s)")).with_data(json!({
-            "entity": entity,
-            "copies": made,
-            "count": made.len(),
-            "items": items,
-            "centre": { "x": centre.0, "y": centre.1 },
-            "degrees": degrees,
-        })))
     }
 }

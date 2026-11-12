@@ -287,7 +287,7 @@ pub fn run(root: &Path, args: &[String]) -> Result<crate::Outcome, String> {
             root,
         )?;
     }
-    build_the_shared_libraries(root, &selected)?;
+    build_the_shared_libraries(root, &packages.iter().collect::<Vec<&Package>>())?;
     for package in &selected {
         crate::ci::test_package(root, package)?;
     }
@@ -310,7 +310,7 @@ fn describe(scope: &Scope) -> String {
     }
 }
 
-/// Build every package in the scope whose library is also a shared library.
+/// Build every package in the tree whose library is also a shared library.
 ///
 /// **Before the tests, and for the reason the gate gives:** cargo writes a
 /// package's `.so` when the package is **built**, and not when it is used as
@@ -318,6 +318,13 @@ fn describe(scope: &Scope) -> String {
 /// `cargo test --package craftkit-au` never writes
 /// `libcraftkit_au_fixture.so`, and the host's test opens a file that is not
 /// there.
+///
+/// **Every** shared library of the tree, and not only the ones in the
+/// scope: a test in the scope may open the shared library of a package
+/// that is **not** in the scope. The doors' fixtures are dev-dependencies
+/// of the studio, and the studio's test opens them — so a scoped run that
+/// built only the scope's own shared libraries failed on a file that was
+/// never missing, only never built.
 fn build_the_shared_libraries(root: &Path, packages: &[&Package]) -> Result<(), String> {
     let mut names: Vec<&str> = packages.iter().filter(|p| p.is_cdylib).map(|p| p.name.as_str()).collect();
     if names.is_empty() {

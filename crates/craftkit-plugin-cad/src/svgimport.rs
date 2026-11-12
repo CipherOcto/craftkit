@@ -40,10 +40,10 @@
 //! - The **fills**, the **gradients** and the **styles** are not read:
 //!   the drawing model of this tree draws outlines.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Outcome, Relation, Session, Text};
+use craftkit_sdk::{EngineError, Outcome, Relation, Text};
 
 /// The most an SVG file may be, in bytes.
 const MAX_BYTES: u64 = 16 * 1024 * 1024;
@@ -626,164 +626,172 @@ fn extents_of(shapes: &[Shape]) -> Option<(f64, f64, f64, f64)> {
     }
 }
 
-/// **Read** an SVG file and make the **drawing** it names.
-///
-/// The shapes of the file are entities of the drawing's model space,
-/// and the page of the file is the origin of the drawing.
-#[derive(Command)]
-#[command(id = "cad.import.svg", area = "cad", layer = "cad", icon = "file", mutates, undoable)]
-pub struct ImportSvg {
-    /// The file to read.
-    pub path: Text,
-    /// What to call the drawing.
+commands! {
+    /// **Read** an SVG file and make the **drawing** it names.
     ///
-    /// Without it, the name of the file.
-    pub name: Option<Text>,
-}
+    /// The shapes of the file are entities of the drawing's model space,
+    /// and the page of the file is the origin of the drawing.
+    cad.import.svg {
+        area: "cad",
+        layer: "cad",
+        icon: "file",
+        mutates,
+        undoable,
+        params: {
+            /// The file to read.
 
-impl ImportSvg {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed {
+            path: Text,
+            /// What to call the drawing.
+            ///
+            /// Without it, the name of the file.
+
+            name: Option<Text>,
+        },
+        run: {
+
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "a file has a path".to_string(),
+                });
+            }
+            let text = craftkit_sdk::files::read_text_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(
+                |message| EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the file cannot be read: {message}"),
+                },
+            )?;
+            let root = craftkit_sdk::xml::parse(&text).map_err(|reason| EngineError::Failed {
                 id: COMMAND.to_string(),
-                message: "a file has a path".to_string(),
-            });
-        }
-        let text = craftkit_sdk::files::read_text_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(
-            |message| EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the file cannot be read: {message}"),
-            },
-        )?;
-        let root = craftkit_sdk::xml::parse(&text).map_err(|reason| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("the file is not an SVG file: {reason}"),
-        })?;
-        if root.name != "svg" {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the file is not an SVG file: its root is a `{}`", root.name),
-            });
-        }
-        let (page, scale) = page_of(&root);
-        let mut shapes: Vec<Shape> = Vec::new();
-        let mut left_out: Vec<String> = Vec::new();
-        let mut counted = 0usize;
-        shapes_of_tree(&root, scale, &mut shapes, &mut left_out, 0, &mut counted);
-        // The **box** of the drawing: the page of the file, or the
-        // extents of its shapes.
-        let (min_x, top) = match page {
-            Some((x, y, _width, height)) => (x, y + height),
-            None => match extents_of(&shapes) {
-                Some((min_x, _min_y, _max_x, max_y)) => (min_x, max_y),
-                None => (0.0, 0.0),
-            },
-        };
-        let map = |x: f64, y: f64| json!({ "x": (x - min_x) * scale, "y": (top - y) * scale });
-        // The **name** of the drawing.
-        let name = match &self.name {
-            Some(name) if !name.0.trim().is_empty() => name.0.trim().to_string(),
-            _ => std::path::Path::new(&path)
-                .file_stem()
-                .map(|stem| stem.to_string_lossy().to_string())
-                .unwrap_or_else(|| "the drawing".to_string()),
-        };
-        // The **drawing**, its **layer** and its **block**.
-        let drawing = session.document_mut()?.add_node_under(None, name.clone(), "cad.drawing", None);
-        let layer = session.document_mut()?.add_node_with_under(
-            Some(drawing),
-            "the picture".to_string(),
-            "cad.layer",
-            None,
-            json!({ "color": Json::Null }),
-        );
-        let block = session.document_mut()?.add_node_with_under(
-            Some(drawing),
-            MODEL_SPACE.to_string(),
-            "cad.block",
-            None,
-            json!({}),
-        );
-        // The **entities**.
-        let mut entities = 0usize;
-        let mut points = 0usize;
-        let mut counts: Vec<(String, usize)> = Vec::new();
-        for shape in &shapes {
-            let (kind, geometry) = match shape {
-                Shape::Line { from, to } => {
-                    ("line", json!({ "from": map(from.0, from.1), "to": map(to.0, to.1) }))
-                }
-                Shape::Circle { center, radius } => {
-                    ("circle", json!({ "center": map(center.0, center.1), "radius": radius * scale }))
-                }
-                Shape::Ellipse { center, rx, ry } => {
-                    // The **major axis** is the longer of the two, and
-                    // the ratio is the shorter over the longer.
-                    let (major, ratio) = if rx >= ry {
-                        (json!({ "x": rx * scale, "y": 0.0 }), ry / rx)
-                    } else {
-                        (json!({ "x": 0.0, "y": ry * scale }), rx / ry)
-                    };
-                    (
-                        "ellipse",
-                        json!({
-                            "center": map(center.0, center.1),
-                            "major": major,
-                            "ratio": ratio,
-                            "start": 0.0,
-                            "end": std::f64::consts::TAU,
-                        }),
-                    )
-                }
-                Shape::Polyline { points: vertices, closed } => {
-                    points += vertices.len();
-                    if points > MAX_POINTS {
-                        left_out.push("too many points".to_string());
-                        break;
-                    }
-                    let mapped: Vec<Json> = vertices.iter().map(|(x, y)| map(*x, *y)).collect();
-                    ("polyline", json!({ "points": mapped, "closed": closed }))
-                }
+                message: format!("the file is not an SVG file: {reason}"),
+            })?;
+            if root.name != "svg" {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the file is not an SVG file: its root is a `{}`", root.name),
+                });
+            }
+            let (page, scale) = page_of(&root);
+            let mut shapes: Vec<Shape> = Vec::new();
+            let mut left_out: Vec<String> = Vec::new();
+            let mut counted = 0usize;
+            shapes_of_tree(&root, scale, &mut shapes, &mut left_out, 0, &mut counted);
+            // The **box** of the drawing: the page of the file, or the
+            // extents of its shapes.
+            let (min_x, top) = match page {
+                Some((x, y, _width, height)) => (x, y + height),
+                None => match extents_of(&shapes) {
+                    Some((min_x, _min_y, _max_x, max_y)) => (min_x, max_y),
+                    None => (0.0, 0.0),
+                },
             };
-            let count = match counts.iter_mut().find(|(name, _)| *name == kind) {
-                Some((_, count)) => {
-                    *count += 1;
-                    *count
-                }
-                None => {
-                    counts.push((kind.to_string(), 1));
-                    1
-                }
+            let map = |x: f64, y: f64| json!({ "x": (x - min_x) * scale, "y": (top - y) * scale });
+            // The **name** of the drawing.
+            let name = match &self.name {
+                Some(name) if !name.0.trim().is_empty() => name.0.trim().to_string(),
+                _ => std::path::Path::new(&path)
+                    .file_stem()
+                    .map(|stem| stem.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "the drawing".to_string()),
             };
-            let entity = session.document_mut()?.add_node_with_under(
-                Some(block),
-                format!("{kind} {count}"),
-                format!("cad.entity.{kind}"),
+            // The **drawing**, its **layer** and its **block**.
+            let drawing = session.document_mut()?.add_node_under(None, name.clone(), "cad.drawing", None);
+            let layer = session.document_mut()?.add_node_with_under(
+                Some(drawing),
+                "the picture".to_string(),
+                "cad.layer",
                 None,
-                json!({ "geometry": geometry }),
+                json!({ "color": Json::Null }),
             );
-            let relation = Relation::with_payload(
-                entity,
-                layer,
-                craftkit_sdk::layer::ON_LAYER,
-                json!({ "layer": "the picture" }),
+            let block = session.document_mut()?.add_node_with_under(
+                Some(drawing),
+                MODEL_SPACE.to_string(),
+                "cad.block",
+                None,
+                json!({}),
             );
-            session.document_mut()?.add_relation(relation);
-            entities += 1;
+            // The **entities**.
+            let mut entities = 0usize;
+            let mut points = 0usize;
+            let mut counts: Vec<(String, usize)> = Vec::new();
+            for shape in &shapes {
+                let (kind, geometry) = match shape {
+                    Shape::Line { from, to } => {
+                        ("line", json!({ "from": map(from.0, from.1), "to": map(to.0, to.1) }))
+                    }
+                    Shape::Circle { center, radius } => {
+                        ("circle", json!({ "center": map(center.0, center.1), "radius": radius * scale }))
+                    }
+                    Shape::Ellipse { center, rx, ry } => {
+                        // The **major axis** is the longer of the two, and
+                        // the ratio is the shorter over the longer.
+                        let (major, ratio) = if rx >= ry {
+                            (json!({ "x": rx * scale, "y": 0.0 }), ry / rx)
+                        } else {
+                            (json!({ "x": 0.0, "y": ry * scale }), rx / ry)
+                        };
+                        (
+                            "ellipse",
+                            json!({
+                                "center": map(center.0, center.1),
+                                "major": major,
+                                "ratio": ratio,
+                                "start": 0.0,
+                                "end": std::f64::consts::TAU,
+                            }),
+                        )
+                    }
+                    Shape::Polyline { points: vertices, closed } => {
+                        points += vertices.len();
+                        if points > MAX_POINTS {
+                            left_out.push("too many points".to_string());
+                            break;
+                        }
+                        let mapped: Vec<Json> = vertices.iter().map(|(x, y)| map(*x, *y)).collect();
+                        ("polyline", json!({ "points": mapped, "closed": closed }))
+                    }
+                };
+                let count = match counts.iter_mut().find(|(name, _)| *name == kind) {
+                    Some((_, count)) => {
+                        *count += 1;
+                        *count
+                    }
+                    None => {
+                        counts.push((kind.to_string(), 1));
+                        1
+                    }
+                };
+                let entity = session.document_mut()?.add_node_with_under(
+                    Some(block),
+                    format!("{kind} {count}"),
+                    format!("cad.entity.{kind}"),
+                    None,
+                    json!({ "geometry": geometry }),
+                );
+                let relation = Relation::with_payload(
+                    entity,
+                    layer,
+                    craftkit_sdk::layer::ON_LAYER,
+                    json!({ "layer": "the picture" }),
+                );
+                session.document_mut()?.add_relation(relation);
+                entities += 1;
+            }
+            // What was left out is said once each: a file may hold a
+            // thousand of the same thing, and a thousand names is noise.
+            left_out.sort();
+            left_out.dedup();
+            Ok(Outcome::changed(format!("the file `{path}` made {entities} entit(ies)")).with_data(json!({
+                "path": path,
+                "drawing": drawing,
+                "block": block,
+                "layer": layer,
+                "entities": entities,
+                "left_out": left_out,
+                "scale": scale,
+            })))
+
         }
-        // What was left out is said once each: a file may hold a
-        // thousand of the same thing, and a thousand names is noise.
-        left_out.sort();
-        left_out.dedup();
-        Ok(Outcome::changed(format!("the file `{path}` made {entities} entit(ies)")).with_data(json!({
-            "path": path,
-            "drawing": drawing,
-            "block": block,
-            "layer": layer,
-            "entities": entities,
-            "left_out": left_out,
-            "scale": scale,
-        })))
     }
 }

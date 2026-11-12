@@ -73,6 +73,7 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use syn::ext::IdentExt;
 use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::{Attribute, Block, Error, Ident, LitStr, Result, Token, Type, Visibility, braced};
@@ -113,6 +114,13 @@ struct Row {
     example: bool,
     /// Its parameters: the fields, and their types.
     params: Vec<Field>,
+    /// The methods the command has, besides its `run`.
+    ///
+    /// A command is a struct, and a struct may have methods: a helper the
+    /// body calls, a form of the value it holds. The table writes them
+    /// with the command, so a battery that is a table does not have to
+    /// leave one of its commands behind.
+    methods: Vec<syn::ItemFn>,
     /// The command's body.
     run: Block,
     /// Whether the table gave the row a body.
@@ -123,6 +131,8 @@ struct Row {
 struct Field {
     /// The parameter's documentation.
     docs: Vec<Attribute>,
+    /// The parameter's own attributes: `#[param(or = "…")]`.
+    attrs: Vec<Attribute>,
     /// The parameter's name.
     name: Ident,
     /// The parameter's kind: the type says what it is.
@@ -165,6 +175,7 @@ impl Parse for Row {
             no_prefix: false,
             example: false,
             params: Vec::new(),
+            methods: Vec::new(),
             run: Block { brace_token: Default::default(), stmts: Vec::new() },
             has_run: false,
         };
@@ -212,6 +223,11 @@ impl Parse for Row {
                         braced!(fields in body);
                         row.params = params_of(&fields)?;
                     }
+                    "methods" => {
+                        let methods;
+                        braced!(methods in body);
+                        row.methods = methods_of(&methods)?;
+                    }
                     "run" => {
                         row.run = body.parse()?;
                         row.has_run = true;
@@ -222,7 +238,7 @@ impl Parse for Row {
                             format!(
                                 "`{other}` is not an entry of a command: a command in a table has \
                                  `label`, `area`, `layer`, `icon`, `shortcut`, `capability`, \
-                                 `menu`, `enabled`, `params` and `run`"
+                                 `menu`, `enabled`, `params`, `methods` and `run`"
                             ),
                         ));
                     }
@@ -273,13 +289,18 @@ fn docs_of(input: ParseStream) -> Result<Vec<Attribute>> {
 }
 
 /// A dotted id: `<area>.<thing>`.
+///
+/// **A part may be a keyword.** An id is a name in the tree, not a name in
+/// Rust: `cad.group.move` is a command, and `move` is a word the compiler
+/// has opinions about. The id is read as text, and the keyword is read the
+/// way it is written.
 fn id_of(input: ParseStream) -> Result<String> {
     let mut id = String::new();
-    let first: Ident = input.parse()?;
+    let first = Ident::parse_any(input)?;
     id.push_str(&first.to_string());
     while input.peek(Token![.]) {
         input.parse::<Token![.]>()?;
-        let part: Ident = input.parse()?;
+        let part = Ident::parse_any(input)?;
         id.push('.');
         id.push_str(&part.to_string());
     }
@@ -305,15 +326,40 @@ fn menu_of(input: ParseStream) -> Result<Vec<String>> {
     Ok(out)
 }
 
+/// The methods of a command: the items of a block.
+///
+/// A method is an ordinary Rust item, and the table does not pretend
+/// otherwise: it is read as one and written as one.
+fn methods_of(input: ParseStream) -> Result<Vec<syn::ItemFn>> {
+    let mut out = Vec::new();
+    while !input.is_empty() {
+        out.push(input.parse::<syn::ItemFn>()?);
+    }
+    Ok(out)
+}
+
 /// The parameters of a command: the fields, and their types.
+///
+/// A parameter may carry the derive's own attributes — `#[param(or =
+/// "…")]`, the other spelling of two parameters — and the table carries
+/// them, so a parameter that says something about itself is not a reason
+/// to leave the command behind.
 fn params_of(input: ParseStream) -> Result<Vec<Field>> {
     let mut out = Vec::new();
     while !input.is_empty() {
-        let docs = docs_of(input)?;
+        let mut docs = Vec::new();
+        let mut attrs = Vec::new();
+        for attribute in Attribute::parse_outer(input)? {
+            if attribute.path().is_ident("doc") {
+                docs.push(attribute);
+            } else {
+                attrs.push(attribute);
+            }
+        }
         let name: Ident = input.parse()?;
         input.parse::<Token![:]>()?;
         let ty: Type = input.parse()?;
-        out.push(Field { docs, name, ty });
+        out.push(Field { docs, attrs, name, ty });
         if input.is_empty() {
             break;
         }
@@ -437,7 +483,7 @@ fn expand_row(sdk: &TokenStream2, row: &Row) -> Result<TokenStream2> {
         .params
         .iter()
         .map(|field| syn::Field {
-            attrs: field.docs.clone(),
+            attrs: field.docs.clone().into_iter().chain(field.attrs.clone()).collect(),
             vis: Visibility::Inherited,
             ident: Some(field.name.clone()),
             colon_token: Default::default(),
@@ -470,6 +516,9 @@ fn expand_row(sdk: &TokenStream2, row: &Row) -> Result<TokenStream2> {
             let docs = &field.docs;
             let name = &field.name;
             let ty = &field.ty;
+            // The parameter's own attributes are **not** written on the
+            // field: the table writes the reader itself, and the
+            // attribute is what the reader is made of.
             quote!(#(#docs)* #name: #ty)
         })
         .collect();
@@ -480,6 +529,8 @@ fn expand_row(sdk: &TokenStream2, row: &Row) -> Result<TokenStream2> {
     // derive writes for one command.
     let expansion = crate::command::expand(declaration)?;
 
+    let methods = &row.methods;
+
     Ok(quote! {
         #(#docs)*
         pub struct #name {
@@ -487,6 +538,7 @@ fn expand_row(sdk: &TokenStream2, row: &Row) -> Result<TokenStream2> {
         }
 
         impl #name {
+            #(#methods)*
             /// The command's body.
             ///
             /// Written by the arc: the macro writes the edges, and the

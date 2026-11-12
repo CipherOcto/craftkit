@@ -25,10 +25,10 @@
 //!   removes the reference. Here it is **reported**: the drawing is
 //!   left as it is, and a person says what should happen to it.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome};
 
 /// One **thing that is wrong** with a drawing.
 struct Issue {
@@ -152,38 +152,43 @@ fn belongs_to(block: &Node, drawing: &Node) -> bool {
     drawing.children.iter().any(|child| child.id == block.id)
 }
 
-/// **Audit** a drawing.
-#[derive(Command)]
-#[command(id = "cad.audit", area = "cad", layer = "cad", icon = "list")]
-pub struct AuditDrawing {
-    /// The drawing.
-    pub drawing: NodeRef,
-}
+commands! {
+    /// **Audit** a drawing.
+    cad.audit {
+        area: "cad",
+        layer: "cad",
+        icon: "list",
+        params: {
+            /// The drawing.
 
-impl AuditDrawing {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.audit".to_string();
-        let drawing = self.drawing.0;
-        let Some(node) = session.document().node(drawing) else {
-            return Err(EngineError::Failed { id, message: format!("there is no drawing `{drawing}`") });
-        };
-        if node.kind != "cad.drawing" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{drawing}` is a `{}` and not a drawing", node.kind),
-            });
+            drawing: NodeRef,
+        },
+        run: {
+
+            let id = "cad.audit".to_string();
+            let drawing = self.drawing.0;
+            let Some(node) = session.document().node(drawing) else {
+                return Err(EngineError::Failed { id, message: format!("there is no drawing `{drawing}`") });
+            };
+            if node.kind != "cad.drawing" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{drawing}` is a `{}` and not a drawing", node.kind),
+                });
+            }
+            let issues = issues_of(session.document(), node);
+            let found = issues.len();
+            let message = if found == 0 {
+                format!("the drawing `{drawing}` has nothing wrong with it")
+            } else {
+                format!("the drawing `{drawing}` has {found} thing(s) wrong with it")
+            };
+            Ok(Outcome::new(message).with_data(json!({
+                "drawing": drawing,
+                "count": found,
+                "issues": issues.iter().map(Issue::to_json).collect::<Vec<Json>>(),
+            })))
+
         }
-        let issues = issues_of(session.document(), node);
-        let found = issues.len();
-        let message = if found == 0 {
-            format!("the drawing `{drawing}` has nothing wrong with it")
-        } else {
-            format!("the drawing `{drawing}` has {found} thing(s) wrong with it")
-        };
-        Ok(Outcome::new(message).with_data(json!({
-            "drawing": drawing,
-            "count": found,
-            "issues": issues.iter().map(Issue::to_json).collect::<Vec<Json>>(),
-        })))
     }
 }

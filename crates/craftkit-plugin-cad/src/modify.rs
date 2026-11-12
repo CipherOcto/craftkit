@@ -30,7 +30,7 @@
 //! - **The tree's turn of a text turns the text's own angle** and here
 //!   the same: a text carries its angle and the turn adds to it.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
@@ -248,160 +248,184 @@ fn the_entity<'a>(
     Ok(found)
 }
 
-/// **Move** an entity by a vector.
-#[derive(Command)]
-#[command(id = "cad.entity.move", area = "cad", layer = "cad", icon = "arrows", mutates, undoable)]
-pub struct MoveEntity {
-    /// The entity.
-    pub entity: NodeRef,
-    /// The vector it moves by.
-    pub by: Json,
-}
+commands! {
+    /// **Move** an entity by a vector.
+    cad.entity.move {
+        area: "cad",
+        layer: "cad",
+        icon: "arrows",
+        mutates,
+        undoable,
+        params: {
+            /// The entity.
 
-impl MoveEntity {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.entity.move".to_string();
-        let entity = self.entity.0;
-        let node = the_entity(session, &id, entity)?;
-        crate::editable::may_edit(session.document(), entity, &id)?;
-        let (dx, dy) = point_of(&self.by, &id, "the vector")?;
-        let Some(geometry) = node.data.get("geometry") else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the entity `{entity}` has no geometry"),
-            });
-        };
-        let Some(new) = moved(&node.kind, geometry, dx, dy) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("an entity of the kind `{}` may not be moved", node.kind),
-            });
-        };
-        let Some(node) = session.document_mut()?.node_mut(entity) else {
-            return Err(EngineError::Failed {
-                id: "cad.entity.move".to_string(),
-                message: format!("there is no entity `{entity}`"),
-            });
-        };
-        node.data["geometry"] = new;
-        Ok(Outcome::changed(format!("moved the entity `{entity}`"))
-            .with_data(json!({ "entity": entity, "by": { "x": dx, "y": dy } })))
-    }
-}
+            entity: NodeRef,
+            /// The vector it moves by.
 
-/// **Turn** an entity about a point.
-#[derive(Command)]
-#[command(id = "cad.entity.rotate", area = "cad", layer = "cad", icon = "rotate", mutates, undoable)]
-pub struct RotateEntity {
-    /// The entity.
-    pub entity: NodeRef,
-    /// The point it turns about.
-    pub about: Json,
-    /// The angle, in degrees.
-    pub degrees: Number,
-}
+            by: Json,
+        },
+        run: {
 
-impl RotateEntity {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.entity.rotate".to_string();
-        let entity = self.entity.0;
-        let node = the_entity(session, &id, entity)?;
-        crate::editable::may_edit(session.document(), entity, &id)?;
-        let about = point_of(&self.about, &id, "the point")?;
-        if !self.degrees.0.is_finite() {
-            return Err(EngineError::Failed { id, message: "an angle is a number of degrees".to_string() });
+            let id = "cad.entity.move".to_string();
+            let entity = self.entity.0;
+            let node = the_entity(session, &id, entity)?;
+            crate::editable::may_edit(session.document(), entity, &id)?;
+            let (dx, dy) = point_of(&self.by, &id, "the vector")?;
+            let Some(geometry) = node.data.get("geometry") else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the entity `{entity}` has no geometry"),
+                });
+            };
+            let Some(new) = moved(&node.kind, geometry, dx, dy) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("an entity of the kind `{}` may not be moved", node.kind),
+                });
+            };
+            let Some(node) = session.document_mut()?.node_mut(entity) else {
+                return Err(EngineError::Failed {
+                    id: "cad.entity.move".to_string(),
+                    message: format!("there is no entity `{entity}`"),
+                });
+            };
+            node.data["geometry"] = new;
+            Ok(Outcome::changed(format!("moved the entity `{entity}`"))
+                .with_data(json!({ "entity": entity, "by": { "x": dx, "y": dy } })))
+
         }
-        let Some(geometry) = node.data.get("geometry") else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the entity `{entity}` has no geometry"),
-            });
-        };
-        let Some(new) = turned(&node.kind, geometry, about, self.degrees.0) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("an entity of the kind `{}` may not be turned", node.kind),
-            });
-        };
-        let Some(node) = session.document_mut()?.node_mut(entity) else {
-            return Err(EngineError::Failed {
-                id: "cad.entity.rotate".to_string(),
-                message: format!("there is no entity `{entity}`"),
-            });
-        };
-        node.data["geometry"] = new;
-        Ok(Outcome::changed(format!("turned the entity `{entity}`"))
-            .with_data(json!({ "entity": entity, "degrees": self.degrees.0 })))
     }
-}
+    /// **Turn** an entity about a point.
+    cad.entity.rotate {
+        area: "cad",
+        layer: "cad",
+        icon: "rotate",
+        mutates,
+        undoable,
+        params: {
+            /// The entity.
 
-/// **Scale** an entity about a point.
-#[derive(Command)]
-#[command(id = "cad.entity.scale", area = "cad", layer = "cad", icon = "scale", mutates, undoable)]
-pub struct ScaleEntity {
-    /// The entity.
-    pub entity: NodeRef,
-    /// The point it scales about.
-    pub about: Json,
-    /// The factor: above nothing.
-    pub factor: Number,
-}
+            entity: NodeRef,
+            /// The point it turns about.
 
-impl ScaleEntity {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.entity.scale".to_string();
-        let entity = self.entity.0;
-        let node = the_entity(session, &id, entity)?;
-        crate::editable::may_edit(session.document(), entity, &id)?;
-        let about = point_of(&self.about, &id, "the point")?;
-        if !self.factor.0.is_finite() || self.factor.0 <= 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "a factor is a number above nothing".to_string(),
-            });
+            about: Json,
+            /// The angle, in degrees.
+
+            degrees: Number,
+        },
+        run: {
+
+            let id = "cad.entity.rotate".to_string();
+            let entity = self.entity.0;
+            let node = the_entity(session, &id, entity)?;
+            crate::editable::may_edit(session.document(), entity, &id)?;
+            let about = point_of(&self.about, &id, "the point")?;
+            if !self.degrees.0.is_finite() {
+                return Err(EngineError::Failed { id, message: "an angle is a number of degrees".to_string() });
+            }
+            let Some(geometry) = node.data.get("geometry") else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the entity `{entity}` has no geometry"),
+                });
+            };
+            let Some(new) = turned(&node.kind, geometry, about, self.degrees.0) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("an entity of the kind `{}` may not be turned", node.kind),
+                });
+            };
+            let Some(node) = session.document_mut()?.node_mut(entity) else {
+                return Err(EngineError::Failed {
+                    id: "cad.entity.rotate".to_string(),
+                    message: format!("there is no entity `{entity}`"),
+                });
+            };
+            node.data["geometry"] = new;
+            Ok(Outcome::changed(format!("turned the entity `{entity}`"))
+                .with_data(json!({ "entity": entity, "degrees": self.degrees.0 })))
+
         }
-        let Some(geometry) = node.data.get("geometry") else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the entity `{entity}` has no geometry"),
-            });
-        };
-        let Some(new) = scaled(&node.kind, geometry, about, self.factor.0) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("an entity of the kind `{}` may not be scaled", node.kind),
-            });
-        };
-        let Some(node) = session.document_mut()?.node_mut(entity) else {
-            return Err(EngineError::Failed {
-                id: "cad.entity.scale".to_string(),
-                message: format!("there is no entity `{entity}`"),
-            });
-        };
-        node.data["geometry"] = new;
-        Ok(Outcome::changed(format!("scaled the entity `{entity}`"))
-            .with_data(json!({ "entity": entity, "factor": self.factor.0 })))
     }
-}
+    /// **Scale** an entity about a point.
+    cad.entity.scale {
+        area: "cad",
+        layer: "cad",
+        icon: "scale",
+        mutates,
+        undoable,
+        params: {
+            /// The entity.
 
-/// **Take** an entity **away**.
-#[derive(Command)]
-#[command(id = "cad.entity.remove", area = "cad", layer = "cad", icon = "minus", mutates, undoable)]
-pub struct RemoveEntity {
-    /// The entity.
-    pub entity: NodeRef,
-}
+            entity: NodeRef,
+            /// The point it scales about.
 
-impl RemoveEntity {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.entity.remove".to_string();
-        let entity = self.entity.0;
-        the_entity(session, &id, entity)?;
-        crate::editable::may_edit(session.document(), entity, &id)?;
-        if !session.document_mut()?.remove_node(entity) {
-            return Err(EngineError::Failed { id, message: format!("there is no entity `{entity}`") });
+            about: Json,
+            /// The factor: above nothing.
+
+            factor: Number,
+        },
+        run: {
+
+            let id = "cad.entity.scale".to_string();
+            let entity = self.entity.0;
+            let node = the_entity(session, &id, entity)?;
+            crate::editable::may_edit(session.document(), entity, &id)?;
+            let about = point_of(&self.about, &id, "the point")?;
+            if !self.factor.0.is_finite() || self.factor.0 <= 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a factor is a number above nothing".to_string(),
+                });
+            }
+            let Some(geometry) = node.data.get("geometry") else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the entity `{entity}` has no geometry"),
+                });
+            };
+            let Some(new) = scaled(&node.kind, geometry, about, self.factor.0) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("an entity of the kind `{}` may not be scaled", node.kind),
+                });
+            };
+            let Some(node) = session.document_mut()?.node_mut(entity) else {
+                return Err(EngineError::Failed {
+                    id: "cad.entity.scale".to_string(),
+                    message: format!("there is no entity `{entity}`"),
+                });
+            };
+            node.data["geometry"] = new;
+            Ok(Outcome::changed(format!("scaled the entity `{entity}`"))
+                .with_data(json!({ "entity": entity, "factor": self.factor.0 })))
+
         }
-        Ok(Outcome::changed(format!("took the entity `{entity}` away"))
-            .with_data(json!({ "entity": entity })))
+    }
+    /// **Take** an entity **away**.
+    cad.entity.remove {
+        area: "cad",
+        layer: "cad",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The entity.
+
+            entity: NodeRef,
+        },
+        run: {
+
+            let id = "cad.entity.remove".to_string();
+            let entity = self.entity.0;
+            the_entity(session, &id, entity)?;
+            crate::editable::may_edit(session.document(), entity, &id)?;
+            if !session.document_mut()?.remove_node(entity) {
+                return Err(EngineError::Failed { id, message: format!("there is no entity `{entity}`") });
+            }
+            Ok(Outcome::changed(format!("took the entity `{entity}` away"))
+                .with_data(json!({ "entity": entity })))
+
+        }
     }
 }

@@ -23,10 +23,10 @@
 //!   command, and an **empty** text takes it away: the measurement
 //!   shows again.
 
-use craftkit_derive::{Command, NodeKind};
+use craftkit_derive::{NodeKind, commands};
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Relation, Session, Text};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Relation, Text};
 
 /// The **edge** that says a dimension measures an entity.
 const MEASURES: &str = "cad.measures";
@@ -88,103 +88,118 @@ pub fn text_of(dimension: &Node, value: Option<f64>) -> String {
     }
 }
 
-/// **Add** a dimension to a block.
-///
-/// The dimension measures the **length** of an entity, and an entity
-/// that has no length is refused.
-#[derive(Command)]
-#[command(id = "cad.dimension.add", area = "cad", layer = "cad", icon = "ruler", mutates, undoable)]
-pub struct AddDimension {
-    /// The block it goes in.
-    pub block: NodeRef,
-    /// What to call it.
-    pub name: Text,
-    /// The entity it **measures**.
-    pub entity: NodeRef,
-    /// Where it is written.
-    pub at: Json,
-}
+commands! {
+    /// **Add** a dimension to a block.
+    ///
+    /// The dimension measures the **length** of an entity, and an entity
+    /// that has no length is refused.
+    cad.dimension.add {
+        area: "cad",
+        layer: "cad",
+        icon: "ruler",
+        mutates,
+        undoable,
+        params: {
+            /// The block it goes in.
 
-impl AddDimension {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.dimension.add".to_string();
-        let measured = self.entity.0;
-        let Some(entity) = session.document().node(measured).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no entity `{measured}`"),
-            });
-        };
-        if !entity.kind.starts_with("cad.entity.") {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{measured}` is a `{}` and not an entity", entity.kind),
-            });
-        }
-        if length_of(&entity).is_none() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "a dimension measures the length of an entity, and a `{}` has no length",
-                    entity.kind
-                ),
-            });
-        }
-        let (x, y) = crate::point(&self.at, &id, "the insertion point")?;
-        let geometry = json!({ "at": { "x": x, "y": y } });
-        let name = self.name.0.trim().to_string();
-        let dimension =
-            crate::add_entity(session, self.block.0, &name, "cad.entity.dimension", geometry, &id)?;
-        session.document_mut()?.add_relation(Relation::with_payload(
-            dimension,
-            measured,
-            MEASURES,
-            json!({ "measures": entity.name.clone() }),
-        ));
-        let value = length_of(&entity);
-        Ok(Outcome::changed(format!("added the dimension `{name}`"))
-            .with_data(json!({ "id": dimension, "name": name, "measures": measured, "value": value })))
-    }
-}
+            block: NodeRef,
+            /// What to call it.
 
-/// **Say** what a dimension says of its own.
-///
-/// A text that is **empty** takes the text away, and the measurement
-/// shows again.
-#[derive(Command)]
-#[command(id = "cad.dimension.text", area = "cad", layer = "cad", icon = "pencil", mutates, undoable)]
-pub struct SetDimensionText {
-    /// The dimension.
-    pub dimension: NodeRef,
-    /// What it says. Without it the measurement shows.
-    pub text: Text,
-}
+            name: Text,
+            /// The entity it **measures**.
 
-impl SetDimensionText {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.dimension.text".to_string();
-        let dimension = self.dimension.0;
-        let Some(node) = session.document().node(dimension).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no dimension `{dimension}`"),
-            });
-        };
-        if node.kind != "cad.entity.dimension" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{dimension}` is a `{}` and not a dimension", node.kind),
-            });
-        }
-        let text = self.text.0.clone();
-        if let Some(node) = session.document_mut()?.node_mut(dimension) {
-            if text.is_empty() {
-                node.data.as_object_mut().map(|data| data.remove("text"));
-            } else {
-                node.data["text"] = json!(text.clone());
+            entity: NodeRef,
+            /// Where it is written.
+
+            at: Json,
+        },
+        run: {
+
+            let id = "cad.dimension.add".to_string();
+            let measured = self.entity.0;
+            let Some(entity) = session.document().node(measured).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no entity `{measured}`"),
+                });
+            };
+            if !entity.kind.starts_with("cad.entity.") {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{measured}` is a `{}` and not an entity", entity.kind),
+                });
             }
+            if length_of(&entity).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "a dimension measures the length of an entity, and a `{}` has no length",
+                        entity.kind
+                    ),
+                });
+            }
+            let (x, y) = crate::point(&self.at, &id, "the insertion point")?;
+            let geometry = json!({ "at": { "x": x, "y": y } });
+            let name = self.name.0.trim().to_string();
+            let dimension =
+                crate::add_entity(session, self.block.0, &name, "cad.entity.dimension", geometry, &id)?;
+            session.document_mut()?.add_relation(Relation::with_payload(
+                dimension,
+                measured,
+                MEASURES,
+                json!({ "measures": entity.name.clone() }),
+            ));
+            let value = length_of(&entity);
+            Ok(Outcome::changed(format!("added the dimension `{name}`"))
+                .with_data(json!({ "id": dimension, "name": name, "measures": measured, "value": value })))
+
         }
-        Ok(Outcome::changed(format!("the dimension `{dimension}` says `{text}`"))
-            .with_data(json!({ "dimension": dimension, "text": text })))
+    }
+    /// **Say** what a dimension says of its own.
+    ///
+    /// A text that is **empty** takes the text away, and the measurement
+    /// shows again.
+    cad.dimension.text {
+        area: "cad",
+        layer: "cad",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The dimension.
+
+            dimension: NodeRef,
+            /// What it says. Without it the measurement shows.
+
+            text: Text,
+        },
+        run: {
+
+            let id = "cad.dimension.text".to_string();
+            let dimension = self.dimension.0;
+            let Some(node) = session.document().node(dimension).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no dimension `{dimension}`"),
+                });
+            };
+            if node.kind != "cad.entity.dimension" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{dimension}` is a `{}` and not a dimension", node.kind),
+                });
+            }
+            let text = self.text.0.clone();
+            if let Some(node) = session.document_mut()?.node_mut(dimension) {
+                if text.is_empty() {
+                    node.data.as_object_mut().map(|data| data.remove("text"));
+                } else {
+                    node.data["text"] = json!(text.clone());
+                }
+            }
+            Ok(Outcome::changed(format!("the dimension `{dimension}` says `{text}`"))
+                .with_data(json!({ "dimension": dimension, "text": text })))
+
+        }
     }
 }

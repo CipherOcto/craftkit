@@ -23,10 +23,10 @@
 //!   a whole ellipse are exact and the bounds of an **arc** of one are
 //!   **sampled** — a difference, and it is written down here.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Text};
 
 /// How many points a curve is drawn with.
 const CURVE_SEGMENTS: usize = 64;
@@ -116,122 +116,142 @@ fn point_in(geometry: &Json, key: &str) -> Option<(f64, f64)> {
     (x.is_finite() && y.is_finite()).then_some((x, y))
 }
 
-/// Put an **ellipse** in a block.
-#[derive(Command)]
-#[command(id = "cad.entity.ellipse.add", area = "cad", layer = "cad", icon = "plus", mutates, undoable)]
-pub struct AddEllipse {
-    /// The block it goes in.
-    pub block: NodeRef,
-    /// What to call it.
-    pub name: Text,
-    /// Its centre.
-    pub center: Json,
-    /// Its **major axis**: a vector from the centre to the end of the
-    /// major axis.
-    pub major: Json,
-    /// The **ratio** of the minor axis to the major one: above nothing
-    /// and at most one.
-    pub ratio: Number,
-    /// The angle the arc runs from. The whole ellipse when it is not
-    /// said.
-    pub start: Option<Number>,
-    /// The angle the arc runs to. The whole ellipse when it is not
-    /// said.
-    pub end: Option<Number>,
-}
+commands! {
+    /// Put an **ellipse** in a block.
+    cad.entity.ellipse.add {
+        area: "cad",
+        layer: "cad",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The block it goes in.
 
-impl AddEllipse {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.entity.ellipse.add".to_string();
-        let center = point_of(&self.center, &id, "the centre")?;
-        let major = point_of(&self.major, &id, "the major axis")?;
-        if major.0 == 0.0 && major.1 == 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "the major axis of an ellipse is not of no length".to_string(),
+            block: NodeRef,
+            /// What to call it.
+
+            name: Text,
+            /// Its centre.
+
+            center: Json,
+            /// Its **major axis**: a vector from the centre to the end of the
+            /// major axis.
+
+            major: Json,
+            /// The **ratio** of the minor axis to the major one: above nothing
+            /// and at most one.
+
+            ratio: Number,
+            /// The angle the arc runs from. The whole ellipse when it is not
+            /// said.
+
+            start: Option<Number>,
+            /// The angle the arc runs to. The whole ellipse when it is not
+            /// said.
+
+            end: Option<Number>,
+        },
+        run: {
+
+            let id = "cad.entity.ellipse.add".to_string();
+            let center = point_of(&self.center, &id, "the centre")?;
+            let major = point_of(&self.major, &id, "the major axis")?;
+            if major.0 == 0.0 && major.1 == 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the major axis of an ellipse is not of no length".to_string(),
+                });
+            }
+            if !self.ratio.0.is_finite() || self.ratio.0 <= 0.0 || self.ratio.0 > 1.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the ratio of an ellipse is above nothing and at most one".to_string(),
+                });
+            }
+            let start = self.start.map(|start| start.0).unwrap_or(0.0);
+            let end = self.end.map(|end| end.0).unwrap_or(std::f64::consts::TAU);
+            if !start.is_finite() || !end.is_finite() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the angles of an ellipse are numbers".to_string(),
+                });
+            }
+            let geometry = json!({
+                "center": { "x": center.0, "y": center.1 },
+                "major": { "x": major.0, "y": major.1 },
+                "ratio": self.ratio.0,
+                "start": start,
+                "end": end,
             });
+            let entity = crate::add_entity(
+                session,
+                self.block.0,
+                &self.name.0,
+                "cad.entity.ellipse",
+                geometry,
+                "cad.entity.ellipse.add",
+            )?;
+            Ok(Outcome::changed(format!("added the ellipse `{}`", self.name.0))
+                .with_data(json!({ "id": entity, "name": self.name.0 })))
+
         }
-        if !self.ratio.0.is_finite() || self.ratio.0 <= 0.0 || self.ratio.0 > 1.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "the ratio of an ellipse is above nothing and at most one".to_string(),
-            });
-        }
-        let start = self.start.map(|start| start.0).unwrap_or(0.0);
-        let end = self.end.map(|end| end.0).unwrap_or(std::f64::consts::TAU);
-        if !start.is_finite() || !end.is_finite() {
-            return Err(EngineError::Failed {
-                id,
-                message: "the angles of an ellipse are numbers".to_string(),
-            });
-        }
-        let geometry = json!({
-            "center": { "x": center.0, "y": center.1 },
-            "major": { "x": major.0, "y": major.1 },
-            "ratio": self.ratio.0,
-            "start": start,
-            "end": end,
-        });
-        let entity = crate::add_entity(
-            session,
-            self.block.0,
-            &self.name.0,
-            "cad.entity.ellipse",
-            geometry,
-            "cad.entity.ellipse.add",
-        )?;
-        Ok(Outcome::changed(format!("added the ellipse `{}`", self.name.0))
-            .with_data(json!({ "id": entity, "name": self.name.0 })))
     }
-}
+    /// Put a **polyline** in a block.
+    cad.entity.polyline.add {
+        area: "cad",
+        layer: "cad",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The block it goes in.
 
-/// Put a **polyline** in a block.
-#[derive(Command)]
-#[command(id = "cad.entity.polyline.add", area = "cad", layer = "cad", icon = "plus", mutates, undoable)]
-pub struct AddPolyline {
-    /// The block it goes in.
-    pub block: NodeRef,
-    /// What to call it.
-    pub name: Text,
-    /// Its **points**: `[{ "x": …, "y": … }, …]`.
-    pub points: Json,
-    /// Whether the polyline is **closed**.
-    pub closed: Option<Bool>,
-}
+            block: NodeRef,
+            /// What to call it.
 
-impl AddPolyline {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.entity.polyline.add".to_string();
-        let Some(list) = self.points.as_array() else {
-            return Err(EngineError::Failed {
-                id,
-                message: "the points of a polyline are a list of points".to_string(),
+            name: Text,
+            /// Its **points**: `[{ "x": …, "y": … }, …]`.
+
+            points: Json,
+            /// Whether the polyline is **closed**.
+
+            closed: Option<Bool>,
+        },
+        run: {
+
+            let id = "cad.entity.polyline.add".to_string();
+            let Some(list) = self.points.as_array() else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the points of a polyline are a list of points".to_string(),
+                });
+            };
+            let mut points = Vec::with_capacity(list.len());
+            for value in list {
+                let (x, y) = point_of(value, &id, "a point of a polyline")?;
+                points.push(json!({ "x": x, "y": y }));
+            }
+            if points.len() < 2 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a polyline is made of points, and this one is made of none".to_string(),
+                });
+            }
+            let geometry = json!({
+                "points": points,
+                "closed": self.closed.map(|closed| closed.0).unwrap_or(false),
             });
-        };
-        let mut points = Vec::with_capacity(list.len());
-        for value in list {
-            let (x, y) = point_of(value, &id, "a point of a polyline")?;
-            points.push(json!({ "x": x, "y": y }));
+            let entity = crate::add_entity(
+                session,
+                self.block.0,
+                &self.name.0,
+                "cad.entity.polyline",
+                geometry,
+                "cad.entity.polyline.add",
+            )?;
+            Ok(Outcome::changed(format!("added the polyline `{}`", self.name.0))
+                .with_data(json!({ "id": entity, "name": self.name.0 })))
+
         }
-        if points.len() < 2 {
-            return Err(EngineError::Failed {
-                id,
-                message: "a polyline is made of points, and this one is made of none".to_string(),
-            });
-        }
-        let geometry = json!({
-            "points": points,
-            "closed": self.closed.map(|closed| closed.0).unwrap_or(false),
-        });
-        let entity = crate::add_entity(
-            session,
-            self.block.0,
-            &self.name.0,
-            "cad.entity.polyline",
-            geometry,
-            "cad.entity.polyline.add",
-        )?;
-        Ok(Outcome::changed(format!("added the polyline `{}`", self.name.0))
-            .with_data(json!({ "id": entity, "name": self.name.0 })))
     }
 }

@@ -17,7 +17,7 @@
 //! a selection is a command that does not say what it does — the
 //! tree's own rule is that a command does one thing (§ the registry).
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
@@ -94,85 +94,106 @@ fn move_entity(session: &mut Session, id: &str, entity: u64, place: &str) -> Res
         .with_data(json!({ "entity": entity, "block": block, "to": place })))
 }
 
-/// **Read** the entities of a block, in the order they are drawn.
-#[derive(Command)]
-#[command(id = "cad.entity.list", area = "cad", layer = "cad", icon = "list")]
-pub struct ListEntities {
-    /// The block.
-    pub block: NodeRef,
-}
+commands! {
+    /// **Read** the entities of a block, in the order they are drawn.
+    cad.entity.list {
+        area: "cad",
+        layer: "cad",
+        icon: "list",
+        params: {
+            /// The block.
 
-impl ListEntities {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.entity.list".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed { id, message: format!("there is no block `{block}`") });
-        };
-        if node.kind != "cad.block" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
+            block: NodeRef,
+        },
+        run: {
+
+            let id = "cad.entity.list".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed { id, message: format!("there is no block `{block}`") });
+            };
+            if node.kind != "cad.block" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
+                });
+            }
+            let entities = entities_of(session, block);
+            Ok(Outcome::new(format!("the block `{block}` has {} entity(s)", entities.len()))
+                .with_data(json!({ "block": block, "entities": entities })))
+
         }
-        let entities = entities_of(session, block);
-        Ok(Outcome::new(format!("the block `{block}` has {} entity(s)", entities.len()))
-            .with_data(json!({ "block": block, "entities": entities })))
     }
-}
+    /// **Bring** an entity to the **front**.
+    cad.entity.front {
+        area: "cad",
+        layer: "cad",
+        icon: "arrows",
+        mutates,
+        undoable,
+        params: {
+            /// The entity.
 
-/// **Bring** an entity to the **front**.
-#[derive(Command)]
-#[command(id = "cad.entity.front", area = "cad", layer = "cad", icon = "arrows", mutates, undoable)]
-pub struct BringToFront {
-    /// The entity.
-    pub entity: NodeRef,
-}
+            entity: NodeRef,
+        },
+        run: {
 
-impl BringToFront {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        move_entity(session, "cad.entity.front", self.entity.0, "front")
+            move_entity(session, "cad.entity.front", self.entity.0, "front")
+
+        }
     }
-}
+    /// **Send** an entity to the **back**.
+    cad.entity.back {
+        area: "cad",
+        layer: "cad",
+        icon: "arrows",
+        mutates,
+        undoable,
+        params: {
+            /// The entity.
 
-/// **Send** an entity to the **back**.
-#[derive(Command)]
-#[command(id = "cad.entity.back", area = "cad", layer = "cad", icon = "arrows", mutates, undoable)]
-pub struct SendToBack {
-    /// The entity.
-    pub entity: NodeRef,
-}
+            entity: NodeRef,
+        },
+        run: {
 
-impl SendToBack {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        move_entity(session, "cad.entity.back", self.entity.0, "back")
+            move_entity(session, "cad.entity.back", self.entity.0, "back")
+
+        }
     }
-}
+    /// **Move** an entity **one step** towards the front.
+    cad.entity.forward {
+        area: "cad",
+        layer: "cad",
+        icon: "arrows",
+        mutates,
+        undoable,
+        params: {
+            /// The entity.
 
-/// **Move** an entity **one step** towards the front.
-#[derive(Command)]
-#[command(id = "cad.entity.forward", area = "cad", layer = "cad", icon = "arrows", mutates, undoable)]
-pub struct ForwardEntity {
-    /// The entity.
-    pub entity: NodeRef,
-}
+            entity: NodeRef,
+        },
+        run: {
 
-impl ForwardEntity {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        move_entity(session, "cad.entity.forward", self.entity.0, "forward")
+            move_entity(session, "cad.entity.forward", self.entity.0, "forward")
+
+        }
     }
-}
+    /// **Move** an entity **one step** towards the back.
+    cad.entity.backward {
+        area: "cad",
+        layer: "cad",
+        icon: "arrows",
+        mutates,
+        undoable,
+        params: {
+            /// The entity.
 
-/// **Move** an entity **one step** towards the back.
-#[derive(Command)]
-#[command(id = "cad.entity.backward", area = "cad", layer = "cad", icon = "arrows", mutates, undoable)]
-pub struct BackwardEntity {
-    /// The entity.
-    pub entity: NodeRef,
-}
+            entity: NodeRef,
+        },
+        run: {
 
-impl BackwardEntity {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        move_entity(session, "cad.entity.backward", self.entity.0, "backward")
+            move_entity(session, "cad.entity.backward", self.entity.0, "backward")
+
+        }
     }
 }

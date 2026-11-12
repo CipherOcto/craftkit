@@ -190,7 +190,10 @@ pub fn clippy(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 pub fn tests(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("tests");
     let packages = packages_in_scope(root)?;
-    build_the_shared_libraries(root, &packages)?;
+    // The shared libraries of the **whole tree**, and not only of the
+    // scope: a test in the scope may open one of a package that is not in
+    // the scope.
+    build_the_shared_libraries(root, &workspace_packages(root)?)?;
     for package in &packages {
         println!("   {}", package.name);
         test_package(root, package)?;
@@ -212,6 +215,13 @@ pub fn tests(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 /// one find it. The rule this keeps is the tree's: the host's test is against
 /// a **real** shared library, not a mock, and a mock would have been the easy
 /// way to make the failure go away.
+///
+/// **Every** shared library of the tree, and not only the ones in the scope:
+/// a test in the scope may open the shared library of a package that is
+/// **not** in the scope — the doors' fixtures are dev-dependencies of the
+/// studio, and the studio's test opens them. A scoped run that built only
+/// the scope's own shared libraries failed on a file that was never missing,
+/// only never built.
 fn build_the_shared_libraries(root: &Path, packages: &[Package]) -> Result<(), String> {
     let mut names: Vec<&str> = packages.iter().filter(|p| p.is_cdylib).map(|p| p.name.as_str()).collect();
     if names.is_empty() {

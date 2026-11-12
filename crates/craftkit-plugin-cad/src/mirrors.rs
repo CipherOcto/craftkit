@@ -18,7 +18,7 @@
 //!   is a point and the axis is a vector, and the mirror knows which
 //!   is which.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
@@ -157,53 +157,62 @@ fn mirrored(kind: &str, geometry: &Json, line: &Line) -> Option<Json> {
     Some(out)
 }
 
-/// **Mirror** an entity over a line.
-#[derive(Command)]
-#[command(id = "cad.entity.mirror", area = "cad", layer = "cad", icon = "copy", mutates, undoable)]
-pub struct MirrorEntity {
-    /// The entity.
-    pub entity: NodeRef,
-    /// A point on the line the entity is turned over.
-    pub from: Json,
-    /// Another point on that line.
-    pub to: Json,
-}
+commands! {
+    /// **Mirror** an entity over a line.
+    cad.entity.mirror {
+        area: "cad",
+        layer: "cad",
+        icon: "copy",
+        mutates,
+        undoable,
+        params: {
+            /// The entity.
 
-impl MirrorEntity {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.entity.mirror".to_string();
-        let entity = self.entity.0;
-        let node = the_entity(session, &id, entity)?;
-        crate::editable::may_edit(session.document(), entity, &id)?;
-        let kind = node.kind.clone();
-        let from = point_of(&self.from, &id, "the first point of the line")?;
-        let to = point_of(&self.to, &id, "the second point of the line")?;
-        let Some(line) = Line::through(from, to) else {
-            return Err(EngineError::Failed {
-                id,
-                message: "the two points of the line are the same point".to_string(),
-            });
-        };
-        let Some(geometry) = node.data.get("geometry") else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the entity `{entity}` has no geometry"),
-            });
-        };
-        let Some(new) = mirrored(&kind, geometry, &line) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("an entity of the kind `{kind}` may not be turned over a line"),
-            });
-        };
-        let Some(node) = session.document_mut()?.node_mut(entity) else {
-            return Err(EngineError::Failed {
-                id: "cad.entity.mirror".to_string(),
-                message: format!("there is no entity `{entity}`"),
-            });
-        };
-        node.data["geometry"] = new;
-        Ok(Outcome::changed(format!("turned the entity `{entity}` over the line"))
-            .with_data(json!({ "entity": entity })))
+            entity: NodeRef,
+            /// A point on the line the entity is turned over.
+
+            from: Json,
+            /// Another point on that line.
+
+            to: Json,
+        },
+        run: {
+
+            let id = "cad.entity.mirror".to_string();
+            let entity = self.entity.0;
+            let node = the_entity(session, &id, entity)?;
+            crate::editable::may_edit(session.document(), entity, &id)?;
+            let kind = node.kind.clone();
+            let from = point_of(&self.from, &id, "the first point of the line")?;
+            let to = point_of(&self.to, &id, "the second point of the line")?;
+            let Some(line) = Line::through(from, to) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the two points of the line are the same point".to_string(),
+                });
+            };
+            let Some(geometry) = node.data.get("geometry") else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the entity `{entity}` has no geometry"),
+                });
+            };
+            let Some(new) = mirrored(&kind, geometry, &line) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("an entity of the kind `{kind}` may not be turned over a line"),
+                });
+            };
+            let Some(node) = session.document_mut()?.node_mut(entity) else {
+                return Err(EngineError::Failed {
+                    id: "cad.entity.mirror".to_string(),
+                    message: format!("there is no entity `{entity}`"),
+                });
+            };
+            node.data["geometry"] = new;
+            Ok(Outcome::changed(format!("turned the entity `{entity}` over the line"))
+                .with_data(json!({ "entity": entity })))
+
+        }
     }
 }

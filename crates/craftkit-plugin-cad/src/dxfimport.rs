@@ -42,7 +42,7 @@
 //!   **splines** of a file are not read, and the **handles** are not
 //!   kept.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Outcome, Relation, Session, Text};
@@ -383,153 +383,161 @@ fn geometry_of(kind: &str, tags: &[Tag]) -> Option<(String, Json)> {
     }
 }
 
-/// **Read** a DXF file and make the **drawing** it names.
-///
-/// The layers of the file are layers of the drawing, and the entities
-/// of the file are entities of its model space.
-#[derive(Command)]
-#[command(id = "cad.import.dxf", area = "cad", layer = "cad", icon = "file", mutates, undoable)]
-pub struct ImportDxf {
-    /// The file to read.
-    pub path: Text,
-    /// What to call the drawing.
+commands! {
+    /// **Read** a DXF file and make the **drawing** it names.
     ///
-    /// Without it, the name of the file.
-    pub name: Option<Text>,
-}
+    /// The layers of the file are layers of the drawing, and the entities
+    /// of the file are entities of its model space.
+    cad.import.dxf {
+        area: "cad",
+        layer: "cad",
+        icon: "file",
+        mutates,
+        undoable,
+        params: {
+            /// The file to read.
 
-impl ImportDxf {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "a file has a path".to_string(),
-            });
-        }
-        let text = craftkit_sdk::files::read_text_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(
-            |message| EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the file cannot be read: {message}"),
-            },
-        )?;
-        let tags = tags_of(&text).map_err(|reason| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("the file is not a DXF file: {reason}"),
-        })?;
-        let sections = sections_of(&tags);
-        if sections.is_empty() {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the file is not a DXF file: it holds no section".to_string(),
-            });
-        }
-        // The **name** of the drawing.
-        let name = match &self.name {
-            Some(name) if !name.0.trim().is_empty() => name.0.trim().to_string(),
-            _ => std::path::Path::new(&path)
-                .file_stem()
-                .map(|stem| stem.to_string_lossy().to_string())
-                .unwrap_or_else(|| "the drawing".to_string()),
-        };
-        // The **drawing**, its **layers** and its **block**.
-        let drawing = session.document_mut()?.add_node_under(None, name.clone(), "cad.drawing", None);
-        let mut import = Import { layers: Vec::new(), blocks: Vec::new(), counts: Vec::new() };
-        for (layer_name, color) in sections
-            .iter()
-            .find(|(name, _)| name == "TABLES")
-            .map(|(_, body)| layers_of(body))
-            .unwrap_or_default()
-        {
-            let color = color.map(|color| color.to_string());
-            let layer = session.document_mut()?.add_node_with_under(
-                Some(drawing),
-                layer_name.clone(),
-                "cad.layer",
-                None,
-                json!({ "color": color }),
-            );
-            import.layers.push((layer_name, layer));
-        }
-        let block = session.document_mut()?.add_node_with_under(
-            Some(drawing),
-            MODEL_SPACE.to_string(),
-            "cad.block",
-            None,
-            json!({}),
-        );
-        import.blocks.push((MODEL_SPACE.to_string(), block));
-        let entity_records = sections
-            .iter()
-            .find(|(name, _)| name == "ENTITIES")
-            .map(|(_, body)| records_of(body))
-            .unwrap_or_default();
-        // The **blocks** of the file. They are made first, so that an
-        // insert may name one of them.
-        let file_blocks = sections
-            .iter()
-            .find(|(name, _)| name == "BLOCKS")
-            .map(|(_, body)| blocks_of(body))
-            .unwrap_or_default();
-        let mut made_blocks: Vec<(u64, Vec<Record>)> = Vec::new();
-        for (name, block_entities) in &file_blocks {
-            if name == MODEL_SPACE {
-                // The model's own record is the model space, and the
-                // entities of the model space are the entities of the
-                // `ENTITIES` section — the tree's own writer puts
-                // them there. A file that keeps them in the record
-                // instead is read when it has none of its own.
-                if entity_records.is_empty() {
-                    made_blocks.push((block, block_entities.clone()));
-                }
-                continue;
+            path: Text,
+            /// What to call the drawing.
+            ///
+            /// Without it, the name of the file.
+
+            name: Option<Text>,
+        },
+        run: {
+
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "a file has a path".to_string(),
+                });
             }
-            let made = session.document_mut()?.add_node_with_under(
+            let text = craftkit_sdk::files::read_text_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(
+                |message| EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the file cannot be read: {message}"),
+                },
+            )?;
+            let tags = tags_of(&text).map_err(|reason| EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("the file is not a DXF file: {reason}"),
+            })?;
+            let sections = sections_of(&tags);
+            if sections.is_empty() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the file is not a DXF file: it holds no section".to_string(),
+                });
+            }
+            // The **name** of the drawing.
+            let name = match &self.name {
+                Some(name) if !name.0.trim().is_empty() => name.0.trim().to_string(),
+                _ => std::path::Path::new(&path)
+                    .file_stem()
+                    .map(|stem| stem.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "the drawing".to_string()),
+            };
+            // The **drawing**, its **layers** and its **block**.
+            let drawing = session.document_mut()?.add_node_under(None, name.clone(), "cad.drawing", None);
+            let mut import = Import { layers: Vec::new(), blocks: Vec::new(), counts: Vec::new() };
+            for (layer_name, color) in sections
+                .iter()
+                .find(|(name, _)| name == "TABLES")
+                .map(|(_, body)| layers_of(body))
+                .unwrap_or_default()
+            {
+                let color = color.map(|color| color.to_string());
+                let layer = session.document_mut()?.add_node_with_under(
+                    Some(drawing),
+                    layer_name.clone(),
+                    "cad.layer",
+                    None,
+                    json!({ "color": color }),
+                );
+                import.layers.push((layer_name, layer));
+            }
+            let block = session.document_mut()?.add_node_with_under(
                 Some(drawing),
-                name.clone(),
+                MODEL_SPACE.to_string(),
                 "cad.block",
                 None,
                 json!({}),
             );
-            import.blocks.push((name.clone(), made));
-            made_blocks.push((made, block_entities.clone()));
-        }
-        // The **entities** of the file's `ENTITIES` section.
-        let mut entities = 0usize;
-        let mut skipped: Vec<String> = Vec::new();
-        for (kind, tags) in &entity_records {
-            match add_entity(session, &mut import, drawing, block, kind, tags)? {
-                Some(_) => entities += 1,
-                None => skipped.push(kind.clone()),
+            import.blocks.push((MODEL_SPACE.to_string(), block));
+            let entity_records = sections
+                .iter()
+                .find(|(name, _)| name == "ENTITIES")
+                .map(|(_, body)| records_of(body))
+                .unwrap_or_default();
+            // The **blocks** of the file. They are made first, so that an
+            // insert may name one of them.
+            let file_blocks = sections
+                .iter()
+                .find(|(name, _)| name == "BLOCKS")
+                .map(|(_, body)| blocks_of(body))
+                .unwrap_or_default();
+            let mut made_blocks: Vec<(u64, Vec<Record>)> = Vec::new();
+            for (name, block_entities) in &file_blocks {
+                if name == MODEL_SPACE {
+                    // The model's own record is the model space, and the
+                    // entities of the model space are the entities of the
+                    // `ENTITIES` section — the tree's own writer puts
+                    // them there. A file that keeps them in the record
+                    // instead is read when it has none of its own.
+                    if entity_records.is_empty() {
+                        made_blocks.push((block, block_entities.clone()));
+                    }
+                    continue;
+                }
+                let made = session.document_mut()?.add_node_with_under(
+                    Some(drawing),
+                    name.clone(),
+                    "cad.block",
+                    None,
+                    json!({}),
+                );
+                import.blocks.push((name.clone(), made));
+                made_blocks.push((made, block_entities.clone()));
             }
-        }
-        // The **entities** of the blocks.
-        for (made, block_entities) in &made_blocks {
-            for (kind, tags) in block_entities {
-                match add_entity(session, &mut import, drawing, *made, kind, tags)? {
+            // The **entities** of the file's `ENTITIES` section.
+            let mut entities = 0usize;
+            let mut skipped: Vec<String> = Vec::new();
+            for (kind, tags) in &entity_records {
+                match add_entity(session, &mut import, drawing, block, kind, tags)? {
                     Some(_) => entities += 1,
                     None => skipped.push(kind.clone()),
                 }
             }
+            // The **entities** of the blocks.
+            for (made, block_entities) in &made_blocks {
+                for (kind, tags) in block_entities {
+                    match add_entity(session, &mut import, drawing, *made, kind, tags)? {
+                        Some(_) => entities += 1,
+                        None => skipped.push(kind.clone()),
+                    }
+                }
+            }
+            let units = sections
+                .iter()
+                .find(|(name, _)| name == "HEADER")
+                .and_then(|(_, body)| {
+                    body.iter()
+                        .find(|tag| tag.code == 9 && tag.value.trim() == "$INSUNITS")
+                        .and_then(|_| body.iter().find(|tag| tag.code == 70))
+                })
+                .and_then(|tag| tag.value.trim().parse::<i64>().ok());
+            Ok(Outcome::changed(format!("the file `{path}` made {entities} entit(ies)")).with_data(json!({
+                "path": path,
+                "drawing": drawing,
+                "block": block,
+                "layers": import.layers.len(),
+                "blocks": import.blocks.len(),
+                "entities": entities,
+                "units": units,
+                "skipped": skipped,
+            })))
+
         }
-        let units = sections
-            .iter()
-            .find(|(name, _)| name == "HEADER")
-            .and_then(|(_, body)| {
-                body.iter()
-                    .find(|tag| tag.code == 9 && tag.value.trim() == "$INSUNITS")
-                    .and_then(|_| body.iter().find(|tag| tag.code == 70))
-            })
-            .and_then(|tag| tag.value.trim().parse::<i64>().ok());
-        Ok(Outcome::changed(format!("the file `{path}` made {entities} entit(ies)")).with_data(json!({
-            "path": path,
-            "drawing": drawing,
-            "block": block,
-            "layers": import.layers.len(),
-            "blocks": import.blocks.len(),
-            "entities": entities,
-            "units": units,
-            "skipped": skipped,
-        })))
     }
 }

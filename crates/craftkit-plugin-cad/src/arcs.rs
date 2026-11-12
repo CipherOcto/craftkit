@@ -17,10 +17,10 @@
 //!   and its own file mapping. Here an arc is a node of an **open
 //!   kind**, and a new kind of curve is a new kind and nothing else.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Text};
 
 /// How many points an arc is drawn with.
 const ARC_SEGMENTS: usize = 64;
@@ -94,68 +94,80 @@ pub(crate) fn arc_points(geometry: &Json) -> Vec<(f64, f64)> {
     points
 }
 
-/// Put an **arc** in a block.
-#[derive(Command)]
-#[command(id = "cad.entity.arc.add", area = "cad", layer = "cad", icon = "plus", mutates, undoable)]
-pub struct AddArc {
-    /// The block it goes in.
-    pub block: NodeRef,
-    /// What to call it.
-    pub name: Text,
-    /// Its centre.
-    pub center: Json,
-    /// Its radius: above nothing.
-    pub radius: Number,
-    /// The angle it starts at, in radians.
-    pub start: Number,
-    /// The angle it ends at, in radians.
-    pub end: Number,
-}
+commands! {
+    /// Put an **arc** in a block.
+    cad.entity.arc.add {
+        area: "cad",
+        layer: "cad",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The block it goes in.
 
-impl AddArc {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.entity.arc.add".to_string();
-        let (cx, cy) = point_of(&self.center, &id, "the centre")?;
-        let radius = self.radius.0;
-        if !radius.is_finite() || radius <= 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "the radius of an arc is a number above nothing".to_string(),
+            block: NodeRef,
+            /// What to call it.
+
+            name: Text,
+            /// Its centre.
+
+            center: Json,
+            /// Its radius: above nothing.
+
+            radius: Number,
+            /// The angle it starts at, in radians.
+
+            start: Number,
+            /// The angle it ends at, in radians.
+
+            end: Number,
+        },
+        run: {
+
+            let id = "cad.entity.arc.add".to_string();
+            let (cx, cy) = point_of(&self.center, &id, "the centre")?;
+            let radius = self.radius.0;
+            if !radius.is_finite() || radius <= 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the radius of an arc is a number above nothing".to_string(),
+                });
+            }
+            let start = self.start.0;
+            let end = self.end.0;
+            if !start.is_finite() || !end.is_finite() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the angles of an arc are numbers of radians".to_string(),
+                });
+            }
+            if sweep_between(start, end) <= 0.0 {
+                return Err(EngineError::Failed { id, message: "an arc of no sweep is not an arc".to_string() });
+            }
+            let geometry = json!({
+                "center": { "x": cx, "y": cy },
+                "radius": radius,
+                "start": {
+                    "x": cx + radius * start.cos(),
+                    "y": cy + radius * start.sin(),
+                },
+                "end": {
+                    "x": cx + radius * end.cos(),
+                    "y": cy + radius * end.sin(),
+                },
             });
+            let entity = crate::add_entity(
+                session,
+                self.block.0,
+                &self.name.0,
+                "cad.entity.arc",
+                geometry,
+                "cad.entity.arc.add",
+            )?;
+            Ok(Outcome::changed(format!("added the arc `{}`", self.name.0))
+                .with_data(json!({ "id": entity, "name": self.name.0 })))
+
         }
-        let start = self.start.0;
-        let end = self.end.0;
-        if !start.is_finite() || !end.is_finite() {
-            return Err(EngineError::Failed {
-                id,
-                message: "the angles of an arc are numbers of radians".to_string(),
-            });
-        }
-        if sweep_between(start, end) <= 0.0 {
-            return Err(EngineError::Failed { id, message: "an arc of no sweep is not an arc".to_string() });
-        }
-        let geometry = json!({
-            "center": { "x": cx, "y": cy },
-            "radius": radius,
-            "start": {
-                "x": cx + radius * start.cos(),
-                "y": cy + radius * start.sin(),
-            },
-            "end": {
-                "x": cx + radius * end.cos(),
-                "y": cy + radius * end.sin(),
-            },
-        });
-        let entity = crate::add_entity(
-            session,
-            self.block.0,
-            &self.name.0,
-            "cad.entity.arc",
-            geometry,
-            "cad.entity.arc.add",
-        )?;
-        Ok(Outcome::changed(format!("added the arc `{}`", self.name.0))
-            .with_data(json!({ "id": entity, "name": self.name.0 })))
     }
 }
 

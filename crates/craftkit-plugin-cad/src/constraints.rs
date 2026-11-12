@@ -31,10 +31,10 @@
 //! - **The degrees of freedom are not counted.** The tree counts them
 //!   and shows them in the constraint bar.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Relation, Session, Text};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Relation, Text};
 
 /// The kinds of **constraint** this tree reads.
 const KINDS: [&str; 8] =
@@ -187,140 +187,151 @@ fn gather_entities(node: &Node, out: &mut Vec<u64>) {
     }
 }
 
-/// **Add** a **constraint** to a drawing.
-///
-/// A constraint is a fact of the drawing: it says that two entities
-/// stand in some relation to one another. Whether it holds is worked
-/// out from the geometry, and the answer says.
-#[derive(Command)]
-#[command(id = "cad.constraint.add", area = "cad", layer = "cad", icon = "link", mutates, undoable)]
-pub struct AddConstraint {
-    /// The first entity.
-    pub first: NodeRef,
-    /// The second entity.
-    pub second: NodeRef,
-    /// The kind of constraint: `coincident`, `parallel`,
-    /// `perpendicular`, `horizontal`, `vertical`, `tangent`,
-    /// `concentric` or `equal`.
-    pub kind: Text,
-}
+commands! {
+    /// **Add** a **constraint** to a drawing.
+    ///
+    /// A constraint is a fact of the drawing: it says that two entities
+    /// stand in some relation to one another. Whether it holds is worked
+    /// out from the geometry, and the answer says.
+    cad.constraint.add {
+        area: "cad",
+        layer: "cad",
+        icon: "link",
+        mutates,
+        undoable,
+        params: {
+            /// The first entity.
 
-impl AddConstraint {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.constraint.add".to_string();
-        let first = self.first.0;
-        let second = self.second.0;
-        let kind = self.kind.0.trim().to_lowercase();
-        if !KINDS.contains(&kind.as_str()) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a constraint is one of {}: `{kind}` is not one of them", KINDS.join(", ")),
-            });
-        }
-        for entity in [first, second] {
-            let Some(node) = session.document().node(entity) else {
+            first: NodeRef,
+            /// The second entity.
+
+            second: NodeRef,
+            /// The kind of constraint: `coincident`, `parallel`,
+            /// `perpendicular`, `horizontal`, `vertical`, `tangent`,
+            /// `concentric` or `equal`.
+
+            kind: Text,
+        },
+        run: {
+
+            let id = "cad.constraint.add".to_string();
+            let first = self.first.0;
+            let second = self.second.0;
+            let kind = self.kind.0.trim().to_lowercase();
+            if !KINDS.contains(&kind.as_str()) {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("there is no entity `{entity}`"),
+                    message: format!("a constraint is one of {}: `{kind}` is not one of them", KINDS.join(", ")),
                 });
-            };
-            if !node.kind.starts_with("cad.entity.") {
+            }
+            for entity in [first, second] {
+                let Some(node) = session.document().node(entity) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no entity `{entity}`"),
+                    });
+                };
+                if !node.kind.starts_with("cad.entity.") {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{entity}` is a `{}` and not an entity", node.kind),
+                    });
+                }
+            }
+            if first == second {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the node `{entity}` is a `{}` and not an entity", node.kind),
+                    message: "a constraint is between two entities, and these are one".to_string(),
                 });
             }
-        }
-        if first == second {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a constraint is between two entities, and these are one".to_string(),
-            });
-        }
-        // The **constraint** is a relation from one entity to the
-        // other, and it says what kind it is.
-        session.document_mut()?.add_relation(Relation::with_payload(
-            first,
-            second,
-            CONSTRAINS,
-            json!({ "kind": kind }),
-        ));
-        // Whether it **holds** is derived from the geometry.
-        let one = geometry_of(session.document(), first);
-        let other = geometry_of(session.document(), second);
-        let held = match (&one, &other) {
-            (Some(one), Some(other)) => holds(&kind, one, other),
-            _ => None,
-        };
-        Ok(Outcome::changed(format!("the entity `{first}` is constrained to `{second}`")).with_data(json!({
-            "first": first,
-            "second": second,
-            "kind": kind,
-            "holds": held,
-        })))
-    }
-}
-
-/// **Read** the **constraints** of a drawing.
-///
-/// Whether each constraint holds is **derived**: it is worked out from
-/// the geometry of the entities, and a constraint whose geometry
-/// cannot be read is *unknown*.
-#[derive(Command)]
-#[command(id = "cad.constraint.list", area = "cad", layer = "cad", icon = "list")]
-pub struct ListConstraints {
-    /// The drawing.
-    pub drawing: NodeRef,
-}
-
-impl ListConstraints {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.constraint.list".to_string();
-        let drawing = self.drawing.0;
-        let Some(node) = session.document().node(drawing) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no drawing `{drawing}`"),
-            });
-        };
-        if node.kind != "cad.drawing" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{drawing}` is a `{}` and not a drawing", node.kind),
-            });
-        }
-        // The **entities** of the drawing: the constraints are the
-        // relations they hold.
-        let mut entities: Vec<u64> = Vec::new();
-        gather_entities(node, &mut entities);
-        let mut listed: Vec<Json> = Vec::new();
-        let mut relations: Vec<craftkit_sdk::Relation> = Vec::new();
-        for entity in entities {
-            for relation in session.document().relations_from(entity, Some(CONSTRAINS)) {
-                relations.push(relation.clone());
-            }
-        }
-        for relation in relations {
-            let kind =
-                relation.payload.get("kind").and_then(|kind| kind.as_str()).unwrap_or_default().to_string();
-            let one = geometry_of(session.document(), relation.from);
-            let other = geometry_of(session.document(), relation.to);
+            // The **constraint** is a relation from one entity to the
+            // other, and it says what kind it is.
+            session.document_mut()?.add_relation(Relation::with_payload(
+                first,
+                second,
+                CONSTRAINS,
+                json!({ "kind": kind }),
+            ));
+            // Whether it **holds** is derived from the geometry.
+            let one = geometry_of(session.document(), first);
+            let other = geometry_of(session.document(), second);
             let held = match (&one, &other) {
                 (Some(one), Some(other)) => holds(&kind, one, other),
                 _ => None,
             };
-            listed.push(json!({
-                "first": relation.from,
-                "second": relation.to,
+            Ok(Outcome::changed(format!("the entity `{first}` is constrained to `{second}`")).with_data(json!({
+                "first": first,
+                "second": second,
                 "kind": kind,
                 "holds": held,
-            }));
+            })))
+
         }
-        let count = listed.len();
-        Ok(Outcome::new(format!("the drawing `{drawing}` holds {count} constraint(s)")).with_data(json!({
-            "drawing": drawing,
-            "constraints": listed,
-            "count": count,
-        })))
+    }
+    /// **Read** the **constraints** of a drawing.
+    ///
+    /// Whether each constraint holds is **derived**: it is worked out from
+    /// the geometry of the entities, and a constraint whose geometry
+    /// cannot be read is *unknown*.
+    cad.constraint.list {
+        area: "cad",
+        layer: "cad",
+        icon: "list",
+        params: {
+            /// The drawing.
+
+            drawing: NodeRef,
+        },
+        run: {
+
+            let id = "cad.constraint.list".to_string();
+            let drawing = self.drawing.0;
+            let Some(node) = session.document().node(drawing) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no drawing `{drawing}`"),
+                });
+            };
+            if node.kind != "cad.drawing" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{drawing}` is a `{}` and not a drawing", node.kind),
+                });
+            }
+            // The **entities** of the drawing: the constraints are the
+            // relations they hold.
+            let mut entities: Vec<u64> = Vec::new();
+            gather_entities(node, &mut entities);
+            let mut listed: Vec<Json> = Vec::new();
+            let mut relations: Vec<craftkit_sdk::Relation> = Vec::new();
+            for entity in entities {
+                for relation in session.document().relations_from(entity, Some(CONSTRAINS)) {
+                    relations.push(relation.clone());
+                }
+            }
+            for relation in relations {
+                let kind =
+                    relation.payload.get("kind").and_then(|kind| kind.as_str()).unwrap_or_default().to_string();
+                let one = geometry_of(session.document(), relation.from);
+                let other = geometry_of(session.document(), relation.to);
+                let held = match (&one, &other) {
+                    (Some(one), Some(other)) => holds(&kind, one, other),
+                    _ => None,
+                };
+                listed.push(json!({
+                    "first": relation.from,
+                    "second": relation.to,
+                    "kind": kind,
+                    "holds": held,
+                }));
+            }
+            let count = listed.len();
+            Ok(Outcome::new(format!("the drawing `{drawing}` holds {count} constraint(s)")).with_data(json!({
+                "drawing": drawing,
+                "constraints": listed,
+                "count": count,
+            })))
+
+        }
     }
 }

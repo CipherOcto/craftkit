@@ -97,31 +97,33 @@ mod svgexport;
 mod svgimport;
 mod tables;
 
-pub use arcs::AddArc;
-pub use audits::AuditDrawing;
-pub use copies::CopyEntity;
-use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
+pub use arcs::CadEntityArcAdd;
+pub use audits::CadAudit;
+pub use copies::CadEntityCopy;
+use craftkit_derive::{Evaluator, Layer, NodeKind, Panel, commands};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
     Appearance, BlendMode, Canvas, Colour, Document, EngineError, Fill, Node, NodeRef, Number, Outcome, Path,
     Plan, PlanItem, Point, Relation, Session, Stroke, Text,
 };
-pub use curves::{AddEllipse, AddPolyline};
-pub use dimensions::{AddDimension, DimensionKind, SetDimensionText};
-pub use dxfexport::ExportDxf;
-pub use dxfimport::ImportDxf;
+pub use curves::{CadEntityEllipseAdd, CadEntityPolylineAdd};
+pub use dimensions::{CadDimensionAdd, CadDimensionText, DimensionKind};
+pub use dxfexport::CadExportDxf;
+pub use dxfimport::CadImportDxf;
 pub use layersettings::{
-    FreezeLayer, ListLayers, LockLayer, SetLayerColor, SetLayerFill, SetLayerLinetype, SetLayerLineweight,
-    SetLayerOn,
+    CadLayerColor, CadLayerFill, CadLayerFreeze, CadLayerLinetype, CadLayerLineweight, CadLayerList,
+    CadLayerLock, CadLayerOn,
 };
-pub use linetypes::ListLineTypes;
-pub use measurements::{MeasureAngle, MeasureArea, MeasureLength, MeasureRadius};
-pub use mirrors::MirrorEntity;
-pub use modify::{MoveEntity, RemoveEntity, RotateEntity, ScaleEntity};
-pub use order::{BackwardEntity, BringToFront, ForwardEntity, ListEntities, SendToBack};
-pub use svgexport::ExportSvg;
-pub use svgimport::ImportSvg;
-pub use tables::{AddTable, DeleteRow, InsertRow, MergeCells, SetCell, UnmergeCells};
+pub use linetypes::CadLinetypeList;
+pub use measurements::{CadMeasureAngle, CadMeasureArea, CadMeasureLength, CadMeasureRadius};
+pub use mirrors::CadEntityMirror;
+pub use modify::{CadEntityMove, CadEntityRemove, CadEntityRotate, CadEntityScale};
+pub use order::{CadEntityBack, CadEntityBackward, CadEntityForward, CadEntityFront, CadEntityList};
+pub use svgexport::CadExportSvg;
+pub use svgimport::CadImportSvg;
+pub use tables::{
+    CadTableAdd, CadTableDeleteRow, CadTableInsertRow, CadTableMerge, CadTableSet, CadTableUnmerge,
+};
 
 /// The CAD layer.
 ///
@@ -662,344 +664,398 @@ pub(crate) fn point(value: &Json, id: &str, what: &str) -> Result<(f64, f64), En
     Ok((x, y))
 }
 
-/// Put a **drawing** in the document.
-#[derive(Command)]
-#[command(id = "cad.drawing.add", area = "cad", layer = "cad", icon = "plus", mutates, undoable, example)]
-pub struct AddDrawing {
-    /// What to call it.
-    pub name: Text,
-}
+commands! {
+    /// Put a **drawing** in the document.
+    cad.drawing.add {
+        area: "cad",
+        layer: "cad",
+        icon: "plus",
+        mutates,
+        undoable,
+        example,
+        params: {
+            /// What to call it.
 
-impl AddDrawing {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.clone();
-        if name.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "cad.drawing.add".to_string(),
-                message: "a drawing has a name".to_string(),
-            });
+            name: Text,
+        },
+        run: {
+
+            let name = self.name.0.clone();
+            if name.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "cad.drawing.add".to_string(),
+                    message: "a drawing has a name".to_string(),
+                });
+            }
+            let id =
+                session.document_mut()?.add_node_with_under(None, name.clone(), "cad.drawing", None, json!({}));
+            Ok(Outcome::changed(format!("added the drawing `{name}`"))
+                .with_data(json!({ "id": id, "name": name })))
+
         }
-        let id =
-            session.document_mut()?.add_node_with_under(None, name.clone(), "cad.drawing", None, json!({}));
-        Ok(Outcome::changed(format!("added the drawing `{name}`"))
-            .with_data(json!({ "id": id, "name": name })))
     }
-}
+    /// Put a **layer** in a drawing.
+    cad.layer.add {
+        area: "cad",
+        layer: "cad",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The drawing it goes in.
 
-/// Put a **layer** in a drawing.
-#[derive(Command)]
-#[command(id = "cad.layer.add", area = "cad", layer = "cad", icon = "plus", mutates, undoable)]
-pub struct AddLayer {
-    /// The drawing it goes in.
-    pub drawing: NodeRef,
-    /// The layer's name.
-    pub name: Text,
-    /// Its colour, as an index or a name.
-    pub color: Option<Text>,
-    /// The colour it is drawn in, as `#rrggbb`.
+            drawing: NodeRef,
+            /// The layer's name.
+
+            name: Text,
+            /// Its colour, as an index or a name.
+
+            color: Option<Text>,
+            /// The colour it is drawn in, as `#rrggbb`.
+            ///
+            /// It is the kit's own **appearance**, and the entities on the
+            /// layer are drawn in it. A layer that says nothing is drawn in
+            /// black.
+
+            fill: Option<Text>,
+        },
+        run: {
+
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "cad.layer.add".to_string(),
+                    message: "a layer has a name".to_string(),
+                });
+            }
+            let drawing = self.drawing.0;
+            if session.document().node(drawing).is_none() {
+                return Err(EngineError::Failed {
+                    id: "cad.layer.add".to_string(),
+                    message: format!("there is no drawing `{drawing}`"),
+                });
+            }
+            let color = self.color.as_ref().map(|color| color.0.clone());
+            let appearance =
+                match &self.fill {
+                    Some(fill) => Some(Appearance {
+                        fill: Fill::Solid(Colour::from_hex(&fill.0).map_err(|message| EngineError::Failed {
+                            id: "cad.layer.add".to_string(),
+                            message,
+                        })?),
+                        stroke: None,
+                        blend: BlendMode::Normal,
+                    }),
+                    None => None,
+                };
+            let id = session.document_mut()?.add_node_with_under(
+                Some(drawing),
+                name.clone(),
+                "cad.layer",
+                None,
+                json!({ "color": color }),
+            );
+            if let Some(node) = session.document_mut()?.node_mut(id) {
+                node.appearance = appearance;
+            }
+            Ok(Outcome::changed(format!("added the layer `{name}`")).with_data(json!({ "id": id, "name": name })))
+
+        }
+    }
+    /// Put a **block** in a drawing.
+    cad.block.add {
+        area: "cad",
+        layer: "cad",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The drawing it goes in.
+
+            drawing: NodeRef,
+            /// The block's name.
+
+            name: Text,
+        },
+        run: {
+
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "cad.block.add".to_string(),
+                    message: "a block has a name".to_string(),
+                });
+            }
+            let drawing = self.drawing.0;
+            if session.document().node(drawing).is_none() {
+                return Err(EngineError::Failed {
+                    id: "cad.block.add".to_string(),
+                    message: format!("there is no drawing `{drawing}`"),
+                });
+            }
+            let id = session.document_mut()?.add_node_with_under(
+                Some(drawing),
+                name.clone(),
+                "cad.block",
+                None,
+                json!({}),
+            );
+            Ok(Outcome::changed(format!("added the block `{name}`")).with_data(json!({ "id": id, "name": name })))
+
+        }
+    }
+    /// Put a **line** in a block.
+    cad.entity.line.add {
+        area: "cad",
+        layer: "cad",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The block it goes in.
+
+            block: NodeRef,
+            /// What to call it.
+
+            name: Text,
+            /// Where it starts.
+
+            from: Json,
+            /// Where it ends.
+
+            to: Json,
+        },
+        run: {
+
+            let geometry = json!({
+                "from": { "x": point(&self.from, "cad.entity.line.add", "the start")?.0, "y": point(&self.from, "cad.entity.line.add", "the start")?.1 },
+                "to": { "x": point(&self.to, "cad.entity.line.add", "the end")?.0, "y": point(&self.to, "cad.entity.line.add", "the end")?.1 },
+            });
+            let entity = add_entity(
+                session,
+                self.block.0,
+                &self.name.0,
+                "cad.entity.line",
+                geometry,
+                "cad.entity.line.add",
+            )?;
+            Ok(Outcome::changed(format!("added the line `{}`", self.name.0))
+                .with_data(json!({ "id": entity, "name": self.name.0 })))
+
+        }
+    }
+    /// Put a **circle** in a block.
+    cad.entity.circle.add {
+        area: "cad",
+        layer: "cad",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The block it goes in.
+
+            block: NodeRef,
+            /// What to call it.
+
+            name: Text,
+            /// Its centre.
+
+            center: Json,
+            /// Its radius.
+
+            radius: Number,
+        },
+        run: {
+
+            let (x, y) = point(&self.center, "cad.entity.circle.add", "the centre")?;
+            let radius = self.radius.0;
+            if !radius.is_finite() || radius <= 0.0 {
+                return Err(EngineError::Failed {
+                    id: "cad.entity.circle.add".to_string(),
+                    message: "a radius is a number above zero".to_string(),
+                });
+            }
+            let geometry = json!({ "center": { "x": x, "y": y }, "radius": radius });
+            let entity = add_entity(
+                session,
+                self.block.0,
+                &self.name.0,
+                "cad.entity.circle",
+                geometry,
+                "cad.entity.circle.add",
+            )?;
+            Ok(Outcome::changed(format!("added the circle `{}`", self.name.0))
+                .with_data(json!({ "id": entity, "name": self.name.0 })))
+
+        }
+    }
+    /// Put a **text** in a block.
+    cad.entity.text.add {
+        area: "cad",
+        layer: "cad",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The block it goes in.
+
+            block: NodeRef,
+            /// What to call it.
+
+            name: Text,
+            /// What it says.
+
+            text: Text,
+            /// Where it is written.
+
+            at: Json,
+            /// How big it is.
+
+            height: Option<Number>,
+        },
+        run: {
+
+            let (x, y) = point(&self.at, "cad.entity.text.add", "the insertion point")?;
+            let height = match &self.height {
+                Some(height) if height.0.is_finite() && height.0 > 0.0 => height.0,
+                Some(_) => {
+                    return Err(EngineError::Failed {
+                        id: "cad.entity.text.add".to_string(),
+                        message: "a height is a number above zero".to_string(),
+                    });
+                }
+                None => 1.0,
+            };
+            let geometry = json!({ "at": { "x": x, "y": y }, "height": height, "text": self.text.0 });
+            let entity = add_entity(
+                session,
+                self.block.0,
+                &self.name.0,
+                "cad.entity.text",
+                geometry,
+                "cad.entity.text.add",
+            )?;
+            Ok(Outcome::changed(format!("added the text `{}`", self.name.0))
+                .with_data(json!({ "id": entity, "name": self.name.0 })))
+
+        }
+    }
+    /// Put an **insert** in a block: an instance of another block.
     ///
-    /// It is the kit's own **appearance**, and the entities on the
-    /// layer are drawn in it. A layer that says nothing is drawn in
-    /// black.
-    pub fill: Option<Text>,
-}
+    /// The insert **references** the block it inserts, and the reference is
+    /// an **edge**: an instance and its definition are two things, and the
+    /// edge between them says which.
+    cad.entity.insert.add {
+        area: "cad",
+        layer: "cad",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The block the instance goes in.
 
-impl AddLayer {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: "cad.layer.add".to_string(),
-                message: "a layer has a name".to_string(),
-            });
-        }
-        let drawing = self.drawing.0;
-        if session.document().node(drawing).is_none() {
-            return Err(EngineError::Failed {
-                id: "cad.layer.add".to_string(),
-                message: format!("there is no drawing `{drawing}`"),
-            });
-        }
-        let color = self.color.as_ref().map(|color| color.0.clone());
-        let appearance =
-            match &self.fill {
-                Some(fill) => Some(Appearance {
-                    fill: Fill::Solid(Colour::from_hex(&fill.0).map_err(|message| EngineError::Failed {
-                        id: "cad.layer.add".to_string(),
-                        message,
-                    })?),
-                    stroke: None,
-                    blend: BlendMode::Normal,
-                }),
-                None => None,
+            block: NodeRef,
+            /// What to call it.
+
+            name: Text,
+            /// The block it inserts.
+
+            inserts: NodeRef,
+            /// Where it is put.
+
+            at: Json,
+        },
+        run: {
+
+            let inserts = self.inserts.0;
+            let block_name = {
+                let Some(block) = session.document().node(inserts) else {
+                    return Err(EngineError::Failed {
+                        id: "cad.entity.insert.add".to_string(),
+                        message: format!("there is no block `{inserts}`"),
+                    });
+                };
+                if block.kind != "cad.block" {
+                    return Err(EngineError::Failed {
+                        id: "cad.entity.insert.add".to_string(),
+                        message: format!("the node `{inserts}` is not a block"),
+                    });
+                }
+                block.name.clone()
             };
-        let id = session.document_mut()?.add_node_with_under(
-            Some(drawing),
-            name.clone(),
-            "cad.layer",
-            None,
-            json!({ "color": color }),
-        );
-        if let Some(node) = session.document_mut()?.node_mut(id) {
-            node.appearance = appearance;
+            let (x, y) = point(&self.at, "cad.entity.insert.add", "the insertion point")?;
+            let geometry = json!({ "at": { "x": x, "y": y } });
+            let entity = add_entity(
+                session,
+                self.block.0,
+                &self.name.0,
+                "cad.entity.insert",
+                geometry,
+                "cad.entity.insert.add",
+            )?;
+            session.document_mut()?.add_relation(Relation::with_payload(
+                entity,
+                inserts,
+                "cad.inserts",
+                json!({ "block": block_name }),
+            ));
+            Ok(Outcome::changed(format!("added the insert `{}`", self.name.0))
+                .with_data(json!({ "id": entity, "inserts": inserts })))
+
         }
-        Ok(Outcome::changed(format!("added the layer `{name}`")).with_data(json!({ "id": id, "name": name })))
     }
-}
+    /// Put an entity on a **layer**.
+    ///
+    /// The layer is **not** the entity's parent: the entity is in a block,
+    /// and it is *on* a layer. So this is an **edge**, and it says what it
+    /// is.
+    cad.entity.layer {
+        area: "cad",
+        layer: "cad",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The entity.
 
-/// Put a **block** in a drawing.
-#[derive(Command)]
-#[command(id = "cad.block.add", area = "cad", layer = "cad", icon = "plus", mutates, undoable)]
-pub struct AddBlock {
-    /// The drawing it goes in.
-    pub drawing: NodeRef,
-    /// The block's name.
-    pub name: Text,
-}
+            entity: NodeRef,
+            /// The layer.
 
-impl AddBlock {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: "cad.block.add".to_string(),
-                message: "a block has a name".to_string(),
-            });
-        }
-        let drawing = self.drawing.0;
-        if session.document().node(drawing).is_none() {
-            return Err(EngineError::Failed {
-                id: "cad.block.add".to_string(),
-                message: format!("there is no drawing `{drawing}`"),
-            });
-        }
-        let id = session.document_mut()?.add_node_with_under(
-            Some(drawing),
-            name.clone(),
-            "cad.block",
-            None,
-            json!({}),
-        );
-        Ok(Outcome::changed(format!("added the block `{name}`")).with_data(json!({ "id": id, "name": name })))
-    }
-}
+            layer: NodeRef,
+        },
+        run: {
 
-/// Put a **line** in a block.
-#[derive(Command)]
-#[command(id = "cad.entity.line.add", area = "cad", layer = "cad", icon = "plus", mutates, undoable)]
-pub struct AddLine {
-    /// The block it goes in.
-    pub block: NodeRef,
-    /// What to call it.
-    pub name: Text,
-    /// Where it starts.
-    pub from: Json,
-    /// Where it ends.
-    pub to: Json,
-}
-
-impl AddLine {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let geometry = json!({
-            "from": { "x": point(&self.from, "cad.entity.line.add", "the start")?.0, "y": point(&self.from, "cad.entity.line.add", "the start")?.1 },
-            "to": { "x": point(&self.to, "cad.entity.line.add", "the end")?.0, "y": point(&self.to, "cad.entity.line.add", "the end")?.1 },
-        });
-        let entity = add_entity(
-            session,
-            self.block.0,
-            &self.name.0,
-            "cad.entity.line",
-            geometry,
-            "cad.entity.line.add",
-        )?;
-        Ok(Outcome::changed(format!("added the line `{}`", self.name.0))
-            .with_data(json!({ "id": entity, "name": self.name.0 })))
-    }
-}
-
-/// Put a **circle** in a block.
-#[derive(Command)]
-#[command(id = "cad.entity.circle.add", area = "cad", layer = "cad", icon = "plus", mutates, undoable)]
-pub struct AddCircle {
-    /// The block it goes in.
-    pub block: NodeRef,
-    /// What to call it.
-    pub name: Text,
-    /// Its centre.
-    pub center: Json,
-    /// Its radius.
-    pub radius: Number,
-}
-
-impl AddCircle {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let (x, y) = point(&self.center, "cad.entity.circle.add", "the centre")?;
-        let radius = self.radius.0;
-        if !radius.is_finite() || radius <= 0.0 {
-            return Err(EngineError::Failed {
-                id: "cad.entity.circle.add".to_string(),
-                message: "a radius is a number above zero".to_string(),
-            });
-        }
-        let geometry = json!({ "center": { "x": x, "y": y }, "radius": radius });
-        let entity = add_entity(
-            session,
-            self.block.0,
-            &self.name.0,
-            "cad.entity.circle",
-            geometry,
-            "cad.entity.circle.add",
-        )?;
-        Ok(Outcome::changed(format!("added the circle `{}`", self.name.0))
-            .with_data(json!({ "id": entity, "name": self.name.0 })))
-    }
-}
-
-/// Put a **text** in a block.
-#[derive(Command)]
-#[command(id = "cad.entity.text.add", area = "cad", layer = "cad", icon = "plus", mutates, undoable)]
-pub struct AddText {
-    /// The block it goes in.
-    pub block: NodeRef,
-    /// What to call it.
-    pub name: Text,
-    /// What it says.
-    pub text: Text,
-    /// Where it is written.
-    pub at: Json,
-    /// How big it is.
-    pub height: Option<Number>,
-}
-
-impl AddText {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let (x, y) = point(&self.at, "cad.entity.text.add", "the insertion point")?;
-        let height = match &self.height {
-            Some(height) if height.0.is_finite() && height.0 > 0.0 => height.0,
-            Some(_) => {
+            let entity = self.entity.0;
+            let layer = self.layer.0;
+            let Some(node) = session.document().node(layer) else {
                 return Err(EngineError::Failed {
-                    id: "cad.entity.text.add".to_string(),
-                    message: "a height is a number above zero".to_string(),
-                });
-            }
-            None => 1.0,
-        };
-        let geometry = json!({ "at": { "x": x, "y": y }, "height": height, "text": self.text.0 });
-        let entity = add_entity(
-            session,
-            self.block.0,
-            &self.name.0,
-            "cad.entity.text",
-            geometry,
-            "cad.entity.text.add",
-        )?;
-        Ok(Outcome::changed(format!("added the text `{}`", self.name.0))
-            .with_data(json!({ "id": entity, "name": self.name.0 })))
-    }
-}
-
-/// Put an **insert** in a block: an instance of another block.
-///
-/// The insert **references** the block it inserts, and the reference is
-/// an **edge**: an instance and its definition are two things, and the
-/// edge between them says which.
-#[derive(Command)]
-#[command(id = "cad.entity.insert.add", area = "cad", layer = "cad", icon = "plus", mutates, undoable)]
-pub struct AddInsert {
-    /// The block the instance goes in.
-    pub block: NodeRef,
-    /// What to call it.
-    pub name: Text,
-    /// The block it inserts.
-    pub inserts: NodeRef,
-    /// Where it is put.
-    pub at: Json,
-}
-
-impl AddInsert {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let inserts = self.inserts.0;
-        let block_name = {
-            let Some(block) = session.document().node(inserts) else {
-                return Err(EngineError::Failed {
-                    id: "cad.entity.insert.add".to_string(),
-                    message: format!("there is no block `{inserts}`"),
+                    id: "cad.entity.layer".to_string(),
+                    message: format!("there is no layer `{layer}`"),
                 });
             };
-            if block.kind != "cad.block" {
+            if node.kind != "cad.layer" {
                 return Err(EngineError::Failed {
-                    id: "cad.entity.insert.add".to_string(),
-                    message: format!("the node `{inserts}` is not a block"),
+                    id: "cad.entity.layer".to_string(),
+                    message: format!("the node `{layer}` is not a layer"),
                 });
             }
-            block.name.clone()
-        };
-        let (x, y) = point(&self.at, "cad.entity.insert.add", "the insertion point")?;
-        let geometry = json!({ "at": { "x": x, "y": y } });
-        let entity = add_entity(
-            session,
-            self.block.0,
-            &self.name.0,
-            "cad.entity.insert",
-            geometry,
-            "cad.entity.insert.add",
-        )?;
-        session.document_mut()?.add_relation(Relation::with_payload(
-            entity,
-            inserts,
-            "cad.inserts",
-            json!({ "block": block_name }),
-        ));
-        Ok(Outcome::changed(format!("added the insert `{}`", self.name.0))
-            .with_data(json!({ "id": entity, "inserts": inserts })))
-    }
-}
+            let name = node.name.clone();
+            let added = session.document_mut()?.add_relation(Relation::with_payload(
+                entity,
+                layer,
+                craftkit_sdk::layer::ON_LAYER,
+                json!({ "layer": name.clone() }),
+            ));
+            if !added {
+                return Err(EngineError::Failed {
+                    id: "cad.entity.layer".to_string(),
+                    message: format!("the entity `{entity}` is already on the layer `{name}`"),
+                });
+            }
+            Ok(Outcome::changed(format!("put the entity {entity} on the layer `{name}`"))
+                .with_data(json!({ "entity": entity, "layer": layer, "name": name })))
 
-/// Put an entity on a **layer**.
-///
-/// The layer is **not** the entity's parent: the entity is in a block,
-/// and it is *on* a layer. So this is an **edge**, and it says what it
-/// is.
-#[derive(Command)]
-#[command(id = "cad.entity.layer", area = "cad", layer = "cad", icon = "plus", mutates, undoable)]
-pub struct PutOnLayer {
-    /// The entity.
-    pub entity: NodeRef,
-    /// The layer.
-    pub layer: NodeRef,
-}
-
-impl PutOnLayer {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let entity = self.entity.0;
-        let layer = self.layer.0;
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed {
-                id: "cad.entity.layer".to_string(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        if node.kind != "cad.layer" {
-            return Err(EngineError::Failed {
-                id: "cad.entity.layer".to_string(),
-                message: format!("the node `{layer}` is not a layer"),
-            });
         }
-        let name = node.name.clone();
-        let added = session.document_mut()?.add_relation(Relation::with_payload(
-            entity,
-            layer,
-            craftkit_sdk::layer::ON_LAYER,
-            json!({ "layer": name.clone() }),
-        ));
-        if !added {
-            return Err(EngineError::Failed {
-                id: "cad.entity.layer".to_string(),
-                message: format!("the entity `{entity}` is already on the layer `{name}`"),
-            });
-        }
-        Ok(Outcome::changed(format!("put the entity {entity} on the layer `{name}`"))
-            .with_data(json!({ "entity": entity, "layer": layer, "name": name })))
     }
 }
 
@@ -1114,48 +1170,48 @@ craftkit_sdk::plugin_anchor!(
     EllipseKind,
     PolylineKind,
     DimensionKind,
-    AddDrawing,
-    ImportDxf,
-    ExportDxf,
-    ExportSvg,
-    ImportSvg,
-    AddLayer,
-    AddBlock,
-    AddLine,
-    AddCircle,
-    AddText,
-    AddInsert,
-    AddEllipse,
-    AddPolyline,
-    AddArc,
-    CopyEntity,
-    MirrorEntity,
-    AuditDrawing,
-    ListEntities,
-    MoveEntity,
-    RotateEntity,
-    ScaleEntity,
-    RemoveEntity,
-    BringToFront,
-    SendToBack,
-    ForwardEntity,
-    BackwardEntity,
-    PutOnLayer,
-    SetLayerOn,
-    FreezeLayer,
-    LockLayer,
-    SetLayerColor,
-    SetLayerFill,
-    SetLayerLinetype,
-    SetLayerLineweight,
-    ListLayers,
-    ListLineTypes,
-    MeasureLength,
-    MeasureArea,
-    MeasureRadius,
-    MeasureAngle,
-    AddDimension,
-    SetDimensionText,
+    CadDrawingAdd,
+    CadImportDxf,
+    CadExportDxf,
+    CadExportSvg,
+    CadImportSvg,
+    CadLayerAdd,
+    CadBlockAdd,
+    CadEntityLineAdd,
+    CadEntityCircleAdd,
+    CadEntityTextAdd,
+    CadEntityInsertAdd,
+    CadEntityEllipseAdd,
+    CadEntityPolylineAdd,
+    CadEntityArcAdd,
+    CadEntityCopy,
+    CadEntityMirror,
+    CadAudit,
+    CadEntityList,
+    CadEntityMove,
+    CadEntityRotate,
+    CadEntityScale,
+    CadEntityRemove,
+    CadEntityFront,
+    CadEntityBack,
+    CadEntityForward,
+    CadEntityBackward,
+    CadEntityLayer,
+    CadLayerOn,
+    CadLayerFreeze,
+    CadLayerLock,
+    CadLayerColor,
+    CadLayerFill,
+    CadLayerLinetype,
+    CadLayerLineweight,
+    CadLayerList,
+    CadLinetypeList,
+    CadMeasureLength,
+    CadMeasureArea,
+    CadMeasureRadius,
+    CadMeasureAngle,
+    CadDimensionAdd,
+    CadDimensionText,
     ExtentsEvaluator,
     CadPanel
 );

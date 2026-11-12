@@ -23,7 +23,7 @@
 //!   one — a member may be added or taken away — and here the members
 //!   are the relations the group holds.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Relation, Session, Text};
@@ -79,194 +79,210 @@ fn gather(document: &Document, node: u64, out: &mut Vec<u64>) {
     }
 }
 
-/// **Make** a **group** of entities.
-///
-/// The group stands in a block, and its members are the entities it
-/// holds.
-#[derive(Command)]
-#[command(id = "cad.group.add", area = "cad", layer = "cad", icon = "group", mutates, undoable)]
-pub struct AddGroup {
-    /// What to call the group.
-    pub name: Text,
-    /// The block the group stands in.
-    pub block: NodeRef,
-    /// The entities that are members of the group.
-    pub members: Json,
-}
+commands! {
+    /// **Make** a **group** of entities.
+    ///
+    /// The group stands in a block, and its members are the entities it
+    /// holds.
+    cad.group.add {
+        area: "cad",
+        layer: "cad",
+        icon: "group",
+        mutates,
+        undoable,
+        params: {
+            /// What to call the group.
 
-impl AddGroup {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.group.add".to_string();
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a group has a name".to_string() });
-        }
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        if node.kind != "cad.block" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
-        }
-        // The **members**: the entities the group holds.
-        let listed: Vec<u64> = match &self.members {
-            Json::Array(list) => list.iter().filter_map(|member| member.as_u64()).collect(),
-            one => one.as_u64().map(|member| vec![member]).unwrap_or_default(),
-        };
-        if listed.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a group has at least one member".to_string(),
-            });
-        }
-        if listed.len() > MOST_MEMBERS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a group holds at most {MOST_MEMBERS} members"),
-            });
-        }
-        let mut members: Vec<u64> = Vec::new();
-        for member in listed {
-            let Some(node) = session.document().node(member) else {
+            name: Text,
+            /// The block the group stands in.
+
+            block: NodeRef,
+            /// The entities that are members of the group.
+
+            members: Json,
+        },
+        run: {
+
+            let id = "cad.group.add".to_string();
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a group has a name".to_string() });
+            }
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("there is no entity `{member}`"),
+                    message: format!("there is no block `{block}`"),
                 });
             };
-            if !node.kind.starts_with("cad.entity.") {
+            if node.kind != "cad.block" {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the node `{member}` is a `{}` and not an entity", node.kind),
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
                 });
             }
-            // The same entity twice is one member.
-            if !members.contains(&member) {
-                members.push(member);
+            // The **members**: the entities the group holds.
+            let listed: Vec<u64> = match &self.members {
+                Json::Array(list) => list.iter().filter_map(|member| member.as_u64()).collect(),
+                one => one.as_u64().map(|member| vec![member]).unwrap_or_default(),
+            };
+            if listed.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a group has at least one member".to_string(),
+                });
             }
-        }
-        let group = session.document_mut()?.add_node_with_under(
-            Some(block),
-            name.clone(),
-            "cad.group",
-            None,
-            json!({}),
-        );
-        for member in &members {
-            session.document_mut()?.add_relation(Relation::with_payload(group, *member, MEMBER, json!({})));
-        }
-        let count = members.len();
-        Ok(Outcome::changed(format!("made the group `{name}`")).with_data(json!({
-            "group": group,
-            "name": name,
-            "members": members,
-            "count": count,
-        })))
-    }
-}
-
-/// **Read** the **groups** of a drawing.
-///
-/// The members of a group are the relations it holds, and they are
-/// read from the drawing.
-#[derive(Command)]
-#[command(id = "cad.group.list", area = "cad", layer = "cad", icon = "list")]
-pub struct ListGroups {
-    /// The drawing.
-    pub drawing: NodeRef,
-}
-
-impl ListGroups {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.group.list".to_string();
-        let drawing = self.drawing.0;
-        let Some(node) = session.document().node(drawing) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no drawing `{drawing}`"),
-            });
-        };
-        if node.kind != "cad.drawing" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{drawing}` is a `{}` and not a drawing", node.kind),
-            });
-        }
-        let mut listed: Vec<Json> = Vec::new();
-        for group in groups_of(session.document(), drawing) {
-            let Some(node) = session.document().node(group) else { continue };
-            let members = members_of(session.document(), group);
-            listed.push(json!({
+            if listed.len() > MOST_MEMBERS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a group holds at most {MOST_MEMBERS} members"),
+                });
+            }
+            let mut members: Vec<u64> = Vec::new();
+            for member in listed {
+                let Some(node) = session.document().node(member) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no entity `{member}`"),
+                    });
+                };
+                if !node.kind.starts_with("cad.entity.") {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{member}` is a `{}` and not an entity", node.kind),
+                    });
+                }
+                // The same entity twice is one member.
+                if !members.contains(&member) {
+                    members.push(member);
+                }
+            }
+            let group = session.document_mut()?.add_node_with_under(
+                Some(block),
+                name.clone(),
+                "cad.group",
+                None,
+                json!({}),
+            );
+            for member in &members {
+                session.document_mut()?.add_relation(Relation::with_payload(group, *member, MEMBER, json!({})));
+            }
+            let count = members.len();
+            Ok(Outcome::changed(format!("made the group `{name}`")).with_data(json!({
                 "group": group,
-                "name": node.name,
+                "name": name,
                 "members": members,
-                "count": members.len(),
-            }));
+                "count": count,
+            })))
+
         }
-        let count = listed.len();
-        Ok(Outcome::new(format!("the drawing `{drawing}` holds {count} group(s)")).with_data(json!({
-            "drawing": drawing,
-            "groups": listed,
-            "count": count,
-        })))
     }
-}
+    /// **Read** the **groups** of a drawing.
+    ///
+    /// The members of a group are the relations it holds, and they are
+    /// read from the drawing.
+    cad.group.list {
+        area: "cad",
+        layer: "cad",
+        icon: "list",
+        params: {
+            /// The drawing.
 
-/// **Move** the **members** of a group.
-///
-/// The group is a fact of the drawing and the moving of it is derived:
-/// every member of the group goes by the vector.
-#[derive(Command)]
-#[command(id = "cad.group.move", area = "cad", layer = "cad", icon = "move", mutates, undoable)]
-pub struct MoveGroup {
-    /// The group.
-    pub group: NodeRef,
-    /// The vector the members go by.
-    pub by: Json,
-}
+            drawing: NodeRef,
+        },
+        run: {
 
-impl MoveGroup {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "cad.group.move".to_string();
-        let group = self.group.0;
-        the_group(session, &id, group)?;
-        crate::editable::may_edit(session.document(), group, &id)?;
-        let x = self.by.get("x").and_then(|x| x.as_f64()).unwrap_or(f64::NAN);
-        let y = self.by.get("y").and_then(|y| y.as_f64()).unwrap_or(f64::NAN);
-        if !x.is_finite() || !y.is_finite() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the vector is a vector in the world's units".to_string(),
-            });
-        }
-        let members = members_of(session.document(), group);
-        let mut moved: Vec<u64> = Vec::new();
-        for member in members {
-            let Some(node) = session.document().node(member) else { continue };
-            let kind = node.kind.clone();
-            let Some(geometry) = node.data.get("geometry").cloned() else { continue };
-            let Some(new) = crate::modify::moved(&kind, &geometry, x, y) else {
+            let id = "cad.group.list".to_string();
+            let drawing = self.drawing.0;
+            let Some(node) = session.document().node(drawing) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("an entity of the kind `{kind}` may not be moved"),
+                    message: format!("there is no drawing `{drawing}`"),
                 });
             };
-            crate::editable::may_edit(session.document(), member, &id)?;
-            let Some(node) = session.document_mut()?.node_mut(member) else { continue };
-            node.data["geometry"] = new;
-            moved.push(member);
+            if node.kind != "cad.drawing" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{drawing}` is a `{}` and not a drawing", node.kind),
+                });
+            }
+            let mut listed: Vec<Json> = Vec::new();
+            for group in groups_of(session.document(), drawing) {
+                let Some(node) = session.document().node(group) else { continue };
+                let members = members_of(session.document(), group);
+                listed.push(json!({
+                    "group": group,
+                    "name": node.name,
+                    "members": members,
+                    "count": members.len(),
+                }));
+            }
+            let count = listed.len();
+            Ok(Outcome::new(format!("the drawing `{drawing}` holds {count} group(s)")).with_data(json!({
+                "drawing": drawing,
+                "groups": listed,
+                "count": count,
+            })))
+
         }
-        let count = moved.len();
-        Ok(Outcome::changed(format!("moved the members of the group `{group}`")).with_data(json!({
-            "group": group,
-            "members": moved,
-            "count": count,
-            "by": { "x": x, "y": y },
-        })))
+    }
+    /// **Move** the **members** of a group.
+    ///
+    /// The group is a fact of the drawing and the moving of it is derived:
+    /// every member of the group goes by the vector.
+    cad.group.move {
+        area: "cad",
+        layer: "cad",
+        icon: "move",
+        mutates,
+        undoable,
+        params: {
+            /// The group.
+
+            group: NodeRef,
+            /// The vector the members go by.
+
+            by: Json,
+        },
+        run: {
+
+            let id = "cad.group.move".to_string();
+            let group = self.group.0;
+            the_group(session, &id, group)?;
+            crate::editable::may_edit(session.document(), group, &id)?;
+            let x = self.by.get("x").and_then(|x| x.as_f64()).unwrap_or(f64::NAN);
+            let y = self.by.get("y").and_then(|y| y.as_f64()).unwrap_or(f64::NAN);
+            if !x.is_finite() || !y.is_finite() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the vector is a vector in the world's units".to_string(),
+                });
+            }
+            let members = members_of(session.document(), group);
+            let mut moved: Vec<u64> = Vec::new();
+            for member in members {
+                let Some(node) = session.document().node(member) else { continue };
+                let kind = node.kind.clone();
+                let Some(geometry) = node.data.get("geometry").cloned() else { continue };
+                let Some(new) = crate::modify::moved(&kind, &geometry, x, y) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("an entity of the kind `{kind}` may not be moved"),
+                    });
+                };
+                crate::editable::may_edit(session.document(), member, &id)?;
+                let Some(node) = session.document_mut()?.node_mut(member) else { continue };
+                node.data["geometry"] = new;
+                moved.push(member);
+            }
+            let count = moved.len();
+            Ok(Outcome::changed(format!("moved the members of the group `{group}`")).with_data(json!({
+                "group": group,
+                "members": moved,
+                "count": count,
+                "by": { "x": x, "y": y },
+            })))
+
+        }
     }
 }
