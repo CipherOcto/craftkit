@@ -4248,6 +4248,7 @@ so.
 | the **measurement**, and its procedure | **built.** The session-side half of the census has its procedure in the playbook — the rule, the baseline and the wave exits — and the gate says so when the procedure goes (§861) | §861 |
 | the **cad battery**, as a table | **built.** The battery of a drawing is now one table per file; the table learned an id that is a word in Rust and a command's own methods, and the registry is pinned to what it was (§862) | §862 |
 | the **vector battery**, as a table | **built.** The battery of a path is a table in 26 files; the table says a menu as a tuple and holds a command's helper, and the registry is pinned to what it was (§863) | §863 |
+| the **layout battery**, as a table | **built.** The battery of a page is a table; the rename follows the crate's export and not the word, because two modules hold a command with the same name (§864) | §864 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -57016,3 +57017,63 @@ a **helper** of its own. Both are things the table had to say.
   a rule easier to read; that is the trade §858 named, and the three
   batteries that are left are the ones that will say whether it was worth
   it.
+
+## 864. The layout battery is a table
+
+§863 converted vector, which carried menu paths and a command with a
+helper. layout is the next one, and it is where the conversion met the
+battery's own **exports**: two of its modules hold a command with the same
+name, and the tree's anchor names them by the crate's name.
+
+### What was built
+
+- **The layout battery is a table.** Its 73 commands, in its 22 files, are
+  now **one table per file** — `commands! { … }` — with a row per command.
+- **The rename follows the export.** A command's name is the id's own
+  shape — `layout.links` is `LayoutLinks` — and the crate re-exports its
+  commands, so the rename had to follow the export and not the word:
+  ```rust
+  pub use links::{LayoutLinks, SetItemLink, SetItemPageLink};
+  pub use linked::{LayoutDocumentLinks as ReadStoryLinks, …};
+  ```
+  The name the crate exports under another name keeps that name; the name
+  it exports as itself takes the command's new one.
+- **The registry is pinned.** `apps/craftkit-studio/tests/layout_registry.rs`
+  holds all 73 commands as they were — every id, label, area, capability,
+  layer, icon, documentation, chord, menu path, parameter and flag — and
+  the test says whether the registry still says it.
+
+### What the port found
+
+- **Two modules, one name.** `links` holds `layout.links` and `linked`
+  holds `layout.document.links` — and both commands were called
+  `ReadLinks`. A rename that looks for the word in the whole battery
+  cannot tell them apart; a rename that follows the **export** can, and
+  the anchor — which names the crate's own names — tells it which is
+  which.
+- **A command's name is not a word in the file.** The tree's `pub use`
+  lines are the crate's front door, and the anchor is the list that keeps
+  the plugin's items alive. Both name the command by its **old** name, and
+  both had to be rewritten.
+- **The table is still not shorter.** layout's diff is 3 676 lines in and
+  3 292 out: the table writes the id and the fields in its own shape, and
+  the diff is bigger for it.
+
+### What it cost
+
+- **The battery**: 22 files, 73 commands, the plugin's anchor, and the
+  crate's exports.
+- **One new test file**: `apps/craftkit-studio/tests/layout_registry.rs` —
+  one test, and 73 rows of snapshot: the registry the tree had before the
+  conversion.
+
+### What it does not settle
+
+- **The other five batteries are still declarations.** prose, film, pdf,
+  sound and grid are each the same work and each needs its own snapshot.
+- **The rename is invisible to the registry.** A command's *name* is the
+  one thing the conversion changed that no snapshot can see, so the
+  compiler and the anchor are the only witnesses that it was complete.
+- **A table does not make a battery easier to read.** What is bought is
+  one place where a command is declared; the body is still the
+  programmer's own text.
