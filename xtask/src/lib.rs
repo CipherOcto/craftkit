@@ -32,6 +32,9 @@
 //! | [`ci`] | all of the above, in order, then the tests |
 //! | [`counts`] | the commands each battery carries, and the README's counted block |
 //! | [`find`] | where a command lives, what an area holds, what a bound is |
+//! | [`example`] | the example command of a battery, and how it is written |
+//! | [`ports`] | the port manifest: which rule came from where |
+//! | [`brief`] | everything one arc needs, in one page |
 //! | [`verify`] | the same checks, over the packages a change can break |
 //!
 //! A gate that cannot run on this machine is reported as skipped with a reason,
@@ -48,16 +51,19 @@
 #![forbid(unsafe_code)]
 
 pub mod assets;
+pub mod brief;
 pub mod ci;
 pub mod cleanroom;
 pub mod counts;
 pub mod deny;
 pub mod doctor;
+pub mod example;
 pub mod find;
 pub mod index;
 pub mod layers;
 pub mod lists;
 pub mod packages;
+pub mod ports;
 pub mod temp;
 pub mod tree;
 pub mod verify;
@@ -139,6 +145,21 @@ pub const COMMANDS: &[Subcommand] = &[
         run: run_ci,
     },
     Subcommand {
+        name: "brief",
+        what: "everything one arc needs: the rule, the landing site, the conventions, the claims",
+        run: brief::run,
+    },
+    Subcommand {
+        name: "ports",
+        what: "the port manifest: which rule came from where (--check reads it against the tree)",
+        run: ports::run,
+    },
+    Subcommand {
+        name: "example",
+        what: "the example command of a battery: how a command of it is written",
+        run: example::run,
+    },
+    Subcommand {
         name: "find",
         what: "where a command lives, what an area holds, what a bound is (one call)",
         run: find::run,
@@ -178,6 +199,21 @@ pub const NOT_GATES: &[(&str, &str)] = &[
     ("doctor", "it reports on the machine, not on the code"),
     ("deny", "it needs the network and a licence database; CI runs it by name"),
     ("ci", "it is the runner"),
+    (
+        "brief",
+        "it prints the tree's own facts about an arc; it checks nothing, and the tree's own \
+         tests check the tree",
+    ),
+    (
+        "ports",
+        "it prints the port manifest; the `lists` gate reads it against the tree, so the rows \
+         are checked without this command being run",
+    ),
+    (
+        "example",
+        "it prints the tree's own example of a command; it checks nothing, and the tree's own \
+         tests check the tree",
+    ),
     (
         "find",
         "it answers a question about the tree; it checks nothing, and the tree's own tests check \

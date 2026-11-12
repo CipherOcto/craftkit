@@ -527,6 +527,9 @@ impl LoadedPlugin {
             params,
             mutates,
             undoable: mutates,
+            // A plugin's command is not a battery's example: the plugin is
+            // not a battery, and the example is a fact about the tree.
+            example: false,
             journal: true,
             enabled: crate::always,
             run,

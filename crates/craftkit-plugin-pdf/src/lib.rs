@@ -410,7 +410,7 @@ impl Payload {
 
 /// Put an indirect object in the document.
 #[derive(Command)]
-#[command(id = "pdf.object.add", area = "pdf", layer = "pdf", icon = "plus", mutates, undoable)]
+#[command(id = "pdf.object.add", area = "pdf", layer = "pdf", icon = "plus", mutates, undoable, example)]
 pub struct AddObject {
     /// The object's number in the file.
     pub object: Number,

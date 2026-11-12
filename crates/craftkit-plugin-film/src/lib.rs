@@ -483,7 +483,7 @@ impl ClipKind {
 
 /// Put a **bin** in the project.
 #[derive(Command)]
-#[command(id = "film.bin.add", area = "film", layer = "film", icon = "plus", mutates, undoable)]
+#[command(id = "film.bin.add", area = "film", layer = "film", icon = "plus", mutates, undoable, example)]
 pub struct AddBin {
     /// What to call it.
     pub name: Text,

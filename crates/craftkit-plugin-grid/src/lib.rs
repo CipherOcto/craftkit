@@ -899,7 +899,7 @@ pub fn format_code_of(session: &Session, sheet: u64, cells: &Cells, cell: CellRe
 
 /// Put a **workbook** in the document.
 #[derive(Command)]
-#[command(id = "grid.workbook.add", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
+#[command(id = "grid.workbook.add", area = "grid", layer = "grid", icon = "plus", mutates, undoable, example)]
 pub struct AddWorkbook {
     /// What to call it.
     pub name: Text,

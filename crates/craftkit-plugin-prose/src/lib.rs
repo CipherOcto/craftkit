@@ -574,7 +574,15 @@ fn relation_to(document: &Document, from: u64, kind: &str) -> Option<Node> {
 
 /// Put a **document** in the document.
 #[derive(Command)]
-#[command(id = "prose.document.add", area = "prose", layer = "prose", icon = "plus", mutates, undoable)]
+#[command(
+    id = "prose.document.add",
+    area = "prose",
+    layer = "prose",
+    icon = "plus",
+    mutates,
+    undoable,
+    example
+)]
 pub struct AddDocument {
     /// What to call it.
     pub name: Text,

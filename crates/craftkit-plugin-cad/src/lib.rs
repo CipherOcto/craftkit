@@ -664,7 +664,7 @@ pub(crate) fn point(value: &Json, id: &str, what: &str) -> Result<(f64, f64), En
 
 /// Put a **drawing** in the document.
 #[derive(Command)]
-#[command(id = "cad.drawing.add", area = "cad", layer = "cad", icon = "plus", mutates, undoable)]
+#[command(id = "cad.drawing.add", area = "cad", layer = "cad", icon = "plus", mutates, undoable, example)]
 pub struct AddDrawing {
     /// What to call it.
     pub name: Text,

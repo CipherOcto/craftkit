@@ -830,6 +830,7 @@ pub fn runtime_echo() -> CommandSpec {
         menu: &["runtime"],
         params: ECHO_PARAMS,
         mutates: false,
+        example: false,
         undoable: false,
         journal: false,
         enabled: craftkit_sdk::always,

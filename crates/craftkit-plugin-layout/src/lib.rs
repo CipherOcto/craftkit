@@ -469,7 +469,15 @@ fn edge_name(document: &Document, from: u64, kind: &str) -> Json {
 
 /// Put a **document** in the document.
 #[derive(Command)]
-#[command(id = "layout.document.add", area = "layout", layer = "layout", icon = "plus", mutates, undoable)]
+#[command(
+    id = "layout.document.add",
+    area = "layout",
+    layer = "layout",
+    icon = "plus",
+    mutates,
+    undoable,
+    example
+)]
 pub struct AddDocument {
     /// What to call it.
     pub name: Text,

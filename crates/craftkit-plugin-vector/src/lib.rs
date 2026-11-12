@@ -348,6 +348,7 @@ pub struct VectorTool;
 #[derive(Command)]
 #[command(
     id = "vector.rectangle",
+    example,
     area = "vector",
     layer = "vector",
     icon = "rect",

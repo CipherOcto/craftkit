@@ -220,7 +220,7 @@ impl LayerKind {
 
 /// Put a **composition** in the document.
 #[derive(Command)]
-#[command(id = "fx.comp.add", area = "fx", layer = "fx", icon = "plus", mutates, undoable)]
+#[command(id = "fx.comp.add", area = "fx", layer = "fx", icon = "plus", mutates, undoable, example)]
 pub struct AddComp {
     /// How wide it is, in pixels.
     pub width: Number,

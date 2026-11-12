@@ -25,6 +25,7 @@ fn a_command() -> CommandSpec {
         menu: &["test"],
         params: &[],
         mutates: true,
+        example: false,
         undoable: true,
         journal: true,
         enabled: craftkit_sdk::always,

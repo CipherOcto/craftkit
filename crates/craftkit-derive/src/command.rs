@@ -26,6 +26,11 @@ pub struct CommandArgs {
     pub no_prefix: bool,
     /// `no_journal`: the command is not written in the journal.
     pub no_journal: bool,
+    /// `example`: the command is the battery's example.
+    ///
+    /// One per battery: the command that shows what a command of this
+    /// battery looks like. §852.
+    pub example: bool,
 }
 
 impl Parse for CommandArgs {
@@ -83,13 +88,15 @@ impl Parse for CommandArgs {
                 "undoable" => args.undoable = true,
                 "no_prefix" => args.no_prefix = true,
                 "no_journal" => args.no_journal = true,
+                "example" => args.example = true,
                 other => {
                     return Err(Error::new(
                         field.span(),
                         format!(
                             "unknown command field `{other}`: a command has `id`, and optionally \
                              `label`, `area`, `icon`, `shortcut`, `capability`, `layer`, \
-                             `enabled`, `menu`, `mutates`, `undoable`, `no_journal` and `no_prefix`"
+                             `enabled`, `menu`, `mutates`, `undoable`, `no_journal`, `example` \
+                             and `no_prefix`"
                         ),
                     ));
                 }
@@ -362,6 +369,7 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
     let menu_names: Vec<LitStr> = args.menu.clone();
     let mutates = args.mutates;
     let undoable = args.undoable;
+    let example = args.example;
     let journal = !args.no_journal;
     let doc_literal = LitStr::new(&doc, id.span());
     let label_literal = LitStr::new(&label, id.span());
@@ -409,6 +417,7 @@ pub fn expand(input: syn::DeriveInput) -> Result<TokenStream2> {
             ],
             mutates: #mutates,
             undoable: #undoable,
+            example: #example,
             journal: #journal,
             enabled: #enabled,
             run: #sdk::CommandRun::Static(#run_ident),

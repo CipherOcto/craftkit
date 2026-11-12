@@ -2757,6 +2757,7 @@ impl SoloTrack {
 #[derive(Command)]
 #[command(
     id = "sound.clip.add",
+    example,
     area = "sound",
     layer = "sound",
     icon = "plus",

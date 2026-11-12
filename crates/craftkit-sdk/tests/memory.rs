@@ -38,6 +38,7 @@ fn a_session() -> Session {
             menu: &["test"],
             params: &[BYTES_PARAM],
             mutates: true,
+            example: false,
             undoable: true,
             journal: true,
             enabled: craftkit_sdk::always,

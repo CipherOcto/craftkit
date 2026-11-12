@@ -113,6 +113,18 @@ pub struct CommandSpec {
     /// was not cleared.
     pub journal: bool,
 
+    /// Whether this command is the battery's **example**.
+    ///
+    /// **One per battery, and it is a fact of the tree.** The example is how
+    /// a battery says "this is what a command of mine looks like" — and a
+    /// rule that lives in a file of prose is a rule that drifts, while one
+    /// that lives in the declaration is a rule the compiler checks.
+    ///
+    /// A battery with no example is a battery that has not said what one of
+    /// its commands looks like, and the tool that prints the examples says
+    /// so rather than picking one.
+    pub example: bool,
+
     /// Whether it is available right now.
     pub enabled: fn(&Session) -> bool,
     /// How to run it.

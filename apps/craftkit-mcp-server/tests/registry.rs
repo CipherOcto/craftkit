@@ -82,6 +82,26 @@ fn every_battery_is_linked_in_and_counted() {
     }
 }
 
+/// Every battery marks **one** example, and the registry agrees.
+///
+/// The source says which command is the battery's example; the registry says
+/// the same thing about the program. Two readings of the same fact, and the
+/// tree's rule is that they must agree.
+#[test]
+fn every_battery_marks_one_example() {
+    let ecosystem = ecosystem();
+    for battery in BATTERIES {
+        let examples: Vec<&craftkit_sdk::command::CommandSpec> =
+            ecosystem.commands.all().iter().filter(|c| c.area == battery && c.example).collect();
+        assert_eq!(
+            examples.len(),
+            1,
+            "the `{battery}` battery marks {} examples in the program, and it marks one",
+            examples.len()
+        );
+    }
+}
+
 /// The whole tree's commands are the number the README says the MCP server
 /// has.
 ///

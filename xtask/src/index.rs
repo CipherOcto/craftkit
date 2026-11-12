@@ -174,7 +174,7 @@ pub fn commands_in(text: &str, file: &Path, battery: &str) -> Vec<Command> {
                 file: file.to_path_buf(),
                 line,
                 battery: battery.to_string(),
-                example: block.contains("example"),
+                example: has_flag(&block, "example"),
             });
         }
         offset = end;
@@ -220,6 +220,15 @@ fn block_of(text: &str, body_start: usize) -> Option<(String, usize)> {
         at += 1;
     }
     None
+}
+
+/// Whether an attribute block carries a **flag**: a word of its own.
+///
+/// **A word, not a substring.** An id may hold the word — a command called
+/// `pdf.example.set` is not a flag — so the block is split into words and
+/// the word is looked for among them.
+pub fn has_flag(block: &str, flag: &str) -> bool {
+    block.split(|c: char| !(c.is_alphanumeric() || c == '_')).any(|word| word == flag)
 }
 
 /// A field of an attribute block: `name = "value"`.
