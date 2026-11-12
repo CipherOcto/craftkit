@@ -464,10 +464,7 @@ mod tests {
         let names: Vec<&str> = PHASES.iter().map(|p| p.name).collect();
         assert_eq!(
             names,
-            vec![
-                "fmt", "assets", "cleanroom", "lists", "digest", "layers", "web", "clippy", "tests",
-                "wasm",
-            ],
+            vec!["fmt", "assets", "cleanroom", "lists", "digest", "layers", "web", "clippy", "tests", "wasm",],
             "the order is chosen so the cheapest gates run first, and `tests` and `wasm` must \
              still be in it: they used to be called after the loop, where deleting the call was \
              invisible — `ci` reported them as run on a build that ran neither"
