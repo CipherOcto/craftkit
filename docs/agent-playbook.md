@@ -291,7 +291,38 @@ given. It is a program: it can be run again.
 
 ---
 
-## 7. What to read when something does not work
+## 7. When to use a sub-agent, and when not to
+
+A sub-agent is a **round trip that costs money and returns an answer**. The
+rule is short, and it is a rule about the *brief*, not about the task:
+
+> **A sub-agent gets a bounded, mechanical brief, or it does not get
+> spawned.**
+
+- **One survey per battery, with a written contract.** "Survey the grid
+  battery against gridcraft and report the gaps" is a brief. "Survey grid"
+  is not: it has no boundary, no deliverable and no acceptance, and it will
+  be re-asked.
+- **Mechanical work is the good case.** A rewrite that touches every site of
+  one shape, a set of files that must agree, a document that must be written
+  from a list — these are the briefs that pay.
+- **A question the tree can answer is not a brief.** Before spawning anything
+  for "where does this command live" or "what does the claim table say",
+  ask the tree: `cargo xtask find` and `cargo xtask brief` exist so that
+  these questions cost one call and not eleven.
+- **Reading what a rule *means* stays with the reader.** A survey can point
+  at a rule in a reference tree; it cannot decide what that rule means for
+  this tree, and a sub-agent's summary of a meaning is a second source of
+  truth.
+
+The cost of getting this wrong was measured on this tree's own history:
+**41 sub-agents, six of which paid for themselves**, four that errored and
+two that were aborted. The rest were one-off surveys of a tree the reader
+could read directly.
+
+---
+
+## 8. What to read when something does not work
 
 - `KNOWN-GAPS.md` — what this tree does not do, and what its gates cannot see.
 - `docs/architecture.md` — the layers and the seams.

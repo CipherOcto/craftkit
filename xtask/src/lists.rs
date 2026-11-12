@@ -644,6 +644,30 @@ pub fn the_retired_rules_are_named() -> Vec<String> {
     problems
 }
 
+/// The delegation rule is stated in the prose, and the prose that carries it
+/// is named.
+///
+/// **A rule of conduct is a rule like any other**, and it decays the same
+/// way: the rule that was written once is forgotten, and the tree goes back
+/// to spawning a survey for every question. So the rule is in the tree's
+/// prose, and the gate checks that the prose still says it.
+///
+/// Two files carry it, because two kinds of reader read them: the playbook
+/// for whoever drives the tree, and `AGENTS.md` for whoever works in it.
+pub fn the_delegation_rule_is_stated(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    for file in ["docs/agent-playbook.md", "AGENTS.md"] {
+        let text = read_text(root.join(file)).map_err(|e| format!("could not read {file}: {e}"))?;
+        if !text.contains("bounded, mechanical brief") {
+            problems.push(format!(
+                "{file} does not state the delegation rule: a sub-agent gets a bounded, mechanical \
+                 brief, or it does not get spawned"
+            ));
+        }
+    }
+    Ok(problems)
+}
+
 /// The gate itself.
 pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("lists");
@@ -670,6 +694,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     // Every retired rule is named, and says why.
     problems.extend(the_retired_rules_are_named());
+
+    // The rule about delegation is in the prose, and the prose is in the tree.
+    problems.extend(the_delegation_rule_is_stated(root)?);
 
     if problems.is_empty() {
         println!("   ok");

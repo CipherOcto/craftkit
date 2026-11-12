@@ -262,6 +262,18 @@ Commit after every feature arc that builds, one topic per commit (see
 
 ---
 
+## Delegation
+
+A sub-agent is a round trip that costs money and returns an answer, so the
+rule is about the **brief**: **a sub-agent gets a bounded, mechanical brief,
+or it does not get spawned.** One survey per battery, with a written
+contract; a question the tree can answer is not a brief; and reading what a
+rule *means* stays with the reader. The rule is in
+[`docs/agent-playbook.md`](docs/agent-playbook.md), and the gate checks that
+it is still there.
+
+---
+
 ## Where things are
 
 ```text
