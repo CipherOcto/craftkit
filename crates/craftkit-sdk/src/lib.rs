@@ -95,6 +95,7 @@ pub mod session;
 pub mod stream;
 pub mod taskcmds;
 pub mod tasks;
+pub mod testing;
 pub mod view;
 pub mod xml;
 
