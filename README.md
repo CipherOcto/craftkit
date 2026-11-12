@@ -4226,6 +4226,7 @@ so.
 | the **fill** of a format | **built.** The tree's accounting and comma formats fill the cell: the symbol at the left, the number at the right, and the space between them is the width of the column (§838) | §838 |
 | the **table** of a drawing | **built.** A drawing holds a table of cells, and the cells may be merged: the merge is written in its anchor, the texts are joined into it, and a merge of one cell is refused (§839) | §839 |
 | the **repository** that holds the tree | **built.** This tree is the repository: its crates and its applications are at the root, the outer gate describes it, and every rule the v1 tree had and this one does not is named with the reason (§840) | §840 |
+| the **gates** that were running | **built.** The gate runs the batteries' tests, the range checks are written the way clippy asks for on every toolchain the gate uses, and the internal dependencies name their version (§841) | §841 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -55321,3 +55322,83 @@ the Android package are gone.
   it is needed. The inner gate reads the manifests instead.
 - **The applications are not checked for `wasm32-unknown-unknown`**, and
   the window never will be: it is a window.
+
+## 841. The gates that were not running
+
+The tree was moved to the root of the repository, and the outer gate was
+written for it. Then the gate was **run** — and it found that some of the
+gates it was supposed to run were not running, and one of them was not
+running because of a promise this document had made.
+
+### What was built
+
+- **The range checks are written the way clippy asks for** — twenty-two of
+  them, in seven batteries.
+- **The gate runs the batteries' tests.** The clippy phase and the test
+  phase build with **all** the features on.
+- **The path dependencies name their version**, so the deny gate can tell
+  an internal dependency from a wildcard.
+
+### What the port found
+
+- **The portability job was red and the main job was green.** The
+  portability job runs clippy on the workspace's declared **minimum**
+  toolchain — Rust 1.93 — and that clippy fires a lint the newer one does
+  not: `manual !RangeInclusive::contains`. The main job passed and the
+  portability job failed, and the difference was a lint that only one
+  version of clippy has.
+- **The rewrite had a trap in it, and the trap was about `NaN`.** The
+  old shape — `value < LOW || value > HIGH` — is **false** for a `NaN`,
+  because a `NaN` compares false against everything: the old code let a
+  `NaN` through. The new shape — `!(LOW..=HIGH).contains(&value)` — is
+  **true** for a `NaN`, because `contains` asks the question the other way
+  round: the new code refuses it. So the rewrite is *stricter*, and the
+  question at every one of the twenty-two sites is whether a `NaN` is still
+  refused **by the same guard as before**.
+  - At **seventeen** sites the `is_finite` guard is the first term of the
+    same condition, and `||` short-circuits: a `NaN` never reaches the
+    range test, and the error message is the same one.
+  - At **three** sites an **earlier statement** refuses the `NaN` — `if
+    !x.is_finite() { return Err("a pan is a number") }` — with the same
+    message, before the range line is reached at all.
+  - At **one** site there is no guard. There the `NaN` is unreachable by
+    construction: the SDK refuses a non-finite parameter before the command
+    runs, and `serde_json` cannot store a `NaN` in a document, so the value
+    is finite before the line is reached.
+- **The gate was not running the batteries' tests at all.** The batteries
+  are **optional features** — "a program that wants paths says so" — and
+  the gate built the workspace **without** them. So the code behind the
+  features was never compiled, and the tests behind the features never
+  ran: the studio's `vst3` test file held **seven** tests and ran **none**
+  of them. The gate was green about a tree in which the batteries were not
+  there.
+- **The deny gate read every internal dependency as a wildcard.** A path
+  dependency with no version beside it is a wildcard to `cargo deny`, and
+  the bans gate is set to deny wildcards — so the gate failed on **forty**
+  of the tree's own dependencies. The workspace's own dependency table
+  already carried a version beside each path; the crates' internal ones
+  did not.
+
+### What it cost
+
+- **Twenty-two one-line changes** in seven batteries, and **one** change
+  to the gate: `--all-features` on the clippy phase and on the test phase.
+- **Forty manifest lines** gained the version they should have had.
+- **The tests**: 5827 passed, 0 failed, across the whole workspace with
+  every feature on.
+
+### What it does not settle
+
+- **The lint is fixed for the toolchains the gate uses**, not for every
+  toolchain that exists. A clippy from the future may fire a lint that
+  neither 1.93 nor 1.99 knows about, and the portability job will find
+  it then.
+- **The batteries are still optional features.** A program that does not
+  ask for a battery does not get it, and that is the design — but it means
+  that "the gate is green" means "the gate is green with every battery
+  **on**", and a program that links in only some of them is a program the
+  gate has not checked.
+- **The `NaN` analysis was done by reading the code**, not by a test that
+  proves a `NaN` is refused at each of the twenty-two sites. The tree's
+  rule is that a rule has a test, and this rule — "a `NaN` is refused
+  here" — has none of its own.
