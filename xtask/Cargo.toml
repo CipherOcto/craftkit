@@ -5,6 +5,11 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish = false
+# The layering is checked when the tool is **built**, so that a layering
+# mistake fails at build time and not only when the gate runs. The script
+# reads the tree as text — it cannot depend on the tree's own crates, and
+# it does not run `cargo metadata`.
+build = "build.rs"
 
 [lints]
 workspace = true
