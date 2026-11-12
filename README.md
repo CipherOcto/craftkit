@@ -4249,6 +4249,7 @@ so.
 | the **cad battery**, as a table | **built.** The battery of a drawing is now one table per file; the table learned an id that is a word in Rust and a command's own methods, and the registry is pinned to what it was (§862) | §862 |
 | the **vector battery**, as a table | **built.** The battery of a path is a table in 26 files; the table says a menu as a tuple and holds a command's helper, and the registry is pinned to what it was (§863) | §863 |
 | the **layout battery**, as a table | **built.** The battery of a page is a table; the rename follows the crate's export and not the word, because two modules hold a command with the same name (§864) | §864 |
+| the **prose battery**, as a table | **built.** The battery of a document is a table; the snapshot caught a rename that ate a word in a doc comment, and the rule is now that a rename touches code and nothing else (§865) | §865 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -57077,3 +57078,62 @@ name, and the tree's anchor names them by the crate's name.
 - **A table does not make a battery easier to read.** What is bought is
   one place where a command is declared; the body is still the
   programmer's own text.
+
+## 865. The prose battery is a table
+
+§864 converted layout. prose is the battery of a word processor, and its
+conversion found the one thing the earlier ones had not: **the prose**.
+
+### What was built
+
+- **The prose battery is a table.** Its 110 commands, in its 47 files, are
+  now **one table per file** — `commands! { … }` — with a row per command.
+- **The rename leaves the prose alone.** A command's name is the id's own
+  shape — `prose.replace` is `ProseReplace` — and the rename is a rename
+  of a **struct**, not of the file's words:
+  ```rust
+  /// **Replace** a pattern in a block.
+  prose.replace { … }
+  ```
+  The doc comment says what the command *does*; the name says what it is
+  called.
+- **The registry is pinned.** `apps/craftkit-studio/tests/prose_registry.rs`
+  holds all 110 commands as they were — every id, label, area, capability,
+  layer, icon, documentation, chord, menu path, parameter and flag — and
+  the test says whether the registry still says it.
+
+### What the port found
+
+- **The snapshot caught a rename that ate a word.** The first conversion
+  renamed the struct `Replace` wherever the word appeared — and the word
+  appeared in the **documentation** of the command: "**ProseReplace** a
+  pattern in a block". The registry holds the documentation, so the
+  snapshot said *no* and the conversion was wrong. The fix is one rule:
+  **a rename does not touch a doc comment.**
+- **The snapshot is worth more than the build.** The tree compiled, the
+  tests passed and the counts were the same — and the conversion had
+  changed the tree. The documentation of a command is part of the
+  registry, and only the snapshot was looking at it.
+- **A battery's size is not its difficulty.** prose has 110 commands in 47
+  files — more files than layout has commands — and the conversion was
+  the same work. What made prose harder was one **word**, not its size.
+
+### What it cost
+
+- **The battery**: 47 files, 110 commands, the plugin's anchor — 6 647
+  lines in and 6 078 out.
+- **One new test file**: `apps/craftkit-studio/tests/prose_registry.rs` —
+  one test, and 110 rows of snapshot: the registry the tree had before the
+  conversion.
+
+### What it does not settle
+
+- **The other four batteries are still declarations.** film, pdf, sound
+  and grid are each the same work and each needs its own snapshot.
+- **A doc comment is prose, and prose is checked.** The tree's own gate
+  says the numbers in the prose must agree with the code; this arc found
+  the same truth about a **word** in a doc comment: the tree says
+  "**Replace** a pattern", and after the conversion it said
+  "**ProseReplace**".
+- **The table is still not shorter.** The diff is bigger for it, and the
+  trade §858 named is still the trade.
