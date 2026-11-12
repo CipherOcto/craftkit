@@ -4233,9 +4233,9 @@ so.
 | the **gate** that says what it did not check | **built.** The gate checks the packages a change can break, names the packages it left out, and the build machine still checks the whole tree (§846) | §846 |
 | the **delegation**, priced | **built.** The rule is in the prose — a sub-agent gets a bounded, mechanical brief, or it does not get spawned — and the gate checks that the prose still says it (§847) | §847 |
 | the **counts**, from the registry | **built.** The counts of the batteries are read out of the registry — the commands the linker put in — and the source is checked against it, so neither can drift alone (§848) | §848 |
-| the tree's **answers**, in one call | **built.**  answers where a command lives, what an area holds and what a bound is — with the file and the line — from an index of the tree's own commands (§851) | §851 |
+| the tree's **answers**, in one call | **built.** `cargo xtask find` answers where a command lives, what an area holds and what a bound is — with the file and the line — from an index of the tree's own commands (§851) | §851 |
 | the **claim table**, as an index | **built.** Every § the table cites exists, every row says where it is, and every arc the tree made has a row — so a port cannot land without saying what it claims (§849) | §849 |
-| the **example** of a battery | **built.** One command per battery is marked  in its own declaration, and  prints it — with the battery's other commands and a test of it (§852) | §852 |
+| the **example** of a battery | **built.** One command per battery is marked `example` in its own declaration, and `cargo xtask example` prints it — with the battery's other commands and a test of it (§852) | §852 |
 | the **port manifest** | **built.** One row per ported rule — the rule, where it came from, the crate, the module, the command, the test and the section — and the gate checks every row against the tree (§853) | §853 |
 | the **brief** of an arc | **built.** One call gives the arc the rule, the landing site, the conventions, the claims, the counts and the commands — every one of them read out of the tree (§854) | §854 |
 | the **shape** of a test | **built.** A macro writes the four lines a test of a command always writes, the refusal is not swallowed, and the session is left behind so the test can look at the document (§856) | §856 |
