@@ -67,10 +67,24 @@ pub const PHASES: &[Phase] = &[
     Phase { name: "wasm", run: wasm::run },
 ];
 
-/// `cargo fmt --check`.
+/// `cargo fmt --check`, one package at a time.
+///
+/// **One package at a time, and the reason is Windows.** `cargo fmt --all`
+/// hands rustfmt every file of the workspace in a single command line, and
+/// Windows will not take a command line longer than 32 767 characters: the
+/// call fails with "the filename or extension is too long", before rustfmt
+/// has formatted anything. The tree grew past that, so the gate formats a
+/// package at a time — and the largest package of the tree is a hundred
+/// files, which fits comfortably.
+///
+/// It also says more when it fails: the package name is on the line, so a
+/// file that is not formatted is reported against the crate it belongs to.
 pub fn fmt(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("fmt");
-    cargo(&["fmt", "--all", "--check"], root)?;
+    for package in workspace_packages(root)? {
+        println!("   {}", package.name);
+        cargo(&["fmt", "--package", &package.name, "--check"], root)?;
+    }
     println!("   ok");
     Ok(crate::Outcome::Ran)
 }
