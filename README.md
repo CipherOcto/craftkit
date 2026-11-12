@@ -4241,6 +4241,7 @@ so.
 | the **shape** of a test | **built.** A macro writes the four lines a test of a command always writes, the refusal is not swallowed, and the session is left behind so the test can look at the document (§856) | §856 |
 | the **layering**, checked at build time | **built.** A build script reads the manifests and the authority's table as text, and a crate that reaches upward — or a plugin that reaches for a plugin — fails the build with a sentence, not a panic (§857) | §857 |
 | a **battery as a declaration** | **built.** A table declares a family of commands and the compiler writes the struct, the reader and the registration for every row — with the compilers own checks, and one of its own (§858) | §858 |
+| the **bounds**, checked where the compiler is | **built.** The SDK publishes each of its bounds and the number is the constant itself, so the prose is checked against the code — and a number that cannot be worked out is a failure, not a skip (§850) | §850 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -5800,9 +5801,9 @@ The **document's shape** is now bounded, and the bounds are the kit's:
 
 | the bound | it is | and it is |
 |---|---|---|
-| `MAX_DEPTH` | sixty-four levels | the deepest a document's tree may be |
-| `MAX_NODES` | ten thousand | the most nodes a document may hold |
-| `MAX_RELATIONS` | ten thousand | the most relations a document may hold |
+| `MAX_DEPTH` | `64` | sixty-four levels: the deepest a document's tree may be |
+| `MAX_NODES` | `10_000` | ten thousand: the most nodes a document may hold |
+| `MAX_RELATIONS` | `10_000` | ten thousand: the most relations a document may hold |
 
 They are checked in three places, and the three are the same numbers:
 
@@ -6581,22 +6582,39 @@ the prose. This section closes the other half: the prose must say the
 ### What was built
 
 - **A table of the bounds**, in this README, with the expression each
-  one is written with:
+  one is written with, and the crate that declares it:
 
-| the bound | the number |
-|---|---|
-| `MAX_DOCUMENT_BYTES` | `32 * 1024 * 1024` |
-| `MAX_HISTORY_BYTES` | `MAX_DOCUMENT_BYTES * HISTORY_EXPANSION` |
-| `MAX_SESSION_BYTES` | `MAX_DOCUMENT_BYTES * SESSION_DOCUMENTS` |
+<!-- the bounds of the tree: begin -->
 
-- **A small evaluator** (`crates/craftkit-gates/src/numbers.rs`): the
-  four operators an arithmetic bound is written with — `*`, `+`, `-` and
-  `<<` — and the tree's own constants as the names it may use. The two
-  expressions are **evaluated** and compared, so `32 * 1024 * 1024` and
-  `33554432` are the same number, and a reader cannot tell that from
-  the text.
-- **The fifth rule of the gate**: a bound whose number and the prose's
-  number differ is a finding.
+| the bound | the crate | the number |
+|---|---|---|
+| `MAX_DOCUMENT_BYTES` | `craftkit-sdk` | `32 * 1024 * 1024` |
+| `MAX_HISTORY_BYTES` | `craftkit-sdk` | `MAX_DOCUMENT_BYTES * 2` |
+| `MAX_SESSION_BYTES` | `craftkit-sdk` | `MAX_DOCUMENT_BYTES * 5` |
+| `MAX_DEPTH` | `craftkit-sdk` | `64` |
+| `MAX_NODES` | `craftkit-sdk` | `10_000` |
+| `MAX_RELATIONS` | `craftkit-sdk` | `10_000` |
+
+<!-- the bounds of the tree: end -->
+
+- **A small evaluator** — the four operators an arithmetic bound is
+  written with — `*`, `+`, `-` and `<<` — and the tree's own bounds as the
+  names it may use. The two expressions are **evaluated** and compared, so
+  `32 * 1024 * 1024` and `33554432` are the same number, and a reader
+  cannot tell that from the text.
+- **A rule that says the numbers must agree**: a bound whose number and
+  the prose's number differ is a finding.
+
+> **§850 moved this check.** The evaluator used to live in the tree's own
+> gate (`crates/craftkit-gates/src/numbers.rs`) and it **re-parsed the
+> code's text**, which meant the tree's checker and the code could drift
+> apart without either of them noticing — and a bound written in a form
+> the checker could not read was not a failure, it was a **skip**, and a
+> skip looks exactly like a pass. The code now **hands the value over**:
+> the SDK publishes each of its bounds, and the number the prose is
+> checked against is the constant itself. The check lives where the code
+> is — `apps/craftkit-studio/tests/bounds.rs` — and a number that cannot
+> be worked out is a **failure** there, not a skip. See §850.
 
 ### What the port found
 
@@ -56390,3 +56408,89 @@ a list of strangers.
   on the SDK for its tests, and the SDK depends on the derive for its
   commands. Cargo allows it, and the layering gates skip dev-dependencies
   — but it is one more thing a reader has to know.
+
+## 850. The bounds, checked where the compiler is
+
+The README promises numbers. `MAX_NODES` is ten thousand, `MAX_DOCUMENT_BYTES`
+is thirty-two mebibytes, and the promise is a promise about what the kit
+will do. The number was in the code and the promise was in the prose, and
+something had to make them agree.
+
+### What was built
+
+- **The code hands the value over.** The SDK publishes each of its bounds
+  as a value — `craftkit_sdk::bounds::Bound` — and the value is the
+  **constant itself**:
+  ```rust
+  Bound { name: "MAX_NODES", crate_name: "craftkit-sdk", value: MAX_NODES }
+  ```
+  So the compiler ties the published number to the constant: if the
+  constant changes, the published value changes with it, and nothing can
+  be stale. The check does not read the code at all.
+- **The table of the bounds** in §73 is now a **marked block** with the
+  crate that declares each bound, and it is the tree's list of promises:
+  - every row's number is **evaluated** and compared with the published
+    value;
+  - every table of the README that promises a bound has to promise it in
+    that table;
+  - and **a number that cannot be worked out is a failure**, not a skip.
+- **The tree's own gate stopped re-parsing the code.** The rule *the
+  numbers agree with the prose* moved out of `craftkit-gates` and into
+  `apps/craftkit-studio/tests/bounds.rs`, where the code is. The gate's
+  `numbers.rs` — the evaluator that read constants out of the source's
+  text — is gone.
+
+### What the port found
+
+- **The rows that said "ten thousand" were never checked.** The old check
+  read the table's cell and evaluated it; "ten thousand" is not an
+  expression, so the check **skipped** the row — silently, and in a way
+  that looked exactly like a pass. That is what §849 found, and this is
+  the arc that answers it: the number in the table is an expression now,
+  and a cell that cannot be worked out **fails**.
+- **The words stay in the prose.** The §62 table still says *sixty-four
+  levels* and *ten thousand* — only text can say that, and a reader wants
+  to read it. The number moved into the cell beside it, where a machine
+  can work it out; the words are in the third column, where a reader wants
+  them. Both are true, and neither is checked in the other's place.
+- **Two crates may not publish one bound's name.** The registry refuses a
+  duplicate id, and a bound's name is its id — so `MAX_DEPTH` in two
+  crates with two numbers is a refusal at start-up rather than a row
+  nobody can read. The prose plugin's own `MAX_DEPTH` is a different
+  thing and is not published: a bound that another crate also declares has
+  to be given a name of its own.
+- **A checker that cannot build when the tree does not compile is silent
+  exactly when it is needed.** The gate is L0 and the SDK is L2, so the
+  gate cannot link the code — and a gate that links nothing of the tree's
+  own has to read the tree as **text**. The numbers are the one thing
+  that must not be read as text, and now they are not.
+
+### What it cost
+
+- **One new module** in the SDK (`crates/craftkit-sdk/src/bounds.rs`), six
+  published bounds, one line in the SDK's `lib.rs`.
+- **One new test file**: `apps/craftkit-studio/tests/bounds.rs` — seven
+  tests: the README's numbers are the tree's numbers; every promised bound
+  is published; a number in words is a failure; a wrong number is a
+  failure; a bound the tree does not have is a failure; a promise outside
+  the table is a failure; and the evaluator works the arithmetic out.
+- **One rule moved** and one file went: the gate's fifth rule and
+  `crates/craftkit-gates/src/numbers.rs`, with the three tests that
+  measured it.
+
+### What it does not settle
+
+- **Only the SDK's bounds are published.** A battery's own bound — the
+  grid's node count, the sound's sample count — is not in the registry,
+  and the README's table does not promise one. Publishing them is the
+  next arc of this shape, and it is mechanical: a bound is a line.
+- **The table is a promise, not an inventory.** A bound the tree publishes
+  and the table does not list is not a failure: the table says what the
+  tree promises, and a promise may be fewer than a fact. The gate's fourth
+  rule — every public bound is **named** in the prose — still covers the
+  names.
+- **The evaluator is small.** Four operators and the tree's own bounds as
+  the names it may use. It is not a parser of Rust, and it is not meant to
+  be: a number the README states as `32 * 1024 * 1024` is a number, and a
+  number the README states in a form the evaluator does not know is a
+  failure to be fixed, not a form to be supported.
