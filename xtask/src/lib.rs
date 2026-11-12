@@ -52,6 +52,7 @@
 
 pub mod assets;
 pub mod brief;
+pub mod census;
 pub mod ci;
 pub mod claims;
 pub mod cleanroom;
@@ -171,6 +172,7 @@ pub const COMMANDS: &[Subcommand] = &[
         what: "the commands each battery carries, and the README's counted block",
         run: counts::run,
     },
+    Subcommand { name: "census", what: "what an arc costs, measured from the history", run: census::run },
     Subcommand {
         name: "digest",
         what: "the conventions of the house, and of a battery (--house, --battery)",
@@ -230,6 +232,11 @@ pub const NOT_GATES: &[(&str, &str)] = &[
         "counts",
         "it writes the README's counted block; the tree's own test checks that block against the \
          registry, and the registry is the truth",
+    ),
+    (
+        "census",
+        "it measures the history; the tree's own numbers do not change because it was measured, so \
+         nothing checks it",
     ),
     (
         "verify",
