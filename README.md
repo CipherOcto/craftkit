@@ -4234,6 +4234,7 @@ so.
 | the **delegation**, priced | **built.** The rule is in the prose — a sub-agent gets a bounded, mechanical brief, or it does not get spawned — and the gate checks that the prose still says it (§847) | §847 |
 | the **counts**, from the registry | **built.** The counts of the batteries are read out of the registry — the commands the linker put in — and the source is checked against it, so neither can drift alone (§848) | §848 |
 | the tree's **answers**, in one call | **built.**  answers where a command lives, what an area holds and what a bound is — with the file and the line — from an index of the tree's own commands (§851) | §851 |
+| the **example** of a battery | **built.** One command per battery is marked  in its own declaration, and  prints it — with the battery's other commands and a test of it (§852) | §852 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -55933,3 +55934,65 @@ about this. Each of them was a search. Now each of them is a call.
 - **The index is a reading of the tree as it is today.** A command declared
   in a macro, or written by a script, is not in it — and the count it
   reports is what the tree says about itself, not what the compiler knows.
+
+## 852. The battery carries its own example
+
+"How is a command written in the grid battery?" was the largest of the
+searches an arc made. The answer is now in the battery.
+
+### What was built
+
+- **One command per battery is marked `example`**, in the declaration
+  itself:
+  ```rust
+  #[command(id = "grid.workbook.add", area = "grid", layer = "grid",
+            icon = "plus", mutates, undoable, example)]
+  ```
+  The marker is part of the command, so the compiler checks that it is
+  there, and a reader of the source sees it.
+- **The flag is a fact of the tree**, not a convention in a file: the SDK's
+  `CommandSpec` carries `example: bool`, and the registry knows which
+  commands are the examples.
+- **`cargo xtask example --battery grid`** prints, in one call: the example
+  command **in full** — its documentation, its attribute and its struct — the
+  battery's **other commands**, so that a battery is not mistaken for one
+  command, and **a test** of the battery, because a command without its test
+  is half an arc.
+- **The nine batteries each mark one**: the grid's workbook, the prose's
+  document, the pdf's object, the film's bin, the layout's document, the
+  cad's drawing, the fx's comp, the sound's clip and the vector's rectangle.
+
+### What the port found
+
+- **A flag must be a word, not a substring.** The first reader asked whether
+  the attribute held the text `example`, and an id that holds the word — a
+  command called `pdf.example.set` — would have been read as a flag. The
+  reader splits the attribute into words now.
+- **A battery with no example is a battery that has not said what one of its
+  commands looks like.** The tool says so rather than picking one for it:
+  the fixture battery has no example, and the tool says it has none.
+- **The example is only worth having if it is the battery's own.** A file of
+  prose saying "see the grid's workbook command" is a second truth; a
+  marker in the declaration is a truth the compiler sees.
+
+### What it cost
+
+- **One new test file**: `xtask/tests/example.rs` — four tests: every
+  battery marks exactly one example, the example is the command the battery
+  names, the source of the example is the whole declaration, and a battery
+  with no example is said to have none.
+- **One test extended** (`apps/craftkit-mcp-server/tests/registry.rs`): the
+  registry agrees — one example per battery, in the program itself.
+- **The SDK and the derive**, one field and one flag.
+
+### What it does not settle
+
+- **The example is a choice, and a choice can be a bad one.** The grid's
+  example is its workbook command because that is the shape most of the
+  battery's commands have; a battery whose commands are all unusual would
+  need a better example, and the tree has no rule for saying so.
+- **The tool prints the declaration, not a template.** The example is a
+  command of this battery, with this battery's parameters — so it is a
+  model to copy, not a form to fill in.
+- **Nine batteries mark one command each, and the other nine plugins mark
+  none.** The plugins are not batteries, and the rule is about batteries.
