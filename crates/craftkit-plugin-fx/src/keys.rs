@@ -90,10 +90,10 @@
 //!   `expressions`): the numbers, the operators, the names `time` and
 //!   `value`, and the tree's eases and functions.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Text};
 
 use crate::{get_at, parse_path, set_at};
 
@@ -263,261 +263,318 @@ pub(crate) fn with_keys(value: &serde_json::Value, keys: &[Key]) -> serde_json::
     new
 }
 
-/// **Set** a keyframe on a property.
-///
-/// The property must be **animated** — its value is a list of
-/// keyframes — and a keyframe that is already there is **changed**,
-/// and one that is not there is **added**, and the list stays sorted
-/// by frame.
-///
-/// The **interpolation** of a keyframe is kept when its value is
-/// changed, as the tree's `set_key` keeps it.
-#[derive(Command)]
-#[command(id = "fx.keyframe.set", area = "fx", layer = "fx", icon = "plus", mutates, undoable)]
-pub struct SetKeyframe {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-    /// The frame the keyframe is on.
-    pub frame: Number,
-    /// What the property is at that frame.
-    pub value: serde_json::Value,
-}
-
-impl SetKeyframe {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.keyframe.set".to_string();
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let segments = parse_path(&path);
-        if segments.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a path has something in it".to_string(),
-            });
-        }
-        let frame = self.frame.0;
-        if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a frame is a whole number".to_string(),
-            });
-        }
-        let frame = frame as u64;
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
-        }
-        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-        let Some(current) = get_at(&props, &segments).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no `{path}` here"),
-            });
-        };
-        let Some(mut keys) = keys_of(&current) else {
-            return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
-        };
-        // The keyframe that is there is changed, and the one that is
-        // not there is added, and the list stays sorted.
-        let value = self.value.clone();
-        match keys.iter_mut().find(|key| key.frame == frame) {
-            Some(key) => key.value = value,
-            None => {
-                keys.push(Key {
-                    frame,
-                    value,
-                    interp: Interp::Linear,
-                    ease: Ease::default(),
-                    in_interp: Interp::Linear,
-                    in_ease: Ease::default(),
-                    auto: false,
-                    continuous: false,
+commands! {
+    /// **Set** a keyframe on a property.
+    ///
+    /// The property must be **animated** — its value is a list of
+    /// keyframes — and a keyframe that is already there is **changed**,
+    /// and one that is not there is **added**, and the list stays sorted
+    /// by frame.
+    ///
+    /// The **interpolation** of a keyframe is kept when its value is
+    /// changed, as the tree's `set_key` keeps it.
+    fx.keyframe.set {
+        area: "fx",
+        layer: "fx",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+            /// The frame the keyframe is on.
+            frame: Number,
+            /// What the property is at that frame.
+            value: serde_json::Value,
+        },
+        run: {
+            let id = "fx.keyframe.set".to_string();
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let segments = parse_path(&path);
+            if segments.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a path has something in it".to_string(),
                 });
-                keys.sort_by_key(|key| key.frame);
             }
+            let frame = self.frame.0;
+            if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a frame is a whole number".to_string(),
+                });
+            }
+            let frame = frame as u64;
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                });
+            }
+            let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            let Some(current) = get_at(&props, &segments).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no `{path}` here"),
+                });
+            };
+            let Some(mut keys) = keys_of(&current) else {
+                return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
+            };
+            // The keyframe that is there is changed, and the one that is
+            // not there is added, and the list stays sorted.
+            let value = self.value.clone();
+            match keys.iter_mut().find(|key| key.frame == frame) {
+                Some(key) => key.value = value,
+                None => {
+                    keys.push(Key {
+                        frame,
+                        value,
+                        interp: Interp::Linear,
+                        ease: Ease::default(),
+                        in_interp: Interp::Linear,
+                        in_ease: Ease::default(),
+                        auto: false,
+                        continuous: false,
+                    });
+                    keys.sort_by_key(|key| key.frame);
+                }
+            }
+            let new = with_keys(&current, &keys);
+            if let Some(node) = session.document_mut()?.node_mut(layer) {
+                let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+                set_at(&mut props, &segments, new)
+                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                node.data["props"] = props;
+            }
+            Ok(Outcome::changed(format!("`{path}` has a keyframe at frame {frame}"))
+                .with_data(serde_json::json!({ "layer": layer, "path": path, "frame": frame })))
+
         }
-        let new = with_keys(&current, &keys);
-        if let Some(node) = session.document_mut()?.node_mut(layer) {
-            let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-            set_at(&mut props, &segments, new)
-                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-            node.data["props"] = props;
-        }
-        Ok(Outcome::changed(format!("`{path}` has a keyframe at frame {frame}"))
-            .with_data(serde_json::json!({ "layer": layer, "path": path, "frame": frame })))
     }
-}
+    /// **Take away** a keyframe of a property.
+    ///
+    /// A frame that has **no keyframe** is refused: a keyframe that was
+    /// never there is not a keyframe that was taken away.
+    fx.keyframe.remove {
+        area: "fx",
+        layer: "fx",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+            /// The frame the keyframe is on.
+            frame: Number,
+        },
+        run: {
+            let id = "fx.keyframe.remove".to_string();
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let segments = parse_path(&path);
+            if segments.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a path has something in it".to_string(),
+                });
+            }
+            let frame = self.frame.0;
+            if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a frame is a whole number".to_string(),
+                });
+            }
+            let frame = frame as u64;
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                });
+            }
+            let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            let Some(current) = get_at(&props, &segments).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no `{path}` here"),
+                });
+            };
+            let Some(mut keys) = keys_of(&current) else {
+                return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
+            };
+            let before = keys.len();
+            keys.retain(|key| key.frame != frame);
+            if keys.len() == before {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{path}` has no keyframe at frame {frame}"),
+                });
+            }
+            let new = with_keys(&current, &keys);
+            if let Some(node) = session.document_mut()?.node_mut(layer) {
+                let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+                set_at(&mut props, &segments, new)
+                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                node.data["props"] = props;
+            }
+            Ok(Outcome::changed(format!("`{path}` has no keyframe at frame {frame}"))
+                .with_data(serde_json::json!({ "layer": layer, "path": path, "frame": frame })))
 
-/// **Take away** a keyframe of a property.
-///
-/// A frame that has **no keyframe** is refused: a keyframe that was
-/// never there is not a keyframe that was taken away.
-#[derive(Command)]
-#[command(id = "fx.keyframe.remove", area = "fx", layer = "fx", icon = "minus", mutates, undoable)]
-pub struct RemoveKeyframe {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-    /// The frame the keyframe is on.
-    pub frame: Number,
-}
-
-impl RemoveKeyframe {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.keyframe.remove".to_string();
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let segments = parse_path(&path);
-        if segments.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a path has something in it".to_string(),
-            });
         }
-        let frame = self.frame.0;
-        if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a frame is a whole number".to_string(),
-            });
-        }
-        let frame = frame as u64;
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
-        }
-        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-        let Some(current) = get_at(&props, &segments).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no `{path}` here"),
-            });
-        };
-        let Some(mut keys) = keys_of(&current) else {
-            return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
-        };
-        let before = keys.len();
-        keys.retain(|key| key.frame != frame);
-        if keys.len() == before {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{path}` has no keyframe at frame {frame}"),
-            });
-        }
-        let new = with_keys(&current, &keys);
-        if let Some(node) = session.document_mut()?.node_mut(layer) {
-            let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-            set_at(&mut props, &segments, new)
-                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-            node.data["props"] = props;
-        }
-        Ok(Outcome::changed(format!("`{path}` has no keyframe at frame {frame}"))
-            .with_data(serde_json::json!({ "layer": layer, "path": path, "frame": frame })))
     }
-}
-
-/// **Lock** the two sides of a keyframe together: a **continuous**
-/// keyframe.
-///
-/// The tree's rule: the outgoing side follows the incoming one — the
-/// side that is not named takes the ease of the side that is — and
-/// the keyframe is marked continuous, and the auto flag is cleared.
-///
-/// And the tree's finding: the **flag** does not change the curve. The
-/// curve follows the eases that were written; the flag is a memory of
-/// the writing. So a continuous keyframe is smooth because its two
-/// eases are the same, and not because it is marked.
-#[derive(Command)]
-#[command(id = "fx.keyframe.continuous", area = "fx", layer = "fx", icon = "pencil", mutates, undoable)]
-pub struct SetContinuous {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-    /// The frame the keyframe is on.
-    pub frame: Number,
-    /// Whether the keyframe is continuous. The default is that it is.
-    pub continuous: Option<Bool>,
-    /// The speed of both sides, in value units per frame. The default
-    /// is the speed the keyframe has on the side it is entered on.
-    pub speed: Option<Number>,
-    /// The influence of both sides: the fraction of the segment each
-    /// handle takes.
-    pub influence: Option<Number>,
-}
-
-impl SetContinuous {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.keyframe.continuous".to_string();
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let segments = parse_path(&path);
-        if segments.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a path has something in it".to_string(),
-            });
-        }
-        let frame = self.frame.0;
-        if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a frame is a whole number".to_string(),
-            });
-        }
-        let frame = frame as u64;
-        let continuous = self.continuous.map(|continuous| continuous.0).unwrap_or(true);
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
-        }
-        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-        let Some(current) = get_at(&props, &segments).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no `{path}` here"),
-            });
-        };
-        let Some(mut keys) = keys_of(&current) else {
-            return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
-        };
-        let Some(key) = keys.iter_mut().find(|key| key.frame == frame) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{path}` has no keyframe at frame {frame}"),
-            });
-        };
-        if !continuous {
-            // The **flag** is cleared and nothing else changes: the
-            // eases stay as they are, as they do in the tree.
-            key.continuous = false;
+    /// **Lock** the two sides of a keyframe together: a **continuous**
+    /// keyframe.
+    ///
+    /// The tree's rule: the outgoing side follows the incoming one — the
+    /// side that is not named takes the ease of the side that is — and
+    /// the keyframe is marked continuous, and the auto flag is cleared.
+    ///
+    /// And the tree's finding: the **flag** does not change the curve. The
+    /// curve follows the eases that were written; the flag is a memory of
+    /// the writing. So a continuous keyframe is smooth because its two
+    /// eases are the same, and not because it is marked.
+    fx.keyframe.continuous {
+        area: "fx",
+        layer: "fx",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+            /// The frame the keyframe is on.
+            frame: Number,
+            /// Whether the keyframe is continuous. The default is that it is.
+            continuous: Option<Bool>,
+            /// The speed of both sides, in value units per frame. The default
+            /// is the speed the keyframe has on the side it is entered on.
+            speed: Option<Number>,
+            /// The influence of both sides: the fraction of the segment each
+            /// handle takes.
+            influence: Option<Number>,
+        },
+        run: {
+            let id = "fx.keyframe.continuous".to_string();
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let segments = parse_path(&path);
+            if segments.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a path has something in it".to_string(),
+                });
+            }
+            let frame = self.frame.0;
+            if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a frame is a whole number".to_string(),
+                });
+            }
+            let frame = frame as u64;
+            let continuous = self.continuous.map(|continuous| continuous.0).unwrap_or(true);
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                });
+            }
+            let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            let Some(current) = get_at(&props, &segments).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no `{path}` here"),
+                });
+            };
+            let Some(mut keys) = keys_of(&current) else {
+                return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
+            };
+            let Some(key) = keys.iter_mut().find(|key| key.frame == frame) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{path}` has no keyframe at frame {frame}"),
+                });
+            };
+            if !continuous {
+                // The **flag** is cleared and nothing else changes: the
+                // eases stay as they are, as they do in the tree.
+                key.continuous = false;
+                let data = with_keys(&current, &keys);
+                if let Some(node) = session.document_mut()?.node_mut(layer) {
+                    let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+                    set_at(&mut props, &segments, data)
+                        .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                    node.data["props"] = props;
+                }
+                return Ok(Outcome::changed(format!("the keyframe at frame {frame} is not continuous"))
+                    .with_data(serde_json::json!({
+                        "layer": layer,
+                        "path": path,
+                        "frame": frame,
+                        "continuous": false,
+                    })));
+            }
+            // The **ease**: the one that is given, or the one the keyframe
+            // has on the side it is entered on — the tree's rule that the
+            // side that is not named takes the ease of the side that is.
+            let mut ease = key.in_ease;
+            if let Some(speed) = &self.speed {
+                if !speed.0.is_finite() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a speed is a number that is there".to_string(),
+                    });
+                }
+                ease.speed = speed.0;
+            }
+            if let Some(influence) = &self.influence {
+                if !influence.0.is_finite() || !(0.0..=1.0).contains(&influence.0) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "an influence is a fraction of the segment, from 0 to 1, and `{}` is not one",
+                            influence.0
+                        ),
+                    });
+                }
+                ease.influence = influence.0;
+            }
+            // Both sides are **beziers** with the same ease, so the
+            // handles are mirrors of each other and the curve is smooth
+            // at the keyframe.
+            key.interp = Interp::Bezier;
+            key.in_interp = Interp::Bezier;
+            key.ease = ease;
+            key.in_ease = ease;
+            // A **manual** ease is not an auto one.
+            key.auto = false;
+            key.continuous = true;
             let data = with_keys(&current, &keys);
             if let Some(node) = session.document_mut()?.node_mut(layer) {
                 let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
@@ -525,403 +582,359 @@ impl SetContinuous {
                     .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
                 node.data["props"] = props;
             }
-            return Ok(Outcome::changed(format!("the keyframe at frame {frame} is not continuous"))
-                .with_data(serde_json::json!({
+            Ok(Outcome::changed(format!("the keyframe at frame {frame} is continuous")).with_data(
+                serde_json::json!({
                     "layer": layer,
                     "path": path,
                     "frame": frame,
-                    "continuous": false,
-                })));
+                    "continuous": true,
+                    "ease": { "speed": ease.speed, "influence": ease.influence },
+                }),
+            ))
+
         }
-        // The **ease**: the one that is given, or the one the keyframe
-        // has on the side it is entered on — the tree's rule that the
-        // side that is not named takes the ease of the side that is.
-        let mut ease = key.in_ease;
-        if let Some(speed) = &self.speed {
-            if !speed.0.is_finite() {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "a speed is a number that is there".to_string(),
-                });
-            }
-            ease.speed = speed.0;
-        }
-        if let Some(influence) = &self.influence {
-            if !influence.0.is_finite() || !(0.0..=1.0).contains(&influence.0) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "an influence is a fraction of the segment, from 0 to 1, and `{}` is not one",
-                        influence.0
-                    ),
-                });
-            }
-            ease.influence = influence.0;
-        }
-        // Both sides are **beziers** with the same ease, so the
-        // handles are mirrors of each other and the curve is smooth
-        // at the keyframe.
-        key.interp = Interp::Bezier;
-        key.in_interp = Interp::Bezier;
-        key.ease = ease;
-        key.in_ease = ease;
-        // A **manual** ease is not an auto one.
-        key.auto = false;
-        key.continuous = true;
-        let data = with_keys(&current, &keys);
-        if let Some(node) = session.document_mut()?.node_mut(layer) {
-            let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-            set_at(&mut props, &segments, data)
-                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-            node.data["props"] = props;
-        }
-        Ok(Outcome::changed(format!("the keyframe at frame {frame} is continuous")).with_data(
-            serde_json::json!({
-                "layer": layer,
-                "path": path,
-                "frame": frame,
-                "continuous": true,
-                "ease": { "speed": ease.speed, "influence": ease.influence },
-            }),
-        ))
     }
-}
+    /// **Set** or **clear** the **auto bezier** of a keyframe.
+    ///
+    /// An auto keyframe's ease is not written down: it is the **slope** to
+    /// the keyframes on the other side of it, and its influence is a
+    /// sixth. So an auto keyframe follows its neighbours: move one and the
+    /// curve moves with it.
+    ///
+    /// A keyframe with no neighbour on one side is not an auto one, and
+    /// the ease that is written down is used instead.
+    fx.keyframe.auto {
+        area: "fx",
+        layer: "fx",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+            /// The frame the keyframe is on.
+            frame: Number,
+            /// Whether the keyframe is an auto bezier.
+            auto: Bool,
+        },
+        run: {
+            let id = "fx.keyframe.auto".to_string();
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let segments = parse_path(&path);
+            if segments.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a path has something in it".to_string(),
+                });
+            }
+            let frame = self.frame.0;
+            if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a frame is a whole number".to_string(),
+                });
+            }
+            let frame = frame as u64;
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                });
+            }
+            let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            let Some(current) = get_at(&props, &segments).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no `{path}` here"),
+                });
+            };
+            let Some(mut keys) = keys_of(&current) else {
+                return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
+            };
+            let Some(key) = keys.iter_mut().find(|key| key.frame == frame) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{path}` has no keyframe at frame {frame}"),
+                });
+            };
+            key.auto = self.auto.0;
+            let new = with_keys(&current, &keys);
+            if let Some(node) = session.document_mut()?.node_mut(layer) {
+                let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+                set_at(&mut props, &segments, new)
+                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                node.data["props"] = props;
+            }
+            let state = if self.auto.0 { "an auto bezier" } else { "not an auto bezier" };
+            Ok(Outcome::changed(format!("the keyframe at frame {frame} is {state}")).with_data(
+                serde_json::json!({ "layer": layer, "path": path, "frame": frame, "auto": self.auto.0 }),
+            ))
 
-/// **Set** or **clear** the **auto bezier** of a keyframe.
-///
-/// An auto keyframe's ease is not written down: it is the **slope** to
-/// the keyframes on the other side of it, and its influence is a
-/// sixth. So an auto keyframe follows its neighbours: move one and the
-/// curve moves with it.
-///
-/// A keyframe with no neighbour on one side is not an auto one, and
-/// the ease that is written down is used instead.
-#[derive(Command)]
-#[command(id = "fx.keyframe.auto", area = "fx", layer = "fx", icon = "pencil", mutates, undoable)]
-pub struct SetAuto {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-    /// The frame the keyframe is on.
-    pub frame: Number,
-    /// Whether the keyframe is an auto bezier.
-    pub auto: Bool,
-}
-
-impl SetAuto {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.keyframe.auto".to_string();
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let segments = parse_path(&path);
-        if segments.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a path has something in it".to_string(),
-            });
         }
-        let frame = self.frame.0;
-        if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a frame is a whole number".to_string(),
-            });
-        }
-        let frame = frame as u64;
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
-        }
-        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-        let Some(current) = get_at(&props, &segments).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no `{path}` here"),
-            });
-        };
-        let Some(mut keys) = keys_of(&current) else {
-            return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
-        };
-        let Some(key) = keys.iter_mut().find(|key| key.frame == frame) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{path}` has no keyframe at frame {frame}"),
-            });
-        };
-        key.auto = self.auto.0;
-        let new = with_keys(&current, &keys);
-        if let Some(node) = session.document_mut()?.node_mut(layer) {
-            let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-            set_at(&mut props, &segments, new)
-                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-            node.data["props"] = props;
-        }
-        let state = if self.auto.0 { "an auto bezier" } else { "not an auto bezier" };
-        Ok(Outcome::changed(format!("the keyframe at frame {frame} is {state}")).with_data(
-            serde_json::json!({ "layer": layer, "path": path, "frame": frame, "auto": self.auto.0 }),
-        ))
     }
-}
-
-/// The **interpolation** of a keyframe.
-///
-/// The tree's keyframe has an interpolation on the side it leaves on,
-/// and it is one of three: `linear`, `bezier` and `hold`. A **bezier**
-/// has an **ease** — a speed and an influence — and the ease is what
-/// shapes the curve.
-///
-/// A keyframe that is **not there** is refused, and so is an
-/// interpolation that is not one of the three, and an influence that
-/// is not a fraction of the segment.
-#[derive(Command)]
-#[command(id = "fx.keyframe.interp", area = "fx", layer = "fx", icon = "pencil", mutates, undoable)]
-pub struct SetInterpolation {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-    /// The frame the keyframe is on.
-    pub frame: Number,
-    /// `linear`, `bezier` or `hold`.
-    pub interp: Text,
-    /// The speed of a bezier, in value units per frame.
-    pub speed: Option<Number>,
-    /// The influence of a bezier: the fraction of the segment its
-    /// handle takes.
-    pub influence: Option<Number>,
-    /// Which **side** of the keyframe: `out` for the side it leaves
-    /// on and `in` for the side it is entered on. The default is
-    /// `out`.
-    pub side: Option<Text>,
-}
-
-impl SetInterpolation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.keyframe.interp".to_string();
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let segments = parse_path(&path);
-        if segments.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a path has something in it".to_string(),
-            });
-        }
-        let frame = self.frame.0;
-        if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a frame is a whole number".to_string(),
-            });
-        }
-        let frame = frame as u64;
-        let interp = Interp::parse(&self.interp.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!(
-                "`{}` is not an interpolation: a keyframe is `linear`, `bezier` or `hold`",
-                self.interp.0.trim()
-            ),
-        })?;
-        let mut ease = Ease::default();
-        if let Some(speed) = &self.speed {
-            if !speed.0.is_finite() {
+    /// The **interpolation** of a keyframe.
+    ///
+    /// The tree's keyframe has an interpolation on the side it leaves on,
+    /// and it is one of three: `linear`, `bezier` and `hold`. A **bezier**
+    /// has an **ease** — a speed and an influence — and the ease is what
+    /// shapes the curve.
+    ///
+    /// A keyframe that is **not there** is refused, and so is an
+    /// interpolation that is not one of the three, and an influence that
+    /// is not a fraction of the segment.
+    fx.keyframe.interp {
+        area: "fx",
+        layer: "fx",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+            /// The frame the keyframe is on.
+            frame: Number,
+            /// `linear`, `bezier` or `hold`.
+            interp: Text,
+            /// The speed of a bezier, in value units per frame.
+            speed: Option<Number>,
+            /// The influence of a bezier: the fraction of the segment its
+            /// handle takes.
+            influence: Option<Number>,
+            /// Which **side** of the keyframe: `out` for the side it leaves
+            /// on and `in` for the side it is entered on. The default is
+            /// `out`.
+            side: Option<Text>,
+        },
+        run: {
+            let id = "fx.keyframe.interp".to_string();
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let segments = parse_path(&path);
+            if segments.is_empty() {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: "a speed is a number that is there".to_string(),
+                    message: "a path has something in it".to_string(),
                 });
             }
-            ease.speed = speed.0;
-        }
-        if let Some(influence) = &self.influence {
-            if !influence.0.is_finite() || !(0.0..=1.0).contains(&influence.0) {
+            let frame = self.frame.0;
+            if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!(
-                        "an influence is a fraction of the segment, from 0 to 1, and `{}` is not one",
-                        influence.0
-                    ),
+                    message: "a frame is a whole number".to_string(),
                 });
             }
-            ease.influence = influence.0;
-        }
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed {
+            let frame = frame as u64;
+            let interp = Interp::parse(&self.interp.0).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
-        }
-        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-        let Some(current) = get_at(&props, &segments).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no `{path}` here"),
-            });
-        };
-        let Some(mut keys) = keys_of(&current) else {
-            return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
-        };
-        let Some(key) = keys.iter_mut().find(|key| key.frame == frame) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{path}` has no keyframe at frame {frame}"),
-            });
-        };
-        // The **side**: the side the keyframe leaves on, or the side
-        // it is entered on.
-        let side = match &self.side {
-            Some(side) => {
-                let name = side.0.trim();
-                match name.to_ascii_lowercase().as_str() {
-                    "out" => Side::Out,
-                    "in" => Side::In,
-                    _ => {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: format!("`{name}` is not a side of a keyframe: a side is `out` or `in`"),
-                        });
+                message: format!(
+                    "`{}` is not an interpolation: a keyframe is `linear`, `bezier` or `hold`",
+                    self.interp.0.trim()
+                ),
+            })?;
+            let mut ease = Ease::default();
+            if let Some(speed) = &self.speed {
+                if !speed.0.is_finite() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a speed is a number that is there".to_string(),
+                    });
+                }
+                ease.speed = speed.0;
+            }
+            if let Some(influence) = &self.influence {
+                if !influence.0.is_finite() || !(0.0..=1.0).contains(&influence.0) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "an influence is a fraction of the segment, from 0 to 1, and `{}` is not one",
+                            influence.0
+                        ),
+                    });
+                }
+                ease.influence = influence.0;
+            }
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                });
+            }
+            let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            let Some(current) = get_at(&props, &segments).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no `{path}` here"),
+                });
+            };
+            let Some(mut keys) = keys_of(&current) else {
+                return Err(EngineError::Failed { id: id.clone(), message: format!("`{path}` is not animated") });
+            };
+            let Some(key) = keys.iter_mut().find(|key| key.frame == frame) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{path}` has no keyframe at frame {frame}"),
+                });
+            };
+            // The **side**: the side the keyframe leaves on, or the side
+            // it is entered on.
+            let side = match &self.side {
+                Some(side) => {
+                    let name = side.0.trim();
+                    match name.to_ascii_lowercase().as_str() {
+                        "out" => Side::Out,
+                        "in" => Side::In,
+                        _ => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!("`{name}` is not a side of a keyframe: a side is `out` or `in`"),
+                            });
+                        }
                     }
                 }
+                None => Side::Out,
+            };
+            match side {
+                Side::Out => {
+                    key.interp = interp;
+                    key.ease = ease;
+                }
+                Side::In => {
+                    key.in_interp = interp;
+                    key.in_ease = ease;
+                }
             }
-            None => Side::Out,
-        };
-        match side {
-            Side::Out => {
-                key.interp = interp;
-                key.ease = ease;
+            // A **written** ease is a manual one, and the tree's manual
+            // ease is not an auto one: the keyframe follows its neighbours
+            // again only when nobody has said otherwise.
+            if self.speed.is_some() || self.influence.is_some() {
+                key.auto = false;
             }
-            Side::In => {
-                key.in_interp = interp;
-                key.in_ease = ease;
+            let new = with_keys(&current, &keys);
+            if let Some(node) = session.document_mut()?.node_mut(layer) {
+                let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+                set_at(&mut props, &segments, new)
+                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                node.data["props"] = props;
             }
+            let (verb, side_name) = match side {
+                Side::Out => ("leaves", "out"),
+                Side::In => ("is entered", "in"),
+            };
+            Ok(Outcome::changed(format!("`{path}` {verb} frame {frame} on a {}", interp.name())).with_data(
+                serde_json::json!({
+                    "layer": layer,
+                    "path": path,
+                    "frame": frame,
+                    "side": side_name,
+                    "interp": interp.name(),
+                    "ease": { "speed": ease.speed, "influence": ease.influence },
+                }),
+            ))
+
         }
-        // A **written** ease is a manual one, and the tree's manual
-        // ease is not an auto one: the keyframe follows its neighbours
-        // again only when nobody has said otherwise.
-        if self.speed.is_some() || self.influence.is_some() {
-            key.auto = false;
-        }
-        let new = with_keys(&current, &keys);
-        if let Some(node) = session.document_mut()?.node_mut(layer) {
-            let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-            set_at(&mut props, &segments, new)
-                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-            node.data["props"] = props;
-        }
-        let (verb, side_name) = match side {
-            Side::Out => ("leaves", "out"),
-            Side::In => ("is entered", "in"),
-        };
-        Ok(Outcome::changed(format!("`{path}` {verb} frame {frame} on a {}", interp.name())).with_data(
-            serde_json::json!({
-                "layer": layer,
-                "path": path,
-                "frame": frame,
-                "side": side_name,
-                "interp": interp.name(),
-                "ease": { "speed": ease.speed, "influence": ease.influence },
-            }),
-        ))
     }
-}
-
-/// The **value** of a property at a frame.
-///
-/// A property that is not animated has the same value at every frame,
-/// and an animated one has the **interpolation** of its keyframes: the
-/// first key's value before the first key, the last key's value after
-/// the last key, and the curve between them in between.
-#[derive(Command)]
-#[command(id = "fx.prop.at", area = "fx", layer = "fx", icon = "list")]
-pub struct ValueAt {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-    /// The frame.
-    pub frame: Number,
-}
-
-impl ValueAt {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.prop.at".to_string();
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let segments = parse_path(&path);
-        if segments.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a path has something in it".to_string(),
-            });
-        }
-        let frame = self.frame.0;
-        if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a frame is a whole number".to_string(),
-            });
-        }
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
-        }
-        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-        let Some(current) = get_at(&props, &segments).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no `{path}` here"),
-            });
-        };
-        // The property may be **spatial**: its value is a point, and it
-        // follows a path.
-        let spatial = current.get("spatial").and_then(|spatial| spatial.as_bool()).unwrap_or(false);
-        // The property's **own** value: the one its keyframes give.
-        let own = match keys_of(&current) {
-            Some(keys) => value_at(&keys, frame, spatial).unwrap_or(serde_json::Value::Null),
-            None => serde_json::Value::Null,
-        };
-        // The **expression** says what the value is, and the name
-        // `value` inside it is the property's own value.
-        let value = match current.get("expression").and_then(|text| text.as_str()) {
-            Some(text) => {
-                let expression = crate::expressions::parse(text)
-                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-                let own = own.as_f64().unwrap_or(0.0);
-                let number = expression
-                    .value(frame, own)
-                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-                serde_json::json!(number)
+    /// The **value** of a property at a frame.
+    ///
+    /// A property that is not animated has the same value at every frame,
+    /// and an animated one has the **interpolation** of its keyframes: the
+    /// first key's value before the first key, the last key's value after
+    /// the last key, and the curve between them in between.
+    fx.prop.at {
+        area: "fx",
+        layer: "fx",
+        icon: "list",
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+            /// The frame.
+            frame: Number,
+        },
+        run: {
+            let id = "fx.prop.at".to_string();
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let segments = parse_path(&path);
+            if segments.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a path has something in it".to_string(),
+                });
             }
-            None => match keys_of(&current) {
-                Some(_) => own,
-                None => current,
-            },
-        };
-        let message = format!("`{path}` is {value} at frame {frame}");
-        Ok(Outcome::new(message)
-            .with_data(serde_json::json!({ "layer": layer, "path": path, "frame": frame, "value": value })))
+            let frame = self.frame.0;
+            if !frame.is_finite() || frame < 0.0 || frame.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a frame is a whole number".to_string(),
+                });
+            }
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                });
+            }
+            let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            let Some(current) = get_at(&props, &segments).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no `{path}` here"),
+                });
+            };
+            // The property may be **spatial**: its value is a point, and it
+            // follows a path.
+            let spatial = current.get("spatial").and_then(|spatial| spatial.as_bool()).unwrap_or(false);
+            // The property's **own** value: the one its keyframes give.
+            let own = match keys_of(&current) {
+                Some(keys) => value_at(&keys, frame, spatial).unwrap_or(serde_json::Value::Null),
+                None => serde_json::Value::Null,
+            };
+            // The **expression** says what the value is, and the name
+            // `value` inside it is the property's own value.
+            let value = match current.get("expression").and_then(|text| text.as_str()) {
+                Some(text) => {
+                    let expression = crate::expressions::parse(text)
+                        .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                    let own = own.as_f64().unwrap_or(0.0);
+                    let number = expression
+                        .value(frame, own)
+                        .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                    serde_json::json!(number)
+                }
+                None => match keys_of(&current) {
+                    Some(_) => own,
+                    None => current,
+                },
+            };
+            let message = format!("`{path}` is {value} at frame {frame}");
+            Ok(Outcome::new(message)
+                .with_data(serde_json::json!({ "layer": layer, "path": path, "frame": frame, "value": value })))
+
+        }
     }
 }
 

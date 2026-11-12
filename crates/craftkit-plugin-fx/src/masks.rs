@@ -27,7 +27,7 @@
 //! - the masks of a layer are the layer's **children**, and a layer
 //!   with no masks has none.
 
-use craftkit_derive::{Command, NodeKind};
+use craftkit_derive::{NodeKind, commands};
 
 use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{Bool, Document, EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -141,166 +141,216 @@ fn vertices_of(value: &Json) -> Result<Vec<[f64; 2]>, String> {
     Ok(vertices)
 }
 
-/// **Make** a **mask** on a layer.
-#[derive(Command)]
-#[command(id = "fx.mask.add", area = "fx", layer = "fx", icon = "mask", mutates, undoable)]
-pub struct AddMask {
-    /// The layer the mask is on.
-    pub layer: NodeRef,
-    /// The vertices of the mask: `[[x, y], …]` in the layer's space.
-    pub vertices: Json,
-    /// Whether the path is closed.
-    pub closed: Option<Bool>,
-    /// The mode: `None`, `Add`, `Subtract`, `Intersect`, `Lighten`,
-    /// `Darken` or `Difference`.
-    pub mode: Option<Text>,
-}
-
-impl AddMask {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.mask.add".to_string();
-        let layer = self.layer.0;
-        the_layer(session, &id, layer)?;
-        let vertices =
-            vertices_of(&self.vertices).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        if vertices.is_empty() {
-            return Err(EngineError::Failed {
-                id,
-                message: "a mask is made of vertices, and this one is made of none".to_string(),
+commands! {
+    /// **Make** a **mask** on a layer.
+    fx.mask.add {
+        area: "fx",
+        layer: "fx",
+        icon: "mask",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the mask is on.
+            layer: NodeRef,
+            /// The vertices of the mask: `[[x, y], …]` in the layer's space.
+            vertices: Json,
+            /// Whether the path is closed.
+            closed: Option<Bool>,
+            /// The mode: `None`, `Add`, `Subtract`, `Intersect`, `Lighten`,
+            /// `Darken` or `Difference`.
+            mode: Option<Text>,
+        },
+        run: {
+            let id = "fx.mask.add".to_string();
+            let layer = self.layer.0;
+            the_layer(session, &id, layer)?;
+            let vertices =
+                vertices_of(&self.vertices).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            if vertices.is_empty() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a mask is made of vertices, and this one is made of none".to_string(),
+                });
+            }
+            let mode = match &self.mode {
+                Some(mode) => mode_of(&mode.0).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no mode `{}`: the modes are {}", mode.0, MODES.join(", ")),
+                })?,
+                None => "Add",
+            };
+            let data = json!({
+                "vertices": vertices,
+                "closed": self.closed.map(|closed| closed.0).unwrap_or(false),
+                "mode": mode,
+                "inverted": false,
+                "locked": false,
+                "feather": 0.0,
+                "opacity": 100.0,
+                "expansion": 0.0,
             });
+            let count = session
+                .document()
+                .node(layer)
+                .map(|node| node.children.iter().filter(|child| child.kind == "fx.mask").count())
+                .unwrap_or(0);
+            let name = format!("Mask {}", count + 1);
+            let mask =
+                session.document_mut()?.add_node_with_under(Some(layer), name.clone(), "fx.mask", None, data);
+            Ok(Outcome::changed(format!("added the mask `{name}` to the layer `{layer}`"))
+                .with_data(json!({ "id": mask, "layer": layer, "name": name })))
+
         }
-        let mode = match &self.mode {
-            Some(mode) => mode_of(&mode.0).ok_or_else(|| EngineError::Failed {
+    }
+    /// **Take away** a mask of a layer.
+    fx.mask.remove {
+        area: "fx",
+        layer: "fx",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the mask is on.
+            layer: NodeRef,
+            /// The mask.
+            mask: NodeRef,
+        },
+        run: {
+            let id = "fx.mask.remove".to_string();
+            let layer = self.layer.0;
+            let mask = self.mask.0;
+            the_mask(session, &id, layer, mask)?;
+            if !session.document_mut()?.remove_node(mask) {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("there is no mask `{mask}` on the layer `{layer}`"),
+                });
+            }
+            Ok(Outcome::changed(format!("took the mask `{mask}` away"))
+                .with_data(json!({ "layer": layer, "mask": mask })))
+
+        }
+    }
+    /// **Set** the **mode** of a mask.
+    fx.mask.mode {
+        area: "fx",
+        layer: "fx",
+        icon: "mask",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the mask is on.
+            layer: NodeRef,
+            /// The mask.
+            mask: NodeRef,
+            /// The mode: `None`, `Add`, `Subtract`, `Intersect`, `Lighten`,
+            /// `Darken` or `Difference`.
+            mode: Text,
+        },
+        run: {
+            let id = "fx.mask.mode".to_string();
+            let layer = self.layer.0;
+            let mask = self.mask.0;
+            the_mask(session, &id, layer, mask)?;
+            let wanted = self.mode.0.clone();
+            let mode = mode_of(&wanted).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
-                message: format!("there is no mode `{}`: the modes are {}", mode.0, MODES.join(", ")),
-            })?,
-            None => "Add",
-        };
-        let data = json!({
-            "vertices": vertices,
-            "closed": self.closed.map(|closed| closed.0).unwrap_or(false),
-            "mode": mode,
-            "inverted": false,
-            "locked": false,
-            "feather": 0.0,
-            "opacity": 100.0,
-            "expansion": 0.0,
-        });
-        let count = session
-            .document()
-            .node(layer)
-            .map(|node| node.children.iter().filter(|child| child.kind == "fx.mask").count())
-            .unwrap_or(0);
-        let name = format!("Mask {}", count + 1);
-        let mask =
-            session.document_mut()?.add_node_with_under(Some(layer), name.clone(), "fx.mask", None, data);
-        Ok(Outcome::changed(format!("added the mask `{name}` to the layer `{layer}`"))
-            .with_data(json!({ "id": mask, "layer": layer, "name": name })))
-    }
-}
+                message: format!("there is no mode `{wanted}`: the modes are {}", MODES.join(", ")),
+            })?;
+            let Some(node) = session.document_mut()?.node_mut(mask) else {
+                return Err(EngineError::Failed {
+                    id: "fx.mask.mode".to_string(),
+                    message: format!("there is no mask `{mask}` on the layer `{layer}`"),
+                });
+            };
+            node.data["mode"] = json!(mode);
+            Ok(Outcome::changed(format!("the mask `{mask}` is `{mode}`"))
+                .with_data(json!({ "layer": layer, "mask": mask, "mode": mode })))
 
-/// **Take away** a mask of a layer.
-#[derive(Command)]
-#[command(id = "fx.mask.remove", area = "fx", layer = "fx", icon = "minus", mutates, undoable)]
-pub struct RemoveMask {
-    /// The layer the mask is on.
-    pub layer: NodeRef,
-    /// The mask.
-    pub mask: NodeRef,
-}
-
-impl RemoveMask {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.mask.remove".to_string();
-        let layer = self.layer.0;
-        let mask = self.mask.0;
-        the_mask(session, &id, layer, mask)?;
-        if !session.document_mut()?.remove_node(mask) {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("there is no mask `{mask}` on the layer `{layer}`"),
-            });
         }
-        Ok(Outcome::changed(format!("took the mask `{mask}` away"))
-            .with_data(json!({ "layer": layer, "mask": mask })))
     }
-}
+    /// **Invert** a mask, or **uninvert** it.
+    ///
+    /// The value says what to do; when it is not said the mask is
+    /// **toggled**.
+    fx.mask.invert {
+        area: "fx",
+        layer: "fx",
+        icon: "mask",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the mask is on.
+            layer: NodeRef,
+            /// The mask.
+            mask: NodeRef,
+            /// Whether the mask is inverted.
+            value: Option<Bool>,
+        },
+        run: {
+            set_flag(session, "fx.mask.invert", self.layer.0, self.mask.0, "inverted", self.value)
 
-/// **Set** the **mode** of a mask.
-#[derive(Command)]
-#[command(id = "fx.mask.mode", area = "fx", layer = "fx", icon = "mask", mutates, undoable)]
-pub struct SetMaskMode {
-    /// The layer the mask is on.
-    pub layer: NodeRef,
-    /// The mask.
-    pub mask: NodeRef,
-    /// The mode: `None`, `Add`, `Subtract`, `Intersect`, `Lighten`,
-    /// `Darken` or `Difference`.
-    pub mode: Text,
-}
-
-impl SetMaskMode {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.mask.mode".to_string();
-        let layer = self.layer.0;
-        let mask = self.mask.0;
-        the_mask(session, &id, layer, mask)?;
-        let wanted = self.mode.0.clone();
-        let mode = mode_of(&wanted).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no mode `{wanted}`: the modes are {}", MODES.join(", ")),
-        })?;
-        let Some(node) = session.document_mut()?.node_mut(mask) else {
-            return Err(EngineError::Failed {
-                id: "fx.mask.mode".to_string(),
-                message: format!("there is no mask `{mask}` on the layer `{layer}`"),
-            });
-        };
-        node.data["mode"] = json!(mode);
-        Ok(Outcome::changed(format!("the mask `{mask}` is `{mode}`"))
-            .with_data(json!({ "layer": layer, "mask": mask, "mode": mode })))
+        }
     }
-}
+    /// **Lock** a mask, or **unlock** it.
+    ///
+    /// The value says what to do; when it is not said the mask is
+    /// **toggled**.
+    fx.mask.lock {
+        area: "fx",
+        layer: "fx",
+        icon: "lock",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the mask is on.
+            layer: NodeRef,
+            /// The mask.
+            mask: NodeRef,
+            /// Whether the mask is locked.
+            value: Option<Bool>,
+        },
+        run: {
+            set_flag(session, "fx.mask.lock", self.layer.0, self.mask.0, "locked", self.value)
 
-/// **Invert** a mask, or **uninvert** it.
-///
-/// The value says what to do; when it is not said the mask is
-/// **toggled**.
-#[derive(Command)]
-#[command(id = "fx.mask.invert", area = "fx", layer = "fx", icon = "mask", mutates, undoable)]
-pub struct InvertMask {
-    /// The layer the mask is on.
-    pub layer: NodeRef,
-    /// The mask.
-    pub mask: NodeRef,
-    /// Whether the mask is inverted.
-    pub value: Option<Bool>,
-}
-
-impl InvertMask {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        set_flag(session, "fx.mask.invert", self.layer.0, self.mask.0, "inverted", self.value)
+        }
     }
-}
+    /// **Read** the masks of a layer.
+    fx.mask.list {
+        area: "fx",
+        layer: "fx",
+        icon: "list",
+        params: {
+            /// The layer.
+            layer: NodeRef,
+        },
+        run: {
+            let id = "fx.mask.list".to_string();
+            let layer = self.layer.0;
+            let node = the_layer(session, &id, layer)?;
+            let masks: Vec<Json> = node
+                .children
+                .iter()
+                .filter(|child| child.kind == "fx.mask")
+                .map(|child| {
+                    json!({
+                        "id": child.id,
+                        "name": child.name,
+                        "vertices": child.data.get("vertices").cloned().unwrap_or(Json::Null),
+                        "closed": child.data.get("closed").cloned().unwrap_or(Json::Bool(false)),
+                        "mode": child.data.get("mode").cloned().unwrap_or(Json::Null),
+                        "inverted": child.data.get("inverted").cloned().unwrap_or(Json::Bool(false)),
+                        "locked": child.data.get("locked").cloned().unwrap_or(Json::Bool(false)),
+                        "feather": child.data.get("feather").cloned().unwrap_or(Json::Null),
+                        "opacity": child.data.get("opacity").cloned().unwrap_or(Json::Null),
+                        "expansion": child.data.get("expansion").cloned().unwrap_or(Json::Null),
+                    })
+                })
+                .collect();
+            Ok(Outcome::new(format!("the layer `{layer}` has {} mask(s)", masks.len()))
+                .with_data(json!({ "layer": layer, "masks": masks })))
 
-/// **Lock** a mask, or **unlock** it.
-///
-/// The value says what to do; when it is not said the mask is
-/// **toggled**.
-#[derive(Command)]
-#[command(id = "fx.mask.lock", area = "fx", layer = "fx", icon = "lock", mutates, undoable)]
-pub struct LockMask {
-    /// The layer the mask is on.
-    pub layer: NodeRef,
-    /// The mask.
-    pub mask: NodeRef,
-    /// Whether the mask is locked.
-    pub value: Option<Bool>,
-}
-
-impl LockMask {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        set_flag(session, "fx.mask.lock", self.layer.0, self.mask.0, "locked", self.value)
+        }
     }
 }
 
@@ -325,41 +375,4 @@ fn set_flag(
     node.data[key] = json!(now);
     Ok(Outcome::changed(format!("the mask `{mask}` is {} `{key}`", if now { "" } else { "not " }))
         .with_data(json!({ "layer": layer, "mask": mask, key: now })))
-}
-
-/// **Read** the masks of a layer.
-#[derive(Command)]
-#[command(id = "fx.mask.list", area = "fx", layer = "fx", icon = "list")]
-pub struct ListMasks {
-    /// The layer.
-    pub layer: NodeRef,
-}
-
-impl ListMasks {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.mask.list".to_string();
-        let layer = self.layer.0;
-        let node = the_layer(session, &id, layer)?;
-        let masks: Vec<Json> = node
-            .children
-            .iter()
-            .filter(|child| child.kind == "fx.mask")
-            .map(|child| {
-                json!({
-                    "id": child.id,
-                    "name": child.name,
-                    "vertices": child.data.get("vertices").cloned().unwrap_or(Json::Null),
-                    "closed": child.data.get("closed").cloned().unwrap_or(Json::Bool(false)),
-                    "mode": child.data.get("mode").cloned().unwrap_or(Json::Null),
-                    "inverted": child.data.get("inverted").cloned().unwrap_or(Json::Bool(false)),
-                    "locked": child.data.get("locked").cloned().unwrap_or(Json::Bool(false)),
-                    "feather": child.data.get("feather").cloned().unwrap_or(Json::Null),
-                    "opacity": child.data.get("opacity").cloned().unwrap_or(Json::Null),
-                    "expansion": child.data.get("expansion").cloned().unwrap_or(Json::Null),
-                })
-            })
-            .collect();
-        Ok(Outcome::new(format!("the layer `{layer}` has {} mask(s)", masks.len()))
-            .with_data(json!({ "layer": layer, "masks": masks })))
-    }
 }

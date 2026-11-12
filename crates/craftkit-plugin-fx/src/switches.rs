@@ -27,10 +27,10 @@
 //! the frame blend — are not here: a switch that is a word and not a
 //! yes or no is a different thing, and there are enough of the others.
 
-use craftkit_derive::{Command, Evaluator};
+use craftkit_derive::{Evaluator, commands};
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{Bool, Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Session, Text};
+use craftkit_sdk::{Bool, Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Text};
 
 /// The **switches** of a layer.
 ///
@@ -217,117 +217,124 @@ pub fn switches_of(node: &Node) -> Switches {
     }
 }
 
-/// Put a **switch** on a layer, or off.
-///
-/// A switch with no value is **toggled**: the tree's command toggles
-/// a switch that is asked for without a value, and a switch that is
-/// asked for with a value is set.
-///
-/// A name that is not a switch is **refused**: the tree's command
-/// refuses an unknown switch, and a switch that does not exist cannot
-/// be turned on.
-#[derive(Command)]
-#[command(id = "fx.layer.switch", area = "fx", layer = "fx", icon = "eye", mutates, undoable)]
-pub struct SetSwitch {
-    /// The layer the switch is on.
-    pub layer: NodeRef,
-    /// The switch: `video`, `audio`, `solo`, `lock`, `shy`, …
-    pub switch: Text,
-    /// Whether it is on. Without it, the switch is toggled.
-    pub value: Option<Bool>,
-}
-
-impl SetSwitch {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.layer.switch".to_string();
-        let layer = self.layer.0;
-        let name = self.switch.0.clone();
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
-        }
-        let mut switches = switches_of(node);
-        let current = switches.get(&name).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no switch `{name}`: the switches are {}", SWITCH_NAMES.join(", ")),
-        })?;
-        let value = self.value.map(|value| value.0).unwrap_or(!current);
-        switches.set(&name, value).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let Some(node) = session.document_mut()?.node_mut(layer) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        node.data["switches"] = switches.to_json();
-        Ok(Outcome::changed(format!("the switch `{name}` of the layer `{layer}` is {value}"))
-            .with_data(serde_json::json!({ "layer": layer, "switch": name, "value": value })))
-    }
-}
-
-/// Put the composition's **hide shy layers** switch on or off.
-///
-/// The tree's composition has one switch that is about the layers
-/// rather than about the composition, and it is the one that says the
-/// shy layers step aside: they are not picked and their keys are not
-/// stepped to.
-#[derive(Command)]
-#[command(id = "fx.comp.switch", area = "fx", layer = "fx", icon = "eye", mutates, undoable)]
-pub struct SetCompSwitch {
-    /// The composition.
-    pub comp: NodeRef,
-    /// The switch: `hide_shy`.
-    pub switch: Text,
-    /// Whether it is on. Without it, the switch is toggled.
-    pub value: Option<Bool>,
-}
-
-impl SetCompSwitch {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.comp.switch".to_string();
-        let comp = self.comp.0;
-        let name = self.switch.0.clone();
-        let Some(node) = session.document().node(comp) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no composition `{comp}`"),
-            });
-        };
-        if node.kind != "fx.comp" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{comp}` is a `{}` and not a composition", node.kind),
-            });
-        }
-        let current = match name.as_str() {
-            "hide_shy" | "hideShy" | "shy" => {
-                node.data.get("hide_shy").and_then(|hide| hide.as_bool()).unwrap_or(false)
-            }
-            _ => {
+commands! {
+    /// Put a **switch** on a layer, or off.
+    ///
+    /// A switch with no value is **toggled**: the tree's command toggles
+    /// a switch that is asked for without a value, and a switch that is
+    /// asked for with a value is set.
+    ///
+    /// A name that is not a switch is **refused**: the tree's command
+    /// refuses an unknown switch, and a switch that does not exist cannot
+    /// be turned on.
+    fx.layer.switch {
+        area: "fx",
+        layer: "fx",
+        icon: "eye",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the switch is on.
+            layer: NodeRef,
+            /// The switch: `video`, `audio`, `solo`, `lock`, `shy`, …
+            switch: Text,
+            /// Whether it is on. Without it, the switch is toggled.
+            value: Option<Bool>,
+        },
+        run: {
+            let id = "fx.layer.switch".to_string();
+            let layer = self.layer.0;
+            let name = self.switch.0.clone();
+            let Some(node) = session.document().node(layer) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("there is no switch `{name}`: the switch of a composition is hide_shy"),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
                 });
             }
-        };
-        let value = self.value.map(|value| value.0).unwrap_or(!current);
-        let Some(node) = session.document_mut()?.node_mut(comp) else {
-            return Err(EngineError::Failed {
+            let mut switches = switches_of(node);
+            let current = switches.get(&name).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
-                message: format!("there is no composition `{comp}`"),
-            });
-        };
-        node.data["hide_shy"] = serde_json::Value::Bool(value);
-        Ok(Outcome::changed(format!("the switch `{name}` of the composition `{comp}` is {value}"))
-            .with_data(serde_json::json!({ "comp": comp, "switch": name, "value": value })))
+                message: format!("there is no switch `{name}`: the switches are {}", SWITCH_NAMES.join(", ")),
+            })?;
+            let value = self.value.map(|value| value.0).unwrap_or(!current);
+            switches.set(&name, value).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let Some(node) = session.document_mut()?.node_mut(layer) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            node.data["switches"] = switches.to_json();
+            Ok(Outcome::changed(format!("the switch `{name}` of the layer `{layer}` is {value}"))
+                .with_data(serde_json::json!({ "layer": layer, "switch": name, "value": value })))
+
+        }
+    }
+    /// Put the composition's **hide shy layers** switch on or off.
+    ///
+    /// The tree's composition has one switch that is about the layers
+    /// rather than about the composition, and it is the one that says the
+    /// shy layers step aside: they are not picked and their keys are not
+    /// stepped to.
+    fx.comp.switch {
+        area: "fx",
+        layer: "fx",
+        icon: "eye",
+        mutates,
+        undoable,
+        params: {
+            /// The composition.
+            comp: NodeRef,
+            /// The switch: `hide_shy`.
+            switch: Text,
+            /// Whether it is on. Without it, the switch is toggled.
+            value: Option<Bool>,
+        },
+        run: {
+            let id = "fx.comp.switch".to_string();
+            let comp = self.comp.0;
+            let name = self.switch.0.clone();
+            let Some(node) = session.document().node(comp) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no composition `{comp}`"),
+                });
+            };
+            if node.kind != "fx.comp" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{comp}` is a `{}` and not a composition", node.kind),
+                });
+            }
+            let current = match name.as_str() {
+                "hide_shy" | "hideShy" | "shy" => {
+                    node.data.get("hide_shy").and_then(|hide| hide.as_bool()).unwrap_or(false)
+                }
+                _ => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no switch `{name}`: the switch of a composition is hide_shy"),
+                    });
+                }
+            };
+            let value = self.value.map(|value| value.0).unwrap_or(!current);
+            let Some(node) = session.document_mut()?.node_mut(comp) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no composition `{comp}`"),
+                });
+            };
+            node.data["hide_shy"] = serde_json::Value::Bool(value);
+            Ok(Outcome::changed(format!("the switch `{name}` of the composition `{comp}` is {value}"))
+                .with_data(serde_json::json!({ "comp": comp, "switch": name, "value": value })))
+
+        }
     }
 }
 

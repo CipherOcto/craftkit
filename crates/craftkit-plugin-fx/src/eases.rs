@@ -28,7 +28,7 @@
 //!   an empty list is how it says "no ease", and here the ease is
 //!   always there and the default one is how it says the same thing.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
@@ -131,113 +131,120 @@ fn frame_of(id: &str, frame: Number) -> Result<u64, EngineError> {
     Ok(frame.0 as u64)
 }
 
-/// Give a keyframe the **easy ease**.
-#[derive(Command)]
-#[command(id = "fx.keyframe.easy", area = "fx", layer = "fx", icon = "pencil", mutates, undoable)]
-pub struct EasyEase {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-    /// The frame the keyframe is on.
-    pub frame: Number,
-    /// Which **side** of the keyframe: `both`, `in` or `out`. The
-    /// default is `both`.
-    pub side: Option<Text>,
-}
+commands! {
+    /// Give a keyframe the **easy ease**.
+    fx.keyframe.easy {
+        area: "fx",
+        layer: "fx",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+            /// The frame the keyframe is on.
+            frame: Number,
+            /// Which **side** of the keyframe: `both`, `in` or `out`. The
+            /// default is `both`.
+            side: Option<Text>,
+        },
+        run: {
+            let id = "fx.keyframe.easy".to_string();
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let frame = frame_of(&id, self.frame)?;
+            let side = match &self.side {
+                Some(side) => Side::parse(&side.0).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{}` is not a side: a side is `both`, `in` or `out`", side.0),
+                })?,
+                None => Side::Both,
+            };
+            let (current, mut keys) = keys_at(session, &id, layer, &path)?;
+            let Some(index) = keys.iter().position(|key| key.frame == frame) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{path}` has no keyframe at frame {frame}"),
+                });
+            };
+            let easy = Ease { speed: 0.0, influence: EASY_INFLUENCE };
+            let key = &mut keys[index];
+            match side {
+                Side::Both => {
+                    key.interp = Interp::Bezier;
+                    key.ease = easy;
+                    key.in_interp = Interp::Bezier;
+                    key.in_ease = easy;
+                }
+                Side::In => {
+                    key.in_interp = Interp::Bezier;
+                    key.in_ease = easy;
+                }
+                Side::Out => {
+                    key.interp = Interp::Bezier;
+                    key.ease = easy;
+                }
+            }
+            // The ease is written down now, so the keyframe is not an auto
+            // bezier any more: an auto bezier takes its ease from its
+            // neighbours.
+            key.auto = false;
+            write_keys(session, &id, layer, &path, &current, &keys)?;
+            Ok(Outcome::changed(format!("the keyframe at frame {frame} has an easy ease"))
+                .with_data(json!({ "layer": layer, "path": path, "frame": frame })))
 
-impl EasyEase {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.keyframe.easy".to_string();
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let frame = frame_of(&id, self.frame)?;
-        let side = match &self.side {
-            Some(side) => Side::parse(&side.0).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{}` is not a side: a side is `both`, `in` or `out`", side.0),
-            })?,
-            None => Side::Both,
-        };
-        let (current, mut keys) = keys_at(session, &id, layer, &path)?;
-        let Some(index) = keys.iter().position(|key| key.frame == frame) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{path}` has no keyframe at frame {frame}"),
-            });
-        };
-        let easy = Ease { speed: 0.0, influence: EASY_INFLUENCE };
-        let key = &mut keys[index];
-        match side {
-            Side::Both => {
-                key.interp = Interp::Bezier;
-                key.ease = easy;
-                key.in_interp = Interp::Bezier;
-                key.in_ease = easy;
-            }
-            Side::In => {
-                key.in_interp = Interp::Bezier;
-                key.in_ease = easy;
-            }
-            Side::Out => {
-                key.interp = Interp::Bezier;
-                key.ease = easy;
-            }
         }
-        // The ease is written down now, so the keyframe is not an auto
-        // bezier any more: an auto bezier takes its ease from its
-        // neighbours.
-        key.auto = false;
-        write_keys(session, &id, layer, &path, &current, &keys)?;
-        Ok(Outcome::changed(format!("the keyframe at frame {frame} has an easy ease"))
-            .with_data(json!({ "layer": layer, "path": path, "frame": frame })))
     }
-}
+    /// Turn a keyframe's **hold** on, or off again.
+    fx.keyframe.hold {
+        area: "fx",
+        layer: "fx",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+            /// The frame the keyframe is on.
+            frame: Number,
+        },
+        run: {
+            let id = "fx.keyframe.hold".to_string();
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let frame = frame_of(&id, self.frame)?;
+            let (current, mut keys) = keys_at(session, &id, layer, &path)?;
+            let Some(index) = keys.iter().position(|key| key.frame == frame) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{path}` has no keyframe at frame {frame}"),
+                });
+            };
+            // A keyframe that **eases** gets its bezier back; one that does
+            // not gets a straight line.
+            let default = Ease::default();
+            let key = &mut keys[index];
+            let eases = key.auto
+                || key.continuous
+                || key.in_interp == Interp::Bezier
+                || key.ease.speed != default.speed
+                || key.ease.influence != default.influence;
+            let holding = key.interp == Interp::Hold;
+            key.interp = match key.interp {
+                Interp::Hold if eases => Interp::Bezier,
+                Interp::Hold => Interp::Linear,
+                _ => Interp::Hold,
+            };
+            let interp = key.interp;
+            let state = if holding { "does not hold" } else { "holds" };
+            write_keys(session, &id, layer, &path, &current, &keys)?;
+            Ok(Outcome::changed(format!("the keyframe at frame {frame} {state} the value"))
+                .with_data(json!({ "layer": layer, "path": path, "frame": frame, "interp": interp.name() })))
 
-/// Turn a keyframe's **hold** on, or off again.
-#[derive(Command)]
-#[command(id = "fx.keyframe.hold", area = "fx", layer = "fx", icon = "pencil", mutates, undoable)]
-pub struct ToggleHold {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-    /// The frame the keyframe is on.
-    pub frame: Number,
-}
-
-impl ToggleHold {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.keyframe.hold".to_string();
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let frame = frame_of(&id, self.frame)?;
-        let (current, mut keys) = keys_at(session, &id, layer, &path)?;
-        let Some(index) = keys.iter().position(|key| key.frame == frame) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{path}` has no keyframe at frame {frame}"),
-            });
-        };
-        // A keyframe that **eases** gets its bezier back; one that does
-        // not gets a straight line.
-        let default = Ease::default();
-        let key = &mut keys[index];
-        let eases = key.auto
-            || key.continuous
-            || key.in_interp == Interp::Bezier
-            || key.ease.speed != default.speed
-            || key.ease.influence != default.influence;
-        let holding = key.interp == Interp::Hold;
-        key.interp = match key.interp {
-            Interp::Hold if eases => Interp::Bezier,
-            Interp::Hold => Interp::Linear,
-            _ => Interp::Hold,
-        };
-        let interp = key.interp;
-        let state = if holding { "does not hold" } else { "holds" };
-        write_keys(session, &id, layer, &path, &current, &keys)?;
-        Ok(Outcome::changed(format!("the keyframe at frame {frame} {state} the value"))
-            .with_data(json!({ "layer": layer, "path": path, "frame": frame, "interp": interp.name() })))
+        }
     }
 }

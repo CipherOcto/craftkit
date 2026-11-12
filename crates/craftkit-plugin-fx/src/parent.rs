@@ -20,10 +20,10 @@
 //!   re-expression is not here, and the parent here is the fact and not
 //!   the transform.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome};
 
 /// The **parent** of a layer, as the document holds it.
 pub fn parent_of(node: &Node) -> Option<u64> {
@@ -61,108 +61,115 @@ pub fn would_cycle(document: &Document, layer: u64, parent: u64) -> bool {
     ancestors_of(document, parent).contains(&layer)
 }
 
-/// Put a layer **under** another layer.
-///
-/// The parent must be a layer of the **same composition**: the tree's
-/// command finds the parent in the composition and refuses a layer
-/// that is not there.
-///
-/// A parent that would make a **circle** is refused, and nothing is
-/// changed.
-#[derive(Command)]
-#[command(id = "fx.layer.parent", area = "fx", layer = "fx", icon = "link", mutates, undoable)]
-pub struct SetParent {
-    /// The layer to put under the parent.
-    pub layer: NodeRef,
-    /// The parent.
-    pub parent: NodeRef,
-}
+commands! {
+    /// Put a layer **under** another layer.
+    ///
+    /// The parent must be a layer of the **same composition**: the tree's
+    /// command finds the parent in the composition and refuses a layer
+    /// that is not there.
+    ///
+    /// A parent that would make a **circle** is refused, and nothing is
+    /// changed.
+    fx.layer.parent {
+        area: "fx",
+        layer: "fx",
+        icon: "link",
+        mutates,
+        undoable,
+        params: {
+            /// The layer to put under the parent.
+            layer: NodeRef,
+            /// The parent.
+            parent: NodeRef,
+        },
+        run: {
+            let id = "fx.layer.parent".to_string();
+            let layer = self.layer.0;
+            let parent = self.parent.0;
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                });
+            }
+            let Some(master) = session.document().node(parent) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no layer `{parent}`"),
+                });
+            };
+            if master.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{parent}` is a `{}` and not a layer", master.kind),
+                });
+            }
+            if would_cycle(session.document(), layer, parent) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "parenting the layer `{layer}` under the layer `{parent}` would make a circle"
+                    ),
+                });
+            }
+            let Some(node) = session.document_mut()?.node_mut(layer) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            node.data["parent"] = serde_json::Value::from(parent);
+            Ok(Outcome::changed(format!("the layer `{layer}` is under the layer `{parent}`"))
+                .with_data(serde_json::json!({ "layer": layer, "parent": parent })))
 
-impl SetParent {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.layer.parent".to_string();
-        let layer = self.layer.0;
-        let parent = self.parent.0;
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
         }
-        let Some(master) = session.document().node(parent) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no layer `{parent}`"),
-            });
-        };
-        if master.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{parent}` is a `{}` and not a layer", master.kind),
-            });
-        }
-        if would_cycle(session.document(), layer, parent) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "parenting the layer `{layer}` under the layer `{parent}` would make a circle"
-                ),
-            });
-        }
-        let Some(node) = session.document_mut()?.node_mut(layer) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        node.data["parent"] = serde_json::Value::from(parent);
-        Ok(Outcome::changed(format!("the layer `{layer}` is under the layer `{parent}`"))
-            .with_data(serde_json::json!({ "layer": layer, "parent": parent })))
     }
-}
+    /// Take a layer **out** of its parent.
+    ///
+    /// A layer with no parent is a layer of its own, and that is the
+    /// tree's own: nothing carries it but the composition.
+    fx.layer.parent.delete {
+        area: "fx",
+        layer: "fx",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The layer to take out.
+            layer: NodeRef,
+        },
+        run: {
+            let id = "fx.layer.parent.delete".to_string();
+            let layer = self.layer.0;
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                });
+            };
+            let had = parent_of(node);
+            let Some(node) = session.document_mut()?.node_mut(layer) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            node.data["parent"] = serde_json::Value::Null;
+            Ok(Outcome::changed(format!("the layer `{layer}` is under no layer"))
+                .with_data(serde_json::json!({ "layer": layer, "parent": had })))
 
-/// Take a layer **out** of its parent.
-///
-/// A layer with no parent is a layer of its own, and that is the
-/// tree's own: nothing carries it but the composition.
-#[derive(Command)]
-#[command(id = "fx.layer.parent.delete", area = "fx", layer = "fx", icon = "minus", mutates, undoable)]
-pub struct DeleteParent {
-    /// The layer to take out.
-    pub layer: NodeRef,
-}
-
-impl DeleteParent {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.layer.parent.delete".to_string();
-        let layer = self.layer.0;
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
-        };
-        let had = parent_of(node);
-        let Some(node) = session.document_mut()?.node_mut(layer) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        node.data["parent"] = serde_json::Value::Null;
-        Ok(Outcome::changed(format!("the layer `{layer}` is under no layer"))
-            .with_data(serde_json::json!({ "layer": layer, "parent": had })))
+        }
     }
 }

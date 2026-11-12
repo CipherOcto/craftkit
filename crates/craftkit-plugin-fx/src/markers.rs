@@ -10,10 +10,10 @@
 //! responsive composition — and only the time and the comment are
 //! here.
 
-use craftkit_derive::{Command, Evaluator, NodeKind};
+use craftkit_derive::{Evaluator, NodeKind, commands};
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Text};
 
 /// The kind of a **marker**.
 #[derive(NodeKind)]
@@ -85,101 +85,108 @@ pub fn markers_of(document: &Document, comp: u64) -> Vec<u64> {
     markers.into_iter().map(|(_, id)| id).collect()
 }
 
-/// Put a **marker** in a composition.
-///
-/// The marker is a frame and a comment, and the comment may be empty:
-/// the tree's comment is empty when nobody said anything.
-#[derive(Command)]
-#[command(id = "fx.marker.add", area = "fx", layer = "fx", icon = "plus", mutates, undoable)]
-pub struct AddMarker {
-    /// The composition.
-    pub comp: NodeRef,
-    /// Where the marker is, in frames.
-    pub frame: Number,
-    /// What it says.
-    pub comment: Option<Text>,
-}
+commands! {
+    /// Put a **marker** in a composition.
+    ///
+    /// The marker is a frame and a comment, and the comment may be empty:
+    /// the tree's comment is empty when nobody said anything.
+    fx.marker.add {
+        area: "fx",
+        layer: "fx",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The composition.
+            comp: NodeRef,
+            /// Where the marker is, in frames.
+            frame: Number,
+            /// What it says.
+            comment: Option<Text>,
+        },
+        run: {
+            let id = "fx.marker.add".to_string();
+            let comp = self.comp.0;
+            let Some(node) = session.document().node(comp) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no composition `{comp}`"),
+                });
+            };
+            if node.kind != "fx.comp" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{comp}` is a `{}` and not a composition", node.kind),
+                });
+            }
+            let frame = crate::frames(self.frame, "fx.marker.add")?;
+            let comment = self.comment.as_ref().map(|comment| comment.0.clone()).unwrap_or_default();
+            let payload = MarkerPayload { frame, comment: comment.clone() };
+            let name = if comment.is_empty() { format!("marker {frame}") } else { comment.clone() };
+            let marker = session.document_mut()?.add_node_with_under(
+                Some(comp),
+                name.clone(),
+                "fx.marker",
+                None,
+                payload.to_json(),
+            );
+            Ok(Outcome::changed(format!("added a marker at frame {frame}"))
+                .with_data(serde_json::json!({ "id": marker, "comp": comp, "frame": frame, "comment": comment })))
 
-impl AddMarker {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.marker.add".to_string();
-        let comp = self.comp.0;
-        let Some(node) = session.document().node(comp) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no composition `{comp}`"),
-            });
-        };
-        if node.kind != "fx.comp" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{comp}` is a `{}` and not a composition", node.kind),
-            });
         }
-        let frame = crate::frames(self.frame, "fx.marker.add")?;
-        let comment = self.comment.as_ref().map(|comment| comment.0.clone()).unwrap_or_default();
-        let payload = MarkerPayload { frame, comment: comment.clone() };
-        let name = if comment.is_empty() { format!("marker {frame}") } else { comment.clone() };
-        let marker = session.document_mut()?.add_node_with_under(
-            Some(comp),
-            name.clone(),
-            "fx.marker",
-            None,
-            payload.to_json(),
-        );
-        Ok(Outcome::changed(format!("added a marker at frame {frame}"))
-            .with_data(serde_json::json!({ "id": marker, "comp": comp, "frame": frame, "comment": comment })))
     }
-}
+    /// Change a **marker**: where it is, or what it says.
+    fx.marker.set {
+        area: "fx",
+        layer: "fx",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The marker to change.
+            marker: NodeRef,
+            /// Its new place, in frames.
+            frame: Option<Number>,
+            /// Its new comment.
+            comment: Option<Text>,
+        },
+        run: {
+            let id = "fx.marker.set".to_string();
+            let marker = self.marker.0;
+            let Some(node) = session.document().node(marker) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no marker `{marker}`"),
+                });
+            };
+            if node.kind != "fx.marker" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{marker}` is a `{}` and not a marker", node.kind),
+                });
+            }
+            let mut payload = MarkerPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            if let Some(frame) = self.frame {
+                payload.frame = crate::frames(frame, "fx.marker.set")?;
+            }
+            if let Some(comment) = &self.comment {
+                payload.comment = comment.0.clone();
+            }
+            let name = if payload.comment.is_empty() { node.name.clone() } else { payload.comment.clone() };
+            let Some(node) = session.document_mut()?.node_mut(marker) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no marker `{marker}`"),
+                });
+            };
+            node.name = name.clone();
+            node.data = payload.to_json();
+            Ok(Outcome::changed(format!("changed the marker `{name}`")).with_data(
+                serde_json::json!({ "id": marker, "frame": payload.frame, "comment": payload.comment }),
+            ))
 
-/// Change a **marker**: where it is, or what it says.
-#[derive(Command)]
-#[command(id = "fx.marker.set", area = "fx", layer = "fx", icon = "pencil", mutates, undoable)]
-pub struct SetMarker {
-    /// The marker to change.
-    pub marker: NodeRef,
-    /// Its new place, in frames.
-    pub frame: Option<Number>,
-    /// Its new comment.
-    pub comment: Option<Text>,
-}
-
-impl SetMarker {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.marker.set".to_string();
-        let marker = self.marker.0;
-        let Some(node) = session.document().node(marker) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no marker `{marker}`"),
-            });
-        };
-        if node.kind != "fx.marker" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{marker}` is a `{}` and not a marker", node.kind),
-            });
         }
-        let mut payload = MarkerPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-        if let Some(frame) = self.frame {
-            payload.frame = crate::frames(frame, "fx.marker.set")?;
-        }
-        if let Some(comment) = &self.comment {
-            payload.comment = comment.0.clone();
-        }
-        let name = if payload.comment.is_empty() { node.name.clone() } else { payload.comment.clone() };
-        let Some(node) = session.document_mut()?.node_mut(marker) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no marker `{marker}`"),
-            });
-        };
-        node.name = name.clone();
-        node.data = payload.to_json();
-        Ok(Outcome::changed(format!("changed the marker `{name}`")).with_data(
-            serde_json::json!({ "id": marker, "frame": payload.frame, "comment": payload.comment }),
-        ))
     }
 }
 

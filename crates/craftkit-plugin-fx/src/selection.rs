@@ -18,10 +18,10 @@
 //! Here a command selects **layers**, and the stack that the tree
 //! walks is the stack of the composition (§ §431).
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, EngineError, Outcome, Session};
+use craftkit_sdk::{Bool, EngineError, Outcome};
 
 /// The **layers** a value holds: a list of ids.
 fn layers_of(value: &Json) -> Vec<u64> {
@@ -31,90 +31,93 @@ fn layers_of(value: &Json) -> Vec<u64> {
         .unwrap_or_default()
 }
 
-/// **Select** layers.
-#[derive(Command)]
-#[command(id = "fx.layer.select", area = "fx", layer = "fx", icon = "select")]
-pub struct SelectLayers {
-    /// The layers: their ids.
-    pub layers: Json,
-}
-
-impl SelectLayers {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.layer.select".to_string();
-        let layers = layers_of(&self.layers);
-        for layer in &layers {
-            let Some(node) = session.document().node(*layer) else {
-                return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
-            };
-            if node.kind != "fx.layer" {
-                return Err(EngineError::Failed {
-                    id,
-                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-                });
+commands! {
+    /// **Select** layers.
+    fx.layer.select {
+        area: "fx",
+        layer: "fx",
+        icon: "select",
+        params: {
+            /// The layers: their ids.
+            layers: Json,
+        },
+        run: {
+            let id = "fx.layer.select".to_string();
+            let layers = layers_of(&self.layers);
+            for layer in &layers {
+                let Some(node) = session.document().node(*layer) else {
+                    return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
+                };
+                if node.kind != "fx.layer" {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                    });
+                }
             }
+            session.select_ids(&layers);
+            Ok(Outcome::changed(format!("selected {} layer(s)", layers.len()))
+                .with_data(json!({ "layers": layers })))
+
         }
-        session.select_ids(&layers);
-        Ok(Outcome::changed(format!("selected {} layer(s)", layers.len()))
-            .with_data(json!({ "layers": layers })))
     }
-}
-
-/// **Take** layers **out** of the selection.
-#[derive(Command)]
-#[command(id = "fx.layer.deselect", area = "fx", layer = "fx", icon = "select")]
-pub struct DeselectLayers {
-    /// The layers: their ids.
-    pub layers: Json,
-}
-
-impl DeselectLayers {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.layer.deselect".to_string();
-        let layers = layers_of(&self.layers);
-        for layer in &layers {
-            let Some(node) = session.document().node(*layer) else {
-                return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
-            };
-            if node.kind != "fx.layer" {
-                return Err(EngineError::Failed {
-                    id,
-                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-                });
+    /// **Take** layers **out** of the selection.
+    fx.layer.deselect {
+        area: "fx",
+        layer: "fx",
+        icon: "select",
+        params: {
+            /// The layers: their ids.
+            layers: Json,
+        },
+        run: {
+            let id = "fx.layer.deselect".to_string();
+            let layers = layers_of(&self.layers);
+            for layer in &layers {
+                let Some(node) = session.document().node(*layer) else {
+                    return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
+                };
+                if node.kind != "fx.layer" {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                    });
+                }
             }
+            let kept: Vec<u64> =
+                session.selected_ids().into_iter().filter(|selected| !layers.contains(selected)).collect();
+            session.select_ids(&kept);
+            Ok(Outcome::changed(format!("took {} layer(s) out of the selection", layers.len()))
+                .with_data(json!({ "layers": layers })))
+
         }
-        let kept: Vec<u64> =
-            session.selected_ids().into_iter().filter(|selected| !layers.contains(selected)).collect();
-        session.select_ids(&kept);
-        Ok(Outcome::changed(format!("took {} layer(s) out of the selection", layers.len()))
-            .with_data(json!({ "layers": layers })))
     }
-}
+    /// **Read** the selection.
+    fx.selection.get {
+        area: "fx",
+        layer: "fx",
+        icon: "list",
+        params: {
+            /// Whether to say which layers they are and not only how many.
+            detailed: Option<Bool>,
+        },
+        run: {
+            let layers = session.selected_ids();
+            let detailed = self.detailed.map(|detailed| detailed.0).unwrap_or(false);
+            let named: Vec<Json> = if detailed {
+                layers
+                    .iter()
+                    .filter_map(|layer| {
+                        let node = session.document().node(*layer)?;
+                        Some(json!({ "id": node.id, "name": node.name, "kind": node.kind }))
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            Ok(Outcome::new(format!("{} thing(s) are selected", layers.len()))
+                .with_data(json!({ "layers": layers, "selected": named })))
 
-/// **Read** the selection.
-#[derive(Command)]
-#[command(id = "fx.selection.get", area = "fx", layer = "fx", icon = "list")]
-pub struct GetSelection {
-    /// Whether to say which layers they are and not only how many.
-    pub detailed: Option<Bool>,
-}
-
-impl GetSelection {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let layers = session.selected_ids();
-        let detailed = self.detailed.map(|detailed| detailed.0).unwrap_or(false);
-        let named: Vec<Json> = if detailed {
-            layers
-                .iter()
-                .filter_map(|layer| {
-                    let node = session.document().node(*layer)?;
-                    Some(json!({ "id": node.id, "name": node.name, "kind": node.kind }))
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
-        Ok(Outcome::new(format!("{} thing(s) are selected", layers.len()))
-            .with_data(json!({ "layers": layers, "selected": named })))
+        }
     }
 }

@@ -128,9 +128,9 @@
 )]
 #![forbid(unsafe_code)]
 
-use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
+use craftkit_derive::{Evaluator, Layer, NodeKind, Panel, commands};
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Text};
 
 mod blend;
 mod eases;
@@ -146,21 +146,24 @@ mod stack;
 mod switches;
 mod time;
 
-pub use blend::SetBlend;
-pub use eases::{EasyEase, ToggleHold};
+pub use blend::FxLayerBlend;
+pub use eases::{FxKeyframeEasy, FxKeyframeHold};
 pub use effects::{
-    AddEffect, DuplicateEffect, ListEffects, RemoveEffect, ReorderEffect, ResetEffect, ToggleEffect,
+    FxEffectAdd, FxEffectDuplicate, FxEffectList, FxEffectRemove, FxEffectReorder, FxEffectReset,
+    FxEffectToggle,
 };
-pub use expressions::{BakeExpression, DeleteExpression, SetExpression};
+pub use expressions::{FxPropBake, FxPropExpression, FxPropExpressionDelete};
 use keys::keys_of;
-pub use keys::{RemoveKeyframe, SetAuto, SetContinuous, SetInterpolation, SetKeyframe, ValueAt};
-pub use markers::{AddMarker, MarkerKind, MarkersEvaluator, SetMarker};
-pub use masks::{AddMask, InvertMask, ListMasks, LockMask, MaskKind, RemoveMask, SetMaskMode};
-pub use parent::{DeleteParent, SetParent};
-pub use selection::{DeselectLayers, GetSelection, SelectLayers};
-pub use stack::{ArrangeLayer, ListLayers, RenameLayer};
-pub use switches::{SetCompSwitch, SetSwitch, SwitchesEvaluator};
-pub use time::{GetTime, GoToEnd, GoToStart, SetTime, StepTime};
+pub use keys::{
+    FxKeyframeAuto, FxKeyframeContinuous, FxKeyframeInterp, FxKeyframeRemove, FxKeyframeSet, FxPropAt,
+};
+pub use markers::{FxMarkerAdd, FxMarkerSet, MarkerKind, MarkersEvaluator};
+pub use masks::{FxMaskAdd, FxMaskInvert, FxMaskList, FxMaskLock, FxMaskMode, FxMaskRemove, MaskKind};
+pub use parent::{FxLayerParent, FxLayerParentDelete};
+pub use selection::{FxLayerDeselect, FxLayerSelect, FxSelectionGet};
+pub use stack::{FxLayerArrange, FxLayerList, FxLayerRename};
+pub use switches::{FxCompSwitch, FxLayerSwitch, SwitchesEvaluator};
+pub use time::{FxTimeEnd, FxTimeGet, FxTimeSet, FxTimeStart, FxTimeStep};
 
 /// The compositing layer.
 ///
@@ -218,259 +221,271 @@ impl LayerKind {
     }
 }
 
-/// Put a **composition** in the document.
-#[derive(Command)]
-#[command(id = "fx.comp.add", area = "fx", layer = "fx", icon = "plus", mutates, undoable, example)]
-pub struct AddComp {
-    /// How wide it is, in pixels.
-    pub width: Number,
-    /// How tall it is, in pixels.
-    pub height: Number,
-    /// How long it is, in frames.
-    pub duration: Number,
-}
+commands! {
+    /// Put a **composition** in the document.
+    fx.comp.add {
+        area: "fx",
+        layer: "fx",
+        icon: "plus",
+        mutates,
+        undoable,
+        example,
+        params: {
+            /// How wide it is, in pixels.
+            width: Number,
+            /// How tall it is, in pixels.
+            height: Number,
+            /// How long it is, in frames.
+            duration: Number,
+        },
+        run: {
+            let width = frames(self.width, "fx.comp.add")?;
+            let height = frames(self.height, "fx.comp.add")?;
+            let duration = frames(self.duration, "fx.comp.add")?;
+            let data = serde_json::json!({
+                "width": width,
+                "height": height,
+                "duration": duration,
+            });
+            let id = session.document_mut()?.add_node_with("comp".to_string(), "fx.comp", None, data);
+            Ok(Outcome::changed(format!("added a {width} by {height} composition"))
+                .with_data(serde_json::json!({ "id": id })))
 
-impl AddComp {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let width = frames(self.width, "fx.comp.add")?;
-        let height = frames(self.height, "fx.comp.add")?;
-        let duration = frames(self.duration, "fx.comp.add")?;
-        let data = serde_json::json!({
-            "width": width,
-            "height": height,
-            "duration": duration,
-        });
-        let id = session.document_mut()?.add_node_with("comp".to_string(), "fx.comp", None, data);
-        Ok(Outcome::changed(format!("added a {width} by {height} composition"))
-            .with_data(serde_json::json!({ "id": id })))
+        }
     }
-}
-
-/// Put a **layer** in a composition.
-#[derive(Command)]
-#[command(id = "fx.layer.add", area = "fx", layer = "fx", icon = "plus", mutates, undoable)]
-pub struct AddLayer {
-    /// The composition it goes in.
-    pub comp: NodeRef,
-    /// What to call it.
-    pub name: Text,
-}
-
-impl AddLayer {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let comp = self.comp.0;
-        if session.document().node(comp).is_none() {
-            return Err(EngineError::Failed {
-                id: "fx.layer.add".to_string(),
-                message: format!("there is no composition `{comp}`"),
-            });
-        }
-        let name = self.name.0.clone();
-        if name.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "fx.layer.add".to_string(),
-                message: "a layer has a name".to_string(),
-            });
-        }
-        let data = serde_json::json!({
-            "props": serde_json::json!({}),
-            "switches": crate::switches::Switches::default().to_json(),
-            "blend_mode": "Normal",
-        });
-        let id =
-            session.document_mut()?.add_node_with_under(Some(comp), name.clone(), "fx.layer", None, data);
-        Ok(Outcome::changed(format!("added the layer `{name}`"))
-            .with_data(serde_json::json!({ "id": id, "name": name })))
-    }
-}
-
-/// Set a property, by its path.
-///
-/// The path is the plugin's own: `transform/position`, `effects/#1/blurriness`.
-#[derive(Command)]
-#[command(id = "fx.prop.set", area = "fx", layer = "fx", icon = "pencil", mutates, undoable)]
-pub struct SetProp {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-    /// What it is now.
-    pub value: serde_json::Value,
-}
-
-impl SetProp {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let segments = parse_path(&path);
-        if segments.is_empty() {
-            return Err(EngineError::Failed {
-                id: "fx.prop.set".to_string(),
-                message: "a path has something in it".to_string(),
-            });
-        }
-        let Some(node) = session.document_mut()?.node_mut(layer) else {
-            return Err(EngineError::Failed {
-                id: "fx.prop.set".to_string(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-        // A path under `effects` names a **parameter** of an effect
-        // that is there. The stack itself is made by `fx.effect.add`
-        // and taken away by `fx.effect.remove`, and a property is not
-        // a way to make an effect (the module `effects`).
-        check_effect_path(&props, &segments, &path)
-            .map_err(|message| EngineError::Failed { id: "fx.prop.set".to_string(), message })?;
-        set_at(&mut props, &segments, self.value.clone())
-            .map_err(|message| EngineError::Failed { id: "fx.prop.set".to_string(), message })?;
-        node.data["props"] = props;
-        Ok(Outcome::changed(format!("`{path}` is set"))
-            .with_data(serde_json::json!({ "layer": layer, "path": path })))
-    }
-}
-
-/// Make a property **spatial**.
-///
-/// A spatial property is one whose value is a **point**: a pair or a
-/// triple of numbers. It does not move along a straight line from one
-/// keyframe to the next — it follows a **path** in the plane, and the
-/// time maps to the **length** along that path.
-///
-/// The property must be **animated** — a path needs keyframes — and its
-/// value must be a point.
-#[derive(Command)]
-#[command(id = "fx.prop.spatial", area = "fx", layer = "fx", icon = "path", mutates, undoable)]
-pub struct SetSpatial {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-    /// Whether the property is spatial.
-    pub spatial: craftkit_sdk::Bool,
-}
-
-impl SetSpatial {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.prop.spatial".to_string();
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let segments = parse_path(&path);
-        if segments.is_empty() {
-            return Err(EngineError::Failed { id, message: "a path has something in it".to_string() });
-        }
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
-        }
-        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-        let Some(current) = get_at(&props, &segments).cloned() else {
-            return Err(EngineError::Failed { id, message: format!("there is no `{path}` here") });
-        };
-        // A path needs **keyframes**, and a point.
-        let Some(keys) = keys_of(&current) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("`{path}` is not animated, and a path needs keyframes"),
-            });
-        };
-        if self.spatial.0 {
-            // A path is made of **points**, and every keyframe of the
-            // property must be one: a pair or a triple of numbers, and
-            // the same number of them in each keyframe — a path whose
-            // width changes is not a path.
-            let mut width = 0usize;
-            for key in &keys {
-                let Some(list) = key.value.as_array() else {
-                    return Err(EngineError::Failed {
-                        id,
-                        message: format!(
-                            "`{path}` is not a point: a spatial property's value is a pair or a triple of numbers"
-                        ),
-                    });
-                };
-                if (list.len() != 2 && list.len() != 3) || list.iter().any(|item| item.as_f64().is_none()) {
-                    return Err(EngineError::Failed {
-                        id,
-                        message: format!(
-                            "`{path}` is not a point: a spatial property's value is a pair or a triple of numbers"
-                        ),
-                    });
-                }
-                if width == 0 {
-                    width = list.len();
-                } else if width != list.len() {
-                    return Err(EngineError::Failed {
-                        id,
-                        message: format!(
-                            "`{path}` is not a path: its keyframes are {} and {} numbers wide",
-                            width,
-                            list.len()
-                        ),
-                    });
-                }
-            }
-            if width == 0 {
+    /// Put a **layer** in a composition.
+    fx.layer.add {
+        area: "fx",
+        layer: "fx",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The composition it goes in.
+            comp: NodeRef,
+            /// What to call it.
+            name: Text,
+        },
+        run: {
+            let comp = self.comp.0;
+            if session.document().node(comp).is_none() {
                 return Err(EngineError::Failed {
-                    id,
-                    message: format!("`{path}` has no keyframes, and a path needs keyframes"),
+                    id: "fx.layer.add".to_string(),
+                    message: format!("there is no composition `{comp}`"),
                 });
             }
-        }
-        let mut new = current.clone();
-        if !new.is_object() {
-            new = serde_json::json!({});
-        }
-        new["spatial"] = serde_json::json!(self.spatial.0);
-        let Some(node) = session.document_mut()?.node_mut(layer) else {
-            return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
-        };
-        let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-        set_at(&mut props, &segments, new)
-            .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        node.data["props"] = props;
-        Ok(Outcome::changed(format!(
-            "`{path}` is {}",
-            if self.spatial.0 { "spatial" } else { "not spatial" }
-        ))
-        .with_data(serde_json::json!({ "layer": layer, "path": path, "spatial": self.spatial.0 })))
-    }
-}
-
-/// Read a property, by its path.
-#[derive(Command)]
-#[command(id = "fx.prop.get", area = "fx", layer = "fx", icon = "list")]
-pub struct GetProp {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-}
-
-impl GetProp {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let segments = parse_path(&path);
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed {
-                id: "fx.prop.get".to_string(),
-                message: format!("there is no layer `{layer}`"),
+            let name = self.name.0.clone();
+            if name.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "fx.layer.add".to_string(),
+                    message: "a layer has a name".to_string(),
+                });
+            }
+            let data = serde_json::json!({
+                "props": serde_json::json!({}),
+                "switches": crate::switches::Switches::default().to_json(),
+                "blend_mode": "Normal",
             });
-        };
-        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-        let value = get_at(&props, &segments).cloned();
-        let message = match &value {
-            Some(value) => format!("`{path}` is {value}"),
-            None => format!("there is no `{path}`"),
-        };
-        Ok(Outcome::new(message)
-            .with_data(serde_json::json!({ "layer": layer, "path": path, "value": value })))
+            let id =
+                session.document_mut()?.add_node_with_under(Some(comp), name.clone(), "fx.layer", None, data);
+            Ok(Outcome::changed(format!("added the layer `{name}`"))
+                .with_data(serde_json::json!({ "id": id, "name": name })))
+
+        }
+    }
+    /// Set a property, by its path.
+    ///
+    /// The path is the plugin's own: `transform/position`, `effects/#1/blurriness`.
+    fx.prop.set {
+        area: "fx",
+        layer: "fx",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+            /// What it is now.
+            value: serde_json::Value,
+        },
+        run: {
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let segments = parse_path(&path);
+            if segments.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "fx.prop.set".to_string(),
+                    message: "a path has something in it".to_string(),
+                });
+            }
+            let Some(node) = session.document_mut()?.node_mut(layer) else {
+                return Err(EngineError::Failed {
+                    id: "fx.prop.set".to_string(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            // A path under `effects` names a **parameter** of an effect
+            // that is there. The stack itself is made by `fx.effect.add`
+            // and taken away by `fx.effect.remove`, and a property is not
+            // a way to make an effect (the module `effects`).
+            check_effect_path(&props, &segments, &path)
+                .map_err(|message| EngineError::Failed { id: "fx.prop.set".to_string(), message })?;
+            set_at(&mut props, &segments, self.value.clone())
+                .map_err(|message| EngineError::Failed { id: "fx.prop.set".to_string(), message })?;
+            node.data["props"] = props;
+            Ok(Outcome::changed(format!("`{path}` is set"))
+                .with_data(serde_json::json!({ "layer": layer, "path": path })))
+
+        }
+    }
+    /// Make a property **spatial**.
+    ///
+    /// A spatial property is one whose value is a **point**: a pair or a
+    /// triple of numbers. It does not move along a straight line from one
+    /// keyframe to the next — it follows a **path** in the plane, and the
+    /// time maps to the **length** along that path.
+    ///
+    /// The property must be **animated** — a path needs keyframes — and its
+    /// value must be a point.
+    fx.prop.spatial {
+        area: "fx",
+        layer: "fx",
+        icon: "path",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+            /// Whether the property is spatial.
+            spatial: craftkit_sdk::Bool,
+        },
+        run: {
+            let id = "fx.prop.spatial".to_string();
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let segments = parse_path(&path);
+            if segments.is_empty() {
+                return Err(EngineError::Failed { id, message: "a path has something in it".to_string() });
+            }
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                });
+            }
+            let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            let Some(current) = get_at(&props, &segments).cloned() else {
+                return Err(EngineError::Failed { id, message: format!("there is no `{path}` here") });
+            };
+            // A path needs **keyframes**, and a point.
+            let Some(keys) = keys_of(&current) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("`{path}` is not animated, and a path needs keyframes"),
+                });
+            };
+            if self.spatial.0 {
+                // A path is made of **points**, and every keyframe of the
+                // property must be one: a pair or a triple of numbers, and
+                // the same number of them in each keyframe — a path whose
+                // width changes is not a path.
+                let mut width = 0usize;
+                for key in &keys {
+                    let Some(list) = key.value.as_array() else {
+                        return Err(EngineError::Failed {
+                            id,
+                            message: format!(
+                                "`{path}` is not a point: a spatial property's value is a pair or a triple of numbers"
+                            ),
+                        });
+                    };
+                    if (list.len() != 2 && list.len() != 3) || list.iter().any(|item| item.as_f64().is_none()) {
+                        return Err(EngineError::Failed {
+                            id,
+                            message: format!(
+                                "`{path}` is not a point: a spatial property's value is a pair or a triple of numbers"
+                            ),
+                        });
+                    }
+                    if width == 0 {
+                        width = list.len();
+                    } else if width != list.len() {
+                        return Err(EngineError::Failed {
+                            id,
+                            message: format!(
+                                "`{path}` is not a path: its keyframes are {} and {} numbers wide",
+                                width,
+                                list.len()
+                            ),
+                        });
+                    }
+                }
+                if width == 0 {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!("`{path}` has no keyframes, and a path needs keyframes"),
+                    });
+                }
+            }
+            let mut new = current.clone();
+            if !new.is_object() {
+                new = serde_json::json!({});
+            }
+            new["spatial"] = serde_json::json!(self.spatial.0);
+            let Some(node) = session.document_mut()?.node_mut(layer) else {
+                return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
+            };
+            let mut props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            set_at(&mut props, &segments, new)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            node.data["props"] = props;
+            Ok(Outcome::changed(format!(
+                "`{path}` is {}",
+                if self.spatial.0 { "spatial" } else { "not spatial" }
+            ))
+            .with_data(serde_json::json!({ "layer": layer, "path": path, "spatial": self.spatial.0 })))
+
+        }
+    }
+    /// Read a property, by its path.
+    fx.prop.get {
+        area: "fx",
+        layer: "fx",
+        icon: "list",
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+        },
+        run: {
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let segments = parse_path(&path);
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed {
+                    id: "fx.prop.get".to_string(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            let value = get_at(&props, &segments).cloned();
+            let message = match &value {
+                Some(value) => format!("`{path}` is {value}"),
+                None => format!("there is no `{path}`"),
+            };
+            Ok(Outcome::new(message)
+                .with_data(serde_json::json!({ "layer": layer, "path": path, "value": value })))
+
+        }
     }
 }
 
@@ -726,44 +741,44 @@ craftkit_sdk::plugin_anchor!(
     FxLayer,
     CompKind,
     LayerKind,
-    AddComp,
-    AddLayer,
-    SetProp,
-    GetProp,
-    ListEffects,
-    AddEffect,
-    RemoveEffect,
-    ToggleEffect,
-    ResetEffect,
-    DuplicateEffect,
-    ReorderEffect,
+    FxCompAdd,
+    FxLayerAdd,
+    FxPropSet,
+    FxPropGet,
+    FxEffectList,
+    FxEffectAdd,
+    FxEffectRemove,
+    FxEffectToggle,
+    FxEffectReset,
+    FxEffectDuplicate,
+    FxEffectReorder,
     PropsEvaluator,
-    SetKeyframe,
-    RemoveKeyframe,
-    SetAuto,
-    SetContinuous,
-    EasyEase,
-    ToggleHold,
-    ValueAt,
-    BakeExpression,
+    FxKeyframeSet,
+    FxKeyframeRemove,
+    FxKeyframeAuto,
+    FxKeyframeContinuous,
+    FxKeyframeEasy,
+    FxKeyframeHold,
+    FxPropAt,
+    FxPropBake,
     MaskKind,
-    AddMask,
-    RemoveMask,
-    SetMaskMode,
-    InvertMask,
-    LockMask,
-    ListMasks,
-    SetTime,
-    GetTime,
-    GoToStart,
-    GoToEnd,
-    StepTime,
-    ListLayers,
-    ArrangeLayer,
-    RenameLayer,
-    SelectLayers,
-    DeselectLayers,
-    GetSelection,
+    FxMaskAdd,
+    FxMaskRemove,
+    FxMaskMode,
+    FxMaskInvert,
+    FxMaskLock,
+    FxMaskList,
+    FxTimeSet,
+    FxTimeGet,
+    FxTimeStart,
+    FxTimeEnd,
+    FxTimeStep,
+    FxLayerList,
+    FxLayerArrange,
+    FxLayerRename,
+    FxLayerSelect,
+    FxLayerDeselect,
+    FxSelectionGet,
     FxPanel
 );
 

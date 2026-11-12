@@ -28,7 +28,7 @@
 //!   that are moved**, and here one layer is moved and there is no
 //!   order to keep.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
@@ -77,121 +77,128 @@ fn stack_of(session: &Session, comp: u64) -> Vec<u64> {
     node.children.iter().filter(|child| child.kind == "fx.layer").map(|child| child.id).rev().collect()
 }
 
-/// **Read** the stack of layers of a composition.
-#[derive(Command)]
-#[command(id = "fx.layer.list", area = "fx", layer = "fx", icon = "list")]
-pub struct ListLayers {
-    /// The composition.
-    pub comp: NodeRef,
-}
+commands! {
+    /// **Read** the stack of layers of a composition.
+    fx.layer.list {
+        area: "fx",
+        layer: "fx",
+        icon: "list",
+        params: {
+            /// The composition.
+            comp: NodeRef,
+        },
+        run: {
+            let id = "fx.layer.list".to_string();
+            let comp = self.comp.0;
+            the_comp(session, &id, comp)?;
+            let layers = stack_of(session, comp);
+            Ok(Outcome::new(format!("the composition `{comp}` has {} layer(s)", layers.len()))
+                .with_data(json!({ "comp": comp, "layers": layers })))
 
-impl ListLayers {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.layer.list".to_string();
-        let comp = self.comp.0;
-        the_comp(session, &id, comp)?;
-        let layers = stack_of(session, comp);
-        Ok(Outcome::new(format!("the composition `{comp}` has {} layer(s)", layers.len()))
-            .with_data(json!({ "comp": comp, "layers": layers })))
+        }
     }
-}
-
-/// **Move** a layer in the stack.
-#[derive(Command)]
-#[command(id = "fx.layer.arrange", area = "fx", layer = "fx", icon = "arrows", mutates, undoable)]
-pub struct ArrangeLayer {
-    /// The composition.
-    pub comp: NodeRef,
-    /// The layer.
-    pub layer: NodeRef,
-    /// Where to: `forward`, `backward`, `front` or `back`.
-    pub to: Text,
-}
-
-impl ArrangeLayer {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.layer.arrange".to_string();
-        let comp = self.comp.0;
-        let layer = self.layer.0;
-        the_layer(session, &id, comp, layer)?;
-        let wanted = self.to.0.trim().to_string();
-        let place =
-            PLACES.iter().find(|place| place.eq_ignore_ascii_case(&wanted)).copied().ok_or_else(|| {
-                EngineError::Failed {
+    /// **Move** a layer in the stack.
+    fx.layer.arrange {
+        area: "fx",
+        layer: "fx",
+        icon: "arrows",
+        mutates,
+        undoable,
+        params: {
+            /// The composition.
+            comp: NodeRef,
+            /// The layer.
+            layer: NodeRef,
+            /// Where to: `forward`, `backward`, `front` or `back`.
+            to: Text,
+        },
+        run: {
+            let id = "fx.layer.arrange".to_string();
+            let comp = self.comp.0;
+            let layer = self.layer.0;
+            the_layer(session, &id, comp, layer)?;
+            let wanted = self.to.0.trim().to_string();
+            let place =
+                PLACES.iter().find(|place| place.eq_ignore_ascii_case(&wanted)).copied().ok_or_else(|| {
+                    EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no place `{wanted}`: the places are {}", PLACES.join(", ")),
+                    }
+                })?;
+            let Some(node) = session.document_mut()?.node_mut(comp) else {
+                return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("there is no place `{wanted}`: the places are {}", PLACES.join(", ")),
-                }
-            })?;
-        let Some(node) = session.document_mut()?.node_mut(comp) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no composition `{comp}`"),
-            });
-        };
-        let Some(index) = node.children.iter().position(|child| child.id == layer) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("there is no layer `{layer}` in the composition `{comp}`"),
-            });
-        };
-        let last = node.children.len().saturating_sub(1);
-        // The front of the stack is the last of the children.
-        let target = match place {
-            "forward" => (index + 1).min(last),
-            "backward" => index.saturating_sub(1),
-            "front" => last,
-            _ => 0,
-        };
-        if target != index {
-            let child = node.children.remove(index);
-            node.children.insert(target, child);
+                    message: format!("there is no composition `{comp}`"),
+                });
+            };
+            let Some(index) = node.children.iter().position(|child| child.id == layer) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("there is no layer `{layer}` in the composition `{comp}`"),
+                });
+            };
+            let last = node.children.len().saturating_sub(1);
+            // The front of the stack is the last of the children.
+            let target = match place {
+                "forward" => (index + 1).min(last),
+                "backward" => index.saturating_sub(1),
+                "front" => last,
+                _ => 0,
+            };
+            if target != index {
+                let child = node.children.remove(index);
+                node.children.insert(target, child);
+            }
+            Ok(Outcome::changed(format!("the layer `{layer}` is `{place}`"))
+                .with_data(json!({ "comp": comp, "layer": layer, "to": place })))
+
         }
-        Ok(Outcome::changed(format!("the layer `{layer}` is `{place}`"))
-            .with_data(json!({ "comp": comp, "layer": layer, "to": place })))
     }
-}
+    /// **Rename** a layer.
+    fx.layer.rename {
+        area: "fx",
+        layer: "fx",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The layer.
+            layer: NodeRef,
+            /// The name.
+            name: Text,
+        },
+        run: {
+            let id = "fx.layer.rename".to_string();
+            let layer = self.layer.0;
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                });
+            }
+            let name = self.name.0.clone();
+            if name.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a layer has a name, and an empty one is not a name".to_string(),
+                });
+            }
+            let Some(node) = session.document_mut()?.node_mut(layer) else {
+                return Err(EngineError::Failed {
+                    id: "fx.layer.rename".to_string(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            node.name = name.clone();
+            Ok(Outcome::changed(format!("the layer `{layer}` is `{name}`"))
+                .with_data(json!({ "layer": layer, "name": name })))
 
-/// **Rename** a layer.
-#[derive(Command)]
-#[command(id = "fx.layer.rename", area = "fx", layer = "fx", icon = "pencil", mutates, undoable)]
-pub struct RenameLayer {
-    /// The layer.
-    pub layer: NodeRef,
-    /// The name.
-    pub name: Text,
-}
-
-impl RenameLayer {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.layer.rename".to_string();
-        let layer = self.layer.0;
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
         }
-        let name = self.name.0.clone();
-        if name.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id,
-                message: "a layer has a name, and an empty one is not a name".to_string(),
-            });
-        }
-        let Some(node) = session.document_mut()?.node_mut(layer) else {
-            return Err(EngineError::Failed {
-                id: "fx.layer.rename".to_string(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        node.name = name.clone();
-        Ok(Outcome::changed(format!("the layer `{layer}` is `{name}`"))
-            .with_data(json!({ "layer": layer, "name": name })))
     }
 }

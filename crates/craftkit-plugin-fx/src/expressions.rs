@@ -28,131 +28,306 @@
 //! - **The random numbers are not here**: a value that changes every
 //!   time it is read is not derived, and an expression here is.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Text};
 
 use crate::{get_at, parse_path, set_at};
 
-/// Put an **expression** on a property.
-///
-/// The expression computes the property's value at every frame, and the
-/// name `value` inside it is the property's own value — the one its
-/// keyframes give.
-///
-/// The property must be **animated**: an expression is a way of saying
-/// what the value is, and a property with no keyframes has no value to
-/// say it from.
-///
-/// The expression is **parsed** when it is put down, and one that does
-/// not parse is **refused**: a property with a broken expression is a
-/// property that cannot be read.
-#[derive(Command)]
-#[command(id = "fx.prop.expression", area = "fx", layer = "fx", icon = "pencil", mutates, undoable)]
-pub struct SetExpression {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-    /// The expression itself.
-    pub expression: Text,
-}
+commands! {
+    /// Put an **expression** on a property.
+    ///
+    /// The expression computes the property's value at every frame, and the
+    /// name `value` inside it is the property's own value — the one its
+    /// keyframes give.
+    ///
+    /// The property must be **animated**: an expression is a way of saying
+    /// what the value is, and a property with no keyframes has no value to
+    /// say it from.
+    ///
+    /// The expression is **parsed** when it is put down, and one that does
+    /// not parse is **refused**: a property with a broken expression is a
+    /// property that cannot be read.
+    fx.prop.expression {
+        area: "fx",
+        layer: "fx",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+            /// The expression itself.
+            expression: Text,
+        },
+        run: {
+            let id = "fx.prop.expression".to_string();
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let text = self.expression.0.clone();
+            let segments = parse_path(&path);
+            if segments.is_empty() {
+                return Err(EngineError::Failed { id, message: "a path has something in it".to_string() });
+            }
+            // The expression is **parsed** first: an expression that does
+            // not parse is refused before anything is written.
+            parse(&text).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                });
+            }
+            let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            let Some(current) = get_at(&props, &segments).cloned() else {
+                return Err(EngineError::Failed { id, message: format!("there is no `{path}` here") });
+            };
+            if !current.is_object() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("`{path}` is not animated, and an expression needs keyframes"),
+                });
+            }
+            let mut new = current;
+            new["expression"] = serde_json::json!(text);
+            let mut props = props;
+            set_at(&mut props, &segments, new)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let Some(node) = session.document_mut()?.node_mut(layer) else {
+                return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
+            };
+            node.data["props"] = props;
+            Ok(Outcome::changed(format!("`{path}` has an expression"))
+                .with_data(serde_json::json!({ "layer": layer, "path": path, "expression": text })))
 
-impl SetExpression {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.prop.expression".to_string();
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let text = self.expression.0.clone();
-        let segments = parse_path(&path);
-        if segments.is_empty() {
-            return Err(EngineError::Failed { id, message: "a path has something in it".to_string() });
         }
-        // The expression is **parsed** first: an expression that does
-        // not parse is refused before anything is written.
-        parse(&text).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
-        }
-        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-        let Some(current) = get_at(&props, &segments).cloned() else {
-            return Err(EngineError::Failed { id, message: format!("there is no `{path}` here") });
-        };
-        if !current.is_object() {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("`{path}` is not animated, and an expression needs keyframes"),
-            });
-        }
-        let mut new = current;
-        new["expression"] = serde_json::json!(text);
-        let mut props = props;
-        set_at(&mut props, &segments, new)
-            .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let Some(node) = session.document_mut()?.node_mut(layer) else {
-            return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
-        };
-        node.data["props"] = props;
-        Ok(Outcome::changed(format!("`{path}` has an expression"))
-            .with_data(serde_json::json!({ "layer": layer, "path": path, "expression": text })))
     }
-}
+    /// Take the **expression** off a property.
+    ///
+    /// The property keeps its keyframes, and its value is the one they
+    /// give.
+    fx.prop.expression.delete {
+        area: "fx",
+        layer: "fx",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+        },
+        run: {
+            let id = "fx.prop.expression.delete".to_string();
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let segments = parse_path(&path);
+            if segments.is_empty() {
+                return Err(EngineError::Failed { id, message: "a path has something in it".to_string() });
+            }
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                });
+            }
+            let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            let Some(current) = get_at(&props, &segments).cloned() else {
+                return Err(EngineError::Failed { id, message: format!("there is no `{path}` here") });
+            };
+            let mut new = current;
+            if let Some(object) = new.as_object_mut() {
+                object.remove("expression");
+            }
+            let mut props = props;
+            set_at(&mut props, &segments, new)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let Some(node) = session.document_mut()?.node_mut(layer) else {
+                return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
+            };
+            node.data["props"] = props;
+            Ok(Outcome::changed(format!("`{path}` has no expression"))
+                .with_data(serde_json::json!({ "layer": layer, "path": path })))
 
-/// Take the **expression** off a property.
-///
-/// The property keeps its keyframes, and its value is the one they
-/// give.
-#[derive(Command)]
-#[command(id = "fx.prop.expression.delete", area = "fx", layer = "fx", icon = "minus", mutates, undoable)]
-pub struct DeleteExpression {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-}
+        }
+    }
+    /// **Bake** the expression of a property into **keyframes**.
+    ///
+    /// An expression says what the value is at every frame; baking it
+    /// samples it and writes the samples down as keyframes, so the value
+    /// is a fact of the property and not a thing that is worked out every
+    /// time it is asked for. The expression is **taken away** afterwards.
+    ///
+    /// The rules:
+    ///
+    /// - the property must have an **expression**: there is nothing to
+    ///   bake otherwise;
+    /// - the frames are **whole numbers**, the first is not after the
+    ///   last, and the step between them is a whole number of at least
+    ///   one;
+    /// - the number of samples is **bounded**: a bake is at most a
+    ///   thousand of them, and a bake that would be longer is refused
+    ///   rather than truncated;
+    /// - an expression that cannot be worked out at a frame is **refused**,
+    ///   and the refusal names the frame;
+    /// - the keyframes that are written are **straight lines** between the
+    ///   samples: the samples are points and a curve between them is a
+    ///   guess.
+    fx.prop.bake {
+        area: "fx",
+        layer: "fx",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The layer the property is on.
+            layer: NodeRef,
+            /// The path of the property.
+            path: Text,
+            /// The first frame.
+            from: Number,
+            /// The last frame.
+            to: Number,
+            /// The frames between the samples. It is one unless the file says
+            /// another.
+            step: Option<Number>,
+        },
+        run: {
+            let id = "fx.prop.bake".to_string();
+            let layer = self.layer.0;
+            let path = self.path.0.clone();
+            let segments = parse_path(&path);
+            if segments.is_empty() {
+                return Err(EngineError::Failed { id, message: "a path has something in it".to_string() });
+            }
+            // The **frames**: whole numbers, and the first before the
+            // last.
+            let whole = |number: f64| -> Option<u64> {
+                if !number.is_finite() || number < 0.0 || number.fract() != 0.0 {
+                    None
+                } else {
+                    Some(number as u64)
+                }
+            };
+            let Some(from) = whole(self.from.0) else {
+                return Err(EngineError::Failed { id, message: "a frame is a whole number".to_string() });
+            };
+            let Some(to) = whole(self.to.0) else {
+                return Err(EngineError::Failed { id, message: "a frame is a whole number".to_string() });
+            };
+            if from > to {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the first frame {from} is after the last frame {to}"),
+                });
+            }
+            let step = match &self.step {
+                None => 1u64,
+                Some(step) => {
+                    let Some(step) = whole(step.0) else {
+                        return Err(EngineError::Failed {
+                            id,
+                            message: "the step between the frames is a whole number".to_string(),
+                        });
+                    };
+                    if step == 0 {
+                        return Err(EngineError::Failed {
+                            id,
+                            message: "the step between the frames is at least one".to_string(),
+                        });
+                    }
+                    step
+                }
+            };
+            let samples = (to - from) / step + 1;
+            if samples as usize > MAX_SAMPLES {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("a bake is at most {MAX_SAMPLES} samples, and this one is {samples}"),
+                });
+            }
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
+            };
+            if node.kind != "fx.layer" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
+                });
+            }
+            let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
+            let Some(current) = get_at(&props, &segments).cloned() else {
+                return Err(EngineError::Failed { id, message: format!("there is no `{path}` here") });
+            };
+            let Some(text) =
+                current.get("expression").and_then(|text| text.as_str()).map(|text| text.to_string())
+            else {
+                return Err(EngineError::Failed { id, message: format!("`{path}` has no expression to bake") });
+            };
+            let expression = parse(&text).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            // The **own** value of the property: the one its keyframes
+            // give, and it is what the name `value` means inside the
+            // expression.
+            let keys = crate::keys::keys_of(&current).unwrap_or_default();
+            let spatial = current.get("spatial").and_then(|spatial| spatial.as_bool()).unwrap_or(false);
+            // The **samples**: the expression at each frame.
+            let mut baked: Vec<crate::keys::Key> = Vec::with_capacity(samples as usize);
+            let mut frame = from;
+            while frame <= to {
+                let own = crate::keys::value_at(&keys, frame as f64, spatial)
+                    .and_then(|value| value.as_f64())
+                    .unwrap_or(0.0);
+                let number = expression.value(frame as f64, own).map_err(|message| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the expression is not worked out at frame {frame}: {message}"),
+                })?;
+                baked.push(crate::keys::Key {
+                    frame,
+                    value: serde_json::json!(number),
+                    interp: crate::keys::Interp::Linear,
+                    ease: crate::keys::Ease::default(),
+                    in_interp: crate::keys::Interp::Linear,
+                    in_ease: crate::keys::Ease::default(),
+                    auto: false,
+                    continuous: false,
+                });
+                frame += step;
+            }
+            let mut new = crate::keys::with_keys(&current, &baked);
+            // The expression is **taken away**: the keyframes are the
+            // fact now.
+            if let Some(map) = new.as_object_mut() {
+                map.remove("expression");
+            }
+            let mut props = props;
+            set_at(&mut props, &segments, new)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let Some(node) = session.document_mut()?.node_mut(layer) else {
+                return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
+            };
+            node.data["props"] = props;
+            Ok(Outcome::changed(format!("`{path}` is baked into {} keyframe(s)", baked.len())).with_data(
+                serde_json::json!({
+                    "layer": layer,
+                    "path": path,
+                    "from": from,
+                    "to": to,
+                    "step": step,
+                    "keyframes": baked.len(),
+                }),
+            ))
 
-impl DeleteExpression {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.prop.expression.delete".to_string();
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let segments = parse_path(&path);
-        if segments.is_empty() {
-            return Err(EngineError::Failed { id, message: "a path has something in it".to_string() });
         }
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
-        }
-        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-        let Some(current) = get_at(&props, &segments).cloned() else {
-            return Err(EngineError::Failed { id, message: format!("there is no `{path}` here") });
-        };
-        let mut new = current;
-        if let Some(object) = new.as_object_mut() {
-            object.remove("expression");
-        }
-        let mut props = props;
-        set_at(&mut props, &segments, new)
-            .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let Some(node) = session.document_mut()?.node_mut(layer) else {
-            return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
-        };
-        node.data["props"] = props;
-        Ok(Outcome::changed(format!("`{path}` has no expression"))
-            .with_data(serde_json::json!({ "layer": layer, "path": path })))
     }
 }
 
@@ -564,169 +739,3 @@ pub fn parse(text: &str) -> Result<Expression, String> {
 
 /// The most **samples** a bake may take.
 const MAX_SAMPLES: usize = 1_000;
-
-/// **Bake** the expression of a property into **keyframes**.
-///
-/// An expression says what the value is at every frame; baking it
-/// samples it and writes the samples down as keyframes, so the value
-/// is a fact of the property and not a thing that is worked out every
-/// time it is asked for. The expression is **taken away** afterwards.
-///
-/// The rules:
-///
-/// - the property must have an **expression**: there is nothing to
-///   bake otherwise;
-/// - the frames are **whole numbers**, the first is not after the
-///   last, and the step between them is a whole number of at least
-///   one;
-/// - the number of samples is **bounded**: a bake is at most a
-///   thousand of them, and a bake that would be longer is refused
-///   rather than truncated;
-/// - an expression that cannot be worked out at a frame is **refused**,
-///   and the refusal names the frame;
-/// - the keyframes that are written are **straight lines** between the
-///   samples: the samples are points and a curve between them is a
-///   guess.
-#[derive(Command)]
-#[command(id = "fx.prop.bake", area = "fx", layer = "fx", icon = "plus", mutates, undoable)]
-pub struct BakeExpression {
-    /// The layer the property is on.
-    pub layer: NodeRef,
-    /// The path of the property.
-    pub path: Text,
-    /// The first frame.
-    pub from: Number,
-    /// The last frame.
-    pub to: Number,
-    /// The frames between the samples. It is one unless the file says
-    /// another.
-    pub step: Option<Number>,
-}
-
-impl BakeExpression {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "fx.prop.bake".to_string();
-        let layer = self.layer.0;
-        let path = self.path.0.clone();
-        let segments = parse_path(&path);
-        if segments.is_empty() {
-            return Err(EngineError::Failed { id, message: "a path has something in it".to_string() });
-        }
-        // The **frames**: whole numbers, and the first before the
-        // last.
-        let whole = |number: f64| -> Option<u64> {
-            if !number.is_finite() || number < 0.0 || number.fract() != 0.0 {
-                None
-            } else {
-                Some(number as u64)
-            }
-        };
-        let Some(from) = whole(self.from.0) else {
-            return Err(EngineError::Failed { id, message: "a frame is a whole number".to_string() });
-        };
-        let Some(to) = whole(self.to.0) else {
-            return Err(EngineError::Failed { id, message: "a frame is a whole number".to_string() });
-        };
-        if from > to {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the first frame {from} is after the last frame {to}"),
-            });
-        }
-        let step = match &self.step {
-            None => 1u64,
-            Some(step) => {
-                let Some(step) = whole(step.0) else {
-                    return Err(EngineError::Failed {
-                        id,
-                        message: "the step between the frames is a whole number".to_string(),
-                    });
-                };
-                if step == 0 {
-                    return Err(EngineError::Failed {
-                        id,
-                        message: "the step between the frames is at least one".to_string(),
-                    });
-                }
-                step
-            }
-        };
-        let samples = (to - from) / step + 1;
-        if samples as usize > MAX_SAMPLES {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("a bake is at most {MAX_SAMPLES} samples, and this one is {samples}"),
-            });
-        }
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
-        };
-        if node.kind != "fx.layer" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{layer}` is a `{}` and not a layer", node.kind),
-            });
-        }
-        let props = node.data.get("props").cloned().unwrap_or(serde_json::json!({}));
-        let Some(current) = get_at(&props, &segments).cloned() else {
-            return Err(EngineError::Failed { id, message: format!("there is no `{path}` here") });
-        };
-        let Some(text) =
-            current.get("expression").and_then(|text| text.as_str()).map(|text| text.to_string())
-        else {
-            return Err(EngineError::Failed { id, message: format!("`{path}` has no expression to bake") });
-        };
-        let expression = parse(&text).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        // The **own** value of the property: the one its keyframes
-        // give, and it is what the name `value` means inside the
-        // expression.
-        let keys = crate::keys::keys_of(&current).unwrap_or_default();
-        let spatial = current.get("spatial").and_then(|spatial| spatial.as_bool()).unwrap_or(false);
-        // The **samples**: the expression at each frame.
-        let mut baked: Vec<crate::keys::Key> = Vec::with_capacity(samples as usize);
-        let mut frame = from;
-        while frame <= to {
-            let own = crate::keys::value_at(&keys, frame as f64, spatial)
-                .and_then(|value| value.as_f64())
-                .unwrap_or(0.0);
-            let number = expression.value(frame as f64, own).map_err(|message| EngineError::Failed {
-                id: id.clone(),
-                message: format!("the expression is not worked out at frame {frame}: {message}"),
-            })?;
-            baked.push(crate::keys::Key {
-                frame,
-                value: serde_json::json!(number),
-                interp: crate::keys::Interp::Linear,
-                ease: crate::keys::Ease::default(),
-                in_interp: crate::keys::Interp::Linear,
-                in_ease: crate::keys::Ease::default(),
-                auto: false,
-                continuous: false,
-            });
-            frame += step;
-        }
-        let mut new = crate::keys::with_keys(&current, &baked);
-        // The expression is **taken away**: the keyframes are the
-        // fact now.
-        if let Some(map) = new.as_object_mut() {
-            map.remove("expression");
-        }
-        let mut props = props;
-        set_at(&mut props, &segments, new)
-            .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let Some(node) = session.document_mut()?.node_mut(layer) else {
-            return Err(EngineError::Failed { id, message: format!("there is no layer `{layer}`") });
-        };
-        node.data["props"] = props;
-        Ok(Outcome::changed(format!("`{path}` is baked into {} keyframe(s)", baked.len())).with_data(
-            serde_json::json!({
-                "layer": layer,
-                "path": path,
-                "from": from,
-                "to": to,
-                "step": step,
-                "keyframes": baked.len(),
-            }),
-        ))
-    }
-}
