@@ -4235,6 +4235,7 @@ so.
 | the **counts**, from the registry | **built.** The counts of the batteries are read out of the registry — the commands the linker put in — and the source is checked against it, so neither can drift alone (§848) | §848 |
 | the tree's **answers**, in one call | **built.**  answers where a command lives, what an area holds and what a bound is — with the file and the line — from an index of the tree's own commands (§851) | §851 |
 | the **example** of a battery | **built.** One command per battery is marked  in its own declaration, and  prints it — with the battery's other commands and a test of it (§852) | §852 |
+| the **port manifest** | **built.** One row per ported rule — the rule, where it came from, the crate, the module, the command, the test and the section — and the gate checks every row against the tree (§853) | §853 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -55996,3 +55997,62 @@ searches an arc made. The answer is now in the battery.
   model to copy, not a form to fill in.
 - **Nine batteries mark one command each, and the other nine plugins mark
   none.** The plugins are not batteries, and the rule is about batteries.
+
+## 853. The port manifest
+
+A port used to be invisible. Now the tree keeps a record of it.
+
+### What was built
+
+- **The manifest**: one row per ported rule, in Rust, in the tree:
+  ```text
+  rule     what the rule is
+  from     where it came from: a path in a family tree, or a document here
+  to       the crate that carries it
+  module   the file of that crate it landed in
+  command  the command that carries it, or the crate and the symbol
+  test     the test file that holds its test
+  section  the section of the README that says so
+  ```
+- **`cargo xtask ports`** prints it, and `cargo xtask ports --check` reads it
+  against the tree.
+- **The gate checks it.** Every row must name a command that is in the tree
+  — or a crate that is — and a test file that is there, and a module that is
+  there. A row that has rotted is a problem the gate reports.
+
+### What the port found
+
+- **A port does not always add a command.** The arc that made the registry
+  answer by area added an **API**, not a command — so the manifest's field
+  holds two spellings: a command's id, or a crate and a symbol in it.
+- **The manifest is forward only.** The rows are added as the ports are
+  made; the tree does not go back and write a row for every command that was
+  ever ported. That would be a project rather than an arc, and it would be a
+  project of no use: a row written after the fact records a decision nobody
+  made.
+- **A manifest is only worth having if it is checked.** A table of ports
+  that is never read against the tree is a second copy of the tree's
+  history, and it rots silently. So the `lists` gate reads it, and the
+  check is a function of its own so that a test can put a broken row into it.
+
+### What it cost
+
+- **One new test file**: `xtask/tests/ports.rs` — five tests: every port is
+  in the tree, a port that names a command that is not there is a problem, a
+  port that names a test that is not there is a problem, a port that names a
+  module that is not there is a problem, and the manifest grows forwards.
+- **One new module** (`ports`), one new command, and one more check in the
+  outer gate.
+
+### What it does not settle
+
+- **The manifest holds seven rows and the tree has 961 commands.** It is
+  forward only, and it starts with the arcs of this plan. A reader must not
+  mistake it for the whole history — it is the record of the ports made
+  *since the manifest existed*.
+- **A row is a human's promise.** The gate can say that the command is
+  there; it cannot say that the rule is the one that was ported. That is
+  what a port is, and it is not a machine's fact.
+- **The manifest does not say what a family tree has *not* been ported.**
+  That question needs the family trees side by side with this one, and it is
+  a survey, not a manifest.
