@@ -25,77 +25,76 @@
 //! kinds have none — so the kit's lock cannot say what the tree's
 //! locks say. The clip's locks are the battery's own.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Session};
 
 use crate::ClipPayload;
 
-/// Lock a clip's **content**, or take the lock off.
-///
-/// The clip's sound is finished: it may not be trimmed, faded or
-/// stretched.
-///
-/// The clip does not **move** either: the tree's editor holds a locked
-/// clip still — the tree's own word for it is that a locked clip
-/// "doesn't move" — and the two locks are two different claims about
-/// the same clip, and both of them keep it where it is.
-///
-/// Without a lock given, the lock is **toggled**: a clip that is
-/// locked is unlocked, and a clip that is not is locked.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.lock.edit",
-    area = "sound",
-    layer = "sound",
-    icon = "lock",
-    menu("Clip", "Edit Lock"),
-    mutates,
-    undoable
-)]
-pub struct EditLock {
-    /// The clip to lock.
-    pub clip: NodeRef,
-    /// Whether the clip is locked. Without it, the lock is toggled.
-    pub locked: Option<Bool>,
-}
+commands! {
+    /// Lock a clip's **content**, or take the lock off.
+    ///
+    /// The clip's sound is finished: it may not be trimmed, faded or
+    /// stretched.
+    ///
+    /// The clip does not **move** either: the tree's editor holds a locked
+    /// clip still — the tree's own word for it is that a locked clip
+    /// "doesn't move" — and the two locks are two different claims about
+    /// the same clip, and both of them keep it where it is.
+    ///
+    /// Without a lock given, the lock is **toggled**: a clip that is
+    /// locked is unlocked, and a clip that is not is locked.
+    sound.clip.lock.edit {
+        area: "sound",
+        layer: "sound",
+        icon: "lock",
+        mutates,
+        undoable,
+        menu: ("Clip", "Edit Lock"),
+        params: {
+            /// The clip to lock.
 
-impl EditLock {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let locked = self.locked.map(|locked| locked.0);
-        set_lock(session, self.clip.0, Lock::Edit, locked)
+            clip: NodeRef,
+            /// Whether the clip is locked. Without it, the lock is toggled.
+
+            locked: Option<Bool>,
+        },
+        run: {
+
+            let locked = self.locked.map(|locked| locked.0);
+            set_lock(session, self.clip.0, Lock::Edit, locked)
+
+        }
     }
-}
+    /// Lock a clip's **place**, or take the lock off.
+    ///
+    /// The clip stays where it is: it may not be spaced or snapped. The
+    /// clip's sound may still be **changed** — the edit lock is a
+    /// different lock, and a clip may carry both.
+    ///
+    /// Without a lock given, the lock is **toggled**.
+    sound.clip.lock.time {
+        area: "sound",
+        layer: "sound",
+        icon: "lock",
+        mutates,
+        undoable,
+        menu: ("Clip", "Time Lock"),
+        params: {
+            /// The clip to lock.
 
-/// Lock a clip's **place**, or take the lock off.
-///
-/// The clip stays where it is: it may not be spaced or snapped. The
-/// clip's sound may still be **changed** — the edit lock is a
-/// different lock, and a clip may carry both.
-///
-/// Without a lock given, the lock is **toggled**.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.lock.time",
-    area = "sound",
-    layer = "sound",
-    icon = "lock",
-    menu("Clip", "Time Lock"),
-    mutates,
-    undoable
-)]
-pub struct TimeLock {
-    /// The clip to lock.
-    pub clip: NodeRef,
-    /// Whether the clip is locked. Without it, the lock is toggled.
-    pub locked: Option<Bool>,
-}
+            clip: NodeRef,
+            /// Whether the clip is locked. Without it, the lock is toggled.
 
-impl TimeLock {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let locked = self.locked.map(|locked| locked.0);
-        set_lock(session, self.clip.0, Lock::Time, locked)
+            locked: Option<Bool>,
+        },
+        run: {
+
+            let locked = self.locked.map(|locked| locked.0);
+            set_lock(session, self.clip.0, Lock::Time, locked)
+
+        }
     }
 }
 

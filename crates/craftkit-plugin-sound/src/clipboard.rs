@@ -24,7 +24,7 @@
 //! markers in it, the clip gain and the clip effects. The markers are
 //! not here, and the section says why.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::Value as Json;
@@ -208,235 +208,236 @@ fn paste_automation(
     Ok(written)
 }
 
-/// **Copy** the material of a range of a track.
-///
-/// The clips of the track that overlap the range are **trimmed** to it
-/// and copied into the clipboard, and the clipboard says how long the
-/// range was.
-///
-/// A range with **no length** is refused: there is nothing to copy.
-#[derive(Command)]
-#[command(
-    id = "sound.track.copy",
-    area = "sound",
-    layer = "sound",
-    icon = "copy",
-    menu("Edit", "Copy"),
-    mutates,
-    undoable
-)]
-pub struct CopyRange {
-    /// The track whose material is copied.
-    pub track: NodeRef,
-    /// Where the range starts, in samples.
-    pub start: Option<Number>,
-    /// Where the range ends, in samples.
-    pub end: Option<Number>,
-}
+commands! {
+    /// **Copy** the material of a range of a track.
+    ///
+    /// The clips of the track that overlap the range are **trimmed** to it
+    /// and copied into the clipboard, and the clipboard says how long the
+    /// range was.
+    ///
+    /// A range with **no length** is refused: there is nothing to copy.
+    sound.track.copy {
+        area: "sound",
+        layer: "sound",
+        icon: "copy",
+        mutates,
+        undoable,
+        menu: ("Edit", "Copy"),
+        params: {
+            /// The track whose material is copied.
 
-impl CopyRange {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.track.copy".to_string();
-        let (start, end) = crate::range_of(session, self.track.0, &id, self.start, self.end)?;
-        let copies = crate::copies_of_range(session, self.track.0, start, end);
-        let automation = lanes_of(session, self.track.0, start, end);
-        // The **material** of a range is its clips **and** its
-        // automation: a range with a curve in it and no clip in it has
-        // something to copy.
-        if copies.is_empty() && automation.is_empty() {
-            return Ok(Outcome::new("there is no material in the range to copy")
-                .with_data(serde_json::json!({ "copied": 0, "length": end - start })));
-        }
-        let clipboard = Clipboard {
-            length: end - start,
-            clips: copies.into_iter().map(|(name, payload)| ClipboardClip { name, payload }).collect(),
-            automation,
-        };
-        let count = clipboard.clips.len();
-        set_clipboard(session.document_mut()?, &clipboard);
-        Ok(Outcome::changed(format!("copied {count} clip(s) into the clipboard"))
-            .with_data(serde_json::json!({ "copied": count, "length": clipboard.length })))
-    }
-}
+            track: NodeRef,
+            /// Where the range starts, in samples.
 
-/// **Cut** the material of a range of a track.
-///
-/// The material is **copied** into the clipboard and then **taken
-/// away**: the cut is a copy and a removal, and the removal is the
-/// part that changes the document.
-#[derive(Command)]
-#[command(
-    id = "sound.track.cut",
-    area = "sound",
-    layer = "sound",
-    icon = "cut",
-    menu("Edit", "Cut"),
-    mutates,
-    undoable
-)]
-pub struct CutRange {
-    /// The track whose material is cut.
-    pub track: NodeRef,
-    /// Where the range starts, in samples.
-    pub start: Option<Number>,
-    /// Where the range ends, in samples.
-    pub end: Option<Number>,
-}
+            start: Option<Number>,
+            /// Where the range ends, in samples.
 
-impl CutRange {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.track.cut".to_string();
-        let (start, end) = crate::range_of(session, self.track.0, &id, self.start, self.end)?;
-        let copies = crate::copies_of_range(session, self.track.0, start, end);
-        let automation = lanes_of(session, self.track.0, start, end);
-        if copies.is_empty() && automation.is_empty() {
-            return Ok(Outcome::new("there is no material in the range to cut")
-                .with_data(serde_json::json!({ "cut": 0, "length": end - start })));
-        }
-        let clipboard = Clipboard {
-            length: end - start,
-            clips: copies.into_iter().map(|(name, payload)| ClipboardClip { name, payload }).collect(),
-            automation,
-        };
-        let count = clipboard.clips.len();
-        set_clipboard(session.document_mut()?, &clipboard);
-        // The **removal**: the clips that are in the range are taken
-        // away, and the ones that cross its edge keep the part outside
-        // it.
-        let removed = crate::clear_range_of(session, self.track.0, start, end);
-        // The **automation** of the range goes with the material: a
-        // cut takes the curve away as well.
-        clear_automation(session, self.track.0, start, end)?;
-        Ok(Outcome::changed(format!("cut {count} clip(s) into the clipboard"))
-            .with_data(serde_json::json!({ "cut": count, "removed": removed, "length": clipboard.length })))
-    }
-}
+            end: Option<Number>,
+        },
+        run: {
 
-/// **Paste** the clipboard onto a track.
-///
-/// The material of the clipboard is laid on the track at the place the
-/// caller gives: each clip of the clipboard becomes a **new** clip,
-/// with the source it plays and everything it had.
-///
-/// A clipboard that is **empty** is refused: there is nothing to paste.
-#[derive(Command)]
-#[command(
-    id = "sound.track.paste",
-    area = "sound",
-    layer = "sound",
-    icon = "paste",
-    menu("Edit", "Paste"),
-    mutates,
-    undoable
-)]
-pub struct PasteRange {
-    /// The track the material is pasted onto.
-    pub track: NodeRef,
-    /// Where the material is pasted, in samples.
-    pub at: Option<Number>,
-}
-
-impl PasteRange {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.track.paste".to_string();
-        let track = self.track.0;
-        let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{track}`"),
-        })?;
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
-            });
-        }
-        let Some(clipboard) = clipboard_of(session.document()) else {
-            return Err(EngineError::Failed {
-                id,
-                message: "the clipboard is empty: there is nothing to paste".to_string(),
-            });
-        };
-        if clipboard.clips.is_empty() && clipboard.automation.is_empty() {
-            return Err(EngineError::Failed {
-                id,
-                message: "the clipboard is empty: there is nothing to paste".to_string(),
-            });
-        }
-        let at = match &self.at {
-            Some(at) => crate::samples(at.0, "where the material is pasted")?,
-            None => 0,
-        };
-        let playlist = crate::playlist_of(session, track, None)?;
-        // The **clips**: each one of the clipboard is a new clip, with
-        // its own name and its own place.
-        let mut made = Vec::with_capacity(clipboard.clips.len());
-        for clip in &clipboard.clips {
-            let mut payload = clip.payload.clone();
-            payload.start += at;
-            let placed = session.document_mut()?.add_node_with_under(
-                Some(playlist),
-                clip.name.clone(),
-                "sound.clip",
-                None,
-                payload.to_json(),
-            );
-            // The **source** relation goes with the clip: a clip that
-            // plays nothing is a clip of nothing.
-            if let Some(source) = payload.source {
-                session.document_mut()?.add_relation(craftkit_sdk::Relation::new(placed, source, "source"));
+            let id = "sound.track.copy".to_string();
+            let (start, end) = crate::range_of(session, self.track.0, &id, self.start, self.end)?;
+            let copies = crate::copies_of_range(session, self.track.0, start, end);
+            let automation = lanes_of(session, self.track.0, start, end);
+            // The **material** of a range is its clips **and** its
+            // automation: a range with a curve in it and no clip in it has
+            // something to copy.
+            if copies.is_empty() && automation.is_empty() {
+                return Ok(Outcome::new("there is no material in the range to copy")
+                    .with_data(serde_json::json!({ "copied": 0, "length": end - start })));
             }
-            made.push(placed);
+            let clipboard = Clipboard {
+                length: end - start,
+                clips: copies.into_iter().map(|(name, payload)| ClipboardClip { name, payload }).collect(),
+                automation,
+            };
+            let count = clipboard.clips.len();
+            set_clipboard(session.document_mut()?, &clipboard);
+            Ok(Outcome::changed(format!("copied {count} clip(s) into the clipboard"))
+                .with_data(serde_json::json!({ "copied": count, "length": clipboard.length })))
+
         }
-        // The **automation** of the range is written on the track: the
-        // lanes of the clipboard, at the place the material was put.
-        let lanes = paste_automation(session, track, at, &clipboard)?;
-        Ok(Outcome::changed(format!("pasted {} clip(s) onto the track `{track}`", made.len())).with_data(
-            serde_json::json!({ "clips": made, "at": at, "length": clipboard.length, "lanes": lanes }),
-        ))
     }
-}
+    /// **Cut** the material of a range of a track.
+    ///
+    /// The material is **copied** into the clipboard and then **taken
+    /// away**: the cut is a copy and a removal, and the removal is the
+    /// part that changes the document.
+    sound.track.cut {
+        area: "sound",
+        layer: "sound",
+        icon: "cut",
+        mutates,
+        undoable,
+        menu: ("Edit", "Cut"),
+        params: {
+            /// The track whose material is cut.
 
-/// The **clipboard** of the document, read: how many clips it holds and
-/// how long the range was.
-#[derive(Command)]
-#[command(id = "sound.track.clipboard.read", area = "sound", layer = "sound", icon = "list")]
-pub struct ReadClipboard {}
+            track: NodeRef,
+            /// Where the range starts, in samples.
 
-impl ReadClipboard {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let Some(clipboard) = clipboard_of(session.document()) else {
-            return Ok(Outcome::new("the clipboard is empty")
-                .with_data(serde_json::json!({ "empty": true, "length": 0, "clips": Vec::<u64>::new() })));
-        };
-        let clips: Vec<Json> = clipboard
-            .clips
-            .iter()
-            .map(|clip| {
-                serde_json::json!({
-                    "name": clip.name,
-                    "start": clip.payload.start,
-                    "length": clip.payload.length,
+            start: Option<Number>,
+            /// Where the range ends, in samples.
+
+            end: Option<Number>,
+        },
+        run: {
+
+            let id = "sound.track.cut".to_string();
+            let (start, end) = crate::range_of(session, self.track.0, &id, self.start, self.end)?;
+            let copies = crate::copies_of_range(session, self.track.0, start, end);
+            let automation = lanes_of(session, self.track.0, start, end);
+            if copies.is_empty() && automation.is_empty() {
+                return Ok(Outcome::new("there is no material in the range to cut")
+                    .with_data(serde_json::json!({ "cut": 0, "length": end - start })));
+            }
+            let clipboard = Clipboard {
+                length: end - start,
+                clips: copies.into_iter().map(|(name, payload)| ClipboardClip { name, payload }).collect(),
+                automation,
+            };
+            let count = clipboard.clips.len();
+            set_clipboard(session.document_mut()?, &clipboard);
+            // The **removal**: the clips that are in the range are taken
+            // away, and the ones that cross its edge keep the part outside
+            // it.
+            let removed = crate::clear_range_of(session, self.track.0, start, end);
+            // The **automation** of the range goes with the material: a
+            // cut takes the curve away as well.
+            clear_automation(session, self.track.0, start, end)?;
+            Ok(Outcome::changed(format!("cut {count} clip(s) into the clipboard"))
+                .with_data(serde_json::json!({ "cut": count, "removed": removed, "length": clipboard.length })))
+
+        }
+    }
+    /// **Paste** the clipboard onto a track.
+    ///
+    /// The material of the clipboard is laid on the track at the place the
+    /// caller gives: each clip of the clipboard becomes a **new** clip,
+    /// with the source it plays and everything it had.
+    ///
+    /// A clipboard that is **empty** is refused: there is nothing to paste.
+    sound.track.paste {
+        area: "sound",
+        layer: "sound",
+        icon: "paste",
+        mutates,
+        undoable,
+        menu: ("Edit", "Paste"),
+        params: {
+            /// The track the material is pasted onto.
+
+            track: NodeRef,
+            /// Where the material is pasted, in samples.
+
+            at: Option<Number>,
+        },
+        run: {
+
+            let id = "sound.track.paste".to_string();
+            let track = self.track.0;
+            let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{track}`"),
+            })?;
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let Some(clipboard) = clipboard_of(session.document()) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the clipboard is empty: there is nothing to paste".to_string(),
+                });
+            };
+            if clipboard.clips.is_empty() && clipboard.automation.is_empty() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the clipboard is empty: there is nothing to paste".to_string(),
+                });
+            }
+            let at = match &self.at {
+                Some(at) => crate::samples(at.0, "where the material is pasted")?,
+                None => 0,
+            };
+            let playlist = crate::playlist_of(session, track, None)?;
+            // The **clips**: each one of the clipboard is a new clip, with
+            // its own name and its own place.
+            let mut made = Vec::with_capacity(clipboard.clips.len());
+            for clip in &clipboard.clips {
+                let mut payload = clip.payload.clone();
+                payload.start += at;
+                let placed = session.document_mut()?.add_node_with_under(
+                    Some(playlist),
+                    clip.name.clone(),
+                    "sound.clip",
+                    None,
+                    payload.to_json(),
+                );
+                // The **source** relation goes with the clip: a clip that
+                // plays nothing is a clip of nothing.
+                if let Some(source) = payload.source {
+                    session.document_mut()?.add_relation(craftkit_sdk::Relation::new(placed, source, "source"));
+                }
+                made.push(placed);
+            }
+            // The **automation** of the range is written on the track: the
+            // lanes of the clipboard, at the place the material was put.
+            let lanes = paste_automation(session, track, at, &clipboard)?;
+            Ok(Outcome::changed(format!("pasted {} clip(s) onto the track `{track}`", made.len())).with_data(
+                serde_json::json!({ "clips": made, "at": at, "length": clipboard.length, "lanes": lanes }),
+            ))
+
+        }
+    }
+    /// The **clipboard** of the document, read: how many clips it holds and
+    /// how long the range was.
+    sound.track.clipboard.read {
+        area: "sound",
+        layer: "sound",
+        icon: "list",
+        params: {
+        },
+        run: {
+
+            let Some(clipboard) = clipboard_of(session.document()) else {
+                return Ok(Outcome::new("the clipboard is empty")
+                    .with_data(serde_json::json!({ "empty": true, "length": 0, "clips": Vec::<u64>::new() })));
+            };
+            let clips: Vec<Json> = clipboard
+                .clips
+                .iter()
+                .map(|clip| {
+                    serde_json::json!({
+                        "name": clip.name,
+                        "start": clip.payload.start,
+                        "length": clip.payload.length,
+                    })
                 })
-            })
-            .collect();
-        // The **automation** of the range: the lanes that came with it.
-        let automation: Vec<Json> = clipboard
-            .automation
-            .iter()
-            .map(|lane| {
-                let points: Vec<Json> =
-                    lane.points.iter().map(|(at, value)| serde_json::json!([at, value])).collect();
-                serde_json::json!({ "param": lane.param, "points": points })
-            })
-            .collect();
-        Ok(Outcome::new(format!("the clipboard holds {} clip(s)", clips.len())).with_data(
-            serde_json::json!({
-                "empty": false,
-                "length": clipboard.length,
-                "clips": clips,
-                "lanes": automation.len(),
-                "automation": automation,
-            }),
-        ))
+                .collect();
+            // The **automation** of the range: the lanes that came with it.
+            let automation: Vec<Json> = clipboard
+                .automation
+                .iter()
+                .map(|lane| {
+                    let points: Vec<Json> =
+                        lane.points.iter().map(|(at, value)| serde_json::json!([at, value])).collect();
+                    serde_json::json!({ "param": lane.param, "points": points })
+                })
+                .collect();
+            Ok(Outcome::new(format!("the clipboard holds {} clip(s)", clips.len())).with_data(
+                serde_json::json!({
+                    "empty": false,
+                    "length": clipboard.length,
+                    "clips": clips,
+                    "lanes": automation.len(),
+                    "automation": automation,
+                }),
+            ))
+
+        }
     }
 }

@@ -467,7 +467,7 @@
 )]
 #![forbid(unsafe_code)]
 
-use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
+use craftkit_derive::{Evaluator, Layer, NodeKind, Panel, Tool, commands};
 
 // The mixer: buses, routes, inserts, sends and automation lanes. It is
 // the part of a sound document that is a **graph** and not a tree, so it
@@ -541,47 +541,51 @@ mod time;
 
 use std::collections::HashMap;
 
-pub use autoname::{ReadAutoName, SetAutoName};
-pub use beat::{ReadBeat, RemoveBeat, SetBeat};
-pub use clipboard::{CopyRange, CutRange, PasteRange, ReadClipboard};
-pub use commit::CommitTrack;
-pub use conform::Conform;
+pub use autoname::{SoundClipAutoname, SoundClipAutonameRead};
+pub use beat::{SoundClipSyncRead, SoundClipSyncRemove, SoundClipSyncSet};
+pub use clipboard::{SoundTrackClipboardRead, SoundTrackCopy, SoundTrackCut, SoundTrackPaste};
+pub use commit::SoundTrackCommit;
+pub use conform::SoundClipConform;
 use craftkit_sdk::document::{Path, Rect, Segment, SubPath};
 use craftkit_sdk::{
     Bool, Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Point, Session, Text,
 };
-pub use duplicate::DuplicateTrack;
-pub use fades::{DeleteRangeFades, FadeRange};
-pub use freeze::FreezeTrack;
-pub use gain::{BypassGain, SetGain};
-pub use grid::{Quantize, ReadGrid, SetGrid};
-pub use group::{Group, GroupKind, ReadGroup, SetGroupFlags, SetTrackGroup, Ungroup, UngroupTracks};
-pub use heal::HealTrack;
-pub use inactive::SetTrackInactive;
-pub use keys::{KeyKind, ReadKeys, SetKey};
-pub use locks::{EditLock, TimeLock};
-pub use loudness::ReadLoudness;
-pub use markers::{NextMarker, PreviousMarker, RecallMarker};
-pub use marks::SetRating;
+pub use duplicate::SoundTrackDuplicate;
+pub use fades::{SoundTrackFade, SoundTrackFadeDelete};
+pub use freeze::SoundTrackFreeze;
+pub use gain::{SoundClipGain, SoundClipGainBypass};
+pub use grid::{SoundClipQuantize, SoundGridRead, SoundGridSet};
+pub use group::{
+    GroupKind, SoundClipGroup, SoundClipGroupRead, SoundClipUngroup, SoundTrackGroup, SoundTrackGroupSet,
+    SoundTrackUngroup,
+};
+pub use heal::SoundClipHeal;
+pub use inactive::SoundTrackInactive;
+pub use keys::{KeyKind, SoundKeyRead, SoundKeySet};
+pub use locks::{SoundClipLockEdit, SoundClipLockTime};
+pub use loudness::SoundClipLoudnessRead;
+pub use markers::{SoundMarkerNext, SoundMarkerPrevious, SoundMarkerRecall};
+pub use marks::SoundClipRating;
 pub use midi::{
-    DurationMidi, ExportMidi, ImportMidi, ImportMidiTracks, QuantizeMidi, ReadMidi, ReadMidiNames,
-    TransposeMidi, VelocityMidi,
+    SoundClipMidiDuration, SoundClipMidiExport, SoundClipMidiImport, SoundClipMidiNames,
+    SoundClipMidiQuantize, SoundClipMidiRead, SoundClipMidiTranspose, SoundClipMidiVelocity,
+    SoundTrackMidiImport,
 };
 pub use mixer::{
-    AddBus, AddInsert, AddLane, AddRoute, AddSend, BusKind, BusPayload, ClearMutes, ClearSolos, InsertKind,
-    InsertPayload, LaneKind, LanePayload, MoveInsert, MuteTrackSends, RemoveInsert, SendKind, SendPayload,
-    SetSend,
+    BusKind, BusPayload, InsertKind, InsertPayload, LaneKind, LanePayload, SendKind, SendPayload,
+    SoundBusAdd, SoundInsertAdd, SoundInsertMove, SoundInsertRemove, SoundLaneAdd, SoundRouteAdd,
+    SoundSendAdd, SoundSendSet, SoundTrackMuteClear, SoundTrackSendsMute, SoundTrackSoloClear,
 };
-pub use pitch::ReadPitch;
-pub use recording::{MonitorTrack, RecordTrack};
-pub use remove::{RemoveClip, RemoveMarker, RemoveTrack};
-pub use rename::{RenameClip, RenameTrack};
-pub use render::RenderClip;
-pub use repeat::RepeatRange;
-pub use split::SplitMono;
-pub use surround::{DeleteSurround, SetSurround};
-pub use time::{CutTime, InsertTime};
-pub use vca::{DeleteVca, SetVca};
+pub use pitch::SoundClipPitchRead;
+pub use recording::{SoundTrackMonitor, SoundTrackRecord};
+pub use remove::{SoundClipRemove, SoundMarkerRemove, SoundTrackRemove};
+pub use rename::{SoundClipRename, SoundTrackRename};
+pub use render::SoundClipRender;
+pub use repeat::SoundTrackRepeat;
+pub use split::SoundTrackSplitMono;
+pub use surround::{SoundTrackSurround, SoundTrackSurroundDelete};
+pub use time::{SoundTimeCut, SoundTimeInsert};
+pub use vca::{SoundTrackVca, SoundTrackVcaDelete};
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::Value as Json;
@@ -1259,49 +1263,4130 @@ fn baseline() -> f64 {
     -timeline::RULER_HEIGHT
 }
 
-/// Put a **ruler** in the document: the row above the tracks, and the
-/// scale it counts by.
-#[derive(Command)]
-#[command(
-    id = "sound.ruler.add",
-    area = "sound",
-    layer = "sound",
-    icon = "plus",
-    menu("Ruler"),
-    mutates,
-    undoable
-)]
-pub struct AddRuler {
-    /// What to call it.
-    pub name: Text,
-    /// The scale the ruler counts by: `bars` or `seconds`.
-    pub scale: Option<Text>,
-}
+commands! {
+    /// Put a **ruler** in the document: the row above the tracks, and the
+    /// scale it counts by.
+    sound.ruler.add {
+        area: "sound",
+        layer: "sound",
+        icon: "plus",
+        mutates,
+        undoable,
+        menu: ("Ruler"),
+        params: {
+            /// What to call it.
 
-impl AddRuler {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let scale = match &self.scale {
-            Some(scale) => {
-                let scale = scale.0.as_str();
-                if scale != "bars" && scale != "seconds" {
+            name: Text,
+            /// The scale the ruler counts by: `bars` or `seconds`.
+
+            scale: Option<Text>,
+        },
+        run: {
+
+            let scale = match &self.scale {
+                Some(scale) => {
+                    let scale = scale.0.as_str();
+                    if scale != "bars" && scale != "seconds" {
+                        return Err(EngineError::Failed {
+                            id: "sound.ruler.add".to_string(),
+                            message: format!("a ruler counts by bars or by seconds, and not by `{scale}`"),
+                        });
+                    }
+                    scale.to_string()
+                }
+                None => "bars".to_string(),
+            };
+            let name = self.name.0.clone();
+            let id = session.document_mut()?.add_node_with(
+                name.clone(),
+                "sound.ruler",
+                None,
+                serde_json::json!({ "scale": scale }),
+            );
+            Ok(Outcome::changed(format!("added a ruler `{name}`"))
+                .with_data(serde_json::json!({ "id": id, "name": name, "scale": scale })))
+
+        }
+    }
+    /// Make a track.
+    ///
+    /// A track comes with one playlist, because a track with no takes is not a
+    /// track yet: it is a row with nothing in it.
+    sound.track.add {
+        area: "sound",
+        layer: "sound",
+        icon: "plus",
+        mutates,
+        undoable,
+        menu: ("Track", "New"),
+        params: {
+            /// What to call it.
+
+            name: Text,
+            /// What kind of track it is: `audio`, `instrument`, `aux`, `master`.
+
+            track_kind: Option<Text>,
+            /// How many channels it has.
+
+            channels: Option<Number>,
+        },
+        run: {
+
+            let name = self.name.0.clone();
+            let track_kind = match &self.track_kind {
+                Some(kind) => kind.0.clone(),
+                None => "audio".to_string(),
+            };
+            let channels = match &self.channels {
+                Some(channels) => channels.0 as u32,
+                None => 2,
+            };
+            let payload = TrackPayload {
+                track_kind,
+                channels,
+                solo: false,
+                trim_db: 0.0,
+                fader_db: 0.0,
+                pan: 0.0,
+                mute: false,
+                solo_safe: false,
+                phase_invert: false,
+                active_playlist: None,
+                inactive: false,
+                elastic: None,
+                surround: None,
+                vca: None,
+                record_arm: false,
+                input_monitor: false,
+                frozen: false,
+            };
+            let document = session.document_mut()?;
+            let track = document.add_node_with(name.clone(), "sound.track", None, payload.to_json());
+            document.add_node_with_under(Some(track), "A".to_string(), "sound.playlist", None, Json::Null);
+            Ok(Outcome::changed(format!("added a track `{name}`"))
+                .with_data(serde_json::json!({ "id": track, "name": name })))
+
+        }
+    }
+    /// Add a **take** to a track.
+    ///
+    /// A take is the tree's playlist: an alternative set of clips on the
+    /// same track, and one of the takes is the one that is played.
+    sound.playlist.add {
+        area: "sound",
+        layer: "sound",
+        icon: "plus",
+        mutates,
+        undoable,
+        menu: ("Track", "Takes"),
+        params: {
+            /// The track the take is on.
+
+            track: NodeRef,
+            /// What to call it.
+
+            name: Text,
+        },
+        run: {
+
+            let track = self.track.0;
+            let name = self.name.0.clone();
+            if name.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "sound.playlist.add".to_string(),
+                    message: "a take says what it is called".to_string(),
+                });
+            }
+            let Some(node) = session.document().node(track) else {
+                return Err(EngineError::Failed {
+                    id: "sound.playlist.add".to_string(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: "sound.playlist.add".to_string(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                });
+            }
+            if node.children.iter().any(|child| child.kind == "sound.playlist" && child.name == name) {
+                return Err(EngineError::Failed {
+                    id: "sound.playlist.add".to_string(),
+                    message: format!("the track `{track}` already has a take called `{name}`"),
+                });
+            }
+            let id = session.document_mut()?.add_node_with_under(
+                Some(track),
+                name.clone(),
+                "sound.playlist",
+                None,
+                Json::Null,
+            );
+            Ok(Outcome::changed(format!("the track `{track}` has a take called `{name}`"))
+                .with_data(serde_json::json!({ "id": id, "track": track, "name": name })))
+
+        }
+    }
+    /// Say which **take** of a track is played.
+    ///
+    /// The tree's track has several playlists and an index of the one that
+    /// is played; here the take is named, because a name is what a person
+    /// says and an index is what a program says.
+    sound.playlist.active {
+        area: "sound",
+        layer: "sound",
+        icon: "check",
+        mutates,
+        undoable,
+        menu: ("Track", "Takes"),
+        params: {
+            /// The track the take is on.
+
+            track: NodeRef,
+            /// The take that is played.
+
+            playlist: Text,
+        },
+        run: {
+
+            let track = self.track.0;
+            let name = self.playlist.0.clone();
+            let Some(node) = session.document().node(track) else {
+                return Err(EngineError::Failed {
+                    id: "sound.playlist.active".to_string(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: "sound.playlist.active".to_string(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                });
+            }
+            if !node.children.iter().any(|child| child.kind == "sound.playlist" && child.name == name) {
+                return Err(EngineError::Failed {
+                    id: "sound.playlist.active".to_string(),
+                    message: format!("the track `{track}` has no take called `{name}`"),
+                });
+            }
+            let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+                id: "sound.playlist.active".to_string(),
+                message: error.to_string(),
+            })?;
+            payload.active_playlist = Some(name.clone());
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(track) else {
+                return Err(EngineError::Failed {
+                    id: "sound.playlist.active".to_string(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            node.data = data;
+            Ok(Outcome::changed(format!("the track `{track}` plays the take `{name}`"))
+                .with_data(serde_json::json!({ "track": track, "playlist": name })))
+
+        }
+    }
+    /// Set a track's **elastic algorithm**.
+    ///
+    /// An elastic track is a track whose clips are **stretched and the
+    /// pitch stays**: the sound is longer and it is the same note. The
+    /// tree's track carries an algorithm for it — `polyphonic`,
+    /// `rhythmic`, `monophonic`, `varispeed`, `x-form` — and the
+    /// algorithm `varispeed` says that the pitch falls with the speed,
+    /// which is what an ordinary track does anyway.
+    ///
+    /// The algorithm is a **string** and not a variant: the kinds of a
+    /// track are open here, and so are its algorithms. The names the tree
+    /// uses are the names this uses, and a third party may name one.
+    ///
+    /// The algorithm `none` takes the elastic away, and so does an empty
+    /// name: a track with no algorithm is an ordinary track, and its
+    /// clips are played at another speed.
+    sound.track.elastic {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Track", "Elastic"),
+        params: {
+            /// The track to set.
+
+            track: NodeRef,
+            /// The algorithm: `polyphonic`, `rhythmic`, `monophonic`,
+            /// `varispeed`, `x-form`, or `none` to take the elastic away.
+
+            algorithm: Text,
+        },
+        run: {
+
+            let id = self.track.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.elastic".to_string(),
+                    message: format!("there is no track `{id}`"),
+                });
+            };
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: "sound.track.elastic".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let asked = self.algorithm.0.trim().to_string();
+            if asked.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "sound.track.elastic".to_string(),
+                    message: "an algorithm is a name, and the name `none` takes the elastic away".to_string(),
+                });
+            }
+            let algorithm = if asked == "none" { None } else { Some(asked.clone()) };
+            let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+                id: "sound.track.elastic".to_string(),
+                message: error.to_string(),
+            })?;
+            payload.elastic = algorithm.clone();
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.elastic".to_string(),
+                    message: format!("there is no track `{id}`"),
+                });
+            };
+            node.data = data;
+            let said = algorithm.clone().unwrap_or_else(|| "none".to_string());
+            Ok(Outcome::changed(format!("the track `{id}` is `{said}`"))
+                .with_data(serde_json::json!({ "track": id, "algorithm": algorithm })))
+
+        }
+    }
+    /// Make a track **solo safe**, or not.
+    ///
+    /// A solo silences the other tracks, and a **solo-safe** track is not
+    /// silenced by it: it is a track that stays when somebody listens to
+    /// one thing on purpose — a reference, a click, a talk track.
+    ///
+    /// The tree's mixer keeps the flag beside the solo, and the group
+    /// shares the solo and not this: the flag is about one track and not
+    /// about the others.
+    sound.track.solo.safe {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Track", "Solo Safe"),
+        params: {
+            /// The track.
+
+            track: NodeRef,
+            /// Whether it is solo safe.
+
+            solo_safe: Bool,
+        },
+        run: {
+
+            let id = self.track.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.solo.safe".to_string(),
+                    message: format!("there is no track `{id}`"),
+                });
+            };
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: "sound.track.solo.safe".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let solo_safe = self.solo_safe.0;
+            let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+                id: "sound.track.solo.safe".to_string(),
+                message: error.to_string(),
+            })?;
+            payload.solo_safe = solo_safe;
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.solo.safe".to_string(),
+                    message: format!("there is no track `{id}`"),
+                });
+            };
+            node.data = data;
+            Ok(Outcome::changed(format!("the track `{id}` is solo safe: {solo_safe}"))
+                .with_data(serde_json::json!({ "id": id, "solo_safe": solo_safe })))
+
+        }
+    }
+    /// Mute a track, or let it be heard.
+    ///
+    /// The track's own **mute** is the level of the whole track: a muted
+    /// track is not heard, and neither is the copy that a send takes of
+    /// it. The tree's mixer keeps a mute beside the mute lane, and the
+    /// lane is the mute's default: a **mute lane** with breakpoints
+    /// overrides it, and a lane without one is the mute.
+    ///
+    /// The mute is one of the things a **group** shares: the tree's group
+    /// shares the volume, the mute, the solo and the record, and the mute
+    /// is one of them — so a change to the mute of a track in a group
+    /// that mixes is a change to the mute of every member.
+    sound.track.mute {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Track", "Mute"),
+        params: {
+            /// The track.
+
+            track: NodeRef,
+            /// Whether it is muted.
+
+            muted: Bool,
+        },
+        run: {
+
+            let id = self.track.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.mute".to_string(),
+                    message: format!("there is no track `{id}`"),
+                });
+            };
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: "sound.track.mute".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let muted = self.muted.0;
+            let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+                id: "sound.track.mute".to_string(),
+                message: error.to_string(),
+            })?;
+            payload.mute = muted;
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.mute".to_string(),
+                    message: format!("there is no track `{id}`"),
+                });
+            };
+            node.data = data;
+            // The **mix link**: a group of tracks is mixed together, so a
+            // change to the mute of one of them is a change to the mute of
+            // all of them.
+            let mut linked = Vec::new();
+            for sibling in group::mix_siblings(session.document(), id) {
+                if sibling == id {
+                    continue;
+                }
+                let Some(node) = session.document().node(sibling) else { continue };
+                let Ok(mut other) = TrackPayload::from_json(&node.data) else { continue };
+                other.mute = muted;
+                let data = other.to_json();
+                if let Some(node) = session.document_mut()?.node_mut(sibling) {
+                    node.data = data;
+                }
+                linked.push(sibling);
+            }
+            Ok(Outcome::changed(format!("the track `{id}` is muted: {muted}"))
+                .with_data(serde_json::json!({ "id": id, "mute": muted, "linked": linked })))
+
+        }
+    }
+    /// Set a track's **pan**.
+    ///
+    /// The pan is the **balance** of the track's sound: minus one is all
+    /// to the left and one is all to the right, and the middle is the
+    /// middle. It is applied when the track is routed — a track that
+    /// feeds a bus is balanced before it reaches the bus — and a copy
+    /// that a send takes is balanced by the **send's** own pan and not by
+    /// this one.
+    ///
+    /// The pan runs from minus one to one, and a pan outside that is
+    /// **refused** and not pulled to the edge.
+    sound.track.pan {
+        area: "sound",
+        layer: "sound",
+        icon: "sliders",
+        mutates,
+        undoable,
+        menu: ("Track", "Pan"),
+        params: {
+            /// The track to set.
+
+            track: NodeRef,
+            /// Its balance: from minus one to one.
+
+            pan: Number,
+        },
+        run: {
+
+            let id = self.track.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.pan".to_string(),
+                    message: format!("there is no track `{id}`"),
+                });
+            };
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: "sound.track.pan".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let pan = self.pan.0;
+            if !pan.is_finite() || !(-1.0..=1.0).contains(&pan) {
+                return Err(EngineError::Failed {
+                    id: "sound.track.pan".to_string(),
+                    message: "a pan is a number between minus one and one".to_string(),
+                });
+            }
+            let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+                id: "sound.track.pan".to_string(),
+                message: error.to_string(),
+            })?;
+            payload.pan = pan;
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.pan".to_string(),
+                    message: format!("there is no track `{id}`"),
+                });
+            };
+            node.data = data;
+            Ok(Outcome::changed(format!("the track `{id}` is at {pan}"))
+                .with_data(serde_json::json!({ "id": id, "pan": pan })))
+
+        }
+    }
+    /// Set a track's **trim** and **phase**.
+    ///
+    /// The trim is the level of the track's **input**, before its inserts,
+    /// and the phase is a sign and not a level: the sound is the same and
+    /// upside down.
+    sound.track.set {
+        area: "sound",
+        layer: "sound",
+        icon: "sliders",
+        mutates,
+        undoable,
+        menu: ("Track", "Trim"),
+        params: {
+            /// The track to set.
+
+            track: NodeRef,
+            /// Its trim, in decibels: from minus one hundred and forty-four to
+            /// twenty-four.
+
+            trim_db: Option<Number>,
+            /// Whether its phase is inverted.
+
+            phase: Option<Bool>,
+        },
+        run: {
+
+            let id = self.track.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.set".to_string(),
+                    message: format!("there is no track `{id}`"),
+                });
+            };
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: "sound.track.set".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+                id: "sound.track.set".to_string(),
+                message: error.to_string(),
+            })?;
+            if let Some(asked) = &self.trim_db {
+                let decibels = asked.0;
+                if !decibels.is_finite() || !(-144.0..=24.0).contains(&decibels) {
                     return Err(EngineError::Failed {
-                        id: "sound.ruler.add".to_string(),
-                        message: format!("a ruler counts by bars or by seconds, and not by `{scale}`"),
+                        id: "sound.track.set".to_string(),
+                        message:
+                            "a trim is a number of decibels from minus one hundred and forty-four to twenty-four"
+                                .to_string(),
                     });
                 }
-                scale.to_string()
+                payload.trim_db = decibels;
             }
-            None => "bars".to_string(),
-        };
-        let name = self.name.0.clone();
-        let id = session.document_mut()?.add_node_with(
-            name.clone(),
-            "sound.ruler",
-            None,
-            serde_json::json!({ "scale": scale }),
-        );
-        Ok(Outcome::changed(format!("added a ruler `{name}`"))
-            .with_data(serde_json::json!({ "id": id, "name": name, "scale": scale })))
+            if let Some(phase) = &self.phase {
+                payload.phase_invert = phase.0;
+            }
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.set".to_string(),
+                    message: format!("there is no track `{id}`"),
+                });
+            };
+            node.data = data;
+            // The **trim** is not linked by the group: the tree's group
+            // links the **volume** and not the input gain, and the fader
+            // is the volume.
+            Ok(Outcome::changed(format!("the track `{id}` is set")).with_data(serde_json::json!({
+                "id": id,
+                "trim_db": payload.trim_db,
+                "phase": payload.phase_invert,
+            })))
+
+        }
+    }
+    /// Set a track's **fader**.
+    ///
+    /// The fader is the level of the track's **output**: it comes after
+    /// the track's inserts, and it is the level a track is heard at when
+    /// nothing automates it. The tree's fader runs from minus one hundred
+    /// and forty-four decibels to twelve, and a fader outside that is
+    /// **refused** and not pulled to the edge.
+    ///
+    /// A **volume lane** overrides the fader: the tree's mixer runs the
+    /// lane when there is one and the fader when there is not, and the
+    /// fader is the lane's default.
+    ///
+    /// The fader is the one thing a **group** links: the tree's group
+    /// carries a list of the attributes it shares — the volume, the mute,
+    /// the solo and the record — and the volume is the fader, so a change
+    /// to the fader of a track in a group that mixes is a change to the
+    /// fader of every member.
+    sound.track.fader {
+        area: "sound",
+        layer: "sound",
+        icon: "sliders",
+        mutates,
+        undoable,
+        menu: ("Track", "Fader"),
+        params: {
+            /// The track to set.
+
+            track: NodeRef,
+            /// Its level, in decibels: from minus one hundred and forty-four
+            /// to twelve.
+
+            db: Number,
+        },
+        run: {
+
+            let id = self.track.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.fader".to_string(),
+                    message: format!("there is no track `{id}`"),
+                });
+            };
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: "sound.track.fader".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let decibels = self.db.0;
+            if !decibels.is_finite() || !(-144.0..=12.0).contains(&decibels) {
+                return Err(EngineError::Failed {
+                    id: "sound.track.fader".to_string(),
+                    message: "a fader is a number of decibels from minus one hundred and forty-four to twelve"
+                        .to_string(),
+                });
+            }
+            let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+                id: "sound.track.fader".to_string(),
+                message: error.to_string(),
+            })?;
+            payload.fader_db = decibels;
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.fader".to_string(),
+                    message: format!("there is no track `{id}`"),
+                });
+            };
+            node.data = data;
+            // The **mix link**: a group of tracks is mixed together, so a
+            // change to the fader of one of them is a change to the fader
+            // of all of them.
+            let mut linked = Vec::new();
+            for sibling in group::mix_siblings(session.document(), id) {
+                if sibling == id {
+                    continue;
+                }
+                let Some(node) = session.document().node(sibling) else { continue };
+                let Ok(mut other) = TrackPayload::from_json(&node.data) else { continue };
+                other.fader_db = decibels;
+                let data = other.to_json();
+                if let Some(node) = session.document_mut()?.node_mut(sibling) {
+                    node.data = data;
+                }
+                linked.push(sibling);
+            }
+            Ok(Outcome::changed(format!("the track `{id}` is at {decibels} decibels"))
+                .with_data(serde_json::json!({ "id": id, "db": decibels, "linked": linked })))
+
+        }
+    }
+    /// **Solo** a track.
+    ///
+    /// A soloed track silences the others: when one track is soloed, the
+    /// rest are not heard — and their sends carry the silence, because a
+    /// send is a copy of the track's signal.
+    ///
+    /// Soloing nothing is not the same as soloing everything: a document
+    /// with no soloed track is heard whole, and a document with one is
+    /// heard alone.
+    sound.track.solo {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Track", "Solo"),
+        params: {
+            /// The track.
+
+            track: NodeRef,
+            /// Whether the track is soloed.
+
+            solo: Bool,
+        },
+        run: {
+
+            let id = self.track.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.solo".to_string(),
+                    message: format!("there is no node `{id}`"),
+                });
+            };
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: "sound.track.solo".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let solo = self.solo.0;
+            let Some(node) = session.document_mut()?.node_mut(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.track.solo".to_string(),
+                    message: format!("there is no node `{id}`"),
+                });
+            };
+            let mut payload = TrackPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: "sound.track.solo".to_string(), message: error })?;
+            payload.solo = solo;
+            node.data = payload.to_json();
+            Ok(Outcome::changed(format!("the track `{id}` is soloed: {solo}"))
+                .with_data(serde_json::json!({ "id": id, "solo": solo })))
+
+        }
+    }
+    /// Put a clip on a track.
+    ///
+    /// The track may be given as an id, and the playlist as a name: a track
+    /// holds playlists, and a clip goes in one of them.
+    sound.clip.add {
+        area: "sound",
+        layer: "sound",
+        icon: "plus",
+        mutates,
+        undoable,
+        example,
+        menu: ("Track", "New"),
+        params: {
+            /// The track the clip goes on.
+
+            track: NodeRef,
+            /// The playlist it goes in, if the track has more than one.
+
+            playlist: Option<Text>,
+            /// Where it starts, in samples.
+
+            start: Number,
+            /// How long it is, in samples.
+
+            length: Number,
+            /// How much **longer** it is played than its source: one is none.
+
+            stretch: Option<Number>,
+            /// The source it plays.
+
+            source: Option<NodeRef>,
+            /// What to call it.
+
+            name: Option<Text>,
+        },
+        run: {
+
+            let start = samples(self.start.0, "where the clip starts")?;
+            let length = samples(self.length.0, "how long the clip is")?;
+            if length == 0 {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.add".to_string(),
+                    message: "a clip with no length is not a clip".to_string(),
+                });
+            }
+            // A **master** holds a fader and not a playlist: a clip on a
+            // master would be a clip that is never heard.
+            match session.document().node(self.track.0) {
+                Some(node) if node.kind == "sound.track" && is_master(node) => {
+                    return Err(EngineError::Failed {
+                        id: "sound.clip.add".to_string(),
+                        message: "a master holds no clips: it has a fader and not a playlist".to_string(),
+                    });
+                }
+                _ => {}
+            }
+            // A **reader** takes a bus into the mix: it holds a bus and not
+            // a playlist.
+            if mixer::reads_bus(session.document(), self.track.0) {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.add".to_string(),
+                    message: "a track that reads a bus holds no clips: it has a bus and not a playlist"
+                        .to_string(),
+                });
+            }
+            // A clip on an **elastic** track is stretched with the pitch
+            // kept, and that stretch is bounded the way the tree's is: a
+            // stretch outside the bound is refused and not pulled to the
+            // edge.
+            let stretch = match self.stretch {
+                Some(asked) => match session
+                    .document()
+                    .node(self.track.0)
+                    .and_then(elastic_algorithm)
+                    .filter(|algorithm| algorithm != "varispeed")
+                {
+                    Some(algorithm) => elastic_stretch_of(asked.0, "sound.clip.add", &algorithm)?,
+                    None => stretch_of(asked.0, "sound.clip.add")?,
+                },
+                None => 1.0,
+            };
+            let playlist = playlist_of(session, self.track.0, self.playlist.as_ref().map(|name| name.0.clone()))?;
+            let mut payload = ClipPayload::new();
+            payload.start = start;
+            payload.length = length;
+            payload.source = self.source.map(|source| source.0);
+            payload.stretch = stretch;
+            let name = match &self.name {
+                Some(name) => name.0.clone(),
+                None => format!("clip at {start}"),
+            };
+            let id = session.document_mut()?.add_node_with_under(
+                Some(playlist),
+                name.clone(),
+                "sound.clip",
+                None,
+                payload.to_json(),
+            );
+            // The clip plays the source: that is a **relation**, not
+            // containment. The clip is not in the source.
+            if let Some(source) = self.source {
+                session.document_mut()?.add_relation(craftkit_sdk::Relation::new(id, source.0, "source"));
+            }
+            Ok(Outcome::changed(format!("added a clip `{name}`")).with_data(
+                serde_json::json!({ "id": id, "playlist": playlist, "start": start, "length": length }),
+            ))
+
+        }
+    }
+    /// **Move** clips along the timeline.
+    ///
+    /// The clips move by so many samples, later or earlier, and their
+    /// **content** goes with them: a clip that moves keeps the sound it
+    /// plays and plays it at another time.
+    ///
+    /// A **locked** clip does not move — the edit lock and the time lock
+    /// both hold it — and the answer says how many moved. The tree's
+    /// editor does the same, and the tree's own word for it is that a
+    /// locked clip "doesn't move".
+    ///
+    /// A clip that would move **before the beginning** of the timeline is
+    /// **refused**: the move is not made for one clip and not for the
+    /// others, because a move that is half made is a move nobody asked
+    /// for.
+    sound.clip.move {
+        area: "sound",
+        layer: "sound",
+        icon: "move",
+        mutates,
+        undoable,
+        menu: ("Clip", "Move"),
+        params: {
+            /// The clips to move: their ids.
+
+            clips: serde_json::Value,
+            /// How much later or earlier, in samples.
+
+            delta: Number,
+        },
+        run: {
+
+            let id = "sound.clip.move".to_string();
+            let clips = crate::clip_ids_of(&self.clips, &id)?;
+            if clips.is_empty() {
+                return Err(EngineError::Failed { id, message: "there are no clips to move".to_string() });
+            }
+            if !self.delta.0.is_finite() {
+                return Err(EngineError::Failed { id, message: "a distance is a number of samples".to_string() });
+            }
+            let delta = self.delta.0.round() as i64;
+            // The clips are read first, and the whole move is refused if
+            // one of them would go before the beginning.
+            let mut payloads: Vec<(u64, ClipPayload)> = Vec::with_capacity(clips.len());
+            for clip in &clips {
+                let node = session.document().node(*clip).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip}`"),
+                })?;
+                if node.kind != "sound.clip" {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                    });
+                }
+                let payload = ClipPayload::from_json(&node.data)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                if locks::edit_is_locked(&payload) || locks::time_is_locked(&payload) {
+                    continue;
+                }
+                if payload.start + delta < 0 {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the clip `{clip}` would move before the beginning of the timeline"),
+                    });
+                }
+                payloads.push((*clip, payload));
+            }
+            let mut moved = 0;
+            for (clip, payload) in &payloads {
+                let mut moved_payload = payload.clone();
+                moved_payload.start += delta;
+                if let Some(node) = session.document_mut()?.node_mut(*clip) {
+                    node.data = moved_payload.to_json();
+                }
+                moved += 1;
+            }
+            Ok(Outcome::changed(format!("moved {moved} clips"))
+                .with_data(serde_json::json!({ "moved": moved, "delta": delta })))
+
+        }
+    }
+    /// **Trim** clips to the **material** they play.
+    ///
+    /// A clip plays a part of a source, and a clip that was moved may
+    /// reach past the end of it: the part of the clip that is past the end
+    /// is **silence**, and a clip that is half silence is a clip that says
+    /// something false about its own sound.
+    ///
+    /// The clip is cut at the end of its material — and at the beginning
+    /// of it, when the clip starts past the end — and the part of the
+    /// material the clip plays is what is left.
+    ///
+    /// The tree's editor has the same command, and the same name for it:
+    /// "To File Boundaries".
+    sound.clip.trim.to.file {
+        area: "sound",
+        layer: "sound",
+        icon: "trim",
+        mutates,
+        undoable,
+        menu: ("Clip", "Trim to Material"),
+        params: {
+            /// The clips to trim: their ids.
+
+            clips: serde_json::Value,
+        },
+        run: {
+
+            let id = "sound.clip.trim.to.file".to_string();
+            let clips = crate::clip_ids_of(&self.clips, &id)?;
+            if clips.is_empty() {
+                return Err(EngineError::Failed { id, message: "there are no clips to trim".to_string() });
+            }
+            let settings = session_of(session.document());
+            let mut trimmed = 0;
+            for clip in &clips {
+                let node = session.document().node(*clip).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip}`"),
+                })?;
+                if node.kind != "sound.clip" {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                    });
+                }
+                let payload = ClipPayload::from_json(&node.data)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                if locks::edit_is_locked(&payload) {
+                    continue;
+                }
+                let Some(source_id) = payload.source else { continue };
+                let Some(source_node) = session.document().node(source_id) else { continue };
+                let Ok(source) = SourcePayload::from_json(&source_node.data) else { continue };
+                // The **material** in the session's samples: the source's
+                // own frames, read at the session's rate.
+                let ratio = settings.sample_rate.max(1) as f64 / source.sample_rate.max(1) as f64;
+                let material = (source.frames.max(0) as f64 * ratio).round() as i64;
+                let offset = payload.offset.max(0);
+                if offset >= material {
+                    // The clip starts past the end of the material: there
+                    // is nothing of it to play.
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the clip `{clip}` starts past the end of its material"),
+                    });
+                }
+                // The clip's content runs for as long as the material
+                // that is left of it, read at the clip's own stretch.
+                let room = ((material - offset) as f64 * payload.stretch).round() as i64;
+                if room >= payload.length {
+                    continue;
+                }
+                let mut shorter = payload.clone();
+                shorter.length = room.max(1);
+                if let Some(sync) = payload.sync {
+                    shorter.sync = (0..=shorter.length).contains(&sync).then_some(sync);
+                }
+                if let Some(node) = session.document_mut()?.node_mut(*clip) {
+                    node.data = shorter.to_json();
+                }
+                trimmed += 1;
+            }
+            Ok(Outcome::changed(format!("trimmed {trimmed} clips to their material"))
+                .with_data(serde_json::json!({ "trimmed": trimmed })))
+
+        }
+    }
+    /// Stretch a clip.
+    ///
+    /// A stretched clip is **longer and lower**: the source is read more
+    /// slowly, so the sound lasts longer and the pitch falls with it. This
+    /// is a **varispeed**, and it is not a time stretch — a time stretch
+    /// keeps the pitch and changes the length, and that is a much harder
+    /// thing to do well.
+    ///
+    /// The clip keeps its place and its length: the stretch says **how the
+    /// source is played**, and not how long the clip is. One is no stretch.
+    ///
+    /// The clip's place in the source moves with it: trimming a stretched
+    /// clip moves the content by the delta **divided by the stretch**,
+    /// because the source is read that much more slowly.
+    ///
+    /// On an **elastic** track the stretch is **pitch-preserving**: the
+    /// sound is longer and it is the same note, and that is a harder thing
+    /// to do — so it is bounded the way the tree's is, from a tenth to ten
+    /// times, and a stretch outside that is refused.
+    sound.clip.stretch {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Clip", "Stretch"),
+        params: {
+            /// The clip to stretch.
+
+            clip: NodeRef,
+            /// How much longer it is played than its source: one is none.
+
+            stretch: Number,
+        },
+        run: {
+
+            let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+                id: "sound.clip.stretch".to_string(),
+                message: format!("there is no node `{}`", self.clip.0),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.stretch".to_string(),
+                    message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+                });
+            }
+            // A clip on an **elastic** track is stretched with the pitch
+            // kept, and that is a harder thing to do: the stretch is
+            // bounded the way the tree's is, and a stretch outside the
+            // bound is refused.
+            let elastic = timeline::track_of(session.document(), node).and_then(elastic_algorithm);
+            let stretch = match elastic.as_deref() {
+                Some(algorithm) if algorithm != "varispeed" => {
+                    elastic_stretch_of(self.stretch.0, "sound.clip.stretch", algorithm)?
+                }
+                _ => stretch_of(self.stretch.0, "sound.clip.stretch")?,
+            };
+            let mut payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: "sound.clip.stretch".to_string(), message: error })?;
+            // A clip whose **content** is locked is finished: it is not
+            // stretched.
+            if locks::edit_is_locked(&payload) {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.stretch".to_string(),
+                    message: format!("the clip `{}` is locked: its sound is finished", self.clip.0),
+                });
+            }
+            payload.stretch = stretch;
+            if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
+                node.data = payload.to_json();
+            }
+            Ok(Outcome::changed(format!("stretched the clip `{}` to {stretch}", self.clip.0))
+                .with_data(serde_json::json!({ "id": self.clip.0, "stretch": stretch })))
+
+        }
+    }
+    /// Do something to a clip's **sound**.
+    ///
+    /// A process is one of the tree's **audio-suite processes**: the sound
+    /// is reversed, upside down, brought to a level, or has its direct
+    /// current taken away. The tree does each of them by rendering the
+    /// material and replacing the clip's content with the rendered file;
+    /// here the process is on the clip and the sound is worked out when it
+    /// is played.
+    ///
+    /// The processes are done in the order they were added, so a clip may
+    /// have more than one — and a clip may have the same one twice, which
+    /// is what the tree does when the same process is asked for twice.
+    ///
+    /// A process this battery does not know is **refused** and not
+    /// ignored: a process that does nothing is worse than no process at
+    /// all, because the document says the sound was changed and it was
+    /// not.
+    sound.clip.process {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Clip", "Process"),
+        params: {
+            /// The clip to process.
+
+            clip: NodeRef,
+            /// What to do: `reverse`, `invert`, `normalize` or `dc_offset`.
+
+            process: Text,
+            /// What it is given: `normalize` takes a `target_db`.
+
+            params: Option<Json>,
+        },
+        run: {
+
+            let name = self.process.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.process".to_string(),
+                    message: "a process is a name".to_string(),
+                });
+            }
+            // The **parameters** are checked here, so that a process that
+            // would be refused is refused before the clip is changed.
+            let params = process_params(&name, self.params.as_ref(), "sound.clip.process")?;
+            let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+                id: "sound.clip.process".to_string(),
+                message: format!("there is no node `{}`", self.clip.0),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.process".to_string(),
+                    message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+                });
+            }
+            let mut payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: "sound.clip.process".to_string(), message: error })?;
+            // A clip whose **content** is locked is finished: it is not
+            // processed.
+            if locks::edit_is_locked(&payload) {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.process".to_string(),
+                    message: format!("the clip `{}` is locked: its sound is finished", self.clip.0),
+                });
+            }
+            payload.processes.push(ProcessPayload { process: name.clone(), params });
+            let data = payload.to_json();
+            if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
+                node.data = data;
+            }
+            Ok(Outcome::changed(format!("the clip `{}` is processed with `{name}`", self.clip.0))
+                .with_data(serde_json::json!({ "id": self.clip.0, "process": name })))
+
+        }
+    }
+    /// Take a process off a clip.
+    ///
+    /// The **last** process of that name is the one that goes, because the
+    /// processes are done in order and the last one is the one that was
+    /// asked for last. A clip with no such process has nothing to take
+    /// away, and that is refused.
+    sound.clip.process.remove {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Clip", "Unprocess"),
+        params: {
+            /// The clip to take the process off.
+
+            clip: NodeRef,
+            /// The name of the process.
+
+            process: Text,
+        },
+        run: {
+
+            let name = self.process.0.trim().to_string();
+            let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+                id: "sound.clip.process.remove".to_string(),
+                message: format!("there is no node `{}`", self.clip.0),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.process.remove".to_string(),
+                    message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+                });
+            }
+            let mut payload = ClipPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+                id: "sound.clip.process.remove".to_string(),
+                message: error,
+            })?;
+            let Some(at) = payload.processes.iter().rposition(|process| process.process == name) else {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.process.remove".to_string(),
+                    message: format!("the clip `{}` has no `{name}`", self.clip.0),
+                });
+            };
+            payload.processes.remove(at);
+            let data = payload.to_json();
+            if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
+                node.data = data;
+            }
+            Ok(Outcome::changed(format!("the clip `{}` is not processed with `{name}`", self.clip.0))
+                .with_data(serde_json::json!({ "id": self.clip.0, "process": name })))
+
+        }
+    }
+    /// Move the **pitch** of a clip.
+    ///
+    /// A pitch shift is the other half of a stretch: a stretch makes the
+    /// sound longer and the pitch stays, and a pitch shift moves the pitch
+    /// and the sound stays as long as it was. Twelve semitones are an
+    /// octave up and minus twelve an octave down.
+    ///
+    /// The shift runs from minus twenty-four semitones to twenty-four, and
+    /// a shift outside that is **refused** and not pulled to the edge: a
+    /// caller that asked for a hundred semitones would be given
+    /// twenty-four and would not know.
+    ///
+    /// A clip whose **content** is locked is finished, and it is not
+    /// shifted.
+    sound.clip.pitch {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Clip", "Pitch"),
+        params: {
+            /// The clip to shift.
+
+            clip: NodeRef,
+            /// How many semitones: twelve is an octave up, zero is none.
+
+            semitones: Number,
+        },
+        run: {
+
+            let semitones = self.semitones.0;
+            if !semitones.is_finite() || !(-MAX_PITCH_SEMITONES..=MAX_PITCH_SEMITONES).contains(&semitones) {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.pitch".to_string(),
+                    message: format!(
+                        "a pitch is from minus {MAX_PITCH_SEMITONES} semitones to {MAX_PITCH_SEMITONES}, \
+                         and this one is {semitones}"
+                    ),
+                });
+            }
+            let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+                id: "sound.clip.pitch".to_string(),
+                message: format!("there is no node `{}`", self.clip.0),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.pitch".to_string(),
+                    message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+                });
+            }
+            let mut payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: "sound.clip.pitch".to_string(), message: error })?;
+            // A clip whose **content** is locked is finished: it is not
+            // shifted.
+            if locks::edit_is_locked(&payload) {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.pitch".to_string(),
+                    message: format!("the clip `{}` is locked: its sound is finished", self.clip.0),
+                });
+            }
+            payload.pitch_semitones = semitones;
+            if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
+                node.data = payload.to_json();
+            }
+            Ok(Outcome::changed(format!("the clip `{}` is at {semitones} semitones", self.clip.0))
+                .with_data(serde_json::json!({ "id": self.clip.0, "semitones": semitones })))
+
+        }
+    }
+    /// **Fade** a clip **to a place**: up to it, or down to it.
+    ///
+    /// The tree's editor fades a clip to the **playhead**: "Fade to
+    /// Start" fades the clip from its head up to the playhead, and "Fade
+    /// to End" fades it from the playhead down to its tail. The shape of
+    /// the fade is the tree's own — the equal-power curve — and the
+    /// curvature is not bent.
+    ///
+    /// Here the place is **given**, because the playhead is a node of the
+    /// document and a node is not a place every command may read: the
+    /// place is where the caller says it is.
+    ///
+    /// A place that is **not inside the clip** is refused: a fade that
+    /// ends outside the clip is a fade of nothing.
+    sound.clip.fade.to {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Clip", "Fade"),
+        params: {
+            /// The clip to fade.
+
+            clip: NodeRef,
+            /// Where the fade ends, in the clip's own samples.
+
+            at: Number,
+            /// Which way the fade goes: `in` fades the clip from its head up
+            /// to the place, and `out` fades it from the place down to its
+            /// tail.
+
+            to: Option<Text>,
+        },
+        run: {
+
+            let id = "sound.clip.fade.to".to_string();
+            let clip_id = self.clip.0;
+            let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{clip_id}`"),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let mut payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            if locks::edit_is_locked(&payload) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip_id}` is locked: its sound is finished"),
+                });
+            }
+            // The **way** the fade goes: `in` or `out`, and a name this
+            // battery does not know is refused.
+            let to = match &self.to {
+                Some(to) => match to.0.trim() {
+                    "in" => "in",
+                    "out" => "out",
+                    other => {
+                        return Err(EngineError::Failed {
+                            id,
+                            message: format!("a fade goes `in` or `out`, and not `{other}`"),
+                        });
+                    }
+                },
+                None => "in",
+            };
+            // The **place** is in the clip's own time: how far into the
+            // clip it is.
+            let at = samples(self.at.0, "where the fade ends")?;
+            let into = at - payload.start;
+            if into <= 0 || into >= payload.length {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!(
+                        "the clip `{clip_id}` runs from {} to {} and cannot fade at {at}",
+                        payload.start,
+                        payload.start + payload.length
+                    ),
+                });
+            }
+            // The tree's own shape: the equal-power curve, and a bend of
+            // nothing.
+            //
+            // The **length** of the fade is how far it runs: a fade in
+            // runs from the clip's head to the place, and a fade out runs
+            // from the place to the clip's tail.
+            let len = if to == "in" { into } else { payload.length - into };
+            let fade = FadePayload { len, shape: craftkit_audio::FadeShape::EqualPower, curvature: 0.0 };
+            if to == "in" {
+                payload.fade_in = fade;
+            } else {
+                payload.fade_out = fade;
+            }
+            if let Some(node) = session.document_mut()?.node_mut(clip_id) {
+                node.data = payload.to_json();
+            }
+            Ok(Outcome::changed(format!("faded the clip `{clip_id}` {to} to {at}")).with_data(
+                serde_json::json!({
+                    "id": clip_id,
+                    "at": at,
+                    "to": to,
+                    "fade_in": payload.fade_in.to_json(),
+                    "fade_out": payload.fade_out.to_json(),
+                }),
+            ))
+
+        }
+    }
+    /// Fade a clip.
+    ///
+    /// A fade is a **curve from silence to full**, and it is at the two
+    /// ends of a clip: the head fades in and the tail fades out. A fade
+    /// that is longer than the clip it fades is **refused**: a fade that
+    /// does not finish is a fade that is not there, and a fade that is
+    /// quietly shortened is a fade the caller did not ask for.
+    ///
+    /// The **shape** is the curve: linear, equal_power, s_curve,
+    /// exponential or logarithmic. The **bend** pushes the curve away from
+    /// itself, and a bend of zero is the shape exactly.
+    ///
+    /// A fade does not change the clip's length and does not change its
+    /// place: it changes how the clip is heard.
+    sound.clip.fade {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Clip", "Fade"),
+        params: {
+            /// The clip to fade.
+
+            clip: NodeRef,
+            /// How long the fade in is, in samples.
+
+            fade_in: Option<Number>,
+            /// How long the fade out is, in samples.
+
+            fade_out: Option<Number>,
+            /// The shape of the curve: linear, equal_power, s_curve, exponential or logarithmic.
+
+            shape: Option<Text>,
+            /// How much the curve is bent, from -1 to 1.
+
+            curvature: Option<Number>,
+        },
+        run: {
+
+            let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+                id: "sound.clip.fade".to_string(),
+                message: format!("there is no node `{}`", self.clip.0),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.fade".to_string(),
+                    message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+                });
+            }
+            let mut payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: "sound.clip.fade".to_string(), message: error })?;
+            // A clip whose **content** is locked is finished: it is not
+            // faded.
+            if locks::edit_is_locked(&payload) {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.fade".to_string(),
+                    message: format!("the clip `{}` is locked: its sound is finished", self.clip.0),
+                });
+            }
+            if self.fade_in.is_none() && self.fade_out.is_none() {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.fade".to_string(),
+                    message: "a fade needs a length: how long is the fade in, and how long is the fade out?"
+                        .to_string(),
+                });
+            }
+            // The **shape** and the **bend** are the curve, and they are
+            // read once: they apply to the fades that are being set.
+            let shape = match &self.shape {
+                Some(shape) => {
+                    craftkit_audio::FadeShape::from_label(&shape.0).ok_or_else(|| EngineError::Failed {
+                        id: "sound.clip.fade".to_string(),
+                        message: format!("there is no fade shape called `{}`", shape.0),
+                    })?
+                }
+                None => craftkit_audio::FadeShape::default(),
+            };
+            let curvature = match self.curvature {
+                Some(curvature) => {
+                    if !curvature.0.is_finite() {
+                        return Err(EngineError::Failed {
+                            id: "sound.clip.fade".to_string(),
+                            message: "a bend is a number".to_string(),
+                        });
+                    }
+                    curvature.0.clamp(-1.0, 1.0) as f32
+                }
+                None => 0.0,
+            };
+            if let Some(fade_in) = self.fade_in {
+                let len = samples(fade_in.0, "how long the fade in is")?;
+                if len > payload.length {
+                    return Err(EngineError::Failed {
+                        id: "sound.clip.fade".to_string(),
+                        message: format!("the fade in is {len} samples long and the clip is {}", payload.length),
+                    });
+                }
+                payload.fade_in = FadePayload { len, shape, curvature };
+            }
+            if let Some(fade_out) = self.fade_out {
+                let len = samples(fade_out.0, "how long the fade out is")?;
+                if len > payload.length {
+                    return Err(EngineError::Failed {
+                        id: "sound.clip.fade".to_string(),
+                        message: format!("the fade out is {len} samples long and the clip is {}", payload.length),
+                    });
+                }
+                payload.fade_out = FadePayload { len, shape, curvature };
+            }
+            if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
+                node.data = payload.to_json();
+            }
+            Ok(Outcome::changed(format!("faded the clip `{}`", self.clip.0)).with_data(serde_json::json!({
+                "id": self.clip.0,
+                "fade_in": payload.fade_in.to_json(),
+                "fade_out": payload.fade_out.to_json(),
+            })))
+
+        }
+    }
+    /// Trim a clip.
+    ///
+    /// A trim is about a **range**, and not about a node: the clip keeps its
+    /// place on the track and its place in the source, and what changes is
+    /// how much of it is heard. The range may be given, or it may come from
+    /// the selection — the selection holds a **part** of a node as well as
+    /// whole nodes, and a part of a clip is exactly what a trim is about.
+    ///
+    /// The range is in **samples on the track's timeline**, and it is half
+    /// open: `from` is in the clip and `to` is not.
+    sound.clip.trim {
+        area: "sound",
+        layer: "sound",
+        icon: "trim",
+        mutates,
+        undoable,
+        menu: ("Clip", "Trim"),
+        params: {
+            /// The clip to trim, if the caller names one.
+
+            clip: Option<NodeRef>,
+            /// Where the clip starts, in samples.
+
+            from: Option<Number>,
+            /// Where the clip ends, in samples.
+
+            to: Option<Number>,
+        },
+        run: {
+
+            // The clip: named, or the one that is selected.
+            let (clip_id, span) = match (self.clip, selection_span(session)) {
+                (Some(clip), Some((_, span))) => (clip.0, Some(span)),
+                (Some(clip), None) => (clip.0, None),
+                (None, Some((node, span))) => (node, Some(span)),
+                (None, None) => {
+                    return Err(EngineError::Failed {
+                        id: "sound.clip.trim".to_string(),
+                        message: "which clip, and which part of it?".to_string(),
+                    });
+                }
+            };
+            let (from, to) = match (self.from, self.to) {
+                (Some(from), Some(to)) => (from.0, to.0),
+                (None, None) => match span {
+                    Some((from, to)) => (from, to),
+                    None => {
+                        return Err(EngineError::Failed {
+                            id: "sound.clip.trim".to_string(),
+                            message: "which part of the clip?".to_string(),
+                        });
+                    }
+                },
+                _ => {
+                    return Err(EngineError::Failed {
+                        id: "sound.clip.trim".to_string(),
+                        message: "a range has a start and an end".to_string(),
+                    });
+                }
+            };
+            if !from.is_finite() || !to.is_finite() {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.trim".to_string(),
+                    message: "a range is made of numbers".to_string(),
+                });
+            }
+            if to <= from {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.trim".to_string(),
+                    message: format!("the range ends at {to} and starts at {from}"),
+                });
+            }
+            let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+                id: "sound.clip.trim".to_string(),
+                message: format!("there is no node `{clip_id}`"),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.trim".to_string(),
+                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: "sound.clip.trim".to_string(), message: error })?;
+            // A clip whose **content** is locked is finished: it is not
+            // trimmed.
+            if locks::edit_is_locked(&payload) {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.trim".to_string(),
+                    message: format!("the clip `{clip_id}` is locked: its sound is finished"),
+                });
+            }
+            if from < payload.start as f64 {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.trim".to_string(),
+                    message: format!("the clip starts at {} and cannot be trimmed before it", payload.start),
+                });
+            }
+            let mut trimmed = payload.clone();
+            trimmed.start = from as i64;
+            trimmed.length = (to - from) as i64;
+            // The content moves with the start: a clip trimmed at its head
+            // starts later in the source. A stretched clip's source is read
+            // more slowly, so the content moves by the delta **divided by
+            // the stretch**: the same stretch that makes the clip longer
+            // makes it slower, and the two are the same fact.
+            let delta = from as i64 - payload.start;
+            trimmed.offset = payload.offset + ((delta as f64 / payload.stretch).round() as i64);
+            // The **beat** moves with the audio it is in: the trim took
+            // `delta` samples off the head, so the beat is `delta` nearer
+            // the clip's head. A beat that the trim left outside the clip
+            // is not a beat of that clip any more, and it goes.
+            if let Some(sync) = payload.sync {
+                let moved = sync - delta;
+                trimmed.sync = (0..=trimmed.length).contains(&moved).then_some(moved);
+            }
+            // The **notes** of a MIDI clip move with the audio they are in:
+            // the notes the trim took off the head are gone, and the notes
+            // that are left are counted from the clip's new head. The
+            // tree's trim does the same — the notes are re-anchored by the
+            // engine, which knows the tempo map.
+            //
+            // The boundary is the distance the trim made, in the **ticks**
+            // of the document's tempo at the clip's own start.
+            if let Some(midi) = payload.midi.as_ref() {
+                let settings = session_of(session.document());
+                let map = tempo_map(session.document());
+                let start_tick = map.samples_to_ticks(payload.start, settings.sample_rate);
+                let cut_tick = map.samples_to_ticks(from as i64, settings.sample_rate);
+                let boundary = cut_tick.saturating_sub(start_tick);
+                trimmed.midi = Some(midi.divided(boundary, true));
+            }
+            if let Some(node) = session.document_mut()?.node_mut(clip_id) {
+                node.data = trimmed.to_json();
+            }
+            Ok(Outcome::changed(format!("trimmed the clip `{clip_id}` to {from}..{to}")).with_data(
+                serde_json::json!({
+                    "id": clip_id,
+                    "from": from,
+                    "to": to,
+                    "offset": trimmed.offset,
+                    "sync": trimmed.sync,
+                }),
+            ))
+
+        }
+    }
+    /// Separate a clip into two.
+    ///
+    /// The tree's editor separates a take at a place on the track: every
+    /// clip that crosses that place becomes two clips, and the two are
+    /// the same sound with a line between them. Here one clip is
+    /// separated at one place, and the place is **inside** the clip — a
+    /// place at its edge or outside it is refused, because there is
+    /// nothing to separate.
+    ///
+    /// The two pieces are the same sound: the first keeps the head of the
+    /// clip and the second keeps the tail, and the second starts later in
+    /// the source by the distance the cut made — **divided by the
+    /// stretch**, because a stretched clip's source is read more slowly.
+    ///
+    /// The **fade** at the cut is dropped: the tree drops it too, because
+    /// a fade that ended at the cut would be a fade of nothing.
+    sound.clip.separate {
+        area: "sound",
+        layer: "sound",
+        icon: "trim",
+        mutates,
+        undoable,
+        menu: ("Clip", "Separate"),
+        params: {
+            /// The clip to separate.
+
+            clip: NodeRef,
+            /// Where to cut it, in samples on the timeline.
+
+            at: Number,
+        },
+        run: {
+
+            let id = "sound.clip.separate".to_string();
+            let clip_id = self.clip.0;
+            let at = self.at.0;
+            if !at.is_finite() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a place is a number".to_string() });
+            }
+            let (name, payload) = {
+                let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip_id}`"),
+                })?;
+                if node.kind != "sound.clip" {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                    });
+                }
+                let payload = ClipPayload::from_json(&node.data)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                (node.name.clone(), payload)
+            };
+            // A clip whose **content** is locked is finished: it is not
+            // separated.
+            if locks::edit_is_locked(&payload) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip_id}` is locked: its sound is finished"),
+                });
+            }
+            let at = at as i64;
+            let end = payload.start + payload.length;
+            if at <= payload.start || at >= end {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the clip runs from {} to {end} and cannot be separated at {at}",
+                        payload.start
+                    ),
+                });
+            }
+            let second = separate_at(session, clip_id, &payload, &name, at)?;
+            Ok(Outcome::changed(format!("separated the clip `{clip_id}` at {at}")).with_data(serde_json::json!({
+                "id": clip_id,
+                "at": at,
+                "second": second,
+            })))
+
+        }
+    }
+    /// Separate a clip on the **grid**.
+    ///
+    /// The tree's editor separates a take on the grid: the clip is cut at
+    /// every line of the grid it crosses, and the pieces are the bars or
+    /// the beats the grid says they are. The grid is the session's (§200)
+    /// and the lines are **musical**, so they move with the tempo.
+    ///
+    /// The number of lines is **bounded**: a clip that crosses more lines
+    /// than the bound is **refused** and not cut at the first thousand of
+    /// them, because a clip cut at a thousand lines is a clip nobody
+    /// meant to make.
+    sound.clip.separate.grid {
+        area: "sound",
+        layer: "sound",
+        icon: "trim",
+        mutates,
+        undoable,
+        menu: ("Clip", "Separate on Grid"),
+        params: {
+            /// The clip to separate.
+
+            clip: NodeRef,
+        },
+        run: {
+
+            let id = "sound.clip.separate.grid".to_string();
+            let clip_id = self.clip.0;
+            let (name, payload) = {
+                let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip_id}`"),
+                })?;
+                if node.kind != "sound.clip" {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                    });
+                }
+                let payload = ClipPayload::from_json(&node.data)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                (node.name.clone(), payload)
+            };
+            // A clip whose **content** is locked is finished: it is not
+            // separated.
+            if locks::edit_is_locked(&payload) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip_id}` is locked: its sound is finished"),
+                });
+            }
+            let settings = session_of(session.document());
+            let map = tempo_map(session.document());
+            let end = payload.start + payload.length;
+            // The **lines** the clip crosses, and the bound: a clip that
+            // crosses more lines than the bound is refused.
+            let lines = settings.grid.lines(payload.start, end, &map, settings.sample_rate, MAX_GRID_LINES + 1);
+            if lines.len() > MAX_GRID_LINES {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip crosses more than {MAX_GRID_LINES} lines of the grid"),
+                });
+            }
+            // The **cut**: each line cuts the piece that is left, and the
+            // piece that is left is the piece the next line cuts.
+            let mut current = clip_id;
+            let mut pieces = 1_usize;
+            for line in &lines {
+                let piece = ClipPayload::from_json(
+                    &session
+                        .document()
+                        .node(current)
+                        .ok_or_else(|| EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the clip `{current}` is gone"),
+                        })?
+                        .data,
+                )
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                if *line <= piece.start || *line >= piece.start + piece.length {
+                    continue;
+                }
+                current = separate_at(session, current, &piece, &name, *line)?;
+                pieces += 1;
+            }
+            Ok(Outcome::changed(format!("separated the clip `{clip_id}` on the grid"))
+                .with_data(serde_json::json!({ "id": clip_id, "pieces": pieces, "lines": lines.len() })))
+
+        }
+    }
+    /// Separate a clip at its **transients**.
+    ///
+    /// The tree's editor separates a take at the transients of its sound:
+    /// the places where the sound starts again — a drum, a plucked string,
+    /// the start of a phrase. Here the transients are found in the
+    /// **material** — the source the clip plays — and not in the clip's own
+    /// sound: the clip's sound is the material read the clip's way, and
+    /// the material's own attacks are where the pieces are.
+    ///
+    /// The **sensitivity** is how small a rise may be and still be a
+    /// transient, from zero to one: the higher it is, the smaller a rise
+    /// counts.
+    ///
+    /// The detector is the tree's own: it watches the **spectrum** — it
+    /// takes a fast Fourier transform of each frame and looks for a jump in
+    /// the bands of it — and the transform is in the audio library, written
+    /// there because this kit's crates carry no dependencies at all.
+    ///
+    /// The number of cuts is **bounded**: a clip with more transients than
+    /// the bound is **refused** and not cut at the first thousand of them,
+    /// because a clip cut at a thousand places is a clip nobody meant to
+    /// make.
+    sound.clip.separate.transients {
+        area: "sound",
+        layer: "sound",
+        icon: "trim",
+        mutates,
+        undoable,
+        menu: ("Clip", "Separate on Transients"),
+        params: {
+            /// The clip to separate.
+
+            clip: NodeRef,
+            /// How small a rise may be and still be a transient, from zero to one.
+
+            sensitivity: Option<Number>,
+        },
+        run: {
+
+            let id = "sound.clip.separate.transients".to_string();
+            let clip_id = self.clip.0;
+            let (name, payload) = {
+                let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip_id}`"),
+                })?;
+                if node.kind != "sound.clip" {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                    });
+                }
+                let payload = ClipPayload::from_json(&node.data)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                (node.name.clone(), payload)
+            };
+            // A clip whose **content** is locked is finished: it is not
+            // separated.
+            if locks::edit_is_locked(&payload) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip_id}` is locked: its sound is finished"),
+                });
+            }
+            let Some(source_id) = payload.source else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip_id}` plays no sound, and there is nothing to find"),
+                });
+            };
+            let source_node = session.document().node(source_id).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no source `{source_id}`"),
+            })?;
+            let source = SourcePayload::from_json(&source_node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            let sound = read_sound(&id, &source.path)?;
+            let sensitivity = match self.sensitivity {
+                Some(sensitivity) if sensitivity.0.is_finite() => sensitivity.0.clamp(0.0, 1.0),
+                Some(_) => {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: "the sensitivity is a number from zero to one".to_string(),
+                    });
+                }
+                None => 0.5,
+            };
+            // The **transients** of the material, in the material's own
+            // samples.
+            let onsets = craftkit_audio::onsets(&sound.samples, sound.channels as usize, sound.rate, sensitivity);
+            // The material's samples are the **session's** samples turned
+            // into the source's rate, and the clip's offset says where in
+            // the material the clip starts.
+            let settings = session_of(session.document());
+            let rate = settings.sample_rate.max(1) as f64;
+            let source_rate = sound.rate.max(1) as f64;
+            let ratio = source_rate / rate;
+            let end = payload.start + payload.length;
+            let mut cuts: Vec<i64> = Vec::new();
+            for onset in onsets {
+                // The onset in the material's samples, and then in the
+                // clip's own time: a stretched clip reads its material more
+                // slowly, so the stretch is in the way back.
+                let at = at_of_frame(onset as i64, payload.offset, payload.stretch, ratio);
+                let at = at.max(payload.start + 1);
+                if at >= end {
+                    continue;
+                }
+                if cuts.last().is_some_and(|last| *last == at) {
+                    continue;
+                }
+                cuts.push(at);
+            }
+            if cuts.len() > MAX_TRANSIENT_CUTS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip has more than {MAX_TRANSIENT_CUTS} transients"),
+                });
+            }
+            // The **cut**: each transient cuts the piece that is left, and
+            // the piece that is left is the piece the next transient cuts.
+            let mut current = clip_id;
+            let mut pieces = 1_usize;
+            for at in &cuts {
+                let piece = ClipPayload::from_json(
+                    &session
+                        .document()
+                        .node(current)
+                        .ok_or_else(|| EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the clip `{current}` is gone"),
+                        })?
+                        .data,
+                )
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                if *at <= piece.start || *at >= piece.start + piece.length {
+                    continue;
+                }
+                current = separate_at(session, current, &piece, &name, *at)?;
+                pieces += 1;
+            }
+            Ok(Outcome::changed(format!("separated the clip `{clip_id}` at its transients")).with_data(
+                serde_json::json!({
+                    "id": clip_id,
+                    "pieces": pieces,
+                    "transients": cuts.len(),
+                    "sensitivity": sensitivity,
+                }),
+            ))
+
+        }
+    }
+    /// **Strip the silence** out of a clip.
+    ///
+    /// The tree's editor strips silence: it finds the parts of a sound that
+    /// are not silent, cuts the clip at the edges of them, and keeps the
+    /// loud parts and throws the quiet ones away. The kept parts are
+    /// **named** from the auto rename scheme, in time order.
+    ///
+    /// Here the parts are found in the **material** — the source the clip
+    /// plays — and not in the clip's own sound: the clip's sound is the
+    /// material read the clip's way, and the material's own silence is
+    /// where the silence is.
+    ///
+    /// The **threshold** is how far below the loudest part of the material
+    /// a part may be and still be kept, in decibels: forty-eight is the
+    /// tree's own default, and it is a part that is at least a fortieth of
+    /// the peak.
+    ///
+    /// The **minimum length** is how long a part must be to be kept: a
+    /// click is not a part, and a click that is kept is a clip of its own
+    /// that says nothing.
+    ///
+    /// The **pad** is how much of the silence is kept at each end of a
+    /// part, so that a part does not begin or end with a click.
+    ///
+    /// The tree's editor does this in three **modes**: it **strips** the
+    /// silence and keeps the loud parts, it **extracts** the loud parts and
+    /// keeps the silence, and it **separates** the clip at the edges of the
+    /// loud parts and keeps everything. The mode is given by name, and a
+    /// name this battery does not know is **refused**.
+    sound.clip.strip.silence {
+        area: "sound",
+        layer: "sound",
+        icon: "trim",
+        mutates,
+        undoable,
+        menu: ("Clip", "Strip Silence"),
+        params: {
+            /// The clip to strip.
+
+            clip: NodeRef,
+            /// How far below the loudest part a part may be and still be kept,
+            /// in decibels.
+
+            threshold_db: Option<Number>,
+            /// How long a part must be to be kept, in milliseconds.
+
+            min_length_ms: Option<Number>,
+            /// How much silence is kept before each part, in milliseconds.
+
+            pad_before_ms: Option<Number>,
+            /// How much silence is kept after each part, in milliseconds.
+
+            pad_after_ms: Option<Number>,
+            /// What to do with the parts: `strip` keeps the loud parts and
+            /// throws the quiet ones away, `extract` keeps the quiet parts and
+            /// throws the loud ones away, and `separate` cuts the clip at the
+            /// edges of the loud parts and keeps everything.
+
+            mode: Option<Text>,
+        },
+        run: {
+
+            let id = "sound.clip.strip.silence".to_string();
+            let clip_id = self.clip.0;
+            // The **mode**: what is kept and what is thrown away. A mode
+            // this battery does not know is refused, and nothing is
+            // changed.
+            let mode = match &self.mode {
+                Some(mode) => StripMode::parse(mode.0.trim()).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "there is no mode called `{}`: the modes are `strip`, `extract` and `separate`",
+                        mode.0.trim()
+                    ),
+                })?,
+                None => StripMode::Strip,
+            };
+            let (name, payload) = {
+                let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip_id}`"),
+                })?;
+                if node.kind != "sound.clip" {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                    });
+                }
+                let payload = ClipPayload::from_json(&node.data)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                (node.name.clone(), payload)
+            };
+            // A clip whose **content** is locked is finished: it is not
+            // stripped.
+            if locks::edit_is_locked(&payload) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip_id}` is locked: its sound is finished"),
+                });
+            }
+            let Some(source_id) = payload.source else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip_id}` plays no sound, and there is no silence in it"),
+                });
+            };
+            if session.document().node(source_id).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no source `{source_id}`"),
+                });
+            }
+            // The **loud parts** of the clip, in the clip's own time.
+            let ranges = loud_parts_of(
+                &id,
+                session,
+                &payload,
+                self.threshold_db,
+                self.min_length_ms,
+                self.pad_before_ms,
+                self.pad_after_ms,
+            )?;
+            if ranges.is_empty() {
+                // A clip with no loud part at all is **silent**. The strip
+                // and the separate have nothing to keep, and the extract
+                // keeps the whole clip — which is what a silent clip is:
+                // all silence.
+                if mode != StripMode::Extract {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!("the clip `{clip_id}` is silent: there is nothing to keep"),
+                    });
+                }
+            }
+            // The scheme and its **number** before the cut: the pieces
+            // that are kept are named from it, and the pieces that are
+            // thrown away must not take numbers.
+            let scheme = crate::autoname::scheme_of(session.document(), clip_id);
+            let number = scheme.map(|scheme| crate::autoname::number_of(session, scheme));
+            // The **cut**: at the edges of the loud parts, so that the
+            // pieces are the parts and the gaps.
+            let end = payload.start + payload.length;
+            let mut points: Vec<i64> = Vec::new();
+            for (start, stop) in &ranges {
+                for point in [start, stop] {
+                    if *point > payload.start && *point < end && !points.contains(point) {
+                        points.push(*point);
+                    }
+                }
+            }
+            points.sort_unstable();
+            let mut current = clip_id;
+            let mut pieces = 1_usize;
+            for point in &points {
+                let piece = ClipPayload::from_json(
+                    &session
+                        .document()
+                        .node(current)
+                        .ok_or_else(|| EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the clip `{current}` is gone"),
+                        })?
+                        .data,
+                )
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                if *point <= piece.start || *point >= piece.start + piece.length {
+                    continue;
+                }
+                current = separate_at(session, current, &piece, &name, *point)?;
+                pieces += 1;
+            }
+            // The pieces are **kept** or **thrown away**, and which is
+            // which depends on the **mode**: the strip keeps the loud
+            // pieces, the extract keeps the quiet ones, and the separate
+            // keeps everything and only cuts.
+            let playlist = timeline::parent_of(session.document(), clip_id).map(|parent| parent.id);
+            let mut kept: Vec<u64> = Vec::new();
+            let mut removed: Vec<u64> = Vec::new();
+            for node in session.document().walk() {
+                if node.kind != "sound.clip" {
+                    continue;
+                }
+                if timeline::parent_of(session.document(), node.id).map(|parent| parent.id) != playlist {
+                    continue;
+                }
+                let Ok(payload) = ClipPayload::from_json(&node.data) else { continue };
+                let start = payload.start;
+                let stop = payload.start + payload.length;
+                let loud = ranges.iter().any(|(from, to)| start >= *from && stop <= *to);
+                let keep = match mode {
+                    StripMode::Strip => loud,
+                    StripMode::Extract => !loud,
+                    StripMode::Separate => true,
+                };
+                if keep {
+                    kept.push(node.id);
+                } else {
+                    removed.push(node.id);
+                }
+            }
+            for piece in &removed {
+                session.document_mut()?.remove_node(*piece);
+            }
+            // The kept pieces are **named** from the scheme, in time order,
+            // and the number the thrown-away pieces took is given back.
+            if let (Some(scheme), Some(number)) = (scheme, number) {
+                crate::autoname::set_number(session, scheme, number);
+            }
+            kept.sort_by_key(|piece| {
+                session
+                    .document()
+                    .node(*piece)
+                    .and_then(|node| ClipPayload::from_json(&node.data).ok())
+                    .map(|payload| payload.start)
+                    .unwrap_or(0)
+            });
+            let named = match scheme {
+                Some(scheme) => crate::autoname::name_the_pieces(session, scheme, &kept),
+                None => 0,
+            };
+            let what = match mode {
+                StripMode::Strip => "stripped the silence out of",
+                StripMode::Extract => "extracted the sound of",
+                StripMode::Separate => "separated the clip",
+            };
+            Ok(Outcome::changed(format!("{what} the clip `{clip_id}`")).with_data(serde_json::json!({
+                "id": clip_id,
+                "mode": match mode {
+                    StripMode::Strip => "strip",
+                    StripMode::Extract => "extract",
+                    StripMode::Separate => "separate",
+                },
+                "kept": kept.len(),
+                "removed": removed.len(),
+                "pieces": pieces,
+                "named": named,
+                "ranges": ranges.len(),
+            })))
+
+        }
+    }
+    /// **Read** the **loud parts** of a clip: where the silence is.
+    ///
+    /// The tree's editor has a **preview** of its Strip Silence: it finds
+    /// the silence and says where the parts are, without changing
+    /// anything — so that a person can see what the strip would do before
+    /// it does it.
+    ///
+    /// Here the preview is a **read**: it says the same thing and it does
+    /// not change the document. The clip is not cut, nothing is thrown
+    /// away and nothing is named.
+    sound.clip.strip.silence.read {
+        area: "sound",
+        layer: "sound",
+        icon: "list",
+        params: {
+            /// The clip to look at.
+
+            clip: NodeRef,
+            /// How far below the loudest part a part may be and still be kept,
+            /// in decibels.
+
+            threshold_db: Option<Number>,
+            /// How long a part must be to be kept, in milliseconds.
+
+            min_length_ms: Option<Number>,
+            /// How much silence is kept before each part, in milliseconds.
+
+            pad_before_ms: Option<Number>,
+            /// How much silence is kept after each part, in milliseconds.
+
+            pad_after_ms: Option<Number>,
+        },
+        run: {
+
+            let id = "sound.clip.strip.silence.read".to_string();
+            let clip_id = self.clip.0;
+            let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{clip_id}`"),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            let ranges = loud_parts_of(
+                &id,
+                session,
+                &payload,
+                self.threshold_db,
+                self.min_length_ms,
+                self.pad_before_ms,
+                self.pad_after_ms,
+            )?;
+            let parts: Vec<Json> = ranges.iter().map(|(from, to)| serde_json::json!([from, to])).collect();
+            Ok(Outcome::new(format!("the clip `{clip_id}` has {} loud parts", ranges.len()))
+                .with_data(serde_json::json!({ "id": clip_id, "ranges": parts })))
+
+        }
+    }
+    /// Space the **clips** against each other.
+    ///
+    /// The clips are butted together: each one starts where the last one
+    /// ended, with a **gap** between them. The tree's editor does this when
+    /// the pieces of a take are laid out by hand.
+    sound.clip.space {
+        area: "sound",
+        layer: "sound",
+        icon: "trim",
+        mutates,
+        undoable,
+        menu: ("Clip"),
+        params: {
+            /// The clips to space: their ids.
+
+            clips: serde_json::Value,
+            /// The gap between them, in samples.
+
+            gap: Number,
+            /// `end-to-start` — each clip starts where the last one ended — or
+            /// `start-to-start`, which keeps their starts the same distance
+            /// apart. The first one if it is left out.
+
+            mode: Option<Text>,
+        },
+        run: {
+
+            let id = "sound.clip.space".to_string();
+            let list = self.clips.as_array().ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: "the clips to space are a list of their ids".to_string(),
+            })?;
+            let mut ids: Vec<u64> = Vec::with_capacity(list.len());
+            for item in list {
+                let Some(number) = item.as_u64() else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a clip's id is a number".to_string(),
+                    });
+                };
+                ids.push(number);
+            }
+            if ids.len() < 2 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "two or more clips are spaced".to_string(),
+                });
+            }
+            let gap = self.gap.0;
+            if !gap.is_finite() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a gap is a number of samples".to_string(),
+                });
+            }
+            let gap = gap.round() as i64;
+            if gap < 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a gap is not a negative number of samples".to_string(),
+                });
+            }
+            let start_to_start = match &self.mode {
+                Some(mode) => match mode.0.trim().to_ascii_lowercase().as_str() {
+                    "end-to-start" | "end_to_start" => false,
+                    "start-to-start" | "start_to_start" => true,
+                    other => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the mode `{other}` is not one of the two"),
+                        });
+                    }
+                },
+                None => false,
+            };
+            // The **clips** and where they are now.
+            let mut clips: Vec<(u64, i64, i64)> = Vec::with_capacity(ids.len());
+            for clip_id in &ids {
+                let node = session.document().node(*clip_id).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip_id}`"),
+                })?;
+                if node.kind != "sound.clip" {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                    });
+                }
+                let payload = ClipPayload::from_json(&node.data)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                // A clip whose **place** is locked stays where it is — and
+                // the whole spacing is refused, because a spacing that
+                // left one clip behind would be a spacing the caller did
+                // not ask for.
+                if locks::time_is_locked(&payload) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the clip `{clip_id}` is locked: it stays where it is"),
+                    });
+                }
+                clips.push((*clip_id, payload.start, payload.length));
+            }
+            clips.sort_by_key(|(clip_id, start, _)| (*start, *clip_id));
+            // The **new** places: each clip butts against the last one.
+            let mut moved: Vec<(u64, i64)> = Vec::with_capacity(clips.len());
+            let mut current = clips[0].1;
+            for (clip_id, start, length) in &clips {
+                let at = if moved.is_empty() { *start } else { current };
+                moved.push((*clip_id, at.max(0)));
+                current = if start_to_start { at + gap } else { at + length + gap };
+            }
+            for (clip_id, at) in &moved {
+                let node = session.document().node(*clip_id).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip_id}`"),
+                })?;
+                let mut payload = ClipPayload::from_json(&node.data)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                payload.start = *at;
+                if let Some(node) = session.document_mut()?.node_mut(*clip_id) {
+                    node.data = payload.to_json();
+                }
+            }
+            let count = moved.len();
+            Ok(Outcome::changed(format!("spaced {count} clip(s)")).with_data(serde_json::json!({
+                "clips": moved.iter().map(|(clip_id, at)| serde_json::json!({ "id": clip_id, "start": at })).collect::<Vec<_>>(),
+                "gap": gap,
+            })))
+
+        }
+    }
+    /// Put a clip **in front** of the others on its track, or **behind**
+    /// them.
+    ///
+    /// The order the clips are drawn in is the order they are in — and the
+    /// clips of a track are mixed and not laid over one another, so the
+    /// order is what a person sees and not what a person hears.
+    sound.clip.order {
+        area: "sound",
+        layer: "sound",
+        icon: "list",
+        mutates,
+        undoable,
+        menu: ("Clip", "Order"),
+        params: {
+            /// The clip to move.
+
+            clip: NodeRef,
+            /// `front` or `back`.
+
+            place: Text,
+        },
+        run: {
+
+            let id = "sound.clip.order".to_string();
+            let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{}`", self.clip.0),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+                });
+            }
+            let place = self.place.0.trim().to_ascii_lowercase();
+            let moved = match place.as_str() {
+                "front" => session.document_mut()?.bring_to_front(self.clip.0),
+                "back" => session.document_mut()?.send_to_back(self.clip.0),
+                other => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("a clip goes to the front or to the back, and not to `{other}`"),
+                    });
+                }
+            };
+            if !moved {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{}` is not in the document", self.clip.0),
+                });
+            }
+            Ok(Outcome::changed(format!("the clip is {place}"))
+                .with_data(serde_json::json!({ "id": self.clip.0, "place": place })))
+
+        }
+    }
+    /// Loop a clip: the copies of it that follow it.
+    ///
+    /// The tree's editor pastes a copy of the clip onto the track, and the
+    /// copies are ordinary clips — they may be trimmed, muted and faded on
+    /// their own. This tree does the same, and says what the tree can only
+    /// infer: the copy is **named by the clip it follows**, in a relation,
+    /// so that the loop can be found again without guessing.
+    ///
+    /// Three ways to say how long the loop is:
+    ///
+    /// - **count** — the clip and its loops: four is the clip and three
+    ///   copies;
+    /// - **length** — how long the whole looped clip is, in samples, and
+    ///   the last copy is cut short to fit;
+    /// - **fill** — up to the next clip on the track, or else to the end of
+    ///   the timeline.
+    ///
+    /// They are taken in that order: a fill beats a length, and a length
+    /// beats a count.
+    sound.clip.loop {
+        area: "sound",
+        layer: "sound",
+        icon: "link",
+        mutates,
+        undoable,
+        menu: ("Clip", "Loop"),
+        params: {
+            /// The clip to loop.
+
+            clip: NodeRef,
+            /// How many times the clip is played: the clip and its loops.
+
+            count: Option<Number>,
+            /// How long the whole looped clip is, in samples. The last loop is
+            /// cut short to fit.
+
+            length: Option<Number>,
+            /// Loop up to the next clip on the track, or else to the end of the
+            /// timeline.
+
+            fill: Option<Bool>,
+        },
+        methods: {
+            /// How many **copies** the loop has, and how long the last one is.
+            ///
+            /// The three ways to say it are taken in order: a fill beats a
+            /// length, and a length beats a count.
+            fn the_plan(
+                &self,
+                session: &Session,
+                node: &Node,
+                payload: &ClipPayload,
+            ) -> Result<(usize, i64), EngineError> {
+                let id = "sound.clip.loop".to_string();
+                // **Fill**: up to the next clip on the track, or else to the end
+                // of the timeline.
+                if self.fill.map(|fill| fill.0) == Some(true) {
+                    let end = the_next_start(session.document(), node, payload)
+                        .unwrap_or_else(|| timeline::end_in_samples(session.document()));
+                    let span = end.saturating_sub(payload.start.saturating_add(payload.length));
+                    return Self::the_reps(span, payload.length, &id);
+                }
+                // **Length**: the whole looped clip is this long, and the last
+                // copy is cut short to fit.
+                if let Some(length) = self.length {
+                    let total = samples(length.0, "how long the looped clip is")?;
+                    let span = total.saturating_sub(payload.length);
+                    return Self::the_reps(span, payload.length, &id);
+                }
+                // **Count**: the clip and its loops.
+                let count = match self.count {
+                    Some(count) => samples(count.0, "how many times the clip is played")?,
+                    None => DEFAULT_LOOPS,
+                };
+                if count < 1 {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: "a clip that is played no times is not a clip".to_string(),
+                    });
+                }
+                let reps = count - 1;
+                if reps > MAX_LOOPS as i64 {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!("a clip loops at most {MAX_LOOPS} times, and this one was asked for {reps}"),
+                    });
+                }
+                Ok((reps as usize, payload.length))
+            }
+
+            /// How many copies fit in a **span**, and how long the last one is.
+            ///
+            /// A span that is not a whole number of clips has a last copy that
+            /// is cut short — which is the tree's own rule, and the reason a
+            /// loop of a whole number of bars ends exactly where it began.
+            fn the_reps(span: i64, length: i64, id: &str) -> Result<(usize, i64), EngineError> {
+                if span <= 0 || length <= 0 {
+                    return Ok((0, length));
+                }
+                let whole = span / length;
+                let rest = span % length;
+                let reps = whole + i64::from(rest > 0);
+                if reps > MAX_LOOPS as i64 {
+                    return Err(EngineError::Failed {
+                        id: id.to_string(),
+                        message: format!("a clip loops at most {MAX_LOOPS} times, and this one would need {reps}"),
+                    });
+                }
+                let last = if rest > 0 { rest } else { length };
+                Ok((reps as usize, last))
+            }
+
+        },
+        run: {
+
+            let id = "sound.clip.loop".to_string();
+            let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{}`", self.clip.0),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+                });
+            }
+            let payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            if payload.length <= 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a clip with no length is not a clip".to_string(),
+                });
+            }
+            // The **playlist** the clip is in: the copies go beside it.
+            let playlist =
+                timeline::parent_of(session.document(), self.clip.0).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{}` is on no playlist", self.clip.0),
+                })?;
+            // A clip that is **already followed** by a copy is refused: the
+            // chain is a line and not a tree, and a branch would have two
+            // answers to the same question.
+            if !session.document().relations_from(self.clip.0, Some(LOOP_RELATION)).is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{}` is already looped: unloop it first", self.clip.0),
+                });
+            }
+            // How many copies, and how long the last one is.
+            let (reps, last) = self.the_plan(session, node, &payload)?;
+            if reps == 0 {
+                return Ok(Outcome::new("there is no room for a loop").with_data(serde_json::json!({
+                    "loops": 0,
+                    "clips": Vec::<u64>::new(),
+                })));
+            }
+            // The **copies**: each one starts where the last one ended, and
+            // the last one is cut short to fit.
+            let name = node.name.clone();
+            let playlist_id = playlist.id;
+            let mut made: Vec<u64> = Vec::with_capacity(reps);
+            let mut previous = self.clip.0;
+            for step in 1..=reps {
+                let mut copy = payload.clone();
+                copy.start = payload.start.saturating_add(payload.length.saturating_mul(step as i64));
+                if step == reps && last < payload.length {
+                    copy.length = last;
+                    // The **fades** are shortened to fit: a fade that is
+                    // longer than the clip is a fade past the end of it.
+                    copy.fade_in.len = copy.fade_in.len.min(copy.length);
+                    copy.fade_out.len = copy.fade_out.len.min(copy.length);
+                    // And a **beat** past the cut is not a beat of the
+                    // copy: the copy is shorter, and the beat is gone.
+                    copy.sync = copy.sync.filter(|beat| (0..=copy.length).contains(beat));
+                }
+                let made_id = session.document_mut()?.add_node_with_under(
+                    Some(playlist_id),
+                    name.clone(),
+                    "sound.clip",
+                    None,
+                    copy.to_json(),
+                );
+                // The copy plays the same source, and it is said so.
+                if let Some(source) = payload.source {
+                    session.document_mut()?.add_relation(craftkit_sdk::Relation::new(made_id, source, "source"));
+                }
+                // And the copy **follows** the clip before it: that is the
+                // loop, and it is an edge and not a guess.
+                session.document_mut()?.add_relation(craftkit_sdk::Relation::new(
+                    previous,
+                    made_id,
+                    LOOP_RELATION,
+                ));
+                previous = made_id;
+                made.push(made_id);
+            }
+            let count = made.len();
+            Ok(Outcome::changed(format!("looped the clip {count} time(s)")).with_data(serde_json::json!({
+                "loops": count,
+                "clips": made,
+            })))
+
+        }
+    }
+    /// Unloop a clip: take the copies away.
+    ///
+    /// The tree's editor has to **find** the copies before it can take them
+    /// away, and it finds them by looking at the track: a clip that starts
+    /// where this one ends, of the same material. This tree knows them —
+    /// the copy is named by the clip it follows — so the copies are found
+    /// by walking the chain.
+    ///
+    /// Two ways to be rid of a loop:
+    ///
+    /// - **remove** — the copies are taken away, and the clip is a clip
+    ///   again;
+    /// - **flatten** — the copies stay, and they are not a loop any more:
+    ///   they are clips in their own right.
+    sound.clip.unloop {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Clip", "Unloop"),
+        params: {
+            /// The clip whose loop is to be taken away.
+
+            clip: NodeRef,
+            /// `remove` — the copies are taken away. `flatten` — the copies
+            /// stay, and are not a loop any more. The first one if it is left
+            /// out.
+
+            mode: Option<Text>,
+        },
+        run: {
+
+            let id = "sound.clip.unloop".to_string();
+            let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{}`", self.clip.0),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
+                });
+            }
+            let remove = match &self.mode {
+                None => true,
+                Some(mode) => match mode.0.trim().to_ascii_lowercase().as_str() {
+                    "remove" => true,
+                    "flatten" => false,
+                    other => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the mode `{other}` is not one of the two"),
+                        });
+                    }
+                },
+            };
+            // The **chain**: the clip, and the copies that follow it.
+            let chain = the_chain(session.document(), self.clip.0);
+            if chain.len() < 2 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{}` is not a looped clip", self.clip.0),
+                });
+            }
+            let copies = chain.len() - 1;
+            if remove {
+                // The copies go, and their edges go with them: a document
+                // that keeps the edge to a clip that is not there is a
+                // document that says a clip plays a source that is gone.
+                for copy in chain.iter().skip(1) {
+                    session.document_mut()?.remove_node(*copy);
+                }
+            } else {
+                // The copies stay, and the **edges** go: they are clips in
+                // their own right, and nothing says they are a loop.
+                let members = chain.clone();
+                session.document_mut()?.remove_relations(|relation| {
+                    relation.kind == LOOP_RELATION
+                        && members.contains(&relation.from)
+                        && members.contains(&relation.to)
+                });
+            }
+            let message = if remove {
+                format!("took away {copies} cop(y|ies) of the loop")
+            } else {
+                format!("the {copies} cop(y|ies) are not a loop any more")
+            };
+            Ok(Outcome::changed(message).with_data(serde_json::json!({
+                "copies": copies,
+                "removed": remove,
+                "clips": chain.iter().skip(1).collect::<Vec<_>>(),
+            })))
+
+        }
+    }
+    /// Snap a clip to its **neighbour**.
+    ///
+    /// The tree's editor has a menu — *Edit ▸ Snap to* — with two items in
+    /// it: **Next** moves a clip so that its end meets the start of the
+    /// clip that follows it, and **Previous** moves a clip so that its
+    /// start meets the end of the clip that comes before it.
+    ///
+    /// The tree's editor snaps the clip **nearest the destination first**,
+    /// so that the neighbours stay where they are: a row of clips that are
+    /// snapped together does not pile itself up on one clip.
+    ///
+    /// The clips that are named are the destinations too. The tree's
+    /// editor found that out the hard way — ignoring the selected
+    /// neighbours made *Snap to Next* pile every selected clip onto the
+    /// same later clip, and made *Snap to Previous* leave the gap between
+    /// the selected clips in place.
+    sound.clip.snap {
+        area: "sound",
+        layer: "sound",
+        icon: "trim",
+        mutates,
+        undoable,
+        menu: ("Clip", "Snap to"),
+        params: {
+            /// The clips to snap: their ids.
+
+            clips: serde_json::Value,
+            /// `next` — each clip's end meets the start of the clip that
+            /// follows it. `previous` — each clip's start meets the end of the
+            /// clip that comes before it.
+
+            direction: Text,
+        },
+        run: {
+
+            let id = "sound.clip.snap".to_string();
+            let list = self.clips.as_array().ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: "the clips to snap are a list of their ids".to_string(),
+            })?;
+            let mut ids: Vec<u64> = Vec::with_capacity(list.len());
+            for item in list {
+                let Some(number) = item.as_u64() else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a clip's id is a number".to_string(),
+                    });
+                };
+                ids.push(number);
+            }
+            if ids.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "there is no clip to snap".to_string(),
+                });
+            }
+            let next = match self.direction.0.trim().to_ascii_lowercase().as_str() {
+                "next" => true,
+                "previous" => false,
+                other => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the direction `{other}` is not one of the two"),
+                    });
+                }
+            };
+            // The **clips** and where they are now.
+            let mut order: Vec<(u64, i64, i64, u64)> = Vec::with_capacity(ids.len());
+            for clip_id in &ids {
+                let node = session.document().node(*clip_id).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip_id}`"),
+                })?;
+                if node.kind != "sound.clip" {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
+                    });
+                }
+                let payload = ClipPayload::from_json(&node.data)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                // A clip whose **place** is locked stays where it is — and
+                // the whole snap is refused, because a snap that left one
+                // clip behind would be a snap the caller did not ask for.
+                if locks::time_is_locked(&payload) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the clip `{clip_id}` is locked: it stays where it is"),
+                    });
+                }
+                // The **list** the clip is in: the playlist under the
+                // track, or the track itself. A clip's neighbours are the
+                // clips of its own list — a take is a list of clips of its
+                // own, and a clip in another take is not on this timeline.
+                let list =
+                    timeline::parent_of(session.document(), *clip_id).ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the clip `{clip_id}` is on no playlist"),
+                    })?;
+                order.push((*clip_id, payload.start, payload.length, list.id));
+            }
+            // The clip **nearest the destination** is snapped first, so that
+            // the neighbours stay where they are.
+            order.sort_by_key(|(_, start, _, _)| if next { -*start } else { *start });
+            let mut moved: Vec<(u64, i64)> = Vec::with_capacity(order.len());
+            for (clip_id, start, length, list) in order {
+                let end = start.saturating_add(length);
+                // The **neighbour**: the clip the destination is. The clips
+                // that are named are neighbours too.
+                let delta = if next {
+                    clips_in(session.document(), list)
+                        .into_iter()
+                        .filter(|(other, _)| *other != clip_id)
+                        .map(|(_, payload)| payload.start)
+                        .filter(|other_start| *other_start >= end)
+                        .min()
+                        .map(|other_start| other_start - end)
+                } else {
+                    clips_in(session.document(), list)
+                        .into_iter()
+                        .filter(|(other, _)| *other != clip_id)
+                        .map(|(_, payload)| (payload.start, payload.start.saturating_add(payload.length)))
+                        .filter(|(_, other_end)| *other_end <= start)
+                        .map(|(_, other_end)| other_end)
+                        .max()
+                        .map(|other_end| other_end - start)
+                };
+                // A clip that is already against its neighbour is not
+                // moved: there is nothing to snap.
+                let Some(delta) = delta.filter(|delta| *delta != 0) else { continue };
+                let at = start.saturating_add(delta).max(0);
+                if let Some(node) = session.document_mut()?.node_mut(clip_id) {
+                    let mut payload = ClipPayload::from_json(&node.data)
+                        .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                    payload.start = at;
+                    node.data = payload.to_json();
+                }
+                moved.push((clip_id, at));
+            }
+            let count = moved.len();
+            Ok(Outcome::changed(format!("snapped {count} clip(s)")).with_data(serde_json::json!({
+                "moved": count,
+                "clips": moved.iter().map(|(clip_id, at)| serde_json::json!({ "id": clip_id, "start": at })).collect::<Vec<_>>(),
+            })))
+
+        }
+    }
+    /// Set the tempo.
+    ///
+    /// The tempo map is a **list of events** and not a single number, so this
+    /// command sets the tempo at a tick: a second call at the same tick
+    /// changes the one that is there.
+    sound.tempo.set {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Event", "Tempo"),
+        params: {
+            /// How fast, in beats a minute.
+
+            bpm: Number,
+            /// Where, in ticks.
+
+            tick: Option<Number>,
+        },
+        run: {
+
+            let bpm = self.bpm.0;
+            if !bpm.is_finite() || !(5.0..=1000.0).contains(&bpm) {
+                return Err(EngineError::Failed {
+                    id: "sound.tempo.set".to_string(),
+                    message: format!("{bpm} is not a tempo between 5 and 1000 beats a minute"),
+                });
+            }
+            let tick = match &self.tick {
+                Some(tick) => ticks(tick.0)?,
+                None => 0,
+            };
+            let payload = TempoPayload { tick, bpm };
+            let existing = find_event(session, "sound.tempo", tick);
+            let id = match existing {
+                Some(id) => {
+                    if let Some(node) = session.document_mut()?.node_mut(id) {
+                        node.data = payload.to_json();
+                    }
+                    id
+                }
+                None => session.document_mut()?.add_node_with(
+                    format!("tempo {bpm}"),
+                    "sound.tempo",
+                    None,
+                    payload.to_json(),
+                ),
+            };
+            Ok(Outcome::changed(format!("the tempo at tick {tick} is {bpm} beats a minute"))
+                .with_data(serde_json::json!({ "id": id, "tick": tick, "bpm": bpm })))
+
+        }
+    }
+    /// **Take away** the tempo at a tick.
+    ///
+    /// The tempo map is a list of events, and a map that can only grow is
+    /// not a map a person can work with: the tempo at a tick goes away as
+    /// well as the one that is put there.
+    ///
+    /// The tempo at the **first tick** is refused: it is the document's
+    /// tempo, and a document without one has no beat. A tick with **no
+    /// tempo** is refused too: a tempo that was never there is not a tempo
+    /// that was taken away.
+    sound.tempo.remove {
+        area: "sound",
+        layer: "sound",
+        icon: "minus",
+        mutates,
+        undoable,
+        menu: ("Event", "Tempo"),
+        params: {
+            /// Where the tempo is, in ticks.
+
+            tick: Number,
+        },
+        run: {
+
+            let id = "sound.tempo.remove".to_string();
+            let tick = ticks(self.tick.0)?;
+            if tick == 0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the tempo at the first tick is the document's tempo and it stays".to_string(),
+                });
+            }
+            let Some(node) = find_event(session, "sound.tempo", tick) else {
+                return Err(EngineError::Failed { id, message: format!("there is no tempo at tick {tick}") });
+            };
+            session.document_mut()?.remove_node(node);
+            Ok(Outcome::changed(format!("the tempo at tick {tick} is gone"))
+                .with_data(serde_json::json!({ "id": node, "tick": tick })))
+
+        }
+    }
+    /// **Take away** the meter at a tick.
+    ///
+    /// The meter is a list of events, and the same rule the tempo follows
+    /// applies to it: the event at the **first tick** is the document's
+    /// meter and it stays, and a tick with **no meter** is refused.
+    sound.meter.remove {
+        area: "sound",
+        layer: "sound",
+        icon: "minus",
+        mutates,
+        undoable,
+        menu: ("Event", "Meter"),
+        params: {
+            /// Where the meter is, in ticks.
+
+            tick: Number,
+        },
+        run: {
+
+            let id = "sound.meter.remove".to_string();
+            let tick = ticks(self.tick.0)?;
+            if tick == 0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the meter at the first tick is the document's meter and it stays".to_string(),
+                });
+            }
+            let Some(node) = find_event(session, "sound.meter", tick) else {
+                return Err(EngineError::Failed { id, message: format!("there is no meter at tick {tick}") });
+            };
+            session.document_mut()?.remove_node(node);
+            Ok(Outcome::changed(format!("the meter at tick {tick} is gone"))
+                .with_data(serde_json::json!({ "id": node, "tick": tick })))
+
+        }
+    }
+    /// **Take away** the key at a tick.
+    ///
+    /// The key is a list of events too, and the same rule the tempo
+    /// follows applies to it: the event at the **first tick** is the
+    /// document's key and it stays, and a tick with **no key** is refused.
+    sound.key.remove {
+        area: "sound",
+        layer: "sound",
+        icon: "minus",
+        mutates,
+        undoable,
+        menu: ("Event", "Key"),
+        params: {
+            /// Where the key is, in ticks.
+
+            tick: Number,
+        },
+        run: {
+
+            let id = "sound.key.remove".to_string();
+            let tick = ticks(self.tick.0)?;
+            if tick == 0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the key at the first tick is the document's key and it stays".to_string(),
+                });
+            }
+            let Some(node) = find_event(session, "sound.key", tick) else {
+                return Err(EngineError::Failed { id, message: format!("there is no key at tick {tick}") });
+            };
+            session.document_mut()?.remove_node(node);
+            Ok(Outcome::changed(format!("the key at tick {tick} is gone"))
+                .with_data(serde_json::json!({ "id": node, "tick": tick })))
+
+        }
+    }
+    /// Set the meter.
+    ///
+    /// The meter is a list of events too: a bar may be three beats long from
+    /// here on.
+    sound.meter.set {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Event", "Meter"),
+        params: {
+            /// How many beats a bar has.
+
+            numerator: Number,
+            /// Which beat a bar has.
+
+            denominator: Number,
+            /// Where, in ticks.
+
+            tick: Option<Number>,
+        },
+        run: {
+
+            let numerator = self.numerator.0 as u32;
+            let denominator = self.denominator.0 as u32;
+            if !(1..=64).contains(&numerator) || ![1, 2, 4, 8, 16, 32, 64].contains(&denominator) {
+                return Err(EngineError::Failed {
+                    id: "sound.meter.set".to_string(),
+                    message: format!("{numerator}/{denominator} is not a meter"),
+                });
+            }
+            let tick = match &self.tick {
+                Some(tick) => ticks(tick.0)?,
+                None => 0,
+            };
+            let payload = MeterPayload { tick, numerator, denominator };
+            let existing = find_event(session, "sound.meter", tick);
+            let id = match existing {
+                Some(id) => {
+                    if let Some(node) = session.document_mut()?.node_mut(id) {
+                        node.data = payload.to_json();
+                    }
+                    id
+                }
+                None => session.document_mut()?.add_node_with(
+                    format!("meter {numerator}/{denominator}"),
+                    "sound.meter",
+                    None,
+                    payload.to_json(),
+                ),
+            };
+            Ok(Outcome::changed(format!("the meter at tick {tick} is {numerator}/{denominator}"))
+                .with_data(serde_json::json!({ "id": id, "tick": tick })))
+
+        }
+    }
+    /// **Move** a marker, or **rename** it.
+    ///
+    /// The marker's **name** is what a person calls it, and its **place**
+    /// is where it is on the timeline, and both of them may be changed: a
+    /// marker is a thing in the document and not a thing that is put there
+    /// once and for ever.
+    sound.marker.set {
+        area: "sound",
+        layer: "sound",
+        icon: "pencil",
+        mutates,
+        undoable,
+        menu: ("Marker"),
+        params: {
+            /// The marker to change.
+
+            marker: NodeRef,
+            /// The new name.
+
+            name: Option<Text>,
+            /// The new place, in samples.
+
+            start: Option<Number>,
+            /// The new end, in samples.
+
+            end: Option<Number>,
+        },
+        run: {
+
+            let id = "sound.marker.set".to_string();
+            let marker = self.marker.0;
+            let node = session.document().node(marker).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{marker}`"),
+            })?;
+            if node.kind != "sound.marker" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{marker}` is a `{}` and not a marker", node.kind),
+                });
+            }
+            let mut payload = MarkerPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            // The marker moves as a **whole**: its span is kept, so that
+            // moving it does not make it longer or shorter than it was.
+            if let Some(start) = self.start {
+                let start = samples(start.0, "where the marker is")?;
+                let delta = start - payload.start;
+                payload.start = start;
+                payload.end += delta;
+            }
+            if let Some(end) = self.end {
+                payload.end = samples(end.0, "where the marker ends")?;
+            }
+
+            if payload.end < payload.start {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the marker ends at {} and starts at {}", payload.end, payload.start),
+                });
+            }
+            let name = self.name.as_ref().map(|name| name.0.clone()).unwrap_or(node.name.clone());
+            if let Some(node) = session.document_mut()?.node_mut(marker) {
+                node.name = name.clone();
+                node.data = payload.to_json();
+            }
+            Ok(Outcome::changed(format!("changed the marker `{name}`"))
+                .with_data(serde_json::json!({ "marker": marker, "name": name, "start": payload.start })))
+
+        }
+    }
+    /// **Scale** the tempos of the document.
+    ///
+    /// Every tempo is multiplied by the **factor**: a factor of two is
+    /// twice as fast everywhere, and the times the tempos happen at do not
+    /// move — the music is faster, and it starts at the same moment.
+    ///
+    /// A factor that would take a tempo outside the range a tempo may have
+    /// — five to a thousand beats a minute — is **refused**: a tempo of
+    /// zero is not a tempo, and a tempo of two thousand is not one either.
+    sound.tempo.scale {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Event", "Tempo"),
+        params: {
+            /// The factor every tempo is multiplied by.
+
+            factor: Number,
+        },
+        run: {
+
+            let id = "sound.tempo.scale".to_string();
+            let factor = self.factor.0;
+            if !factor.is_finite() || factor <= 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the factor is a number above zero, and {factor} is not one"),
+                });
+            }
+            // Every tempo is read first, and the whole scale is refused if
+            // one of them would leave the range: a scale that is half made
+            // is a map that says something false about half of itself.
+            let mut tempos: Vec<(u64, i64, f64)> = Vec::new();
+            for node in session.document().walk() {
+                if node.kind != "sound.tempo" {
+                    continue;
+                }
+                let Ok(payload) = TempoPayload::from_json(&node.data) else { continue };
+                let scaled = payload.bpm * factor;
+                if !scaled.is_finite() || !(5.0..=1000.0).contains(&scaled) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "the tempo of {} beats a minute would become {scaled}, which is not a tempo",
+                            payload.bpm
+                        ),
+                    });
+                }
+                tempos.push((node.id, payload.tick, scaled));
+            }
+            for (node, tick, bpm) in &tempos {
+                if let Some(node) = session.document_mut()?.node_mut(*node) {
+                    node.data = TempoPayload { tick: *tick, bpm: *bpm }.to_json();
+                    node.name = format!("tempo {bpm}");
+                }
+            }
+            Ok(Outcome::changed(format!("scaled {} tempos by {factor}", tempos.len()))
+                .with_data(serde_json::json!({ "tempos": tempos.len(), "factor": factor })))
+
+        }
+    }
+    /// Make a **range** of the tempo map constant.
+    ///
+    /// The tempo at the start of the range is the one given, the tempo
+    /// changes inside the range are **taken away**, and the tempo at the
+    /// end of the range comes back — so that the music after the range is
+    /// as fast as it was.
+    ///
+    /// The tree's command is the same one, and the tree's own name for it
+    /// is "Constant...".
+    sound.tempo.constant {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Event", "Tempo"),
+        params: {
+            /// How fast, in beats a minute.
+
+            bpm: Number,
+            /// Where the range starts, in ticks.
+
+            start: Option<Number>,
+            /// Where the range ends, in ticks.
+
+            end: Option<Number>,
+        },
+        run: {
+
+            let id = "sound.tempo.constant".to_string();
+            let bpm = self.bpm.0;
+            if !bpm.is_finite() || !(5.0..=1000.0).contains(&bpm) {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("{bpm} is not a tempo between 5 and 1000 beats a minute"),
+                });
+            }
+            let start = match self.start {
+                Some(start) => ticks(start.0)?,
+                None => 0,
+            };
+            let end = match self.end {
+                Some(end) => ticks(end.0)?,
+                None => start,
+            };
+            if end <= start {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the range from {start} to {end} is empty"),
+                });
+            }
+            // The tempo at the end of the range is read **before** the
+            // edit: the end is a musical place, and the new tempo moves it.
+            let map = tempo_map(session.document());
+            let after = map.tempo_at_tick(end);
+            let had_end = find_event(session, "sound.tempo", end).is_some();
+            // The tempo at the start of the range.
+            match find_event(session, "sound.tempo", start) {
+                Some(node) => {
+                    if let Some(node) = session.document_mut()?.node_mut(node) {
+                        node.data = TempoPayload { tick: start, bpm }.to_json();
+                        node.name = format!("tempo {bpm}");
+                    }
+                }
+                None => {
+                    session.document_mut()?.add_node_with(
+                        format!("tempo {bpm}"),
+                        "sound.tempo",
+                        None,
+                        TempoPayload { tick: start, bpm }.to_json(),
+                    );
+                }
+            }
+            // The tempo changes **inside** the range are taken away.
+            let inside: Vec<u64> = session
+                .document()
+                .walk()
+                .filter(|node| node.kind == "sound.tempo")
+                .filter(|node| {
+                    TempoPayload::from_json(&node.data)
+                        .map(|payload| payload.tick > start && payload.tick < end)
+                        .unwrap_or(false)
+                })
+                .map(|node| node.id)
+                .collect();
+            for node in inside {
+                session.document_mut()?.remove_node(node);
+            }
+            // And the tempo at the end of the range comes back.
+            if !had_end {
+                session.document_mut()?.add_node_with(
+                    format!("tempo {after}"),
+                    "sound.tempo",
+                    None,
+                    TempoPayload { tick: end, bpm: after }.to_json(),
+                );
+            }
+            Ok(Outcome::changed(format!("the tempo from tick {start} to {end} is {bpm}"))
+                .with_data(serde_json::json!({ "start": start, "end": end, "bpm": bpm })))
+
+        }
+    }
+    /// Put a marker in the document.
+    sound.marker.add {
+        area: "sound",
+        layer: "sound",
+        icon: "plus",
+        mutates,
+        undoable,
+        menu: ("Marker"),
+        params: {
+            /// What to call it.
+
+            name: Text,
+            /// Where it is, in samples.
+
+            start: Number,
+            /// Where it ends, in samples.
+
+            end: Option<Number>,
+        },
+        run: {
+
+            let start = samples(self.start.0, "where the marker is")?;
+            let end = match &self.end {
+                Some(end) => samples(end.0, "where the marker ends")?,
+                None => start,
+            };
+            let payload = MarkerPayload { start, end };
+            let name = self.name.0.clone();
+            let id = session.document_mut()?.add_node_with(name.clone(), "sound.marker", None, payload.to_json());
+            Ok(Outcome::changed(format!("added a marker `{name}`"))
+                .with_data(serde_json::json!({ "id": id, "name": name, "start": start, "end": end })))
+
+        }
+    }
+    /// Add a source: a reference to media.
+    ///
+    /// The path is **relative to the document**, because a document that
+    /// travels carries its media with it. Nothing here reads the file.
+    sound.source.add {
+        area: "sound",
+        layer: "sound",
+        icon: "plus",
+        mutates,
+        undoable,
+        menu: ("File", "Import"),
+        params: {
+            /// Where the media is.
+
+            path: Text,
+            /// How many channels it has.
+
+            channels: Option<Number>,
+            /// How long it is, in frames.
+
+            frames: Option<Number>,
+        },
+        run: {
+
+            let path = self.path.0.clone();
+            let channels = match &self.channels {
+                Some(channels) => channels.0 as u32,
+                None => 2,
+            };
+            let frames = match &self.frames {
+                Some(frames) => samples(frames.0, "how long the source is")?,
+                None => 0,
+            };
+            let session_settings = session_of(session.document());
+            let payload = SourcePayload {
+                path: path.clone(),
+                channels,
+                frames,
+                sample_rate: session_settings.sample_rate,
+                peaks: Vec::new(),
+            };
+            let id = session.document_mut()?.add_node_with(path.clone(), "sound.source", None, payload.to_json());
+            // The document now says that it needs this file. The bytes are
+            // not in the document: they travel beside it, in a bundle.
+            session.document_mut()?.add_asset(craftkit_sdk::Asset::new(path.clone(), "audio", None));
+            Ok(Outcome::changed(format!("added a source `{path}`"))
+                .with_data(serde_json::json!({ "id": id, "path": path })))
+
+        }
+    }
+    /// **Take away** a source.
+    ///
+    /// The source goes and so does the **asset** it brought: the document
+    /// says it needs the file, and a document that needs a file that
+    /// nothing plays is carrying a file for nothing. The clips that played
+    /// it keep their own word about the source — the clip is silent until
+    /// it is told what to play — and the source itself is gone.
+    ///
+    /// The tree's mixer has no such command: the tree's source is a file
+    /// that the session names and the session does not lose.
+    sound.source.remove {
+        area: "sound",
+        layer: "sound",
+        icon: "minus",
+        mutates,
+        undoable,
+        menu: ("File", "Remove Source"),
+        params: {
+            /// The source to take away.
+
+            source: NodeRef,
+        },
+        run: {
+
+            let id = "sound.source.remove".to_string();
+            let source = self.source.0;
+            let node = session.document().node(source).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no source `{source}`"),
+            })?;
+            if node.kind != "sound.source" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{source}` is a `{}` and not a source", node.kind),
+                });
+            }
+            let path = node.name.clone();
+            session.document_mut()?.remove_node(source);
+            // The **asset** goes with it: the document does not need a file
+            // that nothing plays.
+            let removed = session.document_mut()?.remove_assets(|asset| asset.path == path);
+            Ok(Outcome::changed(format!("took the source `{path}` away"))
+                .with_data(serde_json::json!({ "source": source, "path": path, "assets": removed })))
+
+        }
+    }
+    /// **Measure** the peaks of a source.
+    ///
+    /// The peaks are the shape of the sound in a small table, and the shape
+    /// is what a clip's bar is drawn from.
+    ///
+    /// Measuring them reads the file, so it is a **command** and not a
+    /// thing that happens at every frame: a file that is read a hundred
+    /// times a second is a file that is read a hundred times too often.
+    /// The measurement is in the document, so it is undone with everything
+    /// else and it is saved with the document.
+    sound.source.peaks {
+        area: "sound",
+        layer: "sound",
+        icon: "list",
+        mutates,
+        undoable,
+        params: {
+            /// The source to measure.
+
+            source: NodeRef,
+        },
+        run: {
+
+            let id = self.source.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.source.peaks".to_string(),
+                    message: format!("there is no node `{id}`"),
+                });
+            };
+            if node.kind != "sound.source" {
+                return Err(EngineError::Failed {
+                    id: "sound.source.peaks".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not a source", node.kind),
+                });
+            }
+            let payload = SourcePayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+                id: "sound.source.peaks".to_string(),
+                message: format!("the source `{id}` cannot be read: {error}"),
+            })?;
+            let sound = read_sound("sound.source.peaks", &payload.path)?;
+            let peaks = peaks_of(&sound);
+            let Some(node) = session.document_mut()?.node_mut(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.source.peaks".to_string(),
+                    message: format!("there is no source `{id}`"),
+                });
+            };
+            // The file says what it is: how long it is, how many channels
+            // it has and the rate it was recorded at. A source that has
+            // not been measured does not know.
+            node.data["frames"] = serde_json::json!(sound.frames as i64);
+            node.data["channels"] = serde_json::json!(sound.channels as u32);
+            node.data["sample_rate"] = serde_json::json!(sound.rate);
+            node.data["peaks"] = serde_json::json!(peaks);
+            Ok(Outcome::changed(format!("measured the peaks of the source {id}")).with_data(serde_json::json!({
+                "id": id,
+                "numbers": PEAK_NUMBERS,
+                "frames": sound.frames as i64,
+                "channels": sound.channels as u32,
+                "sample_rate": sound.rate,
+            })))
+
+        }
+    }
+    /// Put the **playhead** where it is, or move it.
+    ///
+    /// The playhead is a **node**, so there is one of it and it is moved.
+    sound.playhead.set {
+        area: "sound",
+        layer: "sound",
+        icon: "play",
+        mutates,
+        undoable,
+        menu: ("Playhead"),
+        params: {
+            /// Where it is, in samples.
+
+            position: Number,
+        },
+        run: {
+
+            let position = samples(self.position.0, "where the playhead is")?;
+            if position < 0 {
+                return Err(EngineError::Failed {
+                    id: "sound.playhead.set".to_string(),
+                    message: "a playhead cannot be before the beginning".to_string(),
+                });
+            }
+            let existing =
+                session.document().walk().find(|node| node.kind == "sound.playhead").map(|node| node.id);
+            let id = match existing {
+                Some(id) => {
+                    if let Some(node) = session.document_mut()?.node_mut(id) {
+                        node.data = serde_json::json!({ "position": position });
+                    }
+                    id
+                }
+                None => session.document_mut()?.add_node_with(
+                    "playhead".to_string(),
+                    "sound.playhead",
+                    None,
+                    serde_json::json!({ "position": position }),
+                ),
+            };
+            Ok(Outcome::changed(format!("the playhead is at {position} samples"))
+                .with_data(serde_json::json!({ "id": id, "position": position })))
+
+        }
+    }
+    /// **Mute** a clip, or unmute it.
+    ///
+    /// A muted clip is not played and is still there: the tree's renderer
+    /// skips it and the tree's editor keeps it, so that a clip that is
+    /// quiet is a clip that may be loud again.
+    sound.clip.mute {
+        area: "sound",
+        layer: "sound",
+        icon: "sound",
+        mutates,
+        undoable,
+        menu: ("Track", "Mute"),
+        params: {
+            /// The clip to mute.
+
+            clip: NodeRef,
+            /// Whether it is muted. Without it, the clip is muted.
+
+            muted: Option<Bool>,
+        },
+        run: {
+
+            let id = self.clip.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.mute".to_string(),
+                    message: format!("there is no clip `{id}`"),
+                });
+            };
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.mute".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let mut payload = ClipPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
+                id: "sound.clip.mute".to_string(),
+                message: error.to_string(),
+            })?;
+            let muted = self.muted.map(|muted| muted.0).unwrap_or(true);
+            payload.muted = muted;
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.clip.mute".to_string(),
+                    message: format!("there is no clip `{id}`"),
+                });
+            };
+            node.data = data;
+            Ok(Outcome::changed(if muted {
+                format!("the clip `{id}` is muted")
+            } else {
+                format!("the clip `{id}` is not muted")
+            })
+            .with_data(serde_json::json!({ "id": id, "muted": muted })))
+
+        }
+    }
+    /// Render the document into a **sound file**.
+    ///
+    /// The renderer is the first thing in this tree that makes a sound: it
+    /// reads the sources the clips play, mixes them and writes the file.
+    /// It is **offline** — it writes a file and it stops — because the kit
+    /// has no audio device and no audio thread (§ the kit's own notes), and
+    /// a file is a thing a program can make without a device.
+    ///
+    /// What it does:
+    /// - the clips are the **tracks**: each clip plays a source from an
+    ///   offset, for a length, at a gain;
+    /// - the sources are read from the **files** the document names, and
+    ///   the samples are the ones the WAV reader gives back (§133);
+    /// - the tracks are mixed (§134) and the mix is written as a WAV.
+    sound.render {
+        area: "sound",
+        layer: "sound",
+        icon: "play",
+        menu: ("Render"),
+        params: {
+            /// Where to write the sound.
+
+            path: Text,
+        },
+        run: {
+
+            let path = self.path.0.clone();
+            let mix = mix_of(session.document(), "sound.render", None)?;
+            let channels = mix.channels;
+            let bytes = craftkit_wav::write(channels, mix.rate, &mix.master);
+            write_file(&path, &bytes)?;
+            Ok(Outcome::new(format!("rendered {} frames to `{path}`", mix.frames)).with_data(serde_json::json!({
+                "path": path,
+                "frames": mix.frames,
+                "rate": mix.rate,
+                "channels": channels,
+                "clips": mix.tracks.len(),
+            })))
+
+        }
+    }
+    /// Render the **stems**: one file for each track.
+    ///
+    /// A stem is the mix with **one track in it**: the tree's bounce solos
+    /// the track and renders the whole mix, so a stem carries the master
+    /// faders and the metronome with it, and a stem of a track that feeds
+    /// a bus carries the bus.
+    ///
+    /// The files are written into a **directory**, and the directory is
+    /// made if it is not there. Each file is named after its track, and a
+    /// name that is taken gets a number after it — two tracks with the
+    /// same name are two files and not one file written twice.
+    ///
+    /// A **muted** track is not bounced: the tree does not bounce it, and
+    /// a stem of silence is a file nobody asked for. The mute is a **lane**
+    /// here and not a field of the track, so a muted track is one whose
+    /// mute lane says so at the start.
+    sound.render.stems {
+        area: "sound",
+        layer: "sound",
+        icon: "play",
+        menu: ("Render"),
+        params: {
+            /// The directory to write the stems into.
+
+            directory: Text,
+        },
+        run: {
+
+            let directory = self.directory.0.clone();
+            if directory.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "sound.render.stems".to_string(),
+                    message: "a directory is a path".to_string(),
+                });
+            }
+            std::fs::create_dir_all(&directory).map_err(|error| EngineError::Failed {
+                id: "sound.render.stems".to_string(),
+                message: format!("the directory `{directory}` cannot be made: {error}"),
+            })?;
+            let document = session.document().clone();
+            // The **tracks** that are bounced: a track that is not a track
+            // is not bounced, a **master** is not bounced (it holds the
+            // fader of the mix and not a sound of its own), and a muted
+            // track is not bounced.
+            let mut files = Vec::new();
+            for track in document.walk().filter(|node| {
+                node.kind == "sound.track" && !is_master(node) && !crate::vca::is_vca(node) && !is_inactive(node)
+            }) {
+                // The **mute** is a field of the track and a lane over it:
+                // a muted track is one whose own mute is on, or one whose
+                // mute lane says so.
+                let automation = automate::automation_of(&document, track);
+                let muted = automation.muted
+                    || automation
+                        .mute
+                        .as_ref()
+                        .map(|points| automate::value_at(points, 0) >= 0.5)
+                        .unwrap_or(false);
+                if muted {
+                    continue;
+                }
+                // The **stem** is the mix with this track in it and the
+                // others out: the track is soloed and the mix is worked
+                // out again, so a stem is the same sound as the mix and
+                // not a second way of mixing.
+                let mut soloed = document.clone();
+                let tracks: Vec<u64> =
+                    soloed.walk().filter(|node| node.kind == "sound.track").map(|node| node.id).collect();
+                for other in tracks {
+                    let Some(node) = soloed.node_mut(other) else { continue };
+                    let Ok(mut payload) = TrackPayload::from_json(&node.data) else { continue };
+                    payload.solo = other == track.id;
+                    node.data = payload.to_json();
+                }
+                let mix = mix_of(&soloed, "sound.render.stems", None)?;
+                let bytes = craftkit_wav::write(mix.channels, mix.rate, &mix.master);
+                let path = a_stem_path(&directory, &track.name);
+                write_file(&path, &bytes)?;
+                files.push(path);
+            }
+            Ok(Outcome::new(format!("bounced {} stems into `{directory}`", files.len()))
+                .with_data(serde_json::json!({ "directory": directory, "files": files })))
+
+        }
+    }
+    /// **Consolidate** a track: the clips of a track become one clip of a
+    /// file that holds their sound.
+    ///
+    /// The tree's consolidate renders the sound of a track's clips over a
+    /// range, writes it to a file, and puts one clip of that file where the
+    /// clips were. The sound is the same and the editing is not: the
+    /// clips are gone and there is one clip with a file behind it.
+    ///
+    /// The sound that is rendered is the sound of the track's **clips**:
+    /// the track's trim and the track's inserts are not in it, because
+    /// they belong to the track and the track is still there. A clip that
+    /// crosses the edge of the range keeps the part outside it.
+    ///
+    /// The **MIDI** clips of the track are left alone: they hold no sound
+    /// to render, and a MIDI clip is not a file.
+    sound.track.consolidate {
+        area: "sound",
+        layer: "sound",
+        icon: "play",
+        mutates,
+        undoable,
+        menu: ("Track", "Consolidate"),
+        params: {
+            /// The track to consolidate.
+
+            track: NodeRef,
+            /// Where the range starts, in samples.
+            ///
+            /// Without it, the range starts at the beginning of the session.
+
+            start: Option<Number>,
+            /// Where the range ends, in samples.
+            ///
+            /// Without it, the range ends at the end of the track's clips.
+
+            end: Option<Number>,
+            /// The directory the file is written into.
+
+            directory: Text,
+        },
+        run: {
+
+            let id = "sound.track.consolidate".to_string();
+            let track = self.track.0;
+            let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{track}`"),
+            })?;
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                });
+            }
+            if is_master(node) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the master holds the fader of the mix and not a sound of its own".to_string(),
+                });
+            }
+            let directory = self.directory.0.clone();
+            if directory.trim().is_empty() {
+                return Err(EngineError::Failed { id, message: "a directory is a path".to_string() });
+            }
+            std::fs::create_dir_all(&directory).map_err(|error| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the directory `{directory}` cannot be made: {error}"),
+            })?;
+            // The **range**: the track's own clips say where it ends, and
+            // a range with no length is refused.
+            let document = session.document().clone();
+            let mut clips: Vec<(u64, ClipPayload)> = Vec::new();
+            let mut last = 0_i64;
+            for clip in document.walk().filter(|node| node.kind == "sound.clip") {
+                if timeline::track_of(&document, clip).map(|owner| owner.id) != Some(track) {
+                    continue;
+                }
+                let Ok(payload) = ClipPayload::from_json(&clip.data) else { continue };
+                last = last.max(payload.start.max(0) + payload.length.max(0));
+                clips.push((clip.id, payload));
+            }
+            let start = match &self.start {
+                Some(start) => samples(start.0, "where the range starts")?,
+                None => 0,
+            };
+            let end = match &self.end {
+                Some(end) => samples(end.0, "where the range ends")?,
+                None => last,
+            };
+            if end <= start {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the range ends at {end} and starts at {start}"),
+                });
+            }
+            // The **sound** of the track's clips: the raw signal, before
+            // the track's trim and before the track's inserts.
+            let mix = mix_of(&document, &id, Some(track))?;
+            let channels = mix.channels.max(1) as usize;
+            let from = start.max(0) as usize * channels;
+            let to = end.max(0) as usize * channels;
+            let Some((_, signal)) = mix.raw else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the track `{track}` has no sound to consolidate"),
+                });
+            };
+            if signal.len() < to {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!(
+                        "the sound of the track is {} frames long and the range asks for {end}",
+                        signal.len() / channels
+                    ),
+                });
+            }
+            let slice = &signal[from..to];
+            // The **file**: the sound of the range, written beside the
+            // session.
+            let name = format!("{}_consolidated", node.name);
+            let path = a_stem_path(&directory, &name);
+            let bytes = craftkit_wav::write(mix.channels, mix.rate, slice);
+            write_file(&path, &bytes)?;
+            // The **source** of the file, and the **asset** that carries it.
+            let frames = (end - start).max(0);
+            let payload = SourcePayload {
+                path: path.clone(),
+                channels: mix.channels as u32,
+                frames,
+                sample_rate: mix.rate,
+                peaks: Vec::new(),
+            };
+            let source =
+                session.document_mut()?.add_node_with(path.clone(), "sound.source", None, payload.to_json());
+            session.document_mut()?.add_asset(craftkit_sdk::Asset::new(path.clone(), "audio", None));
+            // The **clips** of the range are gone: the ones inside it are
+            // thrown away, and the ones that cross its edge keep the part
+            // outside it.
+            let mut removed = 0_usize;
+            let mut kept = 0_usize;
+            for (clip_id, payload) in clips {
+                let clip_start = payload.start.max(0);
+                let clip_end = clip_start + payload.length.max(0);
+                if clip_end <= start || clip_start >= end {
+                    continue;
+                }
+                if clip_start >= start && clip_end <= end {
+                    session.document_mut()?.remove_node(clip_id);
+                    removed += 1;
+                    continue;
+                }
+                // The part **outside** the range is kept.
+                let mut payload = payload;
+                if clip_start < start {
+                    payload.length = (start - clip_start).max(0);
+                } else {
+                    let cut = end - clip_start;
+                    payload.offset += cut;
+                    payload.start = end;
+                    payload.length = (clip_end - end).max(0);
+                }
+                if let Some(node) = session.document_mut()?.node_mut(clip_id) {
+                    node.data = payload.to_json();
+                }
+                kept += 1;
+            }
+            // The **clip** of the new file, where the old ones were.
+            let playlist = playlist_of(session, track, None)?;
+            let mut clip = ClipPayload::new();
+            clip.start = start;
+            clip.length = frames;
+            clip.source = Some(source);
+            let clip_id = session.document_mut()?.add_node_with_under(
+                Some(playlist),
+                name.clone(),
+                "sound.clip",
+                None,
+                clip.to_json(),
+            );
+            Ok(Outcome::changed(format!("consolidated the track `{track}` into `{path}`")).with_data(
+                serde_json::json!({
+                    "track": track,
+                    "clip": clip_id,
+                    "source": source,
+                    "path": path,
+                    "start": start,
+                    "end": end,
+                    "removed": removed,
+                    "kept": kept,
+                }),
+            ))
+
+        }
+    }
+    /// Set the session: the sample rate and the timecode.
+    ///
+    /// These are the settings that belong to the session and not to any one
+    /// node, and they live in the document's own payload.
+    sound.session.set {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Options"),
+        params: {
+            /// The sample rate, in samples a second.
+
+            sample_rate: Option<Number>,
+            /// Where the document starts on a timecode, in samples.
+
+            timecode_start: Option<Number>,
+            /// Whether the **metronome** is heard.
+
+            metronome: Option<Bool>,
+            /// How loud the click is, in decibels.
+
+            click_volume_db: Option<Number>,
+            /// The click's pitch, as a note number.
+
+            click_note: Option<Number>,
+            /// The **accent's** pitch: the click on the first beat of a bar.
+
+            click_accent_note: Option<Number>,
+            /// The **layout** of the room: the speakers the sound is heard on.
+            ///
+            /// One of `stereo`, `5.0`, `5.1`, `7.1` and `7.1.4`, and a layout
+            /// that is not one of them is **refused**.
+
+            layout: Option<Text>,
+            /// Whether the recording is **destructive**: the sound that is
+            /// recorded over is gone.
+
+            destructive_record: Option<Bool>,
+            /// Whether the recording is a **track punch**: the recording is
+            /// written over the part of the track that is armed and nowhere
+            /// else.
+
+            track_punch: Option<Bool>,
+        },
+        run: {
+
+            let mut settings = session_of(session.document());
+            if let Some(rate) = &self.sample_rate {
+                if !rate.0.is_finite() || rate.0 < 1.0 || rate.0 > 768_000.0 {
+                    return Err(EngineError::Failed {
+                        id: "sound.session.set".to_string(),
+                        message: format!("{} is not a sample rate", rate.0),
+                    });
+                }
+                settings.sample_rate = rate.0 as u32;
+            }
+            if let Some(start) = &self.timecode_start {
+                settings.timecode_start = samples(start.0, "where the timecode starts")?;
+            }
+            if let Some(metronome) = &self.metronome {
+                settings.metronome = metronome.0;
+            }
+            if let Some(volume) = &self.click_volume_db {
+                if !volume.0.is_finite() {
+                    return Err(EngineError::Failed {
+                        id: "sound.session.set".to_string(),
+                        message: "a level is a number of decibels".to_string(),
+                    });
+                }
+                settings.click_volume_db = volume.0;
+            }
+            if let Some(note) = &self.click_note {
+                if !note.0.is_finite() {
+                    return Err(EngineError::Failed {
+                        id: "sound.session.set".to_string(),
+                        message: "a pitch is a note number".to_string(),
+                    });
+                }
+                settings.click_note = note.0;
+            }
+            if let Some(note) = &self.click_accent_note {
+                if !note.0.is_finite() {
+                    return Err(EngineError::Failed {
+                        id: "sound.session.set".to_string(),
+                        message: "a pitch is a note number".to_string(),
+                    });
+                }
+                settings.click_accent_note = note.0;
+            }
+            if let Some(layout) = &self.layout {
+                if surround::layout(&layout.0).is_none() {
+                    return Err(EngineError::Failed {
+                        id: "sound.session.set".to_string(),
+                        message: format!(
+                            "`{}` is not a layout this tree has: the layouts are {}",
+                            layout.0,
+                            surround::layout_names().join(", ")
+                        ),
+                    });
+                }
+                settings.layout = layout.0.trim().to_string();
+            }
+            if let Some(destructive) = &self.destructive_record {
+                settings.destructive_record = destructive.0;
+            }
+            if let Some(punch) = &self.track_punch {
+                settings.track_punch = punch.0;
+            }
+            set_session(session.document_mut()?, &settings);
+            Ok(Outcome::changed(format!("the session runs at {} samples a second", settings.sample_rate))
+                .with_data(serde_json::json!({
+                    "sample_rate": settings.sample_rate,
+                    "timecode_start": settings.timecode_start,
+                    "metronome": settings.metronome,
+                    "click_volume_db": settings.click_volume_db,
+                    "click_note": settings.click_note,
+                    "click_accent_note": settings.click_accent_note,
+                    "layout": settings.layout,
+                    "destructive_record": settings.destructive_record,
+                    "track_punch": settings.track_punch,
+                })))
+
+        }
     }
 }
 
@@ -2054,1194 +6139,6 @@ impl SourcePayload {
 
 // -------------------------------------------------------------------- the commands --
 
-/// Make a track.
-///
-/// A track comes with one playlist, because a track with no takes is not a
-/// track yet: it is a row with nothing in it.
-#[derive(Command)]
-#[command(
-    id = "sound.track.add",
-    area = "sound",
-    layer = "sound",
-    icon = "plus",
-    menu("Track", "New"),
-    mutates,
-    undoable
-)]
-pub struct AddTrack {
-    /// What to call it.
-    pub name: Text,
-    /// What kind of track it is: `audio`, `instrument`, `aux`, `master`.
-    pub track_kind: Option<Text>,
-    /// How many channels it has.
-    pub channels: Option<Number>,
-}
-
-impl AddTrack {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.clone();
-        let track_kind = match &self.track_kind {
-            Some(kind) => kind.0.clone(),
-            None => "audio".to_string(),
-        };
-        let channels = match &self.channels {
-            Some(channels) => channels.0 as u32,
-            None => 2,
-        };
-        let payload = TrackPayload {
-            track_kind,
-            channels,
-            solo: false,
-            trim_db: 0.0,
-            fader_db: 0.0,
-            pan: 0.0,
-            mute: false,
-            solo_safe: false,
-            phase_invert: false,
-            active_playlist: None,
-            inactive: false,
-            elastic: None,
-            surround: None,
-            vca: None,
-            record_arm: false,
-            input_monitor: false,
-            frozen: false,
-        };
-        let document = session.document_mut()?;
-        let track = document.add_node_with(name.clone(), "sound.track", None, payload.to_json());
-        document.add_node_with_under(Some(track), "A".to_string(), "sound.playlist", None, Json::Null);
-        Ok(Outcome::changed(format!("added a track `{name}`"))
-            .with_data(serde_json::json!({ "id": track, "name": name })))
-    }
-}
-
-/// Add a **take** to a track.
-///
-/// A take is the tree's playlist: an alternative set of clips on the
-/// same track, and one of the takes is the one that is played.
-#[derive(Command)]
-#[command(
-    id = "sound.playlist.add",
-    area = "sound",
-    layer = "sound",
-    icon = "plus",
-    menu("Track", "Takes"),
-    mutates,
-    undoable
-)]
-pub struct AddPlaylist {
-    /// The track the take is on.
-    pub track: NodeRef,
-    /// What to call it.
-    pub name: Text,
-}
-
-impl AddPlaylist {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let track = self.track.0;
-        let name = self.name.0.clone();
-        if name.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "sound.playlist.add".to_string(),
-                message: "a take says what it is called".to_string(),
-            });
-        }
-        let Some(node) = session.document().node(track) else {
-            return Err(EngineError::Failed {
-                id: "sound.playlist.add".to_string(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: "sound.playlist.add".to_string(),
-                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
-            });
-        }
-        if node.children.iter().any(|child| child.kind == "sound.playlist" && child.name == name) {
-            return Err(EngineError::Failed {
-                id: "sound.playlist.add".to_string(),
-                message: format!("the track `{track}` already has a take called `{name}`"),
-            });
-        }
-        let id = session.document_mut()?.add_node_with_under(
-            Some(track),
-            name.clone(),
-            "sound.playlist",
-            None,
-            Json::Null,
-        );
-        Ok(Outcome::changed(format!("the track `{track}` has a take called `{name}`"))
-            .with_data(serde_json::json!({ "id": id, "track": track, "name": name })))
-    }
-}
-
-/// Say which **take** of a track is played.
-///
-/// The tree's track has several playlists and an index of the one that
-/// is played; here the take is named, because a name is what a person
-/// says and an index is what a program says.
-#[derive(Command)]
-#[command(
-    id = "sound.playlist.active",
-    area = "sound",
-    layer = "sound",
-    icon = "check",
-    menu("Track", "Takes"),
-    mutates,
-    undoable
-)]
-pub struct SetActivePlaylist {
-    /// The track the take is on.
-    pub track: NodeRef,
-    /// The take that is played.
-    pub playlist: Text,
-}
-
-impl SetActivePlaylist {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let track = self.track.0;
-        let name = self.playlist.0.clone();
-        let Some(node) = session.document().node(track) else {
-            return Err(EngineError::Failed {
-                id: "sound.playlist.active".to_string(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: "sound.playlist.active".to_string(),
-                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
-            });
-        }
-        if !node.children.iter().any(|child| child.kind == "sound.playlist" && child.name == name) {
-            return Err(EngineError::Failed {
-                id: "sound.playlist.active".to_string(),
-                message: format!("the track `{track}` has no take called `{name}`"),
-            });
-        }
-        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
-            id: "sound.playlist.active".to_string(),
-            message: error.to_string(),
-        })?;
-        payload.active_playlist = Some(name.clone());
-        let data = payload.to_json();
-        let Some(node) = session.document_mut()?.node_mut(track) else {
-            return Err(EngineError::Failed {
-                id: "sound.playlist.active".to_string(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        node.data = data;
-        Ok(Outcome::changed(format!("the track `{track}` plays the take `{name}`"))
-            .with_data(serde_json::json!({ "track": track, "playlist": name })))
-    }
-}
-
-/// Set a track's **elastic algorithm**.
-///
-/// An elastic track is a track whose clips are **stretched and the
-/// pitch stays**: the sound is longer and it is the same note. The
-/// tree's track carries an algorithm for it — `polyphonic`,
-/// `rhythmic`, `monophonic`, `varispeed`, `x-form` — and the
-/// algorithm `varispeed` says that the pitch falls with the speed,
-/// which is what an ordinary track does anyway.
-///
-/// The algorithm is a **string** and not a variant: the kinds of a
-/// track are open here, and so are its algorithms. The names the tree
-/// uses are the names this uses, and a third party may name one.
-///
-/// The algorithm `none` takes the elastic away, and so does an empty
-/// name: a track with no algorithm is an ordinary track, and its
-/// clips are played at another speed.
-#[derive(Command)]
-#[command(
-    id = "sound.track.elastic",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Track", "Elastic"),
-    mutates,
-    undoable
-)]
-pub struct SetTrackElastic {
-    /// The track to set.
-    pub track: NodeRef,
-    /// The algorithm: `polyphonic`, `rhythmic`, `monophonic`,
-    /// `varispeed`, `x-form`, or `none` to take the elastic away.
-    pub algorithm: Text,
-}
-
-impl SetTrackElastic {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.track.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.elastic".to_string(),
-                message: format!("there is no track `{id}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: "sound.track.elastic".to_string(),
-                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
-            });
-        }
-        let asked = self.algorithm.0.trim().to_string();
-        if asked.is_empty() {
-            return Err(EngineError::Failed {
-                id: "sound.track.elastic".to_string(),
-                message: "an algorithm is a name, and the name `none` takes the elastic away".to_string(),
-            });
-        }
-        let algorithm = if asked == "none" { None } else { Some(asked.clone()) };
-        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
-            id: "sound.track.elastic".to_string(),
-            message: error.to_string(),
-        })?;
-        payload.elastic = algorithm.clone();
-        let data = payload.to_json();
-        let Some(node) = session.document_mut()?.node_mut(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.elastic".to_string(),
-                message: format!("there is no track `{id}`"),
-            });
-        };
-        node.data = data;
-        let said = algorithm.clone().unwrap_or_else(|| "none".to_string());
-        Ok(Outcome::changed(format!("the track `{id}` is `{said}`"))
-            .with_data(serde_json::json!({ "track": id, "algorithm": algorithm })))
-    }
-}
-
-/// Make a track **solo safe**, or not.
-///
-/// A solo silences the other tracks, and a **solo-safe** track is not
-/// silenced by it: it is a track that stays when somebody listens to
-/// one thing on purpose — a reference, a click, a talk track.
-///
-/// The tree's mixer keeps the flag beside the solo, and the group
-/// shares the solo and not this: the flag is about one track and not
-/// about the others.
-#[derive(Command)]
-#[command(
-    id = "sound.track.solo.safe",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Track", "Solo Safe"),
-    mutates,
-    undoable
-)]
-pub struct SetTrackSoloSafe {
-    /// The track.
-    pub track: NodeRef,
-    /// Whether it is solo safe.
-    pub solo_safe: Bool,
-}
-
-impl SetTrackSoloSafe {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.track.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.solo.safe".to_string(),
-                message: format!("there is no track `{id}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: "sound.track.solo.safe".to_string(),
-                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
-            });
-        }
-        let solo_safe = self.solo_safe.0;
-        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
-            id: "sound.track.solo.safe".to_string(),
-            message: error.to_string(),
-        })?;
-        payload.solo_safe = solo_safe;
-        let data = payload.to_json();
-        let Some(node) = session.document_mut()?.node_mut(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.solo.safe".to_string(),
-                message: format!("there is no track `{id}`"),
-            });
-        };
-        node.data = data;
-        Ok(Outcome::changed(format!("the track `{id}` is solo safe: {solo_safe}"))
-            .with_data(serde_json::json!({ "id": id, "solo_safe": solo_safe })))
-    }
-}
-
-/// Mute a track, or let it be heard.
-///
-/// The track's own **mute** is the level of the whole track: a muted
-/// track is not heard, and neither is the copy that a send takes of
-/// it. The tree's mixer keeps a mute beside the mute lane, and the
-/// lane is the mute's default: a **mute lane** with breakpoints
-/// overrides it, and a lane without one is the mute.
-///
-/// The mute is one of the things a **group** shares: the tree's group
-/// shares the volume, the mute, the solo and the record, and the mute
-/// is one of them — so a change to the mute of a track in a group
-/// that mixes is a change to the mute of every member.
-#[derive(Command)]
-#[command(
-    id = "sound.track.mute",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Track", "Mute"),
-    mutates,
-    undoable
-)]
-pub struct MuteTrack {
-    /// The track.
-    pub track: NodeRef,
-    /// Whether it is muted.
-    pub muted: Bool,
-}
-
-impl MuteTrack {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.track.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.mute".to_string(),
-                message: format!("there is no track `{id}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: "sound.track.mute".to_string(),
-                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
-            });
-        }
-        let muted = self.muted.0;
-        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
-            id: "sound.track.mute".to_string(),
-            message: error.to_string(),
-        })?;
-        payload.mute = muted;
-        let data = payload.to_json();
-        let Some(node) = session.document_mut()?.node_mut(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.mute".to_string(),
-                message: format!("there is no track `{id}`"),
-            });
-        };
-        node.data = data;
-        // The **mix link**: a group of tracks is mixed together, so a
-        // change to the mute of one of them is a change to the mute of
-        // all of them.
-        let mut linked = Vec::new();
-        for sibling in group::mix_siblings(session.document(), id) {
-            if sibling == id {
-                continue;
-            }
-            let Some(node) = session.document().node(sibling) else { continue };
-            let Ok(mut other) = TrackPayload::from_json(&node.data) else { continue };
-            other.mute = muted;
-            let data = other.to_json();
-            if let Some(node) = session.document_mut()?.node_mut(sibling) {
-                node.data = data;
-            }
-            linked.push(sibling);
-        }
-        Ok(Outcome::changed(format!("the track `{id}` is muted: {muted}"))
-            .with_data(serde_json::json!({ "id": id, "mute": muted, "linked": linked })))
-    }
-}
-
-/// Set a track's **pan**.
-///
-/// The pan is the **balance** of the track's sound: minus one is all
-/// to the left and one is all to the right, and the middle is the
-/// middle. It is applied when the track is routed — a track that
-/// feeds a bus is balanced before it reaches the bus — and a copy
-/// that a send takes is balanced by the **send's** own pan and not by
-/// this one.
-///
-/// The pan runs from minus one to one, and a pan outside that is
-/// **refused** and not pulled to the edge.
-#[derive(Command)]
-#[command(
-    id = "sound.track.pan",
-    area = "sound",
-    layer = "sound",
-    icon = "sliders",
-    menu("Track", "Pan"),
-    mutates,
-    undoable
-)]
-pub struct SetTrackPan {
-    /// The track to set.
-    pub track: NodeRef,
-    /// Its balance: from minus one to one.
-    pub pan: Number,
-}
-
-impl SetTrackPan {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.track.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.pan".to_string(),
-                message: format!("there is no track `{id}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: "sound.track.pan".to_string(),
-                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
-            });
-        }
-        let pan = self.pan.0;
-        if !pan.is_finite() || !(-1.0..=1.0).contains(&pan) {
-            return Err(EngineError::Failed {
-                id: "sound.track.pan".to_string(),
-                message: "a pan is a number between minus one and one".to_string(),
-            });
-        }
-        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
-            id: "sound.track.pan".to_string(),
-            message: error.to_string(),
-        })?;
-        payload.pan = pan;
-        let data = payload.to_json();
-        let Some(node) = session.document_mut()?.node_mut(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.pan".to_string(),
-                message: format!("there is no track `{id}`"),
-            });
-        };
-        node.data = data;
-        Ok(Outcome::changed(format!("the track `{id}` is at {pan}"))
-            .with_data(serde_json::json!({ "id": id, "pan": pan })))
-    }
-}
-
-/// Set a track's **trim** and **phase**.
-///
-/// The trim is the level of the track's **input**, before its inserts,
-/// and the phase is a sign and not a level: the sound is the same and
-/// upside down.
-#[derive(Command)]
-#[command(
-    id = "sound.track.set",
-    area = "sound",
-    layer = "sound",
-    icon = "sliders",
-    menu("Track", "Trim"),
-    mutates,
-    undoable
-)]
-pub struct SetTrack {
-    /// The track to set.
-    pub track: NodeRef,
-    /// Its trim, in decibels: from minus one hundred and forty-four to
-    /// twenty-four.
-    pub trim_db: Option<Number>,
-    /// Whether its phase is inverted.
-    pub phase: Option<Bool>,
-}
-
-impl SetTrack {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.track.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.set".to_string(),
-                message: format!("there is no track `{id}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: "sound.track.set".to_string(),
-                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
-            });
-        }
-        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
-            id: "sound.track.set".to_string(),
-            message: error.to_string(),
-        })?;
-        if let Some(asked) = &self.trim_db {
-            let decibels = asked.0;
-            if !decibels.is_finite() || !(-144.0..=24.0).contains(&decibels) {
-                return Err(EngineError::Failed {
-                    id: "sound.track.set".to_string(),
-                    message:
-                        "a trim is a number of decibels from minus one hundred and forty-four to twenty-four"
-                            .to_string(),
-                });
-            }
-            payload.trim_db = decibels;
-        }
-        if let Some(phase) = &self.phase {
-            payload.phase_invert = phase.0;
-        }
-        let data = payload.to_json();
-        let Some(node) = session.document_mut()?.node_mut(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.set".to_string(),
-                message: format!("there is no track `{id}`"),
-            });
-        };
-        node.data = data;
-        // The **trim** is not linked by the group: the tree's group
-        // links the **volume** and not the input gain, and the fader
-        // is the volume.
-        Ok(Outcome::changed(format!("the track `{id}` is set")).with_data(serde_json::json!({
-            "id": id,
-            "trim_db": payload.trim_db,
-            "phase": payload.phase_invert,
-        })))
-    }
-}
-
-/// Set a track's **fader**.
-///
-/// The fader is the level of the track's **output**: it comes after
-/// the track's inserts, and it is the level a track is heard at when
-/// nothing automates it. The tree's fader runs from minus one hundred
-/// and forty-four decibels to twelve, and a fader outside that is
-/// **refused** and not pulled to the edge.
-///
-/// A **volume lane** overrides the fader: the tree's mixer runs the
-/// lane when there is one and the fader when there is not, and the
-/// fader is the lane's default.
-///
-/// The fader is the one thing a **group** links: the tree's group
-/// carries a list of the attributes it shares — the volume, the mute,
-/// the solo and the record — and the volume is the fader, so a change
-/// to the fader of a track in a group that mixes is a change to the
-/// fader of every member.
-#[derive(Command)]
-#[command(
-    id = "sound.track.fader",
-    area = "sound",
-    layer = "sound",
-    icon = "sliders",
-    menu("Track", "Fader"),
-    mutates,
-    undoable
-)]
-pub struct SetTrackFader {
-    /// The track to set.
-    pub track: NodeRef,
-    /// Its level, in decibels: from minus one hundred and forty-four
-    /// to twelve.
-    pub db: Number,
-}
-
-impl SetTrackFader {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.track.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.fader".to_string(),
-                message: format!("there is no track `{id}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: "sound.track.fader".to_string(),
-                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
-            });
-        }
-        let decibels = self.db.0;
-        if !decibels.is_finite() || !(-144.0..=12.0).contains(&decibels) {
-            return Err(EngineError::Failed {
-                id: "sound.track.fader".to_string(),
-                message: "a fader is a number of decibels from minus one hundred and forty-four to twelve"
-                    .to_string(),
-            });
-        }
-        let mut payload = TrackPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
-            id: "sound.track.fader".to_string(),
-            message: error.to_string(),
-        })?;
-        payload.fader_db = decibels;
-        let data = payload.to_json();
-        let Some(node) = session.document_mut()?.node_mut(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.fader".to_string(),
-                message: format!("there is no track `{id}`"),
-            });
-        };
-        node.data = data;
-        // The **mix link**: a group of tracks is mixed together, so a
-        // change to the fader of one of them is a change to the fader
-        // of all of them.
-        let mut linked = Vec::new();
-        for sibling in group::mix_siblings(session.document(), id) {
-            if sibling == id {
-                continue;
-            }
-            let Some(node) = session.document().node(sibling) else { continue };
-            let Ok(mut other) = TrackPayload::from_json(&node.data) else { continue };
-            other.fader_db = decibels;
-            let data = other.to_json();
-            if let Some(node) = session.document_mut()?.node_mut(sibling) {
-                node.data = data;
-            }
-            linked.push(sibling);
-        }
-        Ok(Outcome::changed(format!("the track `{id}` is at {decibels} decibels"))
-            .with_data(serde_json::json!({ "id": id, "db": decibels, "linked": linked })))
-    }
-}
-
-/// **Solo** a track.
-///
-/// A soloed track silences the others: when one track is soloed, the
-/// rest are not heard — and their sends carry the silence, because a
-/// send is a copy of the track's signal.
-///
-/// Soloing nothing is not the same as soloing everything: a document
-/// with no soloed track is heard whole, and a document with one is
-/// heard alone.
-#[derive(Command)]
-#[command(
-    id = "sound.track.solo",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Track", "Solo"),
-    mutates,
-    undoable
-)]
-pub struct SoloTrack {
-    /// The track.
-    pub track: NodeRef,
-    /// Whether the track is soloed.
-    pub solo: Bool,
-}
-
-impl SoloTrack {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.track.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.solo".to_string(),
-                message: format!("there is no node `{id}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: "sound.track.solo".to_string(),
-                message: format!("the node `{id}` is a `{}` and not a track", node.kind),
-            });
-        }
-        let solo = self.solo.0;
-        let Some(node) = session.document_mut()?.node_mut(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.track.solo".to_string(),
-                message: format!("there is no node `{id}`"),
-            });
-        };
-        let mut payload = TrackPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: "sound.track.solo".to_string(), message: error })?;
-        payload.solo = solo;
-        node.data = payload.to_json();
-        Ok(Outcome::changed(format!("the track `{id}` is soloed: {solo}"))
-            .with_data(serde_json::json!({ "id": id, "solo": solo })))
-    }
-}
-
-/// Put a clip on a track.
-///
-/// The track may be given as an id, and the playlist as a name: a track
-/// holds playlists, and a clip goes in one of them.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.add",
-    example,
-    area = "sound",
-    layer = "sound",
-    icon = "plus",
-    menu("Track", "New"),
-    mutates,
-    undoable
-)]
-pub struct AddClip {
-    /// The track the clip goes on.
-    pub track: NodeRef,
-    /// The playlist it goes in, if the track has more than one.
-    pub playlist: Option<Text>,
-    /// Where it starts, in samples.
-    pub start: Number,
-    /// How long it is, in samples.
-    pub length: Number,
-    /// How much **longer** it is played than its source: one is none.
-    pub stretch: Option<Number>,
-    /// The source it plays.
-    pub source: Option<NodeRef>,
-    /// What to call it.
-    pub name: Option<Text>,
-}
-
-impl AddClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let start = samples(self.start.0, "where the clip starts")?;
-        let length = samples(self.length.0, "how long the clip is")?;
-        if length == 0 {
-            return Err(EngineError::Failed {
-                id: "sound.clip.add".to_string(),
-                message: "a clip with no length is not a clip".to_string(),
-            });
-        }
-        // A **master** holds a fader and not a playlist: a clip on a
-        // master would be a clip that is never heard.
-        match session.document().node(self.track.0) {
-            Some(node) if node.kind == "sound.track" && is_master(node) => {
-                return Err(EngineError::Failed {
-                    id: "sound.clip.add".to_string(),
-                    message: "a master holds no clips: it has a fader and not a playlist".to_string(),
-                });
-            }
-            _ => {}
-        }
-        // A **reader** takes a bus into the mix: it holds a bus and not
-        // a playlist.
-        if mixer::reads_bus(session.document(), self.track.0) {
-            return Err(EngineError::Failed {
-                id: "sound.clip.add".to_string(),
-                message: "a track that reads a bus holds no clips: it has a bus and not a playlist"
-                    .to_string(),
-            });
-        }
-        // A clip on an **elastic** track is stretched with the pitch
-        // kept, and that stretch is bounded the way the tree's is: a
-        // stretch outside the bound is refused and not pulled to the
-        // edge.
-        let stretch = match self.stretch {
-            Some(asked) => match session
-                .document()
-                .node(self.track.0)
-                .and_then(elastic_algorithm)
-                .filter(|algorithm| algorithm != "varispeed")
-            {
-                Some(algorithm) => elastic_stretch_of(asked.0, "sound.clip.add", &algorithm)?,
-                None => stretch_of(asked.0, "sound.clip.add")?,
-            },
-            None => 1.0,
-        };
-        let playlist = playlist_of(session, self.track.0, self.playlist.as_ref().map(|name| name.0.clone()))?;
-        let mut payload = ClipPayload::new();
-        payload.start = start;
-        payload.length = length;
-        payload.source = self.source.map(|source| source.0);
-        payload.stretch = stretch;
-        let name = match &self.name {
-            Some(name) => name.0.clone(),
-            None => format!("clip at {start}"),
-        };
-        let id = session.document_mut()?.add_node_with_under(
-            Some(playlist),
-            name.clone(),
-            "sound.clip",
-            None,
-            payload.to_json(),
-        );
-        // The clip plays the source: that is a **relation**, not
-        // containment. The clip is not in the source.
-        if let Some(source) = self.source {
-            session.document_mut()?.add_relation(craftkit_sdk::Relation::new(id, source.0, "source"));
-        }
-        Ok(Outcome::changed(format!("added a clip `{name}`")).with_data(
-            serde_json::json!({ "id": id, "playlist": playlist, "start": start, "length": length }),
-        ))
-    }
-}
-
-/// **Move** clips along the timeline.
-///
-/// The clips move by so many samples, later or earlier, and their
-/// **content** goes with them: a clip that moves keeps the sound it
-/// plays and plays it at another time.
-///
-/// A **locked** clip does not move — the edit lock and the time lock
-/// both hold it — and the answer says how many moved. The tree's
-/// editor does the same, and the tree's own word for it is that a
-/// locked clip "doesn't move".
-///
-/// A clip that would move **before the beginning** of the timeline is
-/// **refused**: the move is not made for one clip and not for the
-/// others, because a move that is half made is a move nobody asked
-/// for.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.move",
-    area = "sound",
-    layer = "sound",
-    icon = "move",
-    menu("Clip", "Move"),
-    mutates,
-    undoable
-)]
-pub struct MoveClips {
-    /// The clips to move: their ids.
-    pub clips: serde_json::Value,
-    /// How much later or earlier, in samples.
-    pub delta: Number,
-}
-
-impl MoveClips {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.move".to_string();
-        let clips = crate::clip_ids_of(&self.clips, &id)?;
-        if clips.is_empty() {
-            return Err(EngineError::Failed { id, message: "there are no clips to move".to_string() });
-        }
-        if !self.delta.0.is_finite() {
-            return Err(EngineError::Failed { id, message: "a distance is a number of samples".to_string() });
-        }
-        let delta = self.delta.0.round() as i64;
-        // The clips are read first, and the whole move is refused if
-        // one of them would go before the beginning.
-        let mut payloads: Vec<(u64, ClipPayload)> = Vec::with_capacity(clips.len());
-        for clip in &clips {
-            let node = session.document().node(*clip).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip}`"),
-            })?;
-            if node.kind != "sound.clip" {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-                });
-            }
-            let payload = ClipPayload::from_json(&node.data)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            if locks::edit_is_locked(&payload) || locks::time_is_locked(&payload) {
-                continue;
-            }
-            if payload.start + delta < 0 {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the clip `{clip}` would move before the beginning of the timeline"),
-                });
-            }
-            payloads.push((*clip, payload));
-        }
-        let mut moved = 0;
-        for (clip, payload) in &payloads {
-            let mut moved_payload = payload.clone();
-            moved_payload.start += delta;
-            if let Some(node) = session.document_mut()?.node_mut(*clip) {
-                node.data = moved_payload.to_json();
-            }
-            moved += 1;
-        }
-        Ok(Outcome::changed(format!("moved {moved} clips"))
-            .with_data(serde_json::json!({ "moved": moved, "delta": delta })))
-    }
-}
-
-/// **Trim** clips to the **material** they play.
-///
-/// A clip plays a part of a source, and a clip that was moved may
-/// reach past the end of it: the part of the clip that is past the end
-/// is **silence**, and a clip that is half silence is a clip that says
-/// something false about its own sound.
-///
-/// The clip is cut at the end of its material — and at the beginning
-/// of it, when the clip starts past the end — and the part of the
-/// material the clip plays is what is left.
-///
-/// The tree's editor has the same command, and the same name for it:
-/// "To File Boundaries".
-#[derive(Command)]
-#[command(
-    id = "sound.clip.trim.to.file",
-    area = "sound",
-    layer = "sound",
-    icon = "trim",
-    menu("Clip", "Trim to Material"),
-    mutates,
-    undoable
-)]
-pub struct TrimClipsToFile {
-    /// The clips to trim: their ids.
-    pub clips: serde_json::Value,
-}
-
-impl TrimClipsToFile {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.trim.to.file".to_string();
-        let clips = crate::clip_ids_of(&self.clips, &id)?;
-        if clips.is_empty() {
-            return Err(EngineError::Failed { id, message: "there are no clips to trim".to_string() });
-        }
-        let settings = session_of(session.document());
-        let mut trimmed = 0;
-        for clip in &clips {
-            let node = session.document().node(*clip).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip}`"),
-            })?;
-            if node.kind != "sound.clip" {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-                });
-            }
-            let payload = ClipPayload::from_json(&node.data)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            if locks::edit_is_locked(&payload) {
-                continue;
-            }
-            let Some(source_id) = payload.source else { continue };
-            let Some(source_node) = session.document().node(source_id) else { continue };
-            let Ok(source) = SourcePayload::from_json(&source_node.data) else { continue };
-            // The **material** in the session's samples: the source's
-            // own frames, read at the session's rate.
-            let ratio = settings.sample_rate.max(1) as f64 / source.sample_rate.max(1) as f64;
-            let material = (source.frames.max(0) as f64 * ratio).round() as i64;
-            let offset = payload.offset.max(0);
-            if offset >= material {
-                // The clip starts past the end of the material: there
-                // is nothing of it to play.
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the clip `{clip}` starts past the end of its material"),
-                });
-            }
-            // The clip's content runs for as long as the material
-            // that is left of it, read at the clip's own stretch.
-            let room = ((material - offset) as f64 * payload.stretch).round() as i64;
-            if room >= payload.length {
-                continue;
-            }
-            let mut shorter = payload.clone();
-            shorter.length = room.max(1);
-            if let Some(sync) = payload.sync {
-                shorter.sync = (0..=shorter.length).contains(&sync).then_some(sync);
-            }
-            if let Some(node) = session.document_mut()?.node_mut(*clip) {
-                node.data = shorter.to_json();
-            }
-            trimmed += 1;
-        }
-        Ok(Outcome::changed(format!("trimmed {trimmed} clips to their material"))
-            .with_data(serde_json::json!({ "trimmed": trimmed })))
-    }
-}
-
-/// Stretch a clip.
-///
-/// A stretched clip is **longer and lower**: the source is read more
-/// slowly, so the sound lasts longer and the pitch falls with it. This
-/// is a **varispeed**, and it is not a time stretch — a time stretch
-/// keeps the pitch and changes the length, and that is a much harder
-/// thing to do well.
-///
-/// The clip keeps its place and its length: the stretch says **how the
-/// source is played**, and not how long the clip is. One is no stretch.
-///
-/// The clip's place in the source moves with it: trimming a stretched
-/// clip moves the content by the delta **divided by the stretch**,
-/// because the source is read that much more slowly.
-///
-/// On an **elastic** track the stretch is **pitch-preserving**: the
-/// sound is longer and it is the same note, and that is a harder thing
-/// to do — so it is bounded the way the tree's is, from a tenth to ten
-/// times, and a stretch outside that is refused.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.stretch",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Clip", "Stretch"),
-    mutates,
-    undoable
-)]
-pub struct SetClipStretch {
-    /// The clip to stretch.
-    pub clip: NodeRef,
-    /// How much longer it is played than its source: one is none.
-    pub stretch: Number,
-}
-
-impl SetClipStretch {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
-            id: "sound.clip.stretch".to_string(),
-            message: format!("there is no node `{}`", self.clip.0),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: "sound.clip.stretch".to_string(),
-                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
-            });
-        }
-        // A clip on an **elastic** track is stretched with the pitch
-        // kept, and that is a harder thing to do: the stretch is
-        // bounded the way the tree's is, and a stretch outside the
-        // bound is refused.
-        let elastic = timeline::track_of(session.document(), node).and_then(elastic_algorithm);
-        let stretch = match elastic.as_deref() {
-            Some(algorithm) if algorithm != "varispeed" => {
-                elastic_stretch_of(self.stretch.0, "sound.clip.stretch", algorithm)?
-            }
-            _ => stretch_of(self.stretch.0, "sound.clip.stretch")?,
-        };
-        let mut payload = ClipPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: "sound.clip.stretch".to_string(), message: error })?;
-        // A clip whose **content** is locked is finished: it is not
-        // stretched.
-        if locks::edit_is_locked(&payload) {
-            return Err(EngineError::Failed {
-                id: "sound.clip.stretch".to_string(),
-                message: format!("the clip `{}` is locked: its sound is finished", self.clip.0),
-            });
-        }
-        payload.stretch = stretch;
-        if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
-            node.data = payload.to_json();
-        }
-        Ok(Outcome::changed(format!("stretched the clip `{}` to {stretch}", self.clip.0))
-            .with_data(serde_json::json!({ "id": self.clip.0, "stretch": stretch })))
-    }
-}
-
-/// Do something to a clip's **sound**.
-///
-/// A process is one of the tree's **audio-suite processes**: the sound
-/// is reversed, upside down, brought to a level, or has its direct
-/// current taken away. The tree does each of them by rendering the
-/// material and replacing the clip's content with the rendered file;
-/// here the process is on the clip and the sound is worked out when it
-/// is played.
-///
-/// The processes are done in the order they were added, so a clip may
-/// have more than one — and a clip may have the same one twice, which
-/// is what the tree does when the same process is asked for twice.
-///
-/// A process this battery does not know is **refused** and not
-/// ignored: a process that does nothing is worse than no process at
-/// all, because the document says the sound was changed and it was
-/// not.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.process",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Clip", "Process"),
-    mutates,
-    undoable
-)]
-pub struct AddClipProcess {
-    /// The clip to process.
-    pub clip: NodeRef,
-    /// What to do: `reverse`, `invert`, `normalize` or `dc_offset`.
-    pub process: Text,
-    /// What it is given: `normalize` takes a `target_db`.
-    pub params: Option<Json>,
-}
-
-impl AddClipProcess {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.process.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: "sound.clip.process".to_string(),
-                message: "a process is a name".to_string(),
-            });
-        }
-        // The **parameters** are checked here, so that a process that
-        // would be refused is refused before the clip is changed.
-        let params = process_params(&name, self.params.as_ref(), "sound.clip.process")?;
-        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
-            id: "sound.clip.process".to_string(),
-            message: format!("there is no node `{}`", self.clip.0),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: "sound.clip.process".to_string(),
-                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
-            });
-        }
-        let mut payload = ClipPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: "sound.clip.process".to_string(), message: error })?;
-        // A clip whose **content** is locked is finished: it is not
-        // processed.
-        if locks::edit_is_locked(&payload) {
-            return Err(EngineError::Failed {
-                id: "sound.clip.process".to_string(),
-                message: format!("the clip `{}` is locked: its sound is finished", self.clip.0),
-            });
-        }
-        payload.processes.push(ProcessPayload { process: name.clone(), params });
-        let data = payload.to_json();
-        if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
-            node.data = data;
-        }
-        Ok(Outcome::changed(format!("the clip `{}` is processed with `{name}`", self.clip.0))
-            .with_data(serde_json::json!({ "id": self.clip.0, "process": name })))
-    }
-}
-
-/// Take a process off a clip.
-///
-/// The **last** process of that name is the one that goes, because the
-/// processes are done in order and the last one is the one that was
-/// asked for last. A clip with no such process has nothing to take
-/// away, and that is refused.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.process.remove",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Clip", "Unprocess"),
-    mutates,
-    undoable
-)]
-pub struct RemoveClipProcess {
-    /// The clip to take the process off.
-    pub clip: NodeRef,
-    /// The name of the process.
-    pub process: Text,
-}
-
-impl RemoveClipProcess {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.process.0.trim().to_string();
-        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
-            id: "sound.clip.process.remove".to_string(),
-            message: format!("there is no node `{}`", self.clip.0),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: "sound.clip.process.remove".to_string(),
-                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
-            });
-        }
-        let mut payload = ClipPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
-            id: "sound.clip.process.remove".to_string(),
-            message: error,
-        })?;
-        let Some(at) = payload.processes.iter().rposition(|process| process.process == name) else {
-            return Err(EngineError::Failed {
-                id: "sound.clip.process.remove".to_string(),
-                message: format!("the clip `{}` has no `{name}`", self.clip.0),
-            });
-        };
-        payload.processes.remove(at);
-        let data = payload.to_json();
-        if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
-            node.data = data;
-        }
-        Ok(Outcome::changed(format!("the clip `{}` is not processed with `{name}`", self.clip.0))
-            .with_data(serde_json::json!({ "id": self.clip.0, "process": name })))
-    }
-}
-
 /// The parameters of a process, and the check that it is one this
 /// battery knows.
 ///
@@ -3269,544 +6166,6 @@ fn process_params(name: &str, params: Option<&Json>, id: &str) -> Result<Json, E
             id: id.to_string(),
             message: format!("not supported yet: the process `{other}`"),
         }),
-    }
-}
-
-/// Move the **pitch** of a clip.
-///
-/// A pitch shift is the other half of a stretch: a stretch makes the
-/// sound longer and the pitch stays, and a pitch shift moves the pitch
-/// and the sound stays as long as it was. Twelve semitones are an
-/// octave up and minus twelve an octave down.
-///
-/// The shift runs from minus twenty-four semitones to twenty-four, and
-/// a shift outside that is **refused** and not pulled to the edge: a
-/// caller that asked for a hundred semitones would be given
-/// twenty-four and would not know.
-///
-/// A clip whose **content** is locked is finished, and it is not
-/// shifted.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.pitch",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Clip", "Pitch"),
-    mutates,
-    undoable
-)]
-pub struct SetClipPitch {
-    /// The clip to shift.
-    pub clip: NodeRef,
-    /// How many semitones: twelve is an octave up, zero is none.
-    pub semitones: Number,
-}
-
-impl SetClipPitch {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let semitones = self.semitones.0;
-        if !semitones.is_finite() || !(-MAX_PITCH_SEMITONES..=MAX_PITCH_SEMITONES).contains(&semitones) {
-            return Err(EngineError::Failed {
-                id: "sound.clip.pitch".to_string(),
-                message: format!(
-                    "a pitch is from minus {MAX_PITCH_SEMITONES} semitones to {MAX_PITCH_SEMITONES}, \
-                     and this one is {semitones}"
-                ),
-            });
-        }
-        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
-            id: "sound.clip.pitch".to_string(),
-            message: format!("there is no node `{}`", self.clip.0),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: "sound.clip.pitch".to_string(),
-                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
-            });
-        }
-        let mut payload = ClipPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: "sound.clip.pitch".to_string(), message: error })?;
-        // A clip whose **content** is locked is finished: it is not
-        // shifted.
-        if locks::edit_is_locked(&payload) {
-            return Err(EngineError::Failed {
-                id: "sound.clip.pitch".to_string(),
-                message: format!("the clip `{}` is locked: its sound is finished", self.clip.0),
-            });
-        }
-        payload.pitch_semitones = semitones;
-        if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
-            node.data = payload.to_json();
-        }
-        Ok(Outcome::changed(format!("the clip `{}` is at {semitones} semitones", self.clip.0))
-            .with_data(serde_json::json!({ "id": self.clip.0, "semitones": semitones })))
-    }
-}
-
-/// **Fade** a clip **to a place**: up to it, or down to it.
-///
-/// The tree's editor fades a clip to the **playhead**: "Fade to
-/// Start" fades the clip from its head up to the playhead, and "Fade
-/// to End" fades it from the playhead down to its tail. The shape of
-/// the fade is the tree's own — the equal-power curve — and the
-/// curvature is not bent.
-///
-/// Here the place is **given**, because the playhead is a node of the
-/// document and a node is not a place every command may read: the
-/// place is where the caller says it is.
-///
-/// A place that is **not inside the clip** is refused: a fade that
-/// ends outside the clip is a fade of nothing.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.fade.to",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Clip", "Fade"),
-    mutates,
-    undoable
-)]
-pub struct FadeClipTo {
-    /// The clip to fade.
-    pub clip: NodeRef,
-    /// Where the fade ends, in the clip's own samples.
-    pub at: Number,
-    /// Which way the fade goes: `in` fades the clip from its head up
-    /// to the place, and `out` fades it from the place down to its
-    /// tail.
-    pub to: Option<Text>,
-}
-
-impl FadeClipTo {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.fade.to".to_string();
-        let clip_id = self.clip.0;
-        let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{clip_id}`"),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
-            });
-        }
-        let mut payload = ClipPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-        if locks::edit_is_locked(&payload) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip_id}` is locked: its sound is finished"),
-            });
-        }
-        // The **way** the fade goes: `in` or `out`, and a name this
-        // battery does not know is refused.
-        let to = match &self.to {
-            Some(to) => match to.0.trim() {
-                "in" => "in",
-                "out" => "out",
-                other => {
-                    return Err(EngineError::Failed {
-                        id,
-                        message: format!("a fade goes `in` or `out`, and not `{other}`"),
-                    });
-                }
-            },
-            None => "in",
-        };
-        // The **place** is in the clip's own time: how far into the
-        // clip it is.
-        let at = samples(self.at.0, "where the fade ends")?;
-        let into = at - payload.start;
-        if into <= 0 || into >= payload.length {
-            return Err(EngineError::Failed {
-                id,
-                message: format!(
-                    "the clip `{clip_id}` runs from {} to {} and cannot fade at {at}",
-                    payload.start,
-                    payload.start + payload.length
-                ),
-            });
-        }
-        // The tree's own shape: the equal-power curve, and a bend of
-        // nothing.
-        //
-        // The **length** of the fade is how far it runs: a fade in
-        // runs from the clip's head to the place, and a fade out runs
-        // from the place to the clip's tail.
-        let len = if to == "in" { into } else { payload.length - into };
-        let fade = FadePayload { len, shape: craftkit_audio::FadeShape::EqualPower, curvature: 0.0 };
-        if to == "in" {
-            payload.fade_in = fade;
-        } else {
-            payload.fade_out = fade;
-        }
-        if let Some(node) = session.document_mut()?.node_mut(clip_id) {
-            node.data = payload.to_json();
-        }
-        Ok(Outcome::changed(format!("faded the clip `{clip_id}` {to} to {at}")).with_data(
-            serde_json::json!({
-                "id": clip_id,
-                "at": at,
-                "to": to,
-                "fade_in": payload.fade_in.to_json(),
-                "fade_out": payload.fade_out.to_json(),
-            }),
-        ))
-    }
-}
-
-/// Fade a clip.
-///
-/// A fade is a **curve from silence to full**, and it is at the two
-/// ends of a clip: the head fades in and the tail fades out. A fade
-/// that is longer than the clip it fades is **refused**: a fade that
-/// does not finish is a fade that is not there, and a fade that is
-/// quietly shortened is a fade the caller did not ask for.
-///
-/// The **shape** is the curve: linear, equal_power, s_curve,
-/// exponential or logarithmic. The **bend** pushes the curve away from
-/// itself, and a bend of zero is the shape exactly.
-///
-/// A fade does not change the clip's length and does not change its
-/// place: it changes how the clip is heard.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.fade",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Clip", "Fade"),
-    mutates,
-    undoable
-)]
-pub struct SetClipFade {
-    /// The clip to fade.
-    pub clip: NodeRef,
-    /// How long the fade in is, in samples.
-    pub fade_in: Option<Number>,
-    /// How long the fade out is, in samples.
-    pub fade_out: Option<Number>,
-    /// The shape of the curve: linear, equal_power, s_curve, exponential or logarithmic.
-    pub shape: Option<Text>,
-    /// How much the curve is bent, from -1 to 1.
-    pub curvature: Option<Number>,
-}
-
-impl SetClipFade {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
-            id: "sound.clip.fade".to_string(),
-            message: format!("there is no node `{}`", self.clip.0),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: "sound.clip.fade".to_string(),
-                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
-            });
-        }
-        let mut payload = ClipPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: "sound.clip.fade".to_string(), message: error })?;
-        // A clip whose **content** is locked is finished: it is not
-        // faded.
-        if locks::edit_is_locked(&payload) {
-            return Err(EngineError::Failed {
-                id: "sound.clip.fade".to_string(),
-                message: format!("the clip `{}` is locked: its sound is finished", self.clip.0),
-            });
-        }
-        if self.fade_in.is_none() && self.fade_out.is_none() {
-            return Err(EngineError::Failed {
-                id: "sound.clip.fade".to_string(),
-                message: "a fade needs a length: how long is the fade in, and how long is the fade out?"
-                    .to_string(),
-            });
-        }
-        // The **shape** and the **bend** are the curve, and they are
-        // read once: they apply to the fades that are being set.
-        let shape = match &self.shape {
-            Some(shape) => {
-                craftkit_audio::FadeShape::from_label(&shape.0).ok_or_else(|| EngineError::Failed {
-                    id: "sound.clip.fade".to_string(),
-                    message: format!("there is no fade shape called `{}`", shape.0),
-                })?
-            }
-            None => craftkit_audio::FadeShape::default(),
-        };
-        let curvature = match self.curvature {
-            Some(curvature) => {
-                if !curvature.0.is_finite() {
-                    return Err(EngineError::Failed {
-                        id: "sound.clip.fade".to_string(),
-                        message: "a bend is a number".to_string(),
-                    });
-                }
-                curvature.0.clamp(-1.0, 1.0) as f32
-            }
-            None => 0.0,
-        };
-        if let Some(fade_in) = self.fade_in {
-            let len = samples(fade_in.0, "how long the fade in is")?;
-            if len > payload.length {
-                return Err(EngineError::Failed {
-                    id: "sound.clip.fade".to_string(),
-                    message: format!("the fade in is {len} samples long and the clip is {}", payload.length),
-                });
-            }
-            payload.fade_in = FadePayload { len, shape, curvature };
-        }
-        if let Some(fade_out) = self.fade_out {
-            let len = samples(fade_out.0, "how long the fade out is")?;
-            if len > payload.length {
-                return Err(EngineError::Failed {
-                    id: "sound.clip.fade".to_string(),
-                    message: format!("the fade out is {len} samples long and the clip is {}", payload.length),
-                });
-            }
-            payload.fade_out = FadePayload { len, shape, curvature };
-        }
-        if let Some(node) = session.document_mut()?.node_mut(self.clip.0) {
-            node.data = payload.to_json();
-        }
-        Ok(Outcome::changed(format!("faded the clip `{}`", self.clip.0)).with_data(serde_json::json!({
-            "id": self.clip.0,
-            "fade_in": payload.fade_in.to_json(),
-            "fade_out": payload.fade_out.to_json(),
-        })))
-    }
-}
-
-/// Trim a clip.
-///
-/// A trim is about a **range**, and not about a node: the clip keeps its
-/// place on the track and its place in the source, and what changes is
-/// how much of it is heard. The range may be given, or it may come from
-/// the selection — the selection holds a **part** of a node as well as
-/// whole nodes, and a part of a clip is exactly what a trim is about.
-///
-/// The range is in **samples on the track's timeline**, and it is half
-/// open: `from` is in the clip and `to` is not.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.trim",
-    area = "sound",
-    layer = "sound",
-    icon = "trim",
-    menu("Clip", "Trim"),
-    mutates,
-    undoable
-)]
-pub struct TrimClip {
-    /// The clip to trim, if the caller names one.
-    pub clip: Option<NodeRef>,
-    /// Where the clip starts, in samples.
-    pub from: Option<Number>,
-    /// Where the clip ends, in samples.
-    pub to: Option<Number>,
-}
-
-impl TrimClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        // The clip: named, or the one that is selected.
-        let (clip_id, span) = match (self.clip, selection_span(session)) {
-            (Some(clip), Some((_, span))) => (clip.0, Some(span)),
-            (Some(clip), None) => (clip.0, None),
-            (None, Some((node, span))) => (node, Some(span)),
-            (None, None) => {
-                return Err(EngineError::Failed {
-                    id: "sound.clip.trim".to_string(),
-                    message: "which clip, and which part of it?".to_string(),
-                });
-            }
-        };
-        let (from, to) = match (self.from, self.to) {
-            (Some(from), Some(to)) => (from.0, to.0),
-            (None, None) => match span {
-                Some((from, to)) => (from, to),
-                None => {
-                    return Err(EngineError::Failed {
-                        id: "sound.clip.trim".to_string(),
-                        message: "which part of the clip?".to_string(),
-                    });
-                }
-            },
-            _ => {
-                return Err(EngineError::Failed {
-                    id: "sound.clip.trim".to_string(),
-                    message: "a range has a start and an end".to_string(),
-                });
-            }
-        };
-        if !from.is_finite() || !to.is_finite() {
-            return Err(EngineError::Failed {
-                id: "sound.clip.trim".to_string(),
-                message: "a range is made of numbers".to_string(),
-            });
-        }
-        if to <= from {
-            return Err(EngineError::Failed {
-                id: "sound.clip.trim".to_string(),
-                message: format!("the range ends at {to} and starts at {from}"),
-            });
-        }
-        let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
-            id: "sound.clip.trim".to_string(),
-            message: format!("there is no node `{clip_id}`"),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: "sound.clip.trim".to_string(),
-                message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
-            });
-        }
-        let payload = ClipPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: "sound.clip.trim".to_string(), message: error })?;
-        // A clip whose **content** is locked is finished: it is not
-        // trimmed.
-        if locks::edit_is_locked(&payload) {
-            return Err(EngineError::Failed {
-                id: "sound.clip.trim".to_string(),
-                message: format!("the clip `{clip_id}` is locked: its sound is finished"),
-            });
-        }
-        if from < payload.start as f64 {
-            return Err(EngineError::Failed {
-                id: "sound.clip.trim".to_string(),
-                message: format!("the clip starts at {} and cannot be trimmed before it", payload.start),
-            });
-        }
-        let mut trimmed = payload.clone();
-        trimmed.start = from as i64;
-        trimmed.length = (to - from) as i64;
-        // The content moves with the start: a clip trimmed at its head
-        // starts later in the source. A stretched clip's source is read
-        // more slowly, so the content moves by the delta **divided by
-        // the stretch**: the same stretch that makes the clip longer
-        // makes it slower, and the two are the same fact.
-        let delta = from as i64 - payload.start;
-        trimmed.offset = payload.offset + ((delta as f64 / payload.stretch).round() as i64);
-        // The **beat** moves with the audio it is in: the trim took
-        // `delta` samples off the head, so the beat is `delta` nearer
-        // the clip's head. A beat that the trim left outside the clip
-        // is not a beat of that clip any more, and it goes.
-        if let Some(sync) = payload.sync {
-            let moved = sync - delta;
-            trimmed.sync = (0..=trimmed.length).contains(&moved).then_some(moved);
-        }
-        // The **notes** of a MIDI clip move with the audio they are in:
-        // the notes the trim took off the head are gone, and the notes
-        // that are left are counted from the clip's new head. The
-        // tree's trim does the same — the notes are re-anchored by the
-        // engine, which knows the tempo map.
-        //
-        // The boundary is the distance the trim made, in the **ticks**
-        // of the document's tempo at the clip's own start.
-        if let Some(midi) = payload.midi.as_ref() {
-            let settings = session_of(session.document());
-            let map = tempo_map(session.document());
-            let start_tick = map.samples_to_ticks(payload.start, settings.sample_rate);
-            let cut_tick = map.samples_to_ticks(from as i64, settings.sample_rate);
-            let boundary = cut_tick.saturating_sub(start_tick);
-            trimmed.midi = Some(midi.divided(boundary, true));
-        }
-        if let Some(node) = session.document_mut()?.node_mut(clip_id) {
-            node.data = trimmed.to_json();
-        }
-        Ok(Outcome::changed(format!("trimmed the clip `{clip_id}` to {from}..{to}")).with_data(
-            serde_json::json!({
-                "id": clip_id,
-                "from": from,
-                "to": to,
-                "offset": trimmed.offset,
-                "sync": trimmed.sync,
-            }),
-        ))
-    }
-}
-
-/// Separate a clip into two.
-///
-/// The tree's editor separates a take at a place on the track: every
-/// clip that crosses that place becomes two clips, and the two are
-/// the same sound with a line between them. Here one clip is
-/// separated at one place, and the place is **inside** the clip — a
-/// place at its edge or outside it is refused, because there is
-/// nothing to separate.
-///
-/// The two pieces are the same sound: the first keeps the head of the
-/// clip and the second keeps the tail, and the second starts later in
-/// the source by the distance the cut made — **divided by the
-/// stretch**, because a stretched clip's source is read more slowly.
-///
-/// The **fade** at the cut is dropped: the tree drops it too, because
-/// a fade that ended at the cut would be a fade of nothing.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.separate",
-    area = "sound",
-    layer = "sound",
-    icon = "trim",
-    menu("Clip", "Separate"),
-    mutates,
-    undoable
-)]
-pub struct SeparateClip {
-    /// The clip to separate.
-    pub clip: NodeRef,
-    /// Where to cut it, in samples on the timeline.
-    pub at: Number,
-}
-
-impl SeparateClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.separate".to_string();
-        let clip_id = self.clip.0;
-        let at = self.at.0;
-        if !at.is_finite() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a place is a number".to_string() });
-        }
-        let (name, payload) = {
-            let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip_id}`"),
-            })?;
-            if node.kind != "sound.clip" {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
-                });
-            }
-            let payload = ClipPayload::from_json(&node.data)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            (node.name.clone(), payload)
-        };
-        // A clip whose **content** is locked is finished: it is not
-        // separated.
-        if locks::edit_is_locked(&payload) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip_id}` is locked: its sound is finished"),
-            });
-        }
-        let at = at as i64;
-        let end = payload.start + payload.length;
-        if at <= payload.start || at >= end {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the clip runs from {} to {end} and cannot be separated at {at}",
-                    payload.start
-                ),
-            });
-        }
-        let second = separate_at(session, clip_id, &payload, &name, at)?;
-        Ok(Outcome::changed(format!("separated the clip `{clip_id}` at {at}")).with_data(serde_json::json!({
-            "id": clip_id,
-            "at": at,
-            "second": second,
-        })))
     }
 }
 
@@ -3902,491 +6261,6 @@ fn separate_at(
     Ok(second_id)
 }
 
-/// Separate a clip on the **grid**.
-///
-/// The tree's editor separates a take on the grid: the clip is cut at
-/// every line of the grid it crosses, and the pieces are the bars or
-/// the beats the grid says they are. The grid is the session's (§200)
-/// and the lines are **musical**, so they move with the tempo.
-///
-/// The number of lines is **bounded**: a clip that crosses more lines
-/// than the bound is **refused** and not cut at the first thousand of
-/// them, because a clip cut at a thousand lines is a clip nobody
-/// meant to make.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.separate.grid",
-    area = "sound",
-    layer = "sound",
-    icon = "trim",
-    menu("Clip", "Separate on Grid"),
-    mutates,
-    undoable
-)]
-pub struct SeparateClipOnGrid {
-    /// The clip to separate.
-    pub clip: NodeRef,
-}
-
-impl SeparateClipOnGrid {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.separate.grid".to_string();
-        let clip_id = self.clip.0;
-        let (name, payload) = {
-            let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip_id}`"),
-            })?;
-            if node.kind != "sound.clip" {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
-                });
-            }
-            let payload = ClipPayload::from_json(&node.data)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            (node.name.clone(), payload)
-        };
-        // A clip whose **content** is locked is finished: it is not
-        // separated.
-        if locks::edit_is_locked(&payload) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip_id}` is locked: its sound is finished"),
-            });
-        }
-        let settings = session_of(session.document());
-        let map = tempo_map(session.document());
-        let end = payload.start + payload.length;
-        // The **lines** the clip crosses, and the bound: a clip that
-        // crosses more lines than the bound is refused.
-        let lines = settings.grid.lines(payload.start, end, &map, settings.sample_rate, MAX_GRID_LINES + 1);
-        if lines.len() > MAX_GRID_LINES {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip crosses more than {MAX_GRID_LINES} lines of the grid"),
-            });
-        }
-        // The **cut**: each line cuts the piece that is left, and the
-        // piece that is left is the piece the next line cuts.
-        let mut current = clip_id;
-        let mut pieces = 1_usize;
-        for line in &lines {
-            let piece = ClipPayload::from_json(
-                &session
-                    .document()
-                    .node(current)
-                    .ok_or_else(|| EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the clip `{current}` is gone"),
-                    })?
-                    .data,
-            )
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            if *line <= piece.start || *line >= piece.start + piece.length {
-                continue;
-            }
-            current = separate_at(session, current, &piece, &name, *line)?;
-            pieces += 1;
-        }
-        Ok(Outcome::changed(format!("separated the clip `{clip_id}` on the grid"))
-            .with_data(serde_json::json!({ "id": clip_id, "pieces": pieces, "lines": lines.len() })))
-    }
-}
-
-/// Separate a clip at its **transients**.
-///
-/// The tree's editor separates a take at the transients of its sound:
-/// the places where the sound starts again — a drum, a plucked string,
-/// the start of a phrase. Here the transients are found in the
-/// **material** — the source the clip plays — and not in the clip's own
-/// sound: the clip's sound is the material read the clip's way, and
-/// the material's own attacks are where the pieces are.
-///
-/// The **sensitivity** is how small a rise may be and still be a
-/// transient, from zero to one: the higher it is, the smaller a rise
-/// counts.
-///
-/// The detector is the tree's own: it watches the **spectrum** — it
-/// takes a fast Fourier transform of each frame and looks for a jump in
-/// the bands of it — and the transform is in the audio library, written
-/// there because this kit's crates carry no dependencies at all.
-///
-/// The number of cuts is **bounded**: a clip with more transients than
-/// the bound is **refused** and not cut at the first thousand of them,
-/// because a clip cut at a thousand places is a clip nobody meant to
-/// make.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.separate.transients",
-    area = "sound",
-    layer = "sound",
-    icon = "trim",
-    menu("Clip", "Separate on Transients"),
-    mutates,
-    undoable
-)]
-pub struct SeparateClipOnTransients {
-    /// The clip to separate.
-    pub clip: NodeRef,
-    /// How small a rise may be and still be a transient, from zero to one.
-    pub sensitivity: Option<Number>,
-}
-
-impl SeparateClipOnTransients {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.separate.transients".to_string();
-        let clip_id = self.clip.0;
-        let (name, payload) = {
-            let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip_id}`"),
-            })?;
-            if node.kind != "sound.clip" {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
-                });
-            }
-            let payload = ClipPayload::from_json(&node.data)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            (node.name.clone(), payload)
-        };
-        // A clip whose **content** is locked is finished: it is not
-        // separated.
-        if locks::edit_is_locked(&payload) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip_id}` is locked: its sound is finished"),
-            });
-        }
-        let Some(source_id) = payload.source else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip_id}` plays no sound, and there is nothing to find"),
-            });
-        };
-        let source_node = session.document().node(source_id).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no source `{source_id}`"),
-        })?;
-        let source = SourcePayload::from_json(&source_node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-        let sound = read_sound(&id, &source.path)?;
-        let sensitivity = match self.sensitivity {
-            Some(sensitivity) if sensitivity.0.is_finite() => sensitivity.0.clamp(0.0, 1.0),
-            Some(_) => {
-                return Err(EngineError::Failed {
-                    id,
-                    message: "the sensitivity is a number from zero to one".to_string(),
-                });
-            }
-            None => 0.5,
-        };
-        // The **transients** of the material, in the material's own
-        // samples.
-        let onsets = craftkit_audio::onsets(&sound.samples, sound.channels as usize, sound.rate, sensitivity);
-        // The material's samples are the **session's** samples turned
-        // into the source's rate, and the clip's offset says where in
-        // the material the clip starts.
-        let settings = session_of(session.document());
-        let rate = settings.sample_rate.max(1) as f64;
-        let source_rate = sound.rate.max(1) as f64;
-        let ratio = source_rate / rate;
-        let end = payload.start + payload.length;
-        let mut cuts: Vec<i64> = Vec::new();
-        for onset in onsets {
-            // The onset in the material's samples, and then in the
-            // clip's own time: a stretched clip reads its material more
-            // slowly, so the stretch is in the way back.
-            let at = at_of_frame(onset as i64, payload.offset, payload.stretch, ratio);
-            let at = at.max(payload.start + 1);
-            if at >= end {
-                continue;
-            }
-            if cuts.last().is_some_and(|last| *last == at) {
-                continue;
-            }
-            cuts.push(at);
-        }
-        if cuts.len() > MAX_TRANSIENT_CUTS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip has more than {MAX_TRANSIENT_CUTS} transients"),
-            });
-        }
-        // The **cut**: each transient cuts the piece that is left, and
-        // the piece that is left is the piece the next transient cuts.
-        let mut current = clip_id;
-        let mut pieces = 1_usize;
-        for at in &cuts {
-            let piece = ClipPayload::from_json(
-                &session
-                    .document()
-                    .node(current)
-                    .ok_or_else(|| EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the clip `{current}` is gone"),
-                    })?
-                    .data,
-            )
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            if *at <= piece.start || *at >= piece.start + piece.length {
-                continue;
-            }
-            current = separate_at(session, current, &piece, &name, *at)?;
-            pieces += 1;
-        }
-        Ok(Outcome::changed(format!("separated the clip `{clip_id}` at its transients")).with_data(
-            serde_json::json!({
-                "id": clip_id,
-                "pieces": pieces,
-                "transients": cuts.len(),
-                "sensitivity": sensitivity,
-            }),
-        ))
-    }
-}
-
-/// **Strip the silence** out of a clip.
-///
-/// The tree's editor strips silence: it finds the parts of a sound that
-/// are not silent, cuts the clip at the edges of them, and keeps the
-/// loud parts and throws the quiet ones away. The kept parts are
-/// **named** from the auto rename scheme, in time order.
-///
-/// Here the parts are found in the **material** — the source the clip
-/// plays — and not in the clip's own sound: the clip's sound is the
-/// material read the clip's way, and the material's own silence is
-/// where the silence is.
-///
-/// The **threshold** is how far below the loudest part of the material
-/// a part may be and still be kept, in decibels: forty-eight is the
-/// tree's own default, and it is a part that is at least a fortieth of
-/// the peak.
-///
-/// The **minimum length** is how long a part must be to be kept: a
-/// click is not a part, and a click that is kept is a clip of its own
-/// that says nothing.
-///
-/// The **pad** is how much of the silence is kept at each end of a
-/// part, so that a part does not begin or end with a click.
-///
-/// The tree's editor does this in three **modes**: it **strips** the
-/// silence and keeps the loud parts, it **extracts** the loud parts and
-/// keeps the silence, and it **separates** the clip at the edges of the
-/// loud parts and keeps everything. The mode is given by name, and a
-/// name this battery does not know is **refused**.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.strip.silence",
-    area = "sound",
-    layer = "sound",
-    icon = "trim",
-    menu("Clip", "Strip Silence"),
-    mutates,
-    undoable
-)]
-pub struct StripSilence {
-    /// The clip to strip.
-    pub clip: NodeRef,
-    /// How far below the loudest part a part may be and still be kept,
-    /// in decibels.
-    pub threshold_db: Option<Number>,
-    /// How long a part must be to be kept, in milliseconds.
-    pub min_length_ms: Option<Number>,
-    /// How much silence is kept before each part, in milliseconds.
-    pub pad_before_ms: Option<Number>,
-    /// How much silence is kept after each part, in milliseconds.
-    pub pad_after_ms: Option<Number>,
-    /// What to do with the parts: `strip` keeps the loud parts and
-    /// throws the quiet ones away, `extract` keeps the quiet parts and
-    /// throws the loud ones away, and `separate` cuts the clip at the
-    /// edges of the loud parts and keeps everything.
-    pub mode: Option<Text>,
-}
-
-impl StripSilence {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.strip.silence".to_string();
-        let clip_id = self.clip.0;
-        // The **mode**: what is kept and what is thrown away. A mode
-        // this battery does not know is refused, and nothing is
-        // changed.
-        let mode = match &self.mode {
-            Some(mode) => StripMode::parse(mode.0.trim()).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "there is no mode called `{}`: the modes are `strip`, `extract` and `separate`",
-                    mode.0.trim()
-                ),
-            })?,
-            None => StripMode::Strip,
-        };
-        let (name, payload) = {
-            let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip_id}`"),
-            })?;
-            if node.kind != "sound.clip" {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
-                });
-            }
-            let payload = ClipPayload::from_json(&node.data)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            (node.name.clone(), payload)
-        };
-        // A clip whose **content** is locked is finished: it is not
-        // stripped.
-        if locks::edit_is_locked(&payload) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip_id}` is locked: its sound is finished"),
-            });
-        }
-        let Some(source_id) = payload.source else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip_id}` plays no sound, and there is no silence in it"),
-            });
-        };
-        if session.document().node(source_id).is_none() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no source `{source_id}`"),
-            });
-        }
-        // The **loud parts** of the clip, in the clip's own time.
-        let ranges = loud_parts_of(
-            &id,
-            session,
-            &payload,
-            self.threshold_db,
-            self.min_length_ms,
-            self.pad_before_ms,
-            self.pad_after_ms,
-        )?;
-        if ranges.is_empty() {
-            // A clip with no loud part at all is **silent**. The strip
-            // and the separate have nothing to keep, and the extract
-            // keeps the whole clip — which is what a silent clip is:
-            // all silence.
-            if mode != StripMode::Extract {
-                return Err(EngineError::Failed {
-                    id,
-                    message: format!("the clip `{clip_id}` is silent: there is nothing to keep"),
-                });
-            }
-        }
-        // The scheme and its **number** before the cut: the pieces
-        // that are kept are named from it, and the pieces that are
-        // thrown away must not take numbers.
-        let scheme = crate::autoname::scheme_of(session.document(), clip_id);
-        let number = scheme.map(|scheme| crate::autoname::number_of(session, scheme));
-        // The **cut**: at the edges of the loud parts, so that the
-        // pieces are the parts and the gaps.
-        let end = payload.start + payload.length;
-        let mut points: Vec<i64> = Vec::new();
-        for (start, stop) in &ranges {
-            for point in [start, stop] {
-                if *point > payload.start && *point < end && !points.contains(point) {
-                    points.push(*point);
-                }
-            }
-        }
-        points.sort_unstable();
-        let mut current = clip_id;
-        let mut pieces = 1_usize;
-        for point in &points {
-            let piece = ClipPayload::from_json(
-                &session
-                    .document()
-                    .node(current)
-                    .ok_or_else(|| EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the clip `{current}` is gone"),
-                    })?
-                    .data,
-            )
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            if *point <= piece.start || *point >= piece.start + piece.length {
-                continue;
-            }
-            current = separate_at(session, current, &piece, &name, *point)?;
-            pieces += 1;
-        }
-        // The pieces are **kept** or **thrown away**, and which is
-        // which depends on the **mode**: the strip keeps the loud
-        // pieces, the extract keeps the quiet ones, and the separate
-        // keeps everything and only cuts.
-        let playlist = timeline::parent_of(session.document(), clip_id).map(|parent| parent.id);
-        let mut kept: Vec<u64> = Vec::new();
-        let mut removed: Vec<u64> = Vec::new();
-        for node in session.document().walk() {
-            if node.kind != "sound.clip" {
-                continue;
-            }
-            if timeline::parent_of(session.document(), node.id).map(|parent| parent.id) != playlist {
-                continue;
-            }
-            let Ok(payload) = ClipPayload::from_json(&node.data) else { continue };
-            let start = payload.start;
-            let stop = payload.start + payload.length;
-            let loud = ranges.iter().any(|(from, to)| start >= *from && stop <= *to);
-            let keep = match mode {
-                StripMode::Strip => loud,
-                StripMode::Extract => !loud,
-                StripMode::Separate => true,
-            };
-            if keep {
-                kept.push(node.id);
-            } else {
-                removed.push(node.id);
-            }
-        }
-        for piece in &removed {
-            session.document_mut()?.remove_node(*piece);
-        }
-        // The kept pieces are **named** from the scheme, in time order,
-        // and the number the thrown-away pieces took is given back.
-        if let (Some(scheme), Some(number)) = (scheme, number) {
-            crate::autoname::set_number(session, scheme, number);
-        }
-        kept.sort_by_key(|piece| {
-            session
-                .document()
-                .node(*piece)
-                .and_then(|node| ClipPayload::from_json(&node.data).ok())
-                .map(|payload| payload.start)
-                .unwrap_or(0)
-        });
-        let named = match scheme {
-            Some(scheme) => crate::autoname::name_the_pieces(session, scheme, &kept),
-            None => 0,
-        };
-        let what = match mode {
-            StripMode::Strip => "stripped the silence out of",
-            StripMode::Extract => "extracted the sound of",
-            StripMode::Separate => "separated the clip",
-        };
-        Ok(Outcome::changed(format!("{what} the clip `{clip_id}`")).with_data(serde_json::json!({
-            "id": clip_id,
-            "mode": match mode {
-                StripMode::Strip => "strip",
-                StripMode::Extract => "extract",
-                StripMode::Separate => "separate",
-            },
-            "kept": kept.len(),
-            "removed": removed.len(),
-            "pieces": pieces,
-            "named": named,
-            "ranges": ranges.len(),
-        })))
-    }
-}
-
 /// The **loud parts** of a clip, in the clip's own time.
 ///
 /// The parts are found in the **material** — the source the clip plays
@@ -4466,63 +6340,6 @@ fn loud_parts_of(
         ranges.push((start, stop));
     }
     Ok(ranges)
-}
-
-/// **Read** the **loud parts** of a clip: where the silence is.
-///
-/// The tree's editor has a **preview** of its Strip Silence: it finds
-/// the silence and says where the parts are, without changing
-/// anything — so that a person can see what the strip would do before
-/// it does it.
-///
-/// Here the preview is a **read**: it says the same thing and it does
-/// not change the document. The clip is not cut, nothing is thrown
-/// away and nothing is named.
-#[derive(Command)]
-#[command(id = "sound.clip.strip.silence.read", area = "sound", layer = "sound", icon = "list")]
-pub struct ReadStripSilence {
-    /// The clip to look at.
-    pub clip: NodeRef,
-    /// How far below the loudest part a part may be and still be kept,
-    /// in decibels.
-    pub threshold_db: Option<Number>,
-    /// How long a part must be to be kept, in milliseconds.
-    pub min_length_ms: Option<Number>,
-    /// How much silence is kept before each part, in milliseconds.
-    pub pad_before_ms: Option<Number>,
-    /// How much silence is kept after each part, in milliseconds.
-    pub pad_after_ms: Option<Number>,
-}
-
-impl ReadStripSilence {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.strip.silence.read".to_string();
-        let clip_id = self.clip.0;
-        let node = session.document().node(clip_id).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{clip_id}`"),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
-            });
-        }
-        let payload = ClipPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-        let ranges = loud_parts_of(
-            &id,
-            session,
-            &payload,
-            self.threshold_db,
-            self.min_length_ms,
-            self.pad_before_ms,
-            self.pad_after_ms,
-        )?;
-        let parts: Vec<Json> = ranges.iter().map(|(from, to)| serde_json::json!([from, to])).collect();
-        Ok(Outcome::new(format!("the clip `{clip_id}` has {} loud parts", ranges.len()))
-            .with_data(serde_json::json!({ "id": clip_id, "ranges": parts })))
-    }
 }
 
 /// What the strip of silence does with the pieces of a clip once it
@@ -4608,138 +6425,6 @@ const MAX_TRANSIENT_CUTS: usize = 1024;
 /// thousand — a bound and not a policy, the same way the tree's is.
 const MAX_GRID_LINES: usize = 1024;
 
-/// Space the **clips** against each other.
-///
-/// The clips are butted together: each one starts where the last one
-/// ended, with a **gap** between them. The tree's editor does this when
-/// the pieces of a take are laid out by hand.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.space",
-    area = "sound",
-    layer = "sound",
-    icon = "trim",
-    menu("Clip"),
-    mutates,
-    undoable
-)]
-pub struct SpaceClips {
-    /// The clips to space: their ids.
-    pub clips: serde_json::Value,
-    /// The gap between them, in samples.
-    pub gap: Number,
-    /// `end-to-start` — each clip starts where the last one ended — or
-    /// `start-to-start`, which keeps their starts the same distance
-    /// apart. The first one if it is left out.
-    pub mode: Option<Text>,
-}
-
-impl SpaceClips {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.space".to_string();
-        let list = self.clips.as_array().ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: "the clips to space are a list of their ids".to_string(),
-        })?;
-        let mut ids: Vec<u64> = Vec::with_capacity(list.len());
-        for item in list {
-            let Some(number) = item.as_u64() else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "a clip's id is a number".to_string(),
-                });
-            };
-            ids.push(number);
-        }
-        if ids.len() < 2 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "two or more clips are spaced".to_string(),
-            });
-        }
-        let gap = self.gap.0;
-        if !gap.is_finite() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a gap is a number of samples".to_string(),
-            });
-        }
-        let gap = gap.round() as i64;
-        if gap < 0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a gap is not a negative number of samples".to_string(),
-            });
-        }
-        let start_to_start = match &self.mode {
-            Some(mode) => match mode.0.trim().to_ascii_lowercase().as_str() {
-                "end-to-start" | "end_to_start" => false,
-                "start-to-start" | "start_to_start" => true,
-                other => {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the mode `{other}` is not one of the two"),
-                    });
-                }
-            },
-            None => false,
-        };
-        // The **clips** and where they are now.
-        let mut clips: Vec<(u64, i64, i64)> = Vec::with_capacity(ids.len());
-        for clip_id in &ids {
-            let node = session.document().node(*clip_id).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip_id}`"),
-            })?;
-            if node.kind != "sound.clip" {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
-                });
-            }
-            let payload = ClipPayload::from_json(&node.data)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            // A clip whose **place** is locked stays where it is — and
-            // the whole spacing is refused, because a spacing that
-            // left one clip behind would be a spacing the caller did
-            // not ask for.
-            if locks::time_is_locked(&payload) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the clip `{clip_id}` is locked: it stays where it is"),
-                });
-            }
-            clips.push((*clip_id, payload.start, payload.length));
-        }
-        clips.sort_by_key(|(clip_id, start, _)| (*start, *clip_id));
-        // The **new** places: each clip butts against the last one.
-        let mut moved: Vec<(u64, i64)> = Vec::with_capacity(clips.len());
-        let mut current = clips[0].1;
-        for (clip_id, start, length) in &clips {
-            let at = if moved.is_empty() { *start } else { current };
-            moved.push((*clip_id, at.max(0)));
-            current = if start_to_start { at + gap } else { at + length + gap };
-        }
-        for (clip_id, at) in &moved {
-            let node = session.document().node(*clip_id).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip_id}`"),
-            })?;
-            let mut payload = ClipPayload::from_json(&node.data)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            payload.start = *at;
-            if let Some(node) = session.document_mut()?.node_mut(*clip_id) {
-                node.data = payload.to_json();
-            }
-        }
-        let count = moved.len();
-        Ok(Outcome::changed(format!("spaced {count} clip(s)")).with_data(serde_json::json!({
-            "clips": moved.iter().map(|(clip_id, at)| serde_json::json!({ "id": clip_id, "start": at })).collect::<Vec<_>>(),
-            "gap": gap,
-        })))
-    }
-}
-
 /// The **relation** that says a clip is followed by its loop.
 ///
 /// The tree's editor remembers a loop in a field on the clip, and has to
@@ -4765,365 +6450,6 @@ const MAX_LOOPS: usize = 1000;
 /// The tree's dialog asks; the tree's default is the clip and three
 /// loops.
 const DEFAULT_LOOPS: i64 = 4;
-
-/// Put a clip **in front** of the others on its track, or **behind**
-/// them.
-///
-/// The order the clips are drawn in is the order they are in — and the
-/// clips of a track are mixed and not laid over one another, so the
-/// order is what a person sees and not what a person hears.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.order",
-    area = "sound",
-    layer = "sound",
-    icon = "list",
-    menu("Clip", "Order"),
-    mutates,
-    undoable
-)]
-pub struct OrderClip {
-    /// The clip to move.
-    pub clip: NodeRef,
-    /// `front` or `back`.
-    pub place: Text,
-}
-
-impl OrderClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.order".to_string();
-        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{}`", self.clip.0),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
-            });
-        }
-        let place = self.place.0.trim().to_ascii_lowercase();
-        let moved = match place.as_str() {
-            "front" => session.document_mut()?.bring_to_front(self.clip.0),
-            "back" => session.document_mut()?.send_to_back(self.clip.0),
-            other => {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("a clip goes to the front or to the back, and not to `{other}`"),
-                });
-            }
-        };
-        if !moved {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{}` is not in the document", self.clip.0),
-            });
-        }
-        Ok(Outcome::changed(format!("the clip is {place}"))
-            .with_data(serde_json::json!({ "id": self.clip.0, "place": place })))
-    }
-}
-
-/// Loop a clip: the copies of it that follow it.
-///
-/// The tree's editor pastes a copy of the clip onto the track, and the
-/// copies are ordinary clips — they may be trimmed, muted and faded on
-/// their own. This tree does the same, and says what the tree can only
-/// infer: the copy is **named by the clip it follows**, in a relation,
-/// so that the loop can be found again without guessing.
-///
-/// Three ways to say how long the loop is:
-///
-/// - **count** — the clip and its loops: four is the clip and three
-///   copies;
-/// - **length** — how long the whole looped clip is, in samples, and
-///   the last copy is cut short to fit;
-/// - **fill** — up to the next clip on the track, or else to the end of
-///   the timeline.
-///
-/// They are taken in that order: a fill beats a length, and a length
-/// beats a count.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.loop",
-    area = "sound",
-    layer = "sound",
-    icon = "link",
-    menu("Clip", "Loop"),
-    mutates,
-    undoable
-)]
-pub struct LoopClip {
-    /// The clip to loop.
-    pub clip: NodeRef,
-    /// How many times the clip is played: the clip and its loops.
-    pub count: Option<Number>,
-    /// How long the whole looped clip is, in samples. The last loop is
-    /// cut short to fit.
-    pub length: Option<Number>,
-    /// Loop up to the next clip on the track, or else to the end of the
-    /// timeline.
-    pub fill: Option<Bool>,
-}
-
-impl LoopClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.loop".to_string();
-        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{}`", self.clip.0),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
-            });
-        }
-        let payload = ClipPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-        if payload.length <= 0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a clip with no length is not a clip".to_string(),
-            });
-        }
-        // The **playlist** the clip is in: the copies go beside it.
-        let playlist =
-            timeline::parent_of(session.document(), self.clip.0).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{}` is on no playlist", self.clip.0),
-            })?;
-        // A clip that is **already followed** by a copy is refused: the
-        // chain is a line and not a tree, and a branch would have two
-        // answers to the same question.
-        if !session.document().relations_from(self.clip.0, Some(LOOP_RELATION)).is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{}` is already looped: unloop it first", self.clip.0),
-            });
-        }
-        // How many copies, and how long the last one is.
-        let (reps, last) = self.the_plan(session, node, &payload)?;
-        if reps == 0 {
-            return Ok(Outcome::new("there is no room for a loop").with_data(serde_json::json!({
-                "loops": 0,
-                "clips": Vec::<u64>::new(),
-            })));
-        }
-        // The **copies**: each one starts where the last one ended, and
-        // the last one is cut short to fit.
-        let name = node.name.clone();
-        let playlist_id = playlist.id;
-        let mut made: Vec<u64> = Vec::with_capacity(reps);
-        let mut previous = self.clip.0;
-        for step in 1..=reps {
-            let mut copy = payload.clone();
-            copy.start = payload.start.saturating_add(payload.length.saturating_mul(step as i64));
-            if step == reps && last < payload.length {
-                copy.length = last;
-                // The **fades** are shortened to fit: a fade that is
-                // longer than the clip is a fade past the end of it.
-                copy.fade_in.len = copy.fade_in.len.min(copy.length);
-                copy.fade_out.len = copy.fade_out.len.min(copy.length);
-                // And a **beat** past the cut is not a beat of the
-                // copy: the copy is shorter, and the beat is gone.
-                copy.sync = copy.sync.filter(|beat| (0..=copy.length).contains(beat));
-            }
-            let made_id = session.document_mut()?.add_node_with_under(
-                Some(playlist_id),
-                name.clone(),
-                "sound.clip",
-                None,
-                copy.to_json(),
-            );
-            // The copy plays the same source, and it is said so.
-            if let Some(source) = payload.source {
-                session.document_mut()?.add_relation(craftkit_sdk::Relation::new(made_id, source, "source"));
-            }
-            // And the copy **follows** the clip before it: that is the
-            // loop, and it is an edge and not a guess.
-            session.document_mut()?.add_relation(craftkit_sdk::Relation::new(
-                previous,
-                made_id,
-                LOOP_RELATION,
-            ));
-            previous = made_id;
-            made.push(made_id);
-        }
-        let count = made.len();
-        Ok(Outcome::changed(format!("looped the clip {count} time(s)")).with_data(serde_json::json!({
-            "loops": count,
-            "clips": made,
-        })))
-    }
-
-    /// How many **copies** the loop has, and how long the last one is.
-    ///
-    /// The three ways to say it are taken in order: a fill beats a
-    /// length, and a length beats a count.
-    fn the_plan(
-        &self,
-        session: &Session,
-        node: &Node,
-        payload: &ClipPayload,
-    ) -> Result<(usize, i64), EngineError> {
-        let id = "sound.clip.loop".to_string();
-        // **Fill**: up to the next clip on the track, or else to the end
-        // of the timeline.
-        if self.fill.map(|fill| fill.0) == Some(true) {
-            let end = the_next_start(session.document(), node, payload)
-                .unwrap_or_else(|| timeline::end_in_samples(session.document()));
-            let span = end.saturating_sub(payload.start.saturating_add(payload.length));
-            return Self::the_reps(span, payload.length, &id);
-        }
-        // **Length**: the whole looped clip is this long, and the last
-        // copy is cut short to fit.
-        if let Some(length) = self.length {
-            let total = samples(length.0, "how long the looped clip is")?;
-            let span = total.saturating_sub(payload.length);
-            return Self::the_reps(span, payload.length, &id);
-        }
-        // **Count**: the clip and its loops.
-        let count = match self.count {
-            Some(count) => samples(count.0, "how many times the clip is played")?,
-            None => DEFAULT_LOOPS,
-        };
-        if count < 1 {
-            return Err(EngineError::Failed {
-                id,
-                message: "a clip that is played no times is not a clip".to_string(),
-            });
-        }
-        let reps = count - 1;
-        if reps > MAX_LOOPS as i64 {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("a clip loops at most {MAX_LOOPS} times, and this one was asked for {reps}"),
-            });
-        }
-        Ok((reps as usize, payload.length))
-    }
-
-    /// How many copies fit in a **span**, and how long the last one is.
-    ///
-    /// A span that is not a whole number of clips has a last copy that
-    /// is cut short — which is the tree's own rule, and the reason a
-    /// loop of a whole number of bars ends exactly where it began.
-    fn the_reps(span: i64, length: i64, id: &str) -> Result<(usize, i64), EngineError> {
-        if span <= 0 || length <= 0 {
-            return Ok((0, length));
-        }
-        let whole = span / length;
-        let rest = span % length;
-        let reps = whole + i64::from(rest > 0);
-        if reps > MAX_LOOPS as i64 {
-            return Err(EngineError::Failed {
-                id: id.to_string(),
-                message: format!("a clip loops at most {MAX_LOOPS} times, and this one would need {reps}"),
-            });
-        }
-        let last = if rest > 0 { rest } else { length };
-        Ok((reps as usize, last))
-    }
-}
-
-/// Unloop a clip: take the copies away.
-///
-/// The tree's editor has to **find** the copies before it can take them
-/// away, and it finds them by looking at the track: a clip that starts
-/// where this one ends, of the same material. This tree knows them —
-/// the copy is named by the clip it follows — so the copies are found
-/// by walking the chain.
-///
-/// Two ways to be rid of a loop:
-///
-/// - **remove** — the copies are taken away, and the clip is a clip
-///   again;
-/// - **flatten** — the copies stay, and they are not a loop any more:
-///   they are clips in their own right.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.unloop",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Clip", "Unloop"),
-    mutates,
-    undoable
-)]
-pub struct UnloopClip {
-    /// The clip whose loop is to be taken away.
-    pub clip: NodeRef,
-    /// `remove` — the copies are taken away. `flatten` — the copies
-    /// stay, and are not a loop any more. The first one if it is left
-    /// out.
-    pub mode: Option<Text>,
-}
-
-impl UnloopClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.unloop".to_string();
-        let node = session.document().node(self.clip.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{}`", self.clip.0),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{}` is a `{}` and not a clip", self.clip.0, node.kind),
-            });
-        }
-        let remove = match &self.mode {
-            None => true,
-            Some(mode) => match mode.0.trim().to_ascii_lowercase().as_str() {
-                "remove" => true,
-                "flatten" => false,
-                other => {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the mode `{other}` is not one of the two"),
-                    });
-                }
-            },
-        };
-        // The **chain**: the clip, and the copies that follow it.
-        let chain = the_chain(session.document(), self.clip.0);
-        if chain.len() < 2 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{}` is not a looped clip", self.clip.0),
-            });
-        }
-        let copies = chain.len() - 1;
-        if remove {
-            // The copies go, and their edges go with them: a document
-            // that keeps the edge to a clip that is not there is a
-            // document that says a clip plays a source that is gone.
-            for copy in chain.iter().skip(1) {
-                session.document_mut()?.remove_node(*copy);
-            }
-        } else {
-            // The copies stay, and the **edges** go: they are clips in
-            // their own right, and nothing says they are a loop.
-            let members = chain.clone();
-            session.document_mut()?.remove_relations(|relation| {
-                relation.kind == LOOP_RELATION
-                    && members.contains(&relation.from)
-                    && members.contains(&relation.to)
-            });
-        }
-        let message = if remove {
-            format!("took away {copies} cop(y|ies) of the loop")
-        } else {
-            format!("the {copies} cop(y|ies) are not a loop any more")
-        };
-        Ok(Outcome::changed(message).with_data(serde_json::json!({
-            "copies": copies,
-            "removed": remove,
-            "clips": chain.iter().skip(1).collect::<Vec<_>>(),
-        })))
-    }
-}
 
 /// The **chain** of a loop: the clip and the copies that follow it.
 ///
@@ -5187,155 +6513,6 @@ fn the_next_start(
     next
 }
 
-/// Snap a clip to its **neighbour**.
-///
-/// The tree's editor has a menu — *Edit ▸ Snap to* — with two items in
-/// it: **Next** moves a clip so that its end meets the start of the
-/// clip that follows it, and **Previous** moves a clip so that its
-/// start meets the end of the clip that comes before it.
-///
-/// The tree's editor snaps the clip **nearest the destination first**,
-/// so that the neighbours stay where they are: a row of clips that are
-/// snapped together does not pile itself up on one clip.
-///
-/// The clips that are named are the destinations too. The tree's
-/// editor found that out the hard way — ignoring the selected
-/// neighbours made *Snap to Next* pile every selected clip onto the
-/// same later clip, and made *Snap to Previous* leave the gap between
-/// the selected clips in place.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.snap",
-    area = "sound",
-    layer = "sound",
-    icon = "trim",
-    menu("Clip", "Snap to"),
-    mutates,
-    undoable
-)]
-pub struct SnapClip {
-    /// The clips to snap: their ids.
-    pub clips: serde_json::Value,
-    /// `next` — each clip's end meets the start of the clip that
-    /// follows it. `previous` — each clip's start meets the end of the
-    /// clip that comes before it.
-    pub direction: Text,
-}
-
-impl SnapClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.snap".to_string();
-        let list = self.clips.as_array().ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: "the clips to snap are a list of their ids".to_string(),
-        })?;
-        let mut ids: Vec<u64> = Vec::with_capacity(list.len());
-        for item in list {
-            let Some(number) = item.as_u64() else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "a clip's id is a number".to_string(),
-                });
-            };
-            ids.push(number);
-        }
-        if ids.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "there is no clip to snap".to_string(),
-            });
-        }
-        let next = match self.direction.0.trim().to_ascii_lowercase().as_str() {
-            "next" => true,
-            "previous" => false,
-            other => {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the direction `{other}` is not one of the two"),
-                });
-            }
-        };
-        // The **clips** and where they are now.
-        let mut order: Vec<(u64, i64, i64, u64)> = Vec::with_capacity(ids.len());
-        for clip_id in &ids {
-            let node = session.document().node(*clip_id).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip_id}`"),
-            })?;
-            if node.kind != "sound.clip" {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the node `{clip_id}` is a `{}` and not a clip", node.kind),
-                });
-            }
-            let payload = ClipPayload::from_json(&node.data)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            // A clip whose **place** is locked stays where it is — and
-            // the whole snap is refused, because a snap that left one
-            // clip behind would be a snap the caller did not ask for.
-            if locks::time_is_locked(&payload) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the clip `{clip_id}` is locked: it stays where it is"),
-                });
-            }
-            // The **list** the clip is in: the playlist under the
-            // track, or the track itself. A clip's neighbours are the
-            // clips of its own list — a take is a list of clips of its
-            // own, and a clip in another take is not on this timeline.
-            let list =
-                timeline::parent_of(session.document(), *clip_id).ok_or_else(|| EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the clip `{clip_id}` is on no playlist"),
-                })?;
-            order.push((*clip_id, payload.start, payload.length, list.id));
-        }
-        // The clip **nearest the destination** is snapped first, so that
-        // the neighbours stay where they are.
-        order.sort_by_key(|(_, start, _, _)| if next { -*start } else { *start });
-        let mut moved: Vec<(u64, i64)> = Vec::with_capacity(order.len());
-        for (clip_id, start, length, list) in order {
-            let end = start.saturating_add(length);
-            // The **neighbour**: the clip the destination is. The clips
-            // that are named are neighbours too.
-            let delta = if next {
-                clips_in(session.document(), list)
-                    .into_iter()
-                    .filter(|(other, _)| *other != clip_id)
-                    .map(|(_, payload)| payload.start)
-                    .filter(|other_start| *other_start >= end)
-                    .min()
-                    .map(|other_start| other_start - end)
-            } else {
-                clips_in(session.document(), list)
-                    .into_iter()
-                    .filter(|(other, _)| *other != clip_id)
-                    .map(|(_, payload)| (payload.start, payload.start.saturating_add(payload.length)))
-                    .filter(|(_, other_end)| *other_end <= start)
-                    .map(|(_, other_end)| other_end)
-                    .max()
-                    .map(|other_end| other_end - start)
-            };
-            // A clip that is already against its neighbour is not
-            // moved: there is nothing to snap.
-            let Some(delta) = delta.filter(|delta| *delta != 0) else { continue };
-            let at = start.saturating_add(delta).max(0);
-            if let Some(node) = session.document_mut()?.node_mut(clip_id) {
-                let mut payload = ClipPayload::from_json(&node.data)
-                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-                payload.start = at;
-                node.data = payload.to_json();
-            }
-            moved.push((clip_id, at));
-        }
-        let count = moved.len();
-        Ok(Outcome::changed(format!("snapped {count} clip(s)")).with_data(serde_json::json!({
-            "moved": count,
-            "clips": moved.iter().map(|(clip_id, at)| serde_json::json!({ "id": clip_id, "start": at })).collect::<Vec<_>>(),
-        })))
-    }
-}
-
 /// The **clips** in a list, with what they say.
 ///
 /// A list is a playlist under a track, or a track that holds its clips
@@ -5350,678 +6527,6 @@ fn clips_in(document: &craftkit_sdk::document::Document, list: u64) -> Vec<(u64,
         clips.push((node.id, payload));
     }
     clips
-}
-
-/// Set the tempo.
-///
-/// The tempo map is a **list of events** and not a single number, so this
-/// command sets the tempo at a tick: a second call at the same tick
-/// changes the one that is there.
-#[derive(Command)]
-#[command(
-    id = "sound.tempo.set",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Event", "Tempo"),
-    mutates,
-    undoable
-)]
-pub struct SetTempo {
-    /// How fast, in beats a minute.
-    pub bpm: Number,
-    /// Where, in ticks.
-    pub tick: Option<Number>,
-}
-
-impl SetTempo {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let bpm = self.bpm.0;
-        if !bpm.is_finite() || !(5.0..=1000.0).contains(&bpm) {
-            return Err(EngineError::Failed {
-                id: "sound.tempo.set".to_string(),
-                message: format!("{bpm} is not a tempo between 5 and 1000 beats a minute"),
-            });
-        }
-        let tick = match &self.tick {
-            Some(tick) => ticks(tick.0)?,
-            None => 0,
-        };
-        let payload = TempoPayload { tick, bpm };
-        let existing = find_event(session, "sound.tempo", tick);
-        let id = match existing {
-            Some(id) => {
-                if let Some(node) = session.document_mut()?.node_mut(id) {
-                    node.data = payload.to_json();
-                }
-                id
-            }
-            None => session.document_mut()?.add_node_with(
-                format!("tempo {bpm}"),
-                "sound.tempo",
-                None,
-                payload.to_json(),
-            ),
-        };
-        Ok(Outcome::changed(format!("the tempo at tick {tick} is {bpm} beats a minute"))
-            .with_data(serde_json::json!({ "id": id, "tick": tick, "bpm": bpm })))
-    }
-}
-
-/// **Take away** the tempo at a tick.
-///
-/// The tempo map is a list of events, and a map that can only grow is
-/// not a map a person can work with: the tempo at a tick goes away as
-/// well as the one that is put there.
-///
-/// The tempo at the **first tick** is refused: it is the document's
-/// tempo, and a document without one has no beat. A tick with **no
-/// tempo** is refused too: a tempo that was never there is not a tempo
-/// that was taken away.
-#[derive(Command)]
-#[command(
-    id = "sound.tempo.remove",
-    area = "sound",
-    layer = "sound",
-    icon = "minus",
-    menu("Event", "Tempo"),
-    mutates,
-    undoable
-)]
-pub struct RemoveTempo {
-    /// Where the tempo is, in ticks.
-    pub tick: Number,
-}
-
-impl RemoveTempo {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.tempo.remove".to_string();
-        let tick = ticks(self.tick.0)?;
-        if tick == 0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "the tempo at the first tick is the document's tempo and it stays".to_string(),
-            });
-        }
-        let Some(node) = find_event(session, "sound.tempo", tick) else {
-            return Err(EngineError::Failed { id, message: format!("there is no tempo at tick {tick}") });
-        };
-        session.document_mut()?.remove_node(node);
-        Ok(Outcome::changed(format!("the tempo at tick {tick} is gone"))
-            .with_data(serde_json::json!({ "id": node, "tick": tick })))
-    }
-}
-
-/// **Take away** the meter at a tick.
-///
-/// The meter is a list of events, and the same rule the tempo follows
-/// applies to it: the event at the **first tick** is the document's
-/// meter and it stays, and a tick with **no meter** is refused.
-#[derive(Command)]
-#[command(
-    id = "sound.meter.remove",
-    area = "sound",
-    layer = "sound",
-    icon = "minus",
-    menu("Event", "Meter"),
-    mutates,
-    undoable
-)]
-pub struct RemoveMeter {
-    /// Where the meter is, in ticks.
-    pub tick: Number,
-}
-
-impl RemoveMeter {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.meter.remove".to_string();
-        let tick = ticks(self.tick.0)?;
-        if tick == 0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "the meter at the first tick is the document's meter and it stays".to_string(),
-            });
-        }
-        let Some(node) = find_event(session, "sound.meter", tick) else {
-            return Err(EngineError::Failed { id, message: format!("there is no meter at tick {tick}") });
-        };
-        session.document_mut()?.remove_node(node);
-        Ok(Outcome::changed(format!("the meter at tick {tick} is gone"))
-            .with_data(serde_json::json!({ "id": node, "tick": tick })))
-    }
-}
-
-/// **Take away** the key at a tick.
-///
-/// The key is a list of events too, and the same rule the tempo
-/// follows applies to it: the event at the **first tick** is the
-/// document's key and it stays, and a tick with **no key** is refused.
-#[derive(Command)]
-#[command(
-    id = "sound.key.remove",
-    area = "sound",
-    layer = "sound",
-    icon = "minus",
-    menu("Event", "Key"),
-    mutates,
-    undoable
-)]
-pub struct RemoveKey {
-    /// Where the key is, in ticks.
-    pub tick: Number,
-}
-
-impl RemoveKey {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.key.remove".to_string();
-        let tick = ticks(self.tick.0)?;
-        if tick == 0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "the key at the first tick is the document's key and it stays".to_string(),
-            });
-        }
-        let Some(node) = find_event(session, "sound.key", tick) else {
-            return Err(EngineError::Failed { id, message: format!("there is no key at tick {tick}") });
-        };
-        session.document_mut()?.remove_node(node);
-        Ok(Outcome::changed(format!("the key at tick {tick} is gone"))
-            .with_data(serde_json::json!({ "id": node, "tick": tick })))
-    }
-}
-
-/// Set the meter.
-///
-/// The meter is a list of events too: a bar may be three beats long from
-/// here on.
-#[derive(Command)]
-#[command(
-    id = "sound.meter.set",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Event", "Meter"),
-    mutates,
-    undoable
-)]
-pub struct SetMeter {
-    /// How many beats a bar has.
-    pub numerator: Number,
-    /// Which beat a bar has.
-    pub denominator: Number,
-    /// Where, in ticks.
-    pub tick: Option<Number>,
-}
-
-impl SetMeter {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let numerator = self.numerator.0 as u32;
-        let denominator = self.denominator.0 as u32;
-        if !(1..=64).contains(&numerator) || ![1, 2, 4, 8, 16, 32, 64].contains(&denominator) {
-            return Err(EngineError::Failed {
-                id: "sound.meter.set".to_string(),
-                message: format!("{numerator}/{denominator} is not a meter"),
-            });
-        }
-        let tick = match &self.tick {
-            Some(tick) => ticks(tick.0)?,
-            None => 0,
-        };
-        let payload = MeterPayload { tick, numerator, denominator };
-        let existing = find_event(session, "sound.meter", tick);
-        let id = match existing {
-            Some(id) => {
-                if let Some(node) = session.document_mut()?.node_mut(id) {
-                    node.data = payload.to_json();
-                }
-                id
-            }
-            None => session.document_mut()?.add_node_with(
-                format!("meter {numerator}/{denominator}"),
-                "sound.meter",
-                None,
-                payload.to_json(),
-            ),
-        };
-        Ok(Outcome::changed(format!("the meter at tick {tick} is {numerator}/{denominator}"))
-            .with_data(serde_json::json!({ "id": id, "tick": tick })))
-    }
-}
-
-/// **Move** a marker, or **rename** it.
-///
-/// The marker's **name** is what a person calls it, and its **place**
-/// is where it is on the timeline, and both of them may be changed: a
-/// marker is a thing in the document and not a thing that is put there
-/// once and for ever.
-#[derive(Command)]
-#[command(
-    id = "sound.marker.set",
-    area = "sound",
-    layer = "sound",
-    icon = "pencil",
-    menu("Marker"),
-    mutates,
-    undoable
-)]
-pub struct SetMarker {
-    /// The marker to change.
-    pub marker: NodeRef,
-    /// The new name.
-    pub name: Option<Text>,
-    /// The new place, in samples.
-    pub start: Option<Number>,
-    /// The new end, in samples.
-    pub end: Option<Number>,
-}
-
-impl SetMarker {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.marker.set".to_string();
-        let marker = self.marker.0;
-        let node = session.document().node(marker).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{marker}`"),
-        })?;
-        if node.kind != "sound.marker" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{marker}` is a `{}` and not a marker", node.kind),
-            });
-        }
-        let mut payload = MarkerPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-        // The marker moves as a **whole**: its span is kept, so that
-        // moving it does not make it longer or shorter than it was.
-        if let Some(start) = self.start {
-            let start = samples(start.0, "where the marker is")?;
-            let delta = start - payload.start;
-            payload.start = start;
-            payload.end += delta;
-        }
-        if let Some(end) = self.end {
-            payload.end = samples(end.0, "where the marker ends")?;
-        }
-
-        if payload.end < payload.start {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the marker ends at {} and starts at {}", payload.end, payload.start),
-            });
-        }
-        let name = self.name.as_ref().map(|name| name.0.clone()).unwrap_or(node.name.clone());
-        if let Some(node) = session.document_mut()?.node_mut(marker) {
-            node.name = name.clone();
-            node.data = payload.to_json();
-        }
-        Ok(Outcome::changed(format!("changed the marker `{name}`"))
-            .with_data(serde_json::json!({ "marker": marker, "name": name, "start": payload.start })))
-    }
-}
-
-/// **Scale** the tempos of the document.
-///
-/// Every tempo is multiplied by the **factor**: a factor of two is
-/// twice as fast everywhere, and the times the tempos happen at do not
-/// move — the music is faster, and it starts at the same moment.
-///
-/// A factor that would take a tempo outside the range a tempo may have
-/// — five to a thousand beats a minute — is **refused**: a tempo of
-/// zero is not a tempo, and a tempo of two thousand is not one either.
-#[derive(Command)]
-#[command(
-    id = "sound.tempo.scale",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Event", "Tempo"),
-    mutates,
-    undoable
-)]
-pub struct ScaleTempo {
-    /// The factor every tempo is multiplied by.
-    pub factor: Number,
-}
-
-impl ScaleTempo {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.tempo.scale".to_string();
-        let factor = self.factor.0;
-        if !factor.is_finite() || factor <= 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the factor is a number above zero, and {factor} is not one"),
-            });
-        }
-        // Every tempo is read first, and the whole scale is refused if
-        // one of them would leave the range: a scale that is half made
-        // is a map that says something false about half of itself.
-        let mut tempos: Vec<(u64, i64, f64)> = Vec::new();
-        for node in session.document().walk() {
-            if node.kind != "sound.tempo" {
-                continue;
-            }
-            let Ok(payload) = TempoPayload::from_json(&node.data) else { continue };
-            let scaled = payload.bpm * factor;
-            if !scaled.is_finite() || !(5.0..=1000.0).contains(&scaled) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "the tempo of {} beats a minute would become {scaled}, which is not a tempo",
-                        payload.bpm
-                    ),
-                });
-            }
-            tempos.push((node.id, payload.tick, scaled));
-        }
-        for (node, tick, bpm) in &tempos {
-            if let Some(node) = session.document_mut()?.node_mut(*node) {
-                node.data = TempoPayload { tick: *tick, bpm: *bpm }.to_json();
-                node.name = format!("tempo {bpm}");
-            }
-        }
-        Ok(Outcome::changed(format!("scaled {} tempos by {factor}", tempos.len()))
-            .with_data(serde_json::json!({ "tempos": tempos.len(), "factor": factor })))
-    }
-}
-
-/// Make a **range** of the tempo map constant.
-///
-/// The tempo at the start of the range is the one given, the tempo
-/// changes inside the range are **taken away**, and the tempo at the
-/// end of the range comes back — so that the music after the range is
-/// as fast as it was.
-///
-/// The tree's command is the same one, and the tree's own name for it
-/// is "Constant...".
-#[derive(Command)]
-#[command(
-    id = "sound.tempo.constant",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Event", "Tempo"),
-    mutates,
-    undoable
-)]
-pub struct ConstantTempo {
-    /// How fast, in beats a minute.
-    pub bpm: Number,
-    /// Where the range starts, in ticks.
-    pub start: Option<Number>,
-    /// Where the range ends, in ticks.
-    pub end: Option<Number>,
-}
-
-impl ConstantTempo {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.tempo.constant".to_string();
-        let bpm = self.bpm.0;
-        if !bpm.is_finite() || !(5.0..=1000.0).contains(&bpm) {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("{bpm} is not a tempo between 5 and 1000 beats a minute"),
-            });
-        }
-        let start = match self.start {
-            Some(start) => ticks(start.0)?,
-            None => 0,
-        };
-        let end = match self.end {
-            Some(end) => ticks(end.0)?,
-            None => start,
-        };
-        if end <= start {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the range from {start} to {end} is empty"),
-            });
-        }
-        // The tempo at the end of the range is read **before** the
-        // edit: the end is a musical place, and the new tempo moves it.
-        let map = tempo_map(session.document());
-        let after = map.tempo_at_tick(end);
-        let had_end = find_event(session, "sound.tempo", end).is_some();
-        // The tempo at the start of the range.
-        match find_event(session, "sound.tempo", start) {
-            Some(node) => {
-                if let Some(node) = session.document_mut()?.node_mut(node) {
-                    node.data = TempoPayload { tick: start, bpm }.to_json();
-                    node.name = format!("tempo {bpm}");
-                }
-            }
-            None => {
-                session.document_mut()?.add_node_with(
-                    format!("tempo {bpm}"),
-                    "sound.tempo",
-                    None,
-                    TempoPayload { tick: start, bpm }.to_json(),
-                );
-            }
-        }
-        // The tempo changes **inside** the range are taken away.
-        let inside: Vec<u64> = session
-            .document()
-            .walk()
-            .filter(|node| node.kind == "sound.tempo")
-            .filter(|node| {
-                TempoPayload::from_json(&node.data)
-                    .map(|payload| payload.tick > start && payload.tick < end)
-                    .unwrap_or(false)
-            })
-            .map(|node| node.id)
-            .collect();
-        for node in inside {
-            session.document_mut()?.remove_node(node);
-        }
-        // And the tempo at the end of the range comes back.
-        if !had_end {
-            session.document_mut()?.add_node_with(
-                format!("tempo {after}"),
-                "sound.tempo",
-                None,
-                TempoPayload { tick: end, bpm: after }.to_json(),
-            );
-        }
-        Ok(Outcome::changed(format!("the tempo from tick {start} to {end} is {bpm}"))
-            .with_data(serde_json::json!({ "start": start, "end": end, "bpm": bpm })))
-    }
-}
-
-/// Put a marker in the document.
-#[derive(Command)]
-#[command(
-    id = "sound.marker.add",
-    area = "sound",
-    layer = "sound",
-    icon = "plus",
-    menu("Marker"),
-    mutates,
-    undoable
-)]
-pub struct AddMarker {
-    /// What to call it.
-    pub name: Text,
-    /// Where it is, in samples.
-    pub start: Number,
-    /// Where it ends, in samples.
-    pub end: Option<Number>,
-}
-
-impl AddMarker {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let start = samples(self.start.0, "where the marker is")?;
-        let end = match &self.end {
-            Some(end) => samples(end.0, "where the marker ends")?,
-            None => start,
-        };
-        let payload = MarkerPayload { start, end };
-        let name = self.name.0.clone();
-        let id = session.document_mut()?.add_node_with(name.clone(), "sound.marker", None, payload.to_json());
-        Ok(Outcome::changed(format!("added a marker `{name}`"))
-            .with_data(serde_json::json!({ "id": id, "name": name, "start": start, "end": end })))
-    }
-}
-
-/// Add a source: a reference to media.
-///
-/// The path is **relative to the document**, because a document that
-/// travels carries its media with it. Nothing here reads the file.
-#[derive(Command)]
-#[command(
-    id = "sound.source.add",
-    area = "sound",
-    layer = "sound",
-    icon = "plus",
-    menu("File", "Import"),
-    mutates,
-    undoable
-)]
-pub struct AddSource {
-    /// Where the media is.
-    pub path: Text,
-    /// How many channels it has.
-    pub channels: Option<Number>,
-    /// How long it is, in frames.
-    pub frames: Option<Number>,
-}
-
-impl AddSource {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let path = self.path.0.clone();
-        let channels = match &self.channels {
-            Some(channels) => channels.0 as u32,
-            None => 2,
-        };
-        let frames = match &self.frames {
-            Some(frames) => samples(frames.0, "how long the source is")?,
-            None => 0,
-        };
-        let session_settings = session_of(session.document());
-        let payload = SourcePayload {
-            path: path.clone(),
-            channels,
-            frames,
-            sample_rate: session_settings.sample_rate,
-            peaks: Vec::new(),
-        };
-        let id = session.document_mut()?.add_node_with(path.clone(), "sound.source", None, payload.to_json());
-        // The document now says that it needs this file. The bytes are
-        // not in the document: they travel beside it, in a bundle.
-        session.document_mut()?.add_asset(craftkit_sdk::Asset::new(path.clone(), "audio", None));
-        Ok(Outcome::changed(format!("added a source `{path}`"))
-            .with_data(serde_json::json!({ "id": id, "path": path })))
-    }
-}
-
-/// **Take away** a source.
-///
-/// The source goes and so does the **asset** it brought: the document
-/// says it needs the file, and a document that needs a file that
-/// nothing plays is carrying a file for nothing. The clips that played
-/// it keep their own word about the source — the clip is silent until
-/// it is told what to play — and the source itself is gone.
-///
-/// The tree's mixer has no such command: the tree's source is a file
-/// that the session names and the session does not lose.
-#[derive(Command)]
-#[command(
-    id = "sound.source.remove",
-    area = "sound",
-    layer = "sound",
-    icon = "minus",
-    menu("File", "Remove Source"),
-    mutates,
-    undoable
-)]
-pub struct RemoveSource {
-    /// The source to take away.
-    pub source: NodeRef,
-}
-
-impl RemoveSource {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.source.remove".to_string();
-        let source = self.source.0;
-        let node = session.document().node(source).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no source `{source}`"),
-        })?;
-        if node.kind != "sound.source" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{source}` is a `{}` and not a source", node.kind),
-            });
-        }
-        let path = node.name.clone();
-        session.document_mut()?.remove_node(source);
-        // The **asset** goes with it: the document does not need a file
-        // that nothing plays.
-        let removed = session.document_mut()?.remove_assets(|asset| asset.path == path);
-        Ok(Outcome::changed(format!("took the source `{path}` away"))
-            .with_data(serde_json::json!({ "source": source, "path": path, "assets": removed })))
-    }
-}
-
-/// **Measure** the peaks of a source.
-///
-/// The peaks are the shape of the sound in a small table, and the shape
-/// is what a clip's bar is drawn from.
-///
-/// Measuring them reads the file, so it is a **command** and not a
-/// thing that happens at every frame: a file that is read a hundred
-/// times a second is a file that is read a hundred times too often.
-/// The measurement is in the document, so it is undone with everything
-/// else and it is saved with the document.
-#[derive(Command)]
-#[command(id = "sound.source.peaks", area = "sound", layer = "sound", icon = "list", mutates, undoable)]
-pub struct MeasurePeaks {
-    /// The source to measure.
-    pub source: NodeRef,
-}
-
-impl MeasurePeaks {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.source.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.source.peaks".to_string(),
-                message: format!("there is no node `{id}`"),
-            });
-        };
-        if node.kind != "sound.source" {
-            return Err(EngineError::Failed {
-                id: "sound.source.peaks".to_string(),
-                message: format!("the node `{id}` is a `{}` and not a source", node.kind),
-            });
-        }
-        let payload = SourcePayload::from_json(&node.data).map_err(|error| EngineError::Failed {
-            id: "sound.source.peaks".to_string(),
-            message: format!("the source `{id}` cannot be read: {error}"),
-        })?;
-        let sound = read_sound("sound.source.peaks", &payload.path)?;
-        let peaks = peaks_of(&sound);
-        let Some(node) = session.document_mut()?.node_mut(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.source.peaks".to_string(),
-                message: format!("there is no source `{id}`"),
-            });
-        };
-        // The file says what it is: how long it is, how many channels
-        // it has and the rate it was recorded at. A source that has
-        // not been measured does not know.
-        node.data["frames"] = serde_json::json!(sound.frames as i64);
-        node.data["channels"] = serde_json::json!(sound.channels as u32);
-        node.data["sample_rate"] = serde_json::json!(sound.rate);
-        node.data["peaks"] = serde_json::json!(peaks);
-        Ok(Outcome::changed(format!("measured the peaks of the source {id}")).with_data(serde_json::json!({
-            "id": id,
-            "numbers": PEAK_NUMBERS,
-            "frames": sound.frames as i64,
-            "channels": sound.channels as u32,
-            "sample_rate": sound.rate,
-        })))
-    }
 }
 
 /// The kind of a **playhead**: where the sound is.
@@ -6079,152 +6584,6 @@ impl PlayheadKind {
             "position": position,
             "seconds": position as f64 / rate as f64,
         }))
-    }
-}
-
-/// Put the **playhead** where it is, or move it.
-///
-/// The playhead is a **node**, so there is one of it and it is moved.
-#[derive(Command)]
-#[command(
-    id = "sound.playhead.set",
-    area = "sound",
-    layer = "sound",
-    icon = "play",
-    menu("Playhead"),
-    mutates,
-    undoable
-)]
-pub struct SetPlayhead {
-    /// Where it is, in samples.
-    pub position: Number,
-}
-
-impl SetPlayhead {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let position = samples(self.position.0, "where the playhead is")?;
-        if position < 0 {
-            return Err(EngineError::Failed {
-                id: "sound.playhead.set".to_string(),
-                message: "a playhead cannot be before the beginning".to_string(),
-            });
-        }
-        let existing =
-            session.document().walk().find(|node| node.kind == "sound.playhead").map(|node| node.id);
-        let id = match existing {
-            Some(id) => {
-                if let Some(node) = session.document_mut()?.node_mut(id) {
-                    node.data = serde_json::json!({ "position": position });
-                }
-                id
-            }
-            None => session.document_mut()?.add_node_with(
-                "playhead".to_string(),
-                "sound.playhead",
-                None,
-                serde_json::json!({ "position": position }),
-            ),
-        };
-        Ok(Outcome::changed(format!("the playhead is at {position} samples"))
-            .with_data(serde_json::json!({ "id": id, "position": position })))
-    }
-}
-
-/// **Mute** a clip, or unmute it.
-///
-/// A muted clip is not played and is still there: the tree's renderer
-/// skips it and the tree's editor keeps it, so that a clip that is
-/// quiet is a clip that may be loud again.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.mute",
-    area = "sound",
-    layer = "sound",
-    icon = "sound",
-    menu("Track", "Mute"),
-    mutates,
-    undoable
-)]
-pub struct MuteClip {
-    /// The clip to mute.
-    pub clip: NodeRef,
-    /// Whether it is muted. Without it, the clip is muted.
-    pub muted: Option<Bool>,
-}
-
-impl MuteClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.clip.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.clip.mute".to_string(),
-                message: format!("there is no clip `{id}`"),
-            });
-        };
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: "sound.clip.mute".to_string(),
-                message: format!("the node `{id}` is a `{}` and not a clip", node.kind),
-            });
-        }
-        let mut payload = ClipPayload::from_json(&node.data).map_err(|error| EngineError::Failed {
-            id: "sound.clip.mute".to_string(),
-            message: error.to_string(),
-        })?;
-        let muted = self.muted.map(|muted| muted.0).unwrap_or(true);
-        payload.muted = muted;
-        let data = payload.to_json();
-        let Some(node) = session.document_mut()?.node_mut(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.clip.mute".to_string(),
-                message: format!("there is no clip `{id}`"),
-            });
-        };
-        node.data = data;
-        Ok(Outcome::changed(if muted {
-            format!("the clip `{id}` is muted")
-        } else {
-            format!("the clip `{id}` is not muted")
-        })
-        .with_data(serde_json::json!({ "id": id, "muted": muted })))
-    }
-}
-
-/// Render the document into a **sound file**.
-///
-/// The renderer is the first thing in this tree that makes a sound: it
-/// reads the sources the clips play, mixes them and writes the file.
-/// It is **offline** — it writes a file and it stops — because the kit
-/// has no audio device and no audio thread (§ the kit's own notes), and
-/// a file is a thing a program can make without a device.
-///
-/// What it does:
-/// - the clips are the **tracks**: each clip plays a source from an
-///   offset, for a length, at a gain;
-/// - the sources are read from the **files** the document names, and
-///   the samples are the ones the WAV reader gives back (§133);
-/// - the tracks are mixed (§134) and the mix is written as a WAV.
-#[derive(Command)]
-#[command(id = "sound.render", area = "sound", layer = "sound", icon = "play", menu("Render"))]
-pub struct RenderSound {
-    /// Where to write the sound.
-    pub path: Text,
-}
-
-impl RenderSound {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let path = self.path.0.clone();
-        let mix = mix_of(session.document(), "sound.render", None)?;
-        let channels = mix.channels;
-        let bytes = craftkit_wav::write(channels, mix.rate, &mix.master);
-        write_file(&path, &bytes)?;
-        Ok(Outcome::new(format!("rendered {} frames to `{path}`", mix.frames)).with_data(serde_json::json!({
-            "path": path,
-            "frames": mix.frames,
-            "rate": mix.rate,
-            "channels": channels,
-            "clips": mix.tracks.len(),
-        })))
     }
 }
 
@@ -6775,282 +7134,6 @@ fn mix_of(document: &Document, id: &str, capture: Option<u64>) -> Result<Mix, En
         rate,
         frames,
     })
-}
-
-/// Render the **stems**: one file for each track.
-///
-/// A stem is the mix with **one track in it**: the tree's bounce solos
-/// the track and renders the whole mix, so a stem carries the master
-/// faders and the metronome with it, and a stem of a track that feeds
-/// a bus carries the bus.
-///
-/// The files are written into a **directory**, and the directory is
-/// made if it is not there. Each file is named after its track, and a
-/// name that is taken gets a number after it — two tracks with the
-/// same name are two files and not one file written twice.
-///
-/// A **muted** track is not bounced: the tree does not bounce it, and
-/// a stem of silence is a file nobody asked for. The mute is a **lane**
-/// here and not a field of the track, so a muted track is one whose
-/// mute lane says so at the start.
-#[derive(Command)]
-#[command(id = "sound.render.stems", area = "sound", layer = "sound", icon = "play", menu("Render"))]
-pub struct RenderStems {
-    /// The directory to write the stems into.
-    pub directory: Text,
-}
-
-impl RenderStems {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let directory = self.directory.0.clone();
-        if directory.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "sound.render.stems".to_string(),
-                message: "a directory is a path".to_string(),
-            });
-        }
-        std::fs::create_dir_all(&directory).map_err(|error| EngineError::Failed {
-            id: "sound.render.stems".to_string(),
-            message: format!("the directory `{directory}` cannot be made: {error}"),
-        })?;
-        let document = session.document().clone();
-        // The **tracks** that are bounced: a track that is not a track
-        // is not bounced, a **master** is not bounced (it holds the
-        // fader of the mix and not a sound of its own), and a muted
-        // track is not bounced.
-        let mut files = Vec::new();
-        for track in document.walk().filter(|node| {
-            node.kind == "sound.track" && !is_master(node) && !crate::vca::is_vca(node) && !is_inactive(node)
-        }) {
-            // The **mute** is a field of the track and a lane over it:
-            // a muted track is one whose own mute is on, or one whose
-            // mute lane says so.
-            let automation = automate::automation_of(&document, track);
-            let muted = automation.muted
-                || automation
-                    .mute
-                    .as_ref()
-                    .map(|points| automate::value_at(points, 0) >= 0.5)
-                    .unwrap_or(false);
-            if muted {
-                continue;
-            }
-            // The **stem** is the mix with this track in it and the
-            // others out: the track is soloed and the mix is worked
-            // out again, so a stem is the same sound as the mix and
-            // not a second way of mixing.
-            let mut soloed = document.clone();
-            let tracks: Vec<u64> =
-                soloed.walk().filter(|node| node.kind == "sound.track").map(|node| node.id).collect();
-            for other in tracks {
-                let Some(node) = soloed.node_mut(other) else { continue };
-                let Ok(mut payload) = TrackPayload::from_json(&node.data) else { continue };
-                payload.solo = other == track.id;
-                node.data = payload.to_json();
-            }
-            let mix = mix_of(&soloed, "sound.render.stems", None)?;
-            let bytes = craftkit_wav::write(mix.channels, mix.rate, &mix.master);
-            let path = a_stem_path(&directory, &track.name);
-            write_file(&path, &bytes)?;
-            files.push(path);
-        }
-        Ok(Outcome::new(format!("bounced {} stems into `{directory}`", files.len()))
-            .with_data(serde_json::json!({ "directory": directory, "files": files })))
-    }
-}
-
-/// **Consolidate** a track: the clips of a track become one clip of a
-/// file that holds their sound.
-///
-/// The tree's consolidate renders the sound of a track's clips over a
-/// range, writes it to a file, and puts one clip of that file where the
-/// clips were. The sound is the same and the editing is not: the
-/// clips are gone and there is one clip with a file behind it.
-///
-/// The sound that is rendered is the sound of the track's **clips**:
-/// the track's trim and the track's inserts are not in it, because
-/// they belong to the track and the track is still there. A clip that
-/// crosses the edge of the range keeps the part outside it.
-///
-/// The **MIDI** clips of the track are left alone: they hold no sound
-/// to render, and a MIDI clip is not a file.
-#[derive(Command)]
-#[command(
-    id = "sound.track.consolidate",
-    area = "sound",
-    layer = "sound",
-    icon = "play",
-    menu("Track", "Consolidate"),
-    mutates,
-    undoable
-)]
-pub struct ConsolidateTrack {
-    /// The track to consolidate.
-    pub track: NodeRef,
-    /// Where the range starts, in samples.
-    ///
-    /// Without it, the range starts at the beginning of the session.
-    pub start: Option<Number>,
-    /// Where the range ends, in samples.
-    ///
-    /// Without it, the range ends at the end of the track's clips.
-    pub end: Option<Number>,
-    /// The directory the file is written into.
-    pub directory: Text,
-}
-
-impl ConsolidateTrack {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.track.consolidate".to_string();
-        let track = self.track.0;
-        let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{track}`"),
-        })?;
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
-            });
-        }
-        if is_master(node) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the master holds the fader of the mix and not a sound of its own".to_string(),
-            });
-        }
-        let directory = self.directory.0.clone();
-        if directory.trim().is_empty() {
-            return Err(EngineError::Failed { id, message: "a directory is a path".to_string() });
-        }
-        std::fs::create_dir_all(&directory).map_err(|error| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the directory `{directory}` cannot be made: {error}"),
-        })?;
-        // The **range**: the track's own clips say where it ends, and
-        // a range with no length is refused.
-        let document = session.document().clone();
-        let mut clips: Vec<(u64, ClipPayload)> = Vec::new();
-        let mut last = 0_i64;
-        for clip in document.walk().filter(|node| node.kind == "sound.clip") {
-            if timeline::track_of(&document, clip).map(|owner| owner.id) != Some(track) {
-                continue;
-            }
-            let Ok(payload) = ClipPayload::from_json(&clip.data) else { continue };
-            last = last.max(payload.start.max(0) + payload.length.max(0));
-            clips.push((clip.id, payload));
-        }
-        let start = match &self.start {
-            Some(start) => samples(start.0, "where the range starts")?,
-            None => 0,
-        };
-        let end = match &self.end {
-            Some(end) => samples(end.0, "where the range ends")?,
-            None => last,
-        };
-        if end <= start {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the range ends at {end} and starts at {start}"),
-            });
-        }
-        // The **sound** of the track's clips: the raw signal, before
-        // the track's trim and before the track's inserts.
-        let mix = mix_of(&document, &id, Some(track))?;
-        let channels = mix.channels.max(1) as usize;
-        let from = start.max(0) as usize * channels;
-        let to = end.max(0) as usize * channels;
-        let Some((_, signal)) = mix.raw else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the track `{track}` has no sound to consolidate"),
-            });
-        };
-        if signal.len() < to {
-            return Err(EngineError::Failed {
-                id,
-                message: format!(
-                    "the sound of the track is {} frames long and the range asks for {end}",
-                    signal.len() / channels
-                ),
-            });
-        }
-        let slice = &signal[from..to];
-        // The **file**: the sound of the range, written beside the
-        // session.
-        let name = format!("{}_consolidated", node.name);
-        let path = a_stem_path(&directory, &name);
-        let bytes = craftkit_wav::write(mix.channels, mix.rate, slice);
-        write_file(&path, &bytes)?;
-        // The **source** of the file, and the **asset** that carries it.
-        let frames = (end - start).max(0);
-        let payload = SourcePayload {
-            path: path.clone(),
-            channels: mix.channels as u32,
-            frames,
-            sample_rate: mix.rate,
-            peaks: Vec::new(),
-        };
-        let source =
-            session.document_mut()?.add_node_with(path.clone(), "sound.source", None, payload.to_json());
-        session.document_mut()?.add_asset(craftkit_sdk::Asset::new(path.clone(), "audio", None));
-        // The **clips** of the range are gone: the ones inside it are
-        // thrown away, and the ones that cross its edge keep the part
-        // outside it.
-        let mut removed = 0_usize;
-        let mut kept = 0_usize;
-        for (clip_id, payload) in clips {
-            let clip_start = payload.start.max(0);
-            let clip_end = clip_start + payload.length.max(0);
-            if clip_end <= start || clip_start >= end {
-                continue;
-            }
-            if clip_start >= start && clip_end <= end {
-                session.document_mut()?.remove_node(clip_id);
-                removed += 1;
-                continue;
-            }
-            // The part **outside** the range is kept.
-            let mut payload = payload;
-            if clip_start < start {
-                payload.length = (start - clip_start).max(0);
-            } else {
-                let cut = end - clip_start;
-                payload.offset += cut;
-                payload.start = end;
-                payload.length = (clip_end - end).max(0);
-            }
-            if let Some(node) = session.document_mut()?.node_mut(clip_id) {
-                node.data = payload.to_json();
-            }
-            kept += 1;
-        }
-        // The **clip** of the new file, where the old ones were.
-        let playlist = playlist_of(session, track, None)?;
-        let mut clip = ClipPayload::new();
-        clip.start = start;
-        clip.length = frames;
-        clip.source = Some(source);
-        let clip_id = session.document_mut()?.add_node_with_under(
-            Some(playlist),
-            name.clone(),
-            "sound.clip",
-            None,
-            clip.to_json(),
-        );
-        Ok(Outcome::changed(format!("consolidated the track `{track}` into `{path}`")).with_data(
-            serde_json::json!({
-                "track": track,
-                "clip": clip_id,
-                "source": source,
-                "path": path,
-                "start": start,
-                "end": end,
-                "removed": removed,
-                "kept": kept,
-            }),
-        ))
-    }
 }
 
 /// Put a node **after** another one, at the top level.
@@ -7762,127 +7845,6 @@ fn write_file(path: &str, bytes: &[u8]) -> Result<(), EngineError> {
     })
 }
 
-/// Set the session: the sample rate and the timecode.
-///
-/// These are the settings that belong to the session and not to any one
-/// node, and they live in the document's own payload.
-#[derive(Command)]
-#[command(
-    id = "sound.session.set",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Options"),
-    mutates,
-    undoable
-)]
-pub struct SetSession {
-    /// The sample rate, in samples a second.
-    pub sample_rate: Option<Number>,
-    /// Where the document starts on a timecode, in samples.
-    pub timecode_start: Option<Number>,
-    /// Whether the **metronome** is heard.
-    pub metronome: Option<Bool>,
-    /// How loud the click is, in decibels.
-    pub click_volume_db: Option<Number>,
-    /// The click's pitch, as a note number.
-    pub click_note: Option<Number>,
-    /// The **accent's** pitch: the click on the first beat of a bar.
-    pub click_accent_note: Option<Number>,
-    /// The **layout** of the room: the speakers the sound is heard on.
-    ///
-    /// One of `stereo`, `5.0`, `5.1`, `7.1` and `7.1.4`, and a layout
-    /// that is not one of them is **refused**.
-    pub layout: Option<Text>,
-    /// Whether the recording is **destructive**: the sound that is
-    /// recorded over is gone.
-    pub destructive_record: Option<Bool>,
-    /// Whether the recording is a **track punch**: the recording is
-    /// written over the part of the track that is armed and nowhere
-    /// else.
-    pub track_punch: Option<Bool>,
-}
-
-impl SetSession {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut settings = session_of(session.document());
-        if let Some(rate) = &self.sample_rate {
-            if !rate.0.is_finite() || rate.0 < 1.0 || rate.0 > 768_000.0 {
-                return Err(EngineError::Failed {
-                    id: "sound.session.set".to_string(),
-                    message: format!("{} is not a sample rate", rate.0),
-                });
-            }
-            settings.sample_rate = rate.0 as u32;
-        }
-        if let Some(start) = &self.timecode_start {
-            settings.timecode_start = samples(start.0, "where the timecode starts")?;
-        }
-        if let Some(metronome) = &self.metronome {
-            settings.metronome = metronome.0;
-        }
-        if let Some(volume) = &self.click_volume_db {
-            if !volume.0.is_finite() {
-                return Err(EngineError::Failed {
-                    id: "sound.session.set".to_string(),
-                    message: "a level is a number of decibels".to_string(),
-                });
-            }
-            settings.click_volume_db = volume.0;
-        }
-        if let Some(note) = &self.click_note {
-            if !note.0.is_finite() {
-                return Err(EngineError::Failed {
-                    id: "sound.session.set".to_string(),
-                    message: "a pitch is a note number".to_string(),
-                });
-            }
-            settings.click_note = note.0;
-        }
-        if let Some(note) = &self.click_accent_note {
-            if !note.0.is_finite() {
-                return Err(EngineError::Failed {
-                    id: "sound.session.set".to_string(),
-                    message: "a pitch is a note number".to_string(),
-                });
-            }
-            settings.click_accent_note = note.0;
-        }
-        if let Some(layout) = &self.layout {
-            if surround::layout(&layout.0).is_none() {
-                return Err(EngineError::Failed {
-                    id: "sound.session.set".to_string(),
-                    message: format!(
-                        "`{}` is not a layout this tree has: the layouts are {}",
-                        layout.0,
-                        surround::layout_names().join(", ")
-                    ),
-                });
-            }
-            settings.layout = layout.0.trim().to_string();
-        }
-        if let Some(destructive) = &self.destructive_record {
-            settings.destructive_record = destructive.0;
-        }
-        if let Some(punch) = &self.track_punch {
-            settings.track_punch = punch.0;
-        }
-        set_session(session.document_mut()?, &settings);
-        Ok(Outcome::changed(format!("the session runs at {} samples a second", settings.sample_rate))
-            .with_data(serde_json::json!({
-                "sample_rate": settings.sample_rate,
-                "timecode_start": settings.timecode_start,
-                "metronome": settings.metronome,
-                "click_volume_db": settings.click_volume_db,
-                "click_note": settings.click_note,
-                "click_accent_note": settings.click_accent_note,
-                "layout": settings.layout,
-                "destructive_record": settings.destructive_record,
-                "track_punch": settings.track_punch,
-            })))
-    }
-}
-
 // ------------------------------------------------------------------ the tool, the panel --
 
 /// The clip tool.
@@ -8240,44 +8202,44 @@ craftkit_sdk::plugin_anchor!(
     KeyKind,
     MarkerKind,
     SourceKind,
-    AddTrack,
-    SoloTrack,
-    ClearSolos,
-    MuteTrackSends,
-    AddClip,
-    SetClipStretch,
-    SetClipFade,
-    SetTempo,
-    SetMeter,
-    SetKey,
-    ReadKeys,
-    ImportMidiTracks,
-    ConsolidateTrack,
-    CommitTrack,
-    CopyRange,
-    DuplicateTrack,
-    MoveInsert,
-    CutRange,
-    PasteRange,
-    ReadClipboard,
-    RemoveClip,
-    RemoveInsert,
-    RemoveKey,
-    RemoveMeter,
-    RemoveTempo,
-    RenderClip,
-    RemoveMarker,
-    RemoveTrack,
-    RenameClip,
-    RenameTrack,
-    SetSend,
-    SetTrackInactive,
-    RepeatRange,
-    SplitMono,
-    AddMarker,
-    AddSource,
-    MeasurePeaks,
-    SetSession,
+    SoundTrackAdd,
+    SoundTrackSolo,
+    SoundTrackSoloClear,
+    SoundTrackSendsMute,
+    SoundClipAdd,
+    SoundClipStretch,
+    SoundClipFade,
+    SoundTempoSet,
+    SoundMeterSet,
+    SoundKeySet,
+    SoundKeyRead,
+    SoundTrackMidiImport,
+    SoundTrackConsolidate,
+    SoundTrackCommit,
+    SoundTrackCopy,
+    SoundTrackDuplicate,
+    SoundInsertMove,
+    SoundTrackCut,
+    SoundTrackPaste,
+    SoundTrackClipboardRead,
+    SoundClipRemove,
+    SoundInsertRemove,
+    SoundKeyRemove,
+    SoundMeterRemove,
+    SoundTempoRemove,
+    SoundClipRender,
+    SoundMarkerRemove,
+    SoundTrackRemove,
+    SoundClipRename,
+    SoundTrackRename,
+    SoundSendSet,
+    SoundTrackInactive,
+    SoundTrackRepeat,
+    SoundTrackSplitMono,
+    SoundMarkerAdd,
+    SoundSourceAdd,
+    SoundSourcePeaks,
+    SoundSessionSet,
     ClipTool,
     SoundPanel,
     TimelineEvaluator,
@@ -8286,33 +8248,33 @@ craftkit_sdk::plugin_anchor!(
     InsertKind,
     SendKind,
     LaneKind,
-    AddBus,
-    AddRoute,
-    AddInsert,
-    AddSend,
-    AddLane,
-    SetBeat,
-    RemoveBeat,
-    ReadBeat,
-    EditLock,
-    TimeLock,
-    SetRating,
-    RecallMarker,
-    NextMarker,
-    PreviousMarker,
+    SoundBusAdd,
+    SoundRouteAdd,
+    SoundInsertAdd,
+    SoundSendAdd,
+    SoundLaneAdd,
+    SoundClipSyncSet,
+    SoundClipSyncRemove,
+    SoundClipSyncRead,
+    SoundClipLockEdit,
+    SoundClipLockTime,
+    SoundClipRating,
+    SoundMarkerRecall,
+    SoundMarkerNext,
+    SoundMarkerPrevious,
     GroupKind,
-    Group,
-    Ungroup,
-    ReadGroup,
-    SetGrid,
-    ReadGrid,
-    Quantize,
-    SetGain,
-    BypassGain,
-    Conform,
-    SetTrackGroup,
-    SetGroupFlags,
-    UngroupTracks
+    SoundClipGroup,
+    SoundClipUngroup,
+    SoundClipGroupRead,
+    SoundGridSet,
+    SoundGridRead,
+    SoundClipQuantize,
+    SoundClipGain,
+    SoundClipGainBypass,
+    SoundClipConform,
+    SoundTrackGroup,
+    SoundTrackGroupSet,
+    SoundTrackUngroup
 );
 
 #[cfg(test)]

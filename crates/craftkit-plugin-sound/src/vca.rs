@@ -21,10 +21,10 @@
 //! - **The tree's VCA master may be automated**, and here the VCA's
 //!   own volume lane is read the way any other track's is.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome};
 
 use crate::TrackPayload;
 
@@ -87,134 +87,132 @@ pub fn apply_vca(document: &Document, track: &Node, samples: Vec<f32>, channels:
     crate::automate::apply_fader(&automation, &samples, channels, 0)
 }
 
-/// Put a track under a **VCA master**, or take it out again.
-///
-/// The master must be a track whose kind is `vca`: the tree's engine
-/// refuses any other track, and so does this one. A track that is put
-/// under a master is under **that** master and not under another one:
-/// a track has one VCA.
-#[derive(Command)]
-#[command(
-    id = "sound.track.vca",
-    area = "sound",
-    layer = "sound",
-    icon = "sliders",
-    menu("Track", "VCA"),
-    mutates,
-    undoable
-)]
-pub struct SetVca {
-    /// The track to put under the master.
-    pub track: NodeRef,
-    /// The VCA master.
-    pub vca: NodeRef,
-}
+commands! {
+    /// Put a track under a **VCA master**, or take it out again.
+    ///
+    /// The master must be a track whose kind is `vca`: the tree's engine
+    /// refuses any other track, and so does this one. A track that is put
+    /// under a master is under **that** master and not under another one:
+    /// a track has one VCA.
+    sound.track.vca {
+        area: "sound",
+        layer: "sound",
+        icon: "sliders",
+        mutates,
+        undoable,
+        menu: ("Track", "VCA"),
+        params: {
+            /// The track to put under the master.
 
-impl SetVca {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.track.vca".to_string();
-        let track = self.track.0;
-        let vca = self.vca.0;
-        let Some(node) = session.document().node(track) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
-            });
+            track: NodeRef,
+            /// The VCA master.
+
+            vca: NodeRef,
+        },
+        run: {
+
+            let id = "sound.track.vca".to_string();
+            let track = self.track.0;
+            let vca = self.vca.0;
+            let Some(node) = session.document().node(track) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let Some(master) = session.document().node(vca) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no track `{vca}`"),
+                });
+            };
+            if master.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{vca}` is a `{}` and not a track", master.kind),
+                });
+            }
+            if !is_vca(master) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the track `{vca}` is not a VCA master"),
+                });
+            }
+            if vca == track {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the track `{track}` cannot be its own VCA master"),
+                });
+            }
+            let mut payload = TrackPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            payload.vca = Some(vca);
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(track) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            node.data = data;
+            Ok(Outcome::changed(format!("the track `{track}` is under the VCA `{vca}`"))
+                .with_data(json!({ "track": track, "vca": vca })))
+
         }
-        let Some(master) = session.document().node(vca) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no track `{vca}`"),
-            });
-        };
-        if master.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{vca}` is a `{}` and not a track", master.kind),
-            });
-        }
-        if !is_vca(master) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the track `{vca}` is not a VCA master"),
-            });
-        }
-        if vca == track {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the track `{track}` cannot be its own VCA master"),
-            });
-        }
-        let mut payload = TrackPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-        payload.vca = Some(vca);
-        let data = payload.to_json();
-        let Some(node) = session.document_mut()?.node_mut(track) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        node.data = data;
-        Ok(Outcome::changed(format!("the track `{track}` is under the VCA `{vca}`"))
-            .with_data(json!({ "track": track, "vca": vca })))
     }
-}
+    /// Take a track out of its **VCA master**.
+    ///
+    /// A track with no master is heard at its own level, and that is the
+    /// tree's own: a member of no VCA is not offset by anything.
+    sound.track.vca.delete {
+        area: "sound",
+        layer: "sound",
+        icon: "minus",
+        mutates,
+        undoable,
+        menu: ("Track", "VCA"),
+        params: {
+            /// The track to take out.
 
-/// Take a track out of its **VCA master**.
-///
-/// A track with no master is heard at its own level, and that is the
-/// tree's own: a member of no VCA is not offset by anything.
-#[derive(Command)]
-#[command(
-    id = "sound.track.vca.delete",
-    area = "sound",
-    layer = "sound",
-    icon = "minus",
-    menu("Track", "VCA"),
-    mutates,
-    undoable
-)]
-pub struct DeleteVca {
-    /// The track to take out.
-    pub track: NodeRef,
-}
+            track: NodeRef,
+        },
+        run: {
 
-impl DeleteVca {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.track.vca.delete".to_string();
-        let track = self.track.0;
-        let Some(node) = session.document().node(track) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
-            });
+            let id = "sound.track.vca.delete".to_string();
+            let track = self.track.0;
+            let Some(node) = session.document().node(track) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let mut payload = TrackPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            let had = payload.vca;
+            payload.vca = None;
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(track) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            node.data = data;
+            Ok(Outcome::changed(format!("the track `{track}` is under no VCA"))
+                .with_data(json!({ "track": track, "vca": had })))
+
         }
-        let mut payload = TrackPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-        let had = payload.vca;
-        payload.vca = None;
-        let data = payload.to_json();
-        let Some(node) = session.document_mut()?.node_mut(track) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        node.data = data;
-        Ok(Outcome::changed(format!("the track `{track}` is under no VCA"))
-            .with_data(json!({ "track": track, "vca": had })))
     }
 }

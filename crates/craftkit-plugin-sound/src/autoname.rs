@@ -51,7 +51,7 @@
 //! their **nodes** — a node is the thing, and the tree's id is a key
 //! under a key — so there is no id here.
 
-use craftkit_derive::{Command, NodeKind};
+use craftkit_derive::{NodeKind, commands};
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::Value as Json;
@@ -202,53 +202,149 @@ fn prune_empty_schemes(document: &mut Document) {
     }
 }
 
-/// **Name the clips that editing separates.**
-///
-/// The scheme says what the new pieces are called: the **name**, then
-/// the **zeros**, then the **number** the next piece gets, then the
-/// **suffix**. The clips are named when they are **separated** — the
-/// piece before a cut keeps the name it had, and the piece after it
-/// takes the next number of the scheme.
-///
-/// Without a name, the clips' scheme is **taken away**: the tree's
-/// command does the same, and a clip that is separated afterwards
-/// keeps the names it has.
-///
-/// The number and the zeros and the suffix **need** a name: they say
-/// what the name is made of, and without a name there is nothing to
-/// make.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.autoname",
-    area = "sound",
-    layer = "sound",
-    icon = "sound",
-    menu("Clip", "Auto Rename"),
-    mutates,
-    undoable
-)]
-pub struct SetAutoName {
-    /// The clips to name: their ids.
-    pub clips: serde_json::Value,
-    /// The name before the number. Without it, the scheme is taken away.
-    pub name: Option<Text>,
-    /// The number the next new piece gets. One without it.
-    pub number: Option<Number>,
-    /// How many zeros go in front of the number. None without it.
-    pub zeros: Option<Number>,
-    /// The text after the number. Nothing without it.
-    pub suffix: Option<Text>,
-}
+commands! {
+    /// **Name the clips that editing separates.**
+    ///
+    /// The scheme says what the new pieces are called: the **name**, then
+    /// the **zeros**, then the **number** the next piece gets, then the
+    /// **suffix**. The clips are named when they are **separated** — the
+    /// piece before a cut keeps the name it had, and the piece after it
+    /// takes the next number of the scheme.
+    ///
+    /// Without a name, the clips' scheme is **taken away**: the tree's
+    /// command does the same, and a clip that is separated afterwards
+    /// keeps the names it has.
+    ///
+    /// The number and the zeros and the suffix **need** a name: they say
+    /// what the name is made of, and without a name there is nothing to
+    /// make.
+    sound.clip.autoname {
+        area: "sound",
+        layer: "sound",
+        icon: "sound",
+        mutates,
+        undoable,
+        menu: ("Clip", "Auto Rename"),
+        params: {
+            /// The clips to name: their ids.
 
-impl SetAutoName {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.autoname".to_string();
-        let clips = crate::clip_ids_of(&self.clips, &id)?;
-        if clips.is_empty() {
-            return Err(EngineError::Failed { id, message: "there are no clips to name".to_string() });
+            clips: serde_json::Value,
+            /// The name before the number. Without it, the scheme is taken away.
+
+            name: Option<Text>,
+            /// The number the next new piece gets. One without it.
+
+            number: Option<Number>,
+            /// How many zeros go in front of the number. None without it.
+
+            zeros: Option<Number>,
+            /// The text after the number. Nothing without it.
+
+            suffix: Option<Text>,
+        },
+        run: {
+
+            let id = "sound.clip.autoname".to_string();
+            let clips = crate::clip_ids_of(&self.clips, &id)?;
+            if clips.is_empty() {
+                return Err(EngineError::Failed { id, message: "there are no clips to name".to_string() });
+            }
+            for clip in &clips {
+                let node = session.document().node(*clip).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip}`"),
+                })?;
+                if node.kind != "sound.clip" {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                    });
+                }
+            }
+            // A **blank** name is no name: the tree takes the scheme away
+            // for a name of spaces as well.
+            let name = self.name.as_ref().map(|name| name.0.trim().to_string()).filter(|name| !name.is_empty());
+            // The number, the zeros and the suffix say what the name is
+            // made of: without a name there is nothing to make.
+            if name.is_none() && (self.number.is_some() || self.zeros.is_some() || self.suffix.is_some()) {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the number, the zeros and the suffix need a name".to_string(),
+                });
+            }
+            let Some(name) = name else {
+                // **Taking the scheme away**: the clips keep their names
+                // and are named by nothing when they are separated.
+                let mut left = 0;
+                for clip in &clips {
+                    left += session
+                        .document_mut()?
+                        .remove_relations(|relation| relation.from == *clip && relation.kind == AUTONAMED);
+                }
+                prune_empty_schemes(session.document_mut()?);
+                if left == 0 {
+                    return Ok(Outcome::new("the clips are named by nothing already"));
+                }
+                return Ok(Outcome::changed(format!("the scheme is taken away from {left} clips"))
+                    .with_data(serde_json::json!({ "clips": left, "named": false })));
+            };
+            let payload = AutoNamePayload {
+                name,
+                number: whole(&id, self.number, 1, MAX_NUMBER, "number")?,
+                zeros: whole(&id, self.zeros, 0, MAX_ZEROS as u64, "zeros")? as usize,
+                suffix: self.suffix.as_ref().map(|suffix| suffix.0.clone()).unwrap_or_default(),
+            };
+            if payload.name.chars().count() + payload.suffix.chars().count() > MAX_TEXT_CHARS {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!(
+                        "the name and the suffix together must be at most {MAX_TEXT_CHARS} characters"
+                    ),
+                });
+            }
+            // The scheme is a node of its own, and it holds nothing.
+            let scheme = session.document_mut()?.add_node(payload.name.clone(), "sound.autoname", None);
+            if let Some(node) = session.document_mut()?.node_mut(scheme) {
+                node.data = payload.to_json();
+            }
+            for clip in &clips {
+                // A clip is in one scheme: the edge it had goes, and the
+                // new one comes.
+                session
+                    .document_mut()?
+                    .remove_relations(|relation| relation.from == *clip && relation.kind == AUTONAMED);
+                session.document_mut()?.add_relation(craftkit_sdk::Relation::new(*clip, scheme, AUTONAMED));
+            }
+            prune_empty_schemes(session.document_mut()?);
+            Ok(Outcome::changed(format!("the clips are named by `{}`", payload.name)).with_data(
+                serde_json::json!({
+                    "clips": clips.len(),
+                    "named": true,
+                    "scheme": scheme,
+                    "next": payload.next_name(),
+                }),
+            ))
+
         }
-        for clip in &clips {
-            let node = session.document().node(*clip).ok_or_else(|| EngineError::Failed {
+    }
+    /// **Read the scheme** a clip is in.
+    ///
+    /// The scheme is read and the **next name** is worked out: the name
+    /// the next piece separated from the clip would get.
+    sound.clip.autoname.read {
+        area: "sound",
+        layer: "sound",
+        icon: "list",
+        params: {
+            /// The clip to read the scheme of.
+
+            clip: NodeRef,
+        },
+        run: {
+
+            let id = "sound.clip.autoname.read".to_string();
+            let clip = self.clip.0;
+            let node = session.document().node(clip).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
                 message: format!("there is no node `{clip}`"),
             })?;
@@ -258,115 +354,25 @@ impl SetAutoName {
                     message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
                 });
             }
-        }
-        // A **blank** name is no name: the tree takes the scheme away
-        // for a name of spaces as well.
-        let name = self.name.as_ref().map(|name| name.0.trim().to_string()).filter(|name| !name.is_empty());
-        // The number, the zeros and the suffix say what the name is
-        // made of: without a name there is nothing to make.
-        if name.is_none() && (self.number.is_some() || self.zeros.is_some() || self.suffix.is_some()) {
-            return Err(EngineError::Failed {
-                id,
-                message: "the number, the zeros and the suffix need a name".to_string(),
-            });
-        }
-        let Some(name) = name else {
-            // **Taking the scheme away**: the clips keep their names
-            // and are named by nothing when they are separated.
-            let mut left = 0;
-            for clip in &clips {
-                left += session
-                    .document_mut()?
-                    .remove_relations(|relation| relation.from == *clip && relation.kind == AUTONAMED);
-            }
-            prune_empty_schemes(session.document_mut()?);
-            if left == 0 {
-                return Ok(Outcome::new("the clips are named by nothing already"));
-            }
-            return Ok(Outcome::changed(format!("the scheme is taken away from {left} clips"))
-                .with_data(serde_json::json!({ "clips": left, "named": false })));
-        };
-        let payload = AutoNamePayload {
-            name,
-            number: whole(&id, self.number, 1, MAX_NUMBER, "number")?,
-            zeros: whole(&id, self.zeros, 0, MAX_ZEROS as u64, "zeros")? as usize,
-            suffix: self.suffix.as_ref().map(|suffix| suffix.0.clone()).unwrap_or_default(),
-        };
-        if payload.name.chars().count() + payload.suffix.chars().count() > MAX_TEXT_CHARS {
-            return Err(EngineError::Failed {
-                id,
-                message: format!(
-                    "the name and the suffix together must be at most {MAX_TEXT_CHARS} characters"
-                ),
-            });
-        }
-        // The scheme is a node of its own, and it holds nothing.
-        let scheme = session.document_mut()?.add_node(payload.name.clone(), "sound.autoname", None);
-        if let Some(node) = session.document_mut()?.node_mut(scheme) {
-            node.data = payload.to_json();
-        }
-        for clip in &clips {
-            // A clip is in one scheme: the edge it had goes, and the
-            // new one comes.
-            session
-                .document_mut()?
-                .remove_relations(|relation| relation.from == *clip && relation.kind == AUTONAMED);
-            session.document_mut()?.add_relation(craftkit_sdk::Relation::new(*clip, scheme, AUTONAMED));
-        }
-        prune_empty_schemes(session.document_mut()?);
-        Ok(Outcome::changed(format!("the clips are named by `{}`", payload.name)).with_data(
-            serde_json::json!({
-                "clips": clips.len(),
+            let Some(scheme) = scheme_of(session.document(), clip) else {
+                return Ok(Outcome::new("the clip is named by nothing").with_data(serde_json::json!({
+                    "clip": clip,
+                    "named": false,
+                })));
+            };
+            let payload = payload_of(session.document(), scheme);
+            Ok(Outcome::new(format!("the clip is named by `{}`", payload.name)).with_data(serde_json::json!({
+                "clip": clip,
                 "named": true,
                 "scheme": scheme,
+                "name": payload.name,
+                "number": payload.number,
+                "zeros": payload.zeros,
+                "suffix": payload.suffix,
                 "next": payload.next_name(),
-            }),
-        ))
-    }
-}
+            })))
 
-/// **Read the scheme** a clip is in.
-///
-/// The scheme is read and the **next name** is worked out: the name
-/// the next piece separated from the clip would get.
-#[derive(Command)]
-#[command(id = "sound.clip.autoname.read", area = "sound", layer = "sound", icon = "list")]
-pub struct ReadAutoName {
-    /// The clip to read the scheme of.
-    pub clip: NodeRef,
-}
-
-impl ReadAutoName {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.autoname.read".to_string();
-        let clip = self.clip.0;
-        let node = session.document().node(clip).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{clip}`"),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-            });
         }
-        let Some(scheme) = scheme_of(session.document(), clip) else {
-            return Ok(Outcome::new("the clip is named by nothing").with_data(serde_json::json!({
-                "clip": clip,
-                "named": false,
-            })));
-        };
-        let payload = payload_of(session.document(), scheme);
-        Ok(Outcome::new(format!("the clip is named by `{}`", payload.name)).with_data(serde_json::json!({
-            "clip": clip,
-            "named": true,
-            "scheme": scheme,
-            "name": payload.name,
-            "number": payload.number,
-            "zeros": payload.zeros,
-            "suffix": payload.suffix,
-            "next": payload.next_name(),
-        })))
     }
 }
 

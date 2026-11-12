@@ -35,64 +35,81 @@
 //!   playhead is a node in the document and it is moved, so the move is
 //!   in the history and it may be undone.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Either, EngineError, NodeRef, Outcome, Session, Text};
 
 use crate::MarkerPayload;
 
-/// **Recall** a marker: the playhead goes to it.
-///
-/// The tree's own `markers.recall`: the playhead is put at the marker's
-/// start, and the marker is chosen.
-#[derive(Command)]
-#[command(
-    id = "sound.marker.recall",
-    area = "sound",
-    layer = "sound",
-    icon = "play",
-    menu("Marker"),
-    mutates,
-    undoable
-)]
-pub struct RecallMarker {
-    /// The marker: the node, or the name it is called.
-    #[param(or = "name")]
-    pub marker: Either<NodeRef, Text>,
+commands! {
+    /// **Recall** a marker: the playhead goes to it.
+    ///
+    /// The tree's own `markers.recall`: the playhead is put at the marker's
+    /// start, and the marker is chosen.
+    sound.marker.recall {
+        area: "sound",
+        layer: "sound",
+        icon: "play",
+        mutates,
+        undoable,
+        menu: ("Marker"),
+        params: {
+            /// The marker: the node, or the name it is called.
+            #[param(or = "name")]
+            marker: Either<NodeRef, Text>,
+        },
+        run: {
+
+            let id = "sound.marker.recall".to_string();
+            let (marker, name) = marker_of(session, &self.marker, &id)?;
+            let start = start_of(session, marker, &id)?;
+            move_playhead(session, start)?;
+            session.select_ids(&[marker]);
+            Ok(Outcome::changed(format!("the playhead is at the marker `{name}`"))
+                .with_data(json!({ "marker": marker, "name": name, "at": start, "position": start })))
+
+        }
+    }
+    /// **Step** to the next marker.
+    ///
+    /// The tree's own `markers.next`: the marker that starts after where the
+    /// playhead is.
+    sound.marker.next {
+        area: "sound",
+        layer: "sound",
+        icon: "play",
+        mutates,
+        undoable,
+        menu: ("Marker"),
+        params: {
+        },
+        run: {
+
+            step(session, true)
+
+        }
+    }
+    /// **Step** to the previous marker.
+    ///
+    /// The tree's own `markers.previous`: the marker that starts before
+    /// where the playhead is.
+    sound.marker.previous {
+        area: "sound",
+        layer: "sound",
+        icon: "play",
+        mutates,
+        undoable,
+        menu: ("Marker"),
+        params: {
+        },
+        run: {
+
+            step(session, false)
+
+        }
+    }
 }
-
-/// **Step** to the next marker.
-///
-/// The tree's own `markers.next`: the marker that starts after where the
-/// playhead is.
-#[derive(Command)]
-#[command(
-    id = "sound.marker.next",
-    area = "sound",
-    layer = "sound",
-    icon = "play",
-    menu("Marker"),
-    mutates,
-    undoable
-)]
-pub struct NextMarker {}
-
-/// **Step** to the previous marker.
-///
-/// The tree's own `markers.previous`: the marker that starts before
-/// where the playhead is.
-#[derive(Command)]
-#[command(
-    id = "sound.marker.previous",
-    area = "sound",
-    layer = "sound",
-    icon = "play",
-    menu("Marker"),
-    mutates,
-    undoable
-)]
-pub struct PreviousMarker {}
 
 /// The **markers** of the document, by where they start.
 fn markers(session: &Session) -> Vec<(u64, String, i64)> {
@@ -189,18 +206,6 @@ fn start_of(session: &Session, marker: u64, id: &str) -> Result<i64, EngineError
         .map_err(|error| EngineError::Failed { id: id.to_string(), message: error })
 }
 
-impl RecallMarker {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.marker.recall".to_string();
-        let (marker, name) = marker_of(session, &self.marker, &id)?;
-        let start = start_of(session, marker, &id)?;
-        move_playhead(session, start)?;
-        session.select_ids(&[marker]);
-        Ok(Outcome::changed(format!("the playhead is at the marker `{name}`"))
-            .with_data(json!({ "marker": marker, "name": name, "at": start, "position": start })))
-    }
-}
-
 /// The **step**: the playhead goes to the marker on that side of it.
 ///
 /// A step that has nowhere to go **says so** and changes nothing: the
@@ -228,16 +233,4 @@ fn step(session: &mut Session, forward: bool) -> Result<Outcome, EngineError> {
     session.select_ids(&[marker]);
     Ok(Outcome::changed(format!("the playhead is at the marker `{name}`"))
         .with_data(json!({ "moved": true, "marker": marker, "name": name, "at": start })))
-}
-
-impl NextMarker {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        step(session, true)
-    }
-}
-
-impl PreviousMarker {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        step(session, false)
-    }
 }

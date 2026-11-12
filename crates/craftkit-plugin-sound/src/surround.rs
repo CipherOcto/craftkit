@@ -25,10 +25,10 @@
 //!   `7.1` and `7.1.4`, and a layout that is not one of them is
 //!   refused.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome};
 
 use crate::TrackPayload;
 
@@ -359,142 +359,144 @@ fn wrap180(angle: f64) -> f64 {
     angle
 }
 
-/// lie about where the sound is.
-#[derive(Command)]
-#[command(
-    id = "sound.track.surround",
-    area = "sound",
-    layer = "sound",
-    icon = "sliders",
-    menu("Track", "Surround"),
-    mutates,
-    undoable
-)]
-pub struct SetSurround {
-    /// The track to set.
-    pub track: NodeRef,
-    /// How far to the left or the right: from minus one to one.
-    pub x: Option<Number>,
-    /// How far back or forward: from minus one at the back to one at
-    /// the front.
-    pub y: Option<Number>,
-    /// How high: from zero at the ear to one overhead.
-    pub z: Option<Number>,
-    /// How spread out the sound is: from zero, a point source, to one,
-    /// every speaker.
-    pub divergence: Option<Number>,
-    /// The share of the centre speaker's sound that stays on it, as a
-    /// percentage: the rest goes to a phantom centre on the left and
-    /// the right.
-    pub center: Option<Number>,
-}
+commands! {
+    /// lie about where the sound is.
+    sound.track.surround {
+        area: "sound",
+        layer: "sound",
+        icon: "sliders",
+        mutates,
+        undoable,
+        menu: ("Track", "Surround"),
+        params: {
+            /// The track to set.
 
-impl SetSurround {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.track.surround".to_string();
-        let track = self.track.0;
-        let Some(node) = session.document().node(track) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
-            });
+            track: NodeRef,
+            /// How far to the left or the right: from minus one to one.
+
+            x: Option<Number>,
+            /// How far back or forward: from minus one at the back to one at
+            /// the front.
+
+            y: Option<Number>,
+            /// How high: from zero at the ear to one overhead.
+
+            z: Option<Number>,
+            /// How spread out the sound is: from zero, a point source, to one,
+            /// every speaker.
+
+            divergence: Option<Number>,
+            /// The share of the centre speaker's sound that stays on it, as a
+            /// percentage: the rest goes to a phantom centre on the left and
+            /// the right.
+
+            center: Option<Number>,
+        },
+        run: {
+
+            let id = "sound.track.surround".to_string();
+            let track = self.track.0;
+            let Some(node) = session.document().node(track) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let mut payload = TrackPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            let mut pan = payload.surround.unwrap_or(SurroundPan::middle());
+            if let Some(x) = &self.x {
+                pan.x = within(x.0, -1.0, 1.0, "a position to the left or the right", &id)?;
+            }
+            if let Some(y) = &self.y {
+                pan.y = within(y.0, -1.0, 1.0, "a position back or forward", &id)?;
+            }
+            if let Some(z) = &self.z {
+                pan.z = within(z.0, 0.0, 1.0, "a height", &id)?;
+            }
+            if let Some(divergence) = &self.divergence {
+                pan.divergence =
+                    within(divergence.0, 0.0, 1.0, "a spread from a point source to every speaker", &id)?;
+            }
+            if let Some(center) = &self.center {
+                pan.center = within(center.0, 0.0, 100.0, "a share of the centre speaker's sound", &id)?;
+            }
+            payload.surround = Some(pan);
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(track) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            node.data = data;
+            // The **gains**: what the pan says about each speaker of the
+            // session's layout. They are derived, and they are not stored.
+            let layout = crate::session_of(session.document()).layout.clone();
+            let speakers = layout_speakers(&layout);
+            let gains = surround_gains(speakers, &pan);
+            Ok(Outcome::changed(format!("the track `{track}` is in the room")).with_data(serde_json::json!({
+                "id": track,
+                "surround": pan.to_json(),
+                "layout": layout,
+                "gains": gains,
+            })))
+
         }
-        let mut payload = TrackPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-        let mut pan = payload.surround.unwrap_or(SurroundPan::middle());
-        if let Some(x) = &self.x {
-            pan.x = within(x.0, -1.0, 1.0, "a position to the left or the right", &id)?;
-        }
-        if let Some(y) = &self.y {
-            pan.y = within(y.0, -1.0, 1.0, "a position back or forward", &id)?;
-        }
-        if let Some(z) = &self.z {
-            pan.z = within(z.0, 0.0, 1.0, "a height", &id)?;
-        }
-        if let Some(divergence) = &self.divergence {
-            pan.divergence =
-                within(divergence.0, 0.0, 1.0, "a spread from a point source to every speaker", &id)?;
-        }
-        if let Some(center) = &self.center {
-            pan.center = within(center.0, 0.0, 100.0, "a share of the centre speaker's sound", &id)?;
-        }
-        payload.surround = Some(pan);
-        let data = payload.to_json();
-        let Some(node) = session.document_mut()?.node_mut(track) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        node.data = data;
-        // The **gains**: what the pan says about each speaker of the
-        // session's layout. They are derived, and they are not stored.
-        let layout = crate::session_of(session.document()).layout.clone();
-        let speakers = layout_speakers(&layout);
-        let gains = surround_gains(speakers, &pan);
-        Ok(Outcome::changed(format!("the track `{track}` is in the room")).with_data(serde_json::json!({
-            "id": track,
-            "surround": pan.to_json(),
-            "layout": layout,
-            "gains": gains,
-        })))
     }
-}
+    /// Take a track's **surround pan** away.
+    ///
+    /// A track with no surround pan is balanced, and a balance is not a
+    /// position: the track's sound is in the middle of the room.
+    sound.track.surround.delete {
+        area: "sound",
+        layer: "sound",
+        icon: "minus",
+        mutates,
+        undoable,
+        menu: ("Track", "Surround"),
+        params: {
+            /// The track to take it from.
 
-/// Take a track's **surround pan** away.
-///
-/// A track with no surround pan is balanced, and a balance is not a
-/// position: the track's sound is in the middle of the room.
-#[derive(Command)]
-#[command(
-    id = "sound.track.surround.delete",
-    area = "sound",
-    layer = "sound",
-    icon = "minus",
-    menu("Track", "Surround"),
-    mutates,
-    undoable
-)]
-pub struct DeleteSurround {
-    /// The track to take it from.
-    pub track: NodeRef,
-}
+            track: NodeRef,
+        },
+        run: {
 
-impl DeleteSurround {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.track.surround.delete".to_string();
-        let track = self.track.0;
-        let Some(node) = session.document().node(track) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
-            });
+            let id = "sound.track.surround.delete".to_string();
+            let track = self.track.0;
+            let Some(node) = session.document().node(track) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let mut payload = TrackPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            payload.surround = None;
+            let data = payload.to_json();
+            let Some(node) = session.document_mut()?.node_mut(track) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            node.data = data;
+            Ok(Outcome::changed(format!("the track `{track}` is in the middle of the room"))
+                .with_data(serde_json::json!({ "id": track })))
+
         }
-        let mut payload = TrackPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-        payload.surround = None;
-        let data = payload.to_json();
-        let Some(node) = session.document_mut()?.node_mut(track) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        node.data = data;
-        Ok(Outcome::changed(format!("the track `{track}` is in the middle of the room"))
-            .with_data(serde_json::json!({ "id": track })))
     }
 }
 

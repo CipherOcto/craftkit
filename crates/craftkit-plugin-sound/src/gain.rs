@@ -34,10 +34,10 @@
 //! taken off. A flag says it, and the flag is in the clip's payload,
 //! so a file says whether the gain was in the path.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{Bool, EngineError, Number, Outcome, Session};
+use craftkit_sdk::{Bool, EngineError, Number, Outcome};
 
 use crate::ClipPayload;
 
@@ -51,163 +51,163 @@ pub(crate) const MIN_GAIN_DB: f64 = -144.0;
 /// The loudest a clip may be, in decibels.
 pub(crate) const MAX_GAIN_DB: f64 = 36.0;
 
-/// **Set the gain** of clips.
-///
-/// The gain is set absolutely — `db` — or by a change — `delta_db` —
-/// and one of the two is needed: a command with neither does not know
-/// what the gain should be.
-///
-/// A gain outside the range is **refused** and the clips keep the gain
-/// they had: the tree's command clamps such a gain into the range, and
-/// a gain asked for as a hundred decibels is not a gain. A **change**
-/// that would take a clip out of the range is refused as well, because
-/// the change is what was asked for and the result is not a gain.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.gain",
-    area = "sound",
-    layer = "sound",
-    icon = "sound",
-    menu("Clip", "Gain"),
-    mutates,
-    undoable
-)]
-pub struct SetGain {
-    /// The clips to set the gain of: their ids.
-    pub clips: serde_json::Value,
-    /// The gain, in decibels.
-    pub db: Option<Number>,
-    /// The change in the gain, in decibels.
-    pub delta_db: Option<Number>,
-}
+commands! {
+    /// **Set the gain** of clips.
+    ///
+    /// The gain is set absolutely — `db` — or by a change — `delta_db` —
+    /// and one of the two is needed: a command with neither does not know
+    /// what the gain should be.
+    ///
+    /// A gain outside the range is **refused** and the clips keep the gain
+    /// they had: the tree's command clamps such a gain into the range, and
+    /// a gain asked for as a hundred decibels is not a gain. A **change**
+    /// that would take a clip out of the range is refused as well, because
+    /// the change is what was asked for and the result is not a gain.
+    sound.clip.gain {
+        area: "sound",
+        layer: "sound",
+        icon: "sound",
+        mutates,
+        undoable,
+        menu: ("Clip", "Gain"),
+        params: {
+            /// The clips to set the gain of: their ids.
 
-impl SetGain {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.gain".to_string();
-        let clips = crate::clip_ids_of(&self.clips, &id)?;
-        let (absolute, delta) = match (self.db, self.delta_db) {
-            (Some(db), _) => (Some(db.0), None),
-            (None, Some(delta)) => (None, Some(delta.0)),
-            (None, None) => {
+            clips: serde_json::Value,
+            /// The gain, in decibels.
+
+            db: Option<Number>,
+            /// The change in the gain, in decibels.
+
+            delta_db: Option<Number>,
+        },
+        run: {
+
+            let id = "sound.clip.gain".to_string();
+            let clips = crate::clip_ids_of(&self.clips, &id)?;
+            let (absolute, delta) = match (self.db, self.delta_db) {
+                (Some(db), _) => (Some(db.0), None),
+                (None, Some(delta)) => (None, Some(delta.0)),
+                (None, None) => {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: "the gain in decibels, or the change in it, is needed".to_string(),
+                    });
+                }
+            };
+            if let Some(value) = absolute
+                && !value.is_finite()
+            {
+                return Err(EngineError::Failed { id, message: "a gain is a number of decibels".to_string() });
+            }
+            if let Some(value) = delta
+                && !value.is_finite()
+            {
                 return Err(EngineError::Failed {
                     id,
-                    message: "the gain in decibels, or the change in it, is needed".to_string(),
+                    message: "a change in the gain is a number of decibels".to_string(),
                 });
             }
-        };
-        if let Some(value) = absolute
-            && !value.is_finite()
-        {
-            return Err(EngineError::Failed { id, message: "a gain is a number of decibels".to_string() });
-        }
-        if let Some(value) = delta
-            && !value.is_finite()
-        {
-            return Err(EngineError::Failed {
-                id,
-                message: "a change in the gain is a number of decibels".to_string(),
-            });
-        }
-        let mut set = 0;
-        for clip in &clips {
-            let node = session.document().node(*clip).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip}`"),
-            })?;
-            if node.kind != "sound.clip" {
-                return Err(EngineError::Failed {
+            let mut set = 0;
+            for clip in &clips {
+                let node = session.document().node(*clip).ok_or_else(|| EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-                });
+                    message: format!("there is no node `{clip}`"),
+                })?;
+                if node.kind != "sound.clip" {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                    });
+                }
+                let mut payload = ClipPayload::from_json(&node.data)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                let gain = match absolute {
+                    Some(gain) => gain,
+                    None => payload.gain_db + delta.unwrap_or(0.0),
+                };
+                if !(MIN_GAIN_DB..=MAX_GAIN_DB).contains(&gain) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "a gain is from {MIN_GAIN_DB} to {MAX_GAIN_DB} decibels, and {gain} is not one"
+                        ),
+                    });
+                }
+                if gain == payload.gain_db {
+                    continue;
+                }
+                payload.gain_db = gain;
+                if let Some(node) = session.document_mut()?.node_mut(*clip) {
+                    node.data = payload.to_json();
+                }
+                set += 1;
             }
-            let mut payload = ClipPayload::from_json(&node.data)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            let gain = match absolute {
-                Some(gain) => gain,
-                None => payload.gain_db + delta.unwrap_or(0.0),
-            };
-            if !(MIN_GAIN_DB..=MAX_GAIN_DB).contains(&gain) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "a gain is from {MIN_GAIN_DB} to {MAX_GAIN_DB} decibels, and {gain} is not one"
-                    ),
-                });
+            if set == 0 {
+                return Ok(Outcome::new("the clips are at that gain already"));
             }
-            if gain == payload.gain_db {
-                continue;
-            }
-            payload.gain_db = gain;
-            if let Some(node) = session.document_mut()?.node_mut(*clip) {
-                node.data = payload.to_json();
-            }
-            set += 1;
+            Ok(Outcome::changed(format!("the gain of {set} clips is set"))
+                .with_data(serde_json::json!({ "clips": set })))
+
         }
-        if set == 0 {
-            return Ok(Outcome::new("the clips are at that gain already"));
-        }
-        Ok(Outcome::changed(format!("the gain of {set} clips is set"))
-            .with_data(serde_json::json!({ "clips": set })))
     }
-}
+    /// **Bypass the gain** of clips.
+    ///
+    /// While the bypass is on, the clip plays as it is: the gain is not in
+    /// the path. The gain itself is **kept**, so taking the bypass off
+    /// brings it back — the tree's bypass throws the gain away, which is a
+    /// reset and not a bypass.
+    ///
+    /// Without a bypass given, the bypass is **toggled**.
+    sound.clip.gain.bypass {
+        area: "sound",
+        layer: "sound",
+        icon: "sound",
+        mutates,
+        undoable,
+        menu: ("Clip", "Bypass Gain"),
+        params: {
+            /// The clips to bypass the gain of: their ids.
 
-/// **Bypass the gain** of clips.
-///
-/// While the bypass is on, the clip plays as it is: the gain is not in
-/// the path. The gain itself is **kept**, so taking the bypass off
-/// brings it back — the tree's bypass throws the gain away, which is a
-/// reset and not a bypass.
-///
-/// Without a bypass given, the bypass is **toggled**.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.gain.bypass",
-    area = "sound",
-    layer = "sound",
-    icon = "sound",
-    menu("Clip", "Bypass Gain"),
-    mutates,
-    undoable
-)]
-pub struct BypassGain {
-    /// The clips to bypass the gain of: their ids.
-    pub clips: serde_json::Value,
-    /// Whether the gain is bypassed. Without it, the bypass is toggled.
-    pub bypassed: Option<Bool>,
-}
+            clips: serde_json::Value,
+            /// Whether the gain is bypassed. Without it, the bypass is toggled.
 
-impl BypassGain {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.gain.bypass".to_string();
-        let clips = crate::clip_ids_of(&self.clips, &id)?;
-        let mut set = 0;
-        for clip in &clips {
-            let node = session.document().node(*clip).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip}`"),
-            })?;
-            if node.kind != "sound.clip" {
-                return Err(EngineError::Failed {
+            bypassed: Option<Bool>,
+        },
+        run: {
+
+            let id = "sound.clip.gain.bypass".to_string();
+            let clips = crate::clip_ids_of(&self.clips, &id)?;
+            let mut set = 0;
+            for clip in &clips {
+                let node = session.document().node(*clip).ok_or_else(|| EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-                });
+                    message: format!("there is no node `{clip}`"),
+                })?;
+                if node.kind != "sound.clip" {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                    });
+                }
+                let mut payload = ClipPayload::from_json(&node.data)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+                let bypassed = self.bypassed.map(|bypassed| bypassed.0).unwrap_or(!payload.gain_bypassed);
+                if bypassed == payload.gain_bypassed {
+                    continue;
+                }
+                payload.gain_bypassed = bypassed;
+                if let Some(node) = session.document_mut()?.node_mut(*clip) {
+                    node.data = payload.to_json();
+                }
+                set += 1;
             }
-            let mut payload = ClipPayload::from_json(&node.data)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-            let bypassed = self.bypassed.map(|bypassed| bypassed.0).unwrap_or(!payload.gain_bypassed);
-            if bypassed == payload.gain_bypassed {
-                continue;
+            if set == 0 {
+                return Ok(Outcome::new("the clips are as they are"));
             }
-            payload.gain_bypassed = bypassed;
-            if let Some(node) = session.document_mut()?.node_mut(*clip) {
-                node.data = payload.to_json();
-            }
-            set += 1;
+            Ok(Outcome::changed(format!("the gain of {set} clips is bypassed"))
+                .with_data(serde_json::json!({ "clips": set })))
+
         }
-        if set == 0 {
-            return Ok(Outcome::new("the clips are as they are"));
-        }
-        Ok(Outcome::changed(format!("the gain of {set} clips is bypassed"))
-            .with_data(serde_json::json!({ "clips": set })))
     }
 }

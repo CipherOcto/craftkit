@@ -34,60 +34,60 @@
 
 use std::sync::Arc;
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, NodeRef, Outcome};
 
 use crate::ClipPayload;
 use crate::mixer::LanePayload;
 
-/// **Heal** a track: the clips that were separated are joined.
-///
-/// The clips of the track are walked in order and each one is joined
-/// with the one before it when they are the same sound continued. The
-/// answer says how many joins were made.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.heal",
-    area = "sound",
-    layer = "sound",
-    icon = "trim",
-    menu("Clip", "Heal"),
-    mutates,
-    undoable
-)]
-pub struct HealTrack {
-    /// The track to heal.
-    pub track: NodeRef,
-}
+commands! {
+    /// **Heal** a track: the clips that were separated are joined.
+    ///
+    /// The clips of the track are walked in order and each one is joined
+    /// with the one before it when they are the same sound continued. The
+    /// answer says how many joins were made.
+    sound.clip.heal {
+        area: "sound",
+        layer: "sound",
+        icon: "trim",
+        mutates,
+        undoable,
+        menu: ("Clip", "Heal"),
+        params: {
+            /// The track to heal.
 
-impl HealTrack {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.heal".to_string();
-        let track_id = self.track.0;
-        let node = session.document().node(track_id).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{track_id}`"),
-        })?;
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
+            track: NodeRef,
+        },
+        run: {
+
+            let id = "sound.clip.heal".to_string();
+            let track_id = self.track.0;
+            let node = session.document().node(track_id).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
-                message: format!("the node `{track_id}` is a `{}` and not a track", node.kind),
-            });
+                message: format!("there is no node `{track_id}`"),
+            })?;
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{track_id}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let playlists: Vec<u64> = node
+                .children
+                .iter()
+                .filter(|child| child.kind == "sound.playlist")
+                .map(|child| child.id)
+                .collect();
+            let mut healed = 0;
+            for playlist in playlists {
+                healed += heal_playlist(session.document_mut()?, playlist);
+            }
+            Ok(Outcome::changed(format!("healed {healed} separations of the track `{track_id}`"))
+                .with_data(serde_json::json!({ "track": track_id, "healed": healed })))
+
         }
-        let playlists: Vec<u64> = node
-            .children
-            .iter()
-            .filter(|child| child.kind == "sound.playlist")
-            .map(|child| child.id)
-            .collect();
-        let mut healed = 0;
-        for playlist in playlists {
-            healed += heal_playlist(session.document_mut()?, playlist);
-        }
-        Ok(Outcome::changed(format!("healed {healed} separations of the track `{track_id}`"))
-            .with_data(serde_json::json!({ "track": track_id, "healed": healed })))
     }
 }
 

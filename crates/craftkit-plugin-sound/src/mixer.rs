@@ -23,7 +23,7 @@
 //! inserted where, what is automated — and the **derived order** of it,
 //! which is what a router needs before it can route anything.
 
-use craftkit_derive::{Command, NodeKind};
+use craftkit_derive::{NodeKind, commands};
 
 use craftkit_sdk::{
     Bool, Canvas, Document, EngineError, Node, NodeRef, Number, Outcome, Point, Session, Text,
@@ -390,213 +390,1439 @@ impl LanePayload {
     }
 }
 
-/// Make a bus.
-#[derive(Command)]
-#[command(
-    id = "sound.bus.add",
-    area = "sound",
-    layer = "sound",
-    icon = "plus",
-    menu("Track", "New"),
-    mutates,
-    undoable
-)]
-pub struct AddBus {
-    /// What to call it.
-    pub name: Text,
-    /// How many channels it has.
-    pub channels: Option<Number>,
-}
+commands! {
+    /// Make a bus.
+    sound.bus.add {
+        area: "sound",
+        layer: "sound",
+        icon: "plus",
+        mutates,
+        undoable,
+        menu: ("Track", "New"),
+        params: {
+            /// What to call it.
 
-impl AddBus {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.clone();
-        let channels = match &self.channels {
-            Some(channels) => channels.0 as u32,
-            None => 2,
-        };
-        let payload = BusPayload { name: name.clone(), channels };
-        let id = session.document_mut()?.add_node_with(name.clone(), "sound.bus", None, payload.to_json());
-        Ok(Outcome::changed(format!("added a bus `{name}`"))
-            .with_data(serde_json::json!({ "id": id, "name": name })))
+            name: Text,
+            /// How many channels it has.
+
+            channels: Option<Number>,
+        },
+        run: {
+
+            let name = self.name.0.clone();
+            let channels = match &self.channels {
+                Some(channels) => channels.0 as u32,
+                None => 2,
+            };
+            let payload = BusPayload { name: name.clone(), channels };
+            let id = session.document_mut()?.add_node_with(name.clone(), "sound.bus", None, payload.to_json());
+            Ok(Outcome::changed(format!("added a bus `{name}`"))
+                .with_data(serde_json::json!({ "id": id, "name": name })))
+
+        }
     }
-}
+    /// Send a track to a bus.
+    ///
+    /// This is a **relation**: the track keeps the bus in its routing, and the
+    /// two nodes are not in each other.
+    sound.route.add {
+        area: "sound",
+        layer: "sound",
+        icon: "link",
+        mutates,
+        undoable,
+        menu: ("Track", "Route"),
+        params: {
+            /// The track that feeds the bus.
 
-/// Send a track to a bus.
-///
-/// This is a **relation**: the track keeps the bus in its routing, and the
-/// two nodes are not in each other.
-#[derive(Command)]
-#[command(
-    id = "sound.route.add",
-    area = "sound",
-    layer = "sound",
-    icon = "link",
-    menu("Track", "Route"),
-    mutates,
-    undoable
-)]
-pub struct AddRoute {
-    /// The track that feeds the bus.
-    pub track: NodeRef,
-    /// The bus it feeds.
-    pub bus: NodeRef,
-}
+            track: NodeRef,
+            /// The bus it feeds.
 
-impl AddRoute {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let track = self.track.0;
-        let bus = self.bus.0;
-        for (id, what) in [(track, "track"), (bus, "bus")] {
-            if session.document().node(id).is_none() {
+            bus: NodeRef,
+        },
+        run: {
+
+            let track = self.track.0;
+            let bus = self.bus.0;
+            for (id, what) in [(track, "track"), (bus, "bus")] {
+                if session.document().node(id).is_none() {
+                    return Err(EngineError::Failed {
+                        id: "sound.route.add".to_string(),
+                        message: format!("there is no {what} `{id}`"),
+                    });
+                }
+            }
+            let relation = craftkit_sdk::Relation::new(track, bus, "route");
+            if !session.document_mut()?.add_relation(relation) {
                 return Err(EngineError::Failed {
                     id: "sound.route.add".to_string(),
-                    message: format!("there is no {what} `{id}`"),
+                    message: format!("the track `{track}` already feeds the bus `{bus}`"),
                 });
             }
+            Ok(Outcome::changed(format!("the track `{track}` feeds the bus `{bus}`"))
+                .with_data(serde_json::json!({ "track": track, "bus": bus })))
+
         }
-        let relation = craftkit_sdk::Relation::new(track, bus, "route");
-        if !session.document_mut()?.add_relation(relation) {
-            return Err(EngineError::Failed {
-                id: "sound.route.add".to_string(),
-                message: format!("the track `{track}` already feeds the bus `{bus}`"),
-            });
-        }
-        Ok(Outcome::changed(format!("the track `{track}` feeds the bus `{bus}`"))
-            .with_data(serde_json::json!({ "track": track, "bus": bus })))
     }
-}
+    /// **Take away** a route: the track stops feeding the bus.
+    ///
+    /// A route is a **relation** and not a node, and a relation that
+    /// cannot be taken away is a mistake that cannot be undone: the track
+    /// keeps feeding the bus and the mixer keeps mixing it in.
+    ///
+    /// A route that is not there is **refused**, and it is refused by
+    /// name: a link that was never made is not a link that was taken away.
+    sound.route.remove {
+        area: "sound",
+        layer: "sound",
+        icon: "link",
+        mutates,
+        undoable,
+        menu: ("Track", "Route"),
+        params: {
+            /// The track that fed the bus.
 
-/// **Take away** a route: the track stops feeding the bus.
-///
-/// A route is a **relation** and not a node, and a relation that
-/// cannot be taken away is a mistake that cannot be undone: the track
-/// keeps feeding the bus and the mixer keeps mixing it in.
-///
-/// A route that is not there is **refused**, and it is refused by
-/// name: a link that was never made is not a link that was taken away.
-#[derive(Command)]
-#[command(
-    id = "sound.route.remove",
-    area = "sound",
-    layer = "sound",
-    icon = "link",
-    menu("Track", "Route"),
-    mutates,
-    undoable
-)]
-pub struct RemoveRoute {
-    /// The track that fed the bus.
-    pub track: NodeRef,
-    /// The bus it fed.
-    pub bus: NodeRef,
-}
+            track: NodeRef,
+            /// The bus it fed.
 
-impl RemoveRoute {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.route.remove".to_string();
-        let track = self.track.0;
-        let bus = self.bus.0;
-        for (node, what) in [(track, "track"), (bus, "bus")] {
-            if session.document().node(node).is_none() {
+            bus: NodeRef,
+        },
+        run: {
+
+            let id = "sound.route.remove".to_string();
+            let track = self.track.0;
+            let bus = self.bus.0;
+            for (node, what) in [(track, "track"), (bus, "bus")] {
+                if session.document().node(node).is_none() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no {what} `{node}`"),
+                    });
+                }
+            }
+            let removed = session.document_mut()?.remove_relations(|relation| {
+                relation.from == track && relation.to == bus && relation.kind == "route"
+            });
+            if removed == 0 {
                 return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("there is no {what} `{node}`"),
+                    id,
+                    message: format!("the track `{track}` does not feed the bus `{bus}`"),
                 });
             }
+            Ok(Outcome::changed(format!("the track `{track}` no longer feeds the bus `{bus}`"))
+                .with_data(serde_json::json!({ "track": track, "bus": bus })))
+
         }
-        let removed = session.document_mut()?.remove_relations(|relation| {
-            relation.from == track && relation.to == bus && relation.kind == "route"
-        });
-        if removed == 0 {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the track `{track}` does not feed the bus `{bus}`"),
-            });
-        }
-        Ok(Outcome::changed(format!("the track `{track}` no longer feeds the bus `{bus}`"))
-            .with_data(serde_json::json!({ "track": track, "bus": bus })))
     }
-}
+    /// Make a track **read** a bus.
+    ///
+    /// A bus is a **destination**: sound collects there and is not heard
+    /// there. Something must read it and take it into the mix — the tree's
+    /// aux is a strip that reads a bus, and the bus is silent on its own.
+    ///
+    /// The reading is a **relation**: the node says what it is and the
+    /// relation says what it reads.
+    sound.track.input {
+        area: "sound",
+        layer: "sound",
+        icon: "link",
+        mutates,
+        undoable,
+        menu: ("Track", "Input"),
+        params: {
+            /// The track that reads the bus.
 
-/// Make a track **read** a bus.
-///
-/// A bus is a **destination**: sound collects there and is not heard
-/// there. Something must read it and take it into the mix — the tree's
-/// aux is a strip that reads a bus, and the bus is silent on its own.
-///
-/// The reading is a **relation**: the node says what it is and the
-/// relation says what it reads.
-#[derive(Command)]
-#[command(
-    id = "sound.track.input",
-    area = "sound",
-    layer = "sound",
-    icon = "link",
-    menu("Track", "Input"),
-    mutates,
-    undoable
-)]
-pub struct AddInput {
-    /// The track that reads the bus.
-    pub track: NodeRef,
-    /// The bus it reads.
-    pub bus: NodeRef,
-}
+            track: NodeRef,
+            /// The bus it reads.
 
-impl AddInput {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let track = self.track.0;
-        let bus = self.bus.0;
-        match session.document().node(track) {
-            Some(node) if node.kind == "sound.track" => {}
-            Some(node) => {
+            bus: NodeRef,
+        },
+        run: {
+
+            let track = self.track.0;
+            let bus = self.bus.0;
+            match session.document().node(track) {
+                Some(node) if node.kind == "sound.track" => {}
+                Some(node) => {
+                    return Err(EngineError::Failed {
+                        id: "sound.track.input".to_string(),
+                        message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                    });
+                }
+                None => {
+                    return Err(EngineError::Failed {
+                        id: "sound.track.input".to_string(),
+                        message: format!("there is no track `{track}`"),
+                    });
+                }
+            }
+            match session.document().node(bus) {
+                Some(node) if node.kind == "sound.bus" => {}
+                Some(node) => {
+                    return Err(EngineError::Failed {
+                        id: "sound.track.input".to_string(),
+                        message: format!("the node `{bus}` is a `{}` and not a bus", node.kind),
+                    });
+                }
+                None => {
+                    return Err(EngineError::Failed {
+                        id: "sound.track.input".to_string(),
+                        message: format!("there is no bus `{bus}`"),
+                    });
+                }
+            }
+            // A track reads **one** bus: a reader with two inputs is a
+            // reader with no meaning.
+            for relation in session.document().relations_from(track, Some("input")) {
+                if relation.to != bus {
+                    return Err(EngineError::Failed {
+                        id: "sound.track.input".to_string(),
+                        message: format!("the track `{track}` already reads the bus `{}`", relation.to),
+                    });
+                }
+            }
+            let relation = craftkit_sdk::Relation::new(track, bus, "input");
+            if !session.document_mut()?.add_relation(relation) {
                 return Err(EngineError::Failed {
                     id: "sound.track.input".to_string(),
+                    message: format!("the track `{track}` already reads the bus `{bus}`"),
+                });
+            }
+            Ok(Outcome::changed(format!("the track `{track}` reads the bus `{bus}`"))
+                .with_data(serde_json::json!({ "track": track, "bus": bus })))
+
+        }
+    }
+    /// Put a plugin in a slot on a track.
+    sound.insert.add {
+        area: "sound",
+        layer: "sound",
+        icon: "plus",
+        mutates,
+        undoable,
+        menu: ("Track", "Inserts"),
+        params: {
+            /// The track the insert is on.
+            ///
+            /// An insert is on **one** thing: a track or a clip, and not both.
+
+            track: Option<NodeRef>,
+            /// The clip the insert is on.
+            ///
+            /// A clip may carry effects of its own: the tree's clip effects are
+            /// an equaliser and a compressor on one clip and not on the track.
+
+            clip: Option<NodeRef>,
+            /// Which plugin it is.
+
+            plugin: Text,
+            /// Whether it is bypassed.
+
+            bypass: Option<craftkit_sdk::Bool>,
+        },
+        run: {
+
+            // An insert is on **one** thing: a track or a clip.
+            let (owner, owner_id, kind) = match (self.track, self.clip) {
+                (Some(track), None) => ("track", track.0, "sound.track"),
+                (None, Some(clip)) => ("clip", clip.0, "sound.clip"),
+                (Some(_), Some(_)) => {
+                    return Err(EngineError::Failed {
+                        id: "sound.insert.add".to_string(),
+                        message: "an insert is on one thing: a track or a clip".to_string(),
+                    });
+                }
+                (None, None) => {
+                    return Err(EngineError::Failed {
+                        id: "sound.insert.add".to_string(),
+                        message: "an insert is on something: which track, and which clip?".to_string(),
+                    });
+                }
+            };
+            match session.document().node(owner_id) {
+                Some(node) if node.kind == kind => {}
+                Some(node) => {
+                    return Err(EngineError::Failed {
+                        id: "sound.insert.add".to_string(),
+                        message: format!("the node `{owner_id}` is a `{}` and not a {owner}", node.kind),
+                    });
+                }
+                None => {
+                    return Err(EngineError::Failed {
+                        id: "sound.insert.add".to_string(),
+                        message: format!("there is no {owner} `{owner_id}`"),
+                    });
+                }
+            }
+            let plugin = self.plugin.0.clone();
+            if plugin.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "sound.insert.add".to_string(),
+                    message: "an insert says which plugin it is".to_string(),
+                });
+            }
+            let bypass = self.bypass.map(|bypass| bypass.0).unwrap_or(false);
+            let payload =
+                InsertPayload { plugin: plugin.clone(), params: Json::Object(Default::default()), bypass };
+            let id = session.document_mut()?.add_node_with_under(
+                Some(owner_id),
+                plugin.clone(),
+                "sound.insert",
+                None,
+                payload.to_json(),
+            );
+            Ok(Outcome::changed(format!("added a `{plugin}` insert on the {owner} `{owner_id}`"))
+                .with_data(serde_json::json!({ "id": id, owner: owner_id, "plugin": plugin })))
+
+        }
+    }
+    /// Change an **insert**: its parameters, or whether it is bypassed.
+    ///
+    /// An insert's parameters are how a plugin is told what to do, and a
+    /// document may not change them by itself: the change is a **command**,
+    /// like every other change.
+    sound.insert.set {
+        area: "sound",
+        layer: "sound",
+        icon: "pencil",
+        mutates,
+        undoable,
+        menu: ("Track", "Inserts"),
+        params: {
+            /// The insert to change.
+
+            insert: NodeRef,
+            /// Its parameters, by name: a table of parameter to number.
+
+            parameters: Option<Json>,
+            /// Whether it is bypassed.
+
+            bypass: Option<craftkit_sdk::Bool>,
+        },
+        run: {
+
+            let id = self.insert.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.insert.set".to_string(),
+                    message: format!("there is no node {id} in the document"),
+                });
+            };
+            if node.kind != "sound.insert" {
+                return Err(EngineError::Failed {
+                    id: "sound.insert.set".to_string(),
+                    message: format!("node {id} is not an insert"),
+                });
+            }
+            // The parameters are **numbers**, and a value that is not a
+            // number is **left out**: the reader's rule (§43), and the
+            // parameters of a plugin are numbers.
+            let params = match &self.parameters {
+                Some(params) => {
+                    let mut values = serde_json::Map::new();
+                    if let Some(table) = params.as_object() {
+                        for (name, value) in table {
+                            if let Some(number) = value.as_f64()
+                                && number.is_finite()
+                            {
+                                values.insert(name.clone(), serde_json::json!(number));
+                            }
+                        }
+                    }
+                    Some(values)
+                }
+                None => None,
+            };
+            let bypass = self.bypass.map(|bypass| bypass.0);
+            let Some(node) = session.document_mut()?.node_mut(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.insert.set".to_string(),
+                    message: format!("there is no node {id} in the document"),
+                });
+            };
+            if let Some(params) = params {
+                node.data["params"] = serde_json::Value::Object(params);
+            }
+            if let Some(bypass) = bypass {
+                node.data["bypass"] = serde_json::json!(bypass);
+            }
+            Ok(Outcome::changed(format!("changed the insert {id}")).with_data(serde_json::json!({ "id": id })))
+
+        }
+    }
+    /// **Take away** an insert: the plugin is not on the thing any more.
+    ///
+    /// The tree's insert lives in a **slot** on the track, and taking it
+    /// away empties the slot. Here the insert is a **node** under the
+    /// thing it is on, and taking it away takes the node away: there is
+    /// no slot left empty, because there was never a slot.
+    ///
+    /// A node that is **not an insert** is refused.
+    sound.insert.remove {
+        area: "sound",
+        layer: "sound",
+        icon: "minus",
+        mutates,
+        undoable,
+        menu: ("Track", "Inserts"),
+        params: {
+            /// The insert to take away.
+
+            insert: NodeRef,
+        },
+        run: {
+
+            let id = self.insert.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "sound.insert.remove".to_string(),
+                    message: format!("there is no node `{id}` in the document"),
+                });
+            };
+            if node.kind != "sound.insert" {
+                return Err(EngineError::Failed {
+                    id: "sound.insert.remove".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not an insert", node.kind),
+                });
+            }
+            let owner = crate::timeline::parent_of(session.document(), id).map(|owner| owner.id);
+            session.document_mut()?.remove_node(id);
+            Ok(Outcome::changed(format!("took the insert `{id}` away"))
+                .with_data(serde_json::json!({ "id": id, "owner": owner })))
+
+        }
+    }
+    /// **Move** an insert: it and another one swap their places in the
+    /// chain.
+    ///
+    /// The chain is the **order** of the inserts on the thing they are on,
+    /// and the order is the order they are run in. The tree's insert lives
+    /// in a **slot** and the move swaps two slots; here the insert is a
+    /// **node** and the move swaps two nodes.
+    ///
+    /// Two inserts of **different** things are refused: a chain is the
+    /// chain of one thing, and there is no chain that holds both.
+    sound.insert.move {
+        area: "sound",
+        layer: "sound",
+        icon: "move",
+        mutates,
+        undoable,
+        menu: ("Track", "Inserts"),
+        params: {
+            /// The insert to move.
+
+            insert: NodeRef,
+            /// The insert it swaps places with.
+
+            other: NodeRef,
+        },
+        run: {
+
+            let id = "sound.insert.move".to_string();
+            let (insert, other) = (self.insert.0, self.other.0);
+            for node_id in [insert, other] {
+                match session.document().node(node_id) {
+                    Some(node) if node.kind == "sound.insert" => {}
+                    Some(node) => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the node `{node_id}` is a `{}` and not an insert", node.kind),
+                        });
+                    }
+                    None => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("there is no node `{node_id}` in the document"),
+                        });
+                    }
+                }
+            }
+            let owner = crate::timeline::parent_of(session.document(), insert).map(|owner| owner.id);
+            let other_owner = crate::timeline::parent_of(session.document(), other).map(|owner| owner.id);
+            if owner != other_owner {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the two inserts are not on the same thing: a chain is the chain of one thing"
+                        .to_string(),
+                });
+            }
+            let Some(owner_id) = owner else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the insert `{insert}` is on nothing"),
+                });
+            };
+            let Some(node) = session.document_mut()?.node_mut(owner_id) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{owner_id}` in the document"),
+                });
+            };
+            let children = &mut node.children;
+            let Some(from) = children.iter().position(|child| child.id == insert) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the insert `{insert}` is not on `{owner_id}`"),
+                });
+            };
+            let Some(to) = children.iter().position(|child| child.id == other) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the insert `{other}` is not on `{owner_id}`"),
+                });
+            };
+            children.swap(from, to);
+            Ok(Outcome::changed(format!("moved the insert `{insert}` and `{other}`"))
+                .with_data(serde_json::json!({ "insert": insert, "other": other, "owner": owner_id })))
+
+        }
+    }
+    /// Send a track to a bus at a level.
+    ///
+    /// The send is a node under the track, and the bus it goes to is a
+    /// relation: the node says what the send *is* and the relation says where
+    /// it goes.
+    sound.send.add {
+        area: "sound",
+        layer: "sound",
+        icon: "plus",
+        mutates,
+        undoable,
+        menu: ("Track", "Sends"),
+        params: {
+            /// The track the send is on.
+
+            track: NodeRef,
+            /// The bus it goes to.
+
+            bus: NodeRef,
+            /// Its level, in decibels.
+
+            level_db: Option<Number>,
+            /// Its pan, from minus one to one.
+
+            pan: Option<Number>,
+            /// Whether the send is silent.
+
+            mute: Option<Bool>,
+            /// Whether the send is taken before the track's fader.
+
+            pre_fader: Option<Bool>,
+        },
+        run: {
+
+            let track = self.track.0;
+            let bus = self.bus.0;
+            for (id, what) in [(track, "track"), (bus, "bus")] {
+                if session.document().node(id).is_none() {
+                    return Err(EngineError::Failed {
+                        id: "sound.send.add".to_string(),
+                        message: format!("there is no {what} `{id}`"),
+                    });
+                }
+            }
+            let level_db = match &self.level_db {
+                Some(level) => level.0,
+                None => 0.0,
+            };
+            if !level_db.is_finite() {
+                return Err(EngineError::Failed {
+                    id: "sound.send.add".to_string(),
+                    message: "a level is a number".to_string(),
+                });
+            }
+            let pan = match &self.pan {
+                Some(pan) => pan.0,
+                None => 0.0,
+            };
+            if !pan.is_finite() || !(-1.0..=1.0).contains(&pan) {
+                return Err(EngineError::Failed {
+                    id: "sound.send.add".to_string(),
+                    message: "a pan is a number between minus one and one".to_string(),
+                });
+            }
+            let mute = self.mute.map(|mute| mute.0).unwrap_or(false);
+            let pre_fader = self.pre_fader.map(|pre| pre.0).unwrap_or(false);
+            // A **reader** carries the bus's sound and nothing else: it
+            // takes a bus into the mix and does not copy itself anywhere.
+            if reads_bus(session.document(), track) {
+                return Err(EngineError::Failed {
+                    id: "sound.send.add".to_string(),
+                    message: format!("the track `{track}` reads a bus, and it has no sends"),
+                });
+            }
+            let payload = SendPayload { level_db, pan, mute, pre_fader };
+            let id = session.document_mut()?.add_node_with_under(
+                Some(track),
+                format!("send to {bus}"),
+                "sound.send",
+                None,
+                payload.to_json(),
+            );
+            let relation = craftkit_sdk::Relation::new(id, bus, "send");
+            session.document_mut()?.add_relation(relation);
+            Ok(Outcome::changed(format!("the track `{track}` sends to the bus `{bus}`"))
+                .with_data(serde_json::json!({ "id": id, "track": track, "bus": bus })))
+
+        }
+    }
+    /// **Take away** the reading of a bus: the track stops reading it.
+    ///
+    /// A bus is silent on its own: something must read it and take it into
+    /// the mix, and the reading is a **relation**. A relation that cannot
+    /// be taken away is a mistake that cannot be undone.
+    sound.track.input.remove {
+        area: "sound",
+        layer: "sound",
+        icon: "link",
+        mutates,
+        undoable,
+        menu: ("Track", "Input"),
+        params: {
+            /// The track that read the bus.
+
+            track: NodeRef,
+            /// The bus it read.
+
+            bus: NodeRef,
+        },
+        run: {
+
+            let id = "sound.track.input.remove".to_string();
+            let track = self.track.0;
+            let bus = self.bus.0;
+            for (node, what) in [(track, "track"), (bus, "bus")] {
+                if session.document().node(node).is_none() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no {what} `{node}`"),
+                    });
+                }
+            }
+            let removed = session.document_mut()?.remove_relations(|relation| {
+                relation.from == track && relation.to == bus && relation.kind == "input"
+            });
+            if removed == 0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the track `{track}` does not read the bus `{bus}`"),
+                });
+            }
+            Ok(Outcome::changed(format!("the track `{track}` no longer reads the bus `{bus}`"))
+                .with_data(serde_json::json!({ "track": track, "bus": bus })))
+
+        }
+    }
+    /// **Change** a send: its level, its pan, whether it is silent, and
+    /// whether it is taken before the track's fader.
+    ///
+    /// The tree's send has a command for its **level** and another for the
+    /// rest, and this one has a command for the send's own settings: the
+    /// send is a thing, and the things about it are the send's.
+    ///
+    /// A level outside the tree's range is **refused** and not pulled to
+    /// the edge, and a pan outside minus one and one is refused too.
+    sound.send.set {
+        area: "sound",
+        layer: "sound",
+        icon: "sliders",
+        mutates,
+        undoable,
+        menu: ("Track", "Send"),
+        params: {
+            /// The send to change.
+
+            send: NodeRef,
+            /// Its level, in decibels: from minus one hundred and forty-four to
+            /// twelve.
+
+            level_db: Option<Number>,
+            /// Its pan, from minus one to one.
+
+            pan: Option<Number>,
+            /// Whether the send is silent.
+
+            mute: Option<craftkit_sdk::Bool>,
+            /// Whether the send is taken before the track's fader.
+
+            pre_fader: Option<craftkit_sdk::Bool>,
+        },
+        run: {
+
+            let id = "sound.send.set".to_string();
+            let send = self.send.0;
+            let Some(node) = session.document().node(send) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{send}` in the document"),
+                });
+            };
+            if node.kind != "sound.send" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{send}` is a `{}` and not a send", node.kind),
+                });
+            }
+            let mut payload = SendPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            if let Some(level) = &self.level_db {
+                let decibels = level.0;
+                if !decibels.is_finite() || !(-144.0..=12.0).contains(&decibels) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message:
+                            "a level is a number of decibels from minus one hundred and forty-four to twelve"
+                                .to_string(),
+                    });
+                }
+                payload.level_db = decibels;
+            }
+            if let Some(pan) = &self.pan {
+                let value = pan.0;
+                if !value.is_finite() || !(-1.0..=1.0).contains(&value) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a pan is a number between minus one and one".to_string(),
+                    });
+                }
+                payload.pan = value;
+            }
+            if let Some(mute) = &self.mute {
+                payload.mute = mute.0;
+            }
+            if let Some(pre_fader) = &self.pre_fader {
+                payload.pre_fader = pre_fader.0;
+            }
+            let Some(node) = session.document_mut()?.node_mut(send) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{send}` in the document"),
+                });
+            };
+            node.data = payload.to_json();
+            Ok(Outcome::changed(format!("changed the send `{send}`")).with_data(serde_json::json!({
+                "id": send,
+                "level_db": payload.level_db,
+                "pan": payload.pan,
+                "mute": payload.mute,
+                "pre_fader": payload.pre_fader,
+            })))
+
+        }
+    }
+    /// **Take away** a send.
+    ///
+    /// The send is a **node** under the track, and it goes with its link
+    /// to the bus: a send that is there and points at nothing is a send
+    /// that sends nothing, and it is litter.
+    sound.send.remove {
+        area: "sound",
+        layer: "sound",
+        icon: "minus",
+        mutates,
+        undoable,
+        menu: ("Track", "Send"),
+        params: {
+            /// The send to take away.
+
+            send: NodeRef,
+        },
+        run: {
+
+            let id = "sound.send.remove".to_string();
+            let send = self.send.0;
+            let node = session.document().node(send).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no send `{send}`"),
+            })?;
+            if node.kind != "sound.send" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{send}` is a `{}` and not a send", node.kind),
+                });
+            }
+            session.document_mut()?.remove_node(send);
+            Ok(Outcome::changed(format!("took the send `{send}` away"))
+                .with_data(serde_json::json!({ "send": send })))
+
+        }
+    }
+    /// Automate a parameter of a track.
+    ///
+    /// The lane says which parameter it moves, and the parameter is a
+    /// **string**: `volume`, `pan`, `mute`, or anything a node's payload
+    /// names.
+    sound.lane.add {
+        area: "sound",
+        layer: "sound",
+        icon: "plus",
+        mutates,
+        undoable,
+        menu: ("Track", "Automation"),
+        params: {
+            /// The track whose parameter is automated. A lane automates **one**
+            /// thing: a track or a clip, and not both.
+
+            track: Option<NodeRef>,
+            /// The clip whose parameter is automated.
+
+            clip: Option<NodeRef>,
+            /// Which parameter: `volume`, `pan`, `mute`, …
+
+            param: Text,
+            /// The breakpoints: a list of `[at, value]`, where `at` is a time in
+            /// samples.
+
+            points: Option<Json>,
+        },
+        run: {
+
+            // A lane automates **one** thing: a track or a clip. The
+            // family's clip carries a curve of its own, and the tree's
+            // lane is that curve when it is under a clip.
+            let (owner, owner_id) = match (self.track, self.clip) {
+                (Some(track), None) => ("track", track.0),
+                (None, Some(clip)) => ("clip", clip.0),
+                (Some(_), Some(_)) => {
+                    return Err(EngineError::Failed {
+                        id: "sound.lane.add".to_string(),
+                        message: "a lane automates one thing: a track or a clip".to_string(),
+                    });
+                }
+                (None, None) => {
+                    return Err(EngineError::Failed {
+                        id: "sound.lane.add".to_string(),
+                        message: "a lane automates something: which track, and which clip?".to_string(),
+                    });
+                }
+            };
+            let kind = if owner == "track" { "sound.track" } else { "sound.clip" };
+            match session.document().node(owner_id) {
+                Some(node) if node.kind == kind => {}
+                Some(node) => {
+                    return Err(EngineError::Failed {
+                        id: "sound.lane.add".to_string(),
+                        message: format!("the node `{owner_id}` is a `{}` and not a {owner}", node.kind),
+                    });
+                }
+                None => {
+                    return Err(EngineError::Failed {
+                        id: "sound.lane.add".to_string(),
+                        message: format!("there is no {owner} `{owner_id}`"),
+                    });
+                }
+            }
+            let param = self.param.0.clone();
+            if param.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "sound.lane.add".to_string(),
+                    message: "a lane says which parameter it moves".to_string(),
+                });
+            }
+            let points = match &self.points {
+                Some(points) => {
+                    let value = serde_json::json!({ "param": param, "points": points });
+                    LanePayload::from_json(&value)
+                        .map_err(|error| EngineError::Failed {
+                            id: "sound.lane.add".to_string(),
+                            message: format!("the breakpoints are not breakpoints: {error}"),
+                        })?
+                        .points
+                }
+                None => Vec::new(),
+            };
+            let payload = LanePayload { param: param.clone(), points };
+            let id = session.document_mut()?.add_node_with_under(
+                Some(owner_id),
+                format!("{param} automation"),
+                "sound.lane",
+                None,
+                payload.to_json(),
+            );
+            Ok(Outcome::changed(format!("the {owner} `{owner_id}` automates `{param}`"))
+                .with_data(serde_json::json!({ "id": id, "owner": owner_id, "param": param })))
+
+        }
+    }
+    /// **Set a breakpoint** on a lane.
+    ///
+    /// A breakpoint that is already there takes the new value, and a
+    /// breakpoint that is not there is added: the lane's points are in
+    /// order of their time, so "the breakpoint at that time" is a thing
+    /// that can be named.
+    sound.lane.point.set {
+        area: "sound",
+        layer: "sound",
+        icon: "plus",
+        mutates,
+        undoable,
+        menu: ("Track", "Automation"),
+        params: {
+            /// The lane the breakpoint goes on.
+
+            lane: NodeRef,
+            /// Where the breakpoint is, in the owner's samples.
+
+            at: Number,
+            /// The value at that time.
+
+            value: Number,
+        },
+        run: {
+
+            let id = "sound.lane.point.set".to_string();
+            let lane = self.lane.0;
+            let mut payload = lane_of(session, &id, lane)?;
+            let at = crate::samples(self.at.0, "where the breakpoint is")?;
+            let value = check_value(&id, &payload.param, self.value.0)?;
+            match payload.points.iter_mut().find(|(when, _)| *when == at) {
+                Some(point) => point.1 = value,
+                None => payload.points.push((at, value)),
+            }
+            payload.points.sort_by_key(|(at, _)| *at);
+            write_lane(session, lane, &payload)?;
+            Ok(Outcome::changed(format!("set a breakpoint on the lane `{lane}`"))
+                .with_data(serde_json::json!({ "lane": lane, "at": at, "value": value })))
+
+        }
+    }
+    /// **Take a breakpoint** off a lane.
+    ///
+    /// A time that has no breakpoint on it is **refused**: a breakpoint
+    /// that is not there is not one that was taken away.
+    sound.lane.point.remove {
+        area: "sound",
+        layer: "sound",
+        icon: "minus",
+        mutates,
+        undoable,
+        menu: ("Track", "Automation"),
+        params: {
+            /// The lane the breakpoint is on.
+
+            lane: NodeRef,
+            /// Where the breakpoint is, in the owner's samples.
+
+            at: Number,
+        },
+        run: {
+
+            let id = "sound.lane.point.remove".to_string();
+            let lane = self.lane.0;
+            let mut payload = lane_of(session, &id, lane)?;
+            let at = crate::samples(self.at.0, "where the breakpoint is")?;
+            let before = payload.points.len();
+            payload.points.retain(|(when, _)| *when != at);
+            if payload.points.len() == before {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the lane `{lane}` has no breakpoint at {at}"),
+                });
+            }
+            write_lane(session, lane, &payload)?;
+            Ok(Outcome::changed(format!("took a breakpoint off the lane `{lane}`"))
+                .with_data(serde_json::json!({ "lane": lane, "at": at })))
+
+        }
+    }
+    /// **Clear** the breakpoints of a lane.
+    ///
+    /// Without a range every breakpoint goes, and with one the breakpoints
+    /// in the range go and the rest stay: the tree's command clears a
+    /// range or the whole lane, and the range is the tree's selection.
+    sound.lane.clear {
+        area: "sound",
+        layer: "sound",
+        icon: "minus",
+        mutates,
+        undoable,
+        menu: ("Track", "Automation"),
+        params: {
+            /// The lane to clear.
+
+            lane: NodeRef,
+            /// The start of the range, in the owner's samples. The whole lane
+            /// without it.
+
+            start: Option<Number>,
+            /// The end of the range, in the owner's samples.
+
+            end: Option<Number>,
+        },
+        run: {
+
+            let id = "sound.lane.clear".to_string();
+            let lane = self.lane.0;
+            let mut payload = lane_of(session, &id, lane)?;
+            let range = match (self.start, self.end) {
+                (Some(start), Some(end)) => {
+                    let start = crate::samples(start.0, "where the range starts")?;
+                    let end = crate::samples(end.0, "where the range ends")?;
+                    Some((start, end))
+                }
+                (None, None) => None,
+                _ => {
+                    return Err(EngineError::Failed { id, message: "a range is a start and an end".to_string() });
+                }
+            };
+            let before = payload.points.len();
+            match range {
+                Some((start, end)) => payload.points.retain(|(at, _)| *at < start || *at >= end),
+                None => payload.points.clear(),
+            }
+            let removed = before - payload.points.len();
+            write_lane(session, lane, &payload)?;
+            Ok(Outcome::changed(format!("cleared {removed} breakpoints of the lane `{lane}`"))
+                .with_data(serde_json::json!({ "lane": lane, "removed": removed })))
+
+        }
+    }
+    /// **Write** a value over a range of a lane.
+    ///
+    /// The lane is **flat** over the range: a breakpoint at each end of it
+    /// with the value, and the curve outside the range is kept — with an
+    /// anchor just before and just after, so that the curve does not jump
+    /// where the range begins and ends.
+    sound.lane.write {
+        area: "sound",
+        layer: "sound",
+        icon: "pencil",
+        mutates,
+        undoable,
+        menu: ("Track", "Automation"),
+        params: {
+            /// The lane to write on.
+
+            lane: NodeRef,
+            /// Where the range starts, in the owner's samples.
+
+            start: Number,
+            /// Where the range ends, in the owner's samples.
+
+            end: Number,
+            /// The value over the range.
+
+            value: Number,
+        },
+        run: {
+
+            let id = "sound.lane.write".to_string();
+            let lane = self.lane.0;
+            let mut payload = lane_of(session, &id, lane)?;
+            let start = crate::samples(self.start.0, "where the range starts")?;
+            let end = crate::samples(self.end.0, "where the range ends")?;
+            let value = check_value(&id, &payload.param, self.value.0)?;
+            if end <= start {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the range from {start} to {end} is empty"),
+                });
+            }
+            // The curve before and after the range, so that the anchors
+            // keep it.
+            let before = crate::automate::value_at(&payload.points, start.saturating_sub(1));
+            let after = crate::automate::value_at(&payload.points, end);
+            payload.points.retain(|(at, _)| *at < start || *at > end);
+            fn set(points: &mut Vec<(i64, f64)>, at: i64, value: f64) {
+                match points.iter_mut().find(|(when, _)| *when == at) {
+                    Some(point) => point.1 = value,
+                    None => points.push((at, value)),
+                }
+            }
+            if start > 0 {
+                set(&mut payload.points, start - 1, before);
+            }
+            set(&mut payload.points, start, value);
+            set(&mut payload.points, end, value);
+            // A breakpoint that is already just after the range keeps its
+            // own value.
+            if !payload.points.iter().any(|(at, _)| *at == end + 1) {
+                set(&mut payload.points, end + 1, after);
+            }
+            payload.points.sort_by_key(|(at, _)| *at);
+            write_lane(session, lane, &payload)?;
+            Ok(Outcome::changed(format!("wrote the lane `{lane}` over a range"))
+                .with_data(serde_json::json!({ "lane": lane, "start": start, "end": end, "value": value })))
+
+        }
+    }
+    /// **Thin** a lane: take away the breakpoints the curve does not need.
+    ///
+    /// A breakpoint is taken away when the curve through the ones that
+    /// remain changes by less than the **tolerance** — the same shape of
+    /// curve without it. A tolerance of nothing takes away nothing, and a
+    /// large one takes away everything the curve can lose.
+    sound.lane.thin {
+        area: "sound",
+        layer: "sound",
+        icon: "minus",
+        mutates,
+        undoable,
+        menu: ("Track", "Automation"),
+        params: {
+            /// The lane to thin.
+
+            lane: NodeRef,
+            /// How much the curve may change, in the value of the parameter.
+
+            tolerance: Option<Number>,
+        },
+        run: {
+
+            let id = "sound.lane.thin".to_string();
+            let lane = self.lane.0;
+            let mut payload = lane_of(session, &id, lane)?;
+            let tolerance = match self.tolerance {
+                Some(tolerance) if tolerance.0.is_finite() => tolerance.0.clamp(0.0, 100.0),
+                Some(_) => {
+                    return Err(EngineError::Failed { id, message: "the tolerance is a number".to_string() });
+                }
+                None => 0.1,
+            };
+            let removed = thin_points(&mut payload.points, tolerance);
+            write_lane(session, lane, &payload)?;
+            Ok(Outcome::changed(format!("took {removed} breakpoints off the lane `{lane}`"))
+                .with_data(serde_json::json!({ "lane": lane, "removed": removed })))
+
+        }
+    }
+    /// **Thin** every lane of a track: take away the breakpoints the curves
+    /// do not need.
+    ///
+    /// The tree's editor has a "Thin All": it thins every lane of every
+    /// track at once. Here it is **one track's** lanes, because a track is
+    /// a node and a node is something a command can be given.
+    sound.lane.thin.all {
+        area: "sound",
+        layer: "sound",
+        icon: "minus",
+        mutates,
+        undoable,
+        menu: ("Track", "Automation"),
+        params: {
+            /// The track whose lanes are thinned.
+
+            track: NodeRef,
+            /// How much the curve may change, in the value of the parameter.
+
+            tolerance: Option<Number>,
+        },
+        run: {
+
+            let id = "sound.lane.thin.all".to_string();
+            let track = self.track.0;
+            let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{track}`"),
+            })?;
+            if node.kind != "sound.track" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
                     message: format!("the node `{track}` is a `{}` and not a track", node.kind),
                 });
             }
-            None => {
+            let tolerance = match self.tolerance {
+                Some(tolerance) if tolerance.0.is_finite() => tolerance.0.clamp(0.0, 100.0),
+                Some(_) => {
+                    return Err(EngineError::Failed { id, message: "the tolerance is a number".to_string() });
+                }
+                None => 0.1,
+            };
+            let lanes = lanes_of(session.document(), track);
+            let mut removed = 0;
+            for (lane, mut payload) in lanes {
+                removed += thin_points(&mut payload.points, tolerance);
+                write_lane(session, lane, &payload)?;
+            }
+            Ok(Outcome::changed(format!("took {removed} breakpoints off the lanes of the track `{track}`"))
+                .with_data(serde_json::json!({ "track": track, "removed": removed })))
+
+        }
+    }
+    /// **Write** the static value of every lane of a track over a range.
+    ///
+    /// The tree's editor has a "Write to Current": it takes the **static**
+    /// value of each parameter — the fader, the pan, the mute — and writes
+    /// it over a range, so that the curve is flat over it and the value
+    /// before and after it is kept.
+    ///
+    /// Here the static values are the **defaults of their lanes** (§ the
+    /// fader), and the tree's own mixer keeps a mute of its own beside the
+    /// mute lane: here the lane is the mute's default, and a lane without
+    /// breakpoints is the mute.
+    sound.lane.write.all {
+        area: "sound",
+        layer: "sound",
+        icon: "pencil",
+        mutates,
+        undoable,
+        menu: ("Track", "Automation"),
+        params: {
+            /// The track whose lanes are written.
+
+            track: NodeRef,
+            /// Where the range starts, in the owner's samples.
+
+            start: Number,
+            /// Where the range ends, in the owner's samples.
+
+            end: Number,
+        },
+        run: {
+
+            let id = "sound.lane.write.all".to_string();
+            let track = self.track.0;
+            let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{track}`"),
+            })?;
+            if node.kind != "sound.track" {
                 return Err(EngineError::Failed {
-                    id: "sound.track.input".to_string(),
+                    id: id.clone(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                });
+            }
+            let start = crate::samples(self.start.0, "where the range starts")?;
+            let end = crate::samples(self.end.0, "where the range ends")?;
+            if end <= start {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the range from {start} to {end} is empty"),
+                });
+            }
+            // The **static values**: the fader, the pan and the mute are
+            // the defaults of their lanes, and those are the values the
+            // tree writes.
+            let payload = crate::TrackPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            let statics: Vec<(&str, f64)> = vec![
+                ("volume", payload.fader_db),
+                ("pan", payload.pan),
+                ("mute", if payload.mute { 1.0 } else { 0.0 }),
+            ];
+            let lanes = lanes_of(session.document(), track);
+            let mut written = 0;
+            for (lane, mut lane_payload) in lanes {
+                // The value this lane's parameter holds when it is not
+                // automated: the track's own.
+                let Some((_, value)) = statics.iter().find(|(param, _)| *param == lane_payload.param) else {
+                    continue;
+                };
+                let value = check_value(&id, &lane_payload.param, *value)?;
+                // The curve before and after the range, so that the anchors
+                // keep it.
+                let before = crate::automate::value_at(&lane_payload.points, start.saturating_sub(1));
+                let after = crate::automate::value_at(&lane_payload.points, end);
+                lane_payload.points.retain(|(when, _)| *when < start || *when > end);
+                fn set(points: &mut Vec<(i64, f64)>, at: i64, value: f64) {
+                    match points.iter_mut().find(|(when, _)| *when == at) {
+                        Some(point) => point.1 = value,
+                        None => points.push((at, value)),
+                    }
+                }
+                if start > 0 {
+                    set(&mut lane_payload.points, start - 1, before);
+                }
+                set(&mut lane_payload.points, start, value);
+                set(&mut lane_payload.points, end, value);
+                if !lane_payload.points.iter().any(|(when, _)| *when == end + 1) {
+                    set(&mut lane_payload.points, end + 1, after);
+                }
+                lane_payload.points.sort_by_key(|(at, _)| *at);
+                write_lane(session, lane, &lane_payload)?;
+                written += 1;
+            }
+            Ok(Outcome::changed(format!("wrote the lanes of the track `{track}` over a range"))
+                .with_data(serde_json::json!({ "track": track, "lanes": written, "start": start, "end": end })))
+
+        }
+    }
+    /// The **mutes** of every track cleared.
+    ///
+    /// The tree's Clear Mutes: every track of the document is unmuted at
+    /// once. A track that is **mixed** with others is unmuted with them —
+    /// the mix link is the tree's own, and a change to the mute of one of
+    /// them is a change to the mute of all of them.
+    sound.track.mute.clear {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Track", "Mute"),
+        params: {
+        },
+        run: {
+
+            let tracks: Vec<u64> =
+                session.document().walk().filter(|node| node.kind == "sound.track").map(|node| node.id).collect();
+            let mut cleared = 0usize;
+            for track in tracks {
+                let Some(node) = session.document().node(track) else {
+                    continue;
+                };
+                let Ok(mut payload) = crate::TrackPayload::from_json(&node.data) else {
+                    continue;
+                };
+                if !payload.mute {
+                    continue;
+                }
+                payload.mute = false;
+                let data = payload.to_json();
+                let Some(node) = session.document_mut()?.node_mut(track) else {
+                    continue;
+                };
+                node.data = data;
+                cleared += 1;
+                // The **mix link**: the tracks that are mixed with this one
+                // are unmuted with it.
+                for sibling in crate::group::mix_siblings(session.document(), track) {
+                    if sibling == track {
+                        continue;
+                    }
+                    let Some(node) = session.document().node(sibling) else {
+                        continue;
+                    };
+                    let Ok(mut other) = crate::TrackPayload::from_json(&node.data) else {
+                        continue;
+                    };
+                    if !other.mute {
+                        continue;
+                    }
+                    other.mute = false;
+                    let data = other.to_json();
+                    if let Some(node) = session.document_mut()?.node_mut(sibling) {
+                        node.data = data;
+                        cleared += 1;
+                    }
+                }
+            }
+            if cleared == 0 {
+                return Ok(Outcome::new("no track was muted").with_data(json!({ "cleared": 0 })));
+            }
+            Ok(Outcome::changed(format!("cleared the mute of {cleared} track(s)"))
+                .with_data(json!({ "cleared": cleared })))
+
+        }
+    }
+    /// The **solos** of every track cleared.
+    ///
+    /// The tree's Clear Solos: every track of the document is unsoloed at
+    /// once, and the document is heard whole again.
+    ///
+    /// A solo is a rule about the **other** tracks, and so clearing it is
+    /// about every track and not about one: the tree's own rule. The flag
+    /// that says a track is heard even when another is soloed — the solo
+    /// safe — is not a solo and is left as it is.
+    sound.track.solo.clear {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Track", "Solo"),
+        params: {
+        },
+        run: {
+
+            let tracks: Vec<u64> =
+                session.document().walk().filter(|node| node.kind == "sound.track").map(|node| node.id).collect();
+            let mut cleared = 0usize;
+            for track in tracks {
+                let Some(node) = session.document().node(track) else {
+                    continue;
+                };
+                let Ok(mut payload) = crate::TrackPayload::from_json(&node.data) else {
+                    continue;
+                };
+                if !payload.solo {
+                    continue;
+                }
+                payload.solo = false;
+                let data = payload.to_json();
+                let Some(node) = session.document_mut()?.node_mut(track) else {
+                    continue;
+                };
+                node.data = data;
+                cleared += 1;
+            }
+            if cleared == 0 {
+                return Ok(Outcome::new("no track was soloed").with_data(json!({ "cleared": 0 })));
+            }
+            Ok(Outcome::changed(format!("cleared the solo of {cleared} track(s)"))
+                .with_data(json!({ "cleared": cleared })))
+
+        }
+    }
+    /// **Mute** the sends of a track, or let them be heard.
+    ///
+    /// The tree's Mute Sends: every send of the track is muted at once.
+    ///
+    /// A send is a **copy** of the track's signal, and a muted send is a
+    /// copy of nothing: the track is still heard on its own and the bus
+    /// hears nothing.
+    sound.track.sends.mute {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Track", "Sends"),
+        params: {
+            /// The track.
+
+            track: NodeRef,
+            /// Whether the sends are silent.
+
+            muted: Bool,
+        },
+        run: {
+
+            let id = "sound.track.sends.mute".to_string();
+            let track = self.track.0;
+            let Some(node) = session.document().node(track).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
                     message: format!("there is no track `{track}`"),
                 });
-            }
-        }
-        match session.document().node(bus) {
-            Some(node) if node.kind == "sound.bus" => {}
-            Some(node) => {
+            };
+            if node.kind != "sound.track" {
                 return Err(EngineError::Failed {
-                    id: "sound.track.input".to_string(),
-                    message: format!("the node `{bus}` is a `{}` and not a bus", node.kind),
+                    id: id.clone(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
                 });
             }
-            None => {
-                return Err(EngineError::Failed {
-                    id: "sound.track.input".to_string(),
-                    message: format!("there is no bus `{bus}`"),
-                });
+            let muted = self.muted.0;
+            let sends: Vec<u64> =
+                node.children.iter().filter(|child| child.kind == "sound.send").map(|child| child.id).collect();
+            let mut changed = 0usize;
+            for send in &sends {
+                let Some(node) = session.document().node(*send) else { continue };
+                let Ok(mut payload) = crate::SendPayload::from_json(&node.data) else { continue };
+                if payload.mute == muted {
+                    continue;
+                }
+                payload.mute = muted;
+                let data = payload.to_json();
+                let Some(node) = session.document_mut()?.node_mut(*send) else { continue };
+                node.data = data;
+                changed += 1;
             }
-        }
-        // A track reads **one** bus: a reader with two inputs is a
-        // reader with no meaning.
-        for relation in session.document().relations_from(track, Some("input")) {
-            if relation.to != bus {
-                return Err(EngineError::Failed {
-                    id: "sound.track.input".to_string(),
-                    message: format!("the track `{track}` already reads the bus `{}`", relation.to),
-                });
+            if changed == 0 {
+                let count = sends.len();
+                return Ok(Outcome::new(format!(
+                    "the track `{track}` has {count} send(s) and none of them moved"
+                ))
+                .with_data(json!({ "track": track, "muted": muted, "sends": sends.len() })));
             }
+            Ok(Outcome::changed(format!(
+                "the sends of the track `{track}` are {}",
+                if muted { "muted" } else { "heard" }
+            ))
+            .with_data(json!({ "track": track, "muted": muted, "sends": sends.len(), "changed": changed })))
+
         }
-        let relation = craftkit_sdk::Relation::new(track, bus, "input");
-        if !session.document_mut()?.add_relation(relation) {
-            return Err(EngineError::Failed {
-                id: "sound.track.input".to_string(),
-                message: format!("the track `{track}` already reads the bus `{bus}`"),
-            });
-        }
-        Ok(Outcome::changed(format!("the track `{track}` reads the bus `{bus}`"))
-            .with_data(serde_json::json!({ "track": track, "bus": bus })))
     }
 }
 
@@ -754,666 +1980,6 @@ pub fn stage_order(document: &Document) -> Result<Vec<Stage>, String> {
     Ok(order)
 }
 
-/// Put a plugin in a slot on a track.
-#[derive(Command)]
-#[command(
-    id = "sound.insert.add",
-    area = "sound",
-    layer = "sound",
-    icon = "plus",
-    menu("Track", "Inserts"),
-    mutates,
-    undoable
-)]
-pub struct AddInsert {
-    /// The track the insert is on.
-    ///
-    /// An insert is on **one** thing: a track or a clip, and not both.
-    pub track: Option<NodeRef>,
-    /// The clip the insert is on.
-    ///
-    /// A clip may carry effects of its own: the tree's clip effects are
-    /// an equaliser and a compressor on one clip and not on the track.
-    pub clip: Option<NodeRef>,
-    /// Which plugin it is.
-    pub plugin: Text,
-    /// Whether it is bypassed.
-    pub bypass: Option<craftkit_sdk::Bool>,
-}
-
-impl AddInsert {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        // An insert is on **one** thing: a track or a clip.
-        let (owner, owner_id, kind) = match (self.track, self.clip) {
-            (Some(track), None) => ("track", track.0, "sound.track"),
-            (None, Some(clip)) => ("clip", clip.0, "sound.clip"),
-            (Some(_), Some(_)) => {
-                return Err(EngineError::Failed {
-                    id: "sound.insert.add".to_string(),
-                    message: "an insert is on one thing: a track or a clip".to_string(),
-                });
-            }
-            (None, None) => {
-                return Err(EngineError::Failed {
-                    id: "sound.insert.add".to_string(),
-                    message: "an insert is on something: which track, and which clip?".to_string(),
-                });
-            }
-        };
-        match session.document().node(owner_id) {
-            Some(node) if node.kind == kind => {}
-            Some(node) => {
-                return Err(EngineError::Failed {
-                    id: "sound.insert.add".to_string(),
-                    message: format!("the node `{owner_id}` is a `{}` and not a {owner}", node.kind),
-                });
-            }
-            None => {
-                return Err(EngineError::Failed {
-                    id: "sound.insert.add".to_string(),
-                    message: format!("there is no {owner} `{owner_id}`"),
-                });
-            }
-        }
-        let plugin = self.plugin.0.clone();
-        if plugin.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "sound.insert.add".to_string(),
-                message: "an insert says which plugin it is".to_string(),
-            });
-        }
-        let bypass = self.bypass.map(|bypass| bypass.0).unwrap_or(false);
-        let payload =
-            InsertPayload { plugin: plugin.clone(), params: Json::Object(Default::default()), bypass };
-        let id = session.document_mut()?.add_node_with_under(
-            Some(owner_id),
-            plugin.clone(),
-            "sound.insert",
-            None,
-            payload.to_json(),
-        );
-        Ok(Outcome::changed(format!("added a `{plugin}` insert on the {owner} `{owner_id}`"))
-            .with_data(serde_json::json!({ "id": id, owner: owner_id, "plugin": plugin })))
-    }
-}
-
-/// Change an **insert**: its parameters, or whether it is bypassed.
-///
-/// An insert's parameters are how a plugin is told what to do, and a
-/// document may not change them by itself: the change is a **command**,
-/// like every other change.
-#[derive(Command)]
-#[command(
-    id = "sound.insert.set",
-    area = "sound",
-    layer = "sound",
-    icon = "pencil",
-    menu("Track", "Inserts"),
-    mutates,
-    undoable
-)]
-pub struct SetInsert {
-    /// The insert to change.
-    pub insert: NodeRef,
-    /// Its parameters, by name: a table of parameter to number.
-    pub parameters: Option<Json>,
-    /// Whether it is bypassed.
-    pub bypass: Option<craftkit_sdk::Bool>,
-}
-
-impl SetInsert {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.insert.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.insert.set".to_string(),
-                message: format!("there is no node {id} in the document"),
-            });
-        };
-        if node.kind != "sound.insert" {
-            return Err(EngineError::Failed {
-                id: "sound.insert.set".to_string(),
-                message: format!("node {id} is not an insert"),
-            });
-        }
-        // The parameters are **numbers**, and a value that is not a
-        // number is **left out**: the reader's rule (§43), and the
-        // parameters of a plugin are numbers.
-        let params = match &self.parameters {
-            Some(params) => {
-                let mut values = serde_json::Map::new();
-                if let Some(table) = params.as_object() {
-                    for (name, value) in table {
-                        if let Some(number) = value.as_f64()
-                            && number.is_finite()
-                        {
-                            values.insert(name.clone(), serde_json::json!(number));
-                        }
-                    }
-                }
-                Some(values)
-            }
-            None => None,
-        };
-        let bypass = self.bypass.map(|bypass| bypass.0);
-        let Some(node) = session.document_mut()?.node_mut(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.insert.set".to_string(),
-                message: format!("there is no node {id} in the document"),
-            });
-        };
-        if let Some(params) = params {
-            node.data["params"] = serde_json::Value::Object(params);
-        }
-        if let Some(bypass) = bypass {
-            node.data["bypass"] = serde_json::json!(bypass);
-        }
-        Ok(Outcome::changed(format!("changed the insert {id}")).with_data(serde_json::json!({ "id": id })))
-    }
-}
-
-/// **Take away** an insert: the plugin is not on the thing any more.
-///
-/// The tree's insert lives in a **slot** on the track, and taking it
-/// away empties the slot. Here the insert is a **node** under the
-/// thing it is on, and taking it away takes the node away: there is
-/// no slot left empty, because there was never a slot.
-///
-/// A node that is **not an insert** is refused.
-#[derive(Command)]
-#[command(
-    id = "sound.insert.remove",
-    area = "sound",
-    layer = "sound",
-    icon = "minus",
-    menu("Track", "Inserts"),
-    mutates,
-    undoable
-)]
-pub struct RemoveInsert {
-    /// The insert to take away.
-    pub insert: NodeRef,
-}
-
-impl RemoveInsert {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.insert.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "sound.insert.remove".to_string(),
-                message: format!("there is no node `{id}` in the document"),
-            });
-        };
-        if node.kind != "sound.insert" {
-            return Err(EngineError::Failed {
-                id: "sound.insert.remove".to_string(),
-                message: format!("the node `{id}` is a `{}` and not an insert", node.kind),
-            });
-        }
-        let owner = crate::timeline::parent_of(session.document(), id).map(|owner| owner.id);
-        session.document_mut()?.remove_node(id);
-        Ok(Outcome::changed(format!("took the insert `{id}` away"))
-            .with_data(serde_json::json!({ "id": id, "owner": owner })))
-    }
-}
-
-/// **Move** an insert: it and another one swap their places in the
-/// chain.
-///
-/// The chain is the **order** of the inserts on the thing they are on,
-/// and the order is the order they are run in. The tree's insert lives
-/// in a **slot** and the move swaps two slots; here the insert is a
-/// **node** and the move swaps two nodes.
-///
-/// Two inserts of **different** things are refused: a chain is the
-/// chain of one thing, and there is no chain that holds both.
-#[derive(Command)]
-#[command(
-    id = "sound.insert.move",
-    area = "sound",
-    layer = "sound",
-    icon = "move",
-    menu("Track", "Inserts"),
-    mutates,
-    undoable
-)]
-pub struct MoveInsert {
-    /// The insert to move.
-    pub insert: NodeRef,
-    /// The insert it swaps places with.
-    pub other: NodeRef,
-}
-
-impl MoveInsert {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.insert.move".to_string();
-        let (insert, other) = (self.insert.0, self.other.0);
-        for node_id in [insert, other] {
-            match session.document().node(node_id) {
-                Some(node) if node.kind == "sound.insert" => {}
-                Some(node) => {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the node `{node_id}` is a `{}` and not an insert", node.kind),
-                    });
-                }
-                None => {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("there is no node `{node_id}` in the document"),
-                    });
-                }
-            }
-        }
-        let owner = crate::timeline::parent_of(session.document(), insert).map(|owner| owner.id);
-        let other_owner = crate::timeline::parent_of(session.document(), other).map(|owner| owner.id);
-        if owner != other_owner {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the two inserts are not on the same thing: a chain is the chain of one thing"
-                    .to_string(),
-            });
-        }
-        let Some(owner_id) = owner else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the insert `{insert}` is on nothing"),
-            });
-        };
-        let Some(node) = session.document_mut()?.node_mut(owner_id) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{owner_id}` in the document"),
-            });
-        };
-        let children = &mut node.children;
-        let Some(from) = children.iter().position(|child| child.id == insert) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the insert `{insert}` is not on `{owner_id}`"),
-            });
-        };
-        let Some(to) = children.iter().position(|child| child.id == other) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the insert `{other}` is not on `{owner_id}`"),
-            });
-        };
-        children.swap(from, to);
-        Ok(Outcome::changed(format!("moved the insert `{insert}` and `{other}`"))
-            .with_data(serde_json::json!({ "insert": insert, "other": other, "owner": owner_id })))
-    }
-}
-
-/// Send a track to a bus at a level.
-///
-/// The send is a node under the track, and the bus it goes to is a
-/// relation: the node says what the send *is* and the relation says where
-/// it goes.
-#[derive(Command)]
-#[command(
-    id = "sound.send.add",
-    area = "sound",
-    layer = "sound",
-    icon = "plus",
-    menu("Track", "Sends"),
-    mutates,
-    undoable
-)]
-pub struct AddSend {
-    /// The track the send is on.
-    pub track: NodeRef,
-    /// The bus it goes to.
-    pub bus: NodeRef,
-    /// Its level, in decibels.
-    pub level_db: Option<Number>,
-    /// Its pan, from minus one to one.
-    pub pan: Option<Number>,
-    /// Whether the send is silent.
-    pub mute: Option<Bool>,
-    /// Whether the send is taken before the track's fader.
-    pub pre_fader: Option<Bool>,
-}
-
-impl AddSend {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let track = self.track.0;
-        let bus = self.bus.0;
-        for (id, what) in [(track, "track"), (bus, "bus")] {
-            if session.document().node(id).is_none() {
-                return Err(EngineError::Failed {
-                    id: "sound.send.add".to_string(),
-                    message: format!("there is no {what} `{id}`"),
-                });
-            }
-        }
-        let level_db = match &self.level_db {
-            Some(level) => level.0,
-            None => 0.0,
-        };
-        if !level_db.is_finite() {
-            return Err(EngineError::Failed {
-                id: "sound.send.add".to_string(),
-                message: "a level is a number".to_string(),
-            });
-        }
-        let pan = match &self.pan {
-            Some(pan) => pan.0,
-            None => 0.0,
-        };
-        if !pan.is_finite() || !(-1.0..=1.0).contains(&pan) {
-            return Err(EngineError::Failed {
-                id: "sound.send.add".to_string(),
-                message: "a pan is a number between minus one and one".to_string(),
-            });
-        }
-        let mute = self.mute.map(|mute| mute.0).unwrap_or(false);
-        let pre_fader = self.pre_fader.map(|pre| pre.0).unwrap_or(false);
-        // A **reader** carries the bus's sound and nothing else: it
-        // takes a bus into the mix and does not copy itself anywhere.
-        if reads_bus(session.document(), track) {
-            return Err(EngineError::Failed {
-                id: "sound.send.add".to_string(),
-                message: format!("the track `{track}` reads a bus, and it has no sends"),
-            });
-        }
-        let payload = SendPayload { level_db, pan, mute, pre_fader };
-        let id = session.document_mut()?.add_node_with_under(
-            Some(track),
-            format!("send to {bus}"),
-            "sound.send",
-            None,
-            payload.to_json(),
-        );
-        let relation = craftkit_sdk::Relation::new(id, bus, "send");
-        session.document_mut()?.add_relation(relation);
-        Ok(Outcome::changed(format!("the track `{track}` sends to the bus `{bus}`"))
-            .with_data(serde_json::json!({ "id": id, "track": track, "bus": bus })))
-    }
-}
-
-/// **Take away** the reading of a bus: the track stops reading it.
-///
-/// A bus is silent on its own: something must read it and take it into
-/// the mix, and the reading is a **relation**. A relation that cannot
-/// be taken away is a mistake that cannot be undone.
-#[derive(Command)]
-#[command(
-    id = "sound.track.input.remove",
-    area = "sound",
-    layer = "sound",
-    icon = "link",
-    menu("Track", "Input"),
-    mutates,
-    undoable
-)]
-pub struct RemoveInput {
-    /// The track that read the bus.
-    pub track: NodeRef,
-    /// The bus it read.
-    pub bus: NodeRef,
-}
-
-impl RemoveInput {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.track.input.remove".to_string();
-        let track = self.track.0;
-        let bus = self.bus.0;
-        for (node, what) in [(track, "track"), (bus, "bus")] {
-            if session.document().node(node).is_none() {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("there is no {what} `{node}`"),
-                });
-            }
-        }
-        let removed = session.document_mut()?.remove_relations(|relation| {
-            relation.from == track && relation.to == bus && relation.kind == "input"
-        });
-        if removed == 0 {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the track `{track}` does not read the bus `{bus}`"),
-            });
-        }
-        Ok(Outcome::changed(format!("the track `{track}` no longer reads the bus `{bus}`"))
-            .with_data(serde_json::json!({ "track": track, "bus": bus })))
-    }
-}
-
-/// **Change** a send: its level, its pan, whether it is silent, and
-/// whether it is taken before the track's fader.
-///
-/// The tree's send has a command for its **level** and another for the
-/// rest, and this one has a command for the send's own settings: the
-/// send is a thing, and the things about it are the send's.
-///
-/// A level outside the tree's range is **refused** and not pulled to
-/// the edge, and a pan outside minus one and one is refused too.
-#[derive(Command)]
-#[command(
-    id = "sound.send.set",
-    area = "sound",
-    layer = "sound",
-    icon = "sliders",
-    menu("Track", "Send"),
-    mutates,
-    undoable
-)]
-pub struct SetSend {
-    /// The send to change.
-    pub send: NodeRef,
-    /// Its level, in decibels: from minus one hundred and forty-four to
-    /// twelve.
-    pub level_db: Option<Number>,
-    /// Its pan, from minus one to one.
-    pub pan: Option<Number>,
-    /// Whether the send is silent.
-    pub mute: Option<craftkit_sdk::Bool>,
-    /// Whether the send is taken before the track's fader.
-    pub pre_fader: Option<craftkit_sdk::Bool>,
-}
-
-impl SetSend {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.send.set".to_string();
-        let send = self.send.0;
-        let Some(node) = session.document().node(send) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{send}` in the document"),
-            });
-        };
-        if node.kind != "sound.send" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{send}` is a `{}` and not a send", node.kind),
-            });
-        }
-        let mut payload = SendPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-        if let Some(level) = &self.level_db {
-            let decibels = level.0;
-            if !decibels.is_finite() || !(-144.0..=12.0).contains(&decibels) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message:
-                        "a level is a number of decibels from minus one hundred and forty-four to twelve"
-                            .to_string(),
-                });
-            }
-            payload.level_db = decibels;
-        }
-        if let Some(pan) = &self.pan {
-            let value = pan.0;
-            if !value.is_finite() || !(-1.0..=1.0).contains(&value) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "a pan is a number between minus one and one".to_string(),
-                });
-            }
-            payload.pan = value;
-        }
-        if let Some(mute) = &self.mute {
-            payload.mute = mute.0;
-        }
-        if let Some(pre_fader) = &self.pre_fader {
-            payload.pre_fader = pre_fader.0;
-        }
-        let Some(node) = session.document_mut()?.node_mut(send) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{send}` in the document"),
-            });
-        };
-        node.data = payload.to_json();
-        Ok(Outcome::changed(format!("changed the send `{send}`")).with_data(serde_json::json!({
-            "id": send,
-            "level_db": payload.level_db,
-            "pan": payload.pan,
-            "mute": payload.mute,
-            "pre_fader": payload.pre_fader,
-        })))
-    }
-}
-
-/// **Take away** a send.
-///
-/// The send is a **node** under the track, and it goes with its link
-/// to the bus: a send that is there and points at nothing is a send
-/// that sends nothing, and it is litter.
-#[derive(Command)]
-#[command(
-    id = "sound.send.remove",
-    area = "sound",
-    layer = "sound",
-    icon = "minus",
-    menu("Track", "Send"),
-    mutates,
-    undoable
-)]
-pub struct RemoveSend {
-    /// The send to take away.
-    pub send: NodeRef,
-}
-
-impl RemoveSend {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.send.remove".to_string();
-        let send = self.send.0;
-        let node = session.document().node(send).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no send `{send}`"),
-        })?;
-        if node.kind != "sound.send" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{send}` is a `{}` and not a send", node.kind),
-            });
-        }
-        session.document_mut()?.remove_node(send);
-        Ok(Outcome::changed(format!("took the send `{send}` away"))
-            .with_data(serde_json::json!({ "send": send })))
-    }
-}
-
-/// Automate a parameter of a track.
-///
-/// The lane says which parameter it moves, and the parameter is a
-/// **string**: `volume`, `pan`, `mute`, or anything a node's payload
-/// names.
-#[derive(Command)]
-#[command(
-    id = "sound.lane.add",
-    area = "sound",
-    layer = "sound",
-    icon = "plus",
-    menu("Track", "Automation"),
-    mutates,
-    undoable
-)]
-pub struct AddLane {
-    /// The track whose parameter is automated. A lane automates **one**
-    /// thing: a track or a clip, and not both.
-    pub track: Option<NodeRef>,
-    /// The clip whose parameter is automated.
-    pub clip: Option<NodeRef>,
-    /// Which parameter: `volume`, `pan`, `mute`, …
-    pub param: Text,
-    /// The breakpoints: a list of `[at, value]`, where `at` is a time in
-    /// samples.
-    pub points: Option<Json>,
-}
-
-impl AddLane {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        // A lane automates **one** thing: a track or a clip. The
-        // family's clip carries a curve of its own, and the tree's
-        // lane is that curve when it is under a clip.
-        let (owner, owner_id) = match (self.track, self.clip) {
-            (Some(track), None) => ("track", track.0),
-            (None, Some(clip)) => ("clip", clip.0),
-            (Some(_), Some(_)) => {
-                return Err(EngineError::Failed {
-                    id: "sound.lane.add".to_string(),
-                    message: "a lane automates one thing: a track or a clip".to_string(),
-                });
-            }
-            (None, None) => {
-                return Err(EngineError::Failed {
-                    id: "sound.lane.add".to_string(),
-                    message: "a lane automates something: which track, and which clip?".to_string(),
-                });
-            }
-        };
-        let kind = if owner == "track" { "sound.track" } else { "sound.clip" };
-        match session.document().node(owner_id) {
-            Some(node) if node.kind == kind => {}
-            Some(node) => {
-                return Err(EngineError::Failed {
-                    id: "sound.lane.add".to_string(),
-                    message: format!("the node `{owner_id}` is a `{}` and not a {owner}", node.kind),
-                });
-            }
-            None => {
-                return Err(EngineError::Failed {
-                    id: "sound.lane.add".to_string(),
-                    message: format!("there is no {owner} `{owner_id}`"),
-                });
-            }
-        }
-        let param = self.param.0.clone();
-        if param.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "sound.lane.add".to_string(),
-                message: "a lane says which parameter it moves".to_string(),
-            });
-        }
-        let points = match &self.points {
-            Some(points) => {
-                let value = serde_json::json!({ "param": param, "points": points });
-                LanePayload::from_json(&value)
-                    .map_err(|error| EngineError::Failed {
-                        id: "sound.lane.add".to_string(),
-                        message: format!("the breakpoints are not breakpoints: {error}"),
-                    })?
-                    .points
-            }
-            None => Vec::new(),
-        };
-        let payload = LanePayload { param: param.clone(), points };
-        let id = session.document_mut()?.add_node_with_under(
-            Some(owner_id),
-            format!("{param} automation"),
-            "sound.lane",
-            None,
-            payload.to_json(),
-        );
-        Ok(Outcome::changed(format!("the {owner} `{owner_id}` automates `{param}`"))
-            .with_data(serde_json::json!({ "id": id, "owner": owner_id, "param": param })))
-    }
-}
-
 /// The **lane** of a command, read.
 fn lane_of(session: &Session, id: &str, lane: u64) -> Result<LanePayload, EngineError> {
     let node = session.document().node(lane).ok_or_else(|| EngineError::Failed {
@@ -1465,254 +2031,6 @@ fn check_value(id: &str, param: &str, value: f64) -> Result<f64, EngineError> {
     }
 }
 
-/// **Set a breakpoint** on a lane.
-///
-/// A breakpoint that is already there takes the new value, and a
-/// breakpoint that is not there is added: the lane's points are in
-/// order of their time, so "the breakpoint at that time" is a thing
-/// that can be named.
-#[derive(Command)]
-#[command(
-    id = "sound.lane.point.set",
-    area = "sound",
-    layer = "sound",
-    icon = "plus",
-    menu("Track", "Automation"),
-    mutates,
-    undoable
-)]
-pub struct SetLanePoint {
-    /// The lane the breakpoint goes on.
-    pub lane: NodeRef,
-    /// Where the breakpoint is, in the owner's samples.
-    pub at: Number,
-    /// The value at that time.
-    pub value: Number,
-}
-
-impl SetLanePoint {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.lane.point.set".to_string();
-        let lane = self.lane.0;
-        let mut payload = lane_of(session, &id, lane)?;
-        let at = crate::samples(self.at.0, "where the breakpoint is")?;
-        let value = check_value(&id, &payload.param, self.value.0)?;
-        match payload.points.iter_mut().find(|(when, _)| *when == at) {
-            Some(point) => point.1 = value,
-            None => payload.points.push((at, value)),
-        }
-        payload.points.sort_by_key(|(at, _)| *at);
-        write_lane(session, lane, &payload)?;
-        Ok(Outcome::changed(format!("set a breakpoint on the lane `{lane}`"))
-            .with_data(serde_json::json!({ "lane": lane, "at": at, "value": value })))
-    }
-}
-
-/// **Take a breakpoint** off a lane.
-///
-/// A time that has no breakpoint on it is **refused**: a breakpoint
-/// that is not there is not one that was taken away.
-#[derive(Command)]
-#[command(
-    id = "sound.lane.point.remove",
-    area = "sound",
-    layer = "sound",
-    icon = "minus",
-    menu("Track", "Automation"),
-    mutates,
-    undoable
-)]
-pub struct RemoveLanePoint {
-    /// The lane the breakpoint is on.
-    pub lane: NodeRef,
-    /// Where the breakpoint is, in the owner's samples.
-    pub at: Number,
-}
-
-impl RemoveLanePoint {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.lane.point.remove".to_string();
-        let lane = self.lane.0;
-        let mut payload = lane_of(session, &id, lane)?;
-        let at = crate::samples(self.at.0, "where the breakpoint is")?;
-        let before = payload.points.len();
-        payload.points.retain(|(when, _)| *when != at);
-        if payload.points.len() == before {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the lane `{lane}` has no breakpoint at {at}"),
-            });
-        }
-        write_lane(session, lane, &payload)?;
-        Ok(Outcome::changed(format!("took a breakpoint off the lane `{lane}`"))
-            .with_data(serde_json::json!({ "lane": lane, "at": at })))
-    }
-}
-
-/// **Clear** the breakpoints of a lane.
-///
-/// Without a range every breakpoint goes, and with one the breakpoints
-/// in the range go and the rest stay: the tree's command clears a
-/// range or the whole lane, and the range is the tree's selection.
-#[derive(Command)]
-#[command(
-    id = "sound.lane.clear",
-    area = "sound",
-    layer = "sound",
-    icon = "minus",
-    menu("Track", "Automation"),
-    mutates,
-    undoable
-)]
-pub struct ClearLane {
-    /// The lane to clear.
-    pub lane: NodeRef,
-    /// The start of the range, in the owner's samples. The whole lane
-    /// without it.
-    pub start: Option<Number>,
-    /// The end of the range, in the owner's samples.
-    pub end: Option<Number>,
-}
-
-impl ClearLane {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.lane.clear".to_string();
-        let lane = self.lane.0;
-        let mut payload = lane_of(session, &id, lane)?;
-        let range = match (self.start, self.end) {
-            (Some(start), Some(end)) => {
-                let start = crate::samples(start.0, "where the range starts")?;
-                let end = crate::samples(end.0, "where the range ends")?;
-                Some((start, end))
-            }
-            (None, None) => None,
-            _ => {
-                return Err(EngineError::Failed { id, message: "a range is a start and an end".to_string() });
-            }
-        };
-        let before = payload.points.len();
-        match range {
-            Some((start, end)) => payload.points.retain(|(at, _)| *at < start || *at >= end),
-            None => payload.points.clear(),
-        }
-        let removed = before - payload.points.len();
-        write_lane(session, lane, &payload)?;
-        Ok(Outcome::changed(format!("cleared {removed} breakpoints of the lane `{lane}`"))
-            .with_data(serde_json::json!({ "lane": lane, "removed": removed })))
-    }
-}
-
-/// **Write** a value over a range of a lane.
-///
-/// The lane is **flat** over the range: a breakpoint at each end of it
-/// with the value, and the curve outside the range is kept — with an
-/// anchor just before and just after, so that the curve does not jump
-/// where the range begins and ends.
-#[derive(Command)]
-#[command(
-    id = "sound.lane.write",
-    area = "sound",
-    layer = "sound",
-    icon = "pencil",
-    menu("Track", "Automation"),
-    mutates,
-    undoable
-)]
-pub struct WriteLane {
-    /// The lane to write on.
-    pub lane: NodeRef,
-    /// Where the range starts, in the owner's samples.
-    pub start: Number,
-    /// Where the range ends, in the owner's samples.
-    pub end: Number,
-    /// The value over the range.
-    pub value: Number,
-}
-
-impl WriteLane {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.lane.write".to_string();
-        let lane = self.lane.0;
-        let mut payload = lane_of(session, &id, lane)?;
-        let start = crate::samples(self.start.0, "where the range starts")?;
-        let end = crate::samples(self.end.0, "where the range ends")?;
-        let value = check_value(&id, &payload.param, self.value.0)?;
-        if end <= start {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the range from {start} to {end} is empty"),
-            });
-        }
-        // The curve before and after the range, so that the anchors
-        // keep it.
-        let before = crate::automate::value_at(&payload.points, start.saturating_sub(1));
-        let after = crate::automate::value_at(&payload.points, end);
-        payload.points.retain(|(at, _)| *at < start || *at > end);
-        fn set(points: &mut Vec<(i64, f64)>, at: i64, value: f64) {
-            match points.iter_mut().find(|(when, _)| *when == at) {
-                Some(point) => point.1 = value,
-                None => points.push((at, value)),
-            }
-        }
-        if start > 0 {
-            set(&mut payload.points, start - 1, before);
-        }
-        set(&mut payload.points, start, value);
-        set(&mut payload.points, end, value);
-        // A breakpoint that is already just after the range keeps its
-        // own value.
-        if !payload.points.iter().any(|(at, _)| *at == end + 1) {
-            set(&mut payload.points, end + 1, after);
-        }
-        payload.points.sort_by_key(|(at, _)| *at);
-        write_lane(session, lane, &payload)?;
-        Ok(Outcome::changed(format!("wrote the lane `{lane}` over a range"))
-            .with_data(serde_json::json!({ "lane": lane, "start": start, "end": end, "value": value })))
-    }
-}
-
-/// **Thin** a lane: take away the breakpoints the curve does not need.
-///
-/// A breakpoint is taken away when the curve through the ones that
-/// remain changes by less than the **tolerance** — the same shape of
-/// curve without it. A tolerance of nothing takes away nothing, and a
-/// large one takes away everything the curve can lose.
-#[derive(Command)]
-#[command(
-    id = "sound.lane.thin",
-    area = "sound",
-    layer = "sound",
-    icon = "minus",
-    menu("Track", "Automation"),
-    mutates,
-    undoable
-)]
-pub struct ThinLane {
-    /// The lane to thin.
-    pub lane: NodeRef,
-    /// How much the curve may change, in the value of the parameter.
-    pub tolerance: Option<Number>,
-}
-
-impl ThinLane {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.lane.thin".to_string();
-        let lane = self.lane.0;
-        let mut payload = lane_of(session, &id, lane)?;
-        let tolerance = match self.tolerance {
-            Some(tolerance) if tolerance.0.is_finite() => tolerance.0.clamp(0.0, 100.0),
-            Some(_) => {
-                return Err(EngineError::Failed { id, message: "the tolerance is a number".to_string() });
-            }
-            None => 0.1,
-        };
-        let removed = thin_points(&mut payload.points, tolerance);
-        write_lane(session, lane, &payload)?;
-        Ok(Outcome::changed(format!("took {removed} breakpoints off the lane `{lane}`"))
-            .with_data(serde_json::json!({ "lane": lane, "removed": removed })))
-    }
-}
-
 /// The lanes of a **track**, by their parameter.
 ///
 /// The lanes are the ones under the track: a lane automates one thing
@@ -1726,160 +2044,6 @@ pub(crate) fn lanes_of(document: &Document, track: u64) -> Vec<(u64, LanePayload
         .collect();
     lanes.sort_by_key(|(_, payload)| payload.param.clone());
     lanes
-}
-
-/// **Thin** every lane of a track: take away the breakpoints the curves
-/// do not need.
-///
-/// The tree's editor has a "Thin All": it thins every lane of every
-/// track at once. Here it is **one track's** lanes, because a track is
-/// a node and a node is something a command can be given.
-#[derive(Command)]
-#[command(
-    id = "sound.lane.thin.all",
-    area = "sound",
-    layer = "sound",
-    icon = "minus",
-    menu("Track", "Automation"),
-    mutates,
-    undoable
-)]
-pub struct ThinAllLanes {
-    /// The track whose lanes are thinned.
-    pub track: NodeRef,
-    /// How much the curve may change, in the value of the parameter.
-    pub tolerance: Option<Number>,
-}
-
-impl ThinAllLanes {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.lane.thin.all".to_string();
-        let track = self.track.0;
-        let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{track}`"),
-        })?;
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
-            });
-        }
-        let tolerance = match self.tolerance {
-            Some(tolerance) if tolerance.0.is_finite() => tolerance.0.clamp(0.0, 100.0),
-            Some(_) => {
-                return Err(EngineError::Failed { id, message: "the tolerance is a number".to_string() });
-            }
-            None => 0.1,
-        };
-        let lanes = lanes_of(session.document(), track);
-        let mut removed = 0;
-        for (lane, mut payload) in lanes {
-            removed += thin_points(&mut payload.points, tolerance);
-            write_lane(session, lane, &payload)?;
-        }
-        Ok(Outcome::changed(format!("took {removed} breakpoints off the lanes of the track `{track}`"))
-            .with_data(serde_json::json!({ "track": track, "removed": removed })))
-    }
-}
-
-/// **Write** the static value of every lane of a track over a range.
-///
-/// The tree's editor has a "Write to Current": it takes the **static**
-/// value of each parameter — the fader, the pan, the mute — and writes
-/// it over a range, so that the curve is flat over it and the value
-/// before and after it is kept.
-///
-/// Here the static values are the **defaults of their lanes** (§ the
-/// fader), and the tree's own mixer keeps a mute of its own beside the
-/// mute lane: here the lane is the mute's default, and a lane without
-/// breakpoints is the mute.
-#[derive(Command)]
-#[command(
-    id = "sound.lane.write.all",
-    area = "sound",
-    layer = "sound",
-    icon = "pencil",
-    menu("Track", "Automation"),
-    mutates,
-    undoable
-)]
-pub struct WriteAllLanes {
-    /// The track whose lanes are written.
-    pub track: NodeRef,
-    /// Where the range starts, in the owner's samples.
-    pub start: Number,
-    /// Where the range ends, in the owner's samples.
-    pub end: Number,
-}
-
-impl WriteAllLanes {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.lane.write.all".to_string();
-        let track = self.track.0;
-        let node = session.document().node(track).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{track}`"),
-        })?;
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
-            });
-        }
-        let start = crate::samples(self.start.0, "where the range starts")?;
-        let end = crate::samples(self.end.0, "where the range ends")?;
-        if end <= start {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the range from {start} to {end} is empty"),
-            });
-        }
-        // The **static values**: the fader, the pan and the mute are
-        // the defaults of their lanes, and those are the values the
-        // tree writes.
-        let payload = crate::TrackPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-        let statics: Vec<(&str, f64)> = vec![
-            ("volume", payload.fader_db),
-            ("pan", payload.pan),
-            ("mute", if payload.mute { 1.0 } else { 0.0 }),
-        ];
-        let lanes = lanes_of(session.document(), track);
-        let mut written = 0;
-        for (lane, mut lane_payload) in lanes {
-            // The value this lane's parameter holds when it is not
-            // automated: the track's own.
-            let Some((_, value)) = statics.iter().find(|(param, _)| *param == lane_payload.param) else {
-                continue;
-            };
-            let value = check_value(&id, &lane_payload.param, *value)?;
-            // The curve before and after the range, so that the anchors
-            // keep it.
-            let before = crate::automate::value_at(&lane_payload.points, start.saturating_sub(1));
-            let after = crate::automate::value_at(&lane_payload.points, end);
-            lane_payload.points.retain(|(when, _)| *when < start || *when > end);
-            fn set(points: &mut Vec<(i64, f64)>, at: i64, value: f64) {
-                match points.iter_mut().find(|(when, _)| *when == at) {
-                    Some(point) => point.1 = value,
-                    None => points.push((at, value)),
-                }
-            }
-            if start > 0 {
-                set(&mut lane_payload.points, start - 1, before);
-            }
-            set(&mut lane_payload.points, start, value);
-            set(&mut lane_payload.points, end, value);
-            if !lane_payload.points.iter().any(|(when, _)| *when == end + 1) {
-                set(&mut lane_payload.points, end + 1, after);
-            }
-            lane_payload.points.sort_by_key(|(at, _)| *at);
-            write_lane(session, lane, &lane_payload)?;
-            written += 1;
-        }
-        Ok(Outcome::changed(format!("wrote the lanes of the track `{track}` over a range"))
-            .with_data(serde_json::json!({ "track": track, "lanes": written, "start": start, "end": end })))
-    }
 }
 
 /// Take away the breakpoints of a curve that the curve does not need.
@@ -2225,199 +2389,5 @@ mod tests {
         assert!(ecosystem.commands.get("sound.send.add").is_some());
         assert!(ecosystem.commands.get("sound.insert.add").is_some());
         assert!(ecosystem.commands.get("sound.lane.add").is_some());
-    }
-}
-
-/// The **mutes** of every track cleared.
-///
-/// The tree's Clear Mutes: every track of the document is unmuted at
-/// once. A track that is **mixed** with others is unmuted with them —
-/// the mix link is the tree's own, and a change to the mute of one of
-/// them is a change to the mute of all of them.
-#[derive(Command)]
-#[command(
-    id = "sound.track.mute.clear",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Track", "Mute"),
-    mutates,
-    undoable
-)]
-pub struct ClearMutes {}
-
-impl ClearMutes {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let tracks: Vec<u64> =
-            session.document().walk().filter(|node| node.kind == "sound.track").map(|node| node.id).collect();
-        let mut cleared = 0usize;
-        for track in tracks {
-            let Some(node) = session.document().node(track) else {
-                continue;
-            };
-            let Ok(mut payload) = crate::TrackPayload::from_json(&node.data) else {
-                continue;
-            };
-            if !payload.mute {
-                continue;
-            }
-            payload.mute = false;
-            let data = payload.to_json();
-            let Some(node) = session.document_mut()?.node_mut(track) else {
-                continue;
-            };
-            node.data = data;
-            cleared += 1;
-            // The **mix link**: the tracks that are mixed with this one
-            // are unmuted with it.
-            for sibling in crate::group::mix_siblings(session.document(), track) {
-                if sibling == track {
-                    continue;
-                }
-                let Some(node) = session.document().node(sibling) else {
-                    continue;
-                };
-                let Ok(mut other) = crate::TrackPayload::from_json(&node.data) else {
-                    continue;
-                };
-                if !other.mute {
-                    continue;
-                }
-                other.mute = false;
-                let data = other.to_json();
-                if let Some(node) = session.document_mut()?.node_mut(sibling) {
-                    node.data = data;
-                    cleared += 1;
-                }
-            }
-        }
-        if cleared == 0 {
-            return Ok(Outcome::new("no track was muted").with_data(json!({ "cleared": 0 })));
-        }
-        Ok(Outcome::changed(format!("cleared the mute of {cleared} track(s)"))
-            .with_data(json!({ "cleared": cleared })))
-    }
-}
-
-/// The **solos** of every track cleared.
-///
-/// The tree's Clear Solos: every track of the document is unsoloed at
-/// once, and the document is heard whole again.
-///
-/// A solo is a rule about the **other** tracks, and so clearing it is
-/// about every track and not about one: the tree's own rule. The flag
-/// that says a track is heard even when another is soloed — the solo
-/// safe — is not a solo and is left as it is.
-#[derive(Command)]
-#[command(
-    id = "sound.track.solo.clear",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Track", "Solo"),
-    mutates,
-    undoable
-)]
-pub struct ClearSolos {}
-
-impl ClearSolos {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let tracks: Vec<u64> =
-            session.document().walk().filter(|node| node.kind == "sound.track").map(|node| node.id).collect();
-        let mut cleared = 0usize;
-        for track in tracks {
-            let Some(node) = session.document().node(track) else {
-                continue;
-            };
-            let Ok(mut payload) = crate::TrackPayload::from_json(&node.data) else {
-                continue;
-            };
-            if !payload.solo {
-                continue;
-            }
-            payload.solo = false;
-            let data = payload.to_json();
-            let Some(node) = session.document_mut()?.node_mut(track) else {
-                continue;
-            };
-            node.data = data;
-            cleared += 1;
-        }
-        if cleared == 0 {
-            return Ok(Outcome::new("no track was soloed").with_data(json!({ "cleared": 0 })));
-        }
-        Ok(Outcome::changed(format!("cleared the solo of {cleared} track(s)"))
-            .with_data(json!({ "cleared": cleared })))
-    }
-}
-
-/// **Mute** the sends of a track, or let them be heard.
-///
-/// The tree's Mute Sends: every send of the track is muted at once.
-///
-/// A send is a **copy** of the track's signal, and a muted send is a
-/// copy of nothing: the track is still heard on its own and the bus
-/// hears nothing.
-#[derive(Command)]
-#[command(
-    id = "sound.track.sends.mute",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Track", "Sends"),
-    mutates,
-    undoable
-)]
-pub struct MuteTrackSends {
-    /// The track.
-    pub track: NodeRef,
-    /// Whether the sends are silent.
-    pub muted: Bool,
-}
-
-impl MuteTrackSends {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.track.sends.mute".to_string();
-        let track = self.track.0;
-        let Some(node) = session.document().node(track).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        if node.kind != "sound.track" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
-            });
-        }
-        let muted = self.muted.0;
-        let sends: Vec<u64> =
-            node.children.iter().filter(|child| child.kind == "sound.send").map(|child| child.id).collect();
-        let mut changed = 0usize;
-        for send in &sends {
-            let Some(node) = session.document().node(*send) else { continue };
-            let Ok(mut payload) = crate::SendPayload::from_json(&node.data) else { continue };
-            if payload.mute == muted {
-                continue;
-            }
-            payload.mute = muted;
-            let data = payload.to_json();
-            let Some(node) = session.document_mut()?.node_mut(*send) else { continue };
-            node.data = data;
-            changed += 1;
-        }
-        if changed == 0 {
-            let count = sends.len();
-            return Ok(Outcome::new(format!(
-                "the track `{track}` has {count} send(s) and none of them moved"
-            ))
-            .with_data(json!({ "track": track, "muted": muted, "sends": sends.len() })));
-        }
-        Ok(Outcome::changed(format!(
-            "the sends of the track `{track}` are {}",
-            if muted { "muted" } else { "heard" }
-        ))
-        .with_data(json!({ "track": track, "muted": muted, "sends": sends.len(), "changed": changed })))
     }
 }

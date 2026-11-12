@@ -25,38 +25,43 @@
 //! - The tree's meter also has a **peak meter** and an **RMS meter**
 //!   for a display; this one measures loudness and nothing else.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{NodeRef, Outcome};
 
-/// The **loudness** of a clip.
-///
-/// The loudness is **derived**: it is measured in the sound of the clip
-/// every time it is asked for.
-#[derive(Command)]
-#[command(id = "sound.clip.loudness.read", area = "sound", layer = "sound", icon = "list")]
-pub struct ReadLoudness {
-    /// The clip to measure.
-    pub clip: NodeRef,
-}
+commands! {
+    /// The **loudness** of a clip.
+    ///
+    /// The loudness is **derived**: it is measured in the sound of the clip
+    /// every time it is asked for.
+    sound.clip.loudness.read {
+        area: "sound",
+        layer: "sound",
+        icon: "list",
+        params: {
+            /// The clip to measure.
 
-impl ReadLoudness {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.loudness.read".to_string();
-        let clip_id = self.clip.0;
-        let (channels, rate) = crate::planar_of(&id, session, clip_id)?;
-        let mut meter = craftkit_audio::LoudnessMeter::new(rate as f32, channels.len().max(1));
-        meter.process(&channels);
-        Ok(Outcome::new(format!("the clip `{clip_id}` is measured")).with_data(json!({
-            "clip": clip_id,
-            "rate": rate,
-            "channels": channels.len(),
-            "momentary_lufs": meter.momentary_lufs(),
-            "short_term_lufs": meter.short_term_lufs(),
-            "integrated_lufs": meter.integrated_lufs(),
-            "max_momentary_lufs": meter.max_momentary_lufs(),
-            "true_peak_db": meter.true_peak_db(),
-        })))
+            clip: NodeRef,
+        },
+        run: {
+
+            let id = "sound.clip.loudness.read".to_string();
+            let clip_id = self.clip.0;
+            let (channels, rate) = crate::planar_of(&id, session, clip_id)?;
+            let mut meter = craftkit_audio::LoudnessMeter::new(rate as f32, channels.len().max(1));
+            meter.process(&channels);
+            Ok(Outcome::new(format!("the clip `{clip_id}` is measured")).with_data(json!({
+                "clip": clip_id,
+                "rate": rate,
+                "channels": channels.len(),
+                "momentary_lufs": meter.momentary_lufs(),
+                "short_term_lufs": meter.short_term_lufs(),
+                "integrated_lufs": meter.integrated_lufs(),
+                "max_momentary_lufs": meter.max_momentary_lufs(),
+                "true_peak_db": meter.true_peak_db(),
+            })))
+
+        }
     }
 }

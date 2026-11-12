@@ -37,12 +37,12 @@
 //!   way — D sharp major as C sharp major — is a key the table does
 //!   not have, and it is refused rather than guessed at.
 
-use craftkit_derive::{Command, NodeKind};
+use craftkit_derive::{NodeKind, commands};
 
 use craftkit_sdk::document::{Canvas, Document, Fill, Node, Path, Point, Stroke};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::Value as Json;
-use craftkit_sdk::{BlendMode, Colour, EngineError, Number, Outcome, Session, Text};
+use craftkit_sdk::{BlendMode, Colour, EngineError, Number, Outcome, Text};
 
 use crate::timeline;
 
@@ -126,126 +126,107 @@ impl KeyKind {
     }
 }
 
-/// Set the **key** of the session at a place.
-///
-/// The key is a **name** — "G major", "E flat minor" — and it is
-/// written into the document as the number it stands for: the sharps
-/// and the mode. A second call at the same place changes the key that
-/// is there, the way the tree's command does.
-///
-/// A name that is not a key of the table is **refused**: the tree
-/// takes any string at all and shows it, and a string that is not a
-/// key is a string nobody can read.
-#[derive(Command)]
-#[command(
-    id = "sound.key.set",
-    area = "sound",
-    layer = "sound",
-    icon = "music",
-    menu("Event", "Key"),
-    mutates,
-    undoable
-)]
-pub struct SetKey {
-    /// The key, by name: "C major", "G major", "E flat minor".
-    pub key: Text,
-    /// Where the key changes, in ticks.
+commands! {
+    /// Set the **key** of the session at a place.
     ///
-    /// Without it, the key changes at the beginning of the session.
-    pub tick: Option<Number>,
-}
+    /// The key is a **name** — "G major", "E flat minor" — and it is
+    /// written into the document as the number it stands for: the sharps
+    /// and the mode. A second call at the same place changes the key that
+    /// is there, the way the tree's command does.
+    ///
+    /// A name that is not a key of the table is **refused**: the tree
+    /// takes any string at all and shows it, and a string that is not a
+    /// key is a string nobody can read.
+    sound.key.set {
+        area: "sound",
+        layer: "sound",
+        icon: "music",
+        mutates,
+        undoable,
+        menu: ("Event", "Key"),
+        params: {
+            /// The key, by name: "C major", "G major", "E flat minor".
 
-impl SetKey {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.key.set".to_string();
-        let Some((sharps, minor)) = craftkit_midi::names::key_from_name(&self.key.0) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("`{}` is not a key this battery knows", self.key.0),
-            });
-        };
-        let tick = match &self.tick {
-            Some(tick) => crate::ticks(tick.0)?,
-            None => 0,
-        };
-        let name = craftkit_midi::names::key_name(sharps, minor).unwrap_or_default();
-        let payload = KeyPayload { tick, sharps, minor };
-        let existing = crate::find_event(session, "sound.key", tick);
-        let id_node = match existing {
-            Some(existing) => {
-                if let Some(node) = session.document_mut()?.node_mut(existing) {
-                    node.data = payload.to_json();
-                    node.name = format!("key {name}");
+            key: Text,
+            /// Where the key changes, in ticks.
+            ///
+            /// Without it, the key changes at the beginning of the session.
+
+            tick: Option<Number>,
+        },
+        run: {
+
+            let id = "sound.key.set".to_string();
+            let Some((sharps, minor)) = craftkit_midi::names::key_from_name(&self.key.0) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("`{}` is not a key this battery knows", self.key.0),
+                });
+            };
+            let tick = match &self.tick {
+                Some(tick) => crate::ticks(tick.0)?,
+                None => 0,
+            };
+            let name = craftkit_midi::names::key_name(sharps, minor).unwrap_or_default();
+            let payload = KeyPayload { tick, sharps, minor };
+            let existing = crate::find_event(session, "sound.key", tick);
+            let id_node = match existing {
+                Some(existing) => {
+                    if let Some(node) = session.document_mut()?.node_mut(existing) {
+                        node.data = payload.to_json();
+                        node.name = format!("key {name}");
+                    }
+                    existing
                 }
-                existing
-            }
-            None => session.document_mut()?.add_node_with(
-                format!("key {name}"),
-                "sound.key",
-                None,
-                payload.to_json(),
-            ),
-        };
-        Ok(Outcome::changed(format!("the key at tick {tick} is {name}")).with_data(
-            serde_json::json!({ "id": id_node, "tick": tick, "key": name, "sharps": sharps, "minor": minor }),
-        ))
+                None => session.document_mut()?.add_node_with(
+                    format!("key {name}"),
+                    "sound.key",
+                    None,
+                    payload.to_json(),
+                ),
+            };
+            Ok(Outcome::changed(format!("the key at tick {tick} is {name}")).with_data(
+                serde_json::json!({ "id": id_node, "tick": tick, "key": name, "sharps": sharps, "minor": minor }),
+            ))
+
+        }
     }
-}
-
-/// Read the **keys** of the session.
-///
-/// The read gives every key change the session has, in the order they
-/// happen, and — when a place is asked for — the key that is in effect
-/// there: the last change at or before it.
-///
-/// A session that has **no** key change says so, and it is not a
-/// failure: the tree's session has none until one is added, and the
-/// tree's ruler shows nothing there.
-#[derive(Command)]
-#[command(id = "sound.key.read", area = "sound", layer = "sound", icon = "list")]
-pub struct ReadKeys {
-    /// The place to read the key at, in ticks.
+    /// Read the **keys** of the session.
     ///
-    /// Without it, every key change is read and no key is singled out.
-    pub tick: Option<Number>,
-}
+    /// The read gives every key change the session has, in the order they
+    /// happen, and — when a place is asked for — the key that is in effect
+    /// there: the last change at or before it.
+    ///
+    /// A session that has **no** key change says so, and it is not a
+    /// failure: the tree's session has none until one is added, and the
+    /// tree's ruler shows nothing there.
+    sound.key.read {
+        area: "sound",
+        layer: "sound",
+        icon: "list",
+        params: {
+            /// The place to read the key at, in ticks.
+            ///
+            /// Without it, every key change is read and no key is singled out.
 
-impl ReadKeys {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut keys: Vec<(i64, i8, bool, u64)> = session
-            .document()
-            .walk()
-            .filter(|node| node.kind == "sound.key")
-            .filter_map(|node| {
-                let payload = KeyPayload::from_json(&node.data).ok()?;
-                Some((payload.tick, payload.sharps, payload.minor, node.id))
-            })
-            .collect();
-        keys.sort_by_key(|(tick, sharps, minor, _)| (*tick, *sharps, *minor));
+            tick: Option<Number>,
+        },
+        run: {
 
-        let changes: Vec<Json> = keys
-            .iter()
-            .map(|(tick, sharps, minor, node)| {
-                serde_json::json!({
-                    "id": node,
-                    "tick": tick,
-                    "sharps": sharps,
-                    "minor": minor,
-                    "name": craftkit_midi::names::key_name(*sharps, *minor),
+            let mut keys: Vec<(i64, i8, bool, u64)> = session
+                .document()
+                .walk()
+                .filter(|node| node.kind == "sound.key")
+                .filter_map(|node| {
+                    let payload = KeyPayload::from_json(&node.data).ok()?;
+                    Some((payload.tick, payload.sharps, payload.minor, node.id))
                 })
-            })
-            .collect();
+                .collect();
+            keys.sort_by_key(|(tick, sharps, minor, _)| (*tick, *sharps, *minor));
 
-        // The key **in effect** at a place: the last change at or
-        // before it. A place before the first change has no key, and
-        // none is made up for it.
-        let at = match &self.tick {
-            Some(tick) => Some(crate::ticks(tick.0)?),
-            None => None,
-        };
-        let current = match at {
-            Some(at) => {
-                keys.iter().rev().find(|(tick, _, _, _)| *tick <= at).map(|(tick, sharps, minor, node)| {
+            let changes: Vec<Json> = keys
+                .iter()
+                .map(|(tick, sharps, minor, node)| {
                     serde_json::json!({
                         "id": node,
                         "tick": tick,
@@ -254,11 +235,33 @@ impl ReadKeys {
                         "name": craftkit_midi::names::key_name(*sharps, *minor),
                     })
                 })
-            }
-            None => None,
-        };
-        let count = changes.len();
-        Ok(Outcome::new(format!("the session has {count} key changes"))
-            .with_data(serde_json::json!({ "keys": changes, "current": current })))
+                .collect();
+
+            // The key **in effect** at a place: the last change at or
+            // before it. A place before the first change has no key, and
+            // none is made up for it.
+            let at = match &self.tick {
+                Some(tick) => Some(crate::ticks(tick.0)?),
+                None => None,
+            };
+            let current = match at {
+                Some(at) => {
+                    keys.iter().rev().find(|(tick, _, _, _)| *tick <= at).map(|(tick, sharps, minor, node)| {
+                        serde_json::json!({
+                            "id": node,
+                            "tick": tick,
+                            "sharps": sharps,
+                            "minor": minor,
+                            "name": craftkit_midi::names::key_name(*sharps, *minor),
+                        })
+                    })
+                }
+                None => None,
+            };
+            let count = changes.len();
+            Ok(Outcome::new(format!("the session has {count} key changes"))
+                .with_data(serde_json::json!({ "keys": changes, "current": current })))
+
+        }
     }
 }

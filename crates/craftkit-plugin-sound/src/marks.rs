@@ -37,10 +37,10 @@
 //! rating the caller did not want (§ the tree's own rule: a refusal
 //! never truncates).
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome};
 
 use crate::ClipPayload;
 
@@ -50,74 +50,75 @@ use crate::ClipPayload;
 /// five.
 pub(crate) const MAX_RATING: u8 = 5;
 
-/// Set the **rating** of a clip.
-///
-/// The rating is a number of stars, from none (zero) to five. A rating
-/// outside that range is **refused** and the clip keeps the rating it
-/// had: the tree's command clamps such a rating into the range, and a
-/// rating asked for as nine stars is not a rating.
-///
-/// A rating of **zero** is a rating — the clip has none — and not the
-/// absence of one, so a clip's rating is always there.
-#[derive(Command)]
-#[command(
-    id = "sound.clip.rating",
-    area = "sound",
-    layer = "sound",
-    icon = "sound",
-    menu("Clip", "Rating"),
-    mutates,
-    undoable
-)]
-pub struct SetRating {
-    /// The clip to rate.
-    pub clip: NodeRef,
-    /// The rating, from none (zero) to five stars.
-    pub rating: Number,
-}
+commands! {
+    /// Set the **rating** of a clip.
+    ///
+    /// The rating is a number of stars, from none (zero) to five. A rating
+    /// outside that range is **refused** and the clip keeps the rating it
+    /// had: the tree's command clamps such a rating into the range, and a
+    /// rating asked for as nine stars is not a rating.
+    ///
+    /// A rating of **zero** is a rating — the clip has none — and not the
+    /// absence of one, so a clip's rating is always there.
+    sound.clip.rating {
+        area: "sound",
+        layer: "sound",
+        icon: "sound",
+        mutates,
+        undoable,
+        menu: ("Clip", "Rating"),
+        params: {
+            /// The clip to rate.
 
-impl SetRating {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "sound.clip.rating".to_string();
-        let clip = self.clip.0;
-        let node = session.document().node(clip).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{clip}`"),
-        })?;
-        if node.kind != "sound.clip" {
-            return Err(EngineError::Failed {
+            clip: NodeRef,
+            /// The rating, from none (zero) to five stars.
+
+            rating: Number,
+        },
+        run: {
+
+            let id = "sound.clip.rating".to_string();
+            let clip = self.clip.0;
+            let node = session.document().node(clip).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
-                message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-            });
+                message: format!("there is no node `{clip}`"),
+            })?;
+            if node.kind != "sound.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            // The rating: a whole number of stars, and no more than five.
+            let asked = self.rating.0;
+            if !asked.is_finite() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a rating is a number of stars".to_string(),
+                });
+            }
+            if asked.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a rating is a whole number of stars, and {asked} is not"),
+                });
+            }
+            if asked < 0.0 || asked > MAX_RATING as f64 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a rating is from none to {MAX_RATING} stars, and {asked} is not a rating"),
+                });
+            }
+            let rating = asked as u8;
+            let mut payload = ClipPayload::from_json(&node.data)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
+            payload.rating = rating;
+            if let Some(node) = session.document_mut()?.node_mut(clip) {
+                node.data = payload.to_json();
+            }
+            Ok(Outcome::changed(format!("the clip `{clip}` is rated {rating}"))
+                .with_data(serde_json::json!({ "id": clip, "rating": rating })))
+
         }
-        // The rating: a whole number of stars, and no more than five.
-        let asked = self.rating.0;
-        if !asked.is_finite() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a rating is a number of stars".to_string(),
-            });
-        }
-        if asked.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a rating is a whole number of stars, and {asked} is not"),
-            });
-        }
-        if asked < 0.0 || asked > MAX_RATING as f64 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a rating is from none to {MAX_RATING} stars, and {asked} is not a rating"),
-            });
-        }
-        let rating = asked as u8;
-        let mut payload = ClipPayload::from_json(&node.data)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error })?;
-        payload.rating = rating;
-        if let Some(node) = session.document_mut()?.node_mut(clip) {
-            node.data = payload.to_json();
-        }
-        Ok(Outcome::changed(format!("the clip `{clip}` is rated {rating}"))
-            .with_data(serde_json::json!({ "id": clip, "rating": rating })))
     }
 }
