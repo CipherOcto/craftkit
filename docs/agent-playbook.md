@@ -327,3 +327,72 @@ could read directly.
 - `KNOWN-GAPS.md` — what this tree does not do, and what its gates cannot see.
 - `docs/architecture.md` — the layers and the seams.
 - `skills/craftkit-checking/SKILL.md` — the checklist for a broken tree.
+
+---
+
+## 9. How the next session is measured
+
+The plan's exit numbers are **session-side**: the calls, the round trips and
+the machine time are properties of the *session* that did the work, not of
+the tree. The tree measures its own half — `cargo xtask census` (§859) says
+how big an arc is, how many files it touches and how long it takes from one
+arc to the next — and **this section is the procedure for the other half**.
+
+### What is measured
+
+| the number | what it is | where it comes from |
+|---|---|---|
+| the calls an arc makes | every tool call of the arc | the session's own record |
+| the split | how many of the calls read or search, and how many write | the same record, by what the call did |
+| the round trips | how many times the work went out and came back | the same record |
+| the machine time | the wall clock of the builds and the suites | the same record, timed |
+| the workspace runs | how many times the **whole** workspace was tested | the same record |
+| the sub-agents | how many were spawned, and how many paid for themselves | the same record |
+
+**And the tree's half**, which is in the tree and is measured by the tree:
+`cargo xtask census` reports the arcs, the lines and the files each one
+touched, the gap between them, and the commands per battery and per file.
+
+### The baseline
+
+The survey that made the plan is the baseline, and its numbers are in
+`docs/survey-cost-and-meta.md`. The ones the waves have to move:
+
+| the number | the baseline |
+|---|---|
+| the calls an arc makes | 35.4 |
+| of them, reading and searching | 17.8 (50.3 %) |
+| of them, the reference tree | 3.73 |
+| of them, finding the test conventions | 1.465 (9.6 %) |
+| the machine time an arc takes | 3.9 min |
+| the workspace test runs | 959 (26.8 h) |
+| the sub-agents that paid for themselves | 6 of 41 |
+
+### The rule
+
+- **A shortcut that does not move a number did not happen.** The waves are
+  not a list of features; they are a claim about the cost of an arc, and
+  the number is the claim. A shortcut that leaves the number where it was
+  is a shortcut that did not happen, whatever it did to the tree.
+- **The baseline is read, not remembered.** The numbers above are the ones
+  the survey measured; a session that quotes a different baseline has
+  invented a comparison.
+- **The tree's half is measured by the tree.** When the question is "how
+  big is an arc", the answer is `cargo xtask census` and not an estimate —
+  and the same is true of the counts (`cargo xtask counts`) and of the
+  bounds.
+
+### The wave exits
+
+| wave | the number that must move | from | to |
+|---|---|---|---|
+| 1 | workspace test runs | 959 (26.8 h) | < 100 (≈ 4 h) |
+| 1 | calls per arc for verify | ~9 | 1 |
+| 2 | claim and count searches per arc | 1.81 | 0 |
+| 3 | reading and searching per arc | 17.8 | < 4 |
+| 3 | calls per arc | 35.4 | < 12 |
+| all | machine time per arc | 3.9 min | < 1 min |
+
+The tree-side baselines — the lines in an arc and the gap between two arcs
+— are in `docs/plan-acceleration.md`, and they are measured by
+`cargo xtask census`.

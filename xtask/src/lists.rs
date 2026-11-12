@@ -668,6 +668,49 @@ pub fn the_delegation_rule_is_stated(root: &Path) -> Result<Vec<String>, String>
     Ok(problems)
 }
 
+/// The **measurement** has a procedure, and the procedure is in the prose.
+///
+/// The plan's exit numbers are session-side: the calls, the round trips and
+/// the machine time are properties of the session that did the work, so
+/// they are not in the tree — but the **procedure** that reads them is, and
+/// a procedure that is not written down is a procedure nobody follows.
+///
+/// So the playbook states the rule and names the baseline, and the gate
+/// says so when it does not.
+pub fn the_measurement_procedure_is_stated(root: &Path) -> Result<Vec<String>, String> {
+    let mut problems = Vec::new();
+    let playbook = root.join("docs/agent-playbook.md");
+    let text = read_text(&playbook).map_err(|e| format!("could not read the playbook: {e}"))?;
+    // The rule: a shortcut that does not move a number did not happen.
+    if !text.contains("does not move a number") {
+        problems.push(
+            "the playbook does not state the rule of the measurement: a shortcut that does not move \
+             a number did not happen"
+                .to_string(),
+        );
+    }
+    // The baseline: the numbers the survey measured, and the tree's own
+    // half is named.
+    for needle in ["35.4", "959", "cargo xtask census"] {
+        if !text.contains(needle) {
+            problems
+                .push(format!("the playbook does not name `{needle}`: the baseline is read, not remembered"));
+        }
+    }
+    // The survey holds the baseline the playbook reads against.
+    let survey = root.join("docs/survey-cost-and-meta.md");
+    let survey_text = read_text(&survey).map_err(|e| format!("could not read the survey: {e}"))?;
+    for needle in ["35.4", "26.8", "959"] {
+        if !survey_text.contains(needle) {
+            problems.push(format!(
+                "the survey does not hold `{needle}`: the baseline the waves move against is not \
+                 there"
+            ));
+        }
+    }
+    Ok(problems)
+}
+
 /// The gate itself.
 pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
     step("lists");
@@ -697,6 +740,9 @@ pub fn run(root: &Path, _args: &[String]) -> Result<crate::Outcome, String> {
 
     // The rule about delegation is in the prose, and the prose is in the tree.
     problems.extend(the_delegation_rule_is_stated(root)?);
+
+    // The measurement has a procedure, and the procedure is in the prose.
+    problems.extend(the_measurement_procedure_is_stated(root)?);
 
     // Every port of the manifest is still in the tree.
     let index = crate::index::build(root).map_err(|e| format!("the tree could not be indexed: {e}"))?;
