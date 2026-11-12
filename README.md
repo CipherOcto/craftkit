@@ -4236,6 +4236,7 @@ so.
 | the tree's **answers**, in one call | **built.**  answers where a command lives, what an area holds and what a bound is — with the file and the line — from an index of the tree's own commands (§851) | §851 |
 | the **example** of a battery | **built.** One command per battery is marked  in its own declaration, and  prints it — with the battery's other commands and a test of it (§852) | §852 |
 | the **port manifest** | **built.** One row per ported rule — the rule, where it came from, the crate, the module, the command, the test and the section — and the gate checks every row against the tree (§853) | §853 |
+| the **brief** of an arc | **built.** One call gives the arc the rule, the landing site, the conventions, the claims, the counts and the commands — every one of them read out of the tree (§854) | §854 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -55935,7 +55936,6 @@ about this. Each of them was a search. Now each of them is a call.
 - **The index is a reading of the tree as it is today.** A command declared
   in a macro, or written by a script, is not in it — and the count it
   reports is what the tree says about itself, not what the compiler knows.
-
 ## 852. The battery carries its own example
 
 "How is a command written in the grid battery?" was the largest of the
@@ -55997,7 +55997,6 @@ searches an arc made. The answer is now in the battery.
   model to copy, not a form to fill in.
 - **Nine batteries mark one command each, and the other nine plugins mark
   none.** The plugins are not batteries, and the rule is about batteries.
-
 ## 853. The port manifest
 
 A port used to be invisible. Now the tree keeps a record of it.
@@ -56056,3 +56055,53 @@ A port used to be invisible. Now the tree keeps a record of it.
 - **The manifest does not say what a family tree has *not* been ported.**
   That question needs the family trees side by side with this one, and it is
   a survey, not a manifest.
+## 854. The brief: everything one arc needs, in one page
+
+An arc needs six things before it writes a line. It used to look for each of
+them. Now it asks for them together.
+
+### What was built
+
+- **`cargo xtask brief --battery grid --id grid.workbook.add`**, which
+  prints:
+  - **the rule** — what it is, and where it was ported from, read out of the
+    port manifest;
+  - **the landing site** — the file and the line, and the battery's other
+    commands, so that a battery is not mistaken for one command;
+  - **the conventions** — the battery's **example** command (§852) and **a
+    test** of it, because a command without its test is half an arc;
+  - **the claims** — the § number the arc's section takes, where the claim
+    row goes, and the **counts** of the tree;
+  - **the commands** — the scoped check to run, and the gate to run at the
+    end.
+
+### What the port found
+
+- **The § number is the number the README is about to have** — the highest
+  section, plus one — so the brief cannot be wrong about it.
+- **A command that is not in the tree has no landing site**, and the brief
+  says so rather than inventing one: the arc that is *writing* the command
+  is told where it will land by the battery's own conventions, not by an
+  answer the tree does not have yet.
+- **The brief is made of facts, not of advice.** Every part of it is read
+  out of the tree: the index, the manifest, the example, the counts. There
+  is nothing in it that a person wrote and a person can forget.
+
+### What it cost
+
+- **One new test file**: `xtask/tests/brief.rs` — four tests: the brief has
+  every part, the section is the one the README is about to have, a command
+  that is not in the tree is not given a landing site, and the counts of the
+  brief are the counts of the tree.
+- **One new module** (`brief`) and one new command.
+
+### What it does not settle
+
+- **The brief does not know what the rule *means*.** It says where the rule
+  came from; it does not say what it says. That is the part of the port that
+  is the reader's work, and no tool can do it.
+- **The brief is one page of facts and not a plan.** It does not say what
+  the arc should change, how the rule should behave, or what a refusal
+  should say. It is the ground the arc stands on, not the arc.
+- **The counts in the brief are the counts of the source**, and the tree's
+  own test is what says that the source and the registry agree (§848).
