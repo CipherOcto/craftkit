@@ -16,10 +16,10 @@
 //!   before it and the point after it;
 //! - the spline is **simplified** at the fidelity.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, EngineError, Number, Outcome, Path, Point, Session, Text};
+use craftkit_sdk::{Bool, EngineError, Number, Outcome, Path, Point, Text};
 
 use crate::add_path;
 use crate::anchors::Anchor;
@@ -33,67 +33,72 @@ const MAX_FIDELITY: f64 = 100.0;
 /// The **fidelity** a stroke is fitted at when the caller names none.
 const DEFAULT_FIDELITY: f64 = 1.5;
 
-/// Draw a **stroke by hand** in the document.
-///
-/// The stroke is the tree's own: the samples are fitted, the jitter is
-/// dropped, the sharp turns stay corners, and the result is simplified.
-#[derive(Command)]
-#[command(
-    id = "vector.path.freehand",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Create"),
-    mutates,
-    undoable
-)]
-pub struct Freehand {
-    /// The samples of the stroke: `[[x, y], …]` or `[{x, y}, …]`.
-    pub points: Json,
-    /// The **fidelity** the stroke is fitted at: how far the stroke may
-    /// be from the samples. 1.5 if it is not given.
-    pub fidelity: Option<Number>,
-    /// Whether the stroke is fitted at all.
+commands! {
+    /// Draw a **stroke by hand** in the document.
     ///
-    /// It is, unless this says otherwise: a stroke that is not fitted
-    /// is the samples joined by straight sides.
-    pub fit: Option<Bool>,
-    /// Whether the stroke is closed.
-    pub closed: Option<Bool>,
-    /// What to call it.
-    pub name: Option<Text>,
-    /// The colour it is filled with, as `#rrggbb`.
-    pub fill: Option<Text>,
-}
+    /// The stroke is the tree's own: the samples are fitted, the jitter is
+    /// dropped, the sharp turns stay corners, and the result is simplified.
+    vector.path.freehand {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Create"),
+        params: {
+            /// The samples of the stroke: `[[x, y], …]` or `[{x, y}, …]`.
 
-impl Freehand {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.freehand".to_string();
-        let fidelity = self.fidelity.as_ref().map(|fidelity| fidelity.0).unwrap_or(DEFAULT_FIDELITY);
-        if !fidelity.is_finite() || !(MIN_FIDELITY..=MAX_FIDELITY).contains(&fidelity) {
-            return Err(EngineError::Failed {
-                id,
-                message: format!(
-                    "a fidelity is a number between {MIN_FIDELITY} and {MAX_FIDELITY}, and \
-                     the stroke is fitted at it"
-                ),
-            });
+            points: Json,
+            /// The **fidelity** the stroke is fitted at: how far the stroke may
+            /// be from the samples. 1.5 if it is not given.
+
+            fidelity: Option<Number>,
+            /// Whether the stroke is fitted at all.
+            ///
+            /// It is, unless this says otherwise: a stroke that is not fitted
+            /// is the samples joined by straight sides.
+
+            fit: Option<Bool>,
+            /// Whether the stroke is closed.
+
+            closed: Option<Bool>,
+            /// What to call it.
+
+            name: Option<Text>,
+            /// The colour it is filled with, as `#rrggbb`.
+
+            fill: Option<Text>,
+        },
+        run: {
+
+            let id = "vector.path.freehand".to_string();
+            let fidelity = self.fidelity.as_ref().map(|fidelity| fidelity.0).unwrap_or(DEFAULT_FIDELITY);
+            if !fidelity.is_finite() || !(MIN_FIDELITY..=MAX_FIDELITY).contains(&fidelity) {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!(
+                        "a fidelity is a number between {MIN_FIDELITY} and {MAX_FIDELITY}, and \
+                         the stroke is fitted at it"
+                    ),
+                });
+            }
+            let samples =
+                read_samples(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let closed = self.closed.map(|closed| closed.0).unwrap_or(false);
+            let fit = self.fit.map(|fit| fit.0).unwrap_or(true);
+            let path = stroke(&samples, fidelity, closed, fit);
+            if path.is_empty() {
+                return Err(EngineError::Failed { id, message: "the stroke has nothing in it".to_string() });
+            }
+            // The tree's own name for a stroke drawn by hand.
+            let name = match &self.name {
+                Some(name) => name.0.clone(),
+                None => "Pencil".to_string(),
+            };
+            let node = add_path(session, name, path, self.fill.as_ref())?;
+            Ok(Outcome::changed(format!("added a stroke `{node}`")).with_data(json!({ "id": node })))
+
         }
-        let samples =
-            read_samples(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let closed = self.closed.map(|closed| closed.0).unwrap_or(false);
-        let fit = self.fit.map(|fit| fit.0).unwrap_or(true);
-        let path = stroke(&samples, fidelity, closed, fit);
-        if path.is_empty() {
-            return Err(EngineError::Failed { id, message: "the stroke has nothing in it".to_string() });
-        }
-        // The tree's own name for a stroke drawn by hand.
-        let name = match &self.name {
-            Some(name) => name.0.clone(),
-            None => "Pencil".to_string(),
-        };
-        let node = add_path(session, name, path, self.fill.as_ref())?;
-        Ok(Outcome::changed(format!("added a stroke `{node}`")).with_data(json!({ "id": node })))
     }
 }
 

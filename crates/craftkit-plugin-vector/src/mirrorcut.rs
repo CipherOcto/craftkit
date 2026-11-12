@@ -17,10 +17,10 @@
 //! - what is kept is the shape **cut** at the axis, and the result is
 //!   the shape **joined** to its mirror.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Path, Point, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Outcome, Path, Point, Text};
 
 use craftkit_vector_geom as geom;
 
@@ -33,119 +33,125 @@ use crate::{vector_of, write_back};
 /// The tree's own: a unit.
 const REACH: f64 = 1.0;
 
-/// Mirror a closed shape in an axis, and join it to its mirror.
-#[derive(Command)]
-#[command(
-    id = "vector.path.cut.mirror",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Mirror and cut"),
-    mutates,
-    undoable
-)]
-pub struct MirrorCut {
-    /// The path.
-    pub path: NodeRef,
-    /// The axis: `vertical` (the default), `horizontal` or `free`.
-    pub axis: Option<Text>,
-    /// A point on the axis — where a vertical or horizontal axis runs.
-    pub from: Option<Json>,
-    /// The other point of the axis, when it is `free`.
-    pub to: Option<Json>,
-    /// The side that is kept: `left`, `right`, `top` or `bottom`.
-    pub keep: Option<Text>,
-}
+commands! {
+    /// Mirror a closed shape in an axis, and join it to its mirror.
+    vector.path.cut.mirror {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Mirror and cut"),
+        params: {
+            /// The path.
 
-impl MirrorCut {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.cut.mirror".to_string();
-        let vector = vector_of(session, self.path.0)?;
-        if vector.path.subpaths.iter().any(|contour| !contour.closed) {
-            return Err(EngineError::Failed {
-                id,
-                message: "the mirror cuts closed shapes, and this path has an open contour".to_string(),
-            });
-        }
-        if vector.path.is_empty() {
-            return Err(EngineError::Failed { id, message: "the path has no shape to cut".to_string() });
-        }
-        let kind = self.axis.as_ref().map(|axis| axis.0.clone()).unwrap_or_else(|| "vertical".to_string());
-        let axis = match kind.as_str() {
-            "vertical" => Axis::vertical(self.at(&vector)?),
-            "horizontal" => Axis::horizontal(self.at(&vector)?),
-            "free" => {
-                let from = self.from.as_ref().ok_or_else(|| EngineError::Failed {
-                    id: id.clone(),
-                    message: "a free axis needs the two points it runs through".to_string(),
-                })?;
-                let to = self.to.as_ref().ok_or_else(|| EngineError::Failed {
-                    id: id.clone(),
-                    message: "a free axis needs the two points it runs through".to_string(),
-                })?;
-                let from =
-                    read_point(from).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-                let to = read_point(to).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-                Axis::through(from, to).ok_or_else(|| EngineError::Failed {
-                    id: id.clone(),
-                    message: "the axis's two points must differ".to_string(),
-                })?
+            path: NodeRef,
+            /// The axis: `vertical` (the default), `horizontal` or `free`.
+
+            axis: Option<Text>,
+            /// A point on the axis — where a vertical or horizontal axis runs.
+
+            from: Option<Json>,
+            /// The other point of the axis, when it is `free`.
+
+            to: Option<Json>,
+            /// The side that is kept: `left`, `right`, `top` or `bottom`.
+
+            keep: Option<Text>,
+        },
+        methods: {
+            /// The point a **vertical** or **horizontal** axis runs through: the
+            /// one the caller names, or the **centre** of the shape.
+            fn at(&self, vector: &crate::VectorNode) -> Result<Point, EngineError> {
+                if let Some(from) = &self.from {
+                    return read_point(from).map_err(|message| EngineError::Failed {
+                        id: "vector.path.cut.mirror".to_string(),
+                        message,
+                    });
+                }
+                let bounds = geom::bounds(&vector.path);
+                Ok(Point::new(bounds.x + bounds.w / 2.0, bounds.y + bounds.h / 2.0))
             }
-            other => {
+
+        },
+        run: {
+
+            let id = "vector.path.cut.mirror".to_string();
+            let vector = vector_of(session, self.path.0)?;
+            if vector.path.subpaths.iter().any(|contour| !contour.closed) {
                 return Err(EngineError::Failed {
                     id,
-                    message: format!("there is no axis called `{other}` (vertical|horizontal|free)"),
+                    message: "the mirror cuts closed shapes, and this path has an open contour".to_string(),
                 });
             }
-        };
-        let sign = keep_sign(&axis, self.keep.as_ref().map(|keep| keep.0.as_str()))
-            .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        // The part of the shape on the side that is kept.
-        let bounds = geom::bounds(&vector.path);
-        let box_of =
-            (bounds.x - REACH, bounds.y - REACH, bounds.x + bounds.w + REACH, bounds.y + bounds.h + REACH);
-        // The half of the box on the side that is kept. The box is
-        // wholly on the other side when the axis does not reach the
-        // shape, and then there is nothing to keep.
-        let kept = match axis.half_plane(sign, box_of) {
-            Some(region) => geom::boolean(&vector.path, &region, geom::BoolOp::Intersect)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?,
-            None => Path::default(),
-        };
-        if kept.is_empty() {
-            // The shape is wholly on the **other** side: there is
-            // nothing to keep, and nothing is left.
-            session.document_mut()?.remove_node(self.path.0);
-            return Ok(
-                Outcome::changed("the shape is taken away").with_data(json!({ "removed": self.path.0 }))
-            );
-        }
-        // The shape's own **mirror** across the axis, and the two
-        // joined.
-        let reflection = reflection_of(&axis)?;
-        let mirrored = reflection.transform_path(&kept);
-        let joined = geom::boolean(&kept, &mirrored, geom::BoolOp::Union)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-        if joined.is_empty() {
-            return Err(EngineError::Failed { id, message: "the mirror left no shape".to_string() });
-        }
-        let mut vector = vector;
-        vector.path = joined;
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the shape is mirrored").with_data(json!({ "id": self.path.0 })))
-    }
+            if vector.path.is_empty() {
+                return Err(EngineError::Failed { id, message: "the path has no shape to cut".to_string() });
+            }
+            let kind = self.axis.as_ref().map(|axis| axis.0.clone()).unwrap_or_else(|| "vertical".to_string());
+            let axis = match kind.as_str() {
+                "vertical" => Axis::vertical(self.at(&vector)?),
+                "horizontal" => Axis::horizontal(self.at(&vector)?),
+                "free" => {
+                    let from = self.from.as_ref().ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: "a free axis needs the two points it runs through".to_string(),
+                    })?;
+                    let to = self.to.as_ref().ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: "a free axis needs the two points it runs through".to_string(),
+                    })?;
+                    let from =
+                        read_point(from).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                    let to = read_point(to).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                    Axis::through(from, to).ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: "the axis's two points must differ".to_string(),
+                    })?
+                }
+                other => {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!("there is no axis called `{other}` (vertical|horizontal|free)"),
+                    });
+                }
+            };
+            let sign = keep_sign(&axis, self.keep.as_ref().map(|keep| keep.0.as_str()))
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            // The part of the shape on the side that is kept.
+            let bounds = geom::bounds(&vector.path);
+            let box_of =
+                (bounds.x - REACH, bounds.y - REACH, bounds.x + bounds.w + REACH, bounds.y + bounds.h + REACH);
+            // The half of the box on the side that is kept. The box is
+            // wholly on the other side when the axis does not reach the
+            // shape, and then there is nothing to keep.
+            let kept = match axis.half_plane(sign, box_of) {
+                Some(region) => geom::boolean(&vector.path, &region, geom::BoolOp::Intersect)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?,
+                None => Path::default(),
+            };
+            if kept.is_empty() {
+                // The shape is wholly on the **other** side: there is
+                // nothing to keep, and nothing is left.
+                session.document_mut()?.remove_node(self.path.0);
+                return Ok(
+                    Outcome::changed("the shape is taken away").with_data(json!({ "removed": self.path.0 }))
+                );
+            }
+            // The shape's own **mirror** across the axis, and the two
+            // joined.
+            let reflection = reflection_of(&axis)?;
+            let mirrored = reflection.transform_path(&kept);
+            let joined = geom::boolean(&kept, &mirrored, geom::BoolOp::Union)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            if joined.is_empty() {
+                return Err(EngineError::Failed { id, message: "the mirror left no shape".to_string() });
+            }
+            let mut vector = vector;
+            vector.path = joined;
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the shape is mirrored").with_data(json!({ "id": self.path.0 })))
 
-    /// The point a **vertical** or **horizontal** axis runs through: the
-    /// one the caller names, or the **centre** of the shape.
-    fn at(&self, vector: &crate::VectorNode) -> Result<Point, EngineError> {
-        if let Some(from) = &self.from {
-            return read_point(from).map_err(|message| EngineError::Failed {
-                id: "vector.path.cut.mirror".to_string(),
-                message,
-            });
         }
-        let bounds = geom::bounds(&vector.path);
-        Ok(Point::new(bounds.x + bounds.w / 2.0, bounds.y + bounds.h / 2.0))
     }
 }
 

@@ -31,7 +31,7 @@
 //! - the divide and the merge are of **two** paths, and a selection of
 //!   more than two is **refused** for them.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, FormatValue, NodeRef, Outcome, Path, Session};
@@ -112,167 +112,295 @@ fn front_and_back(
     Ok((paths[0], paths[1]))
 }
 
-/// **Crop** a path with another: the part of the path behind that
-/// lies inside the path in front.
-///
-/// The path in front is taken away, and what it was covering is what
-/// is left.
-#[derive(Command)]
-#[command(
-    id = "vector.path.crop",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Combine"),
-    mutates,
-    undoable
-)]
-pub struct CropPaths {
-    /// The path in front.
+commands! {
+    /// **Crop** a path with another: the part of the path behind that
+    /// lies inside the path in front.
     ///
-    /// Leave it out and the **selection** is used instead.
-    pub front: Option<NodeRef>,
-    /// The path behind.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub back: Option<NodeRef>,
-}
+    /// The path in front is taken away, and what it was covering is what
+    /// is left.
+    vector.path.crop {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Combine"),
+        params: {
+            /// The path in front.
+            ///
+            /// Leave it out and the **selection** is used instead.
 
-impl CropPaths {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.crop".to_string();
-        let paths = the_paths(session, &id, self.front, self.back)?;
-        let front = paths[0];
-        let one = crate::vector_of(session, front)?;
-        if one.path.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the path in front is empty".to_string(),
-            });
-        }
-        // The part of each path behind that lies inside the path in
-        // front. A path with nothing inside it has nothing left: the
-        // crop keeps what lies inside, and there is none of it.
-        let mut kept: Vec<(u64, Path)> = Vec::new();
-        let mut gone: Vec<u64> = Vec::new();
-        for path in &paths[1..] {
-            let two = crate::vector_of(session, *path)?;
-            if two.path.is_empty() {
+            front: Option<NodeRef>,
+            /// The path behind.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            back: Option<NodeRef>,
+        },
+        run: {
+
+            let id = "vector.path.crop".to_string();
+            let paths = the_paths(session, &id, self.front, self.back)?;
+            let front = paths[0];
+            let one = crate::vector_of(session, front)?;
+            if one.path.is_empty() {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the path `{path}` is empty"),
+                    message: "the path in front is empty".to_string(),
                 });
             }
-            let shared = geom::boolean(&one.path, &two.path, geom::BoolOp::Intersect)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-            if shared.is_empty() {
-                gone.push(*path);
-                continue;
-            }
-            kept.push((*path, shared));
-        }
-        if kept.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the paths do not meet, and there is nothing to crop".to_string(),
-            });
-        }
-        // The path in front is taken away, and what it was covering
-        // is what is left.
-        for (path, shared) in kept {
-            let mut result = crate::vector_of(session, path)?;
-            result.path = shared;
-            crate::write_back(session, path, &result)?;
-        }
-        // A path behind that did not meet the path in front has
-        // nothing left of the crop: it is gone.
-        for path in gone {
-            session.document_mut()?.remove_node(path);
-        }
-        session.document_mut()?.remove_node(front);
-        let count = paths.len() - 1;
-        Ok(Outcome::changed(format!("the path in front was cropped away from {count} path(s)"))
-            .with_data(json!({ "id": front, "cropped": count })))
-    }
-}
-
-/// **Trim** two paths: the path behind loses the part the path in
-/// front was covering.
-///
-/// The path in front keeps all of itself, and the two do not overlap
-/// afterwards.
-#[derive(Command)]
-#[command(
-    id = "vector.path.trim",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Combine"),
-    mutates,
-    undoable
-)]
-pub struct TrimPaths {
-    /// The path in front.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub front: Option<NodeRef>,
-    /// The path behind.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub back: Option<NodeRef>,
-}
-
-impl TrimPaths {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.trim".to_string();
-        let paths = the_paths(session, &id, self.front, self.back)?;
-        // The paths in front of each path, one at a time: the hidden
-        // part is taken away path by path, because a path in front is
-        // a path and not a shape of many.
-        let mut trimmed: Vec<(u64, Path)> = Vec::new();
-        // From the back to the front, so that what is in front of a
-        // path is known when the path is reached.
-        for index in (0..paths.len()).rev() {
-            let path = paths[index];
-            let vector = crate::vector_of(session, path)?;
-            if vector.path.is_empty() {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the path `{path}` is empty"),
-                });
-            }
-            let mut kept = vector.path.clone();
-            for other in &paths[..index] {
-                let in_front = crate::vector_of(session, *other)?;
-                if in_front.path.is_empty() {
+            // The part of each path behind that lies inside the path in
+            // front. A path with nothing inside it has nothing left: the
+            // crop keeps what lies inside, and there is none of it.
+            let mut kept: Vec<(u64, Path)> = Vec::new();
+            let mut gone: Vec<u64> = Vec::new();
+            for path in &paths[1..] {
+                let two = crate::vector_of(session, *path)?;
+                if two.path.is_empty() {
                     return Err(EngineError::Failed {
                         id: id.clone(),
-                        message: format!("the path `{other}` is empty"),
+                        message: format!("the path `{path}` is empty"),
                     });
                 }
-                kept = geom::boolean(&kept, &in_front.path, geom::BoolOp::Difference)
+                let shared = geom::boolean(&one.path, &two.path, geom::BoolOp::Intersect)
                     .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-                if kept.is_empty() {
-                    break;
+                if shared.is_empty() {
+                    gone.push(*path);
+                    continue;
                 }
+                kept.push((*path, shared));
             }
-            trimmed.push((path, kept));
-        }
-        // The paths that have something left are kept, and the ones
-        // that have nothing left are gone: a path that is hidden
-        // altogether is not a path.
-        let mut kept = 0usize;
-        for (path, path_of) in trimmed {
-            if path_of.is_empty() {
+            if kept.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the paths do not meet, and there is nothing to crop".to_string(),
+                });
+            }
+            // The path in front is taken away, and what it was covering
+            // is what is left.
+            for (path, shared) in kept {
+                let mut result = crate::vector_of(session, path)?;
+                result.path = shared;
+                crate::write_back(session, path, &result)?;
+            }
+            // A path behind that did not meet the path in front has
+            // nothing left of the crop: it is gone.
+            for path in gone {
                 session.document_mut()?.remove_node(path);
-                continue;
             }
-            let mut result = crate::vector_of(session, path)?;
-            result.path = path_of;
-            crate::write_back(session, path, &result)?;
-            kept += 1;
+            session.document_mut()?.remove_node(front);
+            let count = paths.len() - 1;
+            Ok(Outcome::changed(format!("the path in front was cropped away from {count} path(s)"))
+                .with_data(json!({ "id": front, "cropped": count })))
+
         }
-        Ok(Outcome::changed(format!("{kept} path(s) were trimmed")).with_data(json!({ "trimmed": kept })))
+    }
+    /// **Trim** two paths: the path behind loses the part the path in
+    /// front was covering.
+    ///
+    /// The path in front keeps all of itself, and the two do not overlap
+    /// afterwards.
+    vector.path.trim {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Combine"),
+        params: {
+            /// The path in front.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            front: Option<NodeRef>,
+            /// The path behind.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            back: Option<NodeRef>,
+        },
+        run: {
+
+            let id = "vector.path.trim".to_string();
+            let paths = the_paths(session, &id, self.front, self.back)?;
+            // The paths in front of each path, one at a time: the hidden
+            // part is taken away path by path, because a path in front is
+            // a path and not a shape of many.
+            let mut trimmed: Vec<(u64, Path)> = Vec::new();
+            // From the back to the front, so that what is in front of a
+            // path is known when the path is reached.
+            for index in (0..paths.len()).rev() {
+                let path = paths[index];
+                let vector = crate::vector_of(session, path)?;
+                if vector.path.is_empty() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the path `{path}` is empty"),
+                    });
+                }
+                let mut kept = vector.path.clone();
+                for other in &paths[..index] {
+                    let in_front = crate::vector_of(session, *other)?;
+                    if in_front.path.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the path `{other}` is empty"),
+                        });
+                    }
+                    kept = geom::boolean(&kept, &in_front.path, geom::BoolOp::Difference)
+                        .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+                    if kept.is_empty() {
+                        break;
+                    }
+                }
+                trimmed.push((path, kept));
+            }
+            // The paths that have something left are kept, and the ones
+            // that have nothing left are gone: a path that is hidden
+            // altogether is not a path.
+            let mut kept = 0usize;
+            for (path, path_of) in trimmed {
+                if path_of.is_empty() {
+                    session.document_mut()?.remove_node(path);
+                    continue;
+                }
+                let mut result = crate::vector_of(session, path)?;
+                result.path = path_of;
+                crate::write_back(session, path, &result)?;
+                kept += 1;
+            }
+            Ok(Outcome::changed(format!("{kept} path(s) were trimmed")).with_data(json!({ "trimmed": kept })))
+
+        }
+    }
+    /// **Divide** two paths: every **face** of them.
+    ///
+    /// The paths are cut at the places where they meet, and what is left
+    /// is one path for each face: the part of the path in front that the
+    /// path behind does not cover, the part of the path behind that the
+    /// path in front does not cover, and the part they share. The face
+    /// they share takes the **style of the path in front**, because the
+    /// path in front is what covers it.
+    vector.path.divide {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Combine"),
+        params: {
+            /// The path in front.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            front: Option<NodeRef>,
+            /// The path behind.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            back: Option<NodeRef>,
+        },
+        run: {
+
+            let id = "vector.path.divide".to_string();
+            let (front, back) = front_and_back(session, &id, self.front, self.back)?;
+            let one = crate::vector_of(session, front)?;
+            let two = crate::vector_of(session, back)?;
+            if one.path.is_empty() || two.path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "one of the paths is empty".to_string(),
+                });
+            }
+            // The **faces**: what the path behind does not cover, what the
+            // path in front does not cover, and what they share.
+            let back_only = geom::boolean(&two.path, &one.path, geom::BoolOp::Difference)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            let front_only = geom::boolean(&one.path, &two.path, geom::BoolOp::Difference)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            let shared = geom::boolean(&one.path, &two.path, geom::BoolOp::Intersect)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            // The path behind keeps what is its own, and the path in front
+            // keeps what is its own.
+            let mut back_result = two.clone();
+            back_result.path = back_only;
+            crate::write_back(session, back, &back_result)?;
+            let mut front_result = one.clone();
+            front_result.path = front_only;
+            crate::write_back(session, front, &front_result)?;
+            // The face they share is a path of its own, and it takes the
+            // style of the path in front.
+            let shared_id = if shared.is_empty() {
+                None
+            } else {
+                Some(a_path(session, &one, shared, "the shared face".to_string())?)
+            };
+            let count = 2 + usize::from(shared_id.is_some());
+            Ok(Outcome::changed(format!("the paths were divided into {count} face(s)"))
+                .with_data(json!({ "faces": count, "shared": shared_id })))
+
+        }
+    }
+    /// **Merge** two paths: the parts that are the same are joined.
+    ///
+    /// The tree's merge is the trim and then a join: the parts that are
+    /// left are joined into one path when they are painted the same way,
+    /// and they are kept apart when they are not.
+    vector.path.merge {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Combine"),
+        params: {
+            /// The path in front.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            front: Option<NodeRef>,
+            /// The path behind.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            back: Option<NodeRef>,
+        },
+        run: {
+
+            let id = "vector.path.merge".to_string();
+            let (front, back) = front_and_back(session, &id, self.front, self.back)?;
+            let one = crate::vector_of(session, front)?;
+            let two = crate::vector_of(session, back)?;
+            if one.path.is_empty() || two.path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "one of the paths is empty".to_string(),
+                });
+            }
+            if one.fill == two.fill {
+                // The **same paint**: the two are one path.
+                let path = geom::boolean(&one.path, &two.path, geom::BoolOp::Union)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+                let mut result = one.clone();
+                result.path = path;
+                crate::write_back(session, front, &result)?;
+                session.document_mut()?.remove_node(back);
+                return Ok(
+                    Outcome::changed("the paths are one now").with_data(json!({ "id": front, "removed": back }))
+                );
+            }
+            // **Different paint**: the parts are kept apart, and the part
+            // of the path behind that the path in front covers is taken
+            // away.
+            let path = geom::boolean(&two.path, &one.path, geom::BoolOp::Difference)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            let mut result = two.clone();
+            result.path = path;
+            crate::write_back(session, back, &result)?;
+            Ok(Outcome::changed("the paths were merged and kept apart")
+                .with_data(json!({ "id": back, "front": front })))
+
+        }
     }
 }
 
@@ -282,137 +410,4 @@ fn a_path(session: &mut Session, vector: &VectorNode, path: Path, name: String) 
     copy.path = path;
     let rect = geom::bounds(&copy.placed());
     Ok(session.document_mut()?.add_node_with(name, "vector.path", Some(rect), copy.to_json()))
-}
-
-/// **Divide** two paths: every **face** of them.
-///
-/// The paths are cut at the places where they meet, and what is left
-/// is one path for each face: the part of the path in front that the
-/// path behind does not cover, the part of the path behind that the
-/// path in front does not cover, and the part they share. The face
-/// they share takes the **style of the path in front**, because the
-/// path in front is what covers it.
-#[derive(Command)]
-#[command(
-    id = "vector.path.divide",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Combine"),
-    mutates,
-    undoable
-)]
-pub struct DividePaths {
-    /// The path in front.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub front: Option<NodeRef>,
-    /// The path behind.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub back: Option<NodeRef>,
-}
-
-impl DividePaths {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.divide".to_string();
-        let (front, back) = front_and_back(session, &id, self.front, self.back)?;
-        let one = crate::vector_of(session, front)?;
-        let two = crate::vector_of(session, back)?;
-        if one.path.is_empty() || two.path.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "one of the paths is empty".to_string(),
-            });
-        }
-        // The **faces**: what the path behind does not cover, what the
-        // path in front does not cover, and what they share.
-        let back_only = geom::boolean(&two.path, &one.path, geom::BoolOp::Difference)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-        let front_only = geom::boolean(&one.path, &two.path, geom::BoolOp::Difference)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-        let shared = geom::boolean(&one.path, &two.path, geom::BoolOp::Intersect)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-        // The path behind keeps what is its own, and the path in front
-        // keeps what is its own.
-        let mut back_result = two.clone();
-        back_result.path = back_only;
-        crate::write_back(session, back, &back_result)?;
-        let mut front_result = one.clone();
-        front_result.path = front_only;
-        crate::write_back(session, front, &front_result)?;
-        // The face they share is a path of its own, and it takes the
-        // style of the path in front.
-        let shared_id = if shared.is_empty() {
-            None
-        } else {
-            Some(a_path(session, &one, shared, "the shared face".to_string())?)
-        };
-        let count = 2 + usize::from(shared_id.is_some());
-        Ok(Outcome::changed(format!("the paths were divided into {count} face(s)"))
-            .with_data(json!({ "faces": count, "shared": shared_id })))
-    }
-}
-
-/// **Merge** two paths: the parts that are the same are joined.
-///
-/// The tree's merge is the trim and then a join: the parts that are
-/// left are joined into one path when they are painted the same way,
-/// and they are kept apart when they are not.
-#[derive(Command)]
-#[command(
-    id = "vector.path.merge",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Combine"),
-    mutates,
-    undoable
-)]
-pub struct MergePaths {
-    /// The path in front.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub front: Option<NodeRef>,
-    /// The path behind.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub back: Option<NodeRef>,
-}
-
-impl MergePaths {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.merge".to_string();
-        let (front, back) = front_and_back(session, &id, self.front, self.back)?;
-        let one = crate::vector_of(session, front)?;
-        let two = crate::vector_of(session, back)?;
-        if one.path.is_empty() || two.path.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "one of the paths is empty".to_string(),
-            });
-        }
-        if one.fill == two.fill {
-            // The **same paint**: the two are one path.
-            let path = geom::boolean(&one.path, &two.path, geom::BoolOp::Union)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-            let mut result = one.clone();
-            result.path = path;
-            crate::write_back(session, front, &result)?;
-            session.document_mut()?.remove_node(back);
-            return Ok(
-                Outcome::changed("the paths are one now").with_data(json!({ "id": front, "removed": back }))
-            );
-        }
-        // **Different paint**: the parts are kept apart, and the part
-        // of the path behind that the path in front covers is taken
-        // away.
-        let path = geom::boolean(&two.path, &one.path, geom::BoolOp::Difference)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-        let mut result = two.clone();
-        result.path = path;
-        crate::write_back(session, back, &result)?;
-        Ok(Outcome::changed("the paths were merged and kept apart")
-            .with_data(json!({ "id": back, "front": front })))
-    }
 }

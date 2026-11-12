@@ -120,34 +120,36 @@ mod spline;
 mod svgexport;
 mod svgimport;
 
-pub use anchors::{AddMiddleAnchors, SetAnchors};
-pub use blob::BlobPath;
-pub use colour::{ColourGamut, ConvertColour};
+pub use anchors::{VectorPathAnchorsMiddle, VectorPathAnchorsSet};
+pub use blob::VectorPathBlob;
+pub use colour::{VectorColourConvert, VectorColourGamut};
 pub use components::components;
-pub use convert::ConvertAnchors;
-pub use cutpath::CutPath;
-pub use dashes::DashPath;
-pub use epsexport::ExportEps;
-pub use erasepath::ErasePath;
-pub use eraseregion::EraseRegion;
-pub use freehand::Freehand;
-pub use gradients::{AddStop, ReadGradient, RemoveStop, SetStop};
-pub use joinends::JoinEnds;
-pub use joinscrub::JoinScrub;
-pub use knife::KnifePath;
-pub use linecut::CutPathLine;
-pub use mirrorcut::MirrorCut;
-pub use movepoints::MovePoints;
-pub use opacity::{SetOpacity, fill_at, stroke_at};
-pub use pathcreate::CreatePath;
-pub use pathfinder::{CropPaths, DividePaths, MergePaths, TrimPaths};
-pub use rectcut::CutPathRect;
-pub use shapes::{AddLine, AddSpiral, AddStar};
-pub use spline::AddSpline;
-pub use svgexport::ExportSvg;
-pub use svgimport::ImportSvg;
+pub use convert::VectorPathAnchorsConvert;
+pub use cutpath::VectorPathCut;
+pub use dashes::VectorPathDash;
+pub use epsexport::VectorExportEps;
+pub use erasepath::VectorPathErase;
+pub use eraseregion::VectorPathEraseRegion;
+pub use freehand::VectorPathFreehand;
+pub use gradients::{
+    VectorGradientRead, VectorGradientStopAdd, VectorGradientStopRemove, VectorGradientStopSet,
+};
+pub use joinends::VectorPathJoinEnds;
+pub use joinscrub::VectorPathJoinScrub;
+pub use knife::VectorPathKnife;
+pub use linecut::VectorPathCutLine;
+pub use mirrorcut::VectorPathCutMirror;
+pub use movepoints::VectorPathMovePoints;
+pub use opacity::{VectorPathOpacity, fill_at, stroke_at};
+pub use pathcreate::VectorPathCreate;
+pub use pathfinder::{VectorPathCrop, VectorPathDivide, VectorPathMerge, VectorPathTrim};
+pub use rectcut::VectorPathCutRect;
+pub use shapes::{VectorLine, VectorSpiral, VectorStar};
+pub use spline::VectorPathSpline;
+pub use svgexport::VectorExportSvg;
+pub use svgimport::VectorImportSvg;
 
-use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel, Tool};
+use craftkit_derive::{Evaluator, Layer, NodeKind, Panel, Tool, commands};
 use craftkit_sdk::{
     BlendMode, Canvas, Cap, Colour, Document, EngineError, Fill, FillRule, FormatValue, Gradient,
     GradientGeometry, GradientKind, GradientStop, Join, Node, NodeRef, Number, Outcome, Path, Plan, PlanItem,
@@ -344,135 +346,1757 @@ impl VectorPathKind {
 #[tool(id = "tool.vector", label = "Path", layer = "vector", icon = "rect", command = "vector.rectangle")]
 pub struct VectorTool;
 
-/// Put a rectangle in the document.
-#[derive(Command)]
-#[command(
-    id = "vector.rectangle",
-    example,
-    area = "vector",
-    layer = "vector",
-    icon = "rect",
-    menu("Create"),
-    mutates,
-    undoable
-)]
-pub struct AddRectangle {
-    /// Where it starts, across.
-    pub x: Number,
-    /// Where it starts, down.
-    pub y: Number,
-    /// How wide it is.
-    pub width: Number,
-    /// How tall it is.
-    pub height: Number,
-    /// What to call it.
-    pub name: Option<Text>,
-    /// The colour it is filled with, as `#rrggbb`.
-    pub fill: Option<Text>,
-}
+commands! {
+    /// Put a rectangle in the document.
+    vector.rectangle {
+        area: "vector",
+        layer: "vector",
+        icon: "rect",
+        mutates,
+        undoable,
+        example,
+        menu: ("Create"),
+        params: {
+            /// Where it starts, across.
 
-impl AddRectangle {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let rect = Rect::new(self.x.0, self.y.0, self.width.0, self.height.0);
-        let path = Path::polygon(&[
-            Point::new(rect.x, rect.y),
-            Point::new(rect.x + rect.w, rect.y),
-            Point::new(rect.x + rect.w, rect.y + rect.h),
-            Point::new(rect.x, rect.y + rect.h),
-        ]);
-        let name = match &self.name {
-            Some(name) => name.0.clone(),
-            None => format!("rectangle {}", rect.w),
-        };
-        let id = add_path(session, name, path, self.fill.as_ref())?;
-        Ok(Outcome::changed(format!("added a rectangle `{id}`")).with_data(serde_json::json!({ "id": id })))
-    }
-}
+            x: Number,
+            /// Where it starts, down.
 
-/// Put an ellipse in the document.
-///
-/// The ellipse is four cubic curves, the way a circle has always been
-/// drawn on a screen: the control points are the corner of the square the
-/// circle is inscribed in, pulled in by the circle's constant.
-#[derive(Command)]
-#[command(
-    id = "vector.ellipse",
-    area = "vector",
-    layer = "vector",
-    icon = "ellipse",
-    menu("Create"),
-    mutates,
-    undoable
-)]
-pub struct AddEllipse {
-    /// Its centre, across.
-    pub x: Number,
-    /// Its centre, down.
-    pub y: Number,
-    /// How wide it is, across the centre.
-    pub width: Number,
-    /// How tall it is, down the centre.
-    pub height: Number,
-    /// What to call it.
-    pub name: Option<Text>,
-    /// The colour it is filled with, as `#rrggbb`.
-    pub fill: Option<Text>,
-}
+            y: Number,
+            /// How wide it is.
 
-impl AddEllipse {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let path = ellipse(self.x.0, self.y.0, self.width.0, self.height.0);
-        let name = match &self.name {
-            Some(name) => name.0.clone(),
-            None => format!("ellipse {}", self.width.0),
-        };
-        let id = add_path(session, name, path, self.fill.as_ref())?;
-        Ok(Outcome::changed(format!("added an ellipse `{id}`")).with_data(serde_json::json!({ "id": id })))
-    }
-}
+            width: Number,
+            /// How tall it is.
 
-/// Put a regular polygon in the document.
-#[derive(Command)]
-#[command(
-    id = "vector.polygon",
-    area = "vector",
-    layer = "vector",
-    icon = "polygon",
-    menu("Create"),
-    mutates,
-    undoable
-)]
-pub struct AddPolygon {
-    /// Its centre, across.
-    pub x: Number,
-    /// Its centre, down.
-    pub y: Number,
-    /// How far its corners are from the centre.
-    pub radius: Number,
-    /// How many corners it has.
-    pub sides: Number,
-    /// What to call it.
-    pub name: Option<Text>,
-    /// The colour it is filled with, as `#rrggbb`.
-    pub fill: Option<Text>,
-}
+            height: Number,
+            /// What to call it.
 
-impl AddPolygon {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let sides = self.sides.0;
-        if !sides.is_finite() || !(3.0..=64.0).contains(&sides) {
-            return Err(EngineError::Failed {
-                id: "vector.polygon".to_string(),
-                message: "a polygon has between three and sixty-four sides".to_string(),
-            });
+            name: Option<Text>,
+            /// The colour it is filled with, as `#rrggbb`.
+
+            fill: Option<Text>,
+        },
+        run: {
+
+            let rect = Rect::new(self.x.0, self.y.0, self.width.0, self.height.0);
+            let path = Path::polygon(&[
+                Point::new(rect.x, rect.y),
+                Point::new(rect.x + rect.w, rect.y),
+                Point::new(rect.x + rect.w, rect.y + rect.h),
+                Point::new(rect.x, rect.y + rect.h),
+            ]);
+            let name = match &self.name {
+                Some(name) => name.0.clone(),
+                None => format!("rectangle {}", rect.w),
+            };
+            let id = add_path(session, name, path, self.fill.as_ref())?;
+            Ok(Outcome::changed(format!("added a rectangle `{id}`")).with_data(serde_json::json!({ "id": id })))
+
         }
-        let path = polygon(self.x.0, self.y.0, self.radius.0, sides as usize);
-        let name = match &self.name {
-            Some(name) => name.0.clone(),
-            None => format!("polygon {sides}"),
-        };
-        let id = add_path(session, name, path, self.fill.as_ref())?;
-        Ok(Outcome::changed(format!("added a polygon `{id}`")).with_data(serde_json::json!({ "id": id })))
+    }
+    /// Put an ellipse in the document.
+    ///
+    /// The ellipse is four cubic curves, the way a circle has always been
+    /// drawn on a screen: the control points are the corner of the square the
+    /// circle is inscribed in, pulled in by the circle's constant.
+    vector.ellipse {
+        area: "vector",
+        layer: "vector",
+        icon: "ellipse",
+        mutates,
+        undoable,
+        menu: ("Create"),
+        params: {
+            /// Its centre, across.
+
+            x: Number,
+            /// Its centre, down.
+
+            y: Number,
+            /// How wide it is, across the centre.
+
+            width: Number,
+            /// How tall it is, down the centre.
+
+            height: Number,
+            /// What to call it.
+
+            name: Option<Text>,
+            /// The colour it is filled with, as `#rrggbb`.
+
+            fill: Option<Text>,
+        },
+        run: {
+
+            let path = ellipse(self.x.0, self.y.0, self.width.0, self.height.0);
+            let name = match &self.name {
+                Some(name) => name.0.clone(),
+                None => format!("ellipse {}", self.width.0),
+            };
+            let id = add_path(session, name, path, self.fill.as_ref())?;
+            Ok(Outcome::changed(format!("added an ellipse `{id}`")).with_data(serde_json::json!({ "id": id })))
+
+        }
+    }
+    /// Put a regular polygon in the document.
+    vector.polygon {
+        area: "vector",
+        layer: "vector",
+        icon: "polygon",
+        mutates,
+        undoable,
+        menu: ("Create"),
+        params: {
+            /// Its centre, across.
+
+            x: Number,
+            /// Its centre, down.
+
+            y: Number,
+            /// How far its corners are from the centre.
+
+            radius: Number,
+            /// How many corners it has.
+
+            sides: Number,
+            /// What to call it.
+
+            name: Option<Text>,
+            /// The colour it is filled with, as `#rrggbb`.
+
+            fill: Option<Text>,
+        },
+        run: {
+
+            let sides = self.sides.0;
+            if !sides.is_finite() || !(3.0..=64.0).contains(&sides) {
+                return Err(EngineError::Failed {
+                    id: "vector.polygon".to_string(),
+                    message: "a polygon has between three and sixty-four sides".to_string(),
+                });
+            }
+            let path = polygon(self.x.0, self.y.0, self.radius.0, sides as usize);
+            let name = match &self.name {
+                Some(name) => name.0.clone(),
+                None => format!("polygon {sides}"),
+            };
+            let id = add_path(session, name, path, self.fill.as_ref())?;
+            Ok(Outcome::changed(format!("added a polygon `{id}`")).with_data(serde_json::json!({ "id": id })))
+
+        }
+    }
+    /// Combine two paths into one.
+    ///
+    /// The **union**: everything either path covers. The result is one node,
+    /// and the second node is gone.
+    vector.path.unite {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Combine"),
+        params: {
+            /// The first path.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            first: Option<NodeRef>,
+            /// The second path.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            second: Option<NodeRef>,
+        },
+        run: {
+
+            let (first, second) = two_of(session, self.first, self.second)?;
+            combine(session, "vector.path.unite", first, second, geom::BoolOp::Union)
+
+        }
+    }
+    /// Take one path from another.
+    ///
+    /// The **difference**: what the first path covers and the second does not.
+    /// The result may have a hole, and a hole is a contour of its own.
+    vector.path.subtract {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Combine"),
+        params: {
+            /// The path to take from.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            first: Option<NodeRef>,
+            /// The path to take away.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            second: Option<NodeRef>,
+        },
+        run: {
+
+            let (first, second) = two_of(session, self.first, self.second)?;
+            combine(session, "vector.path.subtract", first, second, geom::BoolOp::Difference)
+
+        }
+    }
+    /// Keep what both paths cover.
+    ///
+    /// The **intersection**: what the two paths share.
+    vector.path.intersect {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Combine"),
+        params: {
+            /// The first path.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            first: Option<NodeRef>,
+            /// The second path.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            second: Option<NodeRef>,
+        },
+        run: {
+
+            let (first, second) = two_of(session, self.first, self.second)?;
+            combine(session, "vector.path.intersect", first, second, geom::BoolOp::Intersect)
+
+        }
+    }
+    /// Take the points a path does not need.
+    ///
+    /// The path is simplified: the points that a flat line would serve are
+    /// removed and the rest are left alone.
+    vector.path.simplify {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path"),
+        params: {
+            /// The path.
+
+            node: NodeRef,
+            /// How far the result may be from the original.
+
+            tolerance: Option<Number>,
+        },
+        run: {
+
+            let tolerance = match &self.tolerance {
+                Some(tolerance) => tolerance.0,
+                None => 0.05,
+            };
+            if !tolerance.is_finite() || tolerance < 0.0 {
+                return Err(EngineError::Failed {
+                    id: "vector.path.simplify".to_string(),
+                    message: "the tolerance is not a distance".to_string(),
+                });
+            }
+            let mut vector = vector_of(session, self.node.0)?;
+            vector.path = geom::simplify(&vector.path, tolerance);
+            write_back(session, self.node.0, &vector)?;
+            Ok(Outcome::changed("the path is simpler").with_data(serde_json::json!({ "id": self.node.0 })))
+
+        }
+    }
+    /// **Close** a path: its last open contour is closed.
+    ///
+    /// A contour that is open has a loose end, and a loose end is a place
+    /// where the paint of the path stops in the middle of nowhere. Closing
+    /// it joins the end back to the beginning.
+    ///
+    /// A path with **no open contour** is refused: there is nothing to
+    /// close.
+    vector.path.close {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path"),
+        params: {
+            /// The path.
+
+            node: NodeRef,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.node.0)?;
+            let Some(subpath) = vector.path.subpaths.iter_mut().rev().find(|subpath| !subpath.closed) else {
+                return Err(EngineError::Failed {
+                    id: "vector.path.close".to_string(),
+                    message: "the path has no open contour: there is nothing to close".to_string(),
+                });
+            };
+            subpath.closed = true;
+            write_back(session, self.node.0, &vector)?;
+            Ok(Outcome::changed("the path is closed").with_data(serde_json::json!({ "id": self.node.0 })))
+
+        }
+    }
+    /// **Turn** a path the other way round.
+    ///
+    /// The contour runs backwards: it starts where it ended, and every
+    /// curve keeps its shape and turns the other way. The path is the same
+    /// shape and it winds the other way, which matters when the shape has
+    /// a **hole** in it or when the path is filled by a rule that says
+    /// which way it winds.
+    vector.path.reverse {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path"),
+        params: {
+            /// The path.
+
+            node: NodeRef,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.node.0)?;
+            let subpaths: Vec<SubPath> = vector.path.subpaths.iter().map(reverse_subpath).collect();
+            vector.path.subpaths = subpaths;
+            write_back(session, self.node.0, &vector)?;
+            Ok(Outcome::changed("the path is turned round").with_data(serde_json::json!({ "id": self.node.0 })))
+
+        }
+    }
+    /// **Add an anchor** to a path: a segment of a contour is split in two.
+    ///
+    /// The anchor goes in at a place along the segment — `t`, from zero at
+    /// its beginning to one at its end — and the two halves are the same
+    /// curve: the shape of the path does not change, and the path has one
+    /// more point to move.
+    vector.path.anchor.add {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path"),
+        params: {
+            /// The path.
+
+            node: NodeRef,
+            /// Which contour of the path.
+
+            subpath: Option<Number>,
+            /// Which segment of the contour.
+
+            segment: Number,
+            /// Where along the segment the anchor goes: from zero to one.
+
+            t: Option<Number>,
+        },
+        run: {
+
+            let id = "vector.path.anchor.add".to_string();
+            let index = self.segment.0;
+            if !index.is_finite() || index < 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a segment is a number and not a negative one".to_string(),
+                });
+            }
+            let t = self.t.map(|t| t.0).unwrap_or(0.5);
+            if !t.is_finite() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a place along a segment is a number between zero and one".to_string(),
+                });
+            }
+            let mut vector = vector_of(session, self.node.0)?;
+            let which = match &self.subpath {
+                Some(subpath) => subpath.0,
+                None => 0.0,
+            };
+            if !which.is_finite() || which < 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a contour is a number and not a negative one".to_string(),
+                });
+            }
+            let which = which as usize;
+            let Some(subpath) = vector.path.subpaths.get(which).cloned() else {
+                return Err(EngineError::Failed { id, message: format!("the path has no contour {which}") });
+            };
+            let split = geom::split_segment(&subpath, index as usize, t)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            vector.path.subpaths[which] = split;
+            write_back(session, self.node.0, &vector)?;
+            Ok(Outcome::changed("the path has one more anchor")
+                .with_data(serde_json::json!({ "id": self.node.0, "subpath": which, "segment": index })))
+
+        }
+    }
+    /// Take an **anchor** away.
+    ///
+    /// The tree's rule: the segments that touch the anchor go with it, and
+    /// the contour **splits** into the runs that are left — the surviving
+    /// stretches stay separate rather than joining across the gap. A run
+    /// with fewer than two points is not a run, and it is gone; and a
+    /// contour that was closed is open afterwards.
+    ///
+    /// The anchors are given one at a time: this tree has no selection,
+    /// and a selection is not a fact.
+    vector.path.anchor.remove {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path"),
+        params: {
+            /// The path.
+
+            node: NodeRef,
+            /// Which contour of the path.
+
+            subpath: Option<Number>,
+            /// Which anchor of the contour.
+
+            anchor: Number,
+        },
+        run: {
+
+            let id = "vector.path.anchor.remove".to_string();
+            let index = self.anchor.0;
+            if !index.is_finite() || index < 0.0 || index.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "an anchor is a number and not a negative one".to_string(),
+                });
+            }
+            let anchor = index as usize;
+            let mut vector = vector_of(session, self.node.0)?;
+            let which = match &self.subpath {
+                Some(subpath) => subpath.0,
+                None => 0.0,
+            };
+            if !which.is_finite() || which < 0.0 || which.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a contour is a number and not a negative one".to_string(),
+                });
+            }
+            let which = which as usize;
+            let Some(subpath) = vector.path.subpaths.get(which).cloned() else {
+                return Err(EngineError::Failed { id, message: format!("the path has no contour {which}") });
+            };
+            let anchors = subpath.segments.len() + 1;
+            if anchor >= anchors {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the contour has {anchors} anchors and not an anchor {anchor}"),
+                });
+            }
+            // The **runs** that are left: the stretches that survive stay
+            // separate rather than joining across the gap.
+            let runs = without_anchor(&subpath, anchor);
+            let mut contours = Vec::with_capacity(vector.path.subpaths.len() + runs.len());
+            for (index, contour) in vector.path.subpaths.iter().enumerate() {
+                if index != which {
+                    contours.push(contour.clone());
+                }
+            }
+            for run in runs {
+                contours.push(run);
+            }
+            vector.path.subpaths = contours;
+            write_back(session, self.node.0, &vector)?;
+            Ok(Outcome::changed("the path has one anchor less")
+                .with_data(serde_json::json!({ "id": self.node.0, "subpath": which, "anchor": anchor })))
+
+        }
+    }
+    /// Push a path out, or in.
+    ///
+    /// The path is offset by a distance: out for a positive one, in for a
+    /// negative one. The curves stay curves.
+    vector.path.offset {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path"),
+        params: {
+            /// The path.
+
+            node: NodeRef,
+            /// How far to push it.
+
+            distance: Number,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.node.0)?;
+            vector.path = geom::offset(&vector.path, self.distance.0).map_err(|error| EngineError::Failed {
+                id: "vector.path.offset".to_string(),
+                message: error.to_string(),
+            })?;
+            write_back(session, self.node.0, &vector)?;
+            Ok(Outcome::changed("the path is offset").with_data(serde_json::json!({ "id": self.node.0 })))
+
+        }
+    }
+    /// The **outline** of a path's line.
+    ///
+    /// The line of a path covers an area, and the outline is that area as
+    /// a shape: a path in its own right, which may be filled, measured and
+    /// cut. The command makes a **new** path and leaves the one it was
+    /// given alone.
+    vector.path.outline {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path"),
+        params: {
+            /// The path whose line is outlined.
+
+            path: NodeRef,
+            /// What to call the new path.
+
+            name: Option<Text>,
+            /// The colour of the new path, as `#rrggbb`.
+            ///
+            /// Leave it out and the new path is filled with the colour of the
+            /// line it came from.
+
+            fill: Option<Text>,
+        },
+        run: {
+
+            let vector = vector_of(session, self.path.0)?;
+            let Some(stroke) = vector.stroke else {
+                return Err(EngineError::Failed {
+                    id: "vector.path.outline".to_string(),
+                    message: format!("the path `{}` has no line to outline", self.path.0),
+                });
+            };
+            // The **miter limit** is the kit's: four widths.
+            let outline = geom::outline_stroke(&vector.path, stroke.width, stroke.cap, stroke.join, 4.0);
+            let colour = match &self.fill {
+                Some(fill) => parse_colour(&fill.0)?,
+                None => stroke.colour,
+            };
+            let name = self.name.clone().unwrap_or_else(|| Text(format!("outline {}", self.path.0)));
+            let node = VectorNode {
+                path: outline.clone(),
+                fill: Fill::Solid(colour),
+                stroke: None,
+                blend: BlendMode::Normal,
+                transform: geom::Matrix::identity(),
+                opacity: 1.0,
+                dash: None,
+            };
+            let rect = bounds(&outline);
+            let id =
+                session.document_mut()?.add_node_with(name.0.clone(), "vector.path", Some(rect), node.to_json());
+            Ok(Outcome::changed("the line has an outline")
+                .with_data(serde_json::json!({ "id": id, "from": self.path.0 })))
+
+        }
+    }
+    ///
+    /// The points of a contour are the point it starts at and the point
+    /// each segment ends at, counting from zero. The handles of the curves
+    /// move with the point they belong to, as they do in the tree: an
+    /// anchor carries its two handles.
+    vector.path.move {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Points"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// Which contour of the path, counting from zero. The first one if
+            /// it is left out.
+
+            contour: Option<Number>,
+            /// Which point of the contour, counting from zero.
+
+            point: Number,
+            /// Where the point goes: a point, `{"x": …, "y": …}`.
+
+            to: Json,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.path.0)?;
+            let contour = index_of(self.contour, "the contour")
+                .map_err(|reason| EngineError::Failed { id: "vector.path.move".to_string(), message: reason })?;
+            let point = index_of(Some(self.point), "the point")
+                .map_err(|reason| EngineError::Failed { id: "vector.path.move".to_string(), message: reason })?;
+            let to = Point::from_json(&self.to).map_err(|reason| EngineError::Failed {
+                id: "vector.path.move".to_string(),
+                message: format!("where the point goes is not a point: {reason}"),
+            })?;
+            move_point(&mut vector.path, contour, point, to)
+                .map_err(|reason| EngineError::Failed { id: "vector.path.move".to_string(), message: reason })?;
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the point has moved")
+                .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
+
+        }
+    }
+    /// **Average** the points of a path.
+    ///
+    /// The points that are averaged are given **one per line**, as
+    /// `contour:point`, because the tree's average works on the points that
+    /// are selected and this tree has no selection: a range is a fact and
+    /// a selection is not.
+    ///
+    /// The **axis** says what is averaged: `horizontal` puts the points on
+    /// one line, `vertical` puts them in one column, and `both` puts them
+    /// all in one place. The default is `both`.
+    ///
+    /// The tree's average works on the selected points of **several**
+    /// paths at once; here a command works on one path, because a command
+    /// works on one node.
+    vector.path.average {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Points"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// The points to average, one per line, each `contour:point`.
+
+            points: Text,
+            /// The axis: `horizontal`, `vertical` or `both`. The default is
+            /// `both`.
+
+            axis: Option<Text>,
+        },
+        run: {
+
+            let id = "vector.path.average".to_string();
+            let mut vector = vector_of(session, self.path.0)?;
+            let axis = match &self.axis {
+                Some(axis) => match axis.0.trim().to_ascii_lowercase().as_str() {
+                    "horizontal" => Axis::Horizontal,
+                    "vertical" => Axis::Vertical,
+                    "both" => Axis::Both,
+                    other => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "`{other}` is not an axis: an axis is `horizontal`, `vertical` or `both`"
+                            ),
+                        });
+                    }
+                },
+                None => Axis::Both,
+            };
+            // The **points**: one per line, each `contour:point`.
+            let mut wanted: Vec<(usize, usize)> = Vec::new();
+            for line in self.points.0.lines().map(|line| line.trim()).filter(|line| !line.is_empty()) {
+                let Some((contour, point)) = line.split_once(':') else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("`{line}` is not a point: a point is `contour:point`"),
+                    });
+                };
+                let (Ok(contour), Ok(point)) = (contour.trim().parse::<usize>(), point.trim().parse::<usize>())
+                else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("`{line}` is not a point: a point is `contour:point`"),
+                    });
+                };
+                if wanted.contains(&(contour, point)) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the point `{line}` is in the list twice"),
+                    });
+                }
+                wanted.push((contour, point));
+            }
+            if wanted.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "there are no points to average".to_string(),
+                });
+            }
+            // The **centre**: the mean of the points that are averaged, and
+            // it is worked out before any point moves.
+            let mut sum = Point::new(0.0, 0.0);
+            for (contour, point) in &wanted {
+                let at = point_at(&vector.path, *contour, *point).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the path has no point {contour}:{point}"),
+                })?;
+                sum = Point::new(sum.x + at.x, sum.y + at.y);
+            }
+            let count = wanted.len() as f64;
+            let centre = Point::new(sum.x / count, sum.y / count);
+            for (contour, point) in &wanted {
+                let at = point_at(&vector.path, *contour, *point).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the path has no point {contour}:{point}"),
+                })?;
+                let to = match axis {
+                    Axis::Horizontal => Point::new(at.x, centre.y),
+                    Axis::Vertical => Point::new(centre.x, at.y),
+                    Axis::Both => centre,
+                };
+                move_point(&mut vector.path, *contour, *point, to)
+                    .map_err(|reason| EngineError::Failed { id: id.clone(), message: reason })?;
+            }
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed(format!("{} points are averaged", wanted.len())).with_data(
+                serde_json::json!({
+                    "id": self.path.0,
+                    "points": wanted.iter().map(|(contour, point)| serde_json::json!([contour, point])).collect::<Vec<_>>(),
+                    "centre": { "x": centre.x, "y": centre.y },
+                    "axis": axis.name(),
+                }),
+            ))
+
+        }
+    }
+    /// Set the **handles** of a point.
+    ///
+    /// The two handles of a point are the one the curve leaves by and the
+    /// one the curve arrives by, and a point with handles on it is a
+    /// curve: a straight segment with a handle on it becomes a curve, as
+    /// it does in the tree.
+    vector.path.handle {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Points"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// Which contour of the path, counting from zero. The first one if
+            /// it is left out.
+
+            contour: Option<Number>,
+            /// Which point of the contour, counting from zero.
+
+            point: Number,
+            /// The handle the curve leaves the point by.
+
+            c1: Option<Json>,
+            /// The handle the curve arrives at the point by.
+
+            c2: Option<Json>,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.path.0)?;
+            let contour = index_of(self.contour, "the contour").map_err(|reason| EngineError::Failed {
+                id: "vector.path.handle".to_string(),
+                message: reason,
+            })?;
+            let point = index_of(Some(self.point), "the point").map_err(|reason| EngineError::Failed {
+                id: "vector.path.handle".to_string(),
+                message: reason,
+            })?;
+            let c1 = match &self.c1 {
+                Some(value) => Some(Point::from_json(value).map_err(|reason| EngineError::Failed {
+                    id: "vector.path.handle".to_string(),
+                    message: format!("the handle is not a point: {reason}"),
+                })?),
+                None => None,
+            };
+            let c2 = match &self.c2 {
+                Some(value) => Some(Point::from_json(value).map_err(|reason| EngineError::Failed {
+                    id: "vector.path.handle".to_string(),
+                    message: format!("the handle is not a point: {reason}"),
+                })?),
+                None => None,
+            };
+            if c1.is_none() && c2.is_none() {
+                return Err(EngineError::Failed {
+                    id: "vector.path.handle".to_string(),
+                    message: "a handle says where the curve goes: c1, c2, or both".to_string(),
+                });
+            }
+            handle_point(&mut vector.path, contour, point, c1, c2).map_err(|reason| EngineError::Failed {
+                id: "vector.path.handle".to_string(),
+                message: reason,
+            })?;
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the handles have moved")
+                .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
+
+        }
+    }
+    /// Set the **fill** of a path.
+    ///
+    /// The fill is what is inside the path, and the rule that says what is
+    /// inside is the path's own.
+    vector.path.fill {
+        area: "vector",
+        layer: "vector",
+        icon: "paint",
+        mutates,
+        undoable,
+        menu: ("Path", "Paint"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// The colour, as `#rrggbb`.
+
+            colour: Option<Text>,
+            /// Take the fill away instead: the tree's **None** paint.
+
+            none: Option<craftkit_sdk::Bool>,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.path.0)?;
+            // The tree's **None** paint: the path is filled with nothing,
+            // and the fill is there and paints nothing. It is the same
+            // rule as the line's own: the line may be taken away.
+            if self.none.map(|none| none.0).unwrap_or(false) {
+                vector.fill = Fill::Solid(Colour::NONE);
+                write_back(session, self.path.0, &vector)?;
+                return Ok(Outcome::changed("the path is filled with nothing")
+                    .with_data(serde_json::json!({ "id": self.path.0, "fill": Json::Null })));
+            }
+            let Some(colour) = &self.colour else {
+                return Err(EngineError::Failed {
+                    id: "vector.path.fill".to_string(),
+                    message: "name the colour of the fill, or say that there is none".to_string(),
+                });
+            };
+            let colour = parse_colour(&colour.0)?;
+            vector.fill = Fill::Solid(colour);
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the path is filled")
+                .with_data(serde_json::json!({ "id": self.path.0, "fill": self.colour.as_ref().map(|colour| colour.0.clone()) })))
+
+        }
+    }
+    /// Put a path **in front** of the others, or **behind** them.
+    ///
+    /// The order the paths are drawn in is the order they are in the
+    /// document: the first is drawn first and is behind, and the last is
+    /// drawn last and is in front.
+    ///
+    /// The tree's layers hold an ordered list of their own, and this
+    /// tree's layers are **edges** — so a path moved here moves among
+    /// everything, and not only among the paths of its own layer.
+    vector.path.order {
+        area: "vector",
+        layer: "vector",
+        icon: "list",
+        mutates,
+        undoable,
+        menu: ("Path", "Order"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// `front` or `back`.
+
+            place: Text,
+        },
+        run: {
+
+            let id = "vector.path.order".to_string();
+            let node = session.document().node(self.path.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{}`", self.path.0),
+            })?;
+            if node.kind != "vector.path" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{}` is a `{}` and not a path", self.path.0, node.kind),
+                });
+            }
+            let place = self.place.0.trim().to_ascii_lowercase();
+            let moved = match place.as_str() {
+                "front" => session.document_mut()?.bring_to_front(self.path.0),
+                "back" => session.document_mut()?.send_to_back(self.path.0),
+                other => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("a path goes to the front or to the back, and not to `{other}`"),
+                    });
+                }
+            };
+            if !moved {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{}` is not in the document", self.path.0),
+                });
+            }
+            Ok(Outcome::changed(format!("the path is {place}"))
+                .with_data(serde_json::json!({ "id": self.path.0, "place": place })))
+
+        }
+    }
+    /// Make a **grid** of copies of a path.
+    ///
+    /// The tree's repeat tool makes a grid of copies, and the shape is the
+    /// first cell of it. Here the copies are **paths of their own** — the
+    /// same shape, the same paint, and a **transform** that says where each
+    /// one is — and the original is where it was.
+    ///
+    /// The copies are placed by the step: how far apart they are, across
+    /// and down.
+    vector.path.grid {
+        area: "vector",
+        layer: "vector",
+        icon: "plus",
+        mutates,
+        undoable,
+        menu: ("Path", "Grid"),
+        params: {
+            /// The path to copy.
+
+            path: NodeRef,
+            /// How many copies across, the original among them.
+
+            columns: Number,
+            /// How many copies down, the original among them.
+
+            rows: Number,
+            /// How far apart they are, across.
+
+            step_x: Number,
+            /// How far apart they are, down.
+
+            step_y: Number,
+        },
+        run: {
+
+            let id = "vector.path.grid".to_string();
+            let vector = vector_of(session, self.path.0)?;
+            let columns = the_count(self.columns.0, "columns", &id)?;
+            let rows = the_count(self.rows.0, "rows", &id)?;
+            let step_x = self.step_x.0;
+            let step_y = self.step_y.0;
+            if !step_x.is_finite() || !step_y.is_finite() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the step between the copies is a number".to_string(),
+                });
+            }
+            let cells = columns.saturating_mul(rows);
+            if cells > MAX_COPIES {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a grid holds at most {MAX_COPIES} copies, and this one holds {cells}"),
+                });
+            }
+            let mut made: Vec<u64> = Vec::with_capacity(cells.saturating_sub(1) as usize);
+            for row in 0..rows {
+                for column in 0..columns {
+                    if row == 0 && column == 0 {
+                        continue;
+                    }
+                    let move_by = geom::Matrix::translate(column as f64 * step_x, row as f64 * step_y);
+                    let copy = a_copy(session, &vector, move_by, format!("copy {column}-{row}"))?;
+                    made.push(copy);
+                }
+            }
+            let count = made.len();
+            Ok(Outcome::changed(format!("made {count} cop(y|ies) of the path"))
+                .with_data(serde_json::json!({ "id": self.path.0, "copies": made })))
+
+        }
+    }
+    /// Make a **mirrored** copy of a path.
+    ///
+    /// The copy is the path turned over a **line**: the two points say
+    /// where the line is. A line with no length mirrors nothing, and it is
+    /// refused.
+    vector.path.mirror {
+        area: "vector",
+        layer: "vector",
+        icon: "plus",
+        mutates,
+        undoable,
+        menu: ("Path", "Mirror"),
+        params: {
+            /// The path to copy.
+
+            path: NodeRef,
+            /// Where the line starts, across.
+
+            from_x: Number,
+            /// Where the line starts, down.
+
+            from_y: Number,
+            /// Where the line ends, across.
+
+            to_x: Number,
+            /// Where the line ends, down.
+
+            to_y: Number,
+        },
+        run: {
+
+            let id = "vector.path.mirror".to_string();
+            let vector = vector_of(session, self.path.0)?;
+            let from = Point::new(self.from_x.0, self.from_y.0);
+            let to = Point::new(self.to_x.0, self.to_y.0);
+            if !self.from_x.0.is_finite()
+                || !self.from_y.0.is_finite()
+                || !self.to_x.0.is_finite()
+                || !self.to_y.0.is_finite()
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the line is two points".to_string(),
+                });
+            }
+            let Some(mirror) = geom::Matrix::mirror(from, to) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a line with no length mirrors nothing".to_string(),
+                });
+            };
+            let copy = a_copy(session, &vector, mirror, "mirror".to_string())?;
+            Ok(Outcome::changed("made a mirrored copy of the path")
+                .with_data(serde_json::json!({ "id": self.path.0, "copies": [copy] })))
+
+        }
+    }
+    /// Make a **ring** of copies of a path.
+    ///
+    /// The copies are the path turned about a **centre**: each one by its
+    /// share of the whole turn, so that the last one is where the first
+    /// began.
+    vector.path.radial {
+        area: "vector",
+        layer: "vector",
+        icon: "plus",
+        mutates,
+        undoable,
+        menu: ("Path", "Radial"),
+        params: {
+            /// The path to copy.
+
+            path: NodeRef,
+            /// How many copies there are, the original among them.
+
+            count: Number,
+            /// Where the centre is, across.
+
+            centre_x: Number,
+            /// Where the centre is, down.
+
+            centre_y: Number,
+        },
+        run: {
+
+            let id = "vector.path.radial".to_string();
+            let vector = vector_of(session, self.path.0)?;
+            let count = the_count(self.count.0, "copies", &id)?;
+            if count > MAX_COPIES {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a ring holds at most {MAX_COPIES} copies, and this one holds {count}"),
+                });
+            }
+            if !self.centre_x.0.is_finite() || !self.centre_y.0.is_finite() {
+                return Err(EngineError::Failed { id: id.clone(), message: "the centre is a point".to_string() });
+            }
+            let centre = Point::new(self.centre_x.0, self.centre_y.0);
+            let turn = std::f64::consts::TAU / count as f64;
+            let mut made: Vec<u64> = Vec::with_capacity(count.saturating_sub(1) as usize);
+            for step in 1..count {
+                let turn_by = geom::Matrix::rotate_about(centre, turn * step as f64);
+                let copy = a_copy(session, &vector, turn_by, format!("copy {step}"))?;
+                made.push(copy);
+            }
+            let made_count = made.len();
+            Ok(Outcome::changed(format!("made {made_count} cop(y|ies) of the path"))
+                .with_data(serde_json::json!({ "id": self.path.0, "copies": made })))
+
+        }
+    }
+    /// Set the **blend mode** of a path.
+    ///
+    /// The mode says how the path mixes with what is under it: the plain
+    /// mode lays it over, and the others mix the two colours first. The
+    /// mode is the **kit's own**, so that a shape, a letter and a picture
+    /// all mix the same way.
+    ///
+    /// The plain mode is the mode a path has when it says nothing, and it
+    /// is how a blend is taken away.
+    vector.path.blend {
+        area: "vector",
+        layer: "vector",
+        icon: "paint",
+        mutates,
+        undoable,
+        menu: ("Path", "Paint"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// The mode: `Normal`, `Multiply`, `Screen`, `Overlay` and the
+            /// rest.
+
+            mode: Text,
+        },
+        run: {
+
+            let id = "vector.path.blend".to_string();
+            let mut vector = vector_of(session, self.path.0)?;
+            let mode = BlendMode::parse(self.mode.0.trim()).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no blend mode called `{}`", self.mode.0.trim()),
+            })?;
+            vector.blend = mode;
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed(format!("the path mixes with `{}`", mode.label()))
+                .with_data(serde_json::json!({ "id": self.path.0, "blend": mode.label() })))
+
+        }
+    }
+    /// Fill a path with a **gradient**.
+    ///
+    /// The gradient is the **kit's own** — the colours, the stops they are
+    /// at, and where the gradient is put — and the path is filled with it.
+    ///
+    /// The stops are a list of `{"offset": 0, "colour": "#rrggbb"}`, and
+    /// the offset is where the colour is along the gradient: zero is the
+    /// start and one is the end. A stop may say how solid it is, with
+    /// `"opacity"`.
+    ///
+    /// Where the gradient is put is the path's **own box** unless the
+    /// caller says otherwise: a linear gradient goes across the box, and a
+    /// radial one is centred in it.
+    vector.path.gradient {
+        area: "vector",
+        layer: "vector",
+        icon: "paint",
+        mutates,
+        undoable,
+        menu: ("Path", "Paint"),
+        params: {
+            /// The path to fill with the gradient.
+
+            path: NodeRef,
+            /// `linear` — along a line — or `radial` — out from a centre.
+
+            kind: Text,
+            /// The stops: a list of `{"offset": 0, "colour": "#rrggbb"}`.
+
+            stops: serde_json::Value,
+            /// Where a **linear** gradient starts: `{"x": 0, "y": 0}`.
+
+            from: Option<serde_json::Value>,
+            /// Where a **linear** gradient ends.
+
+            to: Option<serde_json::Value>,
+            /// Where a **radial** gradient is centred.
+
+            centre: Option<serde_json::Value>,
+            /// How far a **radial** gradient reaches.
+
+            radius: Option<Number>,
+        },
+        run: {
+
+            let id = "vector.path.gradient".to_string();
+            let mut vector = vector_of(session, self.path.0)?;
+            // The **kind**: a line or a centre.
+            let kind = match self.kind.0.trim().to_ascii_lowercase().as_str() {
+                "linear" => GradientKind::Linear,
+                "radial" => GradientKind::Radial,
+                other => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("a gradient is linear or radial, and this one is `{other}`"),
+                    });
+                }
+            };
+            // The **stops**.
+            let list = self.stops.as_array().ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: "the stops of a gradient are a list".to_string(),
+            })?;
+            if list.len() < 2 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a gradient has two stops or more".to_string(),
+                });
+            }
+            let mut stops: Vec<GradientStop> = Vec::with_capacity(list.len());
+            for item in list {
+                let offset = item.get("offset").and_then(|offset| offset.as_f64()).ok_or_else(|| {
+                    EngineError::Failed { id: id.clone(), message: "a stop says where it is".to_string() }
+                })?;
+                if !offset.is_finite() || !(0.0..=1.0).contains(&offset) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("a stop's offset is between zero and one, and this one is {offset}"),
+                    });
+                }
+                let colour = item.get("colour").and_then(|colour| colour.as_str()).ok_or_else(|| {
+                    EngineError::Failed { id: id.clone(), message: "a stop says what colour it is".to_string() }
+                })?;
+                let colour = parse_colour(colour)?;
+                let opacity = match item.get("opacity").and_then(|opacity| opacity.as_f64()) {
+                    Some(opacity) if opacity.is_finite() && (0.0..=1.0).contains(&opacity) => opacity,
+                    Some(_) => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "a stop's opacity is between zero and one".to_string(),
+                        });
+                    }
+                    None => 1.0,
+                };
+                stops.push(GradientStop { offset, colour, opacity });
+            }
+            // The **geometry**: the path's own box, unless the caller says.
+            let box_of = bounds(&vector.path);
+            let geometry = match kind {
+                GradientKind::Linear => {
+                    let from = match &self.from {
+                        Some(from) => point_of(from, &id)?,
+                        None => Point::new(box_of.x, box_of.y + box_of.h / 2.0),
+                    };
+                    let to = match &self.to {
+                        Some(to) => point_of(to, &id)?,
+                        None => Point::new(box_of.x + box_of.w, box_of.y + box_of.h / 2.0),
+                    };
+                    GradientGeometry::Linear { from, to }
+                }
+                GradientKind::Radial => {
+                    let centre = match &self.centre {
+                        Some(centre) => point_of(centre, &id)?,
+                        None => Point::new(box_of.x + box_of.w / 2.0, box_of.y + box_of.h / 2.0),
+                    };
+                    let radius = match &self.radius {
+                        Some(radius) => radius.0,
+                        None => (box_of.w * box_of.w + box_of.h * box_of.h).sqrt() / 2.0,
+                    };
+                    if !radius.is_finite() || radius <= 0.0 {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "a gradient's radius is a number greater than zero".to_string(),
+                        });
+                    }
+                    GradientGeometry::Radial { centre, radius }
+                }
+            };
+            vector.fill = Fill::Gradient(Gradient { kind, stops, geometry });
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the path is filled with a gradient")
+                .with_data(serde_json::json!({ "id": self.path.0, "gradient": vector.fill.to_json() })))
+
+        }
+    }
+    /// Set the **stroke** of a path, or take it away.
+    ///
+    /// The stroke is the line on the path's outline, and it has a colour
+    /// and a width. A path with no stroke has no line.
+    vector.path.stroke {
+        area: "vector",
+        layer: "vector",
+        icon: "paint",
+        mutates,
+        undoable,
+        menu: ("Path", "Paint"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// The colour of the line, as `#rrggbb`.
+
+            colour: Text,
+            /// How wide the line is.
+
+            width: Number,
+            /// Take the line away instead.
+
+            none: Option<craftkit_sdk::Bool>,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.path.0)?;
+            if self.none.map(|none| none.0).unwrap_or(false) {
+                vector.stroke = None;
+                write_back(session, self.path.0, &vector)?;
+                return Ok(Outcome::changed("the path has no line")
+                    .with_data(serde_json::json!({ "id": self.path.0, "stroke": Json::Null })));
+            }
+            let width = self.width.0;
+            if !width.is_finite() || width < 0.0 {
+                return Err(EngineError::Failed {
+                    id: "vector.path.stroke".to_string(),
+                    message: "a line's width is a number and not a negative one".to_string(),
+                });
+            }
+            let colour = parse_colour(&self.colour.0)?;
+            vector.stroke = Some(Stroke { colour, width, ..Default::default() });
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the path has a line")
+                .with_data(serde_json::json!({ "id": self.path.0, "width": width })))
+
+        }
+    }
+    /// Say how the **corners** of a path's line meet.
+    ///
+    /// The join is `miter` — a pointed corner — `round` or `bevel`, which
+    /// is a corner that is cut off.
+    vector.path.join {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Paint"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// The join: `miter`, `round` or `bevel`.
+
+            join: Text,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.path.0)?;
+            let Some(mut stroke) = vector.stroke else {
+                return Err(EngineError::Failed {
+                    id: "vector.path.join".to_string(),
+                    message: format!("the path `{}` has no line", self.path.0),
+                });
+            };
+            let join = match self.join.0.trim().to_ascii_lowercase().as_str() {
+                "miter" => Join::Miter,
+                "round" => Join::Round,
+                "bevel" => Join::Bevel,
+                other => {
+                    return Err(EngineError::Failed {
+                        id: "vector.path.join".to_string(),
+                        message: format!("the join `{other}` is not one of the three"),
+                    });
+                }
+            };
+            stroke.join = join;
+            vector.stroke = Some(stroke);
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the corners of the line meet")
+                .with_data(serde_json::json!({ "id": self.path.0, "join": self.join.0 })))
+
+        }
+    }
+    /// Say how the **ends** of a path's line are finished.
+    ///
+    /// The cap is `butt` — a flush end — `round` or `square`.
+    vector.path.cap {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Paint"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// The cap: `butt`, `round` or `square`.
+
+            cap: Text,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.path.0)?;
+            let Some(mut stroke) = vector.stroke else {
+                return Err(EngineError::Failed {
+                    id: "vector.path.cap".to_string(),
+                    message: format!("the path `{}` has no line", self.path.0),
+                });
+            };
+            let cap = match self.cap.0.trim().to_ascii_lowercase().as_str() {
+                "butt" => Cap::Butt,
+                "round" => Cap::Round,
+                "square" => Cap::Square,
+                other => {
+                    return Err(EngineError::Failed {
+                        id: "vector.path.cap".to_string(),
+                        message: format!("the cap `{other}` is not one of the three"),
+                    });
+                }
+            };
+            stroke.cap = cap;
+            vector.stroke = Some(stroke);
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the ends of the line are finished")
+                .with_data(serde_json::json!({ "id": self.path.0, "cap": self.cap.0 })))
+
+        }
+    }
+    /// Place a path with a **transform**.
+    ///
+    /// The transform is the six numbers of an affine matrix — `a b c d e f`
+    /// — and it says where the path is put: a point `(x, y)` of the path
+    /// is drawn at `(a·x + c·y + e, b·x + d·y + f)`. Leave the numbers out
+    /// and the path is where it is.
+    vector.path.transform {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Transform"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// The six numbers of the matrix.
+
+            matrix: Option<serde_json::Value>,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.path.0)?;
+            let transform = match &self.matrix {
+                Some(matrix) => geom::Matrix::from_json(matrix).map_err(|reason| EngineError::Failed {
+                    id: "vector.path.transform".to_string(),
+                    message: format!("the transform is not a transform: {reason}"),
+                })?,
+                None => geom::Matrix::identity(),
+            };
+            // A matrix that **collapses** the plane has no undoing, and a
+            // path that cannot be undone cannot be hit.
+            if transform.inverse().is_none() {
+                return Err(EngineError::Failed {
+                    id: "vector.path.transform".to_string(),
+                    message: "a transform that cannot be undone is refused".to_string(),
+                });
+            }
+            vector.transform = transform;
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the path is placed")
+                .with_data(serde_json::json!({ "id": self.path.0, "transform": transform.to_json() })))
+
+        }
+    }
+    /// Make a point of a path **smooth**.
+    ///
+    /// A smooth point's two handles are in line: the curve passes through
+    /// the point as one curve and not as two. The command makes it so, and
+    /// the rule is the tree's own.
+    vector.path.smooth {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Points"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// Which contour of the path, counting from zero. The first one if
+            /// it is left out.
+
+            contour: Option<Number>,
+            /// Which point of the contour, counting from zero.
+
+            point: Number,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.path.0)?;
+            let contour = self.contour.as_ref().map(|contour| contour.0).unwrap_or(0.0);
+            let contour = usize::try_from(contour.max(0.0) as i64).unwrap_or(0);
+            let point = usize::try_from(self.point.0.max(0.0) as i64).unwrap_or(0);
+            smooth_point(&mut vector.path, contour, point).map_err(|reason| EngineError::Failed {
+                id: "vector.path.smooth".to_string(),
+                message: reason,
+            })?;
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the point is smooth")
+                .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
+
+        }
+    }
+    /// Make a point of a path a **corner**.
+    ///
+    /// The **handles** at the point are pulled back to it, so the two sides
+    /// leave it as straight lines: the tree calls that a *corner*, and the
+    /// point that has no handles at it is a corner already.
+    ///
+    /// The tree's `path.convertAnchors` is one command with a `to` that
+    /// says `corner` or `smooth`, and it turns **many** points at once.
+    /// This tree has one command for each point — this one is the corner
+    /// and `vector.path.smooth` is the smooth — and
+    /// `vector.path.anchors.convert` is the tree's own command, which
+    /// turns many points at once by the tree's **neighbours'** rule.
+    vector.path.corner {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Points"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// Which contour of the path, counting from zero. The first one if
+            /// it is left out.
+
+            contour: Option<Number>,
+            /// Which point of the contour, counting from zero.
+
+            point: Number,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.path.0)?;
+            let contour = self.contour.as_ref().map(|contour| contour.0).unwrap_or(0.0);
+            let contour = usize::try_from(contour.max(0.0) as i64).unwrap_or(0);
+            let point = usize::try_from(self.point.0.max(0.0) as i64).unwrap_or(0);
+            corner_point(&mut vector.path, contour, point).map_err(|reason| EngineError::Failed {
+                id: "vector.path.corner".to_string(),
+                message: reason,
+            })?;
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the point is a corner")
+                .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
+
+        }
+    }
+    /// **Reshape** a path: grab it at a point and drag it.
+    ///
+    /// The anchors around the grab follow with a **smooth falloff** over a
+    /// radius, and the radius is measured **along** the path — not in a
+    /// straight line from the grab, but along the curve the path is.
+    ///
+    /// The grab may be on a point that is not an anchor: the path is
+    /// grabbed where it is nearest to the point, and an anchor is added
+    /// there — unless an anchor is already within the tolerance.
+    vector.path.reshape {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Reshape"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// Where the path is grabbed: the x of the point.
+
+            x: Number,
+            /// Where the path is grabbed: the y of the point.
+
+            y: Number,
+            /// How far the grab is dragged: the x.
+
+            dx: Number,
+            /// How far the grab is dragged: the y.
+
+            dy: Number,
+            /// How near an anchor must be for it to be the one that is grabbed.
+            /// The tree's own default is three.
+
+            tol: Option<Number>,
+            /// How far the anchors around follow, measured along the path. The
+            /// default is half the size of the contour, and it is never less
+            /// than one.
+
+            radius: Option<Number>,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.path.0)?;
+            let at = Point::new(self.x.0, self.y.0);
+            let delta = Point::new(self.dx.0, self.dy.0);
+            let tol = self.tol.as_ref().map(|tol| tol.0).unwrap_or(3.0);
+            if !tol.is_finite() || tol < 0.0 {
+                return Err(EngineError::Failed {
+                    id: "vector.path.reshape".to_string(),
+                    message: "the tolerance is a distance, and it is not a negative one".to_string(),
+                });
+            }
+            let radius = self.radius.as_ref().map(|radius| radius.0);
+            if let Some(radius) = radius
+                && (!radius.is_finite() || radius < 0.0)
+            {
+                return Err(EngineError::Failed {
+                    id: "vector.path.reshape".to_string(),
+                    message: "the radius is a distance, and it is not a negative one".to_string(),
+                });
+            }
+            // Where the path is **nearest** to the grab.
+            let Some(nearest) = reshape::nearest(&vector.path, at) else {
+                return Err(EngineError::Failed {
+                    id: "vector.path.reshape".to_string(),
+                    message: "the path is empty, and there is nothing to reshape".to_string(),
+                });
+            };
+            // The **contour** the grab is on.
+            let Some(subpath) = vector.path.subpaths.get(nearest.contour).cloned() else {
+                return Err(EngineError::Failed {
+                    id: "vector.path.reshape".to_string(),
+                    message: format!("the path has no contour {}", nearest.contour),
+                });
+            };
+            // The **anchor** that is grabbed: the nearest one, when it is
+            // near enough, and otherwise an anchor that is added there.
+            let anchors = reshape::anchors(&subpath);
+            let nearest_anchor = anchors
+                .iter()
+                .enumerate()
+                .map(|(index, anchor)| (index, distance(*anchor, at)))
+                .min_by(|left, right| left.1.total_cmp(&right.1));
+            let mut subpath = subpath;
+            let grabbed = match nearest_anchor {
+                Some((index, distance)) if distance <= tol => index,
+                _ => {
+                    let split = geom::split_segment(&subpath, nearest.segment, nearest.t).map_err(|reason| {
+                        EngineError::Failed {
+                            id: "vector.path.reshape".to_string(),
+                            message: format!("the path cannot be reshaped there: {reason}"),
+                        }
+                    })?;
+                    subpath = split;
+                    nearest.segment + 1
+                }
+            };
+            vector.path.subpaths[nearest.contour] = subpath.clone();
+            // The **positions** of the anchors along the path, and the
+            // **radius** the falloff is measured over.
+            let (positions, total) = reshape::positions(&subpath);
+            let radius = radius.unwrap_or_else(|| reshape::size(&subpath));
+            let from = positions.get(grabbed).copied().unwrap_or(0.0);
+            let anchors = reshape::anchors(&subpath);
+            let closed = subpath.closed;
+            // The anchors **move**: the grabbed one the whole way, and the
+            // others by their weight.
+            for (index, anchor) in anchors.iter().enumerate() {
+                let weight = if index == grabbed {
+                    1.0
+                } else {
+                    let away = (positions.get(index).copied().unwrap_or(f64::INFINITY) - from).abs();
+                    let away = if closed { away.min(total - away) } else { away };
+                    reshape::weight(away, radius)
+                };
+                if weight == 0.0 {
+                    continue;
+                }
+                let moved = Point::new(anchor.x + delta.x * weight, anchor.y + delta.y * weight);
+                move_point(&mut vector.path, nearest.contour, index, moved).map_err(|reason| {
+                    EngineError::Failed { id: "vector.path.reshape".to_string(), message: reason }
+                })?;
+            }
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the path is reshaped").with_data(serde_json::json!({
+                "id": self.path.0,
+                "contour": nearest.contour,
+                "point": grabbed,
+                "radius": radius,
+            })))
+
+        }
+    }
+    /// Say which parts of a path are **inside**.
+    ///
+    /// The rule is `nonzero` — the default, and the rule that makes a
+    /// contour inside another one a hole when the two run in opposite
+    /// directions — or `evenodd`, which does not care which way round a
+    /// contour runs.
+    vector.path.rule {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Rule"),
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// The rule: `nonzero` or `evenodd`.
+
+            rule: Text,
+        },
+        run: {
+
+            let mut vector = vector_of(session, self.path.0)?;
+            let rule = match self.rule.0.trim().to_ascii_lowercase().as_str() {
+                "nonzero" | "non-zero" => FillRule::NonZero,
+                "evenodd" | "even-odd" => FillRule::EvenOdd,
+                other => {
+                    return Err(EngineError::Failed {
+                        id: "vector.path.rule".to_string(),
+                        message: format!("the rule is `nonzero` or `evenodd`, and not `{other}`"),
+                    });
+                }
+            };
+            vector.path.rule = rule;
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the rule is set").with_data(serde_json::json!({ "id": self.path.0 })))
+
+        }
+    }
+    /// Keep what is in one path and not in the other.
+    ///
+    /// The **exclusion**: what the two paths do not share. It is the
+    /// difference the other way round, and it is the operation that leaves
+    /// the overlap out.
+    vector.path.exclude {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Combine"),
+        params: {
+            /// The first path.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            first: Option<NodeRef>,
+            /// The second path.
+            ///
+            /// Leave it out and the **selection** is used instead.
+
+            second: Option<NodeRef>,
+        },
+        run: {
+
+            let (first, second) = two_of(session, self.first, self.second)?;
+            combine(session, "vector.path.exclude", first, second, geom::BoolOp::Xor)
+
+        }
     }
 }
 
@@ -525,360 +2149,6 @@ impl TotalAreaEvaluator {
             value: serde_json::json!({ "area": total }),
         });
         plan
-    }
-}
-
-/// Combine two paths into one.
-///
-/// The **union**: everything either path covers. The result is one node,
-/// and the second node is gone.
-#[derive(Command)]
-#[command(
-    id = "vector.path.unite",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Combine"),
-    mutates,
-    undoable
-)]
-pub struct UnitePaths {
-    /// The first path.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub first: Option<NodeRef>,
-    /// The second path.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub second: Option<NodeRef>,
-}
-
-impl UnitePaths {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let (first, second) = two_of(session, self.first, self.second)?;
-        combine(session, "vector.path.unite", first, second, geom::BoolOp::Union)
-    }
-}
-
-/// Take one path from another.
-///
-/// The **difference**: what the first path covers and the second does not.
-/// The result may have a hole, and a hole is a contour of its own.
-#[derive(Command)]
-#[command(
-    id = "vector.path.subtract",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Combine"),
-    mutates,
-    undoable
-)]
-pub struct SubtractPaths {
-    /// The path to take from.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub first: Option<NodeRef>,
-    /// The path to take away.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub second: Option<NodeRef>,
-}
-
-impl SubtractPaths {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let (first, second) = two_of(session, self.first, self.second)?;
-        combine(session, "vector.path.subtract", first, second, geom::BoolOp::Difference)
-    }
-}
-
-/// Keep what both paths cover.
-///
-/// The **intersection**: what the two paths share.
-#[derive(Command)]
-#[command(
-    id = "vector.path.intersect",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Combine"),
-    mutates,
-    undoable
-)]
-pub struct IntersectPaths {
-    /// The first path.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub first: Option<NodeRef>,
-    /// The second path.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub second: Option<NodeRef>,
-}
-
-impl IntersectPaths {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let (first, second) = two_of(session, self.first, self.second)?;
-        combine(session, "vector.path.intersect", first, second, geom::BoolOp::Intersect)
-    }
-}
-
-/// Take the points a path does not need.
-///
-/// The path is simplified: the points that a flat line would serve are
-/// removed and the rest are left alone.
-#[derive(Command)]
-#[command(
-    id = "vector.path.simplify",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path"),
-    mutates,
-    undoable
-)]
-pub struct SimplifyPath {
-    /// The path.
-    pub node: NodeRef,
-    /// How far the result may be from the original.
-    pub tolerance: Option<Number>,
-}
-
-impl SimplifyPath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let tolerance = match &self.tolerance {
-            Some(tolerance) => tolerance.0,
-            None => 0.05,
-        };
-        if !tolerance.is_finite() || tolerance < 0.0 {
-            return Err(EngineError::Failed {
-                id: "vector.path.simplify".to_string(),
-                message: "the tolerance is not a distance".to_string(),
-            });
-        }
-        let mut vector = vector_of(session, self.node.0)?;
-        vector.path = geom::simplify(&vector.path, tolerance);
-        write_back(session, self.node.0, &vector)?;
-        Ok(Outcome::changed("the path is simpler").with_data(serde_json::json!({ "id": self.node.0 })))
-    }
-}
-
-/// **Close** a path: its last open contour is closed.
-///
-/// A contour that is open has a loose end, and a loose end is a place
-/// where the paint of the path stops in the middle of nowhere. Closing
-/// it joins the end back to the beginning.
-///
-/// A path with **no open contour** is refused: there is nothing to
-/// close.
-#[derive(Command)]
-#[command(
-    id = "vector.path.close",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path"),
-    mutates,
-    undoable
-)]
-pub struct ClosePath {
-    /// The path.
-    pub node: NodeRef,
-}
-
-impl ClosePath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.node.0)?;
-        let Some(subpath) = vector.path.subpaths.iter_mut().rev().find(|subpath| !subpath.closed) else {
-            return Err(EngineError::Failed {
-                id: "vector.path.close".to_string(),
-                message: "the path has no open contour: there is nothing to close".to_string(),
-            });
-        };
-        subpath.closed = true;
-        write_back(session, self.node.0, &vector)?;
-        Ok(Outcome::changed("the path is closed").with_data(serde_json::json!({ "id": self.node.0 })))
-    }
-}
-
-/// **Turn** a path the other way round.
-///
-/// The contour runs backwards: it starts where it ended, and every
-/// curve keeps its shape and turns the other way. The path is the same
-/// shape and it winds the other way, which matters when the shape has
-/// a **hole** in it or when the path is filled by a rule that says
-/// which way it winds.
-#[derive(Command)]
-#[command(
-    id = "vector.path.reverse",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path"),
-    mutates,
-    undoable
-)]
-pub struct ReversePath {
-    /// The path.
-    pub node: NodeRef,
-}
-
-impl ReversePath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.node.0)?;
-        let subpaths: Vec<SubPath> = vector.path.subpaths.iter().map(reverse_subpath).collect();
-        vector.path.subpaths = subpaths;
-        write_back(session, self.node.0, &vector)?;
-        Ok(Outcome::changed("the path is turned round").with_data(serde_json::json!({ "id": self.node.0 })))
-    }
-}
-
-/// **Add an anchor** to a path: a segment of a contour is split in two.
-///
-/// The anchor goes in at a place along the segment — `t`, from zero at
-/// its beginning to one at its end — and the two halves are the same
-/// curve: the shape of the path does not change, and the path has one
-/// more point to move.
-#[derive(Command)]
-#[command(
-    id = "vector.path.anchor.add",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path"),
-    mutates,
-    undoable
-)]
-pub struct AddAnchor {
-    /// The path.
-    pub node: NodeRef,
-    /// Which contour of the path.
-    pub subpath: Option<Number>,
-    /// Which segment of the contour.
-    pub segment: Number,
-    /// Where along the segment the anchor goes: from zero to one.
-    pub t: Option<Number>,
-}
-
-impl AddAnchor {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.anchor.add".to_string();
-        let index = self.segment.0;
-        if !index.is_finite() || index < 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "a segment is a number and not a negative one".to_string(),
-            });
-        }
-        let t = self.t.map(|t| t.0).unwrap_or(0.5);
-        if !t.is_finite() {
-            return Err(EngineError::Failed {
-                id,
-                message: "a place along a segment is a number between zero and one".to_string(),
-            });
-        }
-        let mut vector = vector_of(session, self.node.0)?;
-        let which = match &self.subpath {
-            Some(subpath) => subpath.0,
-            None => 0.0,
-        };
-        if !which.is_finite() || which < 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "a contour is a number and not a negative one".to_string(),
-            });
-        }
-        let which = which as usize;
-        let Some(subpath) = vector.path.subpaths.get(which).cloned() else {
-            return Err(EngineError::Failed { id, message: format!("the path has no contour {which}") });
-        };
-        let split = geom::split_segment(&subpath, index as usize, t)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-        vector.path.subpaths[which] = split;
-        write_back(session, self.node.0, &vector)?;
-        Ok(Outcome::changed("the path has one more anchor")
-            .with_data(serde_json::json!({ "id": self.node.0, "subpath": which, "segment": index })))
-    }
-}
-
-/// Take an **anchor** away.
-///
-/// The tree's rule: the segments that touch the anchor go with it, and
-/// the contour **splits** into the runs that are left — the surviving
-/// stretches stay separate rather than joining across the gap. A run
-/// with fewer than two points is not a run, and it is gone; and a
-/// contour that was closed is open afterwards.
-///
-/// The anchors are given one at a time: this tree has no selection,
-/// and a selection is not a fact.
-#[derive(Command)]
-#[command(
-    id = "vector.path.anchor.remove",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path"),
-    mutates,
-    undoable
-)]
-pub struct RemoveAnchor {
-    /// The path.
-    pub node: NodeRef,
-    /// Which contour of the path.
-    pub subpath: Option<Number>,
-    /// Which anchor of the contour.
-    pub anchor: Number,
-}
-
-impl RemoveAnchor {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.anchor.remove".to_string();
-        let index = self.anchor.0;
-        if !index.is_finite() || index < 0.0 || index.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "an anchor is a number and not a negative one".to_string(),
-            });
-        }
-        let anchor = index as usize;
-        let mut vector = vector_of(session, self.node.0)?;
-        let which = match &self.subpath {
-            Some(subpath) => subpath.0,
-            None => 0.0,
-        };
-        if !which.is_finite() || which < 0.0 || which.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "a contour is a number and not a negative one".to_string(),
-            });
-        }
-        let which = which as usize;
-        let Some(subpath) = vector.path.subpaths.get(which).cloned() else {
-            return Err(EngineError::Failed { id, message: format!("the path has no contour {which}") });
-        };
-        let anchors = subpath.segments.len() + 1;
-        if anchor >= anchors {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the contour has {anchors} anchors and not an anchor {anchor}"),
-            });
-        }
-        // The **runs** that are left: the stretches that survive stay
-        // separate rather than joining across the gap.
-        let runs = without_anchor(&subpath, anchor);
-        let mut contours = Vec::with_capacity(vector.path.subpaths.len() + runs.len());
-        for (index, contour) in vector.path.subpaths.iter().enumerate() {
-            if index != which {
-                contours.push(contour.clone());
-            }
-        }
-        for run in runs {
-            contours.push(run);
-        }
-        vector.path.subpaths = contours;
-        write_back(session, self.node.0, &vector)?;
-        Ok(Outcome::changed("the path has one anchor less")
-            .with_data(serde_json::json!({ "id": self.node.0, "subpath": which, "anchor": anchor })))
     }
 }
 
@@ -967,267 +2237,6 @@ fn reverse_subpath(subpath: &SubPath) -> SubPath {
     SubPath { start: subpath.end(), segments, closed: subpath.closed }
 }
 
-/// Push a path out, or in.
-///
-/// The path is offset by a distance: out for a positive one, in for a
-/// negative one. The curves stay curves.
-#[derive(Command)]
-#[command(
-    id = "vector.path.offset",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path"),
-    mutates,
-    undoable
-)]
-pub struct OffsetPath {
-    /// The path.
-    pub node: NodeRef,
-    /// How far to push it.
-    pub distance: Number,
-}
-
-impl OffsetPath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.node.0)?;
-        vector.path = geom::offset(&vector.path, self.distance.0).map_err(|error| EngineError::Failed {
-            id: "vector.path.offset".to_string(),
-            message: error.to_string(),
-        })?;
-        write_back(session, self.node.0, &vector)?;
-        Ok(Outcome::changed("the path is offset").with_data(serde_json::json!({ "id": self.node.0 })))
-    }
-}
-
-/// The **outline** of a path's line.
-///
-/// The line of a path covers an area, and the outline is that area as
-/// a shape: a path in its own right, which may be filled, measured and
-/// cut. The command makes a **new** path and leaves the one it was
-/// given alone.
-#[derive(Command)]
-#[command(
-    id = "vector.path.outline",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path"),
-    mutates,
-    undoable
-)]
-pub struct OutlinePath {
-    /// The path whose line is outlined.
-    pub path: NodeRef,
-    /// What to call the new path.
-    pub name: Option<Text>,
-    /// The colour of the new path, as `#rrggbb`.
-    ///
-    /// Leave it out and the new path is filled with the colour of the
-    /// line it came from.
-    pub fill: Option<Text>,
-}
-
-impl OutlinePath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let vector = vector_of(session, self.path.0)?;
-        let Some(stroke) = vector.stroke else {
-            return Err(EngineError::Failed {
-                id: "vector.path.outline".to_string(),
-                message: format!("the path `{}` has no line to outline", self.path.0),
-            });
-        };
-        // The **miter limit** is the kit's: four widths.
-        let outline = geom::outline_stroke(&vector.path, stroke.width, stroke.cap, stroke.join, 4.0);
-        let colour = match &self.fill {
-            Some(fill) => parse_colour(&fill.0)?,
-            None => stroke.colour,
-        };
-        let name = self.name.clone().unwrap_or_else(|| Text(format!("outline {}", self.path.0)));
-        let node = VectorNode {
-            path: outline.clone(),
-            fill: Fill::Solid(colour),
-            stroke: None,
-            blend: BlendMode::Normal,
-            transform: geom::Matrix::identity(),
-            opacity: 1.0,
-            dash: None,
-        };
-        let rect = bounds(&outline);
-        let id =
-            session.document_mut()?.add_node_with(name.0.clone(), "vector.path", Some(rect), node.to_json());
-        Ok(Outcome::changed("the line has an outline")
-            .with_data(serde_json::json!({ "id": id, "from": self.path.0 })))
-    }
-}
-
-///
-/// The points of a contour are the point it starts at and the point
-/// each segment ends at, counting from zero. The handles of the curves
-/// move with the point they belong to, as they do in the tree: an
-/// anchor carries its two handles.
-#[derive(Command)]
-#[command(
-    id = "vector.path.move",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Points"),
-    mutates,
-    undoable
-)]
-pub struct MovePoint {
-    /// The path.
-    pub path: NodeRef,
-    /// Which contour of the path, counting from zero. The first one if
-    /// it is left out.
-    pub contour: Option<Number>,
-    /// Which point of the contour, counting from zero.
-    pub point: Number,
-    /// Where the point goes: a point, `{"x": …, "y": …}`.
-    pub to: Json,
-}
-
-impl MovePoint {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.path.0)?;
-        let contour = index_of(self.contour, "the contour")
-            .map_err(|reason| EngineError::Failed { id: "vector.path.move".to_string(), message: reason })?;
-        let point = index_of(Some(self.point), "the point")
-            .map_err(|reason| EngineError::Failed { id: "vector.path.move".to_string(), message: reason })?;
-        let to = Point::from_json(&self.to).map_err(|reason| EngineError::Failed {
-            id: "vector.path.move".to_string(),
-            message: format!("where the point goes is not a point: {reason}"),
-        })?;
-        move_point(&mut vector.path, contour, point, to)
-            .map_err(|reason| EngineError::Failed { id: "vector.path.move".to_string(), message: reason })?;
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the point has moved")
-            .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
-    }
-}
-
-/// **Average** the points of a path.
-///
-/// The points that are averaged are given **one per line**, as
-/// `contour:point`, because the tree's average works on the points that
-/// are selected and this tree has no selection: a range is a fact and
-/// a selection is not.
-///
-/// The **axis** says what is averaged: `horizontal` puts the points on
-/// one line, `vertical` puts them in one column, and `both` puts them
-/// all in one place. The default is `both`.
-///
-/// The tree's average works on the selected points of **several**
-/// paths at once; here a command works on one path, because a command
-/// works on one node.
-#[derive(Command)]
-#[command(
-    id = "vector.path.average",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Points"),
-    mutates,
-    undoable
-)]
-pub struct AveragePoints {
-    /// The path.
-    pub path: NodeRef,
-    /// The points to average, one per line, each `contour:point`.
-    pub points: Text,
-    /// The axis: `horizontal`, `vertical` or `both`. The default is
-    /// `both`.
-    pub axis: Option<Text>,
-}
-
-impl AveragePoints {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.average".to_string();
-        let mut vector = vector_of(session, self.path.0)?;
-        let axis = match &self.axis {
-            Some(axis) => match axis.0.trim().to_ascii_lowercase().as_str() {
-                "horizontal" => Axis::Horizontal,
-                "vertical" => Axis::Vertical,
-                "both" => Axis::Both,
-                other => {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!(
-                            "`{other}` is not an axis: an axis is `horizontal`, `vertical` or `both`"
-                        ),
-                    });
-                }
-            },
-            None => Axis::Both,
-        };
-        // The **points**: one per line, each `contour:point`.
-        let mut wanted: Vec<(usize, usize)> = Vec::new();
-        for line in self.points.0.lines().map(|line| line.trim()).filter(|line| !line.is_empty()) {
-            let Some((contour, point)) = line.split_once(':') else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("`{line}` is not a point: a point is `contour:point`"),
-                });
-            };
-            let (Ok(contour), Ok(point)) = (contour.trim().parse::<usize>(), point.trim().parse::<usize>())
-            else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("`{line}` is not a point: a point is `contour:point`"),
-                });
-            };
-            if wanted.contains(&(contour, point)) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the point `{line}` is in the list twice"),
-                });
-            }
-            wanted.push((contour, point));
-        }
-        if wanted.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "there are no points to average".to_string(),
-            });
-        }
-        // The **centre**: the mean of the points that are averaged, and
-        // it is worked out before any point moves.
-        let mut sum = Point::new(0.0, 0.0);
-        for (contour, point) in &wanted {
-            let at = point_at(&vector.path, *contour, *point).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("the path has no point {contour}:{point}"),
-            })?;
-            sum = Point::new(sum.x + at.x, sum.y + at.y);
-        }
-        let count = wanted.len() as f64;
-        let centre = Point::new(sum.x / count, sum.y / count);
-        for (contour, point) in &wanted {
-            let at = point_at(&vector.path, *contour, *point).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("the path has no point {contour}:{point}"),
-            })?;
-            let to = match axis {
-                Axis::Horizontal => Point::new(at.x, centre.y),
-                Axis::Vertical => Point::new(centre.x, at.y),
-                Axis::Both => centre,
-            };
-            move_point(&mut vector.path, *contour, *point, to)
-                .map_err(|reason| EngineError::Failed { id: id.clone(), message: reason })?;
-        }
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed(format!("{} points are averaged", wanted.len())).with_data(
-            serde_json::json!({
-                "id": self.path.0,
-                "points": wanted.iter().map(|(contour, point)| serde_json::json!([contour, point])).collect::<Vec<_>>(),
-                "centre": { "x": centre.x, "y": centre.y },
-                "axis": axis.name(),
-            }),
-        ))
-    }
-}
-
 /// The **axis** a set of points is averaged along.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Axis {
@@ -1254,367 +2263,6 @@ impl Axis {
 fn point_at(path: &Path, contour: usize, point: usize) -> Option<Point> {
     let subpath = path.subpaths.get(contour)?;
     if point == 0 { Some(subpath.start) } else { Some(subpath.segments.get(point - 1)?.end()) }
-}
-
-/// Set the **handles** of a point.
-///
-/// The two handles of a point are the one the curve leaves by and the
-/// one the curve arrives by, and a point with handles on it is a
-/// curve: a straight segment with a handle on it becomes a curve, as
-/// it does in the tree.
-#[derive(Command)]
-#[command(
-    id = "vector.path.handle",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Points"),
-    mutates,
-    undoable
-)]
-pub struct HandlePoint {
-    /// The path.
-    pub path: NodeRef,
-    /// Which contour of the path, counting from zero. The first one if
-    /// it is left out.
-    pub contour: Option<Number>,
-    /// Which point of the contour, counting from zero.
-    pub point: Number,
-    /// The handle the curve leaves the point by.
-    pub c1: Option<Json>,
-    /// The handle the curve arrives at the point by.
-    pub c2: Option<Json>,
-}
-
-impl HandlePoint {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.path.0)?;
-        let contour = index_of(self.contour, "the contour").map_err(|reason| EngineError::Failed {
-            id: "vector.path.handle".to_string(),
-            message: reason,
-        })?;
-        let point = index_of(Some(self.point), "the point").map_err(|reason| EngineError::Failed {
-            id: "vector.path.handle".to_string(),
-            message: reason,
-        })?;
-        let c1 = match &self.c1 {
-            Some(value) => Some(Point::from_json(value).map_err(|reason| EngineError::Failed {
-                id: "vector.path.handle".to_string(),
-                message: format!("the handle is not a point: {reason}"),
-            })?),
-            None => None,
-        };
-        let c2 = match &self.c2 {
-            Some(value) => Some(Point::from_json(value).map_err(|reason| EngineError::Failed {
-                id: "vector.path.handle".to_string(),
-                message: format!("the handle is not a point: {reason}"),
-            })?),
-            None => None,
-        };
-        if c1.is_none() && c2.is_none() {
-            return Err(EngineError::Failed {
-                id: "vector.path.handle".to_string(),
-                message: "a handle says where the curve goes: c1, c2, or both".to_string(),
-            });
-        }
-        handle_point(&mut vector.path, contour, point, c1, c2).map_err(|reason| EngineError::Failed {
-            id: "vector.path.handle".to_string(),
-            message: reason,
-        })?;
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the handles have moved")
-            .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
-    }
-}
-
-/// Set the **fill** of a path.
-///
-/// The fill is what is inside the path, and the rule that says what is
-/// inside is the path's own.
-#[derive(Command)]
-#[command(
-    id = "vector.path.fill",
-    area = "vector",
-    layer = "vector",
-    icon = "paint",
-    menu("Path", "Paint"),
-    mutates,
-    undoable
-)]
-pub struct FillPath {
-    /// The path.
-    pub path: NodeRef,
-    /// The colour, as `#rrggbb`.
-    pub colour: Option<Text>,
-    /// Take the fill away instead: the tree's **None** paint.
-    pub none: Option<craftkit_sdk::Bool>,
-}
-
-impl FillPath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.path.0)?;
-        // The tree's **None** paint: the path is filled with nothing,
-        // and the fill is there and paints nothing. It is the same
-        // rule as the line's own: the line may be taken away.
-        if self.none.map(|none| none.0).unwrap_or(false) {
-            vector.fill = Fill::Solid(Colour::NONE);
-            write_back(session, self.path.0, &vector)?;
-            return Ok(Outcome::changed("the path is filled with nothing")
-                .with_data(serde_json::json!({ "id": self.path.0, "fill": Json::Null })));
-        }
-        let Some(colour) = &self.colour else {
-            return Err(EngineError::Failed {
-                id: "vector.path.fill".to_string(),
-                message: "name the colour of the fill, or say that there is none".to_string(),
-            });
-        };
-        let colour = parse_colour(&colour.0)?;
-        vector.fill = Fill::Solid(colour);
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the path is filled")
-            .with_data(serde_json::json!({ "id": self.path.0, "fill": self.colour.as_ref().map(|colour| colour.0.clone()) })))
-    }
-}
-
-/// Put a path **in front** of the others, or **behind** them.
-///
-/// The order the paths are drawn in is the order they are in the
-/// document: the first is drawn first and is behind, and the last is
-/// drawn last and is in front.
-///
-/// The tree's layers hold an ordered list of their own, and this
-/// tree's layers are **edges** — so a path moved here moves among
-/// everything, and not only among the paths of its own layer.
-#[derive(Command)]
-#[command(
-    id = "vector.path.order",
-    area = "vector",
-    layer = "vector",
-    icon = "list",
-    menu("Path", "Order"),
-    mutates,
-    undoable
-)]
-pub struct OrderPath {
-    /// The path.
-    pub path: NodeRef,
-    /// `front` or `back`.
-    pub place: Text,
-}
-
-impl OrderPath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.order".to_string();
-        let node = session.document().node(self.path.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{}`", self.path.0),
-        })?;
-        if node.kind != "vector.path" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{}` is a `{}` and not a path", self.path.0, node.kind),
-            });
-        }
-        let place = self.place.0.trim().to_ascii_lowercase();
-        let moved = match place.as_str() {
-            "front" => session.document_mut()?.bring_to_front(self.path.0),
-            "back" => session.document_mut()?.send_to_back(self.path.0),
-            other => {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("a path goes to the front or to the back, and not to `{other}`"),
-                });
-            }
-        };
-        if !moved {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{}` is not in the document", self.path.0),
-            });
-        }
-        Ok(Outcome::changed(format!("the path is {place}"))
-            .with_data(serde_json::json!({ "id": self.path.0, "place": place })))
-    }
-}
-
-/// Make a **grid** of copies of a path.
-///
-/// The tree's repeat tool makes a grid of copies, and the shape is the
-/// first cell of it. Here the copies are **paths of their own** — the
-/// same shape, the same paint, and a **transform** that says where each
-/// one is — and the original is where it was.
-///
-/// The copies are placed by the step: how far apart they are, across
-/// and down.
-#[derive(Command)]
-#[command(
-    id = "vector.path.grid",
-    area = "vector",
-    layer = "vector",
-    icon = "plus",
-    menu("Path", "Grid"),
-    mutates,
-    undoable
-)]
-pub struct GridPath {
-    /// The path to copy.
-    pub path: NodeRef,
-    /// How many copies across, the original among them.
-    pub columns: Number,
-    /// How many copies down, the original among them.
-    pub rows: Number,
-    /// How far apart they are, across.
-    pub step_x: Number,
-    /// How far apart they are, down.
-    pub step_y: Number,
-}
-
-impl GridPath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.grid".to_string();
-        let vector = vector_of(session, self.path.0)?;
-        let columns = the_count(self.columns.0, "columns", &id)?;
-        let rows = the_count(self.rows.0, "rows", &id)?;
-        let step_x = self.step_x.0;
-        let step_y = self.step_y.0;
-        if !step_x.is_finite() || !step_y.is_finite() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the step between the copies is a number".to_string(),
-            });
-        }
-        let cells = columns.saturating_mul(rows);
-        if cells > MAX_COPIES {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a grid holds at most {MAX_COPIES} copies, and this one holds {cells}"),
-            });
-        }
-        let mut made: Vec<u64> = Vec::with_capacity(cells.saturating_sub(1) as usize);
-        for row in 0..rows {
-            for column in 0..columns {
-                if row == 0 && column == 0 {
-                    continue;
-                }
-                let move_by = geom::Matrix::translate(column as f64 * step_x, row as f64 * step_y);
-                let copy = a_copy(session, &vector, move_by, format!("copy {column}-{row}"))?;
-                made.push(copy);
-            }
-        }
-        let count = made.len();
-        Ok(Outcome::changed(format!("made {count} cop(y|ies) of the path"))
-            .with_data(serde_json::json!({ "id": self.path.0, "copies": made })))
-    }
-}
-
-/// Make a **mirrored** copy of a path.
-///
-/// The copy is the path turned over a **line**: the two points say
-/// where the line is. A line with no length mirrors nothing, and it is
-/// refused.
-#[derive(Command)]
-#[command(
-    id = "vector.path.mirror",
-    area = "vector",
-    layer = "vector",
-    icon = "plus",
-    menu("Path", "Mirror"),
-    mutates,
-    undoable
-)]
-pub struct MirrorPath {
-    /// The path to copy.
-    pub path: NodeRef,
-    /// Where the line starts, across.
-    pub from_x: Number,
-    /// Where the line starts, down.
-    pub from_y: Number,
-    /// Where the line ends, across.
-    pub to_x: Number,
-    /// Where the line ends, down.
-    pub to_y: Number,
-}
-
-impl MirrorPath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.mirror".to_string();
-        let vector = vector_of(session, self.path.0)?;
-        let from = Point::new(self.from_x.0, self.from_y.0);
-        let to = Point::new(self.to_x.0, self.to_y.0);
-        if !self.from_x.0.is_finite()
-            || !self.from_y.0.is_finite()
-            || !self.to_x.0.is_finite()
-            || !self.to_y.0.is_finite()
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the line is two points".to_string(),
-            });
-        }
-        let Some(mirror) = geom::Matrix::mirror(from, to) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a line with no length mirrors nothing".to_string(),
-            });
-        };
-        let copy = a_copy(session, &vector, mirror, "mirror".to_string())?;
-        Ok(Outcome::changed("made a mirrored copy of the path")
-            .with_data(serde_json::json!({ "id": self.path.0, "copies": [copy] })))
-    }
-}
-
-/// Make a **ring** of copies of a path.
-///
-/// The copies are the path turned about a **centre**: each one by its
-/// share of the whole turn, so that the last one is where the first
-/// began.
-#[derive(Command)]
-#[command(
-    id = "vector.path.radial",
-    area = "vector",
-    layer = "vector",
-    icon = "plus",
-    menu("Path", "Radial"),
-    mutates,
-    undoable
-)]
-pub struct RadialPath {
-    /// The path to copy.
-    pub path: NodeRef,
-    /// How many copies there are, the original among them.
-    pub count: Number,
-    /// Where the centre is, across.
-    pub centre_x: Number,
-    /// Where the centre is, down.
-    pub centre_y: Number,
-}
-
-impl RadialPath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.radial".to_string();
-        let vector = vector_of(session, self.path.0)?;
-        let count = the_count(self.count.0, "copies", &id)?;
-        if count > MAX_COPIES {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a ring holds at most {MAX_COPIES} copies, and this one holds {count}"),
-            });
-        }
-        if !self.centre_x.0.is_finite() || !self.centre_y.0.is_finite() {
-            return Err(EngineError::Failed { id: id.clone(), message: "the centre is a point".to_string() });
-        }
-        let centre = Point::new(self.centre_x.0, self.centre_y.0);
-        let turn = std::f64::consts::TAU / count as f64;
-        let mut made: Vec<u64> = Vec::with_capacity(count.saturating_sub(1) as usize);
-        for step in 1..count {
-            let turn_by = geom::Matrix::rotate_about(centre, turn * step as f64);
-            let copy = a_copy(session, &vector, turn_by, format!("copy {step}"))?;
-            made.push(copy);
-        }
-        let made_count = made.len();
-        Ok(Outcome::changed(format!("made {made_count} cop(y|ies) of the path"))
-            .with_data(serde_json::json!({ "id": self.path.0, "copies": made })))
-    }
 }
 
 /// A **count** of things: a whole number, and at least one.
@@ -1652,180 +2300,6 @@ fn a_copy(
     Ok(session.document_mut()?.add_node_with(name, "vector.path", Some(rect), copy.to_json()))
 }
 
-/// Set the **blend mode** of a path.
-///
-/// The mode says how the path mixes with what is under it: the plain
-/// mode lays it over, and the others mix the two colours first. The
-/// mode is the **kit's own**, so that a shape, a letter and a picture
-/// all mix the same way.
-///
-/// The plain mode is the mode a path has when it says nothing, and it
-/// is how a blend is taken away.
-#[derive(Command)]
-#[command(
-    id = "vector.path.blend",
-    area = "vector",
-    layer = "vector",
-    icon = "paint",
-    menu("Path", "Paint"),
-    mutates,
-    undoable
-)]
-pub struct BlendPath {
-    /// The path.
-    pub path: NodeRef,
-    /// The mode: `Normal`, `Multiply`, `Screen`, `Overlay` and the
-    /// rest.
-    pub mode: Text,
-}
-
-impl BlendPath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.blend".to_string();
-        let mut vector = vector_of(session, self.path.0)?;
-        let mode = BlendMode::parse(self.mode.0.trim()).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no blend mode called `{}`", self.mode.0.trim()),
-        })?;
-        vector.blend = mode;
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed(format!("the path mixes with `{}`", mode.label()))
-            .with_data(serde_json::json!({ "id": self.path.0, "blend": mode.label() })))
-    }
-}
-
-/// Fill a path with a **gradient**.
-///
-/// The gradient is the **kit's own** — the colours, the stops they are
-/// at, and where the gradient is put — and the path is filled with it.
-///
-/// The stops are a list of `{"offset": 0, "colour": "#rrggbb"}`, and
-/// the offset is where the colour is along the gradient: zero is the
-/// start and one is the end. A stop may say how solid it is, with
-/// `"opacity"`.
-///
-/// Where the gradient is put is the path's **own box** unless the
-/// caller says otherwise: a linear gradient goes across the box, and a
-/// radial one is centred in it.
-#[derive(Command)]
-#[command(
-    id = "vector.path.gradient",
-    area = "vector",
-    layer = "vector",
-    icon = "paint",
-    menu("Path", "Paint"),
-    mutates,
-    undoable
-)]
-pub struct GradientPath {
-    /// The path to fill with the gradient.
-    pub path: NodeRef,
-    /// `linear` — along a line — or `radial` — out from a centre.
-    pub kind: Text,
-    /// The stops: a list of `{"offset": 0, "colour": "#rrggbb"}`.
-    pub stops: serde_json::Value,
-    /// Where a **linear** gradient starts: `{"x": 0, "y": 0}`.
-    pub from: Option<serde_json::Value>,
-    /// Where a **linear** gradient ends.
-    pub to: Option<serde_json::Value>,
-    /// Where a **radial** gradient is centred.
-    pub centre: Option<serde_json::Value>,
-    /// How far a **radial** gradient reaches.
-    pub radius: Option<Number>,
-}
-
-impl GradientPath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.gradient".to_string();
-        let mut vector = vector_of(session, self.path.0)?;
-        // The **kind**: a line or a centre.
-        let kind = match self.kind.0.trim().to_ascii_lowercase().as_str() {
-            "linear" => GradientKind::Linear,
-            "radial" => GradientKind::Radial,
-            other => {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("a gradient is linear or radial, and this one is `{other}`"),
-                });
-            }
-        };
-        // The **stops**.
-        let list = self.stops.as_array().ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: "the stops of a gradient are a list".to_string(),
-        })?;
-        if list.len() < 2 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a gradient has two stops or more".to_string(),
-            });
-        }
-        let mut stops: Vec<GradientStop> = Vec::with_capacity(list.len());
-        for item in list {
-            let offset = item.get("offset").and_then(|offset| offset.as_f64()).ok_or_else(|| {
-                EngineError::Failed { id: id.clone(), message: "a stop says where it is".to_string() }
-            })?;
-            if !offset.is_finite() || !(0.0..=1.0).contains(&offset) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("a stop's offset is between zero and one, and this one is {offset}"),
-                });
-            }
-            let colour = item.get("colour").and_then(|colour| colour.as_str()).ok_or_else(|| {
-                EngineError::Failed { id: id.clone(), message: "a stop says what colour it is".to_string() }
-            })?;
-            let colour = parse_colour(colour)?;
-            let opacity = match item.get("opacity").and_then(|opacity| opacity.as_f64()) {
-                Some(opacity) if opacity.is_finite() && (0.0..=1.0).contains(&opacity) => opacity,
-                Some(_) => {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: "a stop's opacity is between zero and one".to_string(),
-                    });
-                }
-                None => 1.0,
-            };
-            stops.push(GradientStop { offset, colour, opacity });
-        }
-        // The **geometry**: the path's own box, unless the caller says.
-        let box_of = bounds(&vector.path);
-        let geometry = match kind {
-            GradientKind::Linear => {
-                let from = match &self.from {
-                    Some(from) => point_of(from, &id)?,
-                    None => Point::new(box_of.x, box_of.y + box_of.h / 2.0),
-                };
-                let to = match &self.to {
-                    Some(to) => point_of(to, &id)?,
-                    None => Point::new(box_of.x + box_of.w, box_of.y + box_of.h / 2.0),
-                };
-                GradientGeometry::Linear { from, to }
-            }
-            GradientKind::Radial => {
-                let centre = match &self.centre {
-                    Some(centre) => point_of(centre, &id)?,
-                    None => Point::new(box_of.x + box_of.w / 2.0, box_of.y + box_of.h / 2.0),
-                };
-                let radius = match &self.radius {
-                    Some(radius) => radius.0,
-                    None => (box_of.w * box_of.w + box_of.h * box_of.h).sqrt() / 2.0,
-                };
-                if !radius.is_finite() || radius <= 0.0 {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: "a gradient's radius is a number greater than zero".to_string(),
-                    });
-                }
-                GradientGeometry::Radial { centre, radius }
-            }
-        };
-        vector.fill = Fill::Gradient(Gradient { kind, stops, geometry });
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the path is filled with a gradient")
-            .with_data(serde_json::json!({ "id": self.path.0, "gradient": vector.fill.to_json() })))
-    }
-}
-
 /// A **point**, from a value a caller sent.
 fn point_of(value: &serde_json::Value, id: &str) -> Result<Point, EngineError> {
     let number =
@@ -1837,241 +2311,6 @@ fn point_of(value: &serde_json::Value, id: &str) -> Result<Point, EngineError> {
         });
     };
     Ok(Point::new(x, y))
-}
-
-/// Set the **stroke** of a path, or take it away.
-///
-/// The stroke is the line on the path's outline, and it has a colour
-/// and a width. A path with no stroke has no line.
-#[derive(Command)]
-#[command(
-    id = "vector.path.stroke",
-    area = "vector",
-    layer = "vector",
-    icon = "paint",
-    menu("Path", "Paint"),
-    mutates,
-    undoable
-)]
-pub struct StrokePath {
-    /// The path.
-    pub path: NodeRef,
-    /// The colour of the line, as `#rrggbb`.
-    pub colour: Text,
-    /// How wide the line is.
-    pub width: Number,
-    /// Take the line away instead.
-    pub none: Option<craftkit_sdk::Bool>,
-}
-
-impl StrokePath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.path.0)?;
-        if self.none.map(|none| none.0).unwrap_or(false) {
-            vector.stroke = None;
-            write_back(session, self.path.0, &vector)?;
-            return Ok(Outcome::changed("the path has no line")
-                .with_data(serde_json::json!({ "id": self.path.0, "stroke": Json::Null })));
-        }
-        let width = self.width.0;
-        if !width.is_finite() || width < 0.0 {
-            return Err(EngineError::Failed {
-                id: "vector.path.stroke".to_string(),
-                message: "a line's width is a number and not a negative one".to_string(),
-            });
-        }
-        let colour = parse_colour(&self.colour.0)?;
-        vector.stroke = Some(Stroke { colour, width, ..Default::default() });
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the path has a line")
-            .with_data(serde_json::json!({ "id": self.path.0, "width": width })))
-    }
-}
-
-/// Say how the **corners** of a path's line meet.
-///
-/// The join is `miter` — a pointed corner — `round` or `bevel`, which
-/// is a corner that is cut off.
-#[derive(Command)]
-#[command(
-    id = "vector.path.join",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Paint"),
-    mutates,
-    undoable
-)]
-pub struct JoinPath {
-    /// The path.
-    pub path: NodeRef,
-    /// The join: `miter`, `round` or `bevel`.
-    pub join: Text,
-}
-
-impl JoinPath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.path.0)?;
-        let Some(mut stroke) = vector.stroke else {
-            return Err(EngineError::Failed {
-                id: "vector.path.join".to_string(),
-                message: format!("the path `{}` has no line", self.path.0),
-            });
-        };
-        let join = match self.join.0.trim().to_ascii_lowercase().as_str() {
-            "miter" => Join::Miter,
-            "round" => Join::Round,
-            "bevel" => Join::Bevel,
-            other => {
-                return Err(EngineError::Failed {
-                    id: "vector.path.join".to_string(),
-                    message: format!("the join `{other}` is not one of the three"),
-                });
-            }
-        };
-        stroke.join = join;
-        vector.stroke = Some(stroke);
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the corners of the line meet")
-            .with_data(serde_json::json!({ "id": self.path.0, "join": self.join.0 })))
-    }
-}
-
-/// Say how the **ends** of a path's line are finished.
-///
-/// The cap is `butt` — a flush end — `round` or `square`.
-#[derive(Command)]
-#[command(
-    id = "vector.path.cap",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Paint"),
-    mutates,
-    undoable
-)]
-pub struct CapPath {
-    /// The path.
-    pub path: NodeRef,
-    /// The cap: `butt`, `round` or `square`.
-    pub cap: Text,
-}
-
-impl CapPath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.path.0)?;
-        let Some(mut stroke) = vector.stroke else {
-            return Err(EngineError::Failed {
-                id: "vector.path.cap".to_string(),
-                message: format!("the path `{}` has no line", self.path.0),
-            });
-        };
-        let cap = match self.cap.0.trim().to_ascii_lowercase().as_str() {
-            "butt" => Cap::Butt,
-            "round" => Cap::Round,
-            "square" => Cap::Square,
-            other => {
-                return Err(EngineError::Failed {
-                    id: "vector.path.cap".to_string(),
-                    message: format!("the cap `{other}` is not one of the three"),
-                });
-            }
-        };
-        stroke.cap = cap;
-        vector.stroke = Some(stroke);
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the ends of the line are finished")
-            .with_data(serde_json::json!({ "id": self.path.0, "cap": self.cap.0 })))
-    }
-}
-
-/// Place a path with a **transform**.
-///
-/// The transform is the six numbers of an affine matrix — `a b c d e f`
-/// — and it says where the path is put: a point `(x, y)` of the path
-/// is drawn at `(a·x + c·y + e, b·x + d·y + f)`. Leave the numbers out
-/// and the path is where it is.
-#[derive(Command)]
-#[command(
-    id = "vector.path.transform",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Transform"),
-    mutates,
-    undoable
-)]
-pub struct TransformPath {
-    /// The path.
-    pub path: NodeRef,
-    /// The six numbers of the matrix.
-    pub matrix: Option<serde_json::Value>,
-}
-
-impl TransformPath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.path.0)?;
-        let transform = match &self.matrix {
-            Some(matrix) => geom::Matrix::from_json(matrix).map_err(|reason| EngineError::Failed {
-                id: "vector.path.transform".to_string(),
-                message: format!("the transform is not a transform: {reason}"),
-            })?,
-            None => geom::Matrix::identity(),
-        };
-        // A matrix that **collapses** the plane has no undoing, and a
-        // path that cannot be undone cannot be hit.
-        if transform.inverse().is_none() {
-            return Err(EngineError::Failed {
-                id: "vector.path.transform".to_string(),
-                message: "a transform that cannot be undone is refused".to_string(),
-            });
-        }
-        vector.transform = transform;
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the path is placed")
-            .with_data(serde_json::json!({ "id": self.path.0, "transform": transform.to_json() })))
-    }
-}
-
-/// Make a point of a path **smooth**.
-///
-/// A smooth point's two handles are in line: the curve passes through
-/// the point as one curve and not as two. The command makes it so, and
-/// the rule is the tree's own.
-#[derive(Command)]
-#[command(
-    id = "vector.path.smooth",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Points"),
-    mutates,
-    undoable
-)]
-pub struct SmoothPoint {
-    /// The path.
-    pub path: NodeRef,
-    /// Which contour of the path, counting from zero. The first one if
-    /// it is left out.
-    pub contour: Option<Number>,
-    /// Which point of the contour, counting from zero.
-    pub point: Number,
-}
-
-impl SmoothPoint {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.path.0)?;
-        let contour = self.contour.as_ref().map(|contour| contour.0).unwrap_or(0.0);
-        let contour = usize::try_from(contour.max(0.0) as i64).unwrap_or(0);
-        let point = usize::try_from(self.point.0.max(0.0) as i64).unwrap_or(0);
-        smooth_point(&mut vector.path, contour, point).map_err(|reason| EngineError::Failed {
-            id: "vector.path.smooth".to_string(),
-            message: reason,
-        })?;
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the point is smooth")
-            .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
-    }
 }
 
 /// Make a point of a path **smooth**.
@@ -2209,186 +2448,6 @@ fn anchor_ending_at(subpath: &SubPath, index: usize) -> crate::spline::Anchor {
     crate::spline::Anchor { p: point, h_in, h_out }
 }
 
-/// Make a point of a path a **corner**.
-///
-/// The **handles** at the point are pulled back to it, so the two sides
-/// leave it as straight lines: the tree calls that a *corner*, and the
-/// point that has no handles at it is a corner already.
-///
-/// The tree's `path.convertAnchors` is one command with a `to` that
-/// says `corner` or `smooth`, and it turns **many** points at once.
-/// This tree has one command for each point — this one is the corner
-/// and `vector.path.smooth` is the smooth — and
-/// `vector.path.anchors.convert` is the tree's own command, which
-/// turns many points at once by the tree's **neighbours'** rule.
-#[derive(Command)]
-#[command(
-    id = "vector.path.corner",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Points"),
-    mutates,
-    undoable
-)]
-pub struct CornerPoint {
-    /// The path.
-    pub path: NodeRef,
-    /// Which contour of the path, counting from zero. The first one if
-    /// it is left out.
-    pub contour: Option<Number>,
-    /// Which point of the contour, counting from zero.
-    pub point: Number,
-}
-
-impl CornerPoint {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.path.0)?;
-        let contour = self.contour.as_ref().map(|contour| contour.0).unwrap_or(0.0);
-        let contour = usize::try_from(contour.max(0.0) as i64).unwrap_or(0);
-        let point = usize::try_from(self.point.0.max(0.0) as i64).unwrap_or(0);
-        corner_point(&mut vector.path, contour, point).map_err(|reason| EngineError::Failed {
-            id: "vector.path.corner".to_string(),
-            message: reason,
-        })?;
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the point is a corner")
-            .with_data(serde_json::json!({ "id": self.path.0, "contour": contour, "point": point })))
-    }
-}
-
-/// **Reshape** a path: grab it at a point and drag it.
-///
-/// The anchors around the grab follow with a **smooth falloff** over a
-/// radius, and the radius is measured **along** the path — not in a
-/// straight line from the grab, but along the curve the path is.
-///
-/// The grab may be on a point that is not an anchor: the path is
-/// grabbed where it is nearest to the point, and an anchor is added
-/// there — unless an anchor is already within the tolerance.
-#[derive(Command)]
-#[command(
-    id = "vector.path.reshape",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Reshape"),
-    mutates,
-    undoable
-)]
-pub struct ReshapePath {
-    /// The path.
-    pub path: NodeRef,
-    /// Where the path is grabbed: the x of the point.
-    pub x: Number,
-    /// Where the path is grabbed: the y of the point.
-    pub y: Number,
-    /// How far the grab is dragged: the x.
-    pub dx: Number,
-    /// How far the grab is dragged: the y.
-    pub dy: Number,
-    /// How near an anchor must be for it to be the one that is grabbed.
-    /// The tree's own default is three.
-    pub tol: Option<Number>,
-    /// How far the anchors around follow, measured along the path. The
-    /// default is half the size of the contour, and it is never less
-    /// than one.
-    pub radius: Option<Number>,
-}
-
-impl ReshapePath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.path.0)?;
-        let at = Point::new(self.x.0, self.y.0);
-        let delta = Point::new(self.dx.0, self.dy.0);
-        let tol = self.tol.as_ref().map(|tol| tol.0).unwrap_or(3.0);
-        if !tol.is_finite() || tol < 0.0 {
-            return Err(EngineError::Failed {
-                id: "vector.path.reshape".to_string(),
-                message: "the tolerance is a distance, and it is not a negative one".to_string(),
-            });
-        }
-        let radius = self.radius.as_ref().map(|radius| radius.0);
-        if let Some(radius) = radius
-            && (!radius.is_finite() || radius < 0.0)
-        {
-            return Err(EngineError::Failed {
-                id: "vector.path.reshape".to_string(),
-                message: "the radius is a distance, and it is not a negative one".to_string(),
-            });
-        }
-        // Where the path is **nearest** to the grab.
-        let Some(nearest) = reshape::nearest(&vector.path, at) else {
-            return Err(EngineError::Failed {
-                id: "vector.path.reshape".to_string(),
-                message: "the path is empty, and there is nothing to reshape".to_string(),
-            });
-        };
-        // The **contour** the grab is on.
-        let Some(subpath) = vector.path.subpaths.get(nearest.contour).cloned() else {
-            return Err(EngineError::Failed {
-                id: "vector.path.reshape".to_string(),
-                message: format!("the path has no contour {}", nearest.contour),
-            });
-        };
-        // The **anchor** that is grabbed: the nearest one, when it is
-        // near enough, and otherwise an anchor that is added there.
-        let anchors = reshape::anchors(&subpath);
-        let nearest_anchor = anchors
-            .iter()
-            .enumerate()
-            .map(|(index, anchor)| (index, distance(*anchor, at)))
-            .min_by(|left, right| left.1.total_cmp(&right.1));
-        let mut subpath = subpath;
-        let grabbed = match nearest_anchor {
-            Some((index, distance)) if distance <= tol => index,
-            _ => {
-                let split = geom::split_segment(&subpath, nearest.segment, nearest.t).map_err(|reason| {
-                    EngineError::Failed {
-                        id: "vector.path.reshape".to_string(),
-                        message: format!("the path cannot be reshaped there: {reason}"),
-                    }
-                })?;
-                subpath = split;
-                nearest.segment + 1
-            }
-        };
-        vector.path.subpaths[nearest.contour] = subpath.clone();
-        // The **positions** of the anchors along the path, and the
-        // **radius** the falloff is measured over.
-        let (positions, total) = reshape::positions(&subpath);
-        let radius = radius.unwrap_or_else(|| reshape::size(&subpath));
-        let from = positions.get(grabbed).copied().unwrap_or(0.0);
-        let anchors = reshape::anchors(&subpath);
-        let closed = subpath.closed;
-        // The anchors **move**: the grabbed one the whole way, and the
-        // others by their weight.
-        for (index, anchor) in anchors.iter().enumerate() {
-            let weight = if index == grabbed {
-                1.0
-            } else {
-                let away = (positions.get(index).copied().unwrap_or(f64::INFINITY) - from).abs();
-                let away = if closed { away.min(total - away) } else { away };
-                reshape::weight(away, radius)
-            };
-            if weight == 0.0 {
-                continue;
-            }
-            let moved = Point::new(anchor.x + delta.x * weight, anchor.y + delta.y * weight);
-            move_point(&mut vector.path, nearest.contour, index, moved).map_err(|reason| {
-                EngineError::Failed { id: "vector.path.reshape".to_string(), message: reason }
-            })?;
-        }
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the path is reshaped").with_data(serde_json::json!({
-            "id": self.path.0,
-            "contour": nearest.contour,
-            "point": grabbed,
-            "radius": radius,
-        })))
-    }
-}
-
 /// How far two points are.
 fn distance(from: Point, to: Point) -> f64 {
     ((from.x - to.x).powi(2) + (from.y - to.y).powi(2)).sqrt()
@@ -2453,81 +2512,6 @@ fn corner_point(path: &mut Path, contour: usize, point: usize) -> Result<(), Str
         return Err(format!("the point {point} has no handles to pull back"));
     }
     Ok(())
-}
-
-/// Say which parts of a path are **inside**.
-///
-/// The rule is `nonzero` — the default, and the rule that makes a
-/// contour inside another one a hole when the two run in opposite
-/// directions — or `evenodd`, which does not care which way round a
-/// contour runs.
-#[derive(Command)]
-#[command(
-    id = "vector.path.rule",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Rule"),
-    mutates,
-    undoable
-)]
-pub struct SetRule {
-    /// The path.
-    pub path: NodeRef,
-    /// The rule: `nonzero` or `evenodd`.
-    pub rule: Text,
-}
-
-impl SetRule {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut vector = vector_of(session, self.path.0)?;
-        let rule = match self.rule.0.trim().to_ascii_lowercase().as_str() {
-            "nonzero" | "non-zero" => FillRule::NonZero,
-            "evenodd" | "even-odd" => FillRule::EvenOdd,
-            other => {
-                return Err(EngineError::Failed {
-                    id: "vector.path.rule".to_string(),
-                    message: format!("the rule is `nonzero` or `evenodd`, and not `{other}`"),
-                });
-            }
-        };
-        vector.path.rule = rule;
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the rule is set").with_data(serde_json::json!({ "id": self.path.0 })))
-    }
-}
-
-/// Keep what is in one path and not in the other.
-///
-/// The **exclusion**: what the two paths do not share. It is the
-/// difference the other way round, and it is the operation that leaves
-/// the overlap out.
-#[derive(Command)]
-#[command(
-    id = "vector.path.exclude",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Combine"),
-    mutates,
-    undoable
-)]
-pub struct ExcludePaths {
-    /// The first path.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub first: Option<NodeRef>,
-    /// The second path.
-    ///
-    /// Leave it out and the **selection** is used instead.
-    pub second: Option<NodeRef>,
-}
-
-impl ExcludePaths {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let (first, second) = two_of(session, self.first, self.second)?;
-        combine(session, "vector.path.exclude", first, second, geom::BoolOp::Xor)
-    }
 }
 
 // ------------------------------------------------------------- the helpers --
@@ -2891,59 +2875,59 @@ craftkit_sdk::plugin_anchor!(
     VectorLayer,
     VectorPathKind,
     VectorTool,
-    ExportSvg,
-    ImportSvg,
-    AddRectangle,
-    AddEllipse,
-    ReadGradient,
-    AddStop,
-    SetStop,
-    RemoveStop,
-    AddPolygon,
-    AddStar,
-    AddLine,
-    AddSpiral,
-    CreatePath,
-    AddSpline,
-    SetAnchors,
-    AddMiddleAnchors,
-    BlobPath,
-    ConvertAnchors,
-    MovePoints,
-    JoinEnds,
-    ErasePath,
-    EraseRegion,
-    KnifePath,
-    CutPathLine,
-    CutPathRect,
-    MirrorCut,
-    CutPath,
-    Freehand,
-    UnitePaths,
-    SubtractPaths,
-    IntersectPaths,
-    CropPaths,
-    TrimPaths,
-    DividePaths,
-    MergePaths,
-    SimplifyPath,
-    OffsetPath,
-    JoinPath,
-    CapPath,
-    DashPath,
-    SmoothPoint,
-    OutlinePath,
-    TransformPath,
-    ClosePath,
-    ReversePath,
-    AddAnchor,
-    RemoveAnchor,
-    AveragePoints,
-    CornerPoint,
+    VectorExportSvg,
+    VectorImportSvg,
+    VectorRectangle,
+    VectorEllipse,
+    VectorGradientRead,
+    VectorGradientStopAdd,
+    VectorGradientStopSet,
+    VectorGradientStopRemove,
+    VectorPolygon,
+    VectorStar,
+    VectorLine,
+    VectorSpiral,
+    VectorPathCreate,
+    VectorPathSpline,
+    VectorPathAnchorsSet,
+    VectorPathAnchorsMiddle,
+    VectorPathBlob,
+    VectorPathAnchorsConvert,
+    VectorPathMovePoints,
+    VectorPathJoinEnds,
+    VectorPathErase,
+    VectorPathEraseRegion,
+    VectorPathKnife,
+    VectorPathCutLine,
+    VectorPathCutRect,
+    VectorPathCutMirror,
+    VectorPathCut,
+    VectorPathFreehand,
+    VectorPathUnite,
+    VectorPathSubtract,
+    VectorPathIntersect,
+    VectorPathCrop,
+    VectorPathTrim,
+    VectorPathDivide,
+    VectorPathMerge,
+    VectorPathSimplify,
+    VectorPathOffset,
+    VectorPathJoin,
+    VectorPathCap,
+    VectorPathDash,
+    VectorPathSmooth,
+    VectorPathOutline,
+    VectorPathTransform,
+    VectorPathClose,
+    VectorPathReverse,
+    VectorPathAnchorAdd,
+    VectorPathAnchorRemove,
+    VectorPathAverage,
+    VectorPathCorner,
     VectorPanel,
     TotalAreaEvaluator,
-    ConvertColour,
-    ColourGamut
+    VectorColourConvert,
+    VectorColourGamut
 );
 
 #[cfg(test)]

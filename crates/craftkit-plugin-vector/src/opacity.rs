@@ -16,43 +16,51 @@
 //! half opaque, and the two are multiplied — the tree's opacity is the
 //! object's own and the fill's alpha is the paint's.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{EngineError, Fill, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, Fill, NodeRef, Number, Outcome};
 
 use crate::{Stroke, vector_of, write_back};
 
-/// Put the **opacity** of a path.
-///
-/// The opacity is a percentage, from zero to a hundred: zero is
-/// nothing and a hundred is everything. A number outside that range is
-/// refused — the tree's command clamps it, and a clamped number is a
-/// number that was not asked for.
-#[derive(Command)]
-#[command(id = "vector.path.opacity", area = "vector", layer = "vector", icon = "paint", mutates, undoable)]
-pub struct SetOpacity {
-    /// The path.
-    pub path: NodeRef,
-    /// The opacity, as a percentage: from zero to a hundred.
-    pub opacity: Number,
-}
+commands! {
+    /// Put the **opacity** of a path.
+    ///
+    /// The opacity is a percentage, from zero to a hundred: zero is
+    /// nothing and a hundred is everything. A number outside that range is
+    /// refused — the tree's command clamps it, and a clamped number is a
+    /// number that was not asked for.
+    vector.path.opacity {
+        area: "vector",
+        layer: "vector",
+        icon: "paint",
+        mutates,
+        undoable,
+        params: {
+            /// The path.
 
-impl SetOpacity {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.opacity".to_string();
-        let opacity = self.opacity.0;
-        if !opacity.is_finite() || !(0.0..=100.0).contains(&opacity) {
-            return Err(EngineError::Failed {
-                id,
-                message: "an opacity is a percentage from zero to a hundred".to_string(),
-            });
+            path: NodeRef,
+            /// The opacity, as a percentage: from zero to a hundred.
+
+            opacity: Number,
+        },
+        run: {
+
+            let id = "vector.path.opacity".to_string();
+            let opacity = self.opacity.0;
+            if !opacity.is_finite() || !(0.0..=100.0).contains(&opacity) {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "an opacity is a percentage from zero to a hundred".to_string(),
+                });
+            }
+            let mut vector = vector_of(session, self.path.0)?;
+            vector.opacity = opacity / 100.0;
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed(format!("the path is {} per cent solid", opacity))
+                .with_data(serde_json::json!({ "id": self.path.0, "opacity": opacity })))
+
         }
-        let mut vector = vector_of(session, self.path.0)?;
-        vector.opacity = opacity / 100.0;
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed(format!("the path is {} per cent solid", opacity))
-            .with_data(serde_json::json!({ "id": self.path.0, "opacity": opacity })))
     }
 }
 

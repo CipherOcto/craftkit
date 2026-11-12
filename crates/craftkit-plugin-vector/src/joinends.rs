@@ -16,10 +16,10 @@
 //! - the joined point may be a **corner** — its handles come back to
 //!   it — or **smooth**, by the tree's **neighbours'** rule.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Point, Segment, Session, SubPath, Text};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Point, Segment, SubPath, Text};
 
 use crate::convert::smooth_by_neighbours;
 use crate::{reverse_subpath, vector_of, write_back};
@@ -27,91 +27,95 @@ use crate::{reverse_subpath, vector_of, write_back};
 /// How close two points must be to be **one place**.
 pub(crate) const SAME_PLACE: f64 = 1e-6;
 
-/// Join two open contours of a path into one.
-#[derive(Command)]
-#[command(
-    id = "vector.path.join.ends",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Points"),
-    mutates,
-    undoable
-)]
-pub struct JoinEnds {
-    /// The path.
-    pub path: NodeRef,
-    /// Which contour of the path, counting from zero.
-    pub first: Number,
-    /// The other contour, counting from zero.
-    pub second: Number,
-    /// Which end of each contour is joined: `["first"|"last", "first"|"last"]`.
-    ///
-    /// The **nearest** pair when it is left out.
-    pub ends: Option<Json>,
-    /// The joined point: `corner` or `smooth`.
-    pub to: Option<Text>,
-}
+commands! {
+    /// Join two open contours of a path into one.
+    vector.path.join.ends {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Points"),
+        params: {
+            /// The path.
 
-impl JoinEnds {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.join.ends".to_string();
-        let kind = match self.to.as_ref().map(|to| to.0.as_str()) {
-            None | Some("corner") => Some(false),
-            Some("smooth") => Some(true),
-            Some(other) => {
+            path: NodeRef,
+            /// Which contour of the path, counting from zero.
+
+            first: Number,
+            /// The other contour, counting from zero.
+
+            second: Number,
+            /// Which end of each contour is joined: `["first"|"last", "first"|"last"]`.
+            ///
+            /// The **nearest** pair when it is left out.
+
+            ends: Option<Json>,
+            /// The joined point: `corner` or `smooth`.
+
+            to: Option<Text>,
+        },
+        run: {
+
+            let id = "vector.path.join.ends".to_string();
+            let kind = match self.to.as_ref().map(|to| to.0.as_str()) {
+                None | Some("corner") => Some(false),
+                Some("smooth") => Some(true),
+                Some(other) => {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!("the joined point is `corner` or `smooth`, not `{other}`"),
+                    });
+                }
+            };
+            let first = crate::index_of(Some(self.first), "the first contour")
+                .map_err(|reason| EngineError::Failed { id: id.clone(), message: reason })?;
+            let second = crate::index_of(Some(self.second), "the second contour")
+                .map_err(|reason| EngineError::Failed { id: id.clone(), message: reason })?;
+            if first == second {
                 return Err(EngineError::Failed {
                     id,
-                    message: format!("the joined point is `corner` or `smooth`, not `{other}`"),
+                    message: "a contour cannot be joined to itself: `vector.path.close` closes one".to_string(),
                 });
             }
-        };
-        let first = crate::index_of(Some(self.first), "the first contour")
-            .map_err(|reason| EngineError::Failed { id: id.clone(), message: reason })?;
-        let second = crate::index_of(Some(self.second), "the second contour")
-            .map_err(|reason| EngineError::Failed { id: id.clone(), message: reason })?;
-        if first == second {
-            return Err(EngineError::Failed {
-                id,
-                message: "a contour cannot be joined to itself: `vector.path.close` closes one".to_string(),
-            });
-        }
-        let mut vector = vector_of(session, self.path.0)?;
-        if vector.path.subpaths.len() <= first || vector.path.subpaths.len() <= second {
-            return Err(EngineError::Failed {
-                id,
-                message: format!(
-                    "the path has {} contours and not a contour {first} and a contour {second}",
-                    vector.path.subpaths.len()
-                ),
-            });
-        }
-        let (one, two) = (vector.path.subpaths[first].clone(), vector.path.subpaths[second].clone());
-        if one.closed || two.closed {
-            return Err(EngineError::Failed { id, message: "the join needs open paths".to_string() });
-        }
-        // The ends that are joined: the ones named, or the nearest pair.
-        let (reverse_one, reverse_two) = match &self.ends {
-            Some(ends) => {
-                read_ends(ends).map_err(|message| EngineError::Failed { id: id.clone(), message })?
+            let mut vector = vector_of(session, self.path.0)?;
+            if vector.path.subpaths.len() <= first || vector.path.subpaths.len() <= second {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!(
+                        "the path has {} contours and not a contour {first} and a contour {second}",
+                        vector.path.subpaths.len()
+                    ),
+                });
             }
-            None => nearest_ends(&one, &two),
-        };
-        let joined = join_contours(&one, &two, reverse_one, reverse_two, kind);
-        // The joined contour takes the place of the first, and the
-        // second is gone.
-        let mut subpaths = vector.path.subpaths.clone();
-        if first < second {
-            subpaths[first] = joined;
-            subpaths.remove(second);
-        } else {
-            subpaths.remove(second);
-            subpaths[first - 1] = joined;
+            let (one, two) = (vector.path.subpaths[first].clone(), vector.path.subpaths[second].clone());
+            if one.closed || two.closed {
+                return Err(EngineError::Failed { id, message: "the join needs open paths".to_string() });
+            }
+            // The ends that are joined: the ones named, or the nearest pair.
+            let (reverse_one, reverse_two) = match &self.ends {
+                Some(ends) => {
+                    read_ends(ends).map_err(|message| EngineError::Failed { id: id.clone(), message })?
+                }
+                None => nearest_ends(&one, &two),
+            };
+            let joined = join_contours(&one, &two, reverse_one, reverse_two, kind);
+            // The joined contour takes the place of the first, and the
+            // second is gone.
+            let mut subpaths = vector.path.subpaths.clone();
+            if first < second {
+                subpaths[first] = joined;
+                subpaths.remove(second);
+            } else {
+                subpaths.remove(second);
+                subpaths[first - 1] = joined;
+            }
+            vector.path.subpaths = subpaths;
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the paths are one now")
+                .with_data(json!({ "id": self.path.0, "contour": first.min(second) })))
+
         }
-        vector.path.subpaths = subpaths;
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the paths are one now")
-            .with_data(json!({ "id": self.path.0, "contour": first.min(second) })))
     }
 }
 

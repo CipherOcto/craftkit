@@ -14,7 +14,7 @@
 //! - a stretch that is left is the path **as it was**: the curve of the
 //!   stretch is the curve of the path.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
@@ -33,96 +33,99 @@ const SAMPLES: usize = 24;
 /// The most **samples** one side is sampled at.
 const MAX_SAMPLES: usize = 4096;
 
-/// Take away the parts of a path that are **under a drag**.
-#[derive(Command)]
-#[command(
-    id = "vector.path.erase",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Erase"),
-    mutates,
-    undoable
-)]
-pub struct ErasePath {
-    /// The path.
-    pub path: NodeRef,
-    /// The drag: a run of points, `[[x, y], …]`.
-    pub points: Json,
-    /// How wide the eraser is. 8 if it is not given.
-    pub width: Option<Number>,
-    /// What to call the paths that are left.
-    pub name: Option<Text>,
-}
+commands! {
+    /// Take away the parts of a path that are **under a drag**.
+    vector.path.erase {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Erase"),
+        params: {
+            /// The path.
 
-impl ErasePath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.erase".to_string();
-        let drag =
-            read_drag(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let width = self.width.as_ref().map(|width| width.0).unwrap_or(DEFAULT_WIDTH);
-        if !width.is_finite() || width <= 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "the width of the eraser is a number and not a negative one".to_string(),
-            });
-        }
-        let half = width / 2.0;
-        let mut vector = vector_of(session, self.path.0)?;
-        // The parts under the drag are the parts within half the width
-        // of it.
-        let under = |point: Point| distance_to_drag(&drag, point) <= half;
-        let mut pieces: Vec<SubPath> = Vec::new();
-        let mut erased = false;
-        for contour in &vector.path.subpaths {
-            // A closed contour may leave its **closing edge** out, and
-            // the edge is part of the shape: it is a side of its own
-            // here, and the eraser takes it like any other.
-            let mut contour = contour.clone();
-            if contour.closed && closing_segment(&contour).is_none() {
-                contour.segments.push(Segment::Line { to: contour.start });
-            }
-            match erase_contour(&contour, half, &under) {
-                Some(parts) => {
-                    erased = true;
-                    pieces.extend(parts);
-                }
-                None => pieces.push(contour),
-            }
-        }
-        if !erased {
-            return Ok(Outcome::new("nothing of the path was under the drag")
-                .with_data(json!({ "id": self.path.0 })));
-        }
-        let whole = vector.path.subpaths.len() == 1;
-        if whole {
-            // One path per piece: the first keeps the node, and the
-            // others are new nodes beside it.
-            let mut pieces = pieces.into_iter();
-            let Some(first) = pieces.next() else {
+            path: NodeRef,
+            /// The drag: a run of points, `[[x, y], …]`.
+
+            points: Json,
+            /// How wide the eraser is. 8 if it is not given.
+
+            width: Option<Number>,
+            /// What to call the paths that are left.
+
+            name: Option<Text>,
+        },
+        run: {
+
+            let id = "vector.path.erase".to_string();
+            let drag =
+                read_drag(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let width = self.width.as_ref().map(|width| width.0).unwrap_or(DEFAULT_WIDTH);
+            if !width.is_finite() || width <= 0.0 {
                 return Err(EngineError::Failed {
                     id,
-                    message: "the eraser took the whole path away".to_string(),
+                    message: "the width of the eraser is a number and not a negative one".to_string(),
                 });
-            };
-            let name = match &self.name {
-                Some(name) => name.0.clone(),
-                None => {
-                    session.document().node(self.path.0).map(|node| node.name.clone()).unwrap_or_default()
-                }
-            };
-            vector.path = Path { subpaths: vec![first], rule: vector.path.rule };
-            write_back(session, self.path.0, &vector)?;
-            let mut ids: Vec<u64> = vec![self.path.0];
-            for piece in pieces {
-                ids.push(add_piece(session, &name, &vector, Path::single(piece))?);
             }
-            Ok(Outcome::changed("the parts under the drag are gone").with_data(json!({ "ids": ids })))
-        } else {
-            // The pieces stay contours of the path.
-            vector.path = Path { subpaths: pieces, rule: vector.path.rule };
-            write_back(session, self.path.0, &vector)?;
-            Ok(Outcome::changed("the parts under the drag are gone").with_data(json!({ "id": self.path.0 })))
+            let half = width / 2.0;
+            let mut vector = vector_of(session, self.path.0)?;
+            // The parts under the drag are the parts within half the width
+            // of it.
+            let under = |point: Point| distance_to_drag(&drag, point) <= half;
+            let mut pieces: Vec<SubPath> = Vec::new();
+            let mut erased = false;
+            for contour in &vector.path.subpaths {
+                // A closed contour may leave its **closing edge** out, and
+                // the edge is part of the shape: it is a side of its own
+                // here, and the eraser takes it like any other.
+                let mut contour = contour.clone();
+                if contour.closed && closing_segment(&contour).is_none() {
+                    contour.segments.push(Segment::Line { to: contour.start });
+                }
+                match erase_contour(&contour, half, &under) {
+                    Some(parts) => {
+                        erased = true;
+                        pieces.extend(parts);
+                    }
+                    None => pieces.push(contour),
+                }
+            }
+            if !erased {
+                return Ok(Outcome::new("nothing of the path was under the drag")
+                    .with_data(json!({ "id": self.path.0 })));
+            }
+            let whole = vector.path.subpaths.len() == 1;
+            if whole {
+                // One path per piece: the first keeps the node, and the
+                // others are new nodes beside it.
+                let mut pieces = pieces.into_iter();
+                let Some(first) = pieces.next() else {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: "the eraser took the whole path away".to_string(),
+                    });
+                };
+                let name = match &self.name {
+                    Some(name) => name.0.clone(),
+                    None => {
+                        session.document().node(self.path.0).map(|node| node.name.clone()).unwrap_or_default()
+                    }
+                };
+                vector.path = Path { subpaths: vec![first], rule: vector.path.rule };
+                write_back(session, self.path.0, &vector)?;
+                let mut ids: Vec<u64> = vec![self.path.0];
+                for piece in pieces {
+                    ids.push(add_piece(session, &name, &vector, Path::single(piece))?);
+                }
+                Ok(Outcome::changed("the parts under the drag are gone").with_data(json!({ "ids": ids })))
+            } else {
+                // The pieces stay contours of the path.
+                vector.path = Path { subpaths: pieces, rule: vector.path.rule };
+                write_back(session, self.path.0, &vector)?;
+                Ok(Outcome::changed("the parts under the drag are gone").with_data(json!({ "id": self.path.0 })))
+            }
+
         }
     }
 }

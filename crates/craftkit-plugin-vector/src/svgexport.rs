@@ -20,12 +20,12 @@
 //! - a drawing with **no path** is refused: a file with nothing in it
 //!   is not a drawing.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{
     Cap, Colour, Document, EngineError, Fill, FillRule, FormatValue, GradientGeometry, Join, Outcome, Path,
-    Rect, Segment, Session, Text,
+    Rect, Segment, Text,
 };
 
 use craftkit_vector_geom as geom;
@@ -304,35 +304,40 @@ pub fn the_svg(document: &Document) -> Result<(String, usize), EngineError> {
     Ok((file, paths.len()))
 }
 
-/// **Write** a drawing as an **SVG file**.
-///
-/// The file is written where the caller says, and the answer says how
-/// many paths it holds and what box they are in.
-#[derive(Command)]
-#[command(id = "vector.export.svg", area = "vector", layer = "vector", icon = "file")]
-pub struct ExportSvg {
-    /// Where to write the file.
-    pub path: Text,
-}
+commands! {
+    /// **Write** a drawing as an **SVG file**.
+    ///
+    /// The file is written where the caller says, and the answer says how
+    /// many paths it holds and what box they are in.
+    vector.export.svg {
+        area: "vector",
+        layer: "vector",
+        icon: "file",
+        params: {
+            /// Where to write the file.
 
-impl ExportSvg {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let path = self.path.0.clone();
-        if path.trim().is_empty() {
-            return Err(EngineError::Failed {
+            path: Text,
+        },
+        run: {
+
+            let path = self.path.0.clone();
+            if path.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "a file has a path".to_string(),
+                });
+            }
+            let (file, count) = the_svg(session.document())?;
+            std::fs::write(&path, file.as_bytes()).map_err(|error| EngineError::Failed {
                 id: COMMAND.to_string(),
-                message: "a file has a path".to_string(),
-            });
+                message: format!("the file cannot be written to `{path}`: {error}"),
+            })?;
+            Ok(Outcome::new(format!("wrote {count} path(s)")).with_data(json!({
+                "path": path,
+                "paths": count,
+                "bytes": file.len(),
+            })))
+
         }
-        let (file, count) = the_svg(session.document())?;
-        std::fs::write(&path, file.as_bytes()).map_err(|error| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("the file cannot be written to `{path}`: {error}"),
-        })?;
-        Ok(Outcome::new(format!("wrote {count} path(s)")).with_data(json!({
-            "path": path,
-            "paths": count,
-            "bytes": file.len(),
-        })))
     }
 }

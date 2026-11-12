@@ -19,10 +19,10 @@
 //!   takes it away;
 //! - an **offset** that is not a number is refused.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome};
 
 /// A **dash**: the pattern of the line and where it starts.
 #[derive(Clone, Debug, PartialEq)]
@@ -76,73 +76,75 @@ impl Dash {
     }
 }
 
-/// **Dash** the line of a path.
-///
-/// A pattern that is **empty** takes the dash away.
-#[derive(Command)]
-#[command(
-    id = "vector.path.dash",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Paint"),
-    mutates,
-    undoable
-)]
-pub struct DashPath {
-    /// The path.
-    pub path: NodeRef,
-    /// The pattern: a dash, a gap, a dash, a gap — the lengths in the
-    /// world's units. Without it the line is whole.
-    pub pattern: Option<Json>,
-    /// Where in the pattern the line starts.
-    pub offset: Option<Number>,
-}
+commands! {
+    /// **Dash** the line of a path.
+    ///
+    /// A pattern that is **empty** takes the dash away.
+    vector.path.dash {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Paint"),
+        params: {
+            /// The path.
 
-impl DashPath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.dash".to_string();
-        let mut lengths = Vec::new();
-        if let Some(pattern) = &self.pattern {
-            let Some(list) = pattern.as_array() else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "the pattern of a dash is a list of lengths".to_string(),
-                });
-            };
-            for length in list {
-                let Some(value) = length.as_f64() else {
+            path: NodeRef,
+            /// The pattern: a dash, a gap, a dash, a gap — the lengths in the
+            /// world's units. Without it the line is whole.
+
+            pattern: Option<Json>,
+            /// Where in the pattern the line starts.
+
+            offset: Option<Number>,
+        },
+        run: {
+
+            let id = "vector.path.dash".to_string();
+            let mut lengths = Vec::new();
+            if let Some(pattern) = &self.pattern {
+                let Some(list) = pattern.as_array() else {
                     return Err(EngineError::Failed {
                         id: id.clone(),
-                        message: "the pattern of a dash is a list of numbers".to_string(),
+                        message: "the pattern of a dash is a list of lengths".to_string(),
                     });
                 };
-                if !value.is_finite() || value < 0.0 {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!(
-                            "{value} is not a length of a dash: a length is a number and not a negative one"
-                        ),
-                    });
+                for length in list {
+                    let Some(value) = length.as_f64() else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "the pattern of a dash is a list of numbers".to_string(),
+                        });
+                    };
+                    if !value.is_finite() || value < 0.0 {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "{value} is not a length of a dash: a length is a number and not a negative one"
+                            ),
+                        });
+                    }
+                    lengths.push(value);
                 }
-                lengths.push(value);
             }
+            let offset = self.offset.map(|offset| offset.0).unwrap_or(0.0);
+            if !offset.is_finite() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{offset} is not an offset: an offset is a number"),
+                });
+            }
+            let mut vector = crate::vector_of(session, self.path.0)?;
+            vector.dash = if lengths.is_empty() { None } else { Some(Dash { pattern: lengths.clone(), offset }) };
+            crate::write_back(session, self.path.0, &vector)?;
+            let dash = vector.dash.as_ref().map(|dash| dash.to_json()).unwrap_or(Json::Null);
+            Ok(Outcome::changed(match vector.dash {
+                Some(_) => "the line of the path is dashed".to_string(),
+                None => "the line of the path is whole".to_string(),
+            })
+            .with_data(json!({ "id": self.path.0, "dash": dash })))
+
         }
-        let offset = self.offset.map(|offset| offset.0).unwrap_or(0.0);
-        if !offset.is_finite() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("{offset} is not an offset: an offset is a number"),
-            });
-        }
-        let mut vector = crate::vector_of(session, self.path.0)?;
-        vector.dash = if lengths.is_empty() { None } else { Some(Dash { pattern: lengths.clone(), offset }) };
-        crate::write_back(session, self.path.0, &vector)?;
-        let dash = vector.dash.as_ref().map(|dash| dash.to_json()).unwrap_or(Json::Null);
-        Ok(Outcome::changed(match vector.dash {
-            Some(_) => "the line of the path is dashed".to_string(),
-            None => "the line of the path is whole".to_string(),
-        })
-        .with_data(json!({ "id": self.path.0, "dash": dash })))
     }
 }

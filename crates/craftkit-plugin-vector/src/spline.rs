@@ -20,10 +20,10 @@
 //!   mirrored in the chord, so that the end leaves the chord at the
 //!   angle the curve meets its neighbour at.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Path, Point, Segment, Session, SubPath, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Path, Point, Segment, SubPath, Text};
 
 use crate::add_path;
 use crate::{vector_of, write_back};
@@ -45,65 +45,69 @@ const HANDLE_K: f64 = 1.0 / 3.0;
 /// three points, which for a narrow V is a near-whole circle.
 const TIGHT_TURN: f64 = 0.258_819_045_102_520_8;
 
-/// Put a **curve through the points** in the document.
-///
-/// The curve is the tree's own: the curve tool's curve, worked out from
-/// the points and the points next to them.
-#[derive(Command)]
-#[command(
-    id = "vector.path.spline",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Create"),
-    mutates,
-    undoable
-)]
-pub struct AddSpline {
-    /// The points the curve goes through: `{x, y}`, each with an
-    /// optional `corner`, or a pair of numbers `[x, y]`.
-    pub points: Json,
-    /// Whether the curve is closed.
-    pub closed: Option<Bool>,
-    /// The path to curve, if there is one already.
+commands! {
+    /// Put a **curve through the points** in the document.
     ///
-    /// Without it, a new path is put in the document.
-    pub path: Option<NodeRef>,
-    /// What to call it.
-    pub name: Option<Text>,
-    /// The colour it is filled with, as `#rrggbb`.
-    pub fill: Option<Text>,
-}
+    /// The curve is the tree's own: the curve tool's curve, worked out from
+    /// the points and the points next to them.
+    vector.path.spline {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Create"),
+        params: {
+            /// The points the curve goes through: `{x, y}`, each with an
+            /// optional `corner`, or a pair of numbers `[x, y]`.
 
-impl AddSpline {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.spline".to_string();
-        let points =
-            read_points(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let closed = self.closed.map(|closed| closed.0).unwrap_or(false);
-        let path = spline(&points, closed);
-        if path.is_empty() {
-            return Err(EngineError::Failed { id, message: "a curve needs at least two points".to_string() });
-        }
-        match self.path {
-            // The path that is named is the path that is made: the tree's
-            // own command replaces a path when it is given one.
-            Some(node) => {
-                let mut vector = vector_of(session, node.0)?;
-                vector.path = path;
-                write_back(session, node.0, &vector)?;
-                Ok(Outcome::changed(format!("the path `{}` curves through the points", node.0))
-                    .with_data(json!({ "id": node.0 })))
+            points: Json,
+            /// Whether the curve is closed.
+
+            closed: Option<Bool>,
+            /// The path to curve, if there is one already.
+            ///
+            /// Without it, a new path is put in the document.
+
+            path: Option<NodeRef>,
+            /// What to call it.
+
+            name: Option<Text>,
+            /// The colour it is filled with, as `#rrggbb`.
+
+            fill: Option<Text>,
+        },
+        run: {
+
+            let id = "vector.path.spline".to_string();
+            let points =
+                read_points(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let closed = self.closed.map(|closed| closed.0).unwrap_or(false);
+            let path = spline(&points, closed);
+            if path.is_empty() {
+                return Err(EngineError::Failed { id, message: "a curve needs at least two points".to_string() });
             }
-            None => {
-                // The tree's own name for a curve made this way.
-                let name = match &self.name {
-                    Some(name) => name.0.clone(),
-                    None => "Curvature".to_string(),
-                };
-                let node = add_path(session, name, path, self.fill.as_ref())?;
-                Ok(Outcome::changed(format!("added a curve `{node}`")).with_data(json!({ "id": node })))
+            match self.path {
+                // The path that is named is the path that is made: the tree's
+                // own command replaces a path when it is given one.
+                Some(node) => {
+                    let mut vector = vector_of(session, node.0)?;
+                    vector.path = path;
+                    write_back(session, node.0, &vector)?;
+                    Ok(Outcome::changed(format!("the path `{}` curves through the points", node.0))
+                        .with_data(json!({ "id": node.0 })))
+                }
+                None => {
+                    // The tree's own name for a curve made this way.
+                    let name = match &self.name {
+                        Some(name) => name.0.clone(),
+                        None => "Curvature".to_string(),
+                    };
+                    let node = add_path(session, name, path, self.fill.as_ref())?;
+                    Ok(Outcome::changed(format!("added a curve `{node}`")).with_data(json!({ "id": node })))
+                }
             }
+
         }
     }
 }

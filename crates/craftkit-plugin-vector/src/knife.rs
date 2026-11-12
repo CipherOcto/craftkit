@@ -12,7 +12,7 @@
 //! - only **closed shapes** are cut: an open path has no inside, and
 //!   there is nothing to cut it into.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
@@ -32,69 +32,71 @@ const KNIFE_GAP: f64 = 0.05;
 /// The most **points** the knife's run may have.
 const MAX_POINTS: usize = 10_000;
 
-/// Cut a closed shape along a run of points.
-#[derive(Command)]
-#[command(
-    id = "vector.path.knife",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Cut"),
-    mutates,
-    undoable
-)]
-pub struct KnifePath {
-    /// The path.
-    pub path: NodeRef,
-    /// The knife's run: a list of points, `[[x, y], …]`.
-    pub points: Json,
-    /// What to call the pieces.
-    pub name: Option<Text>,
-}
+commands! {
+    /// Cut a closed shape along a run of points.
+    vector.path.knife {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Cut"),
+        params: {
+            /// The path.
 
-impl KnifePath {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.knife".to_string();
-        let run =
-            read_run(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let vector = vector_of(session, self.path.0)?;
-        if vector.path.subpaths.iter().any(|contour| !contour.closed) {
-            return Err(EngineError::Failed {
-                id,
-                message: "the knife cuts closed shapes, and this path has an open contour".to_string(),
-            });
+            path: NodeRef,
+            /// The knife's run: a list of points, `[[x, y], …]`.
+
+            points: Json,
+            /// What to call the pieces.
+
+            name: Option<Text>,
+        },
+        run: {
+
+            let id = "vector.path.knife".to_string();
+            let run =
+                read_run(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let vector = vector_of(session, self.path.0)?;
+            if vector.path.subpaths.iter().any(|contour| !contour.closed) {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the knife cuts closed shapes, and this path has an open contour".to_string(),
+                });
+            }
+            if vector.path.subpaths.is_empty() {
+                return Err(EngineError::Failed { id, message: "the path has no shape to cut".to_string() });
+            }
+            // The **slit**: the knife's run, stroked with a width of its
+            // own.
+            let slit = geom::outline_stroke(&run_path(&run), KNIFE_GAP, Cap::Butt, Join::Round, 4.0);
+            let cut = geom::boolean(&vector.path, &slit, geom::BoolOp::Difference)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            if cut.subpaths.len() < 2 {
+                return Ok(Outcome::new("the knife did not cut the shape in two")
+                    .with_data(json!({ "id": self.path.0 })));
+            }
+            // One path per piece: the first keeps the node, and the others
+            // are new nodes beside it.
+            let name = match &self.name {
+                Some(name) => name.0.clone(),
+                None => session.document().node(self.path.0).map(|node| node.name.clone()).unwrap_or_default(),
+            };
+            // A **hole** travels with the shape it is in.
+            let mut pieces = crate::components::components(&cut).into_iter();
+            let Some(first) = pieces.next() else {
+                return Err(EngineError::Failed { id, message: "the knife left no shape".to_string() });
+            };
+            let mut vector = vector;
+            vector.path = first;
+            write_back(session, self.path.0, &vector)?;
+            let mut ids: Vec<u64> = vec![self.path.0];
+            for piece in pieces {
+                ids.push(add_piece(session, &name, &vector, piece)?);
+            }
+            Ok(Outcome::changed("the shape is cut").with_data(json!({ "ids": ids })))
+
         }
-        if vector.path.subpaths.is_empty() {
-            return Err(EngineError::Failed { id, message: "the path has no shape to cut".to_string() });
-        }
-        // The **slit**: the knife's run, stroked with a width of its
-        // own.
-        let slit = geom::outline_stroke(&run_path(&run), KNIFE_GAP, Cap::Butt, Join::Round, 4.0);
-        let cut = geom::boolean(&vector.path, &slit, geom::BoolOp::Difference)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-        if cut.subpaths.len() < 2 {
-            return Ok(Outcome::new("the knife did not cut the shape in two")
-                .with_data(json!({ "id": self.path.0 })));
-        }
-        // One path per piece: the first keeps the node, and the others
-        // are new nodes beside it.
-        let name = match &self.name {
-            Some(name) => name.0.clone(),
-            None => session.document().node(self.path.0).map(|node| node.name.clone()).unwrap_or_default(),
-        };
-        // A **hole** travels with the shape it is in.
-        let mut pieces = crate::components::components(&cut).into_iter();
-        let Some(first) = pieces.next() else {
-            return Err(EngineError::Failed { id, message: "the knife left no shape".to_string() });
-        };
-        let mut vector = vector;
-        vector.path = first;
-        write_back(session, self.path.0, &vector)?;
-        let mut ids: Vec<u64> = vec![self.path.0];
-        for piece in pieces {
-            ids.push(add_piece(session, &name, &vector, piece)?);
-        }
-        Ok(Outcome::changed("the shape is cut").with_data(json!({ "ids": ids })))
     }
 }
 

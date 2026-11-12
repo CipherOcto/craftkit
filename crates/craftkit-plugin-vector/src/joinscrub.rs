@@ -14,10 +14,10 @@
 //!   into the last point comes into the first point;
 //! - two ends of **two** contours are joined into one contour.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Point, Segment, Session, SubPath};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Point, Segment, SubPath};
 
 use crate::erasepath::{distance_to_drag, read_drag};
 use crate::joinends::join_contours;
@@ -29,87 +29,89 @@ const DEFAULT_TOLERANCE: f64 = 12.0;
 /// The order of an end that is **after** everything else.
 const LAST: f64 = 1e30;
 
-/// Join the ends that are near a drag.
-#[derive(Command)]
-#[command(
-    id = "vector.path.join.scrub",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Points"),
-    mutates,
-    undoable
-)]
-pub struct JoinScrub {
-    /// The path.
-    pub path: NodeRef,
-    /// The scrub: a run of points, `[[x, y], …]`.
-    pub points: Json,
-    /// How near the ends have to be. 12 if it is not given.
-    pub tolerance: Option<Number>,
-}
+commands! {
+    /// Join the ends that are near a drag.
+    vector.path.join.scrub {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Points"),
+        params: {
+            /// The path.
 
-impl JoinScrub {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.join.scrub".to_string();
-        let drag =
-            read_drag(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let tolerance = self.tolerance.as_ref().map(|tolerance| tolerance.0).unwrap_or(DEFAULT_TOLERANCE);
-        if !tolerance.is_finite() || tolerance < 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "the tolerance of the scrub is a number and not a negative one".to_string(),
-            });
-        }
-        let mut vector = vector_of(session, self.path.0)?;
-        // The **ends** that are near the drag, and where they are
-        // along it.
-        let mut ends: Vec<(f64, usize, bool)> = Vec::new();
-        for (index, contour) in vector.path.subpaths.iter().enumerate() {
-            if contour.closed || contour.segments.is_empty() {
-                continue;
+            path: NodeRef,
+            /// The scrub: a run of points, `[[x, y], …]`.
+
+            points: Json,
+            /// How near the ends have to be. 12 if it is not given.
+
+            tolerance: Option<Number>,
+        },
+        run: {
+
+            let id = "vector.path.join.scrub".to_string();
+            let drag =
+                read_drag(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let tolerance = self.tolerance.as_ref().map(|tolerance| tolerance.0).unwrap_or(DEFAULT_TOLERANCE);
+            if !tolerance.is_finite() || tolerance < 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the tolerance of the scrub is a number and not a negative one".to_string(),
+                });
             }
-            for (at_start, point) in [(true, contour.start), (false, contour.end())] {
-                let Some(order) = order_along(&drag, point, tolerance) else {
+            let mut vector = vector_of(session, self.path.0)?;
+            // The **ends** that are near the drag, and where they are
+            // along it.
+            let mut ends: Vec<(f64, usize, bool)> = Vec::new();
+            for (index, contour) in vector.path.subpaths.iter().enumerate() {
+                if contour.closed || contour.segments.is_empty() {
                     continue;
-                };
-                ends.push((order, index, at_start));
+                }
+                for (at_start, point) in [(true, contour.start), (false, contour.end())] {
+                    let Some(order) = order_along(&drag, point, tolerance) else {
+                        continue;
+                    };
+                    ends.push((order, index, at_start));
+                }
             }
-        }
-        ends.sort_by(|one, other| one.0.total_cmp(&other.0));
-        if ends.len() < 2 {
-            return Ok(Outcome::new("fewer than two ends were near the scrub")
-                .with_data(json!({ "id": self.path.0 })));
-        }
-        let (_, first_contour, first_at_start) = ends[0];
-        let (_, second_contour, second_at_start) = ends[1];
-        if first_contour == second_contour {
-            // The two ends of **one** contour: it closes.
-            let contour = vector.path.subpaths[first_contour].clone();
-            let closed = close_contour(contour, tolerance);
-            vector.path.subpaths[first_contour] = closed;
+            ends.sort_by(|one, other| one.0.total_cmp(&other.0));
+            if ends.len() < 2 {
+                return Ok(Outcome::new("fewer than two ends were near the scrub")
+                    .with_data(json!({ "id": self.path.0 })));
+            }
+            let (_, first_contour, first_at_start) = ends[0];
+            let (_, second_contour, second_at_start) = ends[1];
+            if first_contour == second_contour {
+                // The two ends of **one** contour: it closes.
+                let contour = vector.path.subpaths[first_contour].clone();
+                let closed = close_contour(contour, tolerance);
+                vector.path.subpaths[first_contour] = closed;
+                write_back(session, self.path.0, &vector)?;
+                return Ok(Outcome::changed("the path is closed")
+                    .with_data(json!({ "id": self.path.0, "contour": first_contour })));
+            }
+            // The two ends of **two** contours: they are joined.
+            let one = vector.path.subpaths[first_contour].clone();
+            let two = vector.path.subpaths[second_contour].clone();
+            // The end of the first contour comes last, and the end of the
+            // second comes first.
+            let joined = join_contours(&one, &two, first_at_start, !second_at_start, None);
+            let mut subpaths = vector.path.subpaths.clone();
+            if first_contour < second_contour {
+                subpaths[first_contour] = joined;
+                subpaths.remove(second_contour);
+            } else {
+                subpaths.remove(second_contour);
+                subpaths[first_contour - 1] = joined;
+            }
+            vector.path.subpaths = subpaths;
             write_back(session, self.path.0, &vector)?;
-            return Ok(Outcome::changed("the path is closed")
-                .with_data(json!({ "id": self.path.0, "contour": first_contour })));
+            Ok(Outcome::changed("the ends are joined")
+                .with_data(json!({ "id": self.path.0, "contour": first_contour.min(second_contour) })))
+
         }
-        // The two ends of **two** contours: they are joined.
-        let one = vector.path.subpaths[first_contour].clone();
-        let two = vector.path.subpaths[second_contour].clone();
-        // The end of the first contour comes last, and the end of the
-        // second comes first.
-        let joined = join_contours(&one, &two, first_at_start, !second_at_start, None);
-        let mut subpaths = vector.path.subpaths.clone();
-        if first_contour < second_contour {
-            subpaths[first_contour] = joined;
-            subpaths.remove(second_contour);
-        } else {
-            subpaths.remove(second_contour);
-            subpaths[first_contour - 1] = joined;
-        }
-        vector.path.subpaths = subpaths;
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the ends are joined")
-            .with_data(json!({ "id": self.path.0, "contour": first_contour.min(second_contour) })))
     }
 }
 

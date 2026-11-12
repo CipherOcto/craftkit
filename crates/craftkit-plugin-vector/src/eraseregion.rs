@@ -16,7 +16,7 @@
 //! - a closed shape loses the **area** under the tip, and an open path
 //!   loses the **outline** under it: the tree's own rule.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{
@@ -44,140 +44,145 @@ const MIN_ROUNDNESS: f64 = 1.0;
 /// The **largest** roundness a tip may have, in percent.
 const MAX_ROUNDNESS: f64 = 100.0;
 
-/// Take the area under a shaped tip away.
-#[derive(Command)]
-#[command(
-    id = "vector.path.erase.region",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Erase"),
-    mutates,
-    undoable
-)]
-pub struct EraseRegion {
-    /// The path.
-    pub path: NodeRef,
-    /// The drag: a run of points, `[[x, y], …]`.
-    pub points: Json,
-    /// How long the tip's long axis is. 10 if it is not given.
-    pub size: Option<Number>,
-    /// The angle of the tip's long axis, in degrees. 0 if it is not
-    /// given.
-    pub angle: Option<Number>,
-    /// How round the tip is, in percent of its long axis. 100 if it is
-    /// not given.
-    pub roundness: Option<Number>,
-    /// What to call the paths that are left.
-    pub name: Option<Text>,
-}
+commands! {
+    /// Take the area under a shaped tip away.
+    vector.path.erase.region {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Erase"),
+        params: {
+            /// The path.
 
-impl EraseRegion {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.erase.region".to_string();
-        let drag =
-            read_drag(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let size = self.size.as_ref().map(|size| size.0).unwrap_or(DEFAULT_SIZE);
-        let angle = self.angle.as_ref().map(|angle| angle.0).unwrap_or(DEFAULT_ANGLE);
-        let roundness = self.roundness.as_ref().map(|roundness| roundness.0).unwrap_or(DEFAULT_ROUNDNESS);
-        if !size.is_finite() || size <= 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "the size of the tip is a number and not a negative one".to_string(),
-            });
-        }
-        if !angle.is_finite() {
-            return Err(EngineError::Failed { id, message: "the angle of the tip is a number".to_string() });
-        }
-        if !roundness.is_finite() || !(MIN_ROUNDNESS..=MAX_ROUNDNESS).contains(&roundness) {
-            return Err(EngineError::Failed {
-                id,
-                message: format!(
-                    "the roundness of the tip is between {MIN_ROUNDNESS} and {MAX_ROUNDNESS} percent"
-                ),
-            });
-        }
-        // The tip's **map**: it takes a circle to the tip, and the
-        // shape of the tip is the map's own.
-        let tip = Tip::new(size, angle, roundness);
-        let mut vector = vector_of(session, self.path.0)?;
-        let closed = vector.path.subpaths.iter().all(|contour| contour.closed);
-        let whole = vector.path.subpaths.len() == 1;
-        if closed {
-            // A closed shape loses the **area** under the tip.
-            let region = tip.area_along(&drag);
-            let left = geom::boolean(&vector.path, &region, geom::BoolOp::Difference)
-                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-            let before = geom::area(&vector.path).abs();
-            let after = geom::area(&left).abs();
-            if (before - after).abs() <= 1e-9 {
-                return Ok(Outcome::new("none of the shape was under the tip")
-                    .with_data(json!({ "id": self.path.0 })));
-            }
-            if left.is_empty() {
-                // The whole shape was under the tip: it is gone.
-                session.document_mut()?.remove_node(self.path.0);
-                return Ok(
-                    Outcome::changed("the shape is taken away").with_data(json!({ "removed": self.path.0 }))
-                );
-            }
-            vector.path = left;
-            write_back(session, self.path.0, &vector)?;
-            return Ok(
-                Outcome::changed("the area under the tip is gone").with_data(json!({ "id": self.path.0 }))
-            );
-        }
-        // An open path loses the **outline** under the tip.
-        let short = size * roundness / 100.0;
-        let round: Vec<Point> = drag.iter().map(|point| tip.squash(*point)).collect();
-        let under = |point: Point| distance_to_drag(&round, tip.squash(point)) <= size / 2.0;
-        let mut pieces: Vec<SubPath> = Vec::new();
-        let mut erased = false;
-        for contour in &vector.path.subpaths {
-            let mut contour = contour.clone();
-            if contour.closed && closing_segment(&contour).is_none() {
-                contour.segments.push(Segment::Line { to: contour.start });
-            }
-            match erase_contour(&contour, short / 2.0, &under) {
-                Some(parts) => {
-                    erased = true;
-                    pieces.extend(parts);
-                }
-                None => pieces.push(contour),
-            }
-        }
-        if !erased {
-            return Ok(
-                Outcome::new("none of the path was under the tip").with_data(json!({ "id": self.path.0 }))
-            );
-        }
-        if whole {
-            // One path per piece: the first keeps the node, and the
-            // others are new nodes beside it.
-            let mut pieces = pieces.into_iter();
-            let Some(first) = pieces.next() else {
+            path: NodeRef,
+            /// The drag: a run of points, `[[x, y], …]`.
+
+            points: Json,
+            /// How long the tip's long axis is. 10 if it is not given.
+
+            size: Option<Number>,
+            /// The angle of the tip's long axis, in degrees. 0 if it is not
+            /// given.
+
+            angle: Option<Number>,
+            /// How round the tip is, in percent of its long axis. 100 if it is
+            /// not given.
+
+            roundness: Option<Number>,
+            /// What to call the paths that are left.
+
+            name: Option<Text>,
+        },
+        run: {
+
+            let id = "vector.path.erase.region".to_string();
+            let drag =
+                read_drag(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let size = self.size.as_ref().map(|size| size.0).unwrap_or(DEFAULT_SIZE);
+            let angle = self.angle.as_ref().map(|angle| angle.0).unwrap_or(DEFAULT_ANGLE);
+            let roundness = self.roundness.as_ref().map(|roundness| roundness.0).unwrap_or(DEFAULT_ROUNDNESS);
+            if !size.is_finite() || size <= 0.0 {
                 return Err(EngineError::Failed {
                     id,
-                    message: "the eraser took the whole path away".to_string(),
+                    message: "the size of the tip is a number and not a negative one".to_string(),
                 });
-            };
-            let name = match &self.name {
-                Some(name) => name.0.clone(),
-                None => {
-                    session.document().node(self.path.0).map(|node| node.name.clone()).unwrap_or_default()
-                }
-            };
-            vector.path = Path { subpaths: vec![first], rule: vector.path.rule };
-            write_back(session, self.path.0, &vector)?;
-            let mut ids: Vec<u64> = vec![self.path.0];
-            for piece in pieces {
-                ids.push(add_piece(session, &name, &vector, Path::single(piece))?);
             }
-            Ok(Outcome::changed("the parts under the tip are gone").with_data(json!({ "ids": ids })))
-        } else {
-            vector.path = Path { subpaths: pieces, rule: vector.path.rule };
-            write_back(session, self.path.0, &vector)?;
-            Ok(Outcome::changed("the parts under the tip are gone").with_data(json!({ "id": self.path.0 })))
+            if !angle.is_finite() {
+                return Err(EngineError::Failed { id, message: "the angle of the tip is a number".to_string() });
+            }
+            if !roundness.is_finite() || !(MIN_ROUNDNESS..=MAX_ROUNDNESS).contains(&roundness) {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!(
+                        "the roundness of the tip is between {MIN_ROUNDNESS} and {MAX_ROUNDNESS} percent"
+                    ),
+                });
+            }
+            // The tip's **map**: it takes a circle to the tip, and the
+            // shape of the tip is the map's own.
+            let tip = Tip::new(size, angle, roundness);
+            let mut vector = vector_of(session, self.path.0)?;
+            let closed = vector.path.subpaths.iter().all(|contour| contour.closed);
+            let whole = vector.path.subpaths.len() == 1;
+            if closed {
+                // A closed shape loses the **area** under the tip.
+                let region = tip.area_along(&drag);
+                let left = geom::boolean(&vector.path, &region, geom::BoolOp::Difference)
+                    .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+                let before = geom::area(&vector.path).abs();
+                let after = geom::area(&left).abs();
+                if (before - after).abs() <= 1e-9 {
+                    return Ok(Outcome::new("none of the shape was under the tip")
+                        .with_data(json!({ "id": self.path.0 })));
+                }
+                if left.is_empty() {
+                    // The whole shape was under the tip: it is gone.
+                    session.document_mut()?.remove_node(self.path.0);
+                    return Ok(
+                        Outcome::changed("the shape is taken away").with_data(json!({ "removed": self.path.0 }))
+                    );
+                }
+                vector.path = left;
+                write_back(session, self.path.0, &vector)?;
+                return Ok(
+                    Outcome::changed("the area under the tip is gone").with_data(json!({ "id": self.path.0 }))
+                );
+            }
+            // An open path loses the **outline** under the tip.
+            let short = size * roundness / 100.0;
+            let round: Vec<Point> = drag.iter().map(|point| tip.squash(*point)).collect();
+            let under = |point: Point| distance_to_drag(&round, tip.squash(point)) <= size / 2.0;
+            let mut pieces: Vec<SubPath> = Vec::new();
+            let mut erased = false;
+            for contour in &vector.path.subpaths {
+                let mut contour = contour.clone();
+                if contour.closed && closing_segment(&contour).is_none() {
+                    contour.segments.push(Segment::Line { to: contour.start });
+                }
+                match erase_contour(&contour, short / 2.0, &under) {
+                    Some(parts) => {
+                        erased = true;
+                        pieces.extend(parts);
+                    }
+                    None => pieces.push(contour),
+                }
+            }
+            if !erased {
+                return Ok(
+                    Outcome::new("none of the path was under the tip").with_data(json!({ "id": self.path.0 }))
+                );
+            }
+            if whole {
+                // One path per piece: the first keeps the node, and the
+                // others are new nodes beside it.
+                let mut pieces = pieces.into_iter();
+                let Some(first) = pieces.next() else {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: "the eraser took the whole path away".to_string(),
+                    });
+                };
+                let name = match &self.name {
+                    Some(name) => name.0.clone(),
+                    None => {
+                        session.document().node(self.path.0).map(|node| node.name.clone()).unwrap_or_default()
+                    }
+                };
+                vector.path = Path { subpaths: vec![first], rule: vector.path.rule };
+                write_back(session, self.path.0, &vector)?;
+                let mut ids: Vec<u64> = vec![self.path.0];
+                for piece in pieces {
+                    ids.push(add_piece(session, &name, &vector, Path::single(piece))?);
+                }
+                Ok(Outcome::changed("the parts under the tip are gone").with_data(json!({ "ids": ids })))
+            } else {
+                vector.path = Path { subpaths: pieces, rule: vector.path.rule };
+                write_back(session, self.path.0, &vector)?;
+                Ok(Outcome::changed("the parts under the tip are gone").with_data(json!({ "id": self.path.0 })))
+            }
+
         }
     }
 }

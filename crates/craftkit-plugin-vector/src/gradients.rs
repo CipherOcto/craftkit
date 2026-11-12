@@ -22,7 +22,7 @@
 //!   afterwards. Here the same: a stop is added, changed or taken away
 //!   and the path keeps its gradient.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{
@@ -125,188 +125,192 @@ fn stops_json(stops: &[GradientStop]) -> Vec<serde_json::Value> {
         .collect()
 }
 
-/// **Read** the gradient of a path.
-#[derive(Command)]
-#[command(id = "vector.gradient.read", area = "vector", layer = "vector", icon = "paint")]
-pub struct ReadGradient {
-    /// The path.
-    pub path: NodeRef,
-}
+commands! {
+    /// **Read** the gradient of a path.
+    vector.gradient.read {
+        area: "vector",
+        layer: "vector",
+        icon: "paint",
+        params: {
+            /// The path.
 
-impl ReadGradient {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.gradient.read".to_string();
-        let gradient = gradient_of(session, &id, self.path.0)?;
-        let stops = stops_of(&gradient);
-        Ok(Outcome::new(format!("the path `{}` has {} stop(s)", self.path.0, stops.len())).with_data(
-            serde_json::json!({
-                "path": self.path.0,
-                "kind": kind_of(gradient.kind),
-                "stops": stops_json(&stops),
-            }),
-        ))
+            path: NodeRef,
+        },
+        run: {
+
+            let id = "vector.gradient.read".to_string();
+            let gradient = gradient_of(session, &id, self.path.0)?;
+            let stops = stops_of(&gradient);
+            Ok(Outcome::new(format!("the path `{}` has {} stop(s)", self.path.0, stops.len())).with_data(
+                serde_json::json!({
+                    "path": self.path.0,
+                    "kind": kind_of(gradient.kind),
+                    "stops": stops_json(&stops),
+                }),
+            ))
+
+        }
     }
-}
+    /// **Add** a stop to a gradient.
+    vector.gradient.stop.add {
+        area: "vector",
+        layer: "vector",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The path.
 
-/// **Add** a stop to a gradient.
-#[derive(Command)]
-#[command(
-    id = "vector.gradient.stop.add",
-    area = "vector",
-    layer = "vector",
-    icon = "plus",
-    mutates,
-    undoable
-)]
-pub struct AddStop {
-    /// The path.
-    pub path: NodeRef,
-    /// Where the stop is along the gradient: from zero to one.
-    pub offset: Number,
-    /// The colour of the stop.
-    pub colour: Text,
-    /// How solid the stop is: from zero to one. The default is one.
-    pub opacity: Option<Number>,
-}
+            path: NodeRef,
+            /// Where the stop is along the gradient: from zero to one.
 
-impl AddStop {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.gradient.stop.add".to_string();
-        let offset = offset_of(&id, self.offset)?;
-        let opacity = opacity_of(&id, self.opacity)?;
-        let colour: Colour = parse_colour(&self.colour.0)?;
-        let mut gradient = gradient_of(session, &id, self.path.0)?;
-        let mut stops = stops_of(&gradient);
-        // The stops are a **list in order**: a stop at a smaller
-        // offset comes first.
-        let at = stops.iter().position(|stop| stop.offset > offset).unwrap_or(stops.len());
-        stops.insert(at, GradientStop { offset, colour, opacity });
-        gradient.stops = stops.clone();
-        write_gradient(session, &id, self.path.0, gradient)?;
-        Ok(Outcome::changed(format!(
-            "the gradient of the path `{}` has {} stop(s)",
-            self.path.0,
-            stops.len()
-        ))
-        .with_data(serde_json::json!({
-            "path": self.path.0,
-            "at": at,
-            "stops": stops_json(&stops),
-        })))
-    }
-}
+            offset: Number,
+            /// The colour of the stop.
 
-/// **Change** a stop of a gradient.
-#[derive(Command)]
-#[command(
-    id = "vector.gradient.stop.set",
-    area = "vector",
-    layer = "vector",
-    icon = "pencil",
-    mutates,
-    undoable
-)]
-pub struct SetStop {
-    /// The path.
-    pub path: NodeRef,
-    /// The stop to change: its number in the list.
-    pub stop: Number,
-    /// Where the stop is along the gradient: from zero to one. It stays
-    /// where it is when it is not said.
-    pub offset: Option<Number>,
-    /// The colour of the stop. It stays what it is when it is not
-    /// said.
-    pub colour: Option<Text>,
-    /// How solid the stop is: from zero to one. It stays what it is
-    /// when it is not said.
-    pub opacity: Option<Number>,
-}
+            colour: Text,
+            /// How solid the stop is: from zero to one. The default is one.
 
-impl SetStop {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.gradient.stop.set".to_string();
-        let index = index_of(&id, self.stop)?;
-        let offset = match &self.offset {
-            Some(offset) => Some(offset_of(&id, *offset)?),
-            None => None,
-        };
-        let opacity = match &self.opacity {
-            Some(opacity) => Some(opacity_of(&id, Some(*opacity))?),
-            None => None,
-        };
-        let colour = match &self.colour {
-            Some(colour) => Some(parse_colour(&colour.0)?),
-            None => None,
-        };
-        let mut gradient = gradient_of(session, &id, self.path.0)?;
-        let mut stops = stops_of(&gradient);
-        let Some(stop) = stops.get_mut(index) else {
-            return Err(EngineError::Failed { id, message: format!("the gradient has no stop `{index}`") });
-        };
-        if let Some(offset) = offset {
-            stop.offset = offset;
-        }
-        if let Some(colour) = colour {
-            stop.colour = colour;
-        }
-        if let Some(opacity) = opacity {
-            stop.opacity = opacity;
-        }
-        // The stops are a **list in order** whatever happens to them.
-        stops.sort_by(|left, right| {
-            left.offset.partial_cmp(&right.offset).unwrap_or(std::cmp::Ordering::Equal)
-        });
-        gradient.stops = stops.clone();
-        write_gradient(session, &id, self.path.0, gradient)?;
-        Ok(Outcome::changed(format!("the stop `{index}` of the path `{}` is changed", self.path.0))
+            opacity: Option<Number>,
+        },
+        run: {
+
+            let id = "vector.gradient.stop.add".to_string();
+            let offset = offset_of(&id, self.offset)?;
+            let opacity = opacity_of(&id, self.opacity)?;
+            let colour: Colour = parse_colour(&self.colour.0)?;
+            let mut gradient = gradient_of(session, &id, self.path.0)?;
+            let mut stops = stops_of(&gradient);
+            // The stops are a **list in order**: a stop at a smaller
+            // offset comes first.
+            let at = stops.iter().position(|stop| stop.offset > offset).unwrap_or(stops.len());
+            stops.insert(at, GradientStop { offset, colour, opacity });
+            gradient.stops = stops.clone();
+            write_gradient(session, &id, self.path.0, gradient)?;
+            Ok(Outcome::changed(format!(
+                "the gradient of the path `{}` has {} stop(s)",
+                self.path.0,
+                stops.len()
+            ))
             .with_data(serde_json::json!({
                 "path": self.path.0,
-                "stop": index,
+                "at": at,
                 "stops": stops_json(&stops),
             })))
+
+        }
     }
-}
+    /// **Change** a stop of a gradient.
+    vector.gradient.stop.set {
+        area: "vector",
+        layer: "vector",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The path.
 
-/// **Take away** a stop of a gradient.
-#[derive(Command)]
-#[command(
-    id = "vector.gradient.stop.remove",
-    area = "vector",
-    layer = "vector",
-    icon = "minus",
-    mutates,
-    undoable
-)]
-pub struct RemoveStop {
-    /// The path.
-    pub path: NodeRef,
-    /// The stop that goes: its number in the list.
-    pub stop: Number,
-}
+            path: NodeRef,
+            /// The stop to change: its number in the list.
 
-impl RemoveStop {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.gradient.stop.remove".to_string();
-        let index = index_of(&id, self.stop)?;
-        let mut gradient = gradient_of(session, &id, self.path.0)?;
-        let mut stops = stops_of(&gradient);
-        if index >= stops.len() {
-            return Err(EngineError::Failed { id, message: format!("the gradient has no stop `{index}`") });
+            stop: Number,
+            /// Where the stop is along the gradient: from zero to one. It stays
+            /// where it is when it is not said.
+
+            offset: Option<Number>,
+            /// The colour of the stop. It stays what it is when it is not
+            /// said.
+
+            colour: Option<Text>,
+            /// How solid the stop is: from zero to one. It stays what it is
+            /// when it is not said.
+
+            opacity: Option<Number>,
+        },
+        run: {
+
+            let id = "vector.gradient.stop.set".to_string();
+            let index = index_of(&id, self.stop)?;
+            let offset = match &self.offset {
+                Some(offset) => Some(offset_of(&id, *offset)?),
+                None => None,
+            };
+            let opacity = match &self.opacity {
+                Some(opacity) => Some(opacity_of(&id, Some(*opacity))?),
+                None => None,
+            };
+            let colour = match &self.colour {
+                Some(colour) => Some(parse_colour(&colour.0)?),
+                None => None,
+            };
+            let mut gradient = gradient_of(session, &id, self.path.0)?;
+            let mut stops = stops_of(&gradient);
+            let Some(stop) = stops.get_mut(index) else {
+                return Err(EngineError::Failed { id, message: format!("the gradient has no stop `{index}`") });
+            };
+            if let Some(offset) = offset {
+                stop.offset = offset;
+            }
+            if let Some(colour) = colour {
+                stop.colour = colour;
+            }
+            if let Some(opacity) = opacity {
+                stop.opacity = opacity;
+            }
+            // The stops are a **list in order** whatever happens to them.
+            stops.sort_by(|left, right| {
+                left.offset.partial_cmp(&right.offset).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            gradient.stops = stops.clone();
+            write_gradient(session, &id, self.path.0, gradient)?;
+            Ok(Outcome::changed(format!("the stop `{index}` of the path `{}` is changed", self.path.0))
+                .with_data(serde_json::json!({
+                    "path": self.path.0,
+                    "stop": index,
+                    "stops": stops_json(&stops),
+                })))
+
         }
-        // A gradient has **two stops or more**: one colour is a fill
-        // and not a gradient.
-        if stops.len() <= 2 {
-            return Err(EngineError::Failed { id, message: "a gradient has two stops or more".to_string() });
+    }
+    /// **Take away** a stop of a gradient.
+    vector.gradient.stop.remove {
+        area: "vector",
+        layer: "vector",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The path.
+
+            path: NodeRef,
+            /// The stop that goes: its number in the list.
+
+            stop: Number,
+        },
+        run: {
+
+            let id = "vector.gradient.stop.remove".to_string();
+            let index = index_of(&id, self.stop)?;
+            let mut gradient = gradient_of(session, &id, self.path.0)?;
+            let mut stops = stops_of(&gradient);
+            if index >= stops.len() {
+                return Err(EngineError::Failed { id, message: format!("the gradient has no stop `{index}`") });
+            }
+            // A gradient has **two stops or more**: one colour is a fill
+            // and not a gradient.
+            if stops.len() <= 2 {
+                return Err(EngineError::Failed { id, message: "a gradient has two stops or more".to_string() });
+            }
+            stops.remove(index);
+            gradient.stops = stops.clone();
+            write_gradient(session, &id, self.path.0, gradient)?;
+            Ok(Outcome::changed(format!("the stop `{index}` of the path `{}` is gone", self.path.0)).with_data(
+                serde_json::json!({
+                    "path": self.path.0,
+                    "stop": index,
+                    "stops": stops_json(&stops),
+                }),
+            ))
+
         }
-        stops.remove(index);
-        gradient.stops = stops.clone();
-        write_gradient(session, &id, self.path.0, gradient)?;
-        Ok(Outcome::changed(format!("the stop `{index}` of the path `{}` is gone", self.path.0)).with_data(
-            serde_json::json!({
-                "path": self.path.0,
-                "stop": index,
-                "stops": stops_json(&stops),
-            }),
-        ))
     }
 }

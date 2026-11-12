@@ -37,12 +37,12 @@
 //! - The file is in the **units of the document**, and the tree's file
 //!   is in points.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::FormatValue;
 use craftkit_sdk::document::{Cap, Colour, Fill, FillRule, Gradient, GradientGeometry, Join, Path, Segment};
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{Document, EngineError, Outcome, Session, Text};
+use craftkit_sdk::{Document, EngineError, Outcome, Text};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "vector.export.eps";
@@ -350,32 +350,39 @@ pub fn the_eps(document: &Document) -> Result<(String, usize), EngineError> {
     Ok((out, count))
 }
 
-/// The **EPS file** of the drawing.
-#[derive(Command)]
-#[command(id = "vector.export.eps", area = "vector", layer = "vector", icon = "file", mutates, undoable)]
-pub struct ExportEps {
-    /// The file to write.
-    pub path: Text,
-}
+commands! {
+    /// The **EPS file** of the drawing.
+    vector.export.eps {
+        area: "vector",
+        layer: "vector",
+        icon: "file",
+        mutates,
+        undoable,
+        params: {
+            /// The file to write.
 
-impl ExportEps {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed {
+            path: Text,
+        },
+        run: {
+
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "a file has a path".to_string(),
+                });
+            }
+            let (file, count) = the_eps(session.document())?;
+            std::fs::write(&path, file.as_bytes()).map_err(|error| EngineError::Failed {
                 id: COMMAND.to_string(),
-                message: "a file has a path".to_string(),
-            });
+                message: format!("the file cannot be written: {error}"),
+            })?;
+            Ok(Outcome::changed(format!("`{path}` was written with {count} path(s)")).with_data(json!({
+                "path": path,
+                "count": count,
+                "bytes": file.len(),
+            })))
+
         }
-        let (file, count) = the_eps(session.document())?;
-        std::fs::write(&path, file.as_bytes()).map_err(|error| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("the file cannot be written: {error}"),
-        })?;
-        Ok(Outcome::changed(format!("`{path}` was written with {count} path(s)")).with_data(json!({
-            "path": path,
-            "count": count,
-            "bytes": file.len(),
-        })))
     }
 }

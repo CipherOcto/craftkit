@@ -18,13 +18,11 @@
 //!   gradient — is **skipped**, and the answer says what it skipped;
 //!   and a file with **no path** in it is refused.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::xml::Element;
-use craftkit_sdk::{
-    Colour, EngineError, Fill, FillRule, FormatValue, Outcome, Path, Point, Segment, Session, Text,
-};
+use craftkit_sdk::{Colour, EngineError, Fill, FillRule, FormatValue, Outcome, Path, Point, Segment, Text};
 
 use craftkit_vector_geom as geom;
 
@@ -568,106 +566,114 @@ fn read_box(root: &Element) -> Option<(f64, f64, f64, f64)> {
     Some((0.0, 0.0, width, height))
 }
 
-/// **Read** an **SVG file** into the document.
-///
-/// The paths of the file become paths of the document, in the tree's
-/// millimetres, with the drawing's bottom left corner at the tree's
-/// origin.
-#[derive(Command)]
-#[command(id = "vector.import.svg", area = "vector", layer = "vector", icon = "file", mutates, undoable)]
-pub struct ImportSvg {
-    /// The file to read.
-    pub path: Text,
-    /// The name to give the paths.
-    pub name: Option<Text>,
-}
+commands! {
+    /// **Read** an **SVG file** into the document.
+    ///
+    /// The paths of the file become paths of the document, in the tree's
+    /// millimetres, with the drawing's bottom left corner at the tree's
+    /// origin.
+    vector.import.svg {
+        area: "vector",
+        layer: "vector",
+        icon: "file",
+        mutates,
+        undoable,
+        params: {
+            /// The file to read.
 
-impl ImportSvg {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let path = self.path.0.clone();
-        if path.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "a file has a path".to_string(),
-            });
-        }
-        let text = craftkit_sdk::files::read_text_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(
-            |message| EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the file cannot be read: {message}"),
-            },
-        )?;
-        let parsed = craftkit_sdk::xml::parse(&text).map_err(|reason| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("the file is not an SVG file: {reason}"),
-        })?;
-        // The **root** of the file: the `svg` element itself, or the
-        // first one inside it, for a file that wraps its drawing.
-        let root = if parsed.name == "svg" {
-            &parsed
-        } else {
-            match parsed.find("svg") {
-                Some(found) => found,
-                None => {
-                    return Err(EngineError::Failed {
-                        id: COMMAND.to_string(),
-                        message: "the file holds no `svg` element".to_string(),
-                    });
-                }
+            path: Text,
+            /// The name to give the paths.
+
+            name: Option<Text>,
+        },
+        run: {
+
+            let path = self.path.0.clone();
+            if path.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "a file has a path".to_string(),
+                });
             }
-        };
-        // The **box** of the file, and the turn of the world.
-        let (x, y, width, height) = read_box(root).unwrap_or((0.0, 0.0, 0.0, 0.0));
-        let mapping =
-            geom::Matrix { a: PIXEL, b: 0.0, c: 0.0, d: -PIXEL, e: -x * PIXEL, f: (y + height) * PIXEL };
-        let mut brought: Vec<Brought> = Vec::new();
-        let mut skipped: Vec<String> = Vec::new();
-        bring(&root.children, mapping, &mut brought, &mut skipped);
-        if brought.is_empty() {
-            // The file holds **no path**: and the answer says what it
-            // skipped, so that a file this tree cannot read says why.
-            let reason = if skipped.is_empty() { String::new() } else { format!(": {}", skipped.join("; ")) };
-            return Err(EngineError::Failed {
+            let text = craftkit_sdk::files::read_text_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(
+                |message| EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the file cannot be read: {message}"),
+                },
+            )?;
+            let parsed = craftkit_sdk::xml::parse(&text).map_err(|reason| EngineError::Failed {
                 id: COMMAND.to_string(),
-                message: format!("the file holds no path to read{reason}"),
-            });
+                message: format!("the file is not an SVG file: {reason}"),
+            })?;
+            // The **root** of the file: the `svg` element itself, or the
+            // first one inside it, for a file that wraps its drawing.
+            let root = if parsed.name == "svg" {
+                &parsed
+            } else {
+                match parsed.find("svg") {
+                    Some(found) => found,
+                    None => {
+                        return Err(EngineError::Failed {
+                            id: COMMAND.to_string(),
+                            message: "the file holds no `svg` element".to_string(),
+                        });
+                    }
+                }
+            };
+            // The **box** of the file, and the turn of the world.
+            let (x, y, width, height) = read_box(root).unwrap_or((0.0, 0.0, 0.0, 0.0));
+            let mapping =
+                geom::Matrix { a: PIXEL, b: 0.0, c: 0.0, d: -PIXEL, e: -x * PIXEL, f: (y + height) * PIXEL };
+            let mut brought: Vec<Brought> = Vec::new();
+            let mut skipped: Vec<String> = Vec::new();
+            bring(&root.children, mapping, &mut brought, &mut skipped);
+            if brought.is_empty() {
+                // The file holds **no path**: and the answer says what it
+                // skipped, so that a file this tree cannot read says why.
+                let reason = if skipped.is_empty() { String::new() } else { format!(": {}", skipped.join("; ")) };
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the file holds no path to read{reason}"),
+                });
+            }
+            // The **paths** into the document.
+            let mut ids: Vec<u64> = Vec::with_capacity(brought.len());
+            for (at, path) in brought.into_iter().enumerate() {
+                let name = match &self.name {
+                    Some(name) => format!("{} {}", name.0, at + 1),
+                    None => format!("path {}", at + 1),
+                };
+                let fill = match path.fill {
+                    Some(colour) => Fill::Solid(colour),
+                    None => Fill::Solid(Colour::NONE),
+                };
+                let stroke = path.stroke.map(|(colour, width)| craftkit_sdk::Stroke {
+                    colour,
+                    width,
+                    join: craftkit_sdk::Join::Miter,
+                    cap: craftkit_sdk::Cap::Butt,
+                });
+                let vector = crate::VectorNode {
+                    path: path.path,
+                    fill,
+                    stroke,
+                    blend: craftkit_sdk::BlendMode::Normal,
+                    transform: path.transform,
+                    opacity: path.opacity,
+                    dash: None,
+                };
+                let rect = geom::bounds(&vector.placed());
+                let id = session.document_mut()?.add_node_with(name, "vector.path", Some(rect), vector.to_json());
+                ids.push(id);
+            }
+            let count = ids.len();
+            Ok(Outcome::changed(format!("read {count} path(s)")).with_data(json!({
+                "ids": ids,
+                "paths": count,
+                "skipped": skipped,
+                "box": [x, y, width, height],
+            })))
+
         }
-        // The **paths** into the document.
-        let mut ids: Vec<u64> = Vec::with_capacity(brought.len());
-        for (at, path) in brought.into_iter().enumerate() {
-            let name = match &self.name {
-                Some(name) => format!("{} {}", name.0, at + 1),
-                None => format!("path {}", at + 1),
-            };
-            let fill = match path.fill {
-                Some(colour) => Fill::Solid(colour),
-                None => Fill::Solid(Colour::NONE),
-            };
-            let stroke = path.stroke.map(|(colour, width)| craftkit_sdk::Stroke {
-                colour,
-                width,
-                join: craftkit_sdk::Join::Miter,
-                cap: craftkit_sdk::Cap::Butt,
-            });
-            let vector = crate::VectorNode {
-                path: path.path,
-                fill,
-                stroke,
-                blend: craftkit_sdk::BlendMode::Normal,
-                transform: path.transform,
-                opacity: path.opacity,
-                dash: None,
-            };
-            let rect = geom::bounds(&vector.placed());
-            let id = session.document_mut()?.add_node_with(name, "vector.path", Some(rect), vector.to_json());
-            ids.push(id);
-        }
-        let count = ids.len();
-        Ok(Outcome::changed(format!("read {count} path(s)")).with_data(json!({
-            "ids": ids,
-            "paths": count,
-            "skipped": skipped,
-            "box": [x, y, width, height],
-        })))
     }
 }

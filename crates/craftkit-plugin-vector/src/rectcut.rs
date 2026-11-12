@@ -19,10 +19,10 @@
 //! - what is left is the shape **cropped** to the rectangle, and the
 //!   shape keeps its holes.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Path, Point, Rect, Segment, Session, SubPath, Text};
+use craftkit_sdk::{EngineError, NodeRef, Outcome, Path, Point, Rect, Segment, SubPath, Text};
 
 use craftkit_vector_geom as geom;
 
@@ -36,72 +36,76 @@ const MAX_COORD: f64 = 1e7;
 /// The **smallest** width or height a rectangle may have.
 const MIN_SIDE: f64 = 1e-9;
 
-/// Cut a closed shape to a rectangle.
-#[derive(Command)]
-#[command(
-    id = "vector.path.cut.rect",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Cut by rectangle"),
-    mutates,
-    undoable
-)]
-pub struct CutPathRect {
-    /// The path.
-    pub path: NodeRef,
-    /// The rectangle: `[x, y, width, height]`.
-    pub rect: Option<Json>,
-    /// A **corner** of the rectangle, when it is not given as four
-    /// numbers.
-    pub from: Option<Json>,
-    /// The **other** corner.
-    pub to: Option<Json>,
-    /// What to call the shape that is left.
-    pub name: Option<Text>,
-}
+commands! {
+    /// Cut a closed shape to a rectangle.
+    vector.path.cut.rect {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Cut by rectangle"),
+        params: {
+            /// The path.
 
-impl CutPathRect {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.cut.rect".to_string();
-        let rect = read_rect(&self.rect, &self.from, &self.to)
-            .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let vector = vector_of(session, self.path.0)?;
-        if vector.path.subpaths.iter().any(|contour| !contour.closed) {
-            return Err(EngineError::Failed {
-                id,
-                message: "the rectangle cuts closed shapes, and this path has an open contour".to_string(),
-            });
+            path: NodeRef,
+            /// The rectangle: `[x, y, width, height]`.
+
+            rect: Option<Json>,
+            /// A **corner** of the rectangle, when it is not given as four
+            /// numbers.
+
+            from: Option<Json>,
+            /// The **other** corner.
+
+            to: Option<Json>,
+            /// What to call the shape that is left.
+
+            name: Option<Text>,
+        },
+        run: {
+
+            let id = "vector.path.cut.rect".to_string();
+            let rect = read_rect(&self.rect, &self.from, &self.to)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let vector = vector_of(session, self.path.0)?;
+            if vector.path.subpaths.iter().any(|contour| !contour.closed) {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the rectangle cuts closed shapes, and this path has an open contour".to_string(),
+                });
+            }
+            if vector.path.is_empty() {
+                return Err(EngineError::Failed { id, message: "the path has no shape to cut".to_string() });
+            }
+            let bounds = geom::bounds(&vector.path);
+            // A shape that lies **wholly inside** the rectangle is left as
+            // it was.
+            if rect.holds(bounds) {
+                return Ok(Outcome::new("the shape is already inside the rectangle")
+                    .with_data(json!({ "id": self.path.0 })));
+            }
+            let cropped = geom::boolean(&vector.path, &rect.path(), geom::BoolOp::Intersect)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            if cropped.is_empty() {
+                // A shape that lies **wholly outside** the rectangle is
+                // taken away whole.
+                session.document_mut()?.remove_node(self.path.0);
+                return Ok(
+                    Outcome::changed("the shape is taken away").with_data(json!({ "removed": self.path.0 }))
+                );
+            }
+            let mut vector = vector;
+            vector.path = cropped;
+            if let Some(name) = &self.name
+                && let Some(node) = session.document_mut()?.node_mut(self.path.0)
+            {
+                node.name = name.0.clone();
+            }
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed("the shape is cut to the rectangle").with_data(json!({ "id": self.path.0 })))
+
         }
-        if vector.path.is_empty() {
-            return Err(EngineError::Failed { id, message: "the path has no shape to cut".to_string() });
-        }
-        let bounds = geom::bounds(&vector.path);
-        // A shape that lies **wholly inside** the rectangle is left as
-        // it was.
-        if rect.holds(bounds) {
-            return Ok(Outcome::new("the shape is already inside the rectangle")
-                .with_data(json!({ "id": self.path.0 })));
-        }
-        let cropped = geom::boolean(&vector.path, &rect.path(), geom::BoolOp::Intersect)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-        if cropped.is_empty() {
-            // A shape that lies **wholly outside** the rectangle is
-            // taken away whole.
-            session.document_mut()?.remove_node(self.path.0);
-            return Ok(
-                Outcome::changed("the shape is taken away").with_data(json!({ "removed": self.path.0 }))
-            );
-        }
-        let mut vector = vector;
-        vector.path = cropped;
-        if let Some(name) = &self.name
-            && let Some(node) = session.document_mut()?.node_mut(self.path.0)
-        {
-            node.name = name.0.clone();
-        }
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed("the shape is cut to the rectangle").with_data(json!({ "id": self.path.0 })))
     }
 }
 

@@ -18,85 +18,88 @@
 //! - an end of an open contour has **one** neighbour, and it takes
 //!   that neighbour's direction.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Point, Segment, Session, SubPath, Text};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Point, Segment, SubPath, Text};
 
 use crate::{arriving_segment, closing_segment, leaving_segment, vector_of, write_back};
 
 /// The most **points** one call may name.
 const MAX_POINTS: usize = 10_000;
 
-/// Turn points of a path into smooth points or into corner points.
-#[derive(Command)]
-#[command(
-    id = "vector.path.anchors.convert",
-    area = "vector",
-    layer = "vector",
-    icon = "path",
-    menu("Path", "Points"),
-    mutates,
-    undoable
-)]
-pub struct ConvertAnchors {
-    /// The path.
-    pub path: NodeRef,
-    /// Which contour of the path, counting from zero. The first one if
-    /// it is left out.
-    pub contour: Option<Number>,
-    /// The points, counting from zero: a list of whole numbers.
-    pub points: Json,
-    /// What the points become: `smooth` or `corner`.
-    pub to: Text,
-}
+commands! {
+    /// Turn points of a path into smooth points or into corner points.
+    vector.path.anchors.convert {
+        area: "vector",
+        layer: "vector",
+        icon: "path",
+        mutates,
+        undoable,
+        menu: ("Path", "Points"),
+        params: {
+            /// The path.
 
-impl ConvertAnchors {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "vector.path.anchors.convert".to_string();
-        let smooth = match self.to.0.as_str() {
-            "smooth" => true,
-            "corner" => false,
-            other => {
-                return Err(EngineError::Failed {
-                    id,
-                    message: format!("the points become `smooth` or `corner`, not `{other}`"),
-                });
+            path: NodeRef,
+            /// Which contour of the path, counting from zero. The first one if
+            /// it is left out.
+
+            contour: Option<Number>,
+            /// The points, counting from zero: a list of whole numbers.
+
+            points: Json,
+            /// What the points become: `smooth` or `corner`.
+
+            to: Text,
+        },
+        run: {
+
+            let id = "vector.path.anchors.convert".to_string();
+            let smooth = match self.to.0.as_str() {
+                "smooth" => true,
+                "corner" => false,
+                other => {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!("the points become `smooth` or `corner`, not `{other}`"),
+                    });
+                }
+            };
+            let points =
+                read_points(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let mut vector = vector_of(session, self.path.0)?;
+            let contour = self.contour.as_ref().map(|contour| contour.0).unwrap_or(0.0);
+            let contour = usize::try_from(contour.max(0.0) as i64).unwrap_or(0);
+            let Some(subpath) = vector.path.subpaths.get_mut(contour) else {
+                return Err(EngineError::Failed { id, message: format!("the path has no contour {contour}") });
+            };
+            let mut converted: Vec<usize> = Vec::new();
+            let mut left: Vec<usize> = Vec::new();
+            for point in points {
+                if point >= count_of(subpath) {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!("the contour has {} points and not a point {point}", count_of(subpath)),
+                    });
+                }
+                let done =
+                    if smooth { smooth_by_neighbours(subpath, point) } else { make_corner(subpath, point) };
+                if done {
+                    converted.push(point);
+                } else {
+                    left.push(point);
+                }
             }
-        };
-        let points =
-            read_points(&self.points).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let mut vector = vector_of(session, self.path.0)?;
-        let contour = self.contour.as_ref().map(|contour| contour.0).unwrap_or(0.0);
-        let contour = usize::try_from(contour.max(0.0) as i64).unwrap_or(0);
-        let Some(subpath) = vector.path.subpaths.get_mut(contour) else {
-            return Err(EngineError::Failed { id, message: format!("the path has no contour {contour}") });
-        };
-        let mut converted: Vec<usize> = Vec::new();
-        let mut left: Vec<usize> = Vec::new();
-        for point in points {
-            if point >= count_of(subpath) {
-                return Err(EngineError::Failed {
-                    id,
-                    message: format!("the contour has {} points and not a point {point}", count_of(subpath)),
-                });
-            }
-            let done =
-                if smooth { smooth_by_neighbours(subpath, point) } else { make_corner(subpath, point) };
-            if done {
-                converted.push(point);
-            } else {
-                left.push(point);
-            }
+            write_back(session, self.path.0, &vector)?;
+            Ok(Outcome::changed(if smooth { "the points are smooth" } else { "the points are corners" })
+                .with_data(json!({
+                    "id": self.path.0,
+                    "contour": contour,
+                    "converted": converted,
+                    "left": left
+                })))
+
         }
-        write_back(session, self.path.0, &vector)?;
-        Ok(Outcome::changed(if smooth { "the points are smooth" } else { "the points are corners" })
-            .with_data(json!({
-                "id": self.path.0,
-                "contour": contour,
-                "converted": converted,
-                "left": left
-            })))
     }
 }
 

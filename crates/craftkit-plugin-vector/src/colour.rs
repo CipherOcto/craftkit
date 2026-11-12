@@ -40,10 +40,10 @@
 //!   and a colour is **out of gamut** when the difference is more than
 //!   the tree's own threshold of **four**.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Number, Outcome, Text};
 
 /// The name of the command of the conversion, in the messages.
 const COMMAND: &str = "vector.colour.convert";
@@ -392,127 +392,139 @@ fn colour_of(text: &str, id: &str) -> Result<[f64; 3], EngineError> {
     Ok([f64::from(parsed.0[0]), f64::from(parsed.0[1]), f64::from(parsed.0[2])])
 }
 
-/// **Convert** a colour from one space into another.
-///
-/// The tree's own: the tone curve of the first space is undone, the
-/// primaries of the first space are multiplied out, the white is
-/// adapted with Bradford, and the second space is done in reverse.
-#[derive(Command)]
-#[command(id = "vector.colour.convert", area = "vector", layer = "vector", icon = "list")]
-pub struct ConvertColour {
-    /// The colour: a hex text, `#rrggbb`.
-    pub colour: Text,
-    /// The space the colour is in.
-    pub from: Text,
-    /// The space the colour is put into.
-    pub to: Text,
-}
+commands! {
+    /// **Convert** a colour from one space into another.
+    ///
+    /// The tree's own: the tone curve of the first space is undone, the
+    /// primaries of the first space are multiplied out, the white is
+    /// adapted with Bradford, and the second space is done in reverse.
+    vector.colour.convert {
+        area: "vector",
+        layer: "vector",
+        icon: "list",
+        params: {
+            /// The colour: a hex text, `#rrggbb`.
 
-impl ConvertColour {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let _ = session;
-        let from = space_of(&self.from.0).ok_or_else(|| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!(
-                "`{}` is not a space of colour: it is one of {}",
-                self.from.0.trim(),
-                SPACES.join(", ")
-            ),
-        })?;
-        let to = space_of(&self.to.0).ok_or_else(|| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!(
-                "`{}` is not a space of colour: it is one of {}",
-                self.to.0.trim(),
-                SPACES.join(", ")
-            ),
-        })?;
-        let colour = colour_of(&self.colour.0, COMMAND)?;
-        let converted = convert(&from, &to, colour);
-        // A colour that is **outside** the space it is put into is
-        // refused: the tree clips it, and this tree does not.
-        if converted.iter().any(|channel| !channel.is_finite() || *channel < -SLACK || *channel > 1.0 + SLACK)
-        {
-            return Err(EngineError::Failed {
+            colour: Text,
+            /// The space the colour is in.
+
+            from: Text,
+            /// The space the colour is put into.
+
+            to: Text,
+        },
+        run: {
+
+            let _ = session;
+            let from = space_of(&self.from.0).ok_or_else(|| EngineError::Failed {
                 id: COMMAND.to_string(),
-                message: format!("the colour is outside the space `{}`: {converted:?}", to.name),
-            });
-        }
-        Ok(Outcome::new(format!("the colour in the space `{}`", to.name)).with_data(json!({
-            "colour": converted,
-            "space": to.name,
-            "from": from.name,
-            "difference": difference(&from, &to, colour),
-        })))
-    }
-}
-
-/// **Say** whether a colour is inside the **gamut** of a space.
-///
-/// The tree's own: the colour is sent to the space and clipped there,
-/// and the two ways of looking at it are compared in L\*a\*b\* — and a
-/// colour is out of gamut when the difference is more than the
-/// threshold.
-#[derive(Command)]
-#[command(id = "vector.colour.gamut", area = "vector", layer = "vector", icon = "list")]
-pub struct ColourGamut {
-    /// The colour: a hex text, `#rrggbb`.
-    pub colour: Text,
-    /// The space the colour is in.
-    pub from: Text,
-    /// The space whose gamut is tested.
-    pub to: Text,
-    /// The threshold of the measure: the tree's own is four.
-    pub threshold: Option<Number>,
-}
-
-impl ColourGamut {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let _ = session;
-        let from = space_of(&self.from.0).ok_or_else(|| EngineError::Failed {
-            id: GAMUT_COMMAND.to_string(),
-            message: format!(
-                "`{}` is not a space of colour: it is one of {}",
-                self.from.0.trim(),
-                SPACES.join(", ")
-            ),
-        })?;
-        let to = space_of(&self.to.0).ok_or_else(|| EngineError::Failed {
-            id: GAMUT_COMMAND.to_string(),
-            message: format!(
-                "`{}` is not a space of colour: it is one of {}",
-                self.to.0.trim(),
-                SPACES.join(", ")
-            ),
-        })?;
-        let colour = colour_of(&self.colour.0, GAMUT_COMMAND)?;
-        let threshold = match self.threshold {
-            Some(threshold) => {
-                let threshold = threshold.0;
-                if !threshold.is_finite() || threshold < 0.0 {
-                    return Err(EngineError::Failed {
-                        id: GAMUT_COMMAND.to_string(),
-                        message: "the threshold of the gamut is a number that is not negative".to_string(),
-                    });
-                }
-                threshold
+                message: format!(
+                    "`{}` is not a space of colour: it is one of {}",
+                    self.from.0.trim(),
+                    SPACES.join(", ")
+                ),
+            })?;
+            let to = space_of(&self.to.0).ok_or_else(|| EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!(
+                    "`{}` is not a space of colour: it is one of {}",
+                    self.to.0.trim(),
+                    SPACES.join(", ")
+                ),
+            })?;
+            let colour = colour_of(&self.colour.0, COMMAND)?;
+            let converted = convert(&from, &to, colour);
+            // A colour that is **outside** the space it is put into is
+            // refused: the tree clips it, and this tree does not.
+            if converted.iter().any(|channel| !channel.is_finite() || *channel < -SLACK || *channel > 1.0 + SLACK)
+            {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the colour is outside the space `{}`: {converted:?}", to.name),
+                });
             }
-            None => THRESHOLD,
-        };
-        let difference = difference(&from, &to, colour);
-        let in_gamut = difference <= threshold;
-        Ok(Outcome::new(format!(
-            "the colour is {} the gamut of `{}`",
-            if in_gamut { "inside" } else { "outside" },
-            to.name
-        ))
-        .with_data(json!({
-            "colour": colour,
-            "from": from.name,
-            "to": to.name,
-            "difference": difference,
-            "threshold": threshold,
-            "in_gamut": in_gamut,
-        })))
+            Ok(Outcome::new(format!("the colour in the space `{}`", to.name)).with_data(json!({
+                "colour": converted,
+                "space": to.name,
+                "from": from.name,
+                "difference": difference(&from, &to, colour),
+            })))
+
+        }
+    }
+    /// **Say** whether a colour is inside the **gamut** of a space.
+    ///
+    /// The tree's own: the colour is sent to the space and clipped there,
+    /// and the two ways of looking at it are compared in L\*a\*b\* — and a
+    /// colour is out of gamut when the difference is more than the
+    /// threshold.
+    vector.colour.gamut {
+        area: "vector",
+        layer: "vector",
+        icon: "list",
+        params: {
+            /// The colour: a hex text, `#rrggbb`.
+
+            colour: Text,
+            /// The space the colour is in.
+
+            from: Text,
+            /// The space whose gamut is tested.
+
+            to: Text,
+            /// The threshold of the measure: the tree's own is four.
+
+            threshold: Option<Number>,
+        },
+        run: {
+
+            let _ = session;
+            let from = space_of(&self.from.0).ok_or_else(|| EngineError::Failed {
+                id: GAMUT_COMMAND.to_string(),
+                message: format!(
+                    "`{}` is not a space of colour: it is one of {}",
+                    self.from.0.trim(),
+                    SPACES.join(", ")
+                ),
+            })?;
+            let to = space_of(&self.to.0).ok_or_else(|| EngineError::Failed {
+                id: GAMUT_COMMAND.to_string(),
+                message: format!(
+                    "`{}` is not a space of colour: it is one of {}",
+                    self.to.0.trim(),
+                    SPACES.join(", ")
+                ),
+            })?;
+            let colour = colour_of(&self.colour.0, GAMUT_COMMAND)?;
+            let threshold = match self.threshold {
+                Some(threshold) => {
+                    let threshold = threshold.0;
+                    if !threshold.is_finite() || threshold < 0.0 {
+                        return Err(EngineError::Failed {
+                            id: GAMUT_COMMAND.to_string(),
+                            message: "the threshold of the gamut is a number that is not negative".to_string(),
+                        });
+                    }
+                    threshold
+                }
+                None => THRESHOLD,
+            };
+            let difference = difference(&from, &to, colour);
+            let in_gamut = difference <= threshold;
+            Ok(Outcome::new(format!(
+                "the colour is {} the gamut of `{}`",
+                if in_gamut { "inside" } else { "outside" },
+                to.name
+            ))
+            .with_data(json!({
+                "colour": colour,
+                "from": from.name,
+                "to": to.name,
+                "difference": difference,
+                "threshold": threshold,
+                "in_gamut": in_gamut,
+            })))
+
+        }
     }
 }
