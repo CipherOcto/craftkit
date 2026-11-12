@@ -4227,6 +4227,7 @@ so.
 | the **table** of a drawing | **built.** A drawing holds a table of cells, and the cells may be merged: the merge is written in its anchor, the texts are joined into it, and a merge of one cell is refused (§839) | §839 |
 | the **repository** that holds the tree | **built.** This tree is the repository: its crates and its applications are at the root, the outer gate describes it, and every rule the v1 tree had and this one does not is named with the reason (§840) | §840 |
 | the **gates** that were running | **built.** The gate runs the batteries' tests, the range checks are written the way clippy asks for on every toolchain the gate uses, and the internal dependencies name their version (§841) | §841 |
+| the **machines** the gate runs on | **built.** The fixtures are named for the platform that builds them, and the formatter runs one package at a time, so the gate is green on macOS and Windows as well as on Linux (§842) | §842 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -55402,3 +55403,68 @@ running because of a promise this document had made.
   proves a `NaN` is refused at each of the twenty-two sites. The tree's
   rule is that a rule has a test, and this rule — "a `NaN` is refused
   here" — has none of its own.
+
+## 842. The two machines the gate had never met
+
+The gate runs on three platforms. Until now it had only ever run on one of
+them — Linux — because the v2 tree had a workflow of its own that ran on
+one runner. The swap gave the tree a matrix, and the matrix found two
+things that a Linux-only gate cannot find.
+
+### What was built
+
+- **The fixtures are named for the platform that builds them.**
+- **The formatter runs one package at a time.**
+
+### What the port found
+
+- **On macOS, the door crates' tests opened a file that was never there.**
+  The tests open a **real** shared library — not a mock — and they wrote
+  its name themselves: `libcraftkit_au_fixture.so`. That is the **Linux**
+  name. Cargo names a shared library differently on each platform:
+
+  | target | the name cargo writes |
+  |---|---|
+  | Linux | `libcraftkit_au_fixture.so` |
+  | macOS | `libcraftkit_au_fixture.dylib` |
+  | Windows | `craftkit_au_fixture.dll` — **no** `lib` prefix |
+
+  So on macOS the test asked for a `.so` that cargo had never written, and
+  the failure said so exactly: `dlopen(...) (no such file)`. Each test file
+  now asks one helper for the name, and the helper is a **table** of the
+  three platforms. The paths that are **meant** to be wrong — the ones
+  that say "this file is not there" — are left alone: a path that is not
+  there is not there on any platform.
+- **On Windows, the formatter failed before it formatted anything.** `cargo
+  fmt --all` hands rustfmt **every file of the workspace in one command
+  line**, and Windows will not take a command line longer than **32 767**
+  characters: the call fails with *"the filename or extension is too
+  long"*. The tree grew past that — the grid battery alone is a hundred
+  files — so the gate formats **one package at a time**, which fits
+  comfortably. It also says more when it fails: the package name is on the
+  line, so a file that is not formatted is reported against the crate it
+  belongs to.
+
+### What it cost
+
+- **Eleven test files**, each with one small helper and one unit test that
+  asserts the name for the host it runs on.
+- **One change to the gate**: the formatter's loop.
+- **Nothing changed in the crates.** The door crates' code was right; it
+  was the tests' **names** that were wrong, and only on two platforms.
+
+### What it does not settle
+
+- **The cross-platform checks are compile-only.** The tree compiles for
+  `x86_64-apple-darwin` and `x86_64-pc-windows-msvc`, and that proves the
+  three arms of the helper compile everywhere. It does not prove that
+  cargo writes exactly those names on those machines — only running there
+  proves that, and the CI matrix is what runs there.
+- **The unit test of the helper asserts the host's shape only.** It cannot
+  assert the shape of a platform it is not on, so the other two are proved
+  by the matrix.
+- **The Windows runner is still the one that has the most to teach.** The
+  command-line limit is a property of Windows, and a tree that grows will
+  meet it again — in the clippy invocation, or in the test build, or
+  somewhere else. The per-package loop is the answer for the formatter;
+  the others are not yet answered.
