@@ -38,7 +38,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use crate::packages::{Package, workspace_packages};
-use crate::{assets, cargo, cleanroom, doctor, layers, lists, step, wasm, web};
+use crate::{assets, cargo, cleanroom, digest, doctor, layers, lists, step, wasm, web};
 
 /// One step of the gate.
 pub struct Phase {
@@ -61,6 +61,7 @@ pub const PHASES: &[Phase] = &[
     Phase { name: "assets", run: assets::run },
     Phase { name: "cleanroom", run: cleanroom::run },
     Phase { name: "lists", run: lists::run },
+    Phase { name: "digest", run: digest::run },
     Phase { name: "layers", run: layers::run },
     Phase { name: "web", run: web::run },
     Phase { name: "clippy", run: clippy },
@@ -463,7 +464,10 @@ mod tests {
         let names: Vec<&str> = PHASES.iter().map(|p| p.name).collect();
         assert_eq!(
             names,
-            vec!["fmt", "assets", "cleanroom", "lists", "layers", "web", "clippy", "tests", "wasm",],
+            vec![
+                "fmt", "assets", "cleanroom", "lists", "digest", "layers", "web", "clippy", "tests",
+                "wasm",
+            ],
             "the order is chosen so the cheapest gates run first, and `tests` and `wasm` must \
              still be in it: they used to be called after the loop, where deleting the call was \
              invisible — `ci` reported them as run on a build that ran neither"

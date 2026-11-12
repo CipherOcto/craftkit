@@ -57,6 +57,7 @@ pub mod claims;
 pub mod cleanroom;
 pub mod counts;
 pub mod deny;
+pub mod digest;
 pub mod doctor;
 pub mod example;
 pub mod find;
@@ -169,6 +170,11 @@ pub const COMMANDS: &[Subcommand] = &[
         name: "counts",
         what: "the commands each battery carries, and the README's counted block",
         run: counts::run,
+    },
+    Subcommand {
+        name: "digest",
+        what: "the conventions of the house, and of a battery (--house, --battery)",
+        run: digest::run,
     },
     Subcommand {
         name: "verify",

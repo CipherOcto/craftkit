@@ -94,6 +94,10 @@ docs: <what it does> — §NNN
 - `§NNN` is the number of the README section the work belongs to. The README
   is the design and the sections are numbered; a commit that changes
   behaviour points at the section that describes it.
+- The message may not contain a **backtick** or a shell metacharacter
+  (`$(`, `&&`, `||`, a redirect, a leading `!`): the repository's
+  `commit-msg` hook refuses them, because a message that is pasted into a
+  shell can run what it contains. Write `MAX_NODES`, not `` `MAX_NODES` ``.
 
 Examples from this tree's history:
 
