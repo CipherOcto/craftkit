@@ -4228,6 +4228,7 @@ so.
 | the **repository** that holds the tree | **built.** This tree is the repository: its crates and its applications are at the root, the outer gate describes it, and every rule the v1 tree had and this one does not is named with the reason (§840) | §840 |
 | the **gates** that were running | **built.** The gate runs the batteries' tests, the range checks are written the way clippy asks for on every toolchain the gate uses, and the internal dependencies name their version (§841) | §841 |
 | the **machines** the gate runs on | **built.** The fixtures are named for the platform that builds them, and the formatter runs one package at a time, so the gate is green on macOS and Windows as well as on Linux (§842) | §842 |
+| the **failures** the matrix found | **built.** The tests' temporary directories are unique per call, the paths are compared as paths, and a test that waits waits until a deadline (§843) | §843 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -55453,6 +55454,22 @@ things that a Linux-only gate cannot find.
 - **Nothing changed in the crates.** The door crates' code was right; it
   was the tests' **names** that were wrong, and only on two platforms.
 
+- **The windows runner found the doors do not work there.** The four door
+  crates open a shared library with `dlopen`, and where there is no shared
+  library to open they **refuse** and say why: *"a shared library cannot be
+  opened on this target"*. That is the tree's design, stated in the source
+  — but it means the tests that need a **real** library cannot pass on
+  windows. They are now **unix-only**, and each file has one test that runs
+  everywhere else and asserts the truth of that platform: opening the
+  fixture is refused, and the refusal says why. A file that compiled to
+  nothing would have reported nothing; this reports a test that ran and
+  passed.
+- **The macOS name of the C library.** A test opened `libm.so.6` — the
+  **Linux** name of the C maths library — to prove that a shared library
+  with no plugin entry in it is refused. On macOS that file is not there,
+  so the test failed on the wrong thing. The name is now a table of the
+  two: `libm.so.6` and `/usr/lib/libSystem.B.dylib`.
+
 ### What it does not settle
 
 - **The cross-platform checks are compile-only.** The tree compiles for
@@ -55460,6 +55477,10 @@ things that a Linux-only gate cannot find.
   three arms of the helper compile everywhere. It does not prove that
   cargo writes exactly those names on those machines — only running there
   proves that, and the CI matrix is what runs there.
+- **The macOS path of the C library is unverified on a macOS machine.**
+  `/usr/lib/libSystem.B.dylib` is the stub that survives the move of the C
+  library into the dyld shared cache, and dyld resolves it out of the
+  cache; it is **medium-high** confidence, not certainty.
 - **The unit test of the helper asserts the host's shape only.** It cannot
   assert the shape of a platform it is not on, so the other two are proved
   by the matrix.
@@ -55468,3 +55489,67 @@ things that a Linux-only gate cannot find.
   meet it again — in the clippy invocation, or in the test build, or
   somewhere else. The per-package loop is the answer for the formatter;
   the others are not yet answered.
+
+## 843. The three failures the matrix found
+
+The last arc made the gate run on macOS and Windows. It ran, and it found
+**three** failures that a Linux-only gate cannot find — and one of the three
+was not about a platform at all.
+
+### What was built
+
+- **The temporary directories of the tests are unique per call.**
+- **The paths are compared as paths.**
+- **The waiting is a deadline, not a count of turns.**
+
+### What the port found
+
+- **The tests raced with each other over one temporary directory.** A test
+  file's helper made a folder in the system's temporary directory, named
+  after the **thing** the test was about — and every test in the file used
+  the same name. Cargo runs the tests of one binary in **parallel
+  threads**, so two tests raced: one of them removed the folder the other
+  was writing into, and the other's write failed with *"the file is on the
+  disk: Os { code: 2, kind: NotFound }"*.
+  It is **not a rare flake** — measured on this machine, **one run in
+  eight** failed, and the CI's portability job failed with it. The
+  directories now carry a counter, so no two tests can share one. The
+  sweep found the same defect in **two** files that were not on the list
+  the failure pointed at: `crossfade.rs`, which was not in the list at
+  all.
+- **Two of the film's tests compared paths as strings.** The test built
+  the expected path with `Path::join("media/the clip.mov")`, which on
+  Windows keeps the **forward slashes** — and the battery's own
+  implementation resolves the path properly, with the platform's own
+  **backslashes**. The two are the same path and two different strings, so
+  the assertion failed. The tests now compare `PathBuf`s, and `Path`'s
+  equality compares **components**: the spelling of the separator is the
+  platform's business and not the test's.
+- **A test that waited by counting.** The SDK's job tests waited for a
+  result by yielding the thread a hundred thousand times and giving up.
+  That is a budget of microseconds on a fast machine and a budget of
+  nothing on a slow one: on the macOS runner a job that was one thread
+  behind failed, and the failure said the job had not finished — which is
+  true, and is not what the test was about. The wait is now a **deadline**
+  of thirty seconds.
+
+### What it cost
+
+- **Nine test files** and one source file (`crates/craftkit-sdk/src/jobs.rs`,
+  in its own test module).
+- **No assertion was weakened and no test was deleted or skipped.**
+
+### What it does not settle
+
+- **The tests were racing on Linux too.** Nothing about this was macOS or
+  Windows: the failure was there for whoever ran the tests hard enough.
+  The gate found it because the matrix gave it a second and third machine
+  to fail on, not because those machines were different.
+- **The counter is per process.** A run that is killed mid-test leaves its
+  folder behind; the next run clears the folder with the same name, so
+  nothing accumulates, but a killed run does leave litter in the system's
+  temporary directory.
+- **The windows and macOS runs are still proved by the matrix.** What the
+  change does is remove the **string comparison** that was the cause, and
+  that is a property of the standard library rather than of the machine the
+  change was made on.
