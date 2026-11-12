@@ -188,6 +188,14 @@ agree. Two moves:
 than from a regex over the source; a mismatch names the constant, the file
 and the line.
 
+**As built (§850)**: the code hands the value over — the SDK publishes each
+of its bounds, and the value is the constant itself, so the compiler ties
+the two. The check moved to where the code is
+(`apps/craftkit-studio/tests/bounds.rs`), the gate's `numbers.rs` is gone,
+and **a number that cannot be worked out is a failure**, not a skip: that
+was the promise §849 made about the rows that said "ten thousand", and the
+rows now state their numbers as expressions. The words stay in the prose.
+
 **Wave 2 payoff**: ~1 500 calls removed; the README's numbers can no longer
 drift; the gate stops being a text scanner in the places where a compiler
 can do better.
@@ -360,6 +368,27 @@ six kinds of contribution macro (`expand_node_kind`, `expand_tool`,
 so the machinery is close — but this wave should be done **one battery at a
 time, and measured**, not taken wholesale.
 
+### §859 — the census, measured from the tree
+
+The plan's Part 6 says the census is an xtask command; this is that arc.
+
+`cargo xtask census` reports, **from the git history**: the arcs, the files
+and the lines each one touched, the gap between them, the commands per
+crate and the commands per file.
+
+**The scope is found, not remembered.** The repository holds the v1 tree's
+arcs as well, and their § numbers mean other things. So the census starts
+at the commit that *created* the v2 tree — the one that added
+`v2/Cargo.toml` — and says which commit it started at, every time.
+
+**As built (§859)**: the census measures the v2 tree's own history: 1 720
+commits, of which 1 706 name a section; the median arc is **127 lines over
+2 files**; the median gap between two arcs is **a minute**; 961 commands,
+and the median file carries **one**.
+
+*Acceptance*: the census names its scope; the median is the median; a log
+that is empty is a census of nothing and not a crash.
+
 ---
 
 ## Part 6 — how we will know
@@ -393,6 +422,13 @@ exit is a number:
 | 3 | reading and searching per arc | 17.8 | < 4 |
 | 3 | calls per arc | 35.4 | < 12 |
 | all | machine time per arc | 3.9 min | < 1 min |
+| all | the lines in an arc (the census) | 127 (the median) | — the baseline |
+| all | the gap between two arcs (the census) | 1 min (the median) | — the baseline |
+
+The census's two rows are **baselines**, not targets: they are the numbers
+the tree's own history has today, and the next arc is measured against
+them. The other rows are targets, and they are the numbers a *session*
+has to move.
 
 The census is the honest half of the plan: a shortcut that does not move the
 number is a shortcut that did not happen.
