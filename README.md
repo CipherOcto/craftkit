@@ -4225,6 +4225,7 @@ so.
 | the **way** the playhead goes to a marker | **built.** The playhead of a sound document is put at a marker — by its node or by its name — and it steps to the marker that is next and to the marker before it, and it does not move when there is none (§837) | §837 |
 | the **fill** of a format | **built.** The tree's accounting and comma formats fill the cell: the symbol at the left, the number at the right, and the space between them is the width of the column (§838) | §838 |
 | the **table** of a drawing | **built.** A drawing holds a table of cells, and the cells may be merged: the merge is written in its anchor, the texts are joined into it, and a merge of one cell is refused (§839) | §839 |
+| the **repository** that holds the tree | **built.** This tree is the repository: its crates and its applications are at the root, the outer gate describes it, and every rule the v1 tree had and this one does not is named with the reason (§840) | §840 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
 | the **removal** of a border or a fill | **built.** A colour of "none" takes the border or the background away, and it is not drawn (§780) | §780 |
@@ -55206,3 +55207,117 @@ rules for the merging of them.
 - **The tree's table is written to a DXF file** and read back from
   one; here it is a node of the drawing, and the file is still to
   come.
+
+## 840. The tree that is the repository
+
+The **v1 tree is discontinued**, and this tree — the v2 — is what the
+repository now **is**. Not a subtree of it, not a branch beside it: the
+`crates/`, the `apps/`, the `README.md` and the manifest at the root are
+**this** tree's, and the v1 crates, the v1 applications, the v1 scripts and
+the Android package are gone.
+
+### What was built
+
+- **The move.** `crates/` and `apps/` are the v2's fifty-one crates and
+  seven applications; the root `Cargo.toml` is the v2 workspace plus the
+  xtask; the root `README.md` is this document; the root `Cargo.lock` is
+  the v2's lock.
+- **The outer gate, rewritten for this tree.** The v2 has its own gate
+  (`crates/craftkit-gates`), so the outer gate keeps only the half the
+  inner one cannot have:
+  - the layer table in `docs/architecture.md` and the inner gate's own
+    table agree;
+  - every gate the tree names is actually **run** — by `ci`, or by name
+    in the workflow;
+  - every document link in the prose points at a file that is in the
+    tree;
+  - the `mod` groups of every crate root are **sorted**;
+  - every crate in the tree is a **member** of the workspace;
+  - the **xtask holds itself** to the tree's deny list — it is the one
+    crate the inner gate cannot see, because the inner gate looks in
+    `crates/` and `apps/` and the xtask is beside them.
+- **Every retired rule is named.** The v1 gate had rules about a
+  fuzzer, an Android package, a mutation instrument, a `.craftkit`
+  format with pending edits, a shell and an engine with a session. None
+  of them applies here, and **none of them was dropped silently**: each
+  one is in the `RETIRED` table in `xtask/src/lists.rs` with the reason
+  it no longer applies, and a gate checks that the table is not empty and
+  that every row says why.
+- **The gates re-pointed**: the layering table, the assets exceptions,
+  the clean-room table, the browser door's page and script, and the
+  doctor's report all now describe this tree.
+- **The browser door.** The v2 has no `wasm-bindgen` and no service
+  worker: the door is a plain WebAssembly module that the page fetches,
+  and the tree's own program (`apps/craftkit-wasm/src/bin/bundle.rs`)
+  writes it. The gate reads the module's name from the **one** place it
+  is written, and holds the page, the bundler and the Node script to it.
+- **The standard**: `AGENTS.md`, `docs/architecture.md`, `docs/agent-playbook.md`,
+  `docs/clean-room.md`, `docs/dependency-policy.md`, five recipes under
+  `docs/recipes/`, two skills, `CONTRIBUTING.md` and `KNOWN-GAPS.md` — all
+  written for this tree.
+
+### What the port found
+
+- **The door crates did not build for `wasm32-unknown-unknown`.**
+  `craftkit-clap`, `craftkit-vst3` and `craftkit-au` each have a
+  `#[cfg(not(unix))]` fallback for a target with no shared library — and
+  each one was **incomplete**: the fallback declared only part of the
+  API, so the compiler could not find `get_extension`, `create_plugin`,
+  `plugin_process` and the rest. Two of the three had **no fallback at
+  all**. The fallbacks are now complete, and each one **refuses** rather
+  than pretending to work: a function that can refuse returns the
+  crate's own error, and a function that cannot returns the honest
+  neutral value with the reason in its doc comment.
+- **A false claim in this document, found and corrected in place.** The
+  README said "the whole v2 workspace builds for that target". It does
+  not, and it cannot: `eframe` gates its own native API out on
+  `wasm32-unknown-unknown`, so a window that compiled there would be a
+  window with no window in it. The truth is narrower and is now what the
+  document says — the **library crates and the browser door** build for
+  that target, and the gate that holds the line checks exactly those
+  packages.
+- **A test phase that could not see its own fixtures.** The fixtures are
+  `cdylib`s that the host's tests open with `dlopen`. Cargo writes a
+  package's `.so` when the package is **built**, and not when it is used
+  as another package's dependency — so `cargo test --package craftkit-au`
+  never wrote `libcraftkit_au_fixture.so`, and the test opened a file
+  that was not there. The phase now builds the shared libraries **first**.
+  The easy way to make the failure go away would have been a mock; the
+  tree's rule is that the host's test is against a **real** shared
+  library.
+
+### What it cost
+
+- **The v1 tree, in full**: 1390 files moved, 130 deleted — the v1
+  crates, the v1 applications, the `scripts/`, the Android package, the
+  mutation job, and the v1 workflow.
+- **A rewritten outer gate.** `xtask/src/lists.rs` is a new file: the
+  v1 one was 12 672 lines of rules about a tree that is not here.
+  `xtask/src/layers.rs`, `xtask/src/assets.rs`, `xtask/src/web.rs`,
+  `xtask/src/wasm.rs` and `xtask/src/doctor.rs` were re-pointed.
+- **Three new tests**, one per door crate (`tests/fallback.rs` in
+  `craftkit-clap`, `craftkit-vst3` and `craftkit-au`): each one reads
+  the crate's own source and holds the fallback module's exported doors
+  to the unix module's, so a door cannot go missing from one and not the
+  other.
+- **The counts did not move**: the batteries carry **188** (grid),
+  **144** (sound), **119** (pdf), **113** (film), **110** (prose),
+  **73** (layout), **67** (vector), **55** (cad) and **47** (fx)
+  commands, and the MCP server carries **1045** — the same as §839,
+  because this arc moves the tree and does not add a command to it.
+
+### What it does not settle
+
+- **The v1 tree's history is not in this branch's history.** The old
+  main tip is unreferenced: there is no `archive/v1` branch to go back
+  to, and the shared ancestor commits are the only ones that survive.
+- **Two gates are two places to look.** The inner gate is the tree's
+  own; the outer gate is the repository's. The split is deliberate —
+  the inner gate can be run by anybody who has the tree — but it is a
+  cost, and it is paid on purpose rather than by accident.
+- **The outer gate reads the tree as text.** It does not run cargo to
+  ask what a crate depends on, because a checker that cannot be built
+  when the tree does not compile is a checker that is silent exactly when
+  it is needed. The inner gate reads the manifests instead.
+- **The applications are not checked for `wasm32-unknown-unknown`**, and
+  the window never will be: it is a window.
