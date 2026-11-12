@@ -59,6 +59,7 @@ pub mod anchor;
 pub mod appearance;
 pub mod ask;
 pub mod assets;
+pub mod bounds;
 pub mod bundle;
 pub mod bytes;
 pub mod camera;
