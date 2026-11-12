@@ -4,6 +4,8 @@
 //! and the flag that says a track is heard even when another is soloed
 //! is not a solo and is left as it is.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
 
@@ -30,8 +32,14 @@ fn session() -> Session {
 }
 
 /// A directory of this test's own, so that the files do not mix.
+///
+/// The name is **unique per call**: the tests of one binary run in
+/// parallel threads, and two tests that shared a directory would race —
+/// one of them removing the folder the other is writing into.
 fn directory(name: &str) -> String {
-    let path = std::env::temp_dir().join(format!("craftkit-v2-clearsolos-{name}"));
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let path = std::env::temp_dir().join(format!("craftkit-v2-clearsolos-{name}-{unique}"));
     let _ = std::fs::remove_dir_all(&path);
     std::fs::create_dir_all(&path).expect("the directory is made");
     path.to_string_lossy().to_string()

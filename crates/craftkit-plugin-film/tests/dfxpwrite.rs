@@ -3,6 +3,8 @@
 //! The DFXP profile is the older one: it has no rate, and the times of
 //! the captions are clock times. The rules are the tree's own.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
 
@@ -47,8 +49,15 @@ fn a_track(session: &mut Session, rate: &str) -> u64 {
 
 /// A file of this test's own, so that two tests do not fight over one
 /// file.
+///
+/// The directory is **unique per call**: the tests of one binary run in
+/// parallel threads, and two tests that shared a directory would race —
+/// one of them removing the folder the other is writing into.
 fn a_file(name: &str) -> String {
-    let directory = std::env::temp_dir().join(format!("craftkit-v2-dfxpwrite-{}", std::process::id()));
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let directory =
+        std::env::temp_dir().join(format!("craftkit-v2-dfxpwrite-{}-{unique}", std::process::id()));
     std::fs::create_dir_all(&directory).expect("the directory is made");
     let path = directory.join(name);
     path.to_string_lossy().to_string()

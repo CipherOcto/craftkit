@@ -3,6 +3,8 @@
 //! The file is a general block and then a run of text and timing
 //! blocks, and the text of a cue is ISO/IEC 6937.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Ecosystem, Session};
 
@@ -49,8 +51,15 @@ fn a_track(session: &mut Session, rate: &str) -> (u64, u64) {
 
 /// A file of this test's own, so that two tests do not fight over one
 /// file.
+///
+/// The directory is **unique per call**: the tests of one binary run in
+/// parallel threads, and two tests that shared a directory would race —
+/// one of them removing the folder the other is writing into.
 fn a_file(name: &str) -> String {
-    let directory = std::env::temp_dir().join(format!("craftkit-v2-stl-write-{}", std::process::id()));
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let directory =
+        std::env::temp_dir().join(format!("craftkit-v2-stl-write-{}-{unique}", std::process::id()));
     std::fs::create_dir_all(&directory).expect("the directory is made");
     let path = directory.join(name);
     path.to_string_lossy().to_string()

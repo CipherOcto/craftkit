@@ -426,14 +426,26 @@ mod tests {
     use super::*;
 
     use std::sync::atomic::AtomicUsize;
+    use std::time::{Duration, Instant};
+
+    /// How long a test waits for the thing it is waiting for.
+    ///
+    /// A **deadline**, not a count of turns: the old helper yielded the
+    /// thread a hundred thousand times and gave up, which is a budget of
+    /// microseconds on a fast machine and a budget of nothing on a slow one.
+    /// A job that is one thread behind on a loaded runner then failed, and
+    /// the failure said the job had not finished — which is true, and is not
+    /// what the test was about.
+    const PATIENCE: Duration = Duration::from_secs(30);
 
     /// Wait for a condition, for a while.
     fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
-        for _ in 0..100_000 {
+        let until = Instant::now() + PATIENCE;
+        while Instant::now() < until {
             if done() {
                 return;
             }
-            std::thread::yield_now();
+            std::thread::sleep(Duration::from_millis(1));
         }
         panic!("{what} did not happen");
     }
@@ -441,12 +453,13 @@ mod tests {
     /// Take the results until there are at least this many.
     fn collect(pool: &JobPool, wanted: usize) -> Vec<JobResult> {
         let mut all = Vec::new();
-        for _ in 0..100_000 {
+        let until = Instant::now() + PATIENCE;
+        while Instant::now() < until {
             all.extend(pool.drain());
             if all.len() >= wanted {
                 return all;
             }
-            std::thread::yield_now();
+            std::thread::sleep(Duration::from_millis(1));
         }
         panic!("{wanted} result(s) did not come");
     }

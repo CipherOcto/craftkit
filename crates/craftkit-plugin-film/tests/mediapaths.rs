@@ -91,16 +91,28 @@ fn an_otio(url: &str) -> String {
 }
 
 /// The **path** of the media of the clip that was read.
-fn media_path(session: &mut Session, path: &str) -> String {
+///
+/// It is a **path** and not a text: how a path is spelled is the
+/// platform's business, and one path may be spelled in more than one
+/// way. A path is compared with a path, never with a text.
+fn media_path(session: &mut Session, path: &str) -> std::path::PathBuf {
     session.execute("film.import.otio", &json!({ "path": path })).expect("the file is read");
-    session
-        .document()
-        .walk()
-        .find(|node| node.kind == "film.item")
-        .and_then(|node| node.data.get("path"))
-        .and_then(|path| path.as_str())
-        .unwrap_or_default()
-        .to_string()
+    std::path::PathBuf::from(
+        session
+            .document()
+            .walk()
+            .find(|node| node.kind == "film.item")
+            .and_then(|node| node.data.get("path"))
+            .and_then(|path| path.as_str())
+            .unwrap_or_default(),
+    )
+}
+
+/// The **path** of a media file that is named by a **relative** path:
+/// the folder of the file that names it, and the two parts of the
+/// name.
+fn joined(folder: &std::path::Path, name: &str, file: &str) -> std::path::PathBuf {
+    folder.join(name).join(file)
 }
 
 /// A **file URL** is a path in disguise: the scheme is taken off and
@@ -109,9 +121,17 @@ fn media_path(session: &mut Session, path: &str) -> String {
 fn a_file_url_is_a_path_in_disguise() {
     let mut session = session();
     let path = a_file("url", &an_otio("file:///media/the%20clip.mov"));
-    assert_eq!(media_path(&mut session, &path), "/media/the clip.mov", "the URL is a path");
+    assert_eq!(
+        media_path(&mut session, &path),
+        std::path::PathBuf::from("/media/the clip.mov"),
+        "the URL is a path"
+    );
     let path = a_file("host", &an_otio("file://localhost/media/the%20clip.mov"));
-    assert_eq!(media_path(&mut session, &path), "/media/the clip.mov", "and the host is dropped");
+    assert_eq!(
+        media_path(&mut session, &path),
+        std::path::PathBuf::from("/media/the clip.mov"),
+        "and the host is dropped"
+    );
 }
 
 /// An **absolute path** is a path already, and it stays as it is.
@@ -119,7 +139,11 @@ fn a_file_url_is_a_path_in_disguise() {
 fn an_absolute_path_stays_as_it_is() {
     let mut session = session();
     let path = a_file("absolute", &an_otio("/media/the clip.mov"));
-    assert_eq!(media_path(&mut session, &path), "/media/the clip.mov", "the path is the path");
+    assert_eq!(
+        media_path(&mut session, &path),
+        std::path::PathBuf::from("/media/the clip.mov"),
+        "the path is the path"
+    );
 }
 
 /// A **relative path** is relative to the folder of the file that
@@ -128,12 +152,12 @@ fn an_absolute_path_stays_as_it_is() {
 fn a_relative_path_is_relative_to_the_folder_of_the_file() {
     let mut session = session();
     let path = a_file("relative", &an_otio("media/the clip.mov"));
-    let expected = std::path::Path::new(&path).parent().map(|folder| folder.join("media/the clip.mov"));
-    assert_eq!(
-        media_path(&mut session, &path),
-        expected.map(|path| path.to_string_lossy().to_string()).unwrap_or_default(),
-        "the path is joined to the folder of the file"
+    let expected = joined(
+        std::path::Path::new(&path).parent().expect("the file is in a folder"),
+        "media",
+        "the clip.mov",
     );
+    assert_eq!(media_path(&mut session, &path), expected, "the path is joined to the folder of the file");
 }
 
 /// A `..` in a relative path is **one folder up**.
@@ -141,13 +165,13 @@ fn a_relative_path_is_relative_to_the_folder_of_the_file() {
 fn a_dot_dot_is_one_folder_up() {
     let mut session = session();
     let path = a_file("up", &an_otio("../media/the clip.mov"));
-    let expected = std::path::Path::new(&path)
-        .parent()
-        .and_then(|folder| folder.parent())
-        .map(|folder| folder.join("media/the clip.mov"));
-    assert_eq!(
-        media_path(&mut session, &path),
-        expected.map(|path| path.to_string_lossy().to_string()).unwrap_or_default(),
-        "the path goes up one folder"
+    let expected = joined(
+        std::path::Path::new(&path)
+            .parent()
+            .and_then(|folder| folder.parent())
+            .expect("the folder of the file is in a folder"),
+        "media",
+        "the clip.mov",
     );
+    assert_eq!(media_path(&mut session, &path), expected, "the path goes up one folder");
 }
