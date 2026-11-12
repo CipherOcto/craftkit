@@ -13,10 +13,10 @@
 //!   document;
 //! - a node that is **not a document** may not have a title.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Text};
 
 /// The **title** of a document: what it says it is.
 ///
@@ -31,55 +31,63 @@ pub fn title_of(document: &Node) -> Option<String> {
         .filter(|title| !title.trim().is_empty())
 }
 
-/// **Say** what a document is.
-#[derive(Command)]
-#[command(id = "prose.document.title", area = "prose", layer = "prose", icon = "pencil", mutates, undoable)]
-pub struct SetTitle {
-    /// The document.
-    pub document: NodeRef,
-    /// The title.
-    ///
-    /// An empty title takes the title away.
-    pub title: Text,
-}
+commands! {
+    /// **Say** what a document is.
+    prose.document.title {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-impl SetTitle {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.title".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
-        }
-        let title = self.title.0.trim().to_string();
-        let node = session.document_mut()?.node_mut(document);
-        let Some(node) = node else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{document}`"),
-            });
-        };
-        if title.is_empty() {
-            // An **empty** value takes the fact away.
-            if let Some(map) = node.data.as_object_mut() {
-                map.remove("title");
+            document: NodeRef,
+            /// The title.
+            ///
+            /// An empty title takes the title away.
+
+            title: Text,
+        },
+        run: {
+
+            let id = "prose.document.title".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{document}`"),
+                });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
             }
-        } else {
-            node.data["title"] = json!(title.clone());
+            let title = self.title.0.trim().to_string();
+            let node = session.document_mut()?.node_mut(document);
+            let Some(node) = node else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{document}`"),
+                });
+            };
+            if title.is_empty() {
+                // An **empty** value takes the fact away.
+                if let Some(map) = node.data.as_object_mut() {
+                    map.remove("title");
+                }
+            } else {
+                node.data["title"] = json!(title.clone());
+            }
+            Ok(Outcome::changed(if title.is_empty() {
+                format!("the document `{document}` has no title")
+            } else {
+                format!("the document `{document}` is `{title}`")
+            })
+            .with_data(json!({ "document": document, "title": title })))
+
         }
-        Ok(Outcome::changed(if title.is_empty() {
-            format!("the document `{document}` has no title")
-        } else {
-            format!("the document `{document}` is `{title}`")
-        })
-        .with_data(json!({ "document": document, "title": title })))
     }
 }

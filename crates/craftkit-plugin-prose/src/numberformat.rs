@@ -26,10 +26,10 @@
 //! - a **name** this tree does not know is refused, and not guessed
 //!   at.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Number, Outcome, Text};
 
 /// The largest number that has a **roman** form here.
 const ROMAN_LIMIT: i64 = 3_999;
@@ -209,63 +209,69 @@ pub fn format_of(number: i64, format: &str) -> Option<String> {
     }
 }
 
-/// **Read** the **numbering format** of a number.
-///
-/// A query: it does not change the document.
-#[derive(Command)]
-#[command(id = "prose.number.format", area = "prose", layer = "prose", icon = "list")]
-pub struct NumberFormat {
-    /// The number to write.
-    pub value: Number,
-    /// The form: `roman`, `letters`, `ordinal` or `cardinal`.
-    pub format: Text,
-}
+commands! {
+    /// **Read** the **numbering format** of a number.
+    ///
+    /// A query: it does not change the document.
+    prose.number.format {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The number to write.
 
-impl NumberFormat {
-    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.number.format".to_string();
-        let number = self.value.0;
-        if !number.is_finite() || number.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("{number} is not a whole number"),
-            });
+            value: Number,
+            /// The form: `roman`, `letters`, `ordinal` or `cardinal`.
+
+            format: Text,
+        },
+        run: {
+
+            let id = "prose.number.format".to_string();
+            let number = self.value.0;
+            if !number.is_finite() || number.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{number} is not a whole number"),
+                });
+            }
+            let whole = number as i64;
+            if whole < 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{whole} is negative, and a negative number has no form here"),
+                });
+            }
+            let format = self.format.0.trim();
+            let Some(text) = format_of(whole, format) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "`{format}` is not a form this tree knows: the forms are roman, letters, ordinal and cardinal"
+                    ),
+                });
+            };
+            // The **bounds** of the form: a number outside them has no
+            // form here, and a form that runs out is a form that is not
+            // there.
+            let (low, high) = match format {
+                "roman" => (1, ROMAN_LIMIT),
+                "letters" => (1, LETTER_LIMIT),
+                "ordinal" | "cardinal" => (0, WORD_LIMIT),
+                _ => (0, 0),
+            };
+            if whole < low || whole > high {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{whole} has no {format} form: the form runs from {low} to {high}"),
+                });
+            }
+            Ok(Outcome::new(text.clone()).with_data(json!({
+                "value": whole,
+                "format": format,
+                "text": text,
+            })))
+
         }
-        let whole = number as i64;
-        if whole < 0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("{whole} is negative, and a negative number has no form here"),
-            });
-        }
-        let format = self.format.0.trim();
-        let Some(text) = format_of(whole, format) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "`{format}` is not a form this tree knows: the forms are roman, letters, ordinal and cardinal"
-                ),
-            });
-        };
-        // The **bounds** of the form: a number outside them has no
-        // form here, and a form that runs out is a form that is not
-        // there.
-        let (low, high) = match format {
-            "roman" => (1, ROMAN_LIMIT),
-            "letters" => (1, LETTER_LIMIT),
-            "ordinal" | "cardinal" => (0, WORD_LIMIT),
-            _ => (0, 0),
-        };
-        if whole < low || whole > high {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("{whole} has no {format} form: the form runs from {low} to {high}"),
-            });
-        }
-        Ok(Outcome::new(text.clone()).with_data(json!({
-            "value": whole,
-            "format": format,
-            "text": text,
-        })))
     }
 }

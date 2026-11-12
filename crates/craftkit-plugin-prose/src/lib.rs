@@ -101,7 +101,7 @@
 )]
 #![forbid(unsafe_code)]
 
-use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
+use craftkit_derive::{Evaluator, Layer, NodeKind, Panel, commands};
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Plan, PlanItem, Relation, Session, Text};
 
@@ -154,51 +154,65 @@ mod tables;
 mod theme;
 mod titles;
 
-pub use accessibility::CheckAccessibility;
-pub use authorities::{MarkAuthority, ReadAuthorities};
-pub use autolists::SetList;
-pub use background::{SetBackground, SetWatermark};
-pub use bookmarks::{DeleteBookmark, ReadBookmarks, SetBookmark};
-pub use borders::SetBorders;
-pub use captions::{ReadCaptions, SetCaption};
-pub use characters::FormatRun;
-pub use citestyles::{ListCitationStyles, ReadCitation, ReadCitationStyle, SetCitationStyle};
-pub use columns::SetColumns;
-pub use comments::{DeleteComment, GetComment, SetComment};
-pub use dashes::SetDashes;
-pub use editing::{
-    MoveBlock, RemoveBlock, SetAlignment, SetIndent, SetLineSpacing, SetParagraphText, SetSpacing,
+pub use accessibility::ProseAccessibility;
+pub use authorities::{ProseAuthorityMark, ProseDocumentAuthorities};
+pub use autolists::ProseBlockList;
+pub use background::{ProsePageBackground, ProsePageWatermark};
+pub use bookmarks::{ProseBlockBookmark, ProseBlockBookmarkDelete, ProseDocumentBookmarks};
+pub use borders::ProsePageBorders;
+pub use captions::{ProseBlockCaption, ProseDocumentCaptions};
+pub use characters::ProseRunFormat;
+pub use citestyles::{
+    ProseCitationStyles, ProseDocumentCitation, ProseDocumentCitestyleRead, ProseDocumentCitestyleSet,
 };
-pub use endnotes::{AddEndnote, EndnoteKind, ReadEndnotes};
-pub use equations::{AddEquation, SetEquation};
-pub use fields::{AddField, ReadFields, SetField, UnlinkField};
-pub use figures::ReadFigures;
-pub use finding::{Find, Replace};
-pub use footnotes::{AddFootnote, ReadFootnotes};
-pub use links::ReadLinks;
-pub use mailmerge::Merge;
-pub use media::{SetAlt, SetDecorative, SetPlacement};
-pub use merges::{MergeCells, ReadMerges, SplitCell};
-pub use numberformat::NumberFormat;
-pub use numbering::{AddList, ReadNumber, SetNumbering};
+pub use columns::ProsePageColumns;
+pub use comments::{ProseCommentDelete, ProseCommentGet, ProseCommentSet};
+pub use dashes::ProseBlockDashes;
+pub use editing::{
+    ProseBlockMove, ProseBlockParagraphAlign, ProseBlockParagraphIndent, ProseBlockParagraphLinespacing,
+    ProseBlockParagraphSpacing, ProseBlockParagraphText, ProseBlockRemove,
+};
+pub use endnotes::{EndnoteKind, ProseBlockEndnotes, ProseEndnoteAdd};
+pub use equations::{ProseBlockEquationAdd, ProseEquationSet};
+pub use fields::{ProseBlockFieldAdd, ProseBlockFieldRead, ProseBlockFieldSet, ProseBlockFieldUnlink};
+pub use figures::ProseDocumentFigures;
+pub use finding::{ProseFind, ProseReplace};
+pub use footnotes::{ProseBlockFootnotes, ProseFootnoteAdd};
+pub use links::ProseBlockLinks;
+pub use mailmerge::ProseMerge;
+pub use media::{ProseMediaAlt, ProseMediaDecorative, ProseMediaPlacement};
+pub use merges::{ProseTableMerge, ProseTableMerges, ProseTableSplit};
+pub use numberformat::ProseNumberFormat;
+pub use numbering::{ProseBlockNumber, ProseBlockNumbering, ProseListAdd};
 pub use numbers::of as number_in_format;
-pub use outline::{ReadOutline, ReadStyleLevel, SetStyleLevel};
-pub use page::{GetPage, SetPage};
-pub use pagenumbers::SetPageNumbers;
-pub use paragraph::{ReadBlockParagraph, ReadStyleParagraph, SetStyleParagraph};
-pub use properties::SetProperties;
-pub use quotes::SetQuotes;
-pub use references::{AddReference, ReadReference, SetReference};
-pub use resolving::{AcceptAllRevisions, AcceptRevision, RejectAllRevisions, RejectRevision};
-pub use revisions::ReadRevisions;
-pub use running::{ReadRunningFooter, ReadRunningHeader, SetRunningFooter, SetRunningHeader};
-pub use sources::{ReadBibliography, ReadSources, RemoveSource, SetSource};
-pub use statistics::ReadStatistics;
-pub use stops::SetStops;
-pub use styles::{DeleteStyle, ListStyles, ReadBlockCharacter, ReadStyleCharacter, SetStyleCharacter};
-pub use tables::{AddColumn, AddRow, GetCell, RemoveColumn, RemoveRow, SetCell, SetHeader, SetTableAlt};
-pub use theme::SetTheme;
-pub use titles::SetTitle;
+pub use outline::{ProseDocumentOutline, ProseStyleLevel, ProseStyleLevelRead};
+pub use page::{ProsePageGet, ProsePageSet};
+pub use pagenumbers::ProsePageNumbers;
+pub use paragraph::{ProseBlockParagraph, ProseStyleParagraph, ProseStyleParagraphRead};
+pub use properties::ProseDocumentProperties;
+pub use quotes::ProseBlockQuotes;
+pub use references::{ProseBlockReferenceAdd, ProseBlockReferenceRead, ProseBlockReferenceSet};
+pub use resolving::{
+    ProseRevisionAccept, ProseRevisionAcceptAll, ProseRevisionReject, ProseRevisionRejectAll,
+};
+pub use revisions::ProseBlockRevisions;
+pub use running::{
+    ProseDocumentFooter, ProseDocumentFooterRead, ProseDocumentHeader, ProseDocumentHeaderRead,
+};
+pub use sources::{
+    ProseDocumentBibliography, ProseDocumentSourceRead, ProseDocumentSourceRemove, ProseDocumentSourceSet,
+};
+pub use statistics::ProseDocumentStats;
+pub use stops::ProseBlockStops;
+pub use styles::{
+    ProseBlockCharacter, ProseStyleCharacter, ProseStyleCharacterRead, ProseStyleDelete, ProseStyleList,
+};
+pub use tables::{
+    ProseTableAlt, ProseTableCellGet, ProseTableCellSet, ProseTableColumnAdd, ProseTableColumnRemove,
+    ProseTableHeader, ProseTableRowAdd, ProseTableRowRemove,
+};
+pub use theme::ProseDocumentTheme;
+pub use titles::ProseDocumentTitle;
 
 /// The prose layer.
 ///
@@ -572,264 +586,489 @@ fn relation_to(document: &Document, from: u64, kind: &str) -> Option<Node> {
     document.node(to).cloned()
 }
 
-/// Put a **document** in the document.
-#[derive(Command)]
-#[command(
-    id = "prose.document.add",
-    area = "prose",
-    layer = "prose",
-    icon = "plus",
-    mutates,
-    undoable,
-    example
-)]
-pub struct AddDocument {
-    /// What to call it.
-    pub name: Text,
-}
+commands! {
+    /// Put a **document** in the document.
+    prose.document.add {
+        area: "prose",
+        layer: "prose",
+        icon: "plus",
+        mutates,
+        undoable,
+        example,
+        params: {
+            /// What to call it.
 
-impl AddDocument {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: "prose.document.add".to_string(),
-                message: "a document has a name".to_string(),
-            });
-        }
-        let id = session.document_mut()?.add_node_with_under(
-            None,
-            name.clone(),
-            "prose.document",
-            None,
-            json!({}),
-        );
-        Ok(Outcome::changed(format!("added the document `{name}`"))
-            .with_data(json!({ "id": id, "name": name })))
-    }
-}
+            name: Text,
+        },
+        run: {
 
-/// Put a **style** in a document.
-#[derive(Command)]
-#[command(id = "prose.style.add", area = "prose", layer = "prose", icon = "plus", mutates, undoable)]
-pub struct AddStyle {
-    /// The document it goes in.
-    pub document: NodeRef,
-    /// The style's name.
-    pub name: Text,
-    /// What the style applies to: `paragraph`, `character`, `table` or
-    /// `numbering` — or anything else, because the list is open.
-    pub style_kind: Option<Text>,
-    /// The style it is based on.
-    pub based_on: Option<NodeRef>,
-}
-
-impl AddStyle {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: "prose.style.add".to_string(),
-                message: "a style has a name".to_string(),
-            });
-        }
-        let document = self.document.0;
-        if session.document().node(document).is_none() {
-            return Err(EngineError::Failed {
-                id: "prose.style.add".to_string(),
-                message: format!("there is no document `{document}`"),
-            });
-        }
-        let style_kind = self
-            .style_kind
-            .as_ref()
-            .map(|kind| kind.0.trim().to_string())
-            .unwrap_or_else(|| "paragraph".to_string());
-        if style_kind.is_empty() {
-            return Err(EngineError::Failed {
-                id: "prose.style.add".to_string(),
-                message: "a style says what it applies to".to_string(),
-            });
-        }
-        let based_on = match self.based_on {
-            Some(base) => {
-                let Some(node) = session.document().node(base.0) else {
-                    return Err(EngineError::Failed {
-                        id: "prose.style.add".to_string(),
-                        message: format!("there is no style `{}`", base.0),
-                    });
-                };
-                if node.kind != "prose.style" {
-                    return Err(EngineError::Failed {
-                        id: "prose.style.add".to_string(),
-                        message: format!("the node `{}` is not a style", base.0),
-                    });
-                }
-                Some(base.0)
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "prose.document.add".to_string(),
+                    message: "a document has a name".to_string(),
+                });
             }
-            None => None,
-        };
-        let id = session.document_mut()?.add_node_with_under(
-            Some(document),
-            name.clone(),
-            "prose.style",
-            None,
-            json!({ "style_kind": style_kind }),
-        );
-        if let Some(base) = based_on {
-            let base_name = session.document().node(base).map(|node| node.name.clone()).unwrap_or_default();
-            session.document_mut()?.add_relation(Relation::with_payload(
-                id,
-                base,
-                "prose.based_on",
-                json!({ "based_on": base_name }),
-            ));
+            let id = session.document_mut()?.add_node_with_under(
+                None,
+                name.clone(),
+                "prose.document",
+                None,
+                json!({}),
+            );
+            Ok(Outcome::changed(format!("added the document `{name}`"))
+                .with_data(json!({ "id": id, "name": name })))
+
         }
-        Ok(Outcome::changed(format!("added the style `{name}`")).with_data(json!({ "id": id, "name": name })))
     }
-}
+    /// Put a **style** in a document.
+    prose.style.add {
+        area: "prose",
+        layer: "prose",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The document it goes in.
 
-/// Put a **media** in a document: a file the document uses.
-///
-/// The file is the node's **stream**, so the bytes travel beside the
-/// document in the bundle and nobody names a path twice.
-#[derive(Command)]
-#[command(id = "prose.media.add", area = "prose", layer = "prose", icon = "plus", mutates, undoable)]
-pub struct AddMedia {
-    /// The document it goes in.
-    pub document: NodeRef,
-    /// What to call it.
-    pub name: Text,
-    /// Where the file is, relative to the document.
-    pub path: Text,
-}
+            document: NodeRef,
+            /// The style's name.
 
-impl AddMedia {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: "prose.media.add".to_string(),
-                message: "a media has a name".to_string(),
-            });
-        }
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed {
-                id: "prose.media.add".to_string(),
-                message: "a media says which file it is".to_string(),
-            });
-        }
-        let document = self.document.0;
-        if session.document().node(document).is_none() {
-            return Err(EngineError::Failed {
-                id: "prose.media.add".to_string(),
-                message: format!("there is no document `{document}`"),
-            });
-        }
-        let id = session.document_mut()?.add_node_with_under(
-            Some(document),
-            name.clone(),
-            "prose.media",
-            None,
-            json!({}),
-        );
-        let Some(node) = session.document_mut()?.node_mut(id) else {
-            return Err(EngineError::Failed {
-                id: "prose.media.add".to_string(),
-                message: format!("the media `{name}` is not in the document"),
-            });
-        };
-        node.stream = Some(path.clone());
-        Ok(Outcome::changed(format!("added the media `{name}`"))
-            .with_data(json!({ "id": id, "name": name, "path": path })))
-    }
-}
+            name: Text,
+            /// What the style applies to: `paragraph`, `character`, `table` or
+            /// `numbering` — or anything else, because the list is open.
 
-/// Put a **paragraph** in a document.
-#[derive(Command)]
-#[command(
-    id = "prose.block.paragraph.add",
-    area = "prose",
-    layer = "prose",
-    icon = "plus",
-    mutates,
-    undoable
-)]
-pub struct AddParagraph {
-    /// The document it goes in.
-    pub document: NodeRef,
-    /// What it says.
-    pub text: Text,
-}
+            style_kind: Option<Text>,
+            /// The style it is based on.
 
-impl AddParagraph {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        add_block(
-            session,
-            self.document.0,
-            "prose.block.paragraph",
-            json!({ "text": self.text.0, "runs": [] }),
-            "prose.block.paragraph.add",
-        )
-    }
-}
+            based_on: Option<NodeRef>,
+        },
+        run: {
 
-/// Put a **table** in a document.
-///
-/// The rows are in the **payload**: a cell holds a value and not a
-/// tree. A cell that holds blocks is a different thing, and this
-/// battery does not pretend to have one.
-#[derive(Command)]
-#[command(id = "prose.block.table.add", area = "prose", layer = "prose", icon = "plus", mutates, undoable)]
-pub struct AddTable {
-    /// The document it goes in.
-    pub document: NodeRef,
-    /// The rows, each a list of cells.
-    pub rows: Option<Json>,
-}
-
-impl AddTable {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let rows = match &self.rows {
-            Some(rows) => rows.clone(),
-            None => Json::Array(Vec::new()),
-        };
-        if !rows.is_array() {
-            return Err(EngineError::Failed {
-                id: "prose.block.table.add".to_string(),
-                message: "the rows are a list".to_string(),
-            });
-        }
-        // A table is a **grid**: every row as long as every other row.
-        {
-            let mut width: Option<usize> = None;
-            for row in rows.as_array().unwrap_or(&Vec::new()) {
-                let Some(cells) = row.as_array() else {
-                    return Err(EngineError::Failed {
-                        id: "prose.block.table.add".to_string(),
-                        message: "a row of a table is a list of cells".to_string(),
-                    });
-                };
-                match width {
-                    None => width = Some(cells.len()),
-                    Some(width) if width != cells.len() => {
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "prose.style.add".to_string(),
+                    message: "a style has a name".to_string(),
+                });
+            }
+            let document = self.document.0;
+            if session.document().node(document).is_none() {
+                return Err(EngineError::Failed {
+                    id: "prose.style.add".to_string(),
+                    message: format!("there is no document `{document}`"),
+                });
+            }
+            let style_kind = self
+                .style_kind
+                .as_ref()
+                .map(|kind| kind.0.trim().to_string())
+                .unwrap_or_else(|| "paragraph".to_string());
+            if style_kind.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "prose.style.add".to_string(),
+                    message: "a style says what it applies to".to_string(),
+                });
+            }
+            let based_on = match self.based_on {
+                Some(base) => {
+                    let Some(node) = session.document().node(base.0) else {
                         return Err(EngineError::Failed {
-                            id: "prose.block.table.add".to_string(),
-                            message: "the rows of a table are the same length".to_string(),
+                            id: "prose.style.add".to_string(),
+                            message: format!("there is no style `{}`", base.0),
+                        });
+                    };
+                    if node.kind != "prose.style" {
+                        return Err(EngineError::Failed {
+                            id: "prose.style.add".to_string(),
+                            message: format!("the node `{}` is not a style", base.0),
                         });
                     }
-                    Some(_) => {}
+                    Some(base.0)
+                }
+                None => None,
+            };
+            let id = session.document_mut()?.add_node_with_under(
+                Some(document),
+                name.clone(),
+                "prose.style",
+                None,
+                json!({ "style_kind": style_kind }),
+            );
+            if let Some(base) = based_on {
+                let base_name = session.document().node(base).map(|node| node.name.clone()).unwrap_or_default();
+                session.document_mut()?.add_relation(Relation::with_payload(
+                    id,
+                    base,
+                    "prose.based_on",
+                    json!({ "based_on": base_name }),
+                ));
+            }
+            Ok(Outcome::changed(format!("added the style `{name}`")).with_data(json!({ "id": id, "name": name })))
+
+        }
+    }
+    /// Put a **media** in a document: a file the document uses.
+    ///
+    /// The file is the node's **stream**, so the bytes travel beside the
+    /// document in the bundle and nobody names a path twice.
+    prose.media.add {
+        area: "prose",
+        layer: "prose",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The document it goes in.
+
+            document: NodeRef,
+            /// What to call it.
+
+            name: Text,
+            /// Where the file is, relative to the document.
+
+            path: Text,
+        },
+        run: {
+
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "prose.media.add".to_string(),
+                    message: "a media has a name".to_string(),
+                });
+            }
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "prose.media.add".to_string(),
+                    message: "a media says which file it is".to_string(),
+                });
+            }
+            let document = self.document.0;
+            if session.document().node(document).is_none() {
+                return Err(EngineError::Failed {
+                    id: "prose.media.add".to_string(),
+                    message: format!("there is no document `{document}`"),
+                });
+            }
+            let id = session.document_mut()?.add_node_with_under(
+                Some(document),
+                name.clone(),
+                "prose.media",
+                None,
+                json!({}),
+            );
+            let Some(node) = session.document_mut()?.node_mut(id) else {
+                return Err(EngineError::Failed {
+                    id: "prose.media.add".to_string(),
+                    message: format!("the media `{name}` is not in the document"),
+                });
+            };
+            node.stream = Some(path.clone());
+            Ok(Outcome::changed(format!("added the media `{name}`"))
+                .with_data(json!({ "id": id, "name": name, "path": path })))
+
+        }
+    }
+    /// Put a **paragraph** in a document.
+    prose.block.paragraph.add {
+        area: "prose",
+        layer: "prose",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The document it goes in.
+
+            document: NodeRef,
+            /// What it says.
+
+            text: Text,
+        },
+        run: {
+
+            add_block(
+                session,
+                self.document.0,
+                "prose.block.paragraph",
+                json!({ "text": self.text.0, "runs": [] }),
+                "prose.block.paragraph.add",
+            )
+
+        }
+    }
+    /// Put a **table** in a document.
+    ///
+    /// The rows are in the **payload**: a cell holds a value and not a
+    /// tree. A cell that holds blocks is a different thing, and this
+    /// battery does not pretend to have one.
+    prose.block.table.add {
+        area: "prose",
+        layer: "prose",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The document it goes in.
+
+            document: NodeRef,
+            /// The rows, each a list of cells.
+
+            rows: Option<Json>,
+        },
+        run: {
+
+            let rows = match &self.rows {
+                Some(rows) => rows.clone(),
+                None => Json::Array(Vec::new()),
+            };
+            if !rows.is_array() {
+                return Err(EngineError::Failed {
+                    id: "prose.block.table.add".to_string(),
+                    message: "the rows are a list".to_string(),
+                });
+            }
+            // A table is a **grid**: every row as long as every other row.
+            {
+                let mut width: Option<usize> = None;
+                for row in rows.as_array().unwrap_or(&Vec::new()) {
+                    let Some(cells) = row.as_array() else {
+                        return Err(EngineError::Failed {
+                            id: "prose.block.table.add".to_string(),
+                            message: "a row of a table is a list of cells".to_string(),
+                        });
+                    };
+                    match width {
+                        None => width = Some(cells.len()),
+                        Some(width) if width != cells.len() => {
+                            return Err(EngineError::Failed {
+                                id: "prose.block.table.add".to_string(),
+                                message: "the rows of a table are the same length".to_string(),
+                            });
+                        }
+                        Some(_) => {}
+                    }
                 }
             }
+            add_block(
+                session,
+                self.document.0,
+                "prose.block.table",
+                json!({ "text": "", "runs": [], "rows": rows }),
+                "prose.block.table.add",
+            )
+
         }
-        add_block(
-            session,
-            self.document.0,
-            "prose.block.table",
-            json!({ "text": "", "runs": [], "rows": rows }),
-            "prose.block.table.add",
-        )
+    }
+    /// Put a **style** on a block.
+    ///
+    /// The style is not the block's parent — the block is in the document —
+    /// and it is not in the block's payload either: it is a **relation**, an
+    /// edge that says which style.
+    prose.block.style {
+        area: "prose",
+        layer: "prose",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
+
+            block: NodeRef,
+            /// The style.
+
+            style: NodeRef,
+        },
+        run: {
+
+            let block = self.block.0;
+            let style = self.style.0;
+            let Some(node) = session.document().node(style) else {
+                return Err(EngineError::Failed {
+                    id: "prose.block.style".to_string(),
+                    message: format!("there is no style `{style}`"),
+                });
+            };
+            if node.kind != "prose.style" {
+                return Err(EngineError::Failed {
+                    id: "prose.block.style".to_string(),
+                    message: format!("the node `{style}` is not a style"),
+                });
+            }
+            let name = node.name.clone();
+            let added = session.document_mut()?.add_relation(Relation::with_payload(
+                block,
+                style,
+                "prose.styled_by",
+                json!({ "style": name.clone() }),
+            ));
+            if !added {
+                return Err(EngineError::Failed {
+                    id: "prose.block.style".to_string(),
+                    message: format!("the block `{block}` is already in the style `{name}`"),
+                });
+            }
+            Ok(Outcome::changed(format!("put the block {block} in the style `{name}`"))
+                .with_data(json!({ "block": block, "style": style, "name": name })))
+
+        }
+    }
+    /// Set the **runs** of a block: the formatting of its text.
+    ///
+    /// A run is an **interval**: it says how many of the text's characters
+    /// it covers, and the characters it covers are **derived**. The runs
+    /// are numerous — one per word, sometimes more — so they are in the
+    /// block's payload, and the text they format is beside them.
+    prose.block.runs {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
+
+            block: NodeRef,
+            /// The runs: a list of `{len, bold, italic, underline, colour,
+            /// size}`.
+
+            runs: Json,
+        },
+        run: {
+
+            let block = self.block.0;
+            let Some(runs) = self.runs.as_array() else {
+                return Err(EngineError::Failed {
+                    id: "prose.block.runs".to_string(),
+                    message: "the runs are a list".to_string(),
+                });
+            };
+            if runs.len() > 100_000 {
+                return Err(EngineError::Failed {
+                    id: "prose.block.runs".to_string(),
+                    message: "a block does not hold a hundred thousand runs".to_string(),
+                });
+            }
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: "prose.block.runs".to_string(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            let text = text_of(node);
+            let characters = text.chars().count();
+            let mut covered = 0usize;
+            for run in runs {
+                let Some(length) = run.get("len").and_then(|len| len.as_u64()) else {
+                    return Err(EngineError::Failed {
+                        id: "prose.block.runs".to_string(),
+                        message: "a run says how many characters it covers".to_string(),
+                    });
+                };
+                let length = length as usize;
+                covered = covered.saturating_add(length);
+                if covered > characters {
+                    return Err(EngineError::Failed {
+                        id: "prose.block.runs".to_string(),
+                        message: "the runs cover more characters than the text has".to_string(),
+                    });
+                }
+                // A run may carry a **revision**: it was inserted, it was
+                // deleted, or its format was changed — and by whom.
+                if let Some(revision) = run.get("revision") {
+                    crate::revisions::check(revision, "prose.block.runs")?;
+                }
+                // A run may carry a **footnote**: the note it points at.
+                if let Some(footnote) = run.get("footnote") {
+                    let Some(footnote) = footnote.as_u64() else {
+                        return Err(EngineError::Failed {
+                            id: "prose.block.runs".to_string(),
+                            message: "a footnote is a note".to_string(),
+                        });
+                    };
+                    let found = session.document().node(footnote);
+                    match found {
+                        Some(node) if node.kind == "prose.footnote" => {}
+                        Some(node) => {
+                            return Err(EngineError::Failed {
+                                id: "prose.block.runs".to_string(),
+                                message: format!("the node `{footnote}` is a `{}` and not a footnote", node.kind),
+                            });
+                        }
+                        None => {
+                            return Err(EngineError::Failed {
+                                id: "prose.block.runs".to_string(),
+                                message: format!("there is no footnote `{footnote}`"),
+                            });
+                        }
+                    }
+                }
+                // A run may carry an **endnote**: the note it points at.
+                if let Some(endnote) = run.get("endnote") {
+                    let Some(endnote) = endnote.as_u64() else {
+                        return Err(EngineError::Failed {
+                            id: "prose.block.runs".to_string(),
+                            message: "an endnote is a note".to_string(),
+                        });
+                    };
+                    let found = session.document().node(endnote);
+                    match found {
+                        Some(node) if node.kind == "prose.endnote" => {}
+                        Some(node) => {
+                            return Err(EngineError::Failed {
+                                id: "prose.block.runs".to_string(),
+                                message: format!("the node `{endnote}` is a `{}` and not an endnote", node.kind),
+                            });
+                        }
+                        None => {
+                            return Err(EngineError::Failed {
+                                id: "prose.block.runs".to_string(),
+                                message: format!("there is no endnote `{endnote}`"),
+                            });
+                        }
+                    }
+                }
+                // A run may carry a **citation**: the source it points
+                // at. The tag must name a source of the document.
+                if let Some(citation) = run.get("citation") {
+                    let Some(citation) = citation.as_str() else {
+                        return Err(EngineError::Failed {
+                            id: "prose.block.runs".to_string(),
+                            message: "a citation is the tag of a source".to_string(),
+                        });
+                    };
+                    crate::sources::check_citation(session, block, citation, "prose.block.runs")?;
+                }
+                // A run may carry a **link**: the target it points at.
+                // The target is a text and it is bounded; whether it may
+                // be opened is said by the reading of the links.
+                if let Some(link) = run.get("link") {
+                    let Some(target) = link.as_str() else {
+                        return Err(EngineError::Failed {
+                            id: "prose.block.runs".to_string(),
+                            message: "a link is a target".to_string(),
+                        });
+                    };
+                    if target.chars().count() > crate::links::MAX_TARGET {
+                        return Err(EngineError::Failed {
+                            id: "prose.block.runs".to_string(),
+                            message: format!("a target is at most {} characters long", crate::links::MAX_TARGET),
+                        });
+                    }
+                }
+            }
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: "prose.block.runs".to_string(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            node.data["runs"] = Json::Array(runs.clone());
+            Ok(Outcome::changed(format!("set the runs of the block {block}"))
+                .with_data(json!({ "block": block, "runs": runs.len() })))
+
+        }
     }
 }
 
@@ -860,205 +1099,6 @@ fn add_block(
     let block =
         session.document_mut()?.add_node_with_under(Some(document), name.to_string(), kind, None, data);
     Ok(Outcome::changed(format!("added {name}")).with_data(json!({ "id": block, "kind": kind })))
-}
-
-/// Put a **style** on a block.
-///
-/// The style is not the block's parent — the block is in the document —
-/// and it is not in the block's payload either: it is a **relation**, an
-/// edge that says which style.
-#[derive(Command)]
-#[command(id = "prose.block.style", area = "prose", layer = "prose", icon = "plus", mutates, undoable)]
-pub struct PutOnStyle {
-    /// The block.
-    pub block: NodeRef,
-    /// The style.
-    pub style: NodeRef,
-}
-
-impl PutOnStyle {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let block = self.block.0;
-        let style = self.style.0;
-        let Some(node) = session.document().node(style) else {
-            return Err(EngineError::Failed {
-                id: "prose.block.style".to_string(),
-                message: format!("there is no style `{style}`"),
-            });
-        };
-        if node.kind != "prose.style" {
-            return Err(EngineError::Failed {
-                id: "prose.block.style".to_string(),
-                message: format!("the node `{style}` is not a style"),
-            });
-        }
-        let name = node.name.clone();
-        let added = session.document_mut()?.add_relation(Relation::with_payload(
-            block,
-            style,
-            "prose.styled_by",
-            json!({ "style": name.clone() }),
-        ));
-        if !added {
-            return Err(EngineError::Failed {
-                id: "prose.block.style".to_string(),
-                message: format!("the block `{block}` is already in the style `{name}`"),
-            });
-        }
-        Ok(Outcome::changed(format!("put the block {block} in the style `{name}`"))
-            .with_data(json!({ "block": block, "style": style, "name": name })))
-    }
-}
-
-/// Set the **runs** of a block: the formatting of its text.
-///
-/// A run is an **interval**: it says how many of the text's characters
-/// it covers, and the characters it covers are **derived**. The runs
-/// are numerous — one per word, sometimes more — so they are in the
-/// block's payload, and the text they format is beside them.
-#[derive(Command)]
-#[command(id = "prose.block.runs", area = "prose", layer = "prose", icon = "list", mutates, undoable)]
-pub struct SetRuns {
-    /// The block.
-    pub block: NodeRef,
-    /// The runs: a list of `{len, bold, italic, underline, colour,
-    /// size}`.
-    pub runs: Json,
-}
-
-impl SetRuns {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let block = self.block.0;
-        let Some(runs) = self.runs.as_array() else {
-            return Err(EngineError::Failed {
-                id: "prose.block.runs".to_string(),
-                message: "the runs are a list".to_string(),
-            });
-        };
-        if runs.len() > 100_000 {
-            return Err(EngineError::Failed {
-                id: "prose.block.runs".to_string(),
-                message: "a block does not hold a hundred thousand runs".to_string(),
-            });
-        }
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: "prose.block.runs".to_string(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        let text = text_of(node);
-        let characters = text.chars().count();
-        let mut covered = 0usize;
-        for run in runs {
-            let Some(length) = run.get("len").and_then(|len| len.as_u64()) else {
-                return Err(EngineError::Failed {
-                    id: "prose.block.runs".to_string(),
-                    message: "a run says how many characters it covers".to_string(),
-                });
-            };
-            let length = length as usize;
-            covered = covered.saturating_add(length);
-            if covered > characters {
-                return Err(EngineError::Failed {
-                    id: "prose.block.runs".to_string(),
-                    message: "the runs cover more characters than the text has".to_string(),
-                });
-            }
-            // A run may carry a **revision**: it was inserted, it was
-            // deleted, or its format was changed — and by whom.
-            if let Some(revision) = run.get("revision") {
-                crate::revisions::check(revision, "prose.block.runs")?;
-            }
-            // A run may carry a **footnote**: the note it points at.
-            if let Some(footnote) = run.get("footnote") {
-                let Some(footnote) = footnote.as_u64() else {
-                    return Err(EngineError::Failed {
-                        id: "prose.block.runs".to_string(),
-                        message: "a footnote is a note".to_string(),
-                    });
-                };
-                let found = session.document().node(footnote);
-                match found {
-                    Some(node) if node.kind == "prose.footnote" => {}
-                    Some(node) => {
-                        return Err(EngineError::Failed {
-                            id: "prose.block.runs".to_string(),
-                            message: format!("the node `{footnote}` is a `{}` and not a footnote", node.kind),
-                        });
-                    }
-                    None => {
-                        return Err(EngineError::Failed {
-                            id: "prose.block.runs".to_string(),
-                            message: format!("there is no footnote `{footnote}`"),
-                        });
-                    }
-                }
-            }
-            // A run may carry an **endnote**: the note it points at.
-            if let Some(endnote) = run.get("endnote") {
-                let Some(endnote) = endnote.as_u64() else {
-                    return Err(EngineError::Failed {
-                        id: "prose.block.runs".to_string(),
-                        message: "an endnote is a note".to_string(),
-                    });
-                };
-                let found = session.document().node(endnote);
-                match found {
-                    Some(node) if node.kind == "prose.endnote" => {}
-                    Some(node) => {
-                        return Err(EngineError::Failed {
-                            id: "prose.block.runs".to_string(),
-                            message: format!("the node `{endnote}` is a `{}` and not an endnote", node.kind),
-                        });
-                    }
-                    None => {
-                        return Err(EngineError::Failed {
-                            id: "prose.block.runs".to_string(),
-                            message: format!("there is no endnote `{endnote}`"),
-                        });
-                    }
-                }
-            }
-            // A run may carry a **citation**: the source it points
-            // at. The tag must name a source of the document.
-            if let Some(citation) = run.get("citation") {
-                let Some(citation) = citation.as_str() else {
-                    return Err(EngineError::Failed {
-                        id: "prose.block.runs".to_string(),
-                        message: "a citation is the tag of a source".to_string(),
-                    });
-                };
-                crate::sources::check_citation(session, block, citation, "prose.block.runs")?;
-            }
-            // A run may carry a **link**: the target it points at.
-            // The target is a text and it is bounded; whether it may
-            // be opened is said by the reading of the links.
-            if let Some(link) = run.get("link") {
-                let Some(target) = link.as_str() else {
-                    return Err(EngineError::Failed {
-                        id: "prose.block.runs".to_string(),
-                        message: "a link is a target".to_string(),
-                    });
-                };
-                if target.chars().count() > crate::links::MAX_TARGET {
-                    return Err(EngineError::Failed {
-                        id: "prose.block.runs".to_string(),
-                        message: format!("a target is at most {} characters long", crate::links::MAX_TARGET),
-                    });
-                }
-            }
-        }
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: "prose.block.runs".to_string(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        node.data["runs"] = Json::Array(runs.clone());
-        Ok(Outcome::changed(format!("set the runs of the block {block}"))
-            .with_data(json!({ "block": block, "runs": runs.len() })))
-    }
 }
 
 /// The evaluator: the **blocks** of a document, in order.
@@ -1121,91 +1161,91 @@ craftkit_sdk::plugin_anchor!(
     ReferenceKind,
     StyleKind,
     MediaKind,
-    AddDocument,
-    Merge,
-    AddStyle,
-    AddMedia,
-    SetAlt,
-    SetDecorative,
-    SetPlacement,
-    SetTitle,
-    SetRunningHeader,
-    ReadRunningHeader,
-    SetRunningFooter,
-    ReadRunningFooter,
-    ReadStatistics,
-    DeleteStyle,
-    MergeCells,
-    SplitCell,
-    ReadMerges,
-    ListStyles,
-    NumberFormat,
-    SetHeader,
-    SetTableAlt,
-    CheckAccessibility,
-    AddParagraph,
-    AddTable,
-    AddEquation,
-    SetEquation,
-    PutOnStyle,
-    SetRuns,
-    SetProperties,
-    SetColumns,
-    SetSource,
-    RemoveSource,
-    ReadSources,
-    ReadBibliography,
-    SetQuotes,
-    SetDashes,
-    SetList,
-    SetStops,
-    SetTheme,
-    ListCitationStyles,
-    ReadCitation,
-    SetCitationStyle,
-    ReadCitationStyle,
-    SetPageNumbers,
+    ProseDocumentAdd,
+    ProseMerge,
+    ProseStyleAdd,
+    ProseMediaAdd,
+    ProseMediaAlt,
+    ProseMediaDecorative,
+    ProseMediaPlacement,
+    ProseDocumentTitle,
+    ProseDocumentHeader,
+    ProseDocumentHeaderRead,
+    ProseDocumentFooter,
+    ProseDocumentFooterRead,
+    ProseDocumentStats,
+    ProseStyleDelete,
+    ProseTableMerge,
+    ProseTableSplit,
+    ProseTableMerges,
+    ProseStyleList,
+    ProseNumberFormat,
+    ProseTableHeader,
+    ProseTableAlt,
+    ProseAccessibility,
+    ProseBlockParagraphAdd,
+    ProseBlockTableAdd,
+    ProseBlockEquationAdd,
+    ProseEquationSet,
+    ProseBlockStyle,
+    ProseBlockRuns,
+    ProseDocumentProperties,
+    ProsePageColumns,
+    ProseDocumentSourceSet,
+    ProseDocumentSourceRemove,
+    ProseDocumentSourceRead,
+    ProseDocumentBibliography,
+    ProseBlockQuotes,
+    ProseBlockDashes,
+    ProseBlockList,
+    ProseBlockStops,
+    ProseDocumentTheme,
+    ProseCitationStyles,
+    ProseDocumentCitation,
+    ProseDocumentCitestyleSet,
+    ProseDocumentCitestyleRead,
+    ProsePageNumbers,
     EndnoteKind,
-    AddEndnote,
-    ReadEndnotes,
-    SetCaption,
-    ReadCaptions,
-    AddField,
-    SetField,
-    ReadFields,
-    UnlinkField,
-    SetStyleCharacter,
-    SetStyleParagraph,
-    SetStyleLevel,
-    ReadStyleLevel,
-    ReadOutline,
-    AddReference,
-    SetReference,
-    ReadReference,
-    ReadStyleParagraph,
-    ReadBlockParagraph,
-    ReadStyleCharacter,
-    ReadBlockCharacter,
-    FormatRun,
-    SetParagraphText,
-    RemoveBlock,
-    MoveBlock,
-    SetAlignment,
-    SetIndent,
-    SetSpacing,
-    SetLineSpacing,
-    AcceptRevision,
-    RejectRevision,
-    Find,
-    Replace,
-    GetCell,
-    SetCell,
-    AddRow,
-    RemoveRow,
-    AddColumn,
-    RemoveColumn,
-    AcceptAllRevisions,
-    RejectAllRevisions,
+    ProseEndnoteAdd,
+    ProseBlockEndnotes,
+    ProseBlockCaption,
+    ProseDocumentCaptions,
+    ProseBlockFieldAdd,
+    ProseBlockFieldSet,
+    ProseBlockFieldRead,
+    ProseBlockFieldUnlink,
+    ProseStyleCharacter,
+    ProseStyleParagraph,
+    ProseStyleLevel,
+    ProseStyleLevelRead,
+    ProseDocumentOutline,
+    ProseBlockReferenceAdd,
+    ProseBlockReferenceSet,
+    ProseBlockReferenceRead,
+    ProseStyleParagraphRead,
+    ProseBlockParagraph,
+    ProseStyleCharacterRead,
+    ProseBlockCharacter,
+    ProseRunFormat,
+    ProseBlockParagraphText,
+    ProseBlockRemove,
+    ProseBlockMove,
+    ProseBlockParagraphAlign,
+    ProseBlockParagraphIndent,
+    ProseBlockParagraphSpacing,
+    ProseBlockParagraphLinespacing,
+    ProseRevisionAccept,
+    ProseRevisionReject,
+    ProseFind,
+    ProseReplace,
+    ProseTableCellGet,
+    ProseTableCellSet,
+    ProseTableRowAdd,
+    ProseTableRowRemove,
+    ProseTableColumnAdd,
+    ProseTableColumnRemove,
+    ProseRevisionAcceptAll,
+    ProseRevisionRejectAll,
     BlocksEvaluator,
     ProsePanel
 );

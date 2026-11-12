@@ -21,10 +21,10 @@
 //! - the text of a heading is the text the block **shows**, so a
 //!   heading that is a cross-reference shows what it references.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome};
 
 use crate::styles::chain_of;
 
@@ -54,154 +54,166 @@ pub fn effective_level(document: &craftkit_sdk::Document, style: u64) -> Option<
     level
 }
 
-/// **Set** the level of a style — or take it away.
-///
-/// The level of a style is the level of its base when it has none of
-/// its own, so a style based on a heading is a heading.
-#[derive(Command)]
-#[command(id = "prose.style.level", area = "prose", layer = "prose", icon = "list", mutates, undoable)]
-pub struct SetStyleLevel {
-    /// The style.
-    pub style: NodeRef,
-    /// The level: a whole number from 1 to 9. Without it, the style
-    /// has no level of its own.
-    pub level: Option<Number>,
-}
+commands! {
+    /// **Set** the level of a style — or take it away.
+    ///
+    /// The level of a style is the level of its base when it has none of
+    /// its own, so a style based on a heading is a heading.
+    prose.style.level {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        mutates,
+        undoable,
+        params: {
+            /// The style.
 
-impl SetStyleLevel {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.style.level".to_string();
-        let style = self.style.0;
-        let Some(node) = session.document().node(style) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no style `{style}`"),
-            });
-        };
-        if node.kind != "prose.style" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{style}` is a `{}` and not a style", node.kind),
-            });
-        }
-        let level = match &self.level {
-            Some(level) => {
-                let value = level.0;
-                if !value.is_finite() || value.fract() != 0.0 {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("a level is a whole number: {value} is not one"),
-                    });
-                }
-                if value < f64::from(MIN_LEVEL) || value > f64::from(MAX_LEVEL) {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!(
-                            "a level is a whole number from {MIN_LEVEL} to {MAX_LEVEL}: {value} is not one"
-                        ),
-                    });
-                }
-                Some(value as u32)
+            style: NodeRef,
+            /// The level: a whole number from 1 to 9. Without it, the style
+            /// has no level of its own.
+
+            level: Option<Number>,
+        },
+        run: {
+
+            let id = "prose.style.level".to_string();
+            let style = self.style.0;
+            let Some(node) = session.document().node(style) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no style `{style}`"),
+                });
+            };
+            if node.kind != "prose.style" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{style}` is a `{}` and not a style", node.kind),
+                });
             }
-            None => None,
-        };
-        if let Some(node) = session.document_mut()?.node_mut(style) {
-            match level {
-                Some(level) => node.data["level"] = json!(level),
-                None => {
-                    if let Some(map) = node.data.as_object_mut() {
-                        map.remove("level");
+            let level = match &self.level {
+                Some(level) => {
+                    let value = level.0;
+                    if !value.is_finite() || value.fract() != 0.0 {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("a level is a whole number: {value} is not one"),
+                        });
+                    }
+                    if value < f64::from(MIN_LEVEL) || value > f64::from(MAX_LEVEL) {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "a level is a whole number from {MIN_LEVEL} to {MAX_LEVEL}: {value} is not one"
+                            ),
+                        });
+                    }
+                    Some(value as u32)
+                }
+                None => None,
+            };
+            if let Some(node) = session.document_mut()?.node_mut(style) {
+                match level {
+                    Some(level) => node.data["level"] = json!(level),
+                    None => {
+                        if let Some(map) = node.data.as_object_mut() {
+                            map.remove("level");
+                        }
                     }
                 }
             }
+            Ok(Outcome::changed(format!("the level of the style `{style}` is set"))
+                .with_data(json!({ "style": style, "level": level })))
+
         }
-        Ok(Outcome::changed(format!("the level of the style `{style}` is set"))
-            .with_data(json!({ "style": style, "level": level })))
     }
-}
+    /// **Read** the level of a style, with the level of its base under
+    /// it.
+    prose.style.level.read {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The style.
 
-/// **Read** the level of a style, with the level of its base under
-/// it.
-#[derive(Command)]
-#[command(id = "prose.style.level.read", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadStyleLevel {
-    /// The style.
-    pub style: NodeRef,
-}
+            style: NodeRef,
+        },
+        run: {
 
-impl ReadStyleLevel {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.style.level.read".to_string();
-        let style = self.style.0;
-        let Some(node) = session.document().node(style) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no style `{style}`"),
-            });
-        };
-        if node.kind != "prose.style" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{style}` is a `{}` and not a style", node.kind),
-            });
-        }
-        let level = effective_level(session.document(), style);
-        Ok(Outcome::new(format!("the style `{style}` has a level")).with_data(json!({
-            "style": style,
-            "level": match level {
-                Some(level) => json!(level),
-                None => Json::Null,
-            },
-        })))
-    }
-}
-
-/// **Read** the outline of a document: its headings, in the order
-/// they stand.
-///
-/// The outline is **derived**: it is worked out from the blocks and
-/// their styles every time it is asked for.
-#[derive(Command)]
-#[command(id = "prose.document.outline", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadOutline {
-    /// The document.
-    pub document: NodeRef,
-}
-
-impl ReadOutline {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.outline".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
-        }
-        let mut outline: Vec<Json> = Vec::new();
-        for block in node.children.iter().filter(|child| child.kind.starts_with("prose.block.")) {
-            let Some(style) = crate::styles::style_of_block(session.document(), block.id) else {
-                continue;
+            let id = "prose.style.level.read".to_string();
+            let style = self.style.0;
+            let Some(node) = session.document().node(style) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no style `{style}`"),
+                });
             };
-            let Some(level) = effective_level(session.document(), style.id) else { continue };
-            outline.push(json!({
-                "block": block.id,
-                "style": style.id,
-                "style_name": style.name,
-                "level": level,
-                "text": crate::references::text_of(session.document(), block),
-            }));
+            if node.kind != "prose.style" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{style}` is a `{}` and not a style", node.kind),
+                });
+            }
+            let level = effective_level(session.document(), style);
+            Ok(Outcome::new(format!("the style `{style}` has a level")).with_data(json!({
+                "style": style,
+                "level": match level {
+                    Some(level) => json!(level),
+                    None => Json::Null,
+                },
+            })))
+
         }
-        Ok(Outcome::new(format!("the document has {} heading(s)", outline.len())).with_data(json!({
-            "document": document,
-            "outline": outline,
-            "count": outline.len(),
-        })))
+    }
+    /// **Read** the outline of a document: its headings, in the order
+    /// they stand.
+    ///
+    /// The outline is **derived**: it is worked out from the blocks and
+    /// their styles every time it is asked for.
+    prose.document.outline {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document.
+
+            document: NodeRef,
+        },
+        run: {
+
+            let id = "prose.document.outline".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
+            }
+            let mut outline: Vec<Json> = Vec::new();
+            for block in node.children.iter().filter(|child| child.kind.starts_with("prose.block.")) {
+                let Some(style) = crate::styles::style_of_block(session.document(), block.id) else {
+                    continue;
+                };
+                let Some(level) = effective_level(session.document(), style.id) else { continue };
+                outline.push(json!({
+                    "block": block.id,
+                    "style": style.id,
+                    "style_name": style.name,
+                    "level": level,
+                    "text": crate::references::text_of(session.document(), block),
+                }));
+            }
+            Ok(Outcome::new(format!("the document has {} heading(s)", outline.len())).with_data(json!({
+                "document": document,
+                "outline": outline,
+                "count": outline.len(),
+            })))
+
+        }
     }
 }

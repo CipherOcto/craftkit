@@ -22,10 +22,10 @@
 //! - A paragraph with a **revision** in it is not touched: the tree
 //!   refuses to rewrite a tracked change, and so does this tree.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Outcome};
 
 /// The marks that **open** a saying.
 const OPENERS: &str = "([{<—–«‹„‚";
@@ -72,59 +72,66 @@ fn smart(text: &str) -> String {
     out
 }
 
-/// **Make** the **quotes** of a paragraph smart.
-///
-/// The straight quotes become the smart ones, and the paragraph's
-/// **runs** do not move: a quote is one character before and after.
-#[derive(Command)]
-#[command(id = "prose.block.quotes", area = "prose", layer = "prose", icon = "pencil", mutates, undoable)]
-pub struct SetQuotes {
-    /// The paragraph.
-    pub block: NodeRef,
-}
+commands! {
+    /// **Make** the **quotes** of a paragraph smart.
+    ///
+    /// The straight quotes become the smart ones, and the paragraph's
+    /// **runs** do not move: a quote is one character before and after.
+    prose.block.quotes {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The paragraph.
 
-impl SetQuotes {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.quotes".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if node.kind != "prose.block.paragraph" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
-            });
-        }
-        // A paragraph with a **revision** in it is not touched.
-        if let Some(runs) = node.data.get("runs").and_then(|runs| runs.as_array()) {
-            for run in runs {
-                if run.get("revision").is_some() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the paragraph `{block}` holds a revision"),
-                    });
+            block: NodeRef,
+        },
+        run: {
+
+            let id = "prose.block.quotes".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if node.kind != "prose.block.paragraph" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
+                });
+            }
+            // A paragraph with a **revision** in it is not touched.
+            if let Some(runs) = node.data.get("runs").and_then(|runs| runs.as_array()) {
+                for run in runs {
+                    if run.get("revision").is_some() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the paragraph `{block}` holds a revision"),
+                        });
+                    }
                 }
             }
+            let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
+            let smartened = smart(&text);
+            let changed = text.chars().zip(smartened.chars()).filter(|(before, after)| before != after).count();
+            if smartened == text {
+                return Ok(Outcome::new(format!("the paragraph `{block}` has no straight quotes"))
+                    .with_data(json!({ "block": block, "text": text, "changed": 0 })));
+            }
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            node.data["text"] = json!(smartened.clone());
+            Ok(Outcome::changed(format!("the paragraph `{block}` has its quotes made smart"))
+                .with_data(json!({ "block": block, "text": smartened, "changed": changed })))
+
         }
-        let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
-        let smartened = smart(&text);
-        let changed = text.chars().zip(smartened.chars()).filter(|(before, after)| before != after).count();
-        if smartened == text {
-            return Ok(Outcome::new(format!("the paragraph `{block}` has no straight quotes"))
-                .with_data(json!({ "block": block, "text": text, "changed": 0 })));
-        }
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        node.data["text"] = json!(smartened.clone());
-        Ok(Outcome::changed(format!("the paragraph `{block}` has its quotes made smart"))
-            .with_data(json!({ "block": block, "text": smartened, "changed": changed })))
     }
 }

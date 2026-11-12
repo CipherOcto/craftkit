@@ -20,10 +20,10 @@
 //! - a **heading** is a style whose name begins with `Heading`, and
 //!   the `Title` — the tree's rule for what a heading is.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Text};
 
 /// The **theme** of a document, as it is kept.
 pub fn theme_of(node: &Node) -> Json {
@@ -69,91 +69,101 @@ pub fn character_of_theme(document: &Document, style: u64) -> Json {
     Json::Object(character)
 }
 
-/// **Say** what the **theme** of a document is.
-///
-/// A part that is not named keeps what it was, and an **empty**
-/// colour takes the accent away.
-#[derive(Command)]
-#[command(id = "prose.document.theme", area = "prose", layer = "prose", icon = "paint", mutates, undoable)]
-pub struct SetTheme {
-    /// The document.
-    pub document: NodeRef,
-    /// The font of the headings.
+commands! {
+    /// **Say** what the **theme** of a document is.
     ///
-    /// It is not nothing, and an empty font is refused.
-    pub major: Option<Text>,
-    /// The font of the body.
-    pub minor: Option<Text>,
-    /// The accent colour of the headings, as `#rrggbb`.
-    ///
-    /// An empty colour takes the accent away.
-    pub accent: Option<Text>,
-}
+    /// A part that is not named keeps what it was, and an **empty**
+    /// colour takes the accent away.
+    prose.document.theme {
+        area: "prose",
+        layer: "prose",
+        icon: "paint",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-impl SetTheme {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.theme".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
-        }
-        let mut theme = theme_of(&node);
-        if let Some(major) = &self.major {
-            let major = major.0.trim();
-            if major.is_empty() {
+            document: NodeRef,
+            /// The font of the headings.
+            ///
+            /// It is not nothing, and an empty font is refused.
+
+            major: Option<Text>,
+            /// The font of the body.
+
+            minor: Option<Text>,
+            /// The accent colour of the headings, as `#rrggbb`.
+            ///
+            /// An empty colour takes the accent away.
+
+            accent: Option<Text>,
+        },
+        run: {
+
+            let id = "prose.document.theme".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document).cloned() else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: "a font is not nothing".to_string(),
+                    message: format!("there is no node `{document}`"),
                 });
-            }
-            theme["major"] = json!(major);
-        }
-        if let Some(minor) = &self.minor {
-            let minor = minor.0.trim();
-            if minor.is_empty() {
+            };
+            if node.kind != "prose.document" {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: "a font is not nothing".to_string(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
                 });
             }
-            theme["minor"] = json!(minor);
-        }
-        if let Some(accent) = &self.accent {
-            let accent = accent.0.trim();
-            if accent.is_empty() {
-                if let Some(map) = theme.as_object_mut() {
-                    map.remove("accent");
+            let mut theme = theme_of(&node);
+            if let Some(major) = &self.major {
+                let major = major.0.trim();
+                if major.is_empty() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a font is not nothing".to_string(),
+                    });
+                }
+                theme["major"] = json!(major);
+            }
+            if let Some(minor) = &self.minor {
+                let minor = minor.0.trim();
+                if minor.is_empty() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a font is not nothing".to_string(),
+                    });
+                }
+                theme["minor"] = json!(minor);
+            }
+            if let Some(accent) = &self.accent {
+                let accent = accent.0.trim();
+                if accent.is_empty() {
+                    if let Some(map) = theme.as_object_mut() {
+                        map.remove("accent");
+                    }
+                } else {
+                    if let Err(why) = craftkit_sdk::Colour::from_hex(accent) {
+                        return Err(EngineError::Failed { id: id.clone(), message: why });
+                    }
+                    theme["accent"] = json!(accent);
+                }
+            }
+            let Some(node) = session.document_mut()?.node_mut(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            if theme.as_object().map(|theme| theme.is_empty()).unwrap_or(true) {
+                if let Some(map) = node.data.as_object_mut() {
+                    map.remove("theme");
                 }
             } else {
-                if let Err(why) = craftkit_sdk::Colour::from_hex(accent) {
-                    return Err(EngineError::Failed { id: id.clone(), message: why });
-                }
-                theme["accent"] = json!(accent);
+                node.data["theme"] = theme.clone();
             }
+            Ok(Outcome::changed(format!("the theme of the document `{document}` is said"))
+                .with_data(json!({ "document": document, "theme": theme })))
+
         }
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        if theme.as_object().map(|theme| theme.is_empty()).unwrap_or(true) {
-            if let Some(map) = node.data.as_object_mut() {
-                map.remove("theme");
-            }
-        } else {
-            node.data["theme"] = theme.clone();
-        }
-        Ok(Outcome::changed(format!("the theme of the document `{document}` is said"))
-            .with_data(json!({ "document": document, "theme": theme })))
     }
 }

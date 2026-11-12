@@ -21,10 +21,10 @@
 //!   shorter. A run that covers no words after the change is dropped.
 //! - A paragraph with a **revision** in it is not touched.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Outcome};
 
 /// A **dash** to make: where its pair of hyphens is, and whether it is
 /// an en dash or an em dash.
@@ -103,55 +103,62 @@ fn rewritten(text: &str, runs: &[Json]) -> (String, Vec<Json>) {
     (out, new_runs)
 }
 
-/// **Make** the **dashes** of a paragraph typographic.
-///
-/// The pairs of hyphens become en dashes and em dashes, and the
-/// **runs** are rewritten with the text.
-#[derive(Command)]
-#[command(id = "prose.block.dashes", area = "prose", layer = "prose", icon = "pencil", mutates, undoable)]
-pub struct SetDashes {
-    /// The paragraph.
-    pub block: NodeRef,
-}
+commands! {
+    /// **Make** the **dashes** of a paragraph typographic.
+    ///
+    /// The pairs of hyphens become en dashes and em dashes, and the
+    /// **runs** are rewritten with the text.
+    prose.block.dashes {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The paragraph.
 
-impl SetDashes {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.dashes".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if node.kind != "prose.block.paragraph" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
-            });
-        }
-        // A paragraph with a **revision** in it is not touched.
-        let runs = node.data.get("runs").and_then(|runs| runs.as_array()).cloned().unwrap_or_default();
-        for run in &runs {
-            if run.get("revision").is_some() {
+            block: NodeRef,
+        },
+        run: {
+
+            let id = "prose.block.dashes".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the paragraph `{block}` holds a revision"),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if node.kind != "prose.block.paragraph" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
                 });
             }
+            // A paragraph with a **revision** in it is not touched.
+            let runs = node.data.get("runs").and_then(|runs| runs.as_array()).cloned().unwrap_or_default();
+            for run in &runs {
+                if run.get("revision").is_some() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the paragraph `{block}` holds a revision"),
+                    });
+                }
+            }
+            let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
+            let (text, runs) = rewritten(&text, &runs);
+            let changed = text.chars().filter(|character| *character == '–' || *character == '—').count();
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            node.data["text"] = json!(text.clone());
+            node.data["runs"] = Json::Array(runs.clone());
+            Ok(Outcome::changed(format!("the paragraph `{block}` has its dashes made"))
+                .with_data(json!({ "block": block, "text": text, "dashes": changed })))
+
         }
-        let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
-        let (text, runs) = rewritten(&text, &runs);
-        let changed = text.chars().filter(|character| *character == '–' || *character == '—').count();
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        node.data["text"] = json!(text.clone());
-        node.data["runs"] = Json::Array(runs.clone());
-        Ok(Outcome::changed(format!("the paragraph `{block}` has its dashes made"))
-            .with_data(json!({ "block": block, "text": text, "dashes": changed })))
     }
 }

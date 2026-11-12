@@ -22,10 +22,10 @@
 //! - A paragraph that holds a **revision** is not touched.
 //! - A **mode** that is not one of the tree's five is refused by name.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Outcome};
 
 /// The **modes** the tree changes the case by.
 pub const MODES: [&str; 5] = ["upper", "lower", "toggle", "title", "sentence"];
@@ -131,64 +131,72 @@ pub fn recased(
     (out, new_runs)
 }
 
-/// **Change** the **case** of the text of a paragraph.
-///
-/// The text is changed in the way the tree changes it, and the **runs**
-/// move with the text.
-#[derive(Command)]
-#[command(id = "prose.block.case", area = "prose", layer = "prose", icon = "pencil", mutates, undoable)]
-pub struct SetCase {
-    /// The paragraph.
-    pub block: NodeRef,
-    /// The way the case is changed: `upper`, `lower`, `toggle`, `title`
-    /// or `sentence`.
-    pub mode: craftkit_sdk::Text,
-}
+commands! {
+    /// **Change** the **case** of the text of a paragraph.
+    ///
+    /// The text is changed in the way the tree changes it, and the **runs**
+    /// move with the text.
+    prose.block.case {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The paragraph.
 
-impl SetCase {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.case".to_string();
-        let block = self.block.0;
-        let mode = self.mode.0.trim().to_lowercase();
-        if !MODES.contains(&mode.as_str()) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the mode `{mode}` is not one of the tree's"),
-            });
-        }
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if node.kind != "prose.block.paragraph" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
-            });
-        }
-        // A paragraph with a **revision** in it is not touched.
-        let runs = node.data.get("runs").and_then(|runs| runs.as_array()).cloned().unwrap_or_default();
-        for run in &runs {
-            if run.get("revision").is_some() {
+            block: NodeRef,
+            /// The way the case is changed: `upper`, `lower`, `toggle`, `title`
+            /// or `sentence`.
+
+            mode: craftkit_sdk::Text,
+        },
+        run: {
+
+            let id = "prose.block.case".to_string();
+            let block = self.block.0;
+            let mode = self.mode.0.trim().to_lowercase();
+            if !MODES.contains(&mode.as_str()) {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the paragraph `{block}` holds a revision"),
+                    message: format!("the mode `{mode}` is not one of the tree's"),
                 });
             }
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if node.kind != "prose.block.paragraph" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
+                });
+            }
+            // A paragraph with a **revision** in it is not touched.
+            let runs = node.data.get("runs").and_then(|runs| runs.as_array()).cloned().unwrap_or_default();
+            for run in &runs {
+                if run.get("revision").is_some() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the paragraph `{block}` holds a revision"),
+                    });
+                }
+            }
+            let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
+            let (text, runs) = recased(&text, &runs, &mode);
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            node.data["text"] = json!(text.clone());
+            node.data["runs"] = craftkit_sdk::serde_json::Value::Array(runs.clone());
+            Ok(Outcome::changed(format!("the paragraph `{block}` has its case changed"))
+                .with_data(json!({ "block": block, "mode": mode, "text": text })))
+
         }
-        let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
-        let (text, runs) = recased(&text, &runs, &mode);
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        node.data["text"] = json!(text.clone());
-        node.data["runs"] = craftkit_sdk::serde_json::Value::Array(runs.clone());
-        Ok(Outcome::changed(format!("the paragraph `{block}` has its case changed"))
-            .with_data(json!({ "block": block, "mode": mode, "text": text })))
     }
 }

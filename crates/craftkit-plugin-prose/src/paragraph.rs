@@ -21,10 +21,10 @@
 //! that says nothing about the indentation has the indentation of its
 //! base, and a style that says one has its own.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Text};
 
 use crate::styles::{chain_of, style_of_block};
 
@@ -75,210 +75,228 @@ pub fn alignment_of(text: &str) -> Option<&'static str> {
     }
 }
 
-/// **Set** the paragraph of a style.
-///
-/// The property that is said is set, and the property that is not said
-/// stays as it was.
-#[derive(Command)]
-#[command(id = "prose.style.paragraph", area = "prose", layer = "prose", icon = "pencil", mutates, undoable)]
-pub struct SetStyleParagraph {
-    /// The style.
-    pub style: NodeRef,
-    /// The **alignment** of the paragraph.
-    pub alignment: Option<Text>,
-    /// The room **above** the paragraph, in points.
-    pub space_before: Option<Number>,
-    /// The room **below** the paragraph, in points.
-    pub space_after: Option<Number>,
-    /// The **line spacing**, as a multiple of the line.
-    pub line_spacing: Option<Number>,
-    /// The **indent** of the paragraph, in points.
-    pub indent_left: Option<Number>,
-    /// The **indent** at the right of the paragraph, in points.
-    pub indent_right: Option<Number>,
-    /// The **indent of the first line**, in points. A negative one
-    /// hangs the line.
-    pub indent_first: Option<Number>,
-}
+commands! {
+    /// **Set** the paragraph of a style.
+    ///
+    /// The property that is said is set, and the property that is not said
+    /// stays as it was.
+    prose.style.paragraph {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The style.
 
-impl SetStyleParagraph {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.style.paragraph".to_string();
-        let style = self.style.0;
-        let Some(node) = session.document().node(style) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no style `{style}`"),
-            });
-        };
-        if node.kind != "prose.style" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{style}` is a `{}` and not a style", node.kind),
-            });
-        }
-        let mut paragraph = match paragraph_of(node).as_object().cloned() {
-            Some(map) => map,
-            None => craftkit_sdk::serde_json::Map::new(),
-        };
-        if let Some(alignment) = &self.alignment {
-            let Some(alignment) = alignment_of(&alignment.0) else {
+            style: NodeRef,
+            /// The **alignment** of the paragraph.
+
+            alignment: Option<Text>,
+            /// The room **above** the paragraph, in points.
+
+            space_before: Option<Number>,
+            /// The room **below** the paragraph, in points.
+
+            space_after: Option<Number>,
+            /// The **line spacing**, as a multiple of the line.
+
+            line_spacing: Option<Number>,
+            /// The **indent** of the paragraph, in points.
+
+            indent_left: Option<Number>,
+            /// The **indent** at the right of the paragraph, in points.
+
+            indent_right: Option<Number>,
+            /// The **indent of the first line**, in points. A negative one
+            /// hangs the line.
+
+            indent_first: Option<Number>,
+        },
+        run: {
+
+            let id = "prose.style.paragraph".to_string();
+            let style = self.style.0;
+            let Some(node) = session.document().node(style) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!(
-                        "`{}` is not an alignment: it is one of {}",
-                        alignment.0.trim(),
-                        ALIGNMENTS.join(", ")
-                    ),
+                    message: format!("there is no style `{style}`"),
                 });
             };
-            paragraph.insert("alignment".to_string(), Json::String(alignment.to_string()));
-        }
-        let room = |value: Number, what: &str, most: f64| -> Result<f64, EngineError> {
-            let value = value.0;
-            if !value.is_finite() || value < 0.0 || value > most {
+            if node.kind != "prose.style" {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("{value} is not {what}: it is a number from zero to {most}"),
+                    message: format!("the node `{style}` is a `{}` and not a style", node.kind),
                 });
             }
-            Ok(value)
-        };
-        if let Some(space) = &self.space_before {
-            let space = room(*space, "a space above a paragraph", MAX_SPACE)?;
-            paragraph.insert("space_before".to_string(), Json::from(space));
-        }
-        if let Some(space) = &self.space_after {
-            let space = room(*space, "a space below a paragraph", MAX_SPACE)?;
-            paragraph.insert("space_after".to_string(), Json::from(space));
-        }
-        if let Some(spacing) = &self.line_spacing {
-            let spacing = spacing.0;
-            if !spacing.is_finite() || spacing <= 0.0 || spacing > MAX_LINE_SPACING {
+            let mut paragraph = match paragraph_of(node).as_object().cloned() {
+                Some(map) => map,
+                None => craftkit_sdk::serde_json::Map::new(),
+            };
+            if let Some(alignment) = &self.alignment {
+                let Some(alignment) = alignment_of(&alignment.0) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "`{}` is not an alignment: it is one of {}",
+                            alignment.0.trim(),
+                            ALIGNMENTS.join(", ")
+                        ),
+                    });
+                };
+                paragraph.insert("alignment".to_string(), Json::String(alignment.to_string()));
+            }
+            let room = |value: Number, what: &str, most: f64| -> Result<f64, EngineError> {
+                let value = value.0;
+                if !value.is_finite() || value < 0.0 || value > most {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("{value} is not {what}: it is a number from zero to {most}"),
+                    });
+                }
+                Ok(value)
+            };
+            if let Some(space) = &self.space_before {
+                let space = room(*space, "a space above a paragraph", MAX_SPACE)?;
+                paragraph.insert("space_before".to_string(), Json::from(space));
+            }
+            if let Some(space) = &self.space_after {
+                let space = room(*space, "a space below a paragraph", MAX_SPACE)?;
+                paragraph.insert("space_after".to_string(), Json::from(space));
+            }
+            if let Some(spacing) = &self.line_spacing {
+                let spacing = spacing.0;
+                if !spacing.is_finite() || spacing <= 0.0 || spacing > MAX_LINE_SPACING {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "{spacing} is not a line spacing: it is a multiple of the line from zero to {MAX_LINE_SPACING}"
+                        ),
+                    });
+                }
+                paragraph.insert("line_spacing".to_string(), Json::from(spacing));
+            }
+            let indent = |value: Number, what: &str| -> Result<f64, EngineError> {
+                let value = value.0;
+                if !value.is_finite() || !(0.0..=MAX_INDENT).contains(&value) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("{value} is not {what}: it is a number from zero to {MAX_INDENT}"),
+                    });
+                }
+                Ok(value)
+            };
+            if let Some(value) = &self.indent_left {
+                let value = indent(*value, "an indent")?;
+                paragraph.insert("indent_left".to_string(), Json::from(value));
+            }
+            if let Some(value) = &self.indent_right {
+                let value = indent(*value, "an indent at the right")?;
+                paragraph.insert("indent_right".to_string(), Json::from(value));
+            }
+            if let Some(value) = &self.indent_first {
+                let value = value.0;
+                if !value.is_finite() || !(-MAX_INDENT..=MAX_INDENT).contains(&value) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "{value} is not an indent of the first line: it is a number from minus {MAX_INDENT} to {MAX_INDENT}"
+                        ),
+                    });
+                }
+                paragraph.insert("indent_first".to_string(), Json::from(value));
+            }
+            if paragraph.is_empty() {
                 return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "{spacing} is not a line spacing: it is a multiple of the line from zero to {MAX_LINE_SPACING}"
-                    ),
+                    id,
+                    message: "the command says nothing to change".to_string(),
                 });
             }
-            paragraph.insert("line_spacing".to_string(), Json::from(spacing));
-        }
-        let indent = |value: Number, what: &str| -> Result<f64, EngineError> {
-            let value = value.0;
-            if !value.is_finite() || !(0.0..=MAX_INDENT).contains(&value) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("{value} is not {what}: it is a number from zero to {MAX_INDENT}"),
-                });
+            if let Some(node) = session.document_mut()?.node_mut(style) {
+                node.data["paragraph"] = Json::Object(paragraph);
             }
-            Ok(value)
-        };
-        if let Some(value) = &self.indent_left {
-            let value = indent(*value, "an indent")?;
-            paragraph.insert("indent_left".to_string(), Json::from(value));
+            Ok(Outcome::changed(format!("the paragraph of the style `{style}` is set"))
+                .with_data(json!({ "style": style })))
+
         }
-        if let Some(value) = &self.indent_right {
-            let value = indent(*value, "an indent at the right")?;
-            paragraph.insert("indent_right".to_string(), Json::from(value));
-        }
-        if let Some(value) = &self.indent_first {
-            let value = value.0;
-            if !value.is_finite() || !(-MAX_INDENT..=MAX_INDENT).contains(&value) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "{value} is not an indent of the first line: it is a number from minus {MAX_INDENT} to {MAX_INDENT}"
-                    ),
-                });
-            }
-            paragraph.insert("indent_first".to_string(), Json::from(value));
-        }
-        if paragraph.is_empty() {
-            return Err(EngineError::Failed {
-                id,
-                message: "the command says nothing to change".to_string(),
-            });
-        }
-        if let Some(node) = session.document_mut()?.node_mut(style) {
-            node.data["paragraph"] = Json::Object(paragraph);
-        }
-        Ok(Outcome::changed(format!("the paragraph of the style `{style}` is set"))
-            .with_data(json!({ "style": style })))
     }
-}
+    /// **Read** the paragraph of a style, with the paragraph of its base
+    /// under it.
+    prose.style.paragraph.read {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The style.
 
-/// **Read** the paragraph of a style, with the paragraph of its base
-/// under it.
-#[derive(Command)]
-#[command(id = "prose.style.paragraph.read", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadStyleParagraph {
-    /// The style.
-    pub style: NodeRef,
-}
+            style: NodeRef,
+        },
+        run: {
 
-impl ReadStyleParagraph {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.style.paragraph.read".to_string();
-        let style = self.style.0;
-        let Some(node) = session.document().node(style) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no style `{style}`"),
-            });
-        };
-        if node.kind != "prose.style" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{style}` is a `{}` and not a style", node.kind),
-            });
+            let id = "prose.style.paragraph.read".to_string();
+            let style = self.style.0;
+            let Some(node) = session.document().node(style) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no style `{style}`"),
+                });
+            };
+            if node.kind != "prose.style" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{style}` is a `{}` and not a style", node.kind),
+                });
+            }
+            let paragraph = effective_paragraph(session.document(), style);
+            Ok(Outcome::new(format!("the style `{style}` has a paragraph")).with_data(json!({
+                "style": style,
+                "paragraph": paragraph,
+                "chain": chain_of(session.document(), style),
+            })))
+
         }
-        let paragraph = effective_paragraph(session.document(), style);
-        Ok(Outcome::new(format!("the style `{style}` has a paragraph")).with_data(json!({
-            "style": style,
-            "paragraph": paragraph,
-            "chain": chain_of(session.document(), style),
-        })))
     }
-}
+    /// **Read** the paragraph of a block: the paragraph of the style it is
+    /// on.
+    prose.block.paragraph {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The block.
 
-/// **Read** the paragraph of a block: the paragraph of the style it is
-/// on.
-#[derive(Command)]
-#[command(id = "prose.block.paragraph", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadBlockParagraph {
-    /// The block.
-    pub block: NodeRef,
-}
+            block: NodeRef,
+        },
+        run: {
 
-impl ReadBlockParagraph {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.paragraph".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        if !node.kind.starts_with("prose.block.") {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
-        }
-        let Some(style) = style_of_block(session.document(), block) else {
-            return Ok(Outcome::new(format!("the block `{block}` is on no style")).with_data(json!({
+            let id = "prose.block.paragraph".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            if !node.kind.starts_with("prose.block.") {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
+                });
+            }
+            let Some(style) = style_of_block(session.document(), block) else {
+                return Ok(Outcome::new(format!("the block `{block}` is on no style")).with_data(json!({
+                    "block": block,
+                    "style": Json::Null,
+                    "paragraph": Json::Object(craftkit_sdk::serde_json::Map::new()),
+                })));
+            };
+            let paragraph = effective_paragraph(session.document(), style.id);
+            Ok(Outcome::new(format!("the block `{block}` is on the style `{}`", style.name)).with_data(json!({
                 "block": block,
-                "style": Json::Null,
-                "paragraph": Json::Object(craftkit_sdk::serde_json::Map::new()),
-            })));
-        };
-        let paragraph = effective_paragraph(session.document(), style.id);
-        Ok(Outcome::new(format!("the block `{block}` is on the style `{}`", style.name)).with_data(json!({
-            "block": block,
-            "style": style.id,
-            "paragraph": paragraph,
-        })))
+                "style": style.id,
+                "paragraph": paragraph,
+            })))
+
+        }
     }
 }

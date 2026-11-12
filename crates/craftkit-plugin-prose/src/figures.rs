@@ -34,10 +34,10 @@
 //!   tab leader and a right-aligned page number. There is no layout
 //!   here, and so there is no page to show.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Text};
 
 /// The longest **label** of a table of figures: the tree's.
 pub const MAX_LABEL: usize = 40;
@@ -115,51 +115,58 @@ pub fn entries_of(
     entries
 }
 
-/// **Read** the **table of figures** of a document: the captions that
-/// carry one label.
-#[derive(Command)]
-#[command(id = "prose.document.figures", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadFigures {
-    /// The document.
-    pub document: NodeRef,
-    /// The label of the captions: `Figure` when it is not given.
-    pub label: Option<Text>,
-    /// Whether the entries carry the label: yes, unless it is said
-    /// no.
-    pub include_label: Option<Bool>,
-}
+commands! {
+    /// **Read** the **table of figures** of a document: the captions that
+    /// carry one label.
+    prose.document.figures {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document.
 
-impl ReadFigures {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.figures".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
+            document: NodeRef,
+            /// The label of the captions: `Figure` when it is not given.
+
+            label: Option<Text>,
+            /// Whether the entries carry the label: yes, unless it is said
+            /// no.
+
+            include_label: Option<Bool>,
+        },
+        run: {
+
+            let id = "prose.document.figures".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{document}`"),
+                });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
+            }
+            // The **label** of the table, and its **identifier**: the
+            // tree's own.
+            let label = self.label.as_ref().map(|label| label.0.as_str()).unwrap_or(DEFAULT_LABEL);
+            let ident = ident_of(label);
+            let include_label = self.include_label.map(|flag| flag.0).unwrap_or(true);
+            let entries = entries_of(session.document(), document, &ident, include_label);
+            Ok(Outcome::new(format!(
+                "the table of figures `{ident}` of the document `{document}` has {} entries",
+                entries.len()
+            ))
+            .with_data(json!({
+                "document": document,
+                "label": ident,
+                "includeLabel": include_label,
+                "entries": entries,
+            })))
+
         }
-        // The **label** of the table, and its **identifier**: the
-        // tree's own.
-        let label = self.label.as_ref().map(|label| label.0.as_str()).unwrap_or(DEFAULT_LABEL);
-        let ident = ident_of(label);
-        let include_label = self.include_label.map(|flag| flag.0).unwrap_or(true);
-        let entries = entries_of(session.document(), document, &ident, include_label);
-        Ok(Outcome::new(format!(
-            "the table of figures `{ident}` of the document `{document}` has {} entries",
-            entries.len()
-        ))
-        .with_data(json!({
-            "document": document,
-            "label": ident,
-            "includeLabel": include_label,
-            "entries": entries,
-        })))
     }
 }

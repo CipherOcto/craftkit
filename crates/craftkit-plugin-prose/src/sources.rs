@@ -34,7 +34,7 @@
 //!   cited, in the order they are first cited, and it cannot be out
 //!   of date.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -190,104 +190,149 @@ fn the_document(session: &Session, command: &str, document: u64) -> Result<(), E
     Ok(())
 }
 
-/// **Say** what a **source** is.
-///
-/// A source whose tag is not there yet is **added**, and a source
-/// whose tag is there is **changed**: the parts that are named change
-/// and the parts that are not named keep what they were.
-#[derive(Command)]
-#[command(id = "prose.document.source.set", area = "prose", layer = "prose", icon = "tag", mutates, undoable)]
-pub struct SetSource {
-    /// The document.
-    pub document: NodeRef,
-    /// The tag that names the source.
+commands! {
+    /// **Say** what a **source** is.
     ///
-    /// A source that is not named by a tag is given one.
-    pub tag: Option<Text>,
-    /// The kind of the source.
-    pub kind: Option<Text>,
-    /// Who wrote it.
-    pub author: Option<Text>,
-    /// What it is called.
-    pub title: Option<Text>,
-    /// When it was made.
-    pub year: Option<Text>,
-    /// Who published it.
-    pub publisher: Option<Text>,
-    /// Where it was made.
-    pub city: Option<Text>,
-    /// The journal it is in.
-    pub journal: Option<Text>,
-    /// The volume of the journal it is in.
-    pub volume: Option<Text>,
-    /// The pages of it.
-    pub pages: Option<Text>,
-    /// Where it may be found.
-    pub url: Option<Text>,
-}
+    /// A source whose tag is not there yet is **added**, and a source
+    /// whose tag is there is **changed**: the parts that are named change
+    /// and the parts that are not named keep what they were.
+    prose.document.source.set {
+        area: "prose",
+        layer: "prose",
+        icon: "tag",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-impl SetSource {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.source.set".to_string();
-        let document = self.document.0;
-        the_document(session, &id, document)?;
-        let Some(node) = session.document().node(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
+            document: NodeRef,
+            /// The tag that names the source.
+            ///
+            /// A source that is not named by a tag is given one.
+
+            tag: Option<Text>,
+            /// The kind of the source.
+
+            kind: Option<Text>,
+            /// Who wrote it.
+
+            author: Option<Text>,
+            /// What it is called.
+
+            title: Option<Text>,
+            /// When it was made.
+
+            year: Option<Text>,
+            /// Who published it.
+
+            publisher: Option<Text>,
+            /// Where it was made.
+
+            city: Option<Text>,
+            /// The journal it is in.
+
+            journal: Option<Text>,
+            /// The volume of the journal it is in.
+
+            volume: Option<Text>,
+            /// The pages of it.
+
+            pages: Option<Text>,
+            /// Where it may be found.
+
+            url: Option<Text>,
+        },
+        run: {
+
+            let id = "prose.document.source.set".to_string();
+            let document = self.document.0;
+            the_document(session, &id, document)?;
+            let Some(node) = session.document().node(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            let mut sources = sources_of(node);
+            let kind = match &self.kind {
+                Some(kind) => Some(kind_of(&kind.0, &id)?),
+                None => None,
+            };
+            let author = match &self.author {
+                Some(author) => {
+                    let author = author.0.trim();
+                    if author.chars().count() > MAX_AUTHOR {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("an author is at most {MAX_AUTHOR} characters long"),
+                        });
+                    }
+                    Some(author.to_string())
+                }
+                None => None,
+            };
+            let year = match &self.year {
+                Some(year) => {
+                    let year = year.0.trim();
+                    if year.chars().count() > MAX_YEAR {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("a year is at most {MAX_YEAR} characters long"),
+                        });
+                    }
+                    Some(year.to_string())
+                }
+                None => None,
+            };
+            // The **source** that is there, if it is there.
+            let tag = match &self.tag {
+                Some(tag) => Some(tag_of(&tag.0, &id)?),
+                None => None,
+            };
+            let held = tag.as_ref().and_then(|tag| {
+                sources
+                    .iter()
+                    .position(|source| source.get("tag").and_then(|held| held.as_str()) == Some(tag.as_str()))
             });
-        };
-        let mut sources = sources_of(node);
-        let kind = match &self.kind {
-            Some(kind) => Some(kind_of(&kind.0, &id)?),
-            None => None,
-        };
-        let author = match &self.author {
-            Some(author) => {
-                let author = author.0.trim();
-                if author.chars().count() > MAX_AUTHOR {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("an author is at most {MAX_AUTHOR} characters long"),
-                    });
+            let mut source = match held {
+                Some(at) => sources[at].clone(),
+                None => {
+                    // A **new** source needs a title, and a tag.
+                    let Some(title) = &self.title else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "a source has a title".to_string(),
+                        });
+                    };
+                    let title = title.0.trim();
+                    if title.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "a source has a title".to_string(),
+                        });
+                    }
+                    let tag = match tag {
+                        Some(tag) => tag,
+                        None => {
+                            made_tag(&sources, author.as_deref().unwrap_or(""), year.as_deref().unwrap_or(""))
+                        }
+                    };
+                    json!({
+                        "tag": tag,
+                        "kind": "book",
+                        "author": "",
+                        "title": title,
+                        "year": "",
+                    })
                 }
-                Some(author.to_string())
+            };
+            if let Some(kind) = kind {
+                source["kind"] = json!(kind);
             }
-            None => None,
-        };
-        let year = match &self.year {
-            Some(year) => {
-                let year = year.0.trim();
-                if year.chars().count() > MAX_YEAR {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("a year is at most {MAX_YEAR} characters long"),
-                    });
-                }
-                Some(year.to_string())
+            if let Some(author) = author {
+                source["author"] = json!(author);
             }
-            None => None,
-        };
-        // The **source** that is there, if it is there.
-        let tag = match &self.tag {
-            Some(tag) => Some(tag_of(&tag.0, &id)?),
-            None => None,
-        };
-        let held = tag.as_ref().and_then(|tag| {
-            sources
-                .iter()
-                .position(|source| source.get("tag").and_then(|held| held.as_str()) == Some(tag.as_str()))
-        });
-        let mut source = match held {
-            Some(at) => sources[at].clone(),
-            None => {
-                // A **new** source needs a title, and a tag.
-                let Some(title) = &self.title else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: "a source has a title".to_string(),
-                    });
-                };
+            if let Some(title) = &self.title {
                 let title = title.0.trim();
                 if title.is_empty() {
                     return Err(EngineError::Failed {
@@ -295,196 +340,171 @@ impl SetSource {
                         message: "a source has a title".to_string(),
                     });
                 }
-                let tag = match tag {
-                    Some(tag) => tag,
-                    None => {
-                        made_tag(&sources, author.as_deref().unwrap_or(""), year.as_deref().unwrap_or(""))
-                    }
-                };
-                json!({
-                    "tag": tag,
-                    "kind": "book",
-                    "author": "",
-                    "title": title,
-                    "year": "",
-                })
+                source["title"] = json!(title);
             }
-        };
-        if let Some(kind) = kind {
-            source["kind"] = json!(kind);
-        }
-        if let Some(author) = author {
-            source["author"] = json!(author);
-        }
-        if let Some(title) = &self.title {
-            let title = title.0.trim();
-            if title.is_empty() {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "a source has a title".to_string(),
-                });
+            if let Some(year) = year {
+                source["year"] = json!(year);
             }
-            source["title"] = json!(title);
-        }
-        if let Some(year) = year {
-            source["year"] = json!(year);
-        }
-        // The **parts** the tree's entries are written from. A part
-        // that is not said keeps what it was, and a part that is said
-        // empty is not there.
-        for (key, part) in [
-            ("publisher", &self.publisher),
-            ("city", &self.city),
-            ("journal", &self.journal),
-            ("volume", &self.volume),
-            ("pages", &self.pages),
-            ("url", &self.url),
-        ] {
-            let Some(part) = part else { continue };
-            let part = part.0.trim();
-            if part.chars().count() > MAX_PART {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the {key} of a source is at most {MAX_PART} characters long"),
-                });
-            }
-            if part.is_empty() {
-                if let Json::Object(map) = &mut source {
-                    map.remove(key);
+            // The **parts** the tree's entries are written from. A part
+            // that is not said keeps what it was, and a part that is said
+            // empty is not there.
+            for (key, part) in [
+                ("publisher", &self.publisher),
+                ("city", &self.city),
+                ("journal", &self.journal),
+                ("volume", &self.volume),
+                ("pages", &self.pages),
+                ("url", &self.url),
+            ] {
+                let Some(part) = part else { continue };
+                let part = part.0.trim();
+                if part.chars().count() > MAX_PART {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the {key} of a source is at most {MAX_PART} characters long"),
+                    });
                 }
-                continue;
+                if part.is_empty() {
+                    if let Json::Object(map) = &mut source {
+                        map.remove(key);
+                    }
+                    continue;
+                }
+                source[key] = json!(part);
             }
-            source[key] = json!(part);
+            let tag = source.get("tag").and_then(|tag| tag.as_str()).unwrap_or_default().to_string();
+            match held {
+                Some(at) => sources[at] = source.clone(),
+                None => sources.push(source.clone()),
+            }
+            let Some(node) = session.document_mut()?.node_mut(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            node.data["sources"] = Json::Array(sources);
+            Ok(Outcome::changed(format!("the source `{tag}` of the document `{document}` is said"))
+                .with_data(json!({ "document": document, "source": source })))
+
         }
-        let tag = source.get("tag").and_then(|tag| tag.as_str()).unwrap_or_default().to_string();
-        match held {
-            Some(at) => sources[at] = source.clone(),
-            None => sources.push(source.clone()),
+    }
+    /// **Take away** a **source** of a document.
+    prose.document.source.remove {
+        area: "prose",
+        layer: "prose",
+        icon: "trash",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
+
+            document: NodeRef,
+            /// The tag that names the source.
+
+            tag: Text,
+        },
+        run: {
+
+            let id = "prose.document.source.remove".to_string();
+            let document = self.document.0;
+            the_document(session, &id, document)?;
+            let tag = tag_of(&self.tag.0, &id)?;
+            let Some(node) = session.document().node(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            let mut sources = sources_of(node);
+            let before = sources.len();
+            sources.retain(|source| {
+                source.get("tag").and_then(|held| held.as_str()).map(|held| held != tag).unwrap_or(true)
+            });
+            if sources.len() == before {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no source with the tag `{tag}`"),
+                });
+            }
+            let Some(node) = session.document_mut()?.node_mut(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            node.data["sources"] = Json::Array(sources);
+            Ok(Outcome::changed(format!("the source `{tag}` of the document `{document}` is taken away"))
+                .with_data(json!({ "document": document, "tag": tag })))
+
         }
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        node.data["sources"] = Json::Array(sources);
-        Ok(Outcome::changed(format!("the source `{tag}` of the document `{document}` is said"))
-            .with_data(json!({ "document": document, "source": source })))
     }
-}
+    /// **Read** the **sources** of a document.
+    prose.document.source.read {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document.
 
-/// **Take away** a **source** of a document.
-#[derive(Command)]
-#[command(
-    id = "prose.document.source.remove",
-    area = "prose",
-    layer = "prose",
-    icon = "trash",
-    mutates,
-    undoable
-)]
-pub struct RemoveSource {
-    /// The document.
-    pub document: NodeRef,
-    /// The tag that names the source.
-    pub tag: Text,
-}
+            document: NodeRef,
+        },
+        run: {
 
-impl RemoveSource {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.source.remove".to_string();
-        let document = self.document.0;
-        the_document(session, &id, document)?;
-        let tag = tag_of(&self.tag.0, &id)?;
-        let Some(node) = session.document().node(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        let mut sources = sources_of(node);
-        let before = sources.len();
-        sources.retain(|source| {
-            source.get("tag").and_then(|held| held.as_str()).map(|held| held != tag).unwrap_or(true)
-        });
-        if sources.len() == before {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no source with the tag `{tag}`"),
-            });
+            let id = "prose.document.source.read".to_string();
+            let document = self.document.0;
+            the_document(session, &id, document)?;
+            let sources = session.document().node(document).map(sources_of).unwrap_or_default();
+            Ok(Outcome::new(format!("the document `{document}` has {} sources", sources.len()))
+                .with_data(json!({ "document": document, "sources": sources })))
+
         }
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        node.data["sources"] = Json::Array(sources);
-        Ok(Outcome::changed(format!("the source `{tag}` of the document `{document}` is taken away"))
-            .with_data(json!({ "document": document, "tag": tag })))
     }
-}
+    /// **Read** the **bibliography** of a document: the sources that are
+    /// cited, written in the style of the document.
+    ///
+    /// The bibliography is **derived**: it is worked out from the sources,
+    /// the citations and the style every time it is asked for, so it
+    /// cannot be out of date. The **order** is the order the style asks
+    /// for — by the author, by the title, or in the order the sources are
+    /// cited — and every source that is not cited is left out.
+    prose.document.bibliography {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document.
 
-/// **Read** the **sources** of a document.
-#[derive(Command)]
-#[command(id = "prose.document.source.read", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadSources {
-    /// The document.
-    pub document: NodeRef,
-}
+            document: NodeRef,
+        },
+        run: {
 
-impl ReadSources {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.source.read".to_string();
-        let document = self.document.0;
-        the_document(session, &id, document)?;
-        let sources = session.document().node(document).map(sources_of).unwrap_or_default();
-        Ok(Outcome::new(format!("the document `{document}` has {} sources", sources.len()))
-            .with_data(json!({ "document": document, "sources": sources })))
-    }
-}
+            let id = "prose.document.bibliography".to_string();
+            let document = self.document.0;
+            the_document(session, &id, document)?;
+            let sources = session.document().node(document).map(sources_of).unwrap_or_default();
+            let cited = cited_of(session, document);
+            let style = session
+                .document()
+                .node(document)
+                .map(crate::citestyles::style_of)
+                .unwrap_or(&crate::citestyles::STYLES[0]);
+            let bibliography = crate::citestyles::order_of(&sources, &cited, style.order);
+            let entries: Vec<String> = bibliography
+                .iter()
+                .enumerate()
+                .map(|(at, source)| crate::citestyles::entry_of(source, style, at + 1))
+                .collect();
+            Ok(Outcome::new(format!("the document `{document}` cites {} sources", bibliography.len())).with_data(
+                json!({
+                    "document": document,
+                    "style": style.name,
+                    "title": style.bib_title,
+                    "entries": entries,
+                    "bibliography": bibliography,
+                }),
+            ))
 
-/// **Read** the **bibliography** of a document: the sources that are
-/// cited, written in the style of the document.
-///
-/// The bibliography is **derived**: it is worked out from the sources,
-/// the citations and the style every time it is asked for, so it
-/// cannot be out of date. The **order** is the order the style asks
-/// for — by the author, by the title, or in the order the sources are
-/// cited — and every source that is not cited is left out.
-#[derive(Command)]
-#[command(id = "prose.document.bibliography", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadBibliography {
-    /// The document.
-    pub document: NodeRef,
-}
-
-impl ReadBibliography {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.bibliography".to_string();
-        let document = self.document.0;
-        the_document(session, &id, document)?;
-        let sources = session.document().node(document).map(sources_of).unwrap_or_default();
-        let cited = cited_of(session, document);
-        let style = session
-            .document()
-            .node(document)
-            .map(crate::citestyles::style_of)
-            .unwrap_or(&crate::citestyles::STYLES[0]);
-        let bibliography = crate::citestyles::order_of(&sources, &cited, style.order);
-        let entries: Vec<String> = bibliography
-            .iter()
-            .enumerate()
-            .map(|(at, source)| crate::citestyles::entry_of(source, style, at + 1))
-            .collect();
-        Ok(Outcome::new(format!("the document `{document}` cites {} sources", bibliography.len())).with_data(
-            json!({
-                "document": document,
-                "style": style.name,
-                "title": style.bib_title,
-                "entries": entries,
-                "bibliography": bibliography,
-            }),
-        ))
+        }
     }
 }

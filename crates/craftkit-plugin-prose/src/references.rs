@@ -36,10 +36,10 @@
 //!   name**, and so is a way of showing a reference that is not one of
 //!   the tree's two.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Text};
 
 /// The **kind** of the edge that says a block references another.
 pub const REFERENCES: &str = "prose.references";
@@ -197,249 +197,254 @@ fn captioned(document: &craftkit_sdk::Document, parent: u64, label: &str, target
     caption.get("block").and_then(|block| block.as_u64())
 }
 
-/// **Add** a cross-reference to a document.
-///
-/// The reference is a block that stands for the text of the block that
-/// carries the bookmark, and its text is derived from that block.
-#[derive(Command)]
-#[command(
-    id = "prose.block.reference.add",
-    area = "prose",
-    layer = "prose",
-    icon = "plus",
-    mutates,
-    undoable
-)]
-pub struct AddReference {
-    /// The document it goes in.
-    pub document: NodeRef,
-    /// The **bookmark** it points at — or the **number** or the
-    /// **text** of the caption it points at.
-    pub target: Text,
-    /// What it points at.
+commands! {
+    /// **Add** a cross-reference to a document.
     ///
-    /// `bookmark` — the default — `figure`, `table`, `equation`, or
-    /// `label:<Name>` for a label of the person's own.
-    pub to: Option<Text>,
-    /// How it shows what it points at.
-    ///
-    /// `text` — the default — or `number`.
-    pub show: Option<Text>,
-}
+    /// The reference is a block that stands for the text of the block that
+    /// carries the bookmark, and its text is derived from that block.
+    prose.block.reference.add {
+        area: "prose",
+        layer: "prose",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The document it goes in.
 
-impl AddReference {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.reference.add".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
-        }
-        let name = self.target.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a reference points at a bookmark, and a bookmark has a name".to_string(),
-            });
-        }
-        let to = self.to.as_ref().map(|to| to.0.trim().to_string()).unwrap_or_default();
-        let label = label_of(&to, &id)?;
-        let show = show_of(self.show.as_ref().map(|show| show.0.trim().to_string()), &id)?;
-        let (target, payload) = match &label {
-            None => {
-                if show == "number" {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: "a bookmark has no number, and only a caption has one".to_string(),
-                    });
+            document: NodeRef,
+            /// The **bookmark** it points at — or the **number** or the
+            /// **text** of the caption it points at.
+
+            target: Text,
+            /// What it points at.
+            ///
+            /// `bookmark` — the default — `figure`, `table`, `equation`, or
+            /// `label:<Name>` for a label of the person's own.
+
+            to: Option<Text>,
+            /// How it shows what it points at.
+            ///
+            /// `text` — the default — or `number`.
+
+            show: Option<Text>,
+        },
+        run: {
+
+            let id = "prose.block.reference.add".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
+            }
+            let name = self.target.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a reference points at a bookmark, and a bookmark has a name".to_string(),
+                });
+            }
+            let to = self.to.as_ref().map(|to| to.0.trim().to_string()).unwrap_or_default();
+            let label = label_of(&to, &id)?;
+            let show = show_of(self.show.as_ref().map(|show| show.0.trim().to_string()), &id)?;
+            let (target, payload) = match &label {
+                None => {
+                    if show == "number" {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "a bookmark has no number, and only a caption has one".to_string(),
+                        });
+                    }
+                    let Some(target) = bookmarked(session.document(), document, &name) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("there is no bookmark `{name}` in the document"),
+                        });
+                    };
+                    (target, json!({ "bookmark": name.clone() }))
                 }
-                let Some(target) = bookmarked(session.document(), document, &name) else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("there is no bookmark `{name}` in the document"),
-                    });
-                };
-                (target, json!({ "bookmark": name.clone() }))
-            }
-            Some(label) => {
-                let Some(target) = captioned(session.document(), document, label, &name) else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("there is no caption of the label `{label}` that is `{name}`"),
-                    });
-                };
-                (target, json!({ "caption": name.clone(), "label": label.clone() }))
-            }
-        };
-        let block = session.document_mut()?.add_node_with_under(
-            Some(document),
-            name.clone(),
-            REFERENCE_KIND,
-            None,
-            json!({ "target": name.clone(), "to": to, "show": show }),
-        );
-        session
-            .document_mut()?
-            .add_relation(craftkit_sdk::Relation::with_payload(block, target, REFERENCES, payload));
-        Ok(Outcome::changed(format!("the document references `{name}`"))
-            .with_data(json!({ "block": block, "target": target, "bookmark": name })))
-    }
-}
-
-/// **Point** a cross-reference at another bookmark.
-///
-/// The text of the reference changes with the block it points at, and
-/// the text it had is gone: a reference is never out of date.
-#[derive(Command)]
-#[command(
-    id = "prose.block.reference.set",
-    area = "prose",
-    layer = "prose",
-    icon = "pencil",
-    mutates,
-    undoable
-)]
-pub struct SetReference {
-    /// The reference.
-    pub block: NodeRef,
-    /// The **bookmark** it points at — or the **number** or the
-    /// **text** of the caption it points at.
-    pub target: Text,
-    /// What it points at.
-    ///
-    /// `bookmark` — the default — `figure`, `table`, `equation`, or
-    /// `label:<Name>` for a label of the person's own.
-    pub to: Option<Text>,
-    /// How it shows what it points at.
-    ///
-    /// `text` — the default — or `number`.
-    pub show: Option<Text>,
-}
-
-impl SetReference {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.reference.set".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        if node.kind != REFERENCE_KIND {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a reference", node.kind),
-            });
-        }
-        let name = self.target.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a reference points at a bookmark, and a bookmark has a name".to_string(),
-            });
-        }
-        // The **document** the reference is in.
-        let document = session
-            .document()
-            .walk()
-            .find(|node| node.kind == "prose.document" && node.children.iter().any(|child| child.id == block))
-            .map(|node| node.id);
-        let Some(document) = document else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the reference `{block}` is in no document"),
-            });
-        };
-        let to = self.to.as_ref().map(|to| to.0.trim().to_string()).unwrap_or_default();
-        let label = label_of(&to, &id)?;
-        let show = show_of(self.show.as_ref().map(|show| show.0.trim().to_string()), &id)?;
-        let (target, payload) = match &label {
-            None => {
-                if show == "number" {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: "a bookmark has no number, and only a caption has one".to_string(),
-                    });
+                Some(label) => {
+                    let Some(target) = captioned(session.document(), document, label, &name) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("there is no caption of the label `{label}` that is `{name}`"),
+                        });
+                    };
+                    (target, json!({ "caption": name.clone(), "label": label.clone() }))
                 }
-                let Some(target) = bookmarked(session.document(), document, &name) else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("there is no bookmark `{name}` in the document"),
-                    });
-                };
-                (target, json!({ "bookmark": name.clone() }))
-            }
-            Some(label) => {
-                let Some(target) = captioned(session.document(), document, label, &name) else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("there is no caption of the label `{label}` that is `{name}`"),
-                    });
-                };
-                (target, json!({ "caption": name.clone(), "label": label.clone() }))
-            }
-        };
-        session
-            .document_mut()?
-            .remove_relations(|relation| relation.kind == REFERENCES && relation.from == block);
-        if let Some(node) = session.document_mut()?.node_mut(block) {
-            node.data["target"] = json!(name.clone());
-            node.data["to"] = json!(to);
-            node.data["show"] = json!(show);
+            };
+            let block = session.document_mut()?.add_node_with_under(
+                Some(document),
+                name.clone(),
+                REFERENCE_KIND,
+                None,
+                json!({ "target": name.clone(), "to": to, "show": show }),
+            );
+            session
+                .document_mut()?
+                .add_relation(craftkit_sdk::Relation::with_payload(block, target, REFERENCES, payload));
+            Ok(Outcome::changed(format!("the document references `{name}`"))
+                .with_data(json!({ "block": block, "target": target, "bookmark": name })))
+
         }
-        session
-            .document_mut()?
-            .add_relation(craftkit_sdk::Relation::with_payload(block, target, REFERENCES, payload));
-        Ok(Outcome::changed(format!("the reference points at `{name}`"))
-            .with_data(json!({ "block": block, "target": target, "bookmark": name })))
     }
-}
+    /// **Point** a cross-reference at another bookmark.
+    ///
+    /// The text of the reference changes with the block it points at, and
+    /// the text it had is gone: a reference is never out of date.
+    prose.block.reference.set {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The reference.
 
-/// **Read** the text of a block: the text it shows, which for a
-/// reference is the text of the block it points at.
-#[derive(Command)]
-#[command(id = "prose.block.reference.read", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadReference {
-    /// The block.
-    pub block: NodeRef,
-}
+            block: NodeRef,
+            /// The **bookmark** it points at — or the **number** or the
+            /// **text** of the caption it points at.
 
-impl ReadReference {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.reference.read".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        if !node.kind.starts_with("prose.block.") {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
+            target: Text,
+            /// What it points at.
+            ///
+            /// `bookmark` — the default — `figure`, `table`, `equation`, or
+            /// `label:<Name>` for a label of the person's own.
+
+            to: Option<Text>,
+            /// How it shows what it points at.
+            ///
+            /// `text` — the default — or `number`.
+
+            show: Option<Text>,
+        },
+        run: {
+
+            let id = "prose.block.reference.set".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            if node.kind != REFERENCE_KIND {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a reference", node.kind),
+                });
+            }
+            let name = self.target.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a reference points at a bookmark, and a bookmark has a name".to_string(),
+                });
+            }
+            // The **document** the reference is in.
+            let document = session
+                .document()
+                .walk()
+                .find(|node| node.kind == "prose.document" && node.children.iter().any(|child| child.id == block))
+                .map(|node| node.id);
+            let Some(document) = document else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the reference `{block}` is in no document"),
+                });
+            };
+            let to = self.to.as_ref().map(|to| to.0.trim().to_string()).unwrap_or_default();
+            let label = label_of(&to, &id)?;
+            let show = show_of(self.show.as_ref().map(|show| show.0.trim().to_string()), &id)?;
+            let (target, payload) = match &label {
+                None => {
+                    if show == "number" {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "a bookmark has no number, and only a caption has one".to_string(),
+                        });
+                    }
+                    let Some(target) = bookmarked(session.document(), document, &name) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("there is no bookmark `{name}` in the document"),
+                        });
+                    };
+                    (target, json!({ "bookmark": name.clone() }))
+                }
+                Some(label) => {
+                    let Some(target) = captioned(session.document(), document, label, &name) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("there is no caption of the label `{label}` that is `{name}`"),
+                        });
+                    };
+                    (target, json!({ "caption": name.clone(), "label": label.clone() }))
+                }
+            };
+            session
+                .document_mut()?
+                .remove_relations(|relation| relation.kind == REFERENCES && relation.from == block);
+            if let Some(node) = session.document_mut()?.node_mut(block) {
+                node.data["target"] = json!(name.clone());
+                node.data["to"] = json!(to);
+                node.data["show"] = json!(show);
+            }
+            session
+                .document_mut()?
+                .add_relation(craftkit_sdk::Relation::with_payload(block, target, REFERENCES, payload));
+            Ok(Outcome::changed(format!("the reference points at `{name}`"))
+                .with_data(json!({ "block": block, "target": target, "bookmark": name })))
+
         }
-        let document = session.document();
-        let text = text_of(document, &node);
-        let target = target_of(document, block);
-        Ok(Outcome::new(format!("the block `{block}` has a text")).with_data(json!({
-            "block": block,
-            "kind": node.kind,
-            "text": text,
-            "target": match target {
-                Some(target) => json!(target),
-                None => Json::Null,
-            },
-        })))
+    }
+    /// **Read** the text of a block: the text it shows, which for a
+    /// reference is the text of the block it points at.
+    prose.block.reference.read {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The block.
+
+            block: NodeRef,
+        },
+        run: {
+
+            let id = "prose.block.reference.read".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            if !node.kind.starts_with("prose.block.") {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
+                });
+            }
+            let document = session.document();
+            let text = text_of(document, &node);
+            let target = target_of(document, block);
+            Ok(Outcome::new(format!("the block `{block}` has a text")).with_data(json!({
+                "block": block,
+                "kind": node.kind,
+                "text": text,
+                "target": match target {
+                    Some(target) => json!(target),
+                    None => Json::Null,
+                },
+            })))
+
+        }
     }
 }

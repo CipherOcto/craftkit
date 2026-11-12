@@ -25,7 +25,7 @@
 //!   replaces.** Here the same: the replaced words carry the
 //!   formatting of the run the match **begins** in.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -206,113 +206,129 @@ fn pattern_of(
     Ok((tokens, case.map(|case| case.0).unwrap_or(false)))
 }
 
-/// **Find** a pattern in a block.
-#[derive(Command)]
-#[command(id = "prose.find", area = "prose", layer = "prose", icon = "list")]
-pub struct Find {
-    /// The block.
-    pub block: NodeRef,
-    /// The pattern to find.
-    pub what: Text,
-    /// Whether the pattern holds **wildcards**: a `*` for any text and
-    /// a `?` for one character.
-    pub wildcards: Option<Bool>,
-    /// Whether the **case** matters.
-    pub case: Option<Bool>,
-}
+commands! {
+    /// **Find** a pattern in a block.
+    prose.find {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The block.
 
-impl Find {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.find".to_string();
-        let block = self.block.0;
-        let (tokens, case) = pattern_of(&id, &self.what.0, self.wildcards, self.case)?;
-        let node = the_block(session, &id, block)?;
-        let text = text_of(node);
-        let characters: Vec<char> = text.chars().collect();
-        let found = matches_of(&tokens, &characters, case);
-        let matches: Vec<Json> = found
-            .iter()
-            .map(|(from, to)| {
-                json!({
-                    "start": from,
-                    "end": to,
-                    "text": characters[*from..*to].iter().collect::<String>(),
+            block: NodeRef,
+            /// The pattern to find.
+
+            what: Text,
+            /// Whether the pattern holds **wildcards**: a `*` for any text and
+            /// a `?` for one character.
+
+            wildcards: Option<Bool>,
+            /// Whether the **case** matters.
+
+            case: Option<Bool>,
+        },
+        run: {
+
+            let id = "prose.find".to_string();
+            let block = self.block.0;
+            let (tokens, case) = pattern_of(&id, &self.what.0, self.wildcards, self.case)?;
+            let node = the_block(session, &id, block)?;
+            let text = text_of(node);
+            let characters: Vec<char> = text.chars().collect();
+            let found = matches_of(&tokens, &characters, case);
+            let matches: Vec<Json> = found
+                .iter()
+                .map(|(from, to)| {
+                    json!({
+                        "start": from,
+                        "end": to,
+                        "text": characters[*from..*to].iter().collect::<String>(),
+                    })
                 })
-            })
-            .collect();
-        Ok(Outcome::new(format!("the block `{block}` has {} match(es)", matches.len()))
-            .with_data(json!({ "block": block, "matches": matches })))
+                .collect();
+            Ok(Outcome::new(format!("the block `{block}` has {} match(es)", matches.len()))
+                .with_data(json!({ "block": block, "matches": matches })))
+
+        }
     }
-}
+    /// **Replace** a pattern in a block.
+    ///
+    /// The text is rewritten and the **runs** are rewritten with it: the
+    /// replaced words carry the formatting of the run the match begins in.
+    prose.replace {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-/// **Replace** a pattern in a block.
-///
-/// The text is rewritten and the **runs** are rewritten with it: the
-/// replaced words carry the formatting of the run the match begins in.
-#[derive(Command)]
-#[command(id = "prose.replace", area = "prose", layer = "prose", icon = "pencil", mutates, undoable)]
-pub struct Replace {
-    /// The block.
-    pub block: NodeRef,
-    /// The pattern to find.
-    pub what: Text,
-    /// What to put in its place.
-    pub with: Text,
-    /// Whether the pattern holds **wildcards**: a `*` for any text and
-    /// a `?` for one character.
-    pub wildcards: Option<Bool>,
-    /// Whether the **case** matters.
-    pub case: Option<Bool>,
-}
+            block: NodeRef,
+            /// The pattern to find.
 
-impl Replace {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.replace".to_string();
-        let block = self.block.0;
-        let (tokens, case) = pattern_of(&id, &self.what.0, self.wildcards, self.case)?;
-        let node = the_block(session, &id, block)?;
-        // The text of an **equation** is derived from its parts, and a
-        // replace would make the two disagree.
-        if crate::equations::is_equation(node) {
-            return Err(EngineError::Failed {
-                id,
-                message: "the text of an equation is derived from its parts, and a replace would make them disagree"
-                    .to_string(),
-            });
-        }
-        let text = text_of(node);
-        let runs = runs_of(node);
-        let characters: Vec<char> = text.chars().collect();
-        let found = matches_of(&tokens, &characters, case);
-        if found.is_empty() {
-            return Ok(Outcome::new(format!("the block `{block}` has nothing to replace"))
-                .with_data(json!({ "block": block, "count": 0 })));
-        }
-        // A **revision** is not replaced: the tree refuses to touch a
-        // tracked change, and so does this tree.
-        let mut at = 0usize;
-        for run in &runs {
-            let length = run.get("len").and_then(|len| len.as_u64()).unwrap_or(0) as usize;
-            let end = at + length;
-            if run.get("revision").is_some() && found.iter().any(|(from, to)| *from < end && at < *to) {
+            what: Text,
+            /// What to put in its place.
+
+            with: Text,
+            /// Whether the pattern holds **wildcards**: a `*` for any text and
+            /// a `?` for one character.
+
+            wildcards: Option<Bool>,
+            /// Whether the **case** matters.
+
+            case: Option<Bool>,
+        },
+        run: {
+
+            let id = "prose.replace".to_string();
+            let block = self.block.0;
+            let (tokens, case) = pattern_of(&id, &self.what.0, self.wildcards, self.case)?;
+            let node = the_block(session, &id, block)?;
+            // The text of an **equation** is derived from its parts, and a
+            // replace would make the two disagree.
+            if crate::equations::is_equation(node) {
                 return Err(EngineError::Failed {
                     id,
-                    message: "a tracked change is not replaced".to_string(),
+                    message: "the text of an equation is derived from its parts, and a replace would make them disagree"
+                        .to_string(),
                 });
             }
-            at = end;
+            let text = text_of(node);
+            let runs = runs_of(node);
+            let characters: Vec<char> = text.chars().collect();
+            let found = matches_of(&tokens, &characters, case);
+            if found.is_empty() {
+                return Ok(Outcome::new(format!("the block `{block}` has nothing to replace"))
+                    .with_data(json!({ "block": block, "count": 0 })));
+            }
+            // A **revision** is not replaced: the tree refuses to touch a
+            // tracked change, and so does this tree.
+            let mut at = 0usize;
+            for run in &runs {
+                let length = run.get("len").and_then(|len| len.as_u64()).unwrap_or(0) as usize;
+                let end = at + length;
+                if run.get("revision").is_some() && found.iter().any(|(from, to)| *from < end && at < *to) {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: "a tracked change is not replaced".to_string(),
+                    });
+                }
+                at = end;
+            }
+            let (new_text, new_runs) = rewritten(&characters, &runs, &found, &self.with.0);
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.to_string(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            node.data["text"] = json!(new_text);
+            node.data["runs"] = Json::Array(new_runs);
+            Ok(Outcome::changed(format!("replaced {} match(es) in the block `{block}`", found.len()))
+                .with_data(json!({ "block": block, "count": found.len() })))
+
         }
-        let (new_text, new_runs) = rewritten(&characters, &runs, &found, &self.with.0);
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.to_string(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        node.data["text"] = json!(new_text);
-        node.data["runs"] = Json::Array(new_runs);
-        Ok(Outcome::changed(format!("replaced {} match(es) in the block `{block}`", found.len()))
-            .with_data(json!({ "block": block, "count": found.len() })))
     }
 }
 

@@ -8,10 +8,10 @@
 //! own payload — and the **bookmarks of a document** are derived: they
 //! are the blocks that carry a name.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
 /// The most characters a bookmark's name may have.
 ///
@@ -53,163 +53,170 @@ pub fn bookmarks_of(document: &craftkit_sdk::Document, document_node: u64) -> Ve
         .collect()
 }
 
-/// Put a **bookmark** on a block.
-///
-/// The name must be one a bookmark may have, and it must not be a name
-/// another block of the document already carries: two blocks with one
-/// name are one place, and a link to that name would be a link to
-/// nothing in particular.
-#[derive(Command)]
-#[command(id = "prose.block.bookmark", area = "prose", layer = "prose", icon = "tag", mutates, undoable)]
-pub struct SetBookmark {
-    /// The block.
-    pub block: NodeRef,
-    /// The name of the place.
-    pub name: Text,
-}
+commands! {
+    /// Put a **bookmark** on a block.
+    ///
+    /// The name must be one a bookmark may have, and it must not be a name
+    /// another block of the document already carries: two blocks with one
+    /// name are one place, and a link to that name would be a link to
+    /// nothing in particular.
+    prose.block.bookmark {
+        area: "prose",
+        layer: "prose",
+        icon: "tag",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-impl SetBookmark {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.bookmark".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        if !node.kind.starts_with("prose.block.") {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
-        }
-        let name = self.name.0.trim().to_string();
-        if !name_is_well_formed(&name) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "`{name}` is not a name a bookmark may have: a name begins with a letter or an underscore, the rest of it is letters, digits and underscores, and it is at most {MAX_NAME} characters long"
-                ),
-            });
-        }
-        // The **document** the block is in: the name is unique in it.
-        let document = session
-            .document()
-            .walk()
-            .find(|node| node.children.iter().any(|child| child.id == block))
-            .map(|node| node.id);
-        let Some(document) = document else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the block `{block}` is in no document"),
-            });
-        };
-        for other in session.document().walk().filter(|node| node.kind == "prose.document") {
-            for child in other.children.iter().filter(|child| child.kind.starts_with("prose.block.")) {
-                if child.id == block {
-                    continue;
-                }
-                if bookmark_of(child).as_deref() == Some(name.as_str()) {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the name `{name}` is already in the document"),
-                    });
+            block: NodeRef,
+            /// The name of the place.
+
+            name: Text,
+        },
+        run: {
+
+            let id = "prose.block.bookmark".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            if !node.kind.starts_with("prose.block.") {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
+                });
+            }
+            let name = self.name.0.trim().to_string();
+            if !name_is_well_formed(&name) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "`{name}` is not a name a bookmark may have: a name begins with a letter or an underscore, the rest of it is letters, digits and underscores, and it is at most {MAX_NAME} characters long"
+                    ),
+                });
+            }
+            // The **document** the block is in: the name is unique in it.
+            let document = session
+                .document()
+                .walk()
+                .find(|node| node.children.iter().any(|child| child.id == block))
+                .map(|node| node.id);
+            let Some(document) = document else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the block `{block}` is in no document"),
+                });
+            };
+            for other in session.document().walk().filter(|node| node.kind == "prose.document") {
+                for child in other.children.iter().filter(|child| child.kind.starts_with("prose.block.")) {
+                    if child.id == block {
+                        continue;
+                    }
+                    if bookmark_of(child).as_deref() == Some(name.as_str()) {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the name `{name}` is already in the document"),
+                        });
+                    }
                 }
             }
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            node.data["bookmark"] = Json::String(name.clone());
+            Ok(Outcome::changed(format!("the block `{block}` is the place `{name}`"))
+                .with_data(json!({ "block": block, "document": document, "name": name })))
+
         }
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        node.data["bookmark"] = Json::String(name.clone());
-        Ok(Outcome::changed(format!("the block `{block}` is the place `{name}`"))
-            .with_data(json!({ "block": block, "document": document, "name": name })))
     }
-}
+    /// **Take away** the bookmark of a block.
+    ///
+    /// A block with no bookmark has none to take away, and that is
+    /// refused.
+    prose.block.bookmark.delete {
+        area: "prose",
+        layer: "prose",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-/// **Take away** the bookmark of a block.
-///
-/// A block with no bookmark has none to take away, and that is
-/// refused.
-#[derive(Command)]
-#[command(
-    id = "prose.block.bookmark.delete",
-    area = "prose",
-    layer = "prose",
-    icon = "minus",
-    mutates,
-    undoable
-)]
-pub struct DeleteBookmark {
-    /// The block.
-    pub block: NodeRef,
-}
+            block: NodeRef,
+        },
+        run: {
 
-impl DeleteBookmark {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.bookmark.delete".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        if !node.kind.starts_with("prose.block.") {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
+            let id = "prose.block.bookmark.delete".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            if !node.kind.starts_with("prose.block.") {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
+                });
+            }
+            if bookmark_of(node).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the block `{block}` has no bookmark"),
+                });
+            }
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            node.data["bookmark"] = Json::Null;
+            Ok(Outcome::changed(format!("the block `{block}` is no place")).with_data(json!({ "block": block })))
+
         }
-        if bookmark_of(node).is_none() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the block `{block}` has no bookmark"),
-            });
-        }
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        node.data["bookmark"] = Json::Null;
-        Ok(Outcome::changed(format!("the block `{block}` is no place")).with_data(json!({ "block": block })))
     }
-}
+    /// **Read** the bookmarks of a document.
+    ///
+    /// They are **derived**: they are the blocks that carry a name.
+    prose.document.bookmarks {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document.
 
-/// **Read** the bookmarks of a document.
-///
-/// They are **derived**: they are the blocks that carry a name.
-#[derive(Command)]
-#[command(id = "prose.document.bookmarks", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadBookmarks {
-    /// The document.
-    pub document: NodeRef,
-}
+            document: NodeRef,
+        },
+        run: {
 
-impl ReadBookmarks {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.bookmarks".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document) else {
-            return Err(EngineError::Failed { id, message: format!("there is no document `{document}`") });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
+            let id = "prose.document.bookmarks".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document) else {
+                return Err(EngineError::Failed { id, message: format!("there is no document `{document}`") });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
+            }
+            let bookmarks = bookmarks_of(session.document(), document);
+            Ok(Outcome::new(format!("the document `{document}` has {} bookmark(s)", bookmarks.len())).with_data(
+                json!({
+                    "document": document,
+                    "bookmarks": bookmarks,
+                }),
+            ))
+
         }
-        let bookmarks = bookmarks_of(session.document(), document);
-        Ok(Outcome::new(format!("the document `{document}` has {} bookmark(s)", bookmarks.len())).with_data(
-            json!({
-                "document": document,
-                "bookmarks": bookmarks,
-            }),
-        ))
     }
 }

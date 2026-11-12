@@ -16,10 +16,10 @@
 //! makes the target not a link at all, so ` https://example.com` is
 //! not a web link and neither is a URL with a NUL byte in it.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Outcome};
 
 /// The most characters a target may have.
 pub const MAX_TARGET: usize = 2048;
@@ -89,56 +89,61 @@ pub fn why_not(document: &craftkit_sdk::Document, target: &str) -> Option<String
     }
 }
 
-/// The **links** of a block.
-///
-/// The answer is every run that carries a link, with the words it
-/// covers, the target it points at, and whether the target **may be
-/// opened**.
-#[derive(Command)]
-#[command(id = "prose.block.links", area = "prose", layer = "prose", icon = "link")]
-pub struct ReadLinks {
-    /// The block.
-    pub block: NodeRef,
-}
+commands! {
+    /// The **links** of a block.
+    ///
+    /// The answer is every run that carries a link, with the words it
+    /// covers, the target it points at, and whether the target **may be
+    /// opened**.
+    prose.block.links {
+        area: "prose",
+        layer: "prose",
+        icon: "link",
+        params: {
+            /// The block.
 
-impl ReadLinks {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.links".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed { id, message: format!("there is no block `{block}`") });
-        };
-        if !node.kind.starts_with("prose.block.") {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
+            block: NodeRef,
+        },
+        run: {
+
+            let id = "prose.block.links".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed { id, message: format!("there is no block `{block}`") });
+            };
+            if !node.kind.starts_with("prose.block.") {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
+                });
+            }
+            let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
+            let characters: Vec<char> = text.chars().collect();
+            let document = session.document();
+            let mut links: Vec<Json> = Vec::new();
+            let mut at = 0usize;
+            let runs = node.data.get("runs").and_then(|runs| runs.as_array()).cloned().unwrap_or_default();
+            for (index, run) in runs.iter().enumerate() {
+                let length = run.get("len").and_then(|len| len.as_u64()).unwrap_or(0) as usize;
+                let end = at.saturating_add(length).min(characters.len());
+                let covered: String = characters[at.min(characters.len())..end].iter().collect();
+                at = end;
+                let Some(target) = run.get("link").and_then(|target| target.as_str()) else { continue };
+                let reason = why_not(document, target);
+                links.push(json!({
+                    "run": index,
+                    "len": length,
+                    "text": covered,
+                    "target": target,
+                    "may_be_opened": reason.is_none(),
+                    "reason": reason,
+                }));
+            }
+            Ok(Outcome::new(format!("the block `{block}` has {} link(s)", links.len())).with_data(json!({
+                "block": block,
+                "links": links,
+            })))
+
         }
-        let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
-        let characters: Vec<char> = text.chars().collect();
-        let document = session.document();
-        let mut links: Vec<Json> = Vec::new();
-        let mut at = 0usize;
-        let runs = node.data.get("runs").and_then(|runs| runs.as_array()).cloned().unwrap_or_default();
-        for (index, run) in runs.iter().enumerate() {
-            let length = run.get("len").and_then(|len| len.as_u64()).unwrap_or(0) as usize;
-            let end = at.saturating_add(length).min(characters.len());
-            let covered: String = characters[at.min(characters.len())..end].iter().collect();
-            at = end;
-            let Some(target) = run.get("link").and_then(|target| target.as_str()) else { continue };
-            let reason = why_not(document, target);
-            links.push(json!({
-                "run": index,
-                "len": length,
-                "text": covered,
-                "target": target,
-                "may_be_opened": reason.is_none(),
-                "reason": reason,
-            }));
-        }
-        Ok(Outcome::new(format!("the block `{block}` has {} link(s)", links.len())).with_data(json!({
-            "block": block,
-            "links": links,
-        })))
     }
 }

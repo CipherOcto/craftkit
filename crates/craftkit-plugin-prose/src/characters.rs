@@ -37,10 +37,10 @@
 //!   command is **two numbers**: where the text starts and how long it
 //!   is.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Text};
 
 #[derive(Debug, Clone)]
 /// A **piece** of the text: a stretch of it, and the run that covers
@@ -128,141 +128,155 @@ fn formatted(runs: &[Json], text_length: usize, start: usize, end: usize, charac
     out
 }
 
-/// The **character** of a piece of text.
-#[derive(Command)]
-#[command(id = "prose.run.format", area = "prose", layer = "prose", icon = "pencil", mutates, undoable)]
-pub struct FormatRun {
-    /// The block the text is in.
-    pub block: NodeRef,
-    /// Where the text begins, counted in characters.
-    pub start: Number,
-    /// How long the text is, counted in characters.
-    pub length: Number,
-    /// Whether the text is **bold**.
-    pub bold: Option<Bool>,
-    /// Whether the text is **italic**.
-    pub italic: Option<Bool>,
-    /// Whether the text is **underlined**.
-    pub underline: Option<Bool>,
-    /// The **colour** of the text, as `#rrggbb`.
-    pub colour: Option<Text>,
-    /// The **size** of the text.
-    pub size: Option<Number>,
-}
+commands! {
+    /// The **character** of a piece of text.
+    prose.run.format {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The block the text is in.
 
-impl FormatRun {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.run.format".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        if !node.kind.starts_with("prose.block.") {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
-        }
-        // The **character** that is being put on: what the command says,
-        // and nothing else.
-        let mut character = craftkit_sdk::serde_json::Map::new();
-        if let Some(bold) = &self.bold {
-            character.insert("bold".to_string(), Json::Bool(bold.0));
-        }
-        if let Some(italic) = &self.italic {
-            character.insert("italic".to_string(), Json::Bool(italic.0));
-        }
-        if let Some(underline) = &self.underline {
-            character.insert("underline".to_string(), Json::Bool(underline.0));
-        }
-        if let Some(colour) = &self.colour {
-            let text = colour.0.trim().to_string();
-            if let Err(why) = craftkit_sdk::Colour::from_hex(&text) {
-                return Err(EngineError::Failed { id: id.clone(), message: why });
-            }
-            character.insert("colour".to_string(), Json::String(text));
-        }
-        if let Some(size) = &self.size {
-            let size = size.0;
-            if !size.is_finite() || size <= 0.0 {
+            block: NodeRef,
+            /// Where the text begins, counted in characters.
+
+            start: Number,
+            /// How long the text is, counted in characters.
+
+            length: Number,
+            /// Whether the text is **bold**.
+
+            bold: Option<Bool>,
+            /// Whether the text is **italic**.
+
+            italic: Option<Bool>,
+            /// Whether the text is **underlined**.
+
+            underline: Option<Bool>,
+            /// The **colour** of the text, as `#rrggbb`.
+
+            colour: Option<Text>,
+            /// The **size** of the text.
+
+            size: Option<Number>,
+        },
+        run: {
+
+            let id = "prose.run.format".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("{size} is not a size: a size is a number above zero"),
+                    message: format!("there is no block `{block}`"),
                 });
-            }
-            character.insert("size".to_string(), Json::from(size));
-        }
-        if character.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the command says nothing to change".to_string(),
-            });
-        }
-        // The **range**: inside the text, and not empty.
-        let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
-        let length = text.chars().count();
-        let start = self.start.0;
-        if !start.is_finite() || start < 0.0 || start.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "{start} is not a place in the text: a place is a whole number of characters"
-                ),
-            });
-        }
-        let start = start as usize;
-        let span = self.length.0;
-        if !span.is_finite() || span < 0.0 || span.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("{span} is not a length of text: a length is a whole number of characters"),
-            });
-        }
-        let span = span as usize;
-        if span == 0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the range is empty, and an empty range changes nothing".to_string(),
-            });
-        }
-        let end = start.saturating_add(span);
-        if end > length {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the range is {span} characters from {start}, and the text has {length} characters"
-                ),
-            });
-        }
-        // The **runs** of the block.
-        let runs: Vec<Json> =
-            node.data.get("runs").and_then(|runs| runs.as_array()).cloned().unwrap_or_default();
-        // A **tracked change** is not formatted.
-        let mut at = 0usize;
-        for run in &runs {
-            let run_length = run.get("len").and_then(|len| len.as_u64()).unwrap_or(0) as usize;
-            let run_end = at.saturating_add(run_length);
-            if run.get("revision").is_some() && run_end > start && at < end {
+            };
+            if !node.kind.starts_with("prose.block.") {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: "the text is a tracked change, and a tracked change is not formatted"
-                        .to_string(),
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
                 });
             }
-            at = run_end;
+            // The **character** that is being put on: what the command says,
+            // and nothing else.
+            let mut character = craftkit_sdk::serde_json::Map::new();
+            if let Some(bold) = &self.bold {
+                character.insert("bold".to_string(), Json::Bool(bold.0));
+            }
+            if let Some(italic) = &self.italic {
+                character.insert("italic".to_string(), Json::Bool(italic.0));
+            }
+            if let Some(underline) = &self.underline {
+                character.insert("underline".to_string(), Json::Bool(underline.0));
+            }
+            if let Some(colour) = &self.colour {
+                let text = colour.0.trim().to_string();
+                if let Err(why) = craftkit_sdk::Colour::from_hex(&text) {
+                    return Err(EngineError::Failed { id: id.clone(), message: why });
+                }
+                character.insert("colour".to_string(), Json::String(text));
+            }
+            if let Some(size) = &self.size {
+                let size = size.0;
+                if !size.is_finite() || size <= 0.0 {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("{size} is not a size: a size is a number above zero"),
+                    });
+                }
+                character.insert("size".to_string(), Json::from(size));
+            }
+            if character.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the command says nothing to change".to_string(),
+                });
+            }
+            // The **range**: inside the text, and not empty.
+            let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
+            let length = text.chars().count();
+            let start = self.start.0;
+            if !start.is_finite() || start < 0.0 || start.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "{start} is not a place in the text: a place is a whole number of characters"
+                    ),
+                });
+            }
+            let start = start as usize;
+            let span = self.length.0;
+            if !span.is_finite() || span < 0.0 || span.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{span} is not a length of text: a length is a whole number of characters"),
+                });
+            }
+            let span = span as usize;
+            if span == 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the range is empty, and an empty range changes nothing".to_string(),
+                });
+            }
+            let end = start.saturating_add(span);
+            if end > length {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the range is {span} characters from {start}, and the text has {length} characters"
+                    ),
+                });
+            }
+            // The **runs** of the block.
+            let runs: Vec<Json> =
+                node.data.get("runs").and_then(|runs| runs.as_array()).cloned().unwrap_or_default();
+            // A **tracked change** is not formatted.
+            let mut at = 0usize;
+            for run in &runs {
+                let run_length = run.get("len").and_then(|len| len.as_u64()).unwrap_or(0) as usize;
+                let run_end = at.saturating_add(run_length);
+                if run.get("revision").is_some() && run_end > start && at < end {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "the text is a tracked change, and a tracked change is not formatted"
+                            .to_string(),
+                    });
+                }
+                at = run_end;
+            }
+            let new_runs = formatted(&runs, length, start, end, &Json::Object(character.clone()));
+            if let Some(node) = session.document_mut()?.node_mut(block) {
+                node.data["runs"] = Json::Array(new_runs);
+            }
+            Ok(Outcome::changed(format!("the character of {span} characters is set")).with_data(json!({
+                "block": block,
+                "start": start,
+                "length": span,
+                "character": Json::Object(character),
+            })))
+
         }
-        let new_runs = formatted(&runs, length, start, end, &Json::Object(character.clone()));
-        if let Some(node) = session.document_mut()?.node_mut(block) {
-            node.data["runs"] = Json::Array(new_runs);
-        }
-        Ok(Outcome::changed(format!("the character of {span} characters is set")).with_data(json!({
-            "block": block,
-            "start": start,
-            "length": span,
-            "character": Json::Object(character),
-        })))
     }
 }

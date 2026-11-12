@@ -24,7 +24,7 @@
 //! - A paragraph that does **not begin** with a marker is refused by
 //!   name.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Relation, Session};
@@ -91,99 +91,106 @@ fn without_marker(text: &str, runs: &[Json], length: usize) -> (String, Vec<Json
     (rest, new_runs)
 }
 
-/// **Make** the **list** a paragraph begins.
-///
-/// The marker is taken away from the words and the paragraph becomes
-/// an item of a list of that kind.
-#[derive(Command)]
-#[command(id = "prose.block.list", area = "prose", layer = "prose", icon = "list", mutates, undoable)]
-pub struct SetList {
-    /// The paragraph.
-    pub block: NodeRef,
-}
+commands! {
+    /// **Make** the **list** a paragraph begins.
+    ///
+    /// The marker is taken away from the words and the paragraph becomes
+    /// an item of a list of that kind.
+    prose.block.list {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        mutates,
+        undoable,
+        params: {
+            /// The paragraph.
 
-impl SetList {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.list".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if node.kind != "prose.block.paragraph" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
-            });
-        }
-        // The **document** the paragraph is in.
-        let Some(document) = session
-            .document()
-            .walk()
-            .find(|node| node.children.iter().any(|child| child.id == block))
-            .map(|node| node.id)
-        else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the block `{block}` is in no document"),
-            });
-        };
-        // A paragraph that is **already in a list** is refused: a
-        // block is in one list.
-        if session
-            .document()
-            .relations
-            .iter()
-            .any(|relation| relation.kind == crate::numbering::NUMBERED_BY && relation.from == block)
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the paragraph `{block}` is already in a list"),
-            });
-        }
-        let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
-        let Some((marker, kind)) = marker_of(&text) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the paragraph does not begin with a marker: the markers are {}",
-                    MARKERS.iter().map(|(marker, _)| *marker).collect::<Vec<_>>().join(", ")
+            block: NodeRef,
+        },
+        run: {
+
+            let id = "prose.block.list".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if node.kind != "prose.block.paragraph" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
+                });
+            }
+            // The **document** the paragraph is in.
+            let Some(document) = session
+                .document()
+                .walk()
+                .find(|node| node.children.iter().any(|child| child.id == block))
+                .map(|node| node.id)
+            else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the block `{block}` is in no document"),
+                });
+            };
+            // A paragraph that is **already in a list** is refused: a
+            // block is in one list.
+            if session
+                .document()
+                .relations
+                .iter()
+                .any(|relation| relation.kind == crate::numbering::NUMBERED_BY && relation.from == block)
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the paragraph `{block}` is already in a list"),
+                });
+            }
+            let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
+            let Some((marker, kind)) = marker_of(&text) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the paragraph does not begin with a marker: the markers are {}",
+                        MARKERS.iter().map(|(marker, _)| *marker).collect::<Vec<_>>().join(", ")
+                    ),
+                });
+            };
+            let length = marker.chars().count();
+            // The **list**: a bullet joins the list that is there, and a
+            // numbered list always starts a new one.
+            let list = match list_of(session, document, kind) {
+                Some(list) if is_bullet(kind) => list,
+                _ => session.document_mut()?.add_node_with_under(
+                    Some(document),
+                    kind.to_string(),
+                    "prose.list",
+                    None,
+                    json!({ "kind": kind }),
                 ),
-            });
-        };
-        let length = marker.chars().count();
-        // The **list**: a bullet joins the list that is there, and a
-        // numbered list always starts a new one.
-        let list = match list_of(session, document, kind) {
-            Some(list) if is_bullet(kind) => list,
-            _ => session.document_mut()?.add_node_with_under(
-                Some(document),
-                kind.to_string(),
-                "prose.list",
-                None,
-                json!({ "kind": kind }),
-            ),
-        };
-        let runs = node.data.get("runs").and_then(|runs| runs.as_array()).cloned().unwrap_or_default();
-        let (text, runs) = without_marker(&text, &runs, length);
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        node.data["text"] = json!(text.clone());
-        node.data["runs"] = Json::Array(runs);
-        let relation = Relation::with_payload(
-            block,
-            list,
-            crate::numbering::NUMBERED_BY,
-            json!({ "list": list, "level": 0 }),
-        );
-        session.document_mut()?.add_relation(relation);
-        Ok(Outcome::changed(format!("the paragraph `{block}` is an item of the list `{list}`"))
-            .with_data(json!({ "block": block, "list": list, "kind": kind, "text": text })))
+            };
+            let runs = node.data.get("runs").and_then(|runs| runs.as_array()).cloned().unwrap_or_default();
+            let (text, runs) = without_marker(&text, &runs, length);
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            node.data["text"] = json!(text.clone());
+            node.data["runs"] = Json::Array(runs);
+            let relation = Relation::with_payload(
+                block,
+                list,
+                crate::numbering::NUMBERED_BY,
+                json!({ "list": list, "level": 0 }),
+            );
+            session.document_mut()?.add_relation(relation);
+            Ok(Outcome::changed(format!("the paragraph `{block}` is an item of the list `{list}`"))
+                .with_data(json!({ "block": block, "list": list, "kind": kind, "text": text })))
+
+        }
     }
 }

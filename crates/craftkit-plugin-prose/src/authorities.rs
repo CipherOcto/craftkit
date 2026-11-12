@@ -31,10 +31,10 @@
 //! - **The tree's collation** is the order of the language, and it is
 //!   not here: the entries are compared as their text is.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
 /// The most characters an entry may have.
 pub const MAX_ENTRY: usize = 200;
@@ -85,89 +85,99 @@ pub fn authorities_of_document(document: &craftkit_sdk::Document, document_node:
     entries.into_iter().map(|(entry, blocks)| json!({ "entry": entry, "blocks": blocks })).collect()
 }
 
-/// **Mark** a block with an authority.
-#[derive(Command)]
-#[command(id = "prose.authority.mark", area = "prose", layer = "prose", icon = "tag", mutates, undoable)]
-pub struct MarkAuthority {
-    /// The block.
-    pub block: NodeRef,
-    /// The citation of the authority.
-    pub entry: Text,
-}
+commands! {
+    /// **Mark** a block with an authority.
+    prose.authority.mark {
+        area: "prose",
+        layer: "prose",
+        icon: "tag",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-impl MarkAuthority {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.authority.mark".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        if !node.kind.starts_with("prose.block.") {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
-        }
-        // The **entry**: the citation, without its quotes, and it says
-        // something.
-        let entry = entry_of(self.entry.0.trim());
-        if entry.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "an authority says what it is".to_string(),
-            });
-        }
-        if entry.chars().count() > MAX_ENTRY {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("an entry is at most {MAX_ENTRY} characters long"),
-            });
-        }
-        // The **mark**: the same entry twice on one block is one mark.
-        let mut marks = authorities_of(node);
-        let added = !marks.contains(&entry);
-        if added {
-            marks.push(entry.clone());
-        }
-        if let Some(node) = session.document_mut()?.node_mut(block) {
-            node.data["authorities"] = json!(marks);
-        }
-        Ok(Outcome::changed(format!("the block `{block}` is marked with `{entry}`")).with_data(json!({
-            "block": block,
-            "entry": entry,
-            "added": added,
-        })))
-    }
-}
+            block: NodeRef,
+            /// The citation of the authority.
 
-/// The **table of authorities** of a document: the entries it has been
-/// marked with, and the blocks they are on.
-#[derive(Command)]
-#[command(id = "prose.document.authorities", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadAuthorities {
-    /// The document.
-    pub document: NodeRef,
-}
+            entry: Text,
+        },
+        run: {
 
-impl ReadAuthorities {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "prose.document.authorities";
-        let document = self.document.0;
-        if session.document().node(document).is_none() {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("there is no document `{document}`"),
-            });
-        }
-        let authorities = authorities_of_document(session.document(), document);
-        Ok(Outcome::new(format!("the document `{document}` holds {} authority(ies)", authorities.len()))
-            .with_data(json!({
-                "document": document,
-                "authorities": authorities,
-                "count": authorities.len(),
+            let id = "prose.authority.mark".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            if !node.kind.starts_with("prose.block.") {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
+                });
+            }
+            // The **entry**: the citation, without its quotes, and it says
+            // something.
+            let entry = entry_of(self.entry.0.trim());
+            if entry.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "an authority says what it is".to_string(),
+                });
+            }
+            if entry.chars().count() > MAX_ENTRY {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("an entry is at most {MAX_ENTRY} characters long"),
+                });
+            }
+            // The **mark**: the same entry twice on one block is one mark.
+            let mut marks = authorities_of(node);
+            let added = !marks.contains(&entry);
+            if added {
+                marks.push(entry.clone());
+            }
+            if let Some(node) = session.document_mut()?.node_mut(block) {
+                node.data["authorities"] = json!(marks);
+            }
+            Ok(Outcome::changed(format!("the block `{block}` is marked with `{entry}`")).with_data(json!({
+                "block": block,
+                "entry": entry,
+                "added": added,
             })))
+
+        }
+    }
+    /// The **table of authorities** of a document: the entries it has been
+    /// marked with, and the blocks they are on.
+    prose.document.authorities {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document.
+
+            document: NodeRef,
+        },
+        run: {
+
+            let command = "prose.document.authorities";
+            let document = self.document.0;
+            if session.document().node(document).is_none() {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("there is no document `{document}`"),
+                });
+            }
+            let authorities = authorities_of_document(session.document(), document);
+            Ok(Outcome::new(format!("the document `{document}` holds {} authority(ies)", authorities.len()))
+                .with_data(json!({
+                    "document": document,
+                    "authorities": authorities,
+                    "count": authorities.len(),
+                })))
+
+        }
     }
 }

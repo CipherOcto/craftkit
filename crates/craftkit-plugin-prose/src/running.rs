@@ -20,7 +20,7 @@
 //! - the text is **what it is**: the running head is not a
 //!   paragraph, and it has no style of its own here.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -50,39 +50,84 @@ fn running_of(document: &Node, key: &str) -> Option<String> {
         .filter(|text| !text.trim().is_empty())
 }
 
-/// **Say** what a document carries at the top of every page.
-#[derive(Command)]
-#[command(id = "prose.document.header", area = "prose", layer = "prose", icon = "pencil", mutates, undoable)]
-pub struct SetRunningHeader {
-    /// The document.
-    pub document: NodeRef,
-    /// The header's text.
-    ///
-    /// An empty text takes the header away.
-    pub header: Text,
-}
+commands! {
+    /// **Say** what a document carries at the top of every page.
+    prose.document.header {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-impl SetRunningHeader {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        set_running(session, self.document.0, "header", self.header.0.trim())
+            document: NodeRef,
+            /// The header's text.
+            ///
+            /// An empty text takes the header away.
+
+            header: Text,
+        },
+        run: {
+
+            set_running(session, self.document.0, "header", self.header.0.trim())
+
+        }
     }
-}
+    /// **Say** what a document carries at the bottom of every page.
+    prose.document.footer {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-/// **Say** what a document carries at the bottom of every page.
-#[derive(Command)]
-#[command(id = "prose.document.footer", area = "prose", layer = "prose", icon = "pencil", mutates, undoable)]
-pub struct SetRunningFooter {
-    /// The document.
-    pub document: NodeRef,
-    /// The footer's text.
-    ///
-    /// An empty text takes the footer away.
-    pub footer: Text,
-}
+            document: NodeRef,
+            /// The footer's text.
+            ///
+            /// An empty text takes the footer away.
 
-impl SetRunningFooter {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        set_running(session, self.document.0, "footer", self.footer.0.trim())
+            footer: Text,
+        },
+        run: {
+
+            set_running(session, self.document.0, "footer", self.footer.0.trim())
+
+        }
+    }
+    /// **Read** the **header** of a document.
+    prose.document.header.read {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document.
+
+            document: NodeRef,
+        },
+        run: {
+
+            read_running(session, self.document.0, "header")
+
+        }
+    }
+    /// **Read** the **footer** of a document.
+    prose.document.footer.read {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document.
+
+            document: NodeRef,
+        },
+        run: {
+
+            read_running(session, self.document.0, "footer")
+
+        }
     }
 }
 
@@ -122,34 +167,6 @@ fn set_running(session: &mut Session, document: u64, key: &str, text: &str) -> R
         format!("the document `{document}` carries a {key}")
     })
     .with_data(json!({ "document": document, key: text })))
-}
-
-/// **Read** the **header** of a document.
-#[derive(Command)]
-#[command(id = "prose.document.header.read", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadRunningHeader {
-    /// The document.
-    pub document: NodeRef,
-}
-
-impl ReadRunningHeader {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        read_running(session, self.document.0, "header")
-    }
-}
-
-/// **Read** the **footer** of a document.
-#[derive(Command)]
-#[command(id = "prose.document.footer.read", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadRunningFooter {
-    /// The document.
-    pub document: NodeRef,
-}
-
-impl ReadRunningFooter {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        read_running(session, self.document.0, "footer")
-    }
 }
 
 /// Read what a document carries, at the top or at the bottom of every

@@ -25,10 +25,10 @@
 //!   (`prose.document.title`).
 //! - A node that is **not a document** may not have properties.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Text};
 
 /// The longest **name** a custom property may have.
 pub const MAX_NAME: usize = 255;
@@ -100,171 +100,186 @@ fn the_key(custom: &Json, name: &str) -> String {
     map.keys().find(|held| held.eq_ignore_ascii_case(name)).cloned().unwrap_or_else(|| name.to_string())
 }
 
-/// **Say** what a document is.
-#[derive(Command)]
-#[command(id = "prose.document.properties", area = "prose", layer = "prose", icon = "tag", mutates, undoable)]
-pub struct SetProperties {
-    /// The document.
-    pub document: NodeRef,
-    /// Who wrote it.
-    ///
-    /// An empty author takes the author away.
-    pub author: Option<Text>,
-    /// What it is about.
-    pub subject: Option<Text>,
-    /// The words a search looks for.
-    pub keywords: Option<Text>,
-    /// What a reader may say about it.
-    pub comments: Option<Text>,
-    /// The category it is in.
-    pub category: Option<Text>,
-    /// Who touched it last.
-    ///
-    /// An empty name takes the name away.
-    pub last_modified_by: Option<Text>,
-    /// How many times it has been revised.
-    ///
-    /// A whole number, and a revision of zero takes the revision away.
-    pub revision: Option<Number>,
-    /// The **custom** properties: a list of pairs, each a name and a
-    /// value.
-    ///
-    /// A null or an empty value takes the property away.
-    pub custom: Option<Json>,
-}
+commands! {
+    /// **Say** what a document is.
+    prose.document.properties {
+        area: "prose",
+        layer: "prose",
+        icon: "tag",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-impl SetProperties {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.properties".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
-        }
-        // The **built-in** properties that are named, and the values
-        // they are given.
-        let mut properties = properties_of(&node);
-        let given = [
-            ("author", self.author.as_ref().map(|value| value.0.as_str())),
-            ("subject", self.subject.as_ref().map(|value| value.0.as_str())),
-            ("keywords", self.keywords.as_ref().map(|value| value.0.as_str())),
-            ("comments", self.comments.as_ref().map(|value| value.0.as_str())),
-            ("category", self.category.as_ref().map(|value| value.0.as_str())),
-            ("last_modified_by", self.last_modified_by.as_ref().map(|value| value.0.as_str())),
-        ];
-        for (name, value) in given {
-            let Some(value) = value else { continue };
-            match value_of(value, &id, "a property")? {
-                Some(value) => properties[name] = json!(value),
-                None => {
-                    if let Some(map) = properties.as_object_mut() {
-                        map.remove(name);
-                    }
-                }
-            }
-        }
-        // The **revision** is a whole number, and a revision of zero
-        // is no revision at all: the tree's rule, that nothing means
-        // nothing.
-        if let Some(revision) = self.revision {
-            let number = revision.0;
-            if !number.is_finite() || number.fract() != 0.0 || number < 0.0 {
+            document: NodeRef,
+            /// Who wrote it.
+            ///
+            /// An empty author takes the author away.
+
+            author: Option<Text>,
+            /// What it is about.
+
+            subject: Option<Text>,
+            /// The words a search looks for.
+
+            keywords: Option<Text>,
+            /// What a reader may say about it.
+
+            comments: Option<Text>,
+            /// The category it is in.
+
+            category: Option<Text>,
+            /// Who touched it last.
+            ///
+            /// An empty name takes the name away.
+
+            last_modified_by: Option<Text>,
+            /// How many times it has been revised.
+            ///
+            /// A whole number, and a revision of zero takes the revision away.
+
+            revision: Option<Number>,
+            /// The **custom** properties: a list of pairs, each a name and a
+            /// value.
+            ///
+            /// A null or an empty value takes the property away.
+
+            custom: Option<Json>,
+        },
+        run: {
+
+            let id = "prose.document.properties".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document).cloned() else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("a revision is a whole number, and {number} is not"),
-                });
-            }
-            if number == 0.0 {
-                if let Some(map) = properties.as_object_mut() {
-                    map.remove("revision");
-                }
-            } else {
-                properties["revision"] = json!(number as u64);
-            }
-        }
-        // The **custom** properties that are named.
-        let mut custom = custom_of(&node);
-        if let Some(given) = &self.custom {
-            let Some(list) = given.as_object() else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "the custom properties are a list of pairs".to_string(),
+                    message: format!("there is no node `{document}`"),
                 });
             };
-            // The **removals** first: a name that is only a different
-            // spelling is taken away before it is set again.
-            for (name, value) in list {
-                if value.is_null() {
-                    let key = the_key(&custom, name.trim());
-                    if let Some(map) = custom.as_object_mut() {
-                        map.remove(&key);
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
+            }
+            // The **built-in** properties that are named, and the values
+            // they are given.
+            let mut properties = properties_of(&node);
+            let given = [
+                ("author", self.author.as_ref().map(|value| value.0.as_str())),
+                ("subject", self.subject.as_ref().map(|value| value.0.as_str())),
+                ("keywords", self.keywords.as_ref().map(|value| value.0.as_str())),
+                ("comments", self.comments.as_ref().map(|value| value.0.as_str())),
+                ("category", self.category.as_ref().map(|value| value.0.as_str())),
+                ("last_modified_by", self.last_modified_by.as_ref().map(|value| value.0.as_str())),
+            ];
+            for (name, value) in given {
+                let Some(value) = value else { continue };
+                match value_of(value, &id, "a property")? {
+                    Some(value) => properties[name] = json!(value),
+                    None => {
+                        if let Some(map) = properties.as_object_mut() {
+                            map.remove(name);
+                        }
                     }
                 }
             }
-            for (name, value) in list {
-                if value.is_null() {
-                    continue;
-                }
-                let Some(value) = value.as_str() else {
+            // The **revision** is a whole number, and a revision of zero
+            // is no revision at all: the tree's rule, that nothing means
+            // nothing.
+            if let Some(revision) = self.revision {
+                let number = revision.0;
+                if !number.is_finite() || number.fract() != 0.0 || number < 0.0 {
                     return Err(EngineError::Failed {
                         id: id.clone(),
-                        message: format!("the custom property `{name}` is a text or nothing"),
+                        message: format!("a revision is a whole number, and {number} is not"),
+                    });
+                }
+                if number == 0.0 {
+                    if let Some(map) = properties.as_object_mut() {
+                        map.remove("revision");
+                    }
+                } else {
+                    properties["revision"] = json!(number as u64);
+                }
+            }
+            // The **custom** properties that are named.
+            let mut custom = custom_of(&node);
+            if let Some(given) = &self.custom {
+                let Some(list) = given.as_object() else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "the custom properties are a list of pairs".to_string(),
                     });
                 };
-                let name = name_of(name, &id)?;
-                let key = the_key(&custom, &name);
-                match value_of(value, &id, "a custom property")? {
-                    Some(value) => custom[key] = json!(value),
-                    None => {
+                // The **removals** first: a name that is only a different
+                // spelling is taken away before it is set again.
+                for (name, value) in list {
+                    if value.is_null() {
+                        let key = the_key(&custom, name.trim());
                         if let Some(map) = custom.as_object_mut() {
                             map.remove(&key);
                         }
                     }
                 }
-            }
-        }
-        // The **properties** are kept, and a document with none of
-        // them has none.
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{document}`"),
-            });
-        };
-        if properties.as_object().map(|map| map.is_empty()).unwrap_or(true) {
-            if let Some(map) = node.data.as_object_mut() {
-                map.remove("properties");
-            }
-        } else {
-            node.data["properties"] = properties.clone();
-        }
-        if custom.as_object().map(|map| map.is_empty()).unwrap_or(true) {
-            if let Some(map) = node.data.as_object_mut() {
-                map.remove("custom_properties");
-            }
-        } else {
-            node.data["custom_properties"] = custom.clone();
-        }
-        let mut properties = properties_of(node);
-        if let Some(map) = properties.as_object_mut() {
-            for name in BUILT_INS {
-                if !map.contains_key(name) {
-                    map.insert(name.to_string(), Json::Null);
+                for (name, value) in list {
+                    if value.is_null() {
+                        continue;
+                    }
+                    let Some(value) = value.as_str() else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the custom property `{name}` is a text or nothing"),
+                        });
+                    };
+                    let name = name_of(name, &id)?;
+                    let key = the_key(&custom, &name);
+                    match value_of(value, &id, "a custom property")? {
+                        Some(value) => custom[key] = json!(value),
+                        None => {
+                            if let Some(map) = custom.as_object_mut() {
+                                map.remove(&key);
+                            }
+                        }
+                    }
                 }
             }
+            // The **properties** are kept, and a document with none of
+            // them has none.
+            let Some(node) = session.document_mut()?.node_mut(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{document}`"),
+                });
+            };
+            if properties.as_object().map(|map| map.is_empty()).unwrap_or(true) {
+                if let Some(map) = node.data.as_object_mut() {
+                    map.remove("properties");
+                }
+            } else {
+                node.data["properties"] = properties.clone();
+            }
+            if custom.as_object().map(|map| map.is_empty()).unwrap_or(true) {
+                if let Some(map) = node.data.as_object_mut() {
+                    map.remove("custom_properties");
+                }
+            } else {
+                node.data["custom_properties"] = custom.clone();
+            }
+            let mut properties = properties_of(node);
+            if let Some(map) = properties.as_object_mut() {
+                for name in BUILT_INS {
+                    if !map.contains_key(name) {
+                        map.insert(name.to_string(), Json::Null);
+                    }
+                }
+            }
+            Ok(Outcome::changed(format!("the document `{document}` has its properties")).with_data(json!({
+                "document": document,
+                "properties": properties,
+                "custom": custom,
+            })))
+
         }
-        Ok(Outcome::changed(format!("the document `{document}` has its properties")).with_data(json!({
-            "document": document,
-            "properties": properties,
-            "custom": custom,
-        })))
     }
 }

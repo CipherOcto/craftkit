@@ -11,10 +11,10 @@
 //! And the words of a revision are **derived**: they are the words the
 //! run covers.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Outcome};
 
 /// The kinds of revision the tree has.
 pub const KINDS: [&str; 3] = ["insert", "delete", "format"];
@@ -81,55 +81,60 @@ pub fn check(revision: &Json, id: &str) -> Result<(), EngineError> {
     Ok(())
 }
 
-/// The **revisions** of a block.
-///
-/// The answer is every run that carries a revision, with its kind, its
-/// author, its date and the **words** it covers.
-#[derive(Command)]
-#[command(id = "prose.block.revisions", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadRevisions {
-    /// The block.
-    pub block: NodeRef,
-}
+commands! {
+    /// The **revisions** of a block.
+    ///
+    /// The answer is every run that carries a revision, with its kind, its
+    /// author, its date and the **words** it covers.
+    prose.block.revisions {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The block.
 
-impl ReadRevisions {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.revisions".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed { id, message: format!("there is no block `{block}`") });
-        };
-        if !node.kind.starts_with("prose.block.") {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
+            block: NodeRef,
+        },
+        run: {
+
+            let id = "prose.block.revisions".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed { id, message: format!("there is no block `{block}`") });
+            };
+            if !node.kind.starts_with("prose.block.") {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
+                });
+            }
+            let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
+            let characters: Vec<char> = text.chars().collect();
+            let mut revisions: Vec<Json> = Vec::new();
+            let mut at = 0usize;
+            let runs = node.data.get("runs").and_then(|runs| runs.as_array()).cloned().unwrap_or_default();
+            for (index, run) in runs.iter().enumerate() {
+                let length = run.get("len").and_then(|len| len.as_u64()).unwrap_or(0) as usize;
+                let end = at.saturating_add(length).min(characters.len());
+                let covered: String = characters[at.min(characters.len())..end].iter().collect();
+                at = end;
+                let Some(revision) = run.get("revision") else { continue };
+                revisions.push(json!({
+                    "run": index,
+                    "kind": revision.get("kind").cloned().unwrap_or(Json::Null),
+                    "author": revision.get("author").cloned().unwrap_or(Json::Null),
+                    "date": revision.get("date").cloned().unwrap_or(Json::Null),
+                    "len": length,
+                    "text": covered,
+                }));
+            }
+            Ok(Outcome::new(format!("the block `{block}` has {} revision(s)", revisions.len())).with_data(
+                json!({
+                    "block": block,
+                    "revisions": revisions,
+                }),
+            ))
+
         }
-        let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
-        let characters: Vec<char> = text.chars().collect();
-        let mut revisions: Vec<Json> = Vec::new();
-        let mut at = 0usize;
-        let runs = node.data.get("runs").and_then(|runs| runs.as_array()).cloned().unwrap_or_default();
-        for (index, run) in runs.iter().enumerate() {
-            let length = run.get("len").and_then(|len| len.as_u64()).unwrap_or(0) as usize;
-            let end = at.saturating_add(length).min(characters.len());
-            let covered: String = characters[at.min(characters.len())..end].iter().collect();
-            at = end;
-            let Some(revision) = run.get("revision") else { continue };
-            revisions.push(json!({
-                "run": index,
-                "kind": revision.get("kind").cloned().unwrap_or(Json::Null),
-                "author": revision.get("author").cloned().unwrap_or(Json::Null),
-                "date": revision.get("date").cloned().unwrap_or(Json::Null),
-                "len": length,
-                "text": covered,
-            }));
-        }
-        Ok(Outcome::new(format!("the block `{block}` has {} revision(s)", revisions.len())).with_data(
-            json!({
-                "block": block,
-                "revisions": revisions,
-            }),
-        ))
     }
 }

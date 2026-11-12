@@ -26,10 +26,10 @@
 //!   it.
 //! - A block that is **not a paragraph** may not be a caption.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Text};
 
 /// The longest **label** a caption may have.
 pub const MAX_LABEL: usize = 40;
@@ -185,117 +185,131 @@ pub fn captions_of(document: &craftkit_sdk::Document, node: &Node) -> Json {
     Json::Array(captions)
 }
 
-/// **Say** what a **caption** captions.
-///
-/// A paragraph that is a caption is changed, and a paragraph that is
-/// not one becomes one.
-#[derive(Command)]
-#[command(id = "prose.block.caption", area = "prose", layer = "prose", icon = "tag", mutates, undoable)]
-pub struct SetCaption {
-    /// The paragraph.
-    pub block: NodeRef,
-    /// The label: what the thing is called.
+commands! {
+    /// **Say** what a **caption** captions.
     ///
-    /// It is `Figure` when it is not given.
-    pub label: Option<Text>,
-    /// What the caption says.
-    pub text: Option<Text>,
-    /// The format of the number: `arabic`, `roman`, `alphabetic` or
-    /// `ALPHABETIC`.
-    pub format: Option<Text>,
-    /// The **chapter** the caption is in: the level of a heading, one
-    /// to nine.
-    ///
-    /// The number of a caption that names a chapter is counted again
-    /// at each chapter, and the caption says the chapter it is in.
-    pub chapter: Option<Number>,
-    /// The **separator** between the chapter number and the number of
-    /// the caption: `-`, `.`, `:`, an em dash or an en dash.
-    pub separator: Option<Text>,
-}
+    /// A paragraph that is a caption is changed, and a paragraph that is
+    /// not one becomes one.
+    prose.block.caption {
+        area: "prose",
+        layer: "prose",
+        icon: "tag",
+        mutates,
+        undoable,
+        params: {
+            /// The paragraph.
 
-impl SetCaption {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.caption".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if node.kind != "prose.block.paragraph" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
-            });
-        }
-        let mut caption = caption_of(&node)
-            .unwrap_or_else(|| json!({ "label": DEFAULT_LABEL, "text": "", "format": "arabic" }));
-        if let Some(label) = &self.label {
-            caption["label"] = json!(label_of(&label.0, &id)?);
-        }
-        if let Some(text) = &self.text {
-            caption["text"] = json!(text_of(&text.0, &id)?);
-        }
-        if let Some(format) = &self.format {
-            caption["format"] = json!(format_of(&format.0, &id)?);
-        }
-        if let Some(chapter) = &self.chapter {
-            let level = chapter.0;
-            if !level.is_finite() || !(1.0..=9.0).contains(&level) || level.fract() != 0.0 {
+            block: NodeRef,
+            /// The label: what the thing is called.
+            ///
+            /// It is `Figure` when it is not given.
+
+            label: Option<Text>,
+            /// What the caption says.
+
+            text: Option<Text>,
+            /// The format of the number: `arabic`, `roman`, `alphabetic` or
+            /// `ALPHABETIC`.
+
+            format: Option<Text>,
+            /// The **chapter** the caption is in: the level of a heading, one
+            /// to nine.
+            ///
+            /// The number of a caption that names a chapter is counted again
+            /// at each chapter, and the caption says the chapter it is in.
+
+            chapter: Option<Number>,
+            /// The **separator** between the chapter number and the number of
+            /// the caption: `-`, `.`, `:`, an em dash or an en dash.
+
+            separator: Option<Text>,
+        },
+        run: {
+
+            let id = "prose.block.caption".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block).cloned() else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the chapter `{level}` is not one of the tree's nine levels"),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if node.kind != "prose.block.paragraph" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
                 });
             }
-            caption["chapter"] = json!(level as u64);
+            let mut caption = caption_of(&node)
+                .unwrap_or_else(|| json!({ "label": DEFAULT_LABEL, "text": "", "format": "arabic" }));
+            if let Some(label) = &self.label {
+                caption["label"] = json!(label_of(&label.0, &id)?);
+            }
+            if let Some(text) = &self.text {
+                caption["text"] = json!(text_of(&text.0, &id)?);
+            }
+            if let Some(format) = &self.format {
+                caption["format"] = json!(format_of(&format.0, &id)?);
+            }
+            if let Some(chapter) = &self.chapter {
+                let level = chapter.0;
+                if !level.is_finite() || !(1.0..=9.0).contains(&level) || level.fract() != 0.0 {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the chapter `{level}` is not one of the tree's nine levels"),
+                    });
+                }
+                caption["chapter"] = json!(level as u64);
+            }
+            if let Some(separator) = &self.separator {
+                caption["separator"] = json!(separator_of(&separator.0, &id)?);
+            }
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            node.data["caption"] = caption.clone();
+            Ok(Outcome::changed(format!("the paragraph `{block}` is a caption"))
+                .with_data(json!({ "block": block, "caption": caption })))
+
         }
-        if let Some(separator) = &self.separator {
-            caption["separator"] = json!(separator_of(&separator.0, &id)?);
-        }
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        node.data["caption"] = caption.clone();
-        Ok(Outcome::changed(format!("the paragraph `{block}` is a caption"))
-            .with_data(json!({ "block": block, "caption": caption })))
     }
-}
+    /// **Read** the **captions** of a document, each with the **number**
+    /// it has.
+    prose.document.captions {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document.
 
-/// **Read** the **captions** of a document, each with the **number**
-/// it has.
-#[derive(Command)]
-#[command(id = "prose.document.captions", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadCaptions {
-    /// The document.
-    pub document: NodeRef,
-}
+            document: NodeRef,
+        },
+        run: {
 
-impl ReadCaptions {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.captions".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
+            let id = "prose.document.captions".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
+            }
+            let captions = captions_of(session.document(), node);
+            Ok(Outcome::new(format!(
+                "the document `{document}` has {} captions",
+                captions.as_array().map(|c| c.len()).unwrap_or(0)
+            ))
+            .with_data(json!({ "document": document, "captions": captions })))
+
         }
-        let captions = captions_of(session.document(), node);
-        Ok(Outcome::new(format!(
-            "the document `{document}` has {} captions",
-            captions.as_array().map(|c| c.len()).unwrap_or(0)
-        ))
-        .with_data(json!({ "document": document, "captions": captions })))
     }
 }

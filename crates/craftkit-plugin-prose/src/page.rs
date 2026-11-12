@@ -7,7 +7,7 @@
 //! The page is a fact of the **document**, and the tree's default page
 //! is the tree's default page: US Letter, with an inch of margin.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
@@ -139,121 +139,136 @@ fn points(value: f64, name: &str, id: &str) -> Result<f64, EngineError> {
     Ok(value)
 }
 
-/// **Set** the page of a document.
-///
-/// The size is in **points**, and a margin that is not given keeps the
-/// one the page has.
-#[derive(Command)]
-#[command(id = "prose.page.set", area = "prose", layer = "prose", icon = "rect", mutates, undoable)]
-pub struct SetPage {
-    /// The document.
-    pub document: NodeRef,
-    /// The width of the page, in points.
-    pub width: Number,
-    /// The height of the page, in points.
-    pub height: Number,
-    /// The margin at the top, in points.
-    pub top: Option<Number>,
-    /// The margin at the bottom, in points.
-    pub bottom: Option<Number>,
-    /// The margin on the left, in points.
-    pub left: Option<Number>,
-    /// The margin on the right, in points.
-    pub right: Option<Number>,
-}
+commands! {
+    /// **Set** the page of a document.
+    ///
+    /// The size is in **points**, and a margin that is not given keeps the
+    /// one the page has.
+    prose.page.set {
+        area: "prose",
+        layer: "prose",
+        icon: "rect",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-impl SetPage {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.page.set".to_string();
-        let document = self.document.0;
-        the_document(session, &id, document)?;
-        let width = points(self.width.0, "width", &id)?;
-        let height = points(self.height.0, "height", &id)?;
-        if width == 0.0 || height == 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a page is not nothing wide and nothing high".to_string(),
-            });
-        }
-        let node = session.document().node(document);
-        let mut page = match node {
-            Some(node) => Page::of(node),
-            None => Page::default(),
-        };
-        page.width = width;
-        page.height = height;
-        for (value, name) in [
-            (self.top.map(|margin| margin.0), "top"),
-            (self.bottom.map(|margin| margin.0), "bottom"),
-            (self.left.map(|margin| margin.0), "left"),
-            (self.right.map(|margin| margin.0), "right"),
-        ] {
-            let Some(value) = value else { continue };
-            let value = points(value, name, &id)?;
-            match name {
-                "top" => page.top = value,
-                "bottom" => page.bottom = value,
-                "left" => page.left = value,
-                _ => page.right = value,
+            document: NodeRef,
+            /// The width of the page, in points.
+
+            width: Number,
+            /// The height of the page, in points.
+
+            height: Number,
+            /// The margin at the top, in points.
+
+            top: Option<Number>,
+            /// The margin at the bottom, in points.
+
+            bottom: Option<Number>,
+            /// The margin on the left, in points.
+
+            left: Option<Number>,
+            /// The margin on the right, in points.
+
+            right: Option<Number>,
+        },
+        run: {
+
+            let id = "prose.page.set".to_string();
+            let document = self.document.0;
+            the_document(session, &id, document)?;
+            let width = points(self.width.0, "width", &id)?;
+            let height = points(self.height.0, "height", &id)?;
+            if width == 0.0 || height == 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a page is not nothing wide and nothing high".to_string(),
+                });
             }
+            let node = session.document().node(document);
+            let mut page = match node {
+                Some(node) => Page::of(node),
+                None => Page::default(),
+            };
+            page.width = width;
+            page.height = height;
+            for (value, name) in [
+                (self.top.map(|margin| margin.0), "top"),
+                (self.bottom.map(|margin| margin.0), "bottom"),
+                (self.left.map(|margin| margin.0), "left"),
+                (self.right.map(|margin| margin.0), "right"),
+            ] {
+                let Some(value) = value else { continue };
+                let value = points(value, name, &id)?;
+                match name {
+                    "top" => page.top = value,
+                    "bottom" => page.bottom = value,
+                    "left" => page.left = value,
+                    _ => page.right = value,
+                }
+            }
+            let stored = page.to_json();
+            let Some(node) = session.document_mut()?.node_mut(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            node.data["page"] = stored.clone();
+            Ok(Outcome::changed(format!("the page of the document `{document}` is {width} by {height}"))
+                .with_data(json!({ "document": document, "page": stored })))
+
         }
-        let stored = page.to_json();
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        node.data["page"] = stored.clone();
-        Ok(Outcome::changed(format!("the page of the document `{document}` is {width} by {height}"))
-            .with_data(json!({ "document": document, "page": stored })))
     }
-}
+    /// **Read** the page of a document.
+    ///
+    /// The page is a fact of the document, and whether it is a **landscape**
+    /// one is derived: it is wider than it is tall.
+    prose.page.get {
+        area: "prose",
+        layer: "prose",
+        icon: "rect",
+        params: {
+            /// The document.
 
-/// **Read** the page of a document.
-///
-/// The page is a fact of the document, and whether it is a **landscape**
-/// one is derived: it is wider than it is tall.
-#[derive(Command)]
-#[command(id = "prose.page.get", area = "prose", layer = "prose", icon = "rect")]
-pub struct GetPage {
-    /// The document.
-    pub document: NodeRef,
-}
+            document: NodeRef,
+        },
+        run: {
 
-impl GetPage {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.page.get".to_string();
-        let document = self.document.0;
-        the_document(session, &id, document)?;
-        let page = match session.document().node(document) {
-            Some(node) => Page::of(node),
-            None => Page::default(),
-        };
-        let mut stored = page.to_json();
-        stored["landscape"] = json!(page.is_landscape());
-        // The **background** of the page: the colour it is painted
-        // with, and the watermark it carries. Both are facts of the
-        // document, and a document that has neither says nothing.
-        let background = session.document().node(document);
-        let colour = background.as_ref().and_then(|node| crate::background::background_of(node));
-        let watermark = background.as_ref().and_then(|node| crate::background::watermark_of(node));
-        let borders = background.as_ref().and_then(|node| crate::borders::borders_of(node));
-        // The **columns** of the page: how many there are, the space
-        // between them, the line that may be drawn down the middle,
-        // and the width of a column, which is derived.
-        let columns = background.as_ref().map(|node| crate::columns::columns_of(node));
-        Ok(Outcome::new(format!("the page of the document `{document}`")).with_data(json!({
-            "document": document,
-            "page": stored,
-            "colour": colour,
-            "watermark": watermark,
-            "borders": borders,
-            "columns": columns,
-            // The **numbering** of the pages: the format the numbers
-            // are written in, the number the first page has, and the
-            // first page's number, which is derived.
-            "numbers": background.as_ref().map(|node| crate::pagenumbers::read_of(node)),
-        })))
+            let id = "prose.page.get".to_string();
+            let document = self.document.0;
+            the_document(session, &id, document)?;
+            let page = match session.document().node(document) {
+                Some(node) => Page::of(node),
+                None => Page::default(),
+            };
+            let mut stored = page.to_json();
+            stored["landscape"] = json!(page.is_landscape());
+            // The **background** of the page: the colour it is painted
+            // with, and the watermark it carries. Both are facts of the
+            // document, and a document that has neither says nothing.
+            let background = session.document().node(document);
+            let colour = background.as_ref().and_then(|node| crate::background::background_of(node));
+            let watermark = background.as_ref().and_then(|node| crate::background::watermark_of(node));
+            let borders = background.as_ref().and_then(|node| crate::borders::borders_of(node));
+            // The **columns** of the page: how many there are, the space
+            // between them, the line that may be drawn down the middle,
+            // and the width of a column, which is derived.
+            let columns = background.as_ref().map(|node| crate::columns::columns_of(node));
+            Ok(Outcome::new(format!("the page of the document `{document}`")).with_data(json!({
+                "document": document,
+                "page": stored,
+                "colour": colour,
+                "watermark": watermark,
+                "borders": borders,
+                "columns": columns,
+                // The **numbering** of the pages: the format the numbers
+                // are written in, the number the first page has, and the
+                // first page's number, which is derived.
+                "numbers": background.as_ref().map(|node| crate::pagenumbers::read_of(node)),
+            })))
+
+        }
     }
 }

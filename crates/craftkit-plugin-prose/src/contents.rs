@@ -30,10 +30,10 @@
 //! - **The table is not in the document.** The tree's is a field with
 //!   the entries under it, and here it is read and not stored.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome};
 
 /// The **levels** that are in the table of contents when the reader
 /// does not say: the tree's own, one to three.
@@ -77,67 +77,73 @@ pub fn entries_of(document: &craftkit_sdk::Document, document_node: u64, levels:
     entries
 }
 
-/// **Read** the **table of contents** of a document: its headings, with
-/// the level each of them is at.
-#[derive(Command)]
-#[command(id = "prose.document.contents", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadContents {
-    /// The document.
-    pub document: NodeRef,
-    /// The levels that are in the table: three of them, one to three,
-    /// unless the reader asks for others.
-    pub levels: Option<Number>,
-}
+commands! {
+    /// **Read** the **table of contents** of a document: its headings, with
+    /// the level each of them is at.
+    prose.document.contents {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document.
 
-impl ReadContents {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.contents".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
-        }
-        // The **levels**: the tree's own, and a level that is not a
-        // whole number from one to nine is refused.
-        let levels = match &self.levels {
-            Some(levels) => {
-                let value = levels.0;
-                if !value.is_finite() || value.fract() != 0.0 {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("a level is a whole number: {value} is not one"),
-                    });
-                }
-                if value < f64::from(MIN_LEVEL) || value > f64::from(MAX_LEVEL) {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!(
-                            "a level is a whole number from {MIN_LEVEL} to {MAX_LEVEL}: {value} is not one"
-                        ),
-                    });
-                }
-                value as u32
+            document: NodeRef,
+            /// The levels that are in the table: three of them, one to three,
+            /// unless the reader asks for others.
+
+            levels: Option<Number>,
+        },
+        run: {
+
+            let id = "prose.document.contents".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
             }
-            None => DEFAULT_LEVELS,
-        };
-        let entries = entries_of(session.document(), document, levels);
-        Ok(Outcome::new(format!(
-            "the table of contents of the document `{document}` has {} entries",
-            entries.len()
-        ))
-        .with_data(json!({
-            "document": document,
-            "levels": levels,
-            "entries": entries,
-            "count": entries.len(),
-        })))
+            // The **levels**: the tree's own, and a level that is not a
+            // whole number from one to nine is refused.
+            let levels = match &self.levels {
+                Some(levels) => {
+                    let value = levels.0;
+                    if !value.is_finite() || value.fract() != 0.0 {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("a level is a whole number: {value} is not one"),
+                        });
+                    }
+                    if value < f64::from(MIN_LEVEL) || value > f64::from(MAX_LEVEL) {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "a level is a whole number from {MIN_LEVEL} to {MAX_LEVEL}: {value} is not one"
+                            ),
+                        });
+                    }
+                    value as u32
+                }
+                None => DEFAULT_LEVELS,
+            };
+            let entries = entries_of(session.document(), document, levels);
+            Ok(Outcome::new(format!(
+                "the table of contents of the document `{document}` has {} entries",
+                entries.len()
+            ))
+            .with_data(json!({
+                "document": document,
+                "levels": levels,
+                "entries": entries,
+                "count": entries.len(),
+            })))
+
+        }
     }
 }

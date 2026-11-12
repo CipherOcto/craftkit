@@ -18,10 +18,10 @@
 //! - There is no **section** here, so the tree's "the pages number
 //!   on from the section before" is refused by name.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Text};
 
 /// The most a **start** may be.
 pub const MAX_START: u64 = 100_000;
@@ -70,63 +70,72 @@ fn format_of(name: &str, id: &str) -> Result<&'static str, EngineError> {
         })
 }
 
-/// **Set** the **numbering** of the pages.
-///
-/// The format the numbers are written in, and the number the first
-/// page has.
-#[derive(Command)]
-#[command(id = "prose.page.numbers", area = "prose", layer = "prose", icon = "list", mutates, undoable)]
-pub struct SetPageNumbers {
-    /// The document.
-    pub document: NodeRef,
-    /// The format the numbers are written in.
+commands! {
+    /// **Set** the **numbering** of the pages.
     ///
-    /// It is `decimal` when it is not given.
-    pub format: Option<Text>,
-    /// The number the first page has.
-    ///
-    /// It is from one to a hundred thousand.
-    pub start: Option<Number>,
-}
+    /// The format the numbers are written in, and the number the first
+    /// page has.
+    prose.page.numbers {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-impl SetPageNumbers {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.page.numbers".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
-        }
-        let mut numbering = numbering_of(&node);
-        if let Some(format) = &self.format {
-            numbering["format"] = json!(format_of(&format.0, &id)?);
-        }
-        if let Some(start) = &self.start {
-            let value = start.0;
-            if !value.is_finite() || value.fract() != 0.0 || value < 1.0 || value > MAX_START as f64 {
+            document: NodeRef,
+            /// The format the numbers are written in.
+            ///
+            /// It is `decimal` when it is not given.
+
+            format: Option<Text>,
+            /// The number the first page has.
+            ///
+            /// It is from one to a hundred thousand.
+
+            start: Option<Number>,
+        },
+        run: {
+
+            let id = "prose.page.numbers".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document).cloned() else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("a start is from one to {MAX_START}, and {value} is not one of them"),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
                 });
             }
-            numbering["start"] = json!(value as u64);
+            let mut numbering = numbering_of(&node);
+            if let Some(format) = &self.format {
+                numbering["format"] = json!(format_of(&format.0, &id)?);
+            }
+            if let Some(start) = &self.start {
+                let value = start.0;
+                if !value.is_finite() || value.fract() != 0.0 || value < 1.0 || value > MAX_START as f64 {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("a start is from one to {MAX_START}, and {value} is not one of them"),
+                    });
+                }
+                numbering["start"] = json!(value as u64);
+            }
+            let Some(node) = session.document_mut()?.node_mut(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            node.data["page_numbers"] = numbering.clone();
+            Ok(Outcome::changed(format!("the pages of the document `{document}` are numbered"))
+                .with_data(json!({ "document": document, "numbers": read_of(node) })))
+
         }
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        node.data["page_numbers"] = numbering.clone();
-        Ok(Outcome::changed(format!("the pages of the document `{document}` are numbered"))
-            .with_data(json!({ "document": document, "numbers": read_of(node) })))
     }
 }

@@ -21,7 +21,7 @@
 //! - a row or a column that is **inside** a merge makes the merge
 //!   smaller, and one that is **beside** it moves it.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session};
@@ -197,169 +197,188 @@ fn index_of(id: &str, number: Number, what: &str) -> Result<usize, EngineError> 
     Ok(number.0 as usize)
 }
 
-/// **Merge** cells of a table into one.
-///
-/// A change: the cells the merge covers are emptied, and the cell at
-/// the top left keeps its value.
-#[derive(Command)]
-#[command(id = "prose.table.merge", area = "prose", layer = "prose", icon = "link", mutates, undoable)]
-pub struct MergeCells {
-    /// The table.
-    pub table: NodeRef,
-    /// The row the merge begins at, counting from nothing.
-    pub row: Number,
-    /// The column the merge begins at, counting from nothing.
-    pub column: Number,
-    /// How many rows it reaches down. It is one unless the file says
-    /// another.
-    pub rows: Option<Number>,
-    /// How many columns it reaches across. It is one unless the file
-    /// says another.
-    pub columns: Option<Number>,
-}
+commands! {
+    /// **Merge** cells of a table into one.
+    ///
+    /// A change: the cells the merge covers are emptied, and the cell at
+    /// the top left keeps its value.
+    prose.table.merge {
+        area: "prose",
+        layer: "prose",
+        icon: "link",
+        mutates,
+        undoable,
+        params: {
+            /// The table.
 
-impl MergeCells {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.table.merge".to_string();
-        let table = self.table.0;
-        let row = index_of(&id, self.row, "row")?;
-        let column = index_of(&id, self.column, "column")?;
-        let rows = match &self.rows {
-            None => 1usize,
-            Some(rows) => index_of(&id, *rows, "number of rows")?,
-        };
-        let columns = match &self.columns {
-            None => 1usize,
-            Some(columns) => index_of(&id, *columns, "number of columns")?,
-        };
-        if rows == 0 || columns == 0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "a merge reaches over at least one row and one column".to_string(),
-            });
-        }
-        if rows == 1 && columns == 1 {
-            return Err(EngineError::Failed { id, message: "one cell is not a merge".to_string() });
-        }
-        let node = the_table(session, &id, table)?;
-        let grid = crate::tables::rows_of(node, &id)?;
-        let height = grid.len();
-        let width = grid.first().map(|cells| cells.len()).unwrap_or(0);
-        if row + rows > height || column + columns > width {
-            return Err(EngineError::Failed {
-                id,
-                message: format!(
-                    "the merge reaches outside the table: the table is {height} row(s) and {width} column(s) wide"
-                ),
-            });
-        }
-        let merges = merges_of(node);
-        let merge = Merge { row, column, rows, columns };
-        if merges.iter().any(|other| other.overlaps(&merge)) {
-            return Err(EngineError::Failed {
-                id,
-                message: "the merge reaches over a cell that is already merged".to_string(),
-            });
-        }
-        // The **cells** the merge covers are emptied, and the top
-        // left one keeps its value.
-        let mut grid = grid;
-        for r in row..row + rows {
-            for c in column..column + columns {
-                if r == row && c == column {
-                    continue;
-                }
-                if let Some(cells) = grid.get_mut(r)
-                    && let Some(cell) = cells.get_mut(c)
-                {
-                    *cell = Json::Null;
+            table: NodeRef,
+            /// The row the merge begins at, counting from nothing.
+
+            row: Number,
+            /// The column the merge begins at, counting from nothing.
+
+            column: Number,
+            /// How many rows it reaches down. It is one unless the file says
+            /// another.
+
+            rows: Option<Number>,
+            /// How many columns it reaches across. It is one unless the file
+            /// says another.
+
+            columns: Option<Number>,
+        },
+        run: {
+
+            let id = "prose.table.merge".to_string();
+            let table = self.table.0;
+            let row = index_of(&id, self.row, "row")?;
+            let column = index_of(&id, self.column, "column")?;
+            let rows = match &self.rows {
+                None => 1usize,
+                Some(rows) => index_of(&id, *rows, "number of rows")?,
+            };
+            let columns = match &self.columns {
+                None => 1usize,
+                Some(columns) => index_of(&id, *columns, "number of columns")?,
+            };
+            if rows == 0 || columns == 0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a merge reaches over at least one row and one column".to_string(),
+                });
+            }
+            if rows == 1 && columns == 1 {
+                return Err(EngineError::Failed { id, message: "one cell is not a merge".to_string() });
+            }
+            let node = the_table(session, &id, table)?;
+            let grid = crate::tables::rows_of(node, &id)?;
+            let height = grid.len();
+            let width = grid.first().map(|cells| cells.len()).unwrap_or(0);
+            if row + rows > height || column + columns > width {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!(
+                        "the merge reaches outside the table: the table is {height} row(s) and {width} column(s) wide"
+                    ),
+                });
+            }
+            let merges = merges_of(node);
+            let merge = Merge { row, column, rows, columns };
+            if merges.iter().any(|other| other.overlaps(&merge)) {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the merge reaches over a cell that is already merged".to_string(),
+                });
+            }
+            // The **cells** the merge covers are emptied, and the top
+            // left one keeps its value.
+            let mut grid = grid;
+            for r in row..row + rows {
+                for c in column..column + columns {
+                    if r == row && c == column {
+                        continue;
+                    }
+                    if let Some(cells) = grid.get_mut(r)
+                        && let Some(cell) = cells.get_mut(c)
+                    {
+                        *cell = Json::Null;
+                    }
                 }
             }
+            let mut merges = merges;
+            merges.push(merge);
+            crate::tables::write_rows(session, &id, table, &grid)?;
+            let Some(node) = session.document_mut()?.node_mut(table) else {
+                return Err(EngineError::Failed { id, message: format!("there is no table `{table}`") });
+            };
+            node.data["merges"] = merges_into(&merges);
+            Ok(Outcome::changed(format!("merged the cells of the table `{table}`")).with_data(json!({
+                "table": table,
+                "row": row,
+                "column": column,
+                "rows": rows,
+                "columns": columns,
+                "merges": merges.len(),
+            })))
+
         }
-        let mut merges = merges;
-        merges.push(merge);
-        crate::tables::write_rows(session, &id, table, &grid)?;
-        let Some(node) = session.document_mut()?.node_mut(table) else {
-            return Err(EngineError::Failed { id, message: format!("there is no table `{table}`") });
-        };
-        node.data["merges"] = merges_into(&merges);
-        Ok(Outcome::changed(format!("merged the cells of the table `{table}`")).with_data(json!({
-            "table": table,
-            "row": row,
-            "column": column,
-            "rows": rows,
-            "columns": columns,
-            "merges": merges.len(),
-        })))
     }
-}
+    /// **Split** a merged cell of a table.
+    ///
+    /// A change: the merge is taken away. The cells it covered stay
+    /// empty — the values they held were taken when the merge was made.
+    prose.table.split {
+        area: "prose",
+        layer: "prose",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The table.
 
-/// **Split** a merged cell of a table.
-///
-/// A change: the merge is taken away. The cells it covered stay
-/// empty — the values they held were taken when the merge was made.
-#[derive(Command)]
-#[command(id = "prose.table.split", area = "prose", layer = "prose", icon = "minus", mutates, undoable)]
-pub struct SplitCell {
-    /// The table.
-    pub table: NodeRef,
-    /// The row the cell is in, counting from nothing.
-    pub row: Number,
-    /// The column the cell is in, counting from nothing.
-    pub column: Number,
-}
+            table: NodeRef,
+            /// The row the cell is in, counting from nothing.
 
-impl SplitCell {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.table.split".to_string();
-        let table = self.table.0;
-        let row = index_of(&id, self.row, "row")?;
-        let column = index_of(&id, self.column, "column")?;
-        let node = the_table(session, &id, table)?;
-        let mut merges = merges_of(node);
-        let Some(at) = merge_covering(&merges, row, column) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the cell {row},{column} of the table `{table}` is not merged"),
-            });
-        };
-        let merge = merges.remove(at);
-        let Some(node) = session.document_mut()?.node_mut(table) else {
-            return Err(EngineError::Failed { id, message: format!("there is no table `{table}`") });
-        };
-        node.data["merges"] = merges_into(&merges);
-        Ok(Outcome::changed(format!("split the merged cell of the table `{table}`")).with_data(json!({
-            "table": table,
-            "row": merge.row,
-            "column": merge.column,
-            "rows": merge.rows,
-            "columns": merge.columns,
-            "merges": merges.len(),
-        })))
+            row: Number,
+            /// The column the cell is in, counting from nothing.
+
+            column: Number,
+        },
+        run: {
+
+            let id = "prose.table.split".to_string();
+            let table = self.table.0;
+            let row = index_of(&id, self.row, "row")?;
+            let column = index_of(&id, self.column, "column")?;
+            let node = the_table(session, &id, table)?;
+            let mut merges = merges_of(node);
+            let Some(at) = merge_covering(&merges, row, column) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the cell {row},{column} of the table `{table}` is not merged"),
+                });
+            };
+            let merge = merges.remove(at);
+            let Some(node) = session.document_mut()?.node_mut(table) else {
+                return Err(EngineError::Failed { id, message: format!("there is no table `{table}`") });
+            };
+            node.data["merges"] = merges_into(&merges);
+            Ok(Outcome::changed(format!("split the merged cell of the table `{table}`")).with_data(json!({
+                "table": table,
+                "row": merge.row,
+                "column": merge.column,
+                "rows": merge.rows,
+                "columns": merge.columns,
+                "merges": merges.len(),
+            })))
+
+        }
     }
-}
+    /// **Read** the **merged cells** of a table.
+    ///
+    /// A query: it does not change the document.
+    prose.table.merges {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The table.
 
-/// **Read** the **merged cells** of a table.
-///
-/// A query: it does not change the document.
-#[derive(Command)]
-#[command(id = "prose.table.merges", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadMerges {
-    /// The table.
-    pub table: NodeRef,
-}
+            table: NodeRef,
+        },
+        run: {
 
-impl ReadMerges {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.table.merges".to_string();
-        let table = self.table.0;
-        let node = the_table(session, &id, table)?;
-        let merges = merges_of(node);
-        let count = merges.len();
-        Ok(Outcome::new(format!("the table `{table}` has {count} merged cell(s)")).with_data(json!({
-            "table": table,
-            "merges": merges.iter().map(|merge| merge.to_json()).collect::<Vec<Json>>(),
-            "count": count,
-        })))
+            let id = "prose.table.merges".to_string();
+            let table = self.table.0;
+            let node = the_table(session, &id, table)?;
+            let merges = merges_of(node);
+            let count = merges.len();
+            Ok(Outcome::new(format!("the table `{table}` has {count} merged cell(s)")).with_data(json!({
+                "table": table,
+                "merges": merges.iter().map(|merge| merge.to_json()).collect::<Vec<Json>>(),
+                "count": count,
+            })))
+
+        }
     }
 }

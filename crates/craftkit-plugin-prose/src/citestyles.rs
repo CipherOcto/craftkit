@@ -32,10 +32,10 @@
 //!   each write an author's name in their own way, and that is the
 //!   writing of an entry. A citation names the **surnames**.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Text};
 
 /// How a style cites **in the text**.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -652,184 +652,193 @@ fn to_json(style: &Style) -> Json {
     })
 }
 
-/// **Read** the **citation styles** of this tree.
-///
-/// A query: it does not change the document. The styles are the
-/// tree's own, and what each one says is reported.
-#[derive(Command)]
-#[command(id = "prose.citation.styles", area = "prose", layer = "prose", icon = "list")]
-pub struct ListCitationStyles {}
-
-impl ListCitationStyles {
-    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
-        let styles: Vec<Json> = STYLES.iter().map(to_json).collect();
-        Ok(Outcome::new(format!("this tree has {} citation style(s)", styles.len()))
-            .with_data(json!({ "styles": styles })))
-    }
-}
-
-/// **Say** which **citation style** a document cites by.
-///
-/// The style is a fact of the document, and a style that is not one of
-/// the tree's is refused by name.
-#[derive(Command)]
-#[command(
-    id = "prose.document.citestyle.set",
-    area = "prose",
-    layer = "prose",
-    icon = "pencil",
-    mutates,
-    undoable
-)]
-pub struct SetCitationStyle {
-    /// The document.
-    pub document: NodeRef,
-    /// The name of the style.
+commands! {
+    /// **Read** the **citation styles** of this tree.
     ///
-    /// The name of the style, or a name that begins with one of its
-    /// aliases: `apa`, `chicago`, `mla`, `gosttitle`…
-    pub style: Text,
-}
+    /// A query: it does not change the document. The styles are the
+    /// tree's own, and what each one says is reported.
+    prose.citation.styles {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+        },
+        run: {
 
-impl SetCitationStyle {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.citestyle.set".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
+            let styles: Vec<Json> = STYLES.iter().map(to_json).collect();
+            Ok(Outcome::new(format!("this tree has {} citation style(s)", styles.len()))
+                .with_data(json!({ "styles": styles })))
+
         }
-        let name = self.style.0.trim();
-        let Some(style) = find(name) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the style `{name}` is not one of this tree's: it is one of {}",
-                    names_of_styles().join(", ")
-                ),
-            });
-        };
-        let name = style.name.to_string();
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{document}`"),
-            });
-        };
-        node.data["citation_style"] = json!(name);
-        Ok(Outcome::changed(format!("the document `{document}` cites by `{name}`"))
-            .with_data(json!({ "document": document, "style": name })))
     }
-}
+    /// **Say** which **citation style** a document cites by.
+    ///
+    /// The style is a fact of the document, and a style that is not one of
+    /// the tree's is refused by name.
+    prose.document.citestyle.set {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-/// **Read** the **citation style** of a document.
-///
-/// A query: it does not change the document. A document that names no
-/// style cites by APA: the tree's own default.
-#[derive(Command)]
-#[command(id = "prose.document.citestyle.read", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadCitationStyle {
-    /// The document.
-    pub document: NodeRef,
-}
+            document: NodeRef,
+            /// The name of the style.
+            ///
+            /// The name of the style, or a name that begins with one of its
+            /// aliases: `apa`, `chicago`, `mla`, `gosttitle`…
 
-impl ReadCitationStyle {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.citestyle.read".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
+            style: Text,
+        },
+        run: {
+
+            let id = "prose.document.citestyle.set".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{document}`"),
+                });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
+            }
+            let name = self.style.0.trim();
+            let Some(style) = find(name) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the style `{name}` is not one of this tree's: it is one of {}",
+                        names_of_styles().join(", ")
+                    ),
+                });
+            };
+            let name = style.name.to_string();
+            let Some(node) = session.document_mut()?.node_mut(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{document}`"),
+                });
+            };
+            node.data["citation_style"] = json!(name);
+            Ok(Outcome::changed(format!("the document `{document}` cites by `{name}`"))
+                .with_data(json!({ "document": document, "style": name })))
+
         }
-        let style = style_of(&node);
-        Ok(Outcome::new(format!("the document `{document}` cites by `{}`", style.name))
-            .with_data(json!({ "document": document, "style": to_json(style) })))
     }
-}
+    /// **Read** the **citation style** of a document.
+    ///
+    /// A query: it does not change the document. A document that names no
+    /// style cites by APA: the tree's own default.
+    prose.document.citestyle.read {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document.
 
-/// **Read** the **citation** of a source, in the style of its
-/// document.
-///
-/// A query: it does not change the document. The citation is
-/// **derived**: it is worked out from the source and the style of the
-/// document every time, so it cannot be out of date.
-#[derive(Command)]
-#[command(id = "prose.document.citation", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadCitation {
-    /// The document the source belongs to.
-    pub document: NodeRef,
-    /// The tag that names the source.
-    pub tag: Text,
-    /// The pages of the source that are cited.
-    pub pages: Option<Text>,
-}
+            document: NodeRef,
+        },
+        run: {
 
-impl ReadCitation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.document.citation".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
+            let id = "prose.document.citestyle.read".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{document}`"),
+                });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
+            }
+            let style = style_of(&node);
+            Ok(Outcome::new(format!("the document `{document}` cites by `{}`", style.name))
+                .with_data(json!({ "document": document, "style": to_json(style) })))
+
         }
-        let tag = self.tag.0.trim().to_string();
-        let sources = crate::sources::sources_of(&node);
-        let Some(source) = sources.iter().find(|source| {
-            source.get("tag").and_then(|held| held.as_str()).map(|held| held == tag).unwrap_or(false)
-        }) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no source with the tag `{tag}`"),
-            });
-        };
-        let style = style_of(&node);
-        // The **number** of the source: where it stands in the order
-        // the sources are cited, and the tree's own rule for a source
-        // that is not cited yet — it stands after the ones that are.
-        let cited = crate::sources::cited_of(session, document);
-        let number = match cited.iter().position(|held| *held == tag) {
-            Some(at) => at + 1,
-            None => cited.len() + 1,
-        };
-        let pages = self.pages.as_ref().map(|pages| pages.0.trim().to_string()).unwrap_or_default();
-        let citation = cite_of(source, style, number, &pages);
-        Ok(Outcome::new(format!("the source `{tag}` is cited as `{citation}`")).with_data(json!({
-            "document": document,
-            "tag": tag,
-            "style": style.name,
-            "number": match numbered(style) {
-                true => json!(number),
-                false => Json::Null,
-            },
-            "pages": match pages.is_empty() {
-                true => Json::Null,
-                false => json!(pages),
-            },
-            "citation": citation,
-        })))
+    }
+    /// **Read** the **citation** of a source, in the style of its
+    /// document.
+    ///
+    /// A query: it does not change the document. The citation is
+    /// **derived**: it is worked out from the source and the style of the
+    /// document every time, so it cannot be out of date.
+    prose.document.citation {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document the source belongs to.
+
+            document: NodeRef,
+            /// The tag that names the source.
+
+            tag: Text,
+            /// The pages of the source that are cited.
+
+            pages: Option<Text>,
+        },
+        run: {
+
+            let id = "prose.document.citation".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{document}`"),
+                });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
+            }
+            let tag = self.tag.0.trim().to_string();
+            let sources = crate::sources::sources_of(&node);
+            let Some(source) = sources.iter().find(|source| {
+                source.get("tag").and_then(|held| held.as_str()).map(|held| held == tag).unwrap_or(false)
+            }) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no source with the tag `{tag}`"),
+                });
+            };
+            let style = style_of(&node);
+            // The **number** of the source: where it stands in the order
+            // the sources are cited, and the tree's own rule for a source
+            // that is not cited yet — it stands after the ones that are.
+            let cited = crate::sources::cited_of(session, document);
+            let number = match cited.iter().position(|held| *held == tag) {
+                Some(at) => at + 1,
+                None => cited.len() + 1,
+            };
+            let pages = self.pages.as_ref().map(|pages| pages.0.trim().to_string()).unwrap_or_default();
+            let citation = cite_of(source, style, number, &pages);
+            Ok(Outcome::new(format!("the source `{tag}` is cited as `{citation}`")).with_data(json!({
+                "document": document,
+                "tag": tag,
+                "style": style.name,
+                "number": match numbered(style) {
+                    true => json!(number),
+                    false => Json::Null,
+                },
+                "pages": match pages.is_empty() {
+                    true => Json::Null,
+                    false => json!(pages),
+                },
+                "citation": citation,
+            })))
+
+        }
     }
 }

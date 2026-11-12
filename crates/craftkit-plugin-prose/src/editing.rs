@@ -32,206 +32,500 @@
 //!   it goes to, counting from one among the blocks, and a place that
 //!   is not there is refused — which is one command and not two.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
 
-/// Change **what a paragraph says**.
-///
-/// The runs stay: a run is an interval over the text, and the text it
-/// covers is derived.
-#[derive(Command)]
-#[command(
-    id = "prose.block.paragraph.text",
-    area = "prose",
-    layer = "prose",
-    icon = "pencil",
-    mutates,
-    undoable
-)]
-pub struct SetParagraphText {
-    /// The paragraph.
-    pub block: NodeRef,
-    /// What it says now.
-    pub text: Text,
-}
+commands! {
+    /// Change **what a paragraph says**.
+    ///
+    /// The runs stay: a run is an interval over the text, and the text it
+    /// covers is derived.
+    prose.block.paragraph.text {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The paragraph.
 
-impl SetParagraphText {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.paragraph.text".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if node.kind != "prose.block.paragraph" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
-            });
+            block: NodeRef,
+            /// What it says now.
+
+            text: Text,
+        },
+        run: {
+
+            let id = "prose.block.paragraph.text".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if node.kind != "prose.block.paragraph" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
+                });
+            }
+            let text = self.text.0.clone();
+            let characters = text.chars().count();
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            node.data["text"] = Json::String(text.clone());
+            Ok(Outcome::changed(format!("the paragraph {block} now says {characters} characters"))
+                .with_data(json!({ "block": block, "characters": characters })))
+
         }
-        let text = self.text.0.clone();
-        let characters = text.chars().count();
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        node.data["text"] = Json::String(text.clone());
-        Ok(Outcome::changed(format!("the paragraph {block} now says {characters} characters"))
-            .with_data(json!({ "block": block, "characters": characters })))
     }
-}
+    /// Take a **block** out of a document.
+    ///
+    /// The block's edges go with it: a block that was in a style is not in
+    /// it any more.
+    prose.block.remove {
+        area: "prose",
+        layer: "prose",
+        icon: "trash",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-/// Take a **block** out of a document.
-///
-/// The block's edges go with it: a block that was in a style is not in
-/// it any more.
-#[derive(Command)]
-#[command(id = "prose.block.remove", area = "prose", layer = "prose", icon = "trash", mutates, undoable)]
-pub struct RemoveBlock {
-    /// The block.
-    pub block: NodeRef,
-}
+            block: NodeRef,
+        },
+        run: {
 
-impl RemoveBlock {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.remove".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if !is_block(node) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
+            let id = "prose.block.remove".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if !is_block(node) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
+                });
+            }
+            let Some(document) = parent_of(session, block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the block `{block}` is in no document"),
+                });
+            };
+            if !session.document_mut()?.remove_node(block) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            }
+            // The **comment** goes with the block: a comment on a block
+            // that is not there is a comment on nothing.
+            crate::comments::drop_comment(session, document, block);
+            Ok(Outcome::changed(format!("the block `{block}` is taken away")).with_data(json!({ "id": block })))
+
         }
-        let Some(document) = parent_of(session, block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the block `{block}` is in no document"),
-            });
-        };
-        if !session.document_mut()?.remove_node(block) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        }
-        // The **comment** goes with the block: a comment on a block
-        // that is not there is a comment on nothing.
-        crate::comments::drop_comment(session, document, block);
-        Ok(Outcome::changed(format!("the block `{block}` is taken away")).with_data(json!({ "id": block })))
     }
-}
+    /// **Move** a block to another place in its document.
+    ///
+    /// The place is counted from one among the blocks of the document, and
+    /// the blocks that are not the block itself keep their order.
+    prose.block.move {
+        area: "prose",
+        layer: "prose",
+        icon: "arrow",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-/// **Move** a block to another place in its document.
-///
-/// The place is counted from one among the blocks of the document, and
-/// the blocks that are not the block itself keep their order.
-#[derive(Command)]
-#[command(id = "prose.block.move", area = "prose", layer = "prose", icon = "arrow", mutates, undoable)]
-pub struct MoveBlock {
-    /// The block.
-    pub block: NodeRef,
-    /// Which place it goes to, counting from one among the blocks of
-    /// the document.
-    pub to: Number,
-}
+            block: NodeRef,
+            /// Which place it goes to, counting from one among the blocks of
+            /// the document.
 
-impl MoveBlock {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.move".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if !is_block(node) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
+            to: Number,
+        },
+        run: {
+
+            let id = "prose.block.move".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if !is_block(node) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
+                });
+            }
+            let Some(document) = parent_of(session, block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the block `{block}` is in no document"),
+                });
+            };
+            let to = self.to.0;
+            if !to.is_finite() || to < 1.0 || to.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a place is counted from one: {to} is not one"),
+                });
+            }
+            let to = to as usize;
+            let Some(document_node) = session.document().node(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{document}`"),
+                });
+            };
+            let blocks: Vec<u64> = document_node
+                .children
+                .iter()
+                .filter(|child| child.kind.starts_with("prose.block."))
+                .map(|child| child.id)
+                .collect();
+            let count = blocks.len();
+            if to > count {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the document `{document}` has {count} blocks and the {to} is not one of them"
+                    ),
+                });
+            }
+            let from = blocks.iter().position(|other| *other == block).unwrap_or(0);
+            if to == from + 1 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the block `{block}` is already the {to}"),
+                });
+            }
+            // The **children** of the document: the block comes out of them
+            // and goes back in at the place it was told.
+            let Some(node) = session.document_mut()?.node_mut(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{document}`"),
+                });
+            };
+            let mut children = node.children.clone();
+            let Some(at) = children.iter().position(|child| child.id == block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the block `{block}` is in no document"),
+                });
+            };
+            let taken = children.remove(at);
+            let blocks: Vec<usize> = children
+                .iter()
+                .enumerate()
+                .filter(|(_, child)| child.kind.starts_with("prose.block."))
+                .map(|(index, _)| index)
+                .collect();
+            let insert_at = if to - 1 < blocks.len() { blocks[to - 1] } else { children.len() };
+            children.insert(insert_at, taken);
+            node.children = children;
+            Ok(Outcome::changed(format!("the block `{block}` is now the {to} of the document `{document}`"))
+                .with_data(json!({ "block": block, "document": document, "to": to })))
+
         }
-        let Some(document) = parent_of(session, block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the block `{block}` is in no document"),
-            });
-        };
-        let to = self.to.0;
-        if !to.is_finite() || to < 1.0 || to.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a place is counted from one: {to} is not one"),
-            });
+    }
+    /// Say how a paragraph **stands**.
+    ///
+    /// The alignment is one of the tree's own: `left`, `center`, `right`,
+    /// `justify` or `distribute`. The tree's `start` and `end` are the
+    /// logical edges and it writes them down as `left` and `right`.
+    prose.block.paragraph.align {
+        area: "prose",
+        layer: "prose",
+        icon: "align",
+        mutates,
+        undoable,
+        params: {
+            /// The paragraph.
+
+            block: NodeRef,
+            /// How it stands: `left`, `center`, `right`, `justify` or
+            /// `distribute`.
+
+            align: Text,
+        },
+        run: {
+
+            let id = "prose.block.paragraph.align".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if node.kind != "prose.block.paragraph" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
+                });
+            }
+            let Some(align) = alignment_of(&self.align.0) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "there is no alignment `{}`: the alignments are {}",
+                        self.align.0.trim(),
+                        ALIGNMENTS.join(", ")
+                    ),
+                });
+            };
+            if let Some(node) = session.document_mut()?.node_mut(block) {
+                node.data["align"] = Json::String(align.to_string());
+            }
+            Ok(Outcome::changed(format!("the paragraph {block} stands {align}"))
+                .with_data(json!({ "block": block, "align": align })))
+
         }
-        let to = to as usize;
-        let Some(document_node) = session.document().node(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{document}`"),
-            });
-        };
-        let blocks: Vec<u64> = document_node
-            .children
-            .iter()
-            .filter(|child| child.kind.starts_with("prose.block."))
-            .map(|child| child.id)
-            .collect();
-        let count = blocks.len();
-        if to > count {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the document `{document}` has {count} blocks and the {to} is not one of them"
-                ),
-            });
+    }
+    /// Say how far a paragraph is **indented**, in points.
+    ///
+    /// Only what is named is changed. An indent outside the tree's own
+    /// range is **refused**: the tree clamps it and says nothing.
+    prose.block.paragraph.indent {
+        area: "prose",
+        layer: "prose",
+        icon: "indent",
+        mutates,
+        undoable,
+        params: {
+            /// The paragraph.
+
+            block: NodeRef,
+            /// How far from the left edge, in points.
+
+            left: Option<Number>,
+            /// How far from the right edge, in points.
+
+            right: Option<Number>,
+            /// How far the first line is in from the left, in points. A
+            /// negative number is a **hanging** indent.
+
+            first_line: Option<Number>,
+        },
+        run: {
+
+            let id = "prose.block.paragraph.indent".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if node.kind != "prose.block.paragraph" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
+                });
+            }
+            let left = indent_of(self.left, &id)?;
+            let right = indent_of(self.right, &id)?;
+            let first_line = indent_of(self.first_line, &id)?;
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if let Some(left) = left {
+                node.data["indent_left"] = Json::from(left);
+            }
+            if let Some(right) = right {
+                node.data["indent_right"] = Json::from(right);
+            }
+            if let Some(first_line) = first_line {
+                node.data["indent_first"] = Json::from(first_line);
+            }
+            Ok(Outcome::changed(format!("the paragraph {block} is indented")).with_data(json!({
+                "block": block,
+                "left": left,
+                "right": right,
+                "first_line": first_line,
+            })))
+
         }
-        let from = blocks.iter().position(|other| *other == block).unwrap_or(0);
-        if to == from + 1 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the block `{block}` is already the {to}"),
-            });
+    }
+    /// Say how much **space** is around a paragraph, in points.
+    ///
+    /// Only what is named is changed. A space outside the tree's own range
+    /// is **refused**: the tree clamps it and says nothing.
+    prose.block.paragraph.spacing {
+        area: "prose",
+        layer: "prose",
+        icon: "space",
+        mutates,
+        undoable,
+        params: {
+            /// The paragraph.
+
+            block: NodeRef,
+            /// How much space is above it, in points.
+
+            before: Option<Number>,
+            /// How much space is below it, in points.
+
+            after: Option<Number>,
+        },
+        run: {
+
+            let id = "prose.block.paragraph.spacing".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if node.kind != "prose.block.paragraph" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
+                });
+            }
+            let before = spacing_of(self.before, &id)?;
+            let after = spacing_of(self.after, &id)?;
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if let Some(before) = before {
+                node.data["space_before"] = Json::from(before);
+            }
+            if let Some(after) = after {
+                node.data["space_after"] = Json::from(after);
+            }
+            Ok(Outcome::changed(format!("the paragraph {block} has its space")).with_data(json!({
+                "block": block,
+                "before": before,
+                "after": after,
+            })))
+
         }
-        // The **children** of the document: the block comes out of them
-        // and goes back in at the place it was told.
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{document}`"),
-            });
-        };
-        let mut children = node.children.clone();
-        let Some(at) = children.iter().position(|child| child.id == block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the block `{block}` is in no document"),
-            });
-        };
-        let taken = children.remove(at);
-        let blocks: Vec<usize> = children
-            .iter()
-            .enumerate()
-            .filter(|(_, child)| child.kind.starts_with("prose.block."))
-            .map(|(index, _)| index)
-            .collect();
-        let insert_at = if to - 1 < blocks.len() { blocks[to - 1] } else { children.len() };
-        children.insert(insert_at, taken);
-        node.children = children;
-        Ok(Outcome::changed(format!("the block `{block}` is now the {to} of the document `{document}`"))
-            .with_data(json!({ "block": block, "document": document, "to": to })))
+    }
+    /// Say how the **lines** of a paragraph are spaced.
+    ///
+    /// The tree's spacing is one of three things: a **multiple** of single
+    /// spacing, a **minimum** number of points, or an **exact** number of
+    /// points. Only one of them may be said, and a number outside the
+    /// tree's own range is **refused**: the tree clamps it and says
+    /// nothing.
+    prose.block.paragraph.linespacing {
+        area: "prose",
+        layer: "prose",
+        icon: "lines",
+        mutates,
+        undoable,
+        params: {
+            /// The paragraph.
+
+            block: NodeRef,
+            /// A multiple of single spacing: `1` is single, `1.5` is one and a
+            /// half, `2` is double.
+
+            multiple: Option<Number>,
+            /// At least this many points.
+
+            at_least: Option<Number>,
+            /// Exactly this many points.
+
+            exactly: Option<Number>,
+        },
+        run: {
+
+            let id = "prose.block.paragraph.linespacing".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{block}`"),
+                });
+            };
+            if node.kind != "prose.block.paragraph" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
+                });
+            }
+            let said =
+                [self.multiple, self.at_least, self.exactly].iter().filter(|value| value.is_some()).count();
+            if said == 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a line spacing is a multiple, a minimum or an exact number of points".to_string(),
+                });
+            }
+            if said > 1 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a line spacing is one of the three and not more than one of them".to_string(),
+                });
+            }
+            let (kind, value) = if let Some(multiple) = self.multiple {
+                let multiple = multiple.0;
+                if !multiple.is_finite() || !(MIN_MULTIPLE..=MAX_MULTIPLE).contains(&multiple) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "a multiple of single spacing is between {MIN_MULTIPLE} and {MAX_MULTIPLE}, and {multiple} is not"
+                        ),
+                    });
+                }
+                ("multiple", multiple)
+            } else if let Some(at_least) = self.at_least {
+                let at_least = at_least.0;
+                if !at_least.is_finite() || !(0.0..=MAX_LINE_SPACING).contains(&at_least) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "a minimum of points is between 0 and {MAX_LINE_SPACING}, and {at_least} is not"
+                        ),
+                    });
+                }
+                ("at_least", at_least)
+            } else {
+                let exactly = self.exactly.map(|exactly| exactly.0).unwrap_or(0.0);
+                if !exactly.is_finite() || !(MIN_EXACT..=MAX_LINE_SPACING).contains(&exactly) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "an exact number of points is between {MIN_EXACT} and {MAX_LINE_SPACING}, and {exactly} is not"
+                        ),
+                    });
+                }
+                ("exactly", exactly)
+            };
+            if let Some(node) = session.document_mut()?.node_mut(block) {
+                node.data["line_spacing"] = json!({ "kind": kind, "value": value });
+            }
+            Ok(Outcome::changed(format!("the lines of the paragraph {block} are spaced")).with_data(json!({
+                "block": block,
+                "kind": kind,
+                "value": value,
+            })))
+
+        }
     }
 }
 
@@ -260,130 +554,6 @@ const MAX_INDENT: f64 = 1584.0;
 /// The **largest** a spacing may be, in points.
 const MAX_SPACING: f64 = 1584.0;
 
-/// Say how a paragraph **stands**.
-///
-/// The alignment is one of the tree's own: `left`, `center`, `right`,
-/// `justify` or `distribute`. The tree's `start` and `end` are the
-/// logical edges and it writes them down as `left` and `right`.
-#[derive(Command)]
-#[command(
-    id = "prose.block.paragraph.align",
-    area = "prose",
-    layer = "prose",
-    icon = "align",
-    mutates,
-    undoable
-)]
-pub struct SetAlignment {
-    /// The paragraph.
-    pub block: NodeRef,
-    /// How it stands: `left`, `center`, `right`, `justify` or
-    /// `distribute`.
-    pub align: Text,
-}
-
-impl SetAlignment {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.paragraph.align".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if node.kind != "prose.block.paragraph" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
-            });
-        }
-        let Some(align) = alignment_of(&self.align.0) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "there is no alignment `{}`: the alignments are {}",
-                    self.align.0.trim(),
-                    ALIGNMENTS.join(", ")
-                ),
-            });
-        };
-        if let Some(node) = session.document_mut()?.node_mut(block) {
-            node.data["align"] = Json::String(align.to_string());
-        }
-        Ok(Outcome::changed(format!("the paragraph {block} stands {align}"))
-            .with_data(json!({ "block": block, "align": align })))
-    }
-}
-
-/// Say how far a paragraph is **indented**, in points.
-///
-/// Only what is named is changed. An indent outside the tree's own
-/// range is **refused**: the tree clamps it and says nothing.
-#[derive(Command)]
-#[command(
-    id = "prose.block.paragraph.indent",
-    area = "prose",
-    layer = "prose",
-    icon = "indent",
-    mutates,
-    undoable
-)]
-pub struct SetIndent {
-    /// The paragraph.
-    pub block: NodeRef,
-    /// How far from the left edge, in points.
-    pub left: Option<Number>,
-    /// How far from the right edge, in points.
-    pub right: Option<Number>,
-    /// How far the first line is in from the left, in points. A
-    /// negative number is a **hanging** indent.
-    pub first_line: Option<Number>,
-}
-
-impl SetIndent {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.paragraph.indent".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if node.kind != "prose.block.paragraph" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
-            });
-        }
-        let left = indent_of(self.left, &id)?;
-        let right = indent_of(self.right, &id)?;
-        let first_line = indent_of(self.first_line, &id)?;
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if let Some(left) = left {
-            node.data["indent_left"] = Json::from(left);
-        }
-        if let Some(right) = right {
-            node.data["indent_right"] = Json::from(right);
-        }
-        if let Some(first_line) = first_line {
-            node.data["indent_first"] = Json::from(first_line);
-        }
-        Ok(Outcome::changed(format!("the paragraph {block} is indented")).with_data(json!({
-            "block": block,
-            "left": left,
-            "right": right,
-            "first_line": first_line,
-        })))
-    }
-}
-
 /// An indent, if it is one.
 fn indent_of(value: Option<Number>, id: &str) -> Result<Option<f64>, EngineError> {
     let Some(value) = value else {
@@ -399,66 +569,6 @@ fn indent_of(value: Option<Number>, id: &str) -> Result<Option<f64>, EngineError
         });
     }
     Ok(Some(points))
-}
-
-/// Say how much **space** is around a paragraph, in points.
-///
-/// Only what is named is changed. A space outside the tree's own range
-/// is **refused**: the tree clamps it and says nothing.
-#[derive(Command)]
-#[command(
-    id = "prose.block.paragraph.spacing",
-    area = "prose",
-    layer = "prose",
-    icon = "space",
-    mutates,
-    undoable
-)]
-pub struct SetSpacing {
-    /// The paragraph.
-    pub block: NodeRef,
-    /// How much space is above it, in points.
-    pub before: Option<Number>,
-    /// How much space is below it, in points.
-    pub after: Option<Number>,
-}
-
-impl SetSpacing {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.paragraph.spacing".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if node.kind != "prose.block.paragraph" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
-            });
-        }
-        let before = spacing_of(self.before, &id)?;
-        let after = spacing_of(self.after, &id)?;
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if let Some(before) = before {
-            node.data["space_before"] = Json::from(before);
-        }
-        if let Some(after) = after {
-            node.data["space_after"] = Json::from(after);
-        }
-        Ok(Outcome::changed(format!("the paragraph {block} has its space")).with_data(json!({
-            "block": block,
-            "before": before,
-            "after": after,
-        })))
-    }
 }
 
 /// A space, if it is one.
@@ -487,109 +597,6 @@ const MAX_MULTIPLE: f64 = 132.0;
 
 /// The **smallest** an exact spacing may be, in points.
 const MIN_EXACT: f64 = 0.7;
-
-/// Say how the **lines** of a paragraph are spaced.
-///
-/// The tree's spacing is one of three things: a **multiple** of single
-/// spacing, a **minimum** number of points, or an **exact** number of
-/// points. Only one of them may be said, and a number outside the
-/// tree's own range is **refused**: the tree clamps it and says
-/// nothing.
-#[derive(Command)]
-#[command(
-    id = "prose.block.paragraph.linespacing",
-    area = "prose",
-    layer = "prose",
-    icon = "lines",
-    mutates,
-    undoable
-)]
-pub struct SetLineSpacing {
-    /// The paragraph.
-    pub block: NodeRef,
-    /// A multiple of single spacing: `1` is single, `1.5` is one and a
-    /// half, `2` is double.
-    pub multiple: Option<Number>,
-    /// At least this many points.
-    pub at_least: Option<Number>,
-    /// Exactly this many points.
-    pub exactly: Option<Number>,
-}
-
-impl SetLineSpacing {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.paragraph.linespacing".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{block}`"),
-            });
-        };
-        if node.kind != "prose.block.paragraph" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a paragraph", node.kind),
-            });
-        }
-        let said =
-            [self.multiple, self.at_least, self.exactly].iter().filter(|value| value.is_some()).count();
-        if said == 0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a line spacing is a multiple, a minimum or an exact number of points".to_string(),
-            });
-        }
-        if said > 1 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a line spacing is one of the three and not more than one of them".to_string(),
-            });
-        }
-        let (kind, value) = if let Some(multiple) = self.multiple {
-            let multiple = multiple.0;
-            if !multiple.is_finite() || !(MIN_MULTIPLE..=MAX_MULTIPLE).contains(&multiple) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "a multiple of single spacing is between {MIN_MULTIPLE} and {MAX_MULTIPLE}, and {multiple} is not"
-                    ),
-                });
-            }
-            ("multiple", multiple)
-        } else if let Some(at_least) = self.at_least {
-            let at_least = at_least.0;
-            if !at_least.is_finite() || !(0.0..=MAX_LINE_SPACING).contains(&at_least) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "a minimum of points is between 0 and {MAX_LINE_SPACING}, and {at_least} is not"
-                    ),
-                });
-            }
-            ("at_least", at_least)
-        } else {
-            let exactly = self.exactly.map(|exactly| exactly.0).unwrap_or(0.0);
-            if !exactly.is_finite() || !(MIN_EXACT..=MAX_LINE_SPACING).contains(&exactly) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "an exact number of points is between {MIN_EXACT} and {MAX_LINE_SPACING}, and {exactly} is not"
-                    ),
-                });
-            }
-            ("exactly", exactly)
-        };
-        if let Some(node) = session.document_mut()?.node_mut(block) {
-            node.data["line_spacing"] = json!({ "kind": kind, "value": value });
-        }
-        Ok(Outcome::changed(format!("the lines of the paragraph {block} are spaced")).with_data(json!({
-            "block": block,
-            "kind": kind,
-            "value": value,
-        })))
-    }
-}
 
 /// Whether a node is a **block**: a paragraph or a table.
 fn is_block(node: &Node) -> bool {

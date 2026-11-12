@@ -19,7 +19,7 @@
 //! - **The watermark of the tree is diagonal and grey**: a watermark
 //!   that is made and given neither keeps the tree's two facts.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Session, Text};
@@ -75,120 +75,135 @@ pub fn watermark_of(node: &craftkit_sdk::Node) -> Option<Json> {
     }))
 }
 
-/// **Paint** the page of a document with a **colour**.
-///
-/// An **empty** colour takes the colour away, and the page is then a
-/// page that is not painted.
-#[derive(Command)]
-#[command(id = "prose.page.background", area = "prose", layer = "prose", icon = "paint", mutates, undoable)]
-pub struct SetBackground {
-    /// The document.
-    pub document: NodeRef,
-    /// The colour of the page, as `#rrggbb`.
+commands! {
+    /// **Paint** the page of a document with a **colour**.
     ///
-    /// An empty colour takes the colour of the page away.
-    pub colour: Text,
-}
+    /// An **empty** colour takes the colour away, and the page is then a
+    /// page that is not painted.
+    prose.page.background {
+        area: "prose",
+        layer: "prose",
+        icon: "paint",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-impl SetBackground {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.page.background".to_string();
-        let document = self.document.0;
-        the_document(session, &id, document)?;
-        let text = self.colour.0.trim();
-        if text.is_empty() {
+            document: NodeRef,
+            /// The colour of the page, as `#rrggbb`.
+            ///
+            /// An empty colour takes the colour of the page away.
+
+            colour: Text,
+        },
+        run: {
+
+            let id = "prose.page.background".to_string();
+            let document = self.document.0;
+            the_document(session, &id, document)?;
+            let text = self.colour.0.trim();
+            if text.is_empty() {
+                let Some(node) = session.document_mut()?.node_mut(document) else {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!("there is no document `{document}`"),
+                    });
+                };
+                node.data.as_object_mut().map(|map| map.remove("page_colour"));
+                return Ok(Outcome::changed(format!("the page of the document `{document}` is not painted"))
+                    .with_data(json!({ "document": document, "colour": Json::Null })));
+            }
+            let colour = colour_of(text, &id)?;
             let Some(node) = session.document_mut()?.node_mut(document) else {
-                return Err(EngineError::Failed {
-                    id,
-                    message: format!("there is no document `{document}`"),
-                });
+                return Err(EngineError::Failed { id, message: format!("there is no document `{document}`") });
             };
-            node.data.as_object_mut().map(|map| map.remove("page_colour"));
-            return Ok(Outcome::changed(format!("the page of the document `{document}` is not painted"))
-                .with_data(json!({ "document": document, "colour": Json::Null })));
+            node.data["page_colour"] = json!(colour);
+            Ok(Outcome::changed(format!("the page of the document `{document}` is painted {colour}"))
+                .with_data(json!({ "document": document, "colour": colour })))
+
         }
-        let colour = colour_of(text, &id)?;
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed { id, message: format!("there is no document `{document}`") });
-        };
-        node.data["page_colour"] = json!(colour);
-        Ok(Outcome::changed(format!("the page of the document `{document}` is painted {colour}"))
-            .with_data(json!({ "document": document, "colour": colour })))
     }
-}
-
-/// **Put** a **watermark** on the page of a document.
-///
-/// The text is what the watermark says, and an **empty** text takes
-/// the watermark away. A colour that is not said leaves the colour of
-/// the watermark as it was, and a watermark that is made and given
-/// neither is the tree's: diagonal and grey.
-#[derive(Command)]
-#[command(id = "prose.page.watermark", area = "prose", layer = "prose", icon = "paint", mutates, undoable)]
-pub struct SetWatermark {
-    /// The document.
-    pub document: NodeRef,
-    /// What the watermark says.
+    /// **Put** a **watermark** on the page of a document.
     ///
-    /// An empty text takes the watermark away.
-    pub text: Text,
-    /// Whether the watermark runs **across** the page.
-    pub diagonal: Option<Bool>,
-    /// The colour of the watermark, as `#rrggbb`.
-    pub colour: Option<Text>,
-}
+    /// The text is what the watermark says, and an **empty** text takes
+    /// the watermark away. A colour that is not said leaves the colour of
+    /// the watermark as it was, and a watermark that is made and given
+    /// neither is the tree's: diagonal and grey.
+    prose.page.watermark {
+        area: "prose",
+        layer: "prose",
+        icon: "paint",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-impl SetWatermark {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.page.watermark".to_string();
-        let document = self.document.0;
-        the_document(session, &id, document)?;
-        let text = self.text.0.trim().to_string();
-        if text.is_empty() {
-            let Some(node) = session.document_mut()?.node_mut(document) else {
+            document: NodeRef,
+            /// What the watermark says.
+            ///
+            /// An empty text takes the watermark away.
+
+            text: Text,
+            /// Whether the watermark runs **across** the page.
+
+            diagonal: Option<Bool>,
+            /// The colour of the watermark, as `#rrggbb`.
+
+            colour: Option<Text>,
+        },
+        run: {
+
+            let id = "prose.page.watermark".to_string();
+            let document = self.document.0;
+            the_document(session, &id, document)?;
+            let text = self.text.0.trim().to_string();
+            if text.is_empty() {
+                let Some(node) = session.document_mut()?.node_mut(document) else {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!("there is no document `{document}`"),
+                    });
+                };
+                node.data.as_object_mut().map(|map| map.remove("watermark"));
+                return Ok(Outcome::changed(format!("the document `{document}` has no watermark"))
+                    .with_data(json!({ "document": document, "watermark": Json::Null })));
+            }
+            if text.chars().count() > MOST_CHARACTERS {
                 return Err(EngineError::Failed {
-                    id,
-                    message: format!("there is no document `{document}`"),
+                    id: id.clone(),
+                    message: format!("a watermark says at most {MOST_CHARACTERS} characters"),
                 });
+            }
+            // The **watermark** as it is now: a colour that is not said
+            // leaves the colour as it was.
+            let held = session.document().node(document).and_then(watermark_of);
+            let colour = match &self.colour {
+                Some(colour) => colour_of(&colour.0, &id)?,
+                None => held
+                    .as_ref()
+                    .and_then(|watermark| watermark.get("colour"))
+                    .and_then(|colour| colour.as_str())
+                    .map(|colour| colour.to_string())
+                    .unwrap_or_else(|| GREY.to_string()),
             };
-            node.data.as_object_mut().map(|map| map.remove("watermark"));
-            return Ok(Outcome::changed(format!("the document `{document}` has no watermark"))
-                .with_data(json!({ "document": document, "watermark": Json::Null })));
+            let diagonal = match &self.diagonal {
+                Some(diagonal) => diagonal.0,
+                None => held
+                    .as_ref()
+                    .and_then(|watermark| watermark.get("diagonal"))
+                    .and_then(|diagonal| diagonal.as_bool())
+                    .unwrap_or(true),
+            };
+            let watermark = json!({ "text": text, "diagonal": diagonal, "colour": colour });
+            let Some(node) = session.document_mut()?.node_mut(document) else {
+                return Err(EngineError::Failed { id, message: format!("there is no document `{document}`") });
+            };
+            node.data["watermark"] = watermark.clone();
+            Ok(Outcome::changed(format!("the document `{document}` has a watermark")).with_data(json!({
+                "document": document,
+                "watermark": watermark,
+            })))
+
         }
-        if text.chars().count() > MOST_CHARACTERS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a watermark says at most {MOST_CHARACTERS} characters"),
-            });
-        }
-        // The **watermark** as it is now: a colour that is not said
-        // leaves the colour as it was.
-        let held = session.document().node(document).and_then(watermark_of);
-        let colour = match &self.colour {
-            Some(colour) => colour_of(&colour.0, &id)?,
-            None => held
-                .as_ref()
-                .and_then(|watermark| watermark.get("colour"))
-                .and_then(|colour| colour.as_str())
-                .map(|colour| colour.to_string())
-                .unwrap_or_else(|| GREY.to_string()),
-        };
-        let diagonal = match &self.diagonal {
-            Some(diagonal) => diagonal.0,
-            None => held
-                .as_ref()
-                .and_then(|watermark| watermark.get("diagonal"))
-                .and_then(|diagonal| diagonal.as_bool())
-                .unwrap_or(true),
-        };
-        let watermark = json!({ "text": text, "diagonal": diagonal, "colour": colour });
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed { id, message: format!("there is no document `{document}`") });
-        };
-        node.data["watermark"] = watermark.clone();
-        Ok(Outcome::changed(format!("the document `{document}` has a watermark")).with_data(json!({
-            "document": document,
-            "watermark": watermark,
-        })))
     }
 }

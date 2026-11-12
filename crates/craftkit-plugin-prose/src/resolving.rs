@@ -25,7 +25,7 @@
 //!   put back, and a resolution that guesses is a resolution that is
 //!   wrong.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session};
@@ -133,107 +133,114 @@ fn the_block<'a>(session: &'a Session, id: &str, node: u64) -> Result<&'a Node, 
     Ok(found)
 }
 
-/// **Accept** a revision.
-#[derive(Command)]
-#[command(id = "prose.revision.accept", area = "prose", layer = "prose", icon = "check", mutates, undoable)]
-pub struct AcceptRevision {
-    /// The block.
-    pub block: NodeRef,
-    /// The run the revision is on: its number, counting from nothing.
-    pub run: Number,
-}
+commands! {
+    /// **Accept** a revision.
+    prose.revision.accept {
+        area: "prose",
+        layer: "prose",
+        icon: "check",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-impl AcceptRevision {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.revision.accept".to_string();
-        let block = self.block.0;
-        let node = the_block(session, &id, block)?;
-        let text = text_of(node);
-        let runs = runs_of(node);
-        let index = self.run.0 as usize;
-        let (text, runs) = resolve(&text, &runs, index, true, &id)?;
-        write_back(session, block, &text, &runs, &id)?;
-        Ok(Outcome::changed(format!("accepted the revision of the run `{index}` of the block `{block}`"))
-            .with_data(json!({ "block": block, "run": index })))
+            block: NodeRef,
+            /// The run the revision is on: its number, counting from nothing.
+
+            run: Number,
+        },
+        run: {
+
+            let id = "prose.revision.accept".to_string();
+            let block = self.block.0;
+            let node = the_block(session, &id, block)?;
+            let text = text_of(node);
+            let runs = runs_of(node);
+            let index = self.run.0 as usize;
+            let (text, runs) = resolve(&text, &runs, index, true, &id)?;
+            write_back(session, block, &text, &runs, &id)?;
+            Ok(Outcome::changed(format!("accepted the revision of the run `{index}` of the block `{block}`"))
+                .with_data(json!({ "block": block, "run": index })))
+
+        }
     }
-}
+    /// **Reject** a revision.
+    prose.revision.reject {
+        area: "prose",
+        layer: "prose",
+        icon: "undo",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-/// **Reject** a revision.
-#[derive(Command)]
-#[command(id = "prose.revision.reject", area = "prose", layer = "prose", icon = "undo", mutates, undoable)]
-pub struct RejectRevision {
-    /// The block.
-    pub block: NodeRef,
-    /// The run the revision is on: its number, counting from nothing.
-    pub run: Number,
-}
+            block: NodeRef,
+            /// The run the revision is on: its number, counting from nothing.
 
-impl RejectRevision {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.revision.reject".to_string();
-        let block = self.block.0;
-        let node = the_block(session, &id, block)?;
-        let text = text_of(node);
-        let runs = runs_of(node);
-        let index = self.run.0 as usize;
-        let (text, runs) = resolve(&text, &runs, index, false, &id)?;
-        write_back(session, block, &text, &runs, &id)?;
-        Ok(Outcome::changed(format!("rejected the revision of the run `{index}` of the block `{block}`"))
-            .with_data(json!({ "block": block, "run": index })))
+            run: Number,
+        },
+        run: {
+
+            let id = "prose.revision.reject".to_string();
+            let block = self.block.0;
+            let node = the_block(session, &id, block)?;
+            let text = text_of(node);
+            let runs = runs_of(node);
+            let index = self.run.0 as usize;
+            let (text, runs) = resolve(&text, &runs, index, false, &id)?;
+            write_back(session, block, &text, &runs, &id)?;
+            Ok(Outcome::changed(format!("rejected the revision of the run `{index}` of the block `{block}`"))
+                .with_data(json!({ "block": block, "run": index })))
+
+        }
     }
-}
+    /// **Accept** every revision of a block.
+    prose.revision.accept.all {
+        area: "prose",
+        layer: "prose",
+        icon: "check",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-/// **Accept** every revision of a block.
-#[derive(Command)]
-#[command(
-    id = "prose.revision.accept.all",
-    area = "prose",
-    layer = "prose",
-    icon = "check",
-    mutates,
-    undoable
-)]
-pub struct AcceptAllRevisions {
-    /// The block.
-    pub block: NodeRef,
-}
+            block: NodeRef,
+        },
+        run: {
 
-impl AcceptAllRevisions {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.revision.accept.all".to_string();
-        let block = self.block.0;
-        let node = the_block(session, &id, block)?;
-        let (text, runs, count) = resolve_all(node, true, &id)?;
-        write_back(session, block, &text, &runs, &id)?;
-        Ok(Outcome::changed(format!("accepted {count} revision(s) of the block `{block}`"))
-            .with_data(json!({ "block": block, "count": count })))
+            let id = "prose.revision.accept.all".to_string();
+            let block = self.block.0;
+            let node = the_block(session, &id, block)?;
+            let (text, runs, count) = resolve_all(node, true, &id)?;
+            write_back(session, block, &text, &runs, &id)?;
+            Ok(Outcome::changed(format!("accepted {count} revision(s) of the block `{block}`"))
+                .with_data(json!({ "block": block, "count": count })))
+
+        }
     }
-}
+    /// **Reject** every revision of a block.
+    prose.revision.reject.all {
+        area: "prose",
+        layer: "prose",
+        icon: "undo",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-/// **Reject** every revision of a block.
-#[derive(Command)]
-#[command(
-    id = "prose.revision.reject.all",
-    area = "prose",
-    layer = "prose",
-    icon = "undo",
-    mutates,
-    undoable
-)]
-pub struct RejectAllRevisions {
-    /// The block.
-    pub block: NodeRef,
-}
+            block: NodeRef,
+        },
+        run: {
 
-impl RejectAllRevisions {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.revision.reject.all".to_string();
-        let block = self.block.0;
-        let node = the_block(session, &id, block)?;
-        let (text, runs, count) = resolve_all(node, false, &id)?;
-        write_back(session, block, &text, &runs, &id)?;
-        Ok(Outcome::changed(format!("rejected {count} revision(s) of the block `{block}`"))
-            .with_data(json!({ "block": block, "count": count })))
+            let id = "prose.revision.reject.all".to_string();
+            let block = self.block.0;
+            let node = the_block(session, &id, block)?;
+            let (text, runs, count) = resolve_all(node, false, &id)?;
+            write_back(session, block, &text, &runs, &id)?;
+            Ok(Outcome::changed(format!("rejected {count} revision(s) of the block `{block}`"))
+                .with_data(json!({ "block": block, "count": count })))
+
+        }
     }
 }
 

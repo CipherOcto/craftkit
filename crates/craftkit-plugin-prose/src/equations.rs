@@ -27,10 +27,10 @@
 //!   replaced**: a replace would make the parts and the text disagree,
 //!   and two things that disagree are one thing wrong.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, Node, NodeRef, Outcome};
 
 /// The most an equation may be **deep**.
 pub const MAX_DEPTH: usize = 32;
@@ -142,87 +142,100 @@ pub fn check(parts: &Json, id: &str) -> Result<String, EngineError> {
     linear(parts).map_err(|message| EngineError::Failed { id: id.to_string(), message })
 }
 
-/// **Put** an equation in a document.
-///
-/// The parts are the equation, and the text of the equation is
-/// derived from them.
-#[derive(Command)]
-#[command(id = "prose.block.equation.add", area = "prose", layer = "prose", icon = "plus", mutates, undoable)]
-pub struct AddEquation {
-    /// The document it goes in.
-    pub document: NodeRef,
-    /// The **parts** of the equation: a text, a fraction, a
-    /// superscript, a subscript or a radical.
-    pub parts: Json,
-}
+commands! {
+    /// **Put** an equation in a document.
+    ///
+    /// The parts are the equation, and the text of the equation is
+    /// derived from them.
+    prose.block.equation.add {
+        area: "prose",
+        layer: "prose",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The document it goes in.
 
-impl AddEquation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.equation.add".to_string();
-        let text = check(&self.parts, &id)?;
-        let Some(document) = session.document().node(self.document.0) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{}`", self.document.0),
-            });
-        };
-        if document.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the node `{}` is a `{}` and not a document",
-                    self.document.0, document.kind
-                ),
-            });
+            document: NodeRef,
+            /// The **parts** of the equation: a text, a fraction, a
+            /// superscript, a subscript or a radical.
+
+            parts: Json,
+        },
+        run: {
+
+            let id = "prose.block.equation.add".to_string();
+            let text = check(&self.parts, &id)?;
+            let Some(document) = session.document().node(self.document.0) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{}`", self.document.0),
+                });
+            };
+            if document.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the node `{}` is a `{}` and not a document",
+                        self.document.0, document.kind
+                    ),
+                });
+            }
+            let data = json!({ "parts": self.parts.clone(), "text": text });
+            let block = session.document_mut()?.add_node_with_under(
+                Some(self.document.0),
+                "an equation".to_string(),
+                EQUATION,
+                None,
+                data,
+            );
+            Ok(Outcome::changed(format!("added the equation `{text}`"))
+                .with_data(json!({ "id": block, "kind": EQUATION, "text": text })))
+
         }
-        let data = json!({ "parts": self.parts.clone(), "text": text });
-        let block = session.document_mut()?.add_node_with_under(
-            Some(self.document.0),
-            "an equation".to_string(),
-            EQUATION,
-            None,
-            data,
-        );
-        Ok(Outcome::changed(format!("added the equation `{text}`"))
-            .with_data(json!({ "id": block, "kind": EQUATION, "text": text })))
     }
-}
+    /// **Set** the parts of an equation.
+    ///
+    /// The text of the equation is written with them, because the text is
+    /// the parts and the text is one thing.
+    prose.equation.set {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The equation.
 
-/// **Set** the parts of an equation.
-///
-/// The text of the equation is written with them, because the text is
-/// the parts and the text is one thing.
-#[derive(Command)]
-#[command(id = "prose.equation.set", area = "prose", layer = "prose", icon = "pencil", mutates, undoable)]
-pub struct SetEquation {
-    /// The equation.
-    pub block: NodeRef,
-    /// The **parts** of the equation.
-    pub parts: Json,
-}
+            block: NodeRef,
+            /// The **parts** of the equation.
 
-impl SetEquation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.equation.set".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        if !is_equation(node) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not an equation", node.kind),
-            });
+            parts: Json,
+        },
+        run: {
+
+            let id = "prose.equation.set".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            if !is_equation(node) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not an equation", node.kind),
+                });
+            }
+            let text = check(&self.parts, &id)?;
+            if let Some(node) = session.document_mut()?.node_mut(block) {
+                node.data["parts"] = self.parts.clone();
+                node.data["text"] = json!(text);
+            }
+            Ok(Outcome::changed(format!("the equation is `{text}` now"))
+                .with_data(json!({ "block": block, "text": text })))
+
         }
-        let text = check(&self.parts, &id)?;
-        if let Some(node) = session.document_mut()?.node_mut(block) {
-            node.data["parts"] = self.parts.clone();
-            node.data["text"] = json!(text);
-        }
-        Ok(Outcome::changed(format!("the equation is `{text}` now"))
-            .with_data(json!({ "block": block, "text": text })))
     }
 }

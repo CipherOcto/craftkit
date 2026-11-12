@@ -14,7 +14,7 @@
 //! taken away takes its comment with it, and a comment on a block that
 //! is not there is a comment on nothing.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -61,120 +61,135 @@ fn the_block(session: &Session, command: &str, block: u64) -> Result<u64, Engine
     }
 }
 
-/// **Put** a comment on a block.
-///
-/// A block has at most one comment, and a comment put on it again
-/// **replaces** the one that was there.
-#[derive(Command)]
-#[command(id = "prose.comment.set", area = "prose", layer = "prose", icon = "quote", mutates, undoable)]
-pub struct SetComment {
-    /// The block the comment is on.
-    pub block: NodeRef,
-    /// Who said it.
-    pub author: Text,
-    /// What they said.
-    pub text: Text,
-}
+commands! {
+    /// **Put** a comment on a block.
+    ///
+    /// A block has at most one comment, and a comment put on it again
+    /// **replaces** the one that was there.
+    prose.comment.set {
+        area: "prose",
+        layer: "prose",
+        icon: "quote",
+        mutates,
+        undoable,
+        params: {
+            /// The block the comment is on.
 
-impl SetComment {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.comment.set".to_string();
-        let block = self.block.0;
-        let document = the_block(session, &id, block)?;
-        let author = self.author.0.trim().to_string();
-        if author.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a comment has an author".to_string(),
-            });
-        }
-        let text = self.text.0.clone();
-        let comment = json!({ "author": author, "text": text });
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        let mut comments = comments_of(node);
-        if !comments.is_object() {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the comments of the document `{document}` are not a group"),
-            });
-        }
-        comments[key(block)] = comment.clone();
-        node.data["comments"] = comments;
-        Ok(Outcome::changed(format!("the block `{block}` has a comment from {author}"))
-            .with_data(json!({ "block": block, "document": document, "comment": comment })))
-    }
-}
+            block: NodeRef,
+            /// Who said it.
 
-/// **Read** the comment on a block.
-///
-/// A block with no comment has no comment, and that is said as
-/// nothing and not as an error.
-#[derive(Command)]
-#[command(id = "prose.comment.get", area = "prose", layer = "prose", icon = "list")]
-pub struct GetComment {
-    /// The block.
-    pub block: NodeRef,
-}
+            author: Text,
+            /// What they said.
 
-impl GetComment {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.comment.get".to_string();
-        let block = self.block.0;
-        let document = the_block(session, &id, block)?;
-        let comment = session
-            .document()
-            .node(document)
-            .map(comments_of)
-            .and_then(|comments| comments.get(key(block).as_str()).cloned())
-            .unwrap_or(Json::Null);
-        Ok(Outcome::new(format!("the block `{block}`")).with_data(json!({
-            "block": block,
-            "document": document,
-            "comment": comment,
-        })))
-    }
-}
+            text: Text,
+        },
+        run: {
 
-/// **Take away** the comment on a block.
-///
-/// A block with no comment has no comment to take away, and that is
-/// refused.
-#[derive(Command)]
-#[command(id = "prose.comment.delete", area = "prose", layer = "prose", icon = "trash", mutates, undoable)]
-pub struct DeleteComment {
-    /// The block.
-    pub block: NodeRef,
-}
-
-impl DeleteComment {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.comment.delete".to_string();
-        let block = self.block.0;
-        let document = the_block(session, &id, block)?;
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        let mut comments = comments_of(node);
-        if !comments.is_object() || comments.get(key(block).as_str()).is_none() {
-            return Err(EngineError::Failed { id, message: format!("the block `{block}` has no comment") });
-        }
-        let mut taken = false;
-        if let Some(map) = comments.as_object_mut() {
-            taken = map.remove(&key(block)).is_some();
-        }
-        if taken {
+            let id = "prose.comment.set".to_string();
+            let block = self.block.0;
+            let document = the_block(session, &id, block)?;
+            let author = self.author.0.trim().to_string();
+            if author.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a comment has an author".to_string(),
+                });
+            }
+            let text = self.text.0.clone();
+            let comment = json!({ "author": author, "text": text });
+            let Some(node) = session.document_mut()?.node_mut(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            let mut comments = comments_of(node);
+            if !comments.is_object() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the comments of the document `{document}` are not a group"),
+                });
+            }
+            comments[key(block)] = comment.clone();
             node.data["comments"] = comments;
+            Ok(Outcome::changed(format!("the block `{block}` has a comment from {author}"))
+                .with_data(json!({ "block": block, "document": document, "comment": comment })))
+
         }
-        Ok(Outcome::changed(format!("the block `{block}` has no comment now"))
-            .with_data(json!({ "block": block, "document": document })))
+    }
+    /// **Read** the comment on a block.
+    ///
+    /// A block with no comment has no comment, and that is said as
+    /// nothing and not as an error.
+    prose.comment.get {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The block.
+
+            block: NodeRef,
+        },
+        run: {
+
+            let id = "prose.comment.get".to_string();
+            let block = self.block.0;
+            let document = the_block(session, &id, block)?;
+            let comment = session
+                .document()
+                .node(document)
+                .map(comments_of)
+                .and_then(|comments| comments.get(key(block).as_str()).cloned())
+                .unwrap_or(Json::Null);
+            Ok(Outcome::new(format!("the block `{block}`")).with_data(json!({
+                "block": block,
+                "document": document,
+                "comment": comment,
+            })))
+
+        }
+    }
+    /// **Take away** the comment on a block.
+    ///
+    /// A block with no comment has no comment to take away, and that is
+    /// refused.
+    prose.comment.delete {
+        area: "prose",
+        layer: "prose",
+        icon: "trash",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
+
+            block: NodeRef,
+        },
+        run: {
+
+            let id = "prose.comment.delete".to_string();
+            let block = self.block.0;
+            let document = the_block(session, &id, block)?;
+            let Some(node) = session.document_mut()?.node_mut(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            let mut comments = comments_of(node);
+            if !comments.is_object() || comments.get(key(block).as_str()).is_none() {
+                return Err(EngineError::Failed { id, message: format!("the block `{block}` has no comment") });
+            }
+            let mut taken = false;
+            if let Some(map) = comments.as_object_mut() {
+                taken = map.remove(&key(block)).is_some();
+            }
+            if taken {
+                node.data["comments"] = comments;
+            }
+            Ok(Outcome::changed(format!("the block `{block}` has no comment now"))
+                .with_data(json!({ "block": block, "document": document })))
+
+        }
     }
 }
 

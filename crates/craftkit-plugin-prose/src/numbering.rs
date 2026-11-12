@@ -12,10 +12,10 @@
 //! each of its nine levels looks like, and the levels of the kinds that
 //! cycle — `1. a. i.` — cycle every three.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, NodeRef, Number, Outcome, Relation, Session, Text};
+use craftkit_sdk::{Document, EngineError, NodeRef, Number, Outcome, Relation, Text};
 use std::collections::BTreeMap;
 
 /// The kinds of list the tree has.
@@ -304,171 +304,187 @@ pub fn label_of(document: &Document, block: u64) -> Option<String> {
     Some(label)
 }
 
-/// Put a **list** in a document.
-///
-/// A list is few — a paragraph may be in a list and a list may have a
-/// hundred paragraphs — so a list is a **node**, and a block names it
-/// with a **relation**, the way a block names a style.
-#[derive(Command)]
-#[command(id = "prose.list.add", area = "prose", layer = "prose", icon = "plus", mutates, undoable)]
-pub struct AddList {
-    /// The document it goes in.
-    pub document: NodeRef,
-    /// The kind of list: `bullet`, `numbered`, `numberedParen`,
-    /// `outline`, `upperLetter`, `lowerLetter`, `lowerLetterDot`,
-    /// `lowerRoman` or `legal` — or a single character, which is a
-    /// bullet of its own.
-    pub kind: Text,
-}
+commands! {
+    /// Put a **list** in a document.
+    ///
+    /// A list is few — a paragraph may be in a list and a list may have a
+    /// hundred paragraphs — so a list is a **node**, and a block names it
+    /// with a **relation**, the way a block names a style.
+    prose.list.add {
+        area: "prose",
+        layer: "prose",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The document it goes in.
 
-impl AddList {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.list.add".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
-        }
-        let wanted = self.kind.0.trim().to_string();
-        let Some(kind) = kind_of(&wanted) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "there is no list kind `{wanted}`: the kinds are {}, or a single character",
-                    KINDS.join(", ")
-                ),
-            });
-        };
-        let list = session.document_mut()?.add_node_with_under(
-            Some(document),
-            kind.clone(),
-            "prose.list",
-            None,
-            json!({ "kind": kind.clone() }),
-        );
-        Ok(Outcome::changed(format!("the document `{document}` has a list of {kind}"))
-            .with_data(json!({ "id": list, "document": document, "kind": kind })))
-    }
-}
+            document: NodeRef,
+            /// The kind of list: `bullet`, `numbered`, `numberedParen`,
+            /// `outline`, `upperLetter`, `lowerLetter`, `lowerLetterDot`,
+            /// `lowerRoman` or `legal` — or a single character, which is a
+            /// bullet of its own.
 
-/// Put a **block** in a list, at a level.
-///
-/// The block's own list is replaced: a block is in one list.
-#[derive(Command)]
-#[command(id = "prose.block.numbering", area = "prose", layer = "prose", icon = "list", mutates, undoable)]
-pub struct SetNumbering {
-    /// The block.
-    pub block: NodeRef,
-    /// The list.
-    pub list: NodeRef,
-    /// The level, counting from zero. Without it the block is at the
-    /// first level.
-    pub level: Option<Number>,
-}
+            kind: Text,
+        },
+        run: {
 
-impl SetNumbering {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.numbering".to_string();
-        let block = self.block.0;
-        let list = self.list.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        if !node.kind.starts_with("prose.block.") {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
-        }
-        let Some(node) = session.document().node(list) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no list `{list}`"),
-            });
-        };
-        if node.kind != "prose.list" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{list}` is a `{}` and not a list", node.kind),
-            });
-        }
-        let level = match self.level {
-            Some(level) => {
-                let level = level.0;
-                if !level.is_finite() || level < 0.0 || level.fract() != 0.0 {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("a level is counted from zero: {level} is not one"),
-                    });
-                }
-                level as usize
+            let id = "prose.list.add".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
             }
-            None => 0,
-        };
-        if level >= MAX_LEVELS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a list has {MAX_LEVELS} levels, and {level} is not one of them"),
-            });
+            let wanted = self.kind.0.trim().to_string();
+            let Some(kind) = kind_of(&wanted) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "there is no list kind `{wanted}`: the kinds are {}, or a single character",
+                        KINDS.join(", ")
+                    ),
+                });
+            };
+            let list = session.document_mut()?.add_node_with_under(
+                Some(document),
+                kind.clone(),
+                "prose.list",
+                None,
+                json!({ "kind": kind.clone() }),
+            );
+            Ok(Outcome::changed(format!("the document `{document}` has a list of {kind}"))
+                .with_data(json!({ "id": list, "document": document, "kind": kind })))
+
         }
-        // A block is in **one** list: the old one goes.
-        session
-            .document_mut()?
-            .remove_relations(|relation| relation.kind == NUMBERED_BY && relation.from == block);
-        let relation =
-            Relation::with_payload(block, list, NUMBERED_BY, json!({ "list": list, "level": level }));
-        session.document_mut()?.add_relation(relation);
-        Ok(Outcome::changed(format!("the block `{block}` is in the list `{list}` at the level {level}"))
-            .with_data(json!({ "block": block, "list": list, "level": level })))
     }
-}
+    /// Put a **block** in a list, at a level.
+    ///
+    /// The block's own list is replaced: a block is in one list.
+    prose.block.numbering {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-/// **Read** the number of a block.
-///
-/// The number is **derived**: it is the count of the blocks of the list
-/// before it and the format of the level. A block that is in no list
-/// has no number, and that is said as nothing.
-#[derive(Command)]
-#[command(id = "prose.block.number", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadNumber {
-    /// The block.
-    pub block: NodeRef,
-}
+            block: NodeRef,
+            /// The list.
 
-impl ReadNumber {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.number".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed { id, message: format!("there is no block `{block}`") });
-        };
-        if !node.kind.starts_with("prose.block.") {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
+            list: NodeRef,
+            /// The level, counting from zero. Without it the block is at the
+            /// first level.
+
+            level: Option<Number>,
+        },
+        run: {
+
+            let id = "prose.block.numbering".to_string();
+            let block = self.block.0;
+            let list = self.list.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            if !node.kind.starts_with("prose.block.") {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
+                });
+            }
+            let Some(node) = session.document().node(list) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no list `{list}`"),
+                });
+            };
+            if node.kind != "prose.list" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{list}` is a `{}` and not a list", node.kind),
+                });
+            }
+            let level = match self.level {
+                Some(level) => {
+                    let level = level.0;
+                    if !level.is_finite() || level < 0.0 || level.fract() != 0.0 {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("a level is counted from zero: {level} is not one"),
+                        });
+                    }
+                    level as usize
+                }
+                None => 0,
+            };
+            if level >= MAX_LEVELS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a list has {MAX_LEVELS} levels, and {level} is not one of them"),
+                });
+            }
+            // A block is in **one** list: the old one goes.
+            session
+                .document_mut()?
+                .remove_relations(|relation| relation.kind == NUMBERED_BY && relation.from == block);
+            let relation =
+                Relation::with_payload(block, list, NUMBERED_BY, json!({ "list": list, "level": level }));
+            session.document_mut()?.add_relation(relation);
+            Ok(Outcome::changed(format!("the block `{block}` is in the list `{list}` at the level {level}"))
+                .with_data(json!({ "block": block, "list": list, "level": level })))
+
         }
-        let document = session.document();
-        let numbering = numbering_of(document, block);
-        let label = label_of(document, block).map(Json::String).unwrap_or(Json::Null);
-        let list = numbering.map(|(list, _)| list).map(Json::from).unwrap_or(Json::Null);
-        let level = numbering.map(|(_, level)| level).map(Json::from).unwrap_or(Json::Null);
-        Ok(Outcome::new(format!("the block `{block}`")).with_data(json!({
-            "block": block,
-            "list": list,
-            "level": level,
-            "label": label,
-        })))
+    }
+    /// **Read** the number of a block.
+    ///
+    /// The number is **derived**: it is the count of the blocks of the list
+    /// before it and the format of the level. A block that is in no list
+    /// has no number, and that is said as nothing.
+    prose.block.number {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The block.
+
+            block: NodeRef,
+        },
+        run: {
+
+            let id = "prose.block.number".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed { id, message: format!("there is no block `{block}`") });
+            };
+            if !node.kind.starts_with("prose.block.") {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
+                });
+            }
+            let document = session.document();
+            let numbering = numbering_of(document, block);
+            let label = label_of(document, block).map(Json::String).unwrap_or(Json::Null);
+            let list = numbering.map(|(list, _)| list).map(Json::from).unwrap_or(Json::Null);
+            let level = numbering.map(|(_, level)| level).map(Json::from).unwrap_or(Json::Null);
+            Ok(Outcome::new(format!("the block `{block}`")).with_data(json!({
+                "block": block,
+                "list": list,
+                "level": level,
+                "label": label,
+            })))
+
+        }
     }
 }

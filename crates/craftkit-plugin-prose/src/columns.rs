@@ -41,7 +41,7 @@
 //!   column is the same width, and that width is worked out from the
 //!   page and the space.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session};
@@ -136,85 +136,95 @@ fn space_of(value: f64, id: &str) -> Result<f64, EngineError> {
     Ok(value)
 }
 
-/// **Set** the **columns** of the page of a document.
-///
-/// The count is from one to twelve, the space is in points, and the
-/// separator is a line between the columns.
-#[derive(Command)]
-#[command(id = "prose.page.columns", area = "prose", layer = "prose", icon = "rect", mutates, undoable)]
-pub struct SetColumns {
-    /// The document.
-    pub document: NodeRef,
-    /// How many columns the page has, from one to twelve.
-    pub count: Number,
-    /// The space between the columns, in points.
+commands! {
+    /// **Set** the **columns** of the page of a document.
     ///
-    /// It is thirty-six points when it is not given.
-    pub space: Option<Number>,
-    /// Whether a line is drawn between the columns.
-    pub separator: Option<Bool>,
-}
+    /// The count is from one to twelve, the space is in points, and the
+    /// separator is a line between the columns.
+    prose.page.columns {
+        area: "prose",
+        layer: "prose",
+        icon: "rect",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-impl SetColumns {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.page.columns".to_string();
-        let document = self.document.0;
-        the_document(session, &id, document)?;
-        let count = self.count.0;
-        if !count.is_finite() || count.fract() != 0.0 || count < 1.0 || count > MAX_COLUMNS as f64 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "a page has from one to {MAX_COLUMNS} columns, and {count} is not one of them"
-                ),
+            document: NodeRef,
+            /// How many columns the page has, from one to twelve.
+
+            count: Number,
+            /// The space between the columns, in points.
+            ///
+            /// It is thirty-six points when it is not given.
+
+            space: Option<Number>,
+            /// Whether a line is drawn between the columns.
+
+            separator: Option<Bool>,
+        },
+        run: {
+
+            let id = "prose.page.columns".to_string();
+            let document = self.document.0;
+            the_document(session, &id, document)?;
+            let count = self.count.0;
+            if !count.is_finite() || count.fract() != 0.0 || count < 1.0 || count > MAX_COLUMNS as f64 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "a page has from one to {MAX_COLUMNS} columns, and {count} is not one of them"
+                    ),
+                });
+            }
+            let count = count as u64;
+            let Some(node) = session.document().node(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            let held = stored_of(node);
+            let space = match self.space {
+                Some(space) => space_of(space.0, &id)?,
+                None => held
+                    .as_ref()
+                    .and_then(|columns| columns.get("space"))
+                    .and_then(|space| space.as_f64())
+                    .filter(|space| space.is_finite())
+                    .unwrap_or(DEFAULT_SPACE),
+            };
+            let separator = match self.separator {
+                Some(separator) => separator.0,
+                None => held
+                    .as_ref()
+                    .and_then(|columns| columns.get("separator"))
+                    .and_then(|separator| separator.as_bool())
+                    .unwrap_or(false),
+            };
+            // The columns must **fit**: a column that is not wide enough is
+            // refused, and the page is left as it was.
+            if width_of(node, count, space).is_null() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{count} columns with a space of {space} points do not fit on the page"),
+                });
+            }
+            let columns = json!({
+                "count": count,
+                "space": space,
+                "separator": separator,
             });
+            let Some(node) = session.document_mut()?.node_mut(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            node.data["page_columns"] = columns.clone();
+            Ok(Outcome::changed(format!("the page of the document `{document}` has {count} columns"))
+                .with_data(json!({ "document": document, "columns": columns })))
+
         }
-        let count = count as u64;
-        let Some(node) = session.document().node(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        let held = stored_of(node);
-        let space = match self.space {
-            Some(space) => space_of(space.0, &id)?,
-            None => held
-                .as_ref()
-                .and_then(|columns| columns.get("space"))
-                .and_then(|space| space.as_f64())
-                .filter(|space| space.is_finite())
-                .unwrap_or(DEFAULT_SPACE),
-        };
-        let separator = match self.separator {
-            Some(separator) => separator.0,
-            None => held
-                .as_ref()
-                .and_then(|columns| columns.get("separator"))
-                .and_then(|separator| separator.as_bool())
-                .unwrap_or(false),
-        };
-        // The columns must **fit**: a column that is not wide enough is
-        // refused, and the page is left as it was.
-        if width_of(node, count, space).is_null() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("{count} columns with a space of {space} points do not fit on the page"),
-            });
-        }
-        let columns = json!({
-            "count": count,
-            "space": space,
-            "separator": separator,
-        });
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        node.data["page_columns"] = columns.clone();
-        Ok(Outcome::changed(format!("the page of the document `{document}` has {count} columns"))
-            .with_data(json!({ "document": document, "columns": columns })))
     }
 }

@@ -50,7 +50,7 @@
 //!   a locked field may not be changed and may not be unlinked. It is
 //!   the same promise with nothing behind it but the refusal.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session, Text};
@@ -154,248 +154,266 @@ fn field_at(fields: &[Json], start: usize) -> Option<Json> {
         .cloned()
 }
 
-/// Put a **field** on a block.
-///
-/// The field covers the words between `start` and `end`, and it says
-/// what it is with its code.
-#[derive(Command)]
-#[command(id = "prose.block.field.add", area = "prose", layer = "prose", icon = "link", mutates, undoable)]
-pub struct AddField {
-    /// The block.
-    pub block: NodeRef,
-    /// Where the field begins, in characters.
-    pub start: Number,
-    /// Where the field ends, in characters.
-    pub end: Number,
-    /// The instruction of the field.
-    pub code: Text,
-    /// Whether the field is locked against change.
-    pub locked: Option<Bool>,
-}
+commands! {
+    /// Put a **field** on a block.
+    ///
+    /// The field covers the words between `start` and `end`, and it says
+    /// what it is with its code.
+    prose.block.field.add {
+        area: "prose",
+        layer: "prose",
+        icon: "link",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-impl AddField {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.field.add".to_string();
-        let block = self.block.0;
-        the_block(session, &id, block)?;
-        let code = code_of(&self.code.0, &id)?;
-        let start = offset_of(self.start.0, &id, "the start of a field")?;
-        let end = offset_of(self.end.0, &id, "the end of a field")?;
-        if start >= end {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a field covers at least one character, and {start} to {end} covers none"),
-            });
-        }
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        let text = text_of(node);
-        let characters = text.chars().count();
-        if end > characters {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the text of the block has {characters} characters, and the field ends at {end}"
-                ),
-            });
-        }
-        // Two fields may not cover the same words.
-        let fields = fields_of(node);
-        for field in &fields {
-            let other_start = field.get("start").and_then(|start| start.as_u64()).unwrap_or(0) as usize;
-            let other_end = field.get("end").and_then(|end| end.as_u64()).unwrap_or(0) as usize;
-            if start < other_end && other_start < end {
+            block: NodeRef,
+            /// Where the field begins, in characters.
+
+            start: Number,
+            /// Where the field ends, in characters.
+
+            end: Number,
+            /// The instruction of the field.
+
+            code: Text,
+            /// Whether the field is locked against change.
+
+            locked: Option<Bool>,
+        },
+        run: {
+
+            let id = "prose.block.field.add".to_string();
+            let block = self.block.0;
+            the_block(session, &id, block)?;
+            let code = code_of(&self.code.0, &id)?;
+            let start = offset_of(self.start.0, &id, "the start of a field")?;
+            let end = offset_of(self.end.0, &id, "the end of a field")?;
+            if start >= end {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a field covers at least one character, and {start} to {end} covers none"),
+                });
+            }
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            let text = text_of(node);
+            let characters = text.chars().count();
+            if end > characters {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "the field covers words another field covers: the field at {other_start}"
+                        "the text of the block has {characters} characters, and the field ends at {end}"
                     ),
                 });
             }
-        }
-        let field = json!({
-            "start": start,
-            "end": end,
-            "code": code,
-            "locked": self.locked.map(|locked| locked.0).unwrap_or(false),
-        });
-        // The **fields** are kept in the order they begin in.
-        let mut fields = fields;
-        fields.push(field.clone());
-        fields.sort_by_key(|field| field.get("start").and_then(|start| start.as_u64()).unwrap_or(0));
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
+            // Two fields may not cover the same words.
+            let fields = fields_of(node);
+            for field in &fields {
+                let other_start = field.get("start").and_then(|start| start.as_u64()).unwrap_or(0) as usize;
+                let other_end = field.get("end").and_then(|end| end.as_u64()).unwrap_or(0) as usize;
+                if start < other_end && other_start < end {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "the field covers words another field covers: the field at {other_start}"
+                        ),
+                    });
+                }
+            }
+            let field = json!({
+                "start": start,
+                "end": end,
+                "code": code,
+                "locked": self.locked.map(|locked| locked.0).unwrap_or(false),
             });
-        };
-        node.data["fields"] = Json::Array(fields);
-        Ok(Outcome::changed(format!("the block `{block}` has a field at {start}"))
-            .with_data(json!({ "block": block, "field": with_result(&text, &field) })))
+            // The **fields** are kept in the order they begin in.
+            let mut fields = fields;
+            fields.push(field.clone());
+            fields.sort_by_key(|field| field.get("start").and_then(|start| start.as_u64()).unwrap_or(0));
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            node.data["fields"] = Json::Array(fields);
+            Ok(Outcome::changed(format!("the block `{block}` has a field at {start}"))
+                .with_data(json!({ "block": block, "field": with_result(&text, &field) })))
+
+        }
     }
-}
+    /// **Change** a **field** of a block.
+    ///
+    /// The field is named by **where it begins**, and a locked field is
+    /// not changed at all.
+    prose.block.field.set {
+        area: "prose",
+        layer: "prose",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-/// **Change** a **field** of a block.
-///
-/// The field is named by **where it begins**, and a locked field is
-/// not changed at all.
-#[derive(Command)]
-#[command(id = "prose.block.field.set", area = "prose", layer = "prose", icon = "pencil", mutates, undoable)]
-pub struct SetField {
-    /// The block.
-    pub block: NodeRef,
-    /// The field: the character it begins at.
-    pub field: Number,
-    /// The instruction of the field.
-    pub code: Option<Text>,
-    /// Whether the field is locked against change.
-    pub locked: Option<Bool>,
-}
+            block: NodeRef,
+            /// The field: the character it begins at.
 
-impl SetField {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.field.set".to_string();
-        let block = self.block.0;
-        the_block(session, &id, block)?;
-        if self.code.is_none() && self.locked.is_none() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a field is changed or it is not".to_string(),
-            });
+            field: Number,
+            /// The instruction of the field.
+
+            code: Option<Text>,
+            /// Whether the field is locked against change.
+
+            locked: Option<Bool>,
+        },
+        run: {
+
+            let id = "prose.block.field.set".to_string();
+            let block = self.block.0;
+            the_block(session, &id, block)?;
+            if self.code.is_none() && self.locked.is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a field is changed or it is not".to_string(),
+                });
+            }
+            let start = offset_of(self.field.0, &id, "the name of a field")?;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            let mut fields = fields_of(node);
+            let Some(mut field) = field_at(&fields, start) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no field at {start} in the block `{block}`"),
+                });
+            };
+            if field.get("locked").and_then(|locked| locked.as_bool()).unwrap_or(false) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the field at {start} is locked"),
+                });
+            }
+            if let Some(code) = &self.code {
+                field["code"] = json!(code_of(&code.0, &id)?);
+            }
+            if let Some(locked) = &self.locked {
+                field["locked"] = json!(locked.0);
+            }
+            let text = text_of(node);
+            if let Some(held) = fields.iter_mut().find(|held| {
+                held.get("start").and_then(|start| start.as_u64()).unwrap_or(u64::MAX) == start as u64
+            }) {
+                *held = field.clone();
+            }
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            node.data["fields"] = Json::Array(fields);
+            Ok(Outcome::changed(format!("the field at {start} of the block `{block}` is changed"))
+                .with_data(json!({ "block": block, "field": with_result(&text, &field) })))
+
         }
-        let start = offset_of(self.field.0, &id, "the name of a field")?;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        let mut fields = fields_of(node);
-        let Some(mut field) = field_at(&fields, start) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no field at {start} in the block `{block}`"),
-            });
-        };
-        if field.get("locked").and_then(|locked| locked.as_bool()).unwrap_or(false) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the field at {start} is locked"),
-            });
-        }
-        if let Some(code) = &self.code {
-            field["code"] = json!(code_of(&code.0, &id)?);
-        }
-        if let Some(locked) = &self.locked {
-            field["locked"] = json!(locked.0);
-        }
-        let text = text_of(node);
-        if let Some(held) = fields.iter_mut().find(|held| {
-            held.get("start").and_then(|start| start.as_u64()).unwrap_or(u64::MAX) == start as u64
-        }) {
-            *held = field.clone();
-        }
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        node.data["fields"] = Json::Array(fields);
-        Ok(Outcome::changed(format!("the field at {start} of the block `{block}` is changed"))
-            .with_data(json!({ "block": block, "field": with_result(&text, &field) })))
     }
-}
+    /// **Read** the **fields** of a block, each with the **result** it
+    /// covers.
+    prose.block.field.read {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The block.
 
-/// **Read** the **fields** of a block, each with the **result** it
-/// covers.
-#[derive(Command)]
-#[command(id = "prose.block.field.read", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadFields {
-    /// The block.
-    pub block: NodeRef,
-}
+            block: NodeRef,
+        },
+        run: {
 
-impl ReadFields {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.field.read".to_string();
-        let block = self.block.0;
-        the_block(session, &id, block)?;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        let fields = fields_with_result(node);
-        Ok(Outcome::new(format!(
-            "the block `{block}` has {} fields",
-            fields.as_array().map(|f| f.len()).unwrap_or(0)
-        ))
-        .with_data(json!({ "block": block, "fields": fields })))
-    }
-}
+            let id = "prose.block.field.read".to_string();
+            let block = self.block.0;
+            the_block(session, &id, block)?;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            let fields = fields_with_result(node);
+            Ok(Outcome::new(format!(
+                "the block `{block}` has {} fields",
+                fields.as_array().map(|f| f.len()).unwrap_or(0)
+            ))
+            .with_data(json!({ "block": block, "fields": fields })))
 
-/// **Unlink** a **field** of a block.
-///
-/// The field is taken away and its **words stay**: they were ordinary
-/// words all along. A locked field is not unlinked.
-#[derive(Command)]
-#[command(
-    id = "prose.block.field.unlink",
-    area = "prose",
-    layer = "prose",
-    icon = "trash",
-    mutates,
-    undoable
-)]
-pub struct UnlinkField {
-    /// The block.
-    pub block: NodeRef,
-    /// The field: the character it begins at.
-    pub field: Number,
-}
-
-impl UnlinkField {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.block.field.unlink".to_string();
-        let block = self.block.0;
-        the_block(session, &id, block)?;
-        let start = offset_of(self.field.0, &id, "the name of a field")?;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        let mut fields = fields_of(node);
-        let Some(field) = field_at(&fields, start) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no field at {start} in the block `{block}`"),
-            });
-        };
-        if field.get("locked").and_then(|locked| locked.as_bool()).unwrap_or(false) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the field at {start} is locked"),
-            });
         }
-        fields.retain(|held| {
-            held.get("start").and_then(|start| start.as_u64()).unwrap_or(u64::MAX) != start as u64
-        });
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
+    }
+    /// **Unlink** a **field** of a block.
+    ///
+    /// The field is taken away and its **words stay**: they were ordinary
+    /// words all along. A locked field is not unlinked.
+    prose.block.field.unlink {
+        area: "prose",
+        layer: "prose",
+        icon: "trash",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
+
+            block: NodeRef,
+            /// The field: the character it begins at.
+
+            field: Number,
+        },
+        run: {
+
+            let id = "prose.block.field.unlink".to_string();
+            let block = self.block.0;
+            the_block(session, &id, block)?;
+            let start = offset_of(self.field.0, &id, "the name of a field")?;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            let mut fields = fields_of(node);
+            let Some(field) = field_at(&fields, start) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no field at {start} in the block `{block}`"),
+                });
+            };
+            if field.get("locked").and_then(|locked| locked.as_bool()).unwrap_or(false) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the field at {start} is locked"),
+                });
+            }
+            fields.retain(|held| {
+                held.get("start").and_then(|start| start.as_u64()).unwrap_or(u64::MAX) != start as u64
             });
-        };
-        node.data["fields"] = Json::Array(fields);
-        Ok(Outcome::changed(format!("the field at {start} of the block `{block}` is unlinked"))
-            .with_data(json!({ "block": block, "field": field })))
+            let Some(node) = session.document_mut()?.node_mut(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            node.data["fields"] = Json::Array(fields);
+            Ok(Outcome::changed(format!("the field at {start} of the block `{block}` is unlinked"))
+                .with_data(json!({ "block": block, "field": field })))
+
+        }
     }
 }

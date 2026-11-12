@@ -27,10 +27,10 @@
 //! - The merge does not write a **document**: it says the text of
 //!   every row, and the tree writes a document of its own.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Outcome, Session};
+use craftkit_sdk::{EngineError, Outcome};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "prose.merge";
@@ -152,87 +152,93 @@ fn merged_text(node: &craftkit_sdk::Node, headers: &[String], row: &[Json]) -> S
     out.into_iter().collect()
 }
 
-/// **Merge** the fields of a document with the rows of a data source.
-///
-/// The tree's own: a merge field is a field whose instruction is
-/// `MERGEFIELD`, and its value is the value of the column of that
-/// name.
-#[derive(Command)]
-#[command(id = "prose.merge", area = "prose", layer = "prose", icon = "list")]
-pub struct Merge {
-    /// The names of the columns of the data source.
-    pub headers: Option<Json>,
-    /// The rows of the data source: a list of lists of values.
-    pub rows: Json,
-}
+commands! {
+    /// **Merge** the fields of a document with the rows of a data source.
+    ///
+    /// The tree's own: a merge field is a field whose instruction is
+    /// `MERGEFIELD`, and its value is the value of the column of that
+    /// name.
+    prose.merge {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The names of the columns of the data source.
 
-impl Merge {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let headers: Vec<String> = match &self.headers {
-            Some(headers) => {
-                let Some(list) = headers.as_array() else {
-                    return Err(EngineError::Failed {
-                        id: COMMAND.to_string(),
-                        message: "the names of the columns are a list".to_string(),
-                    });
-                };
-                list.iter().map(|header| header.as_str().map(str::to_string).unwrap_or_default()).collect()
-            }
-            None => Vec::new(),
-        };
-        let Some(rows) = self.rows.as_array() else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the rows of the data source are a list of lists".to_string(),
-            });
-        };
-        // The **blocks** of the document.
-        let blocks: Vec<u64> = session
-            .document()
-            .walk()
-            .filter(|node| node.kind.starts_with("prose.block."))
-            .map(|node| node.id)
-            .collect();
-        let mut merged: Vec<Json> = Vec::new();
-        for (index, row) in rows.iter().enumerate() {
-            let Some(row) = row.as_array() else {
+            headers: Option<Json>,
+            /// The rows of the data source: a list of lists of values.
+
+            rows: Json,
+        },
+        run: {
+
+            let headers: Vec<String> = match &self.headers {
+                Some(headers) => {
+                    let Some(list) = headers.as_array() else {
+                        return Err(EngineError::Failed {
+                            id: COMMAND.to_string(),
+                            message: "the names of the columns are a list".to_string(),
+                        });
+                    };
+                    list.iter().map(|header| header.as_str().map(str::to_string).unwrap_or_default()).collect()
+                }
+                None => Vec::new(),
+            };
+            let Some(rows) = self.rows.as_array() else {
                 return Err(EngineError::Failed {
                     id: COMMAND.to_string(),
                     message: "the rows of the data source are a list of lists".to_string(),
                 });
             };
-            let texts: Vec<Json> = blocks
-                .iter()
-                .filter_map(|block| session.document().node(*block))
-                .map(|node| {
-                    let text = merged_text(node, &headers, row);
-                    json!({ "block": node.id, "kind": node.kind.clone(), "text": text })
-                })
+            // The **blocks** of the document.
+            let blocks: Vec<u64> = session
+                .document()
+                .walk()
+                .filter(|node| node.kind.starts_with("prose.block."))
+                .map(|node| node.id)
                 .collect();
-            merged.push(json!({
-                "row": index + 1,
-                "blocks": texts,
-                "address": address_block(&headers, row),
-            }));
-        }
-        // The **fields** the document holds that are merge fields: the
-        // tree says which they are, and so does this one.
-        let mut names: Vec<String> = Vec::new();
-        for block in blocks {
-            let Some(node) = session.document().node(block) else { continue };
-            for field in crate::fields::fields_of(node) {
-                let Some(code) = field.get("code").and_then(Json::as_str) else { continue };
-                let Some(name) = mergefield_name(code) else { continue };
-                if !names.contains(&name) {
-                    names.push(name);
+            let mut merged: Vec<Json> = Vec::new();
+            for (index, row) in rows.iter().enumerate() {
+                let Some(row) = row.as_array() else {
+                    return Err(EngineError::Failed {
+                        id: COMMAND.to_string(),
+                        message: "the rows of the data source are a list of lists".to_string(),
+                    });
+                };
+                let texts: Vec<Json> = blocks
+                    .iter()
+                    .filter_map(|block| session.document().node(*block))
+                    .map(|node| {
+                        let text = merged_text(node, &headers, row);
+                        json!({ "block": node.id, "kind": node.kind.clone(), "text": text })
+                    })
+                    .collect();
+                merged.push(json!({
+                    "row": index + 1,
+                    "blocks": texts,
+                    "address": address_block(&headers, row),
+                }));
+            }
+            // The **fields** the document holds that are merge fields: the
+            // tree says which they are, and so does this one.
+            let mut names: Vec<String> = Vec::new();
+            for block in blocks {
+                let Some(node) = session.document().node(block) else { continue };
+                for field in crate::fields::fields_of(node) {
+                    let Some(code) = field.get("code").and_then(Json::as_str) else { continue };
+                    let Some(name) = mergefield_name(code) else { continue };
+                    if !names.contains(&name) {
+                        names.push(name);
+                    }
                 }
             }
+            Ok(Outcome::new(format!("{} row(s) merged", merged.len())).with_data(json!({
+                "headers": headers,
+                "rows": merged,
+                "count": merged.len(),
+                "fields": names,
+            })))
+
         }
-        Ok(Outcome::new(format!("{} row(s) merged", merged.len())).with_data(json!({
-            "headers": headers,
-            "rows": merged,
-            "count": merged.len(),
-            "fields": names,
-        })))
     }
 }

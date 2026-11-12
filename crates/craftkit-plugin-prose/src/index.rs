@@ -28,10 +28,10 @@
 //!   document, and it carries the **page** every entry is on. Here
 //!   there is no layout, and the entry names the **block** it is on.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Text};
 
 /// The most characters an entry may have.
 pub const MAX_ENTRY: usize = 200;
@@ -173,126 +173,137 @@ pub fn index_of(document: &Document, document_node: u64) -> Vec<Json> {
     out
 }
 
-/// **Mark** a block with an index **entry**.
-///
-/// The entry may have a **subentry** under it. An entry that says
-/// nothing takes every mark of the block away.
-#[derive(Command)]
-#[command(id = "prose.index.mark", area = "prose", layer = "prose", icon = "tag", mutates, undoable)]
-pub struct MarkIndex {
-    /// The block.
-    pub block: NodeRef,
-    /// The entry.
-    pub entry: Text,
-    /// The subentry under the entry.
-    pub subentry: Option<Text>,
-}
+commands! {
+    /// **Mark** a block with an index **entry**.
+    ///
+    /// The entry may have a **subentry** under it. An entry that says
+    /// nothing takes every mark of the block away.
+    prose.index.mark {
+        area: "prose",
+        layer: "prose",
+        icon: "tag",
+        mutates,
+        undoable,
+        params: {
+            /// The block.
 
-impl MarkIndex {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.index.mark".to_string();
-        let block = self.block.0;
-        let Some(node) = session.document().node(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
+            block: NodeRef,
+            /// The entry.
+
+            entry: Text,
+            /// The subentry under the entry.
+
+            subentry: Option<Text>,
+        },
+        run: {
+
+            let id = "prose.index.mark".to_string();
+            let block = self.block.0;
+            let Some(node) = session.document().node(block) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no block `{block}`"),
+                });
+            };
+            if !node.kind.starts_with("prose.block.") {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{block}` is a `{}` and not a block", node.kind),
+                });
+            }
+            let entry = self.entry.0.trim().to_string();
+            let subentry =
+                self.subentry.as_ref().map(|subentry| subentry.0.trim().to_string()).unwrap_or_default();
+            if entry.chars().count() > MAX_ENTRY {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("an entry is at most {MAX_ENTRY} characters long"),
+                });
+            }
+            // An entry that says **nothing** takes the marks away.
+            if entry.is_empty() {
+                let Some(node) = session.document_mut()?.node_mut(block) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no block `{block}`"),
+                    });
+                };
+                let had = marks_of(node).len();
+                node.data["marks"] = Json::Array(Vec::new());
+                return Ok(Outcome::changed(format!("the block `{block}` is not marked at all"))
+                    .with_data(json!({ "block": block, "taken": had })));
+            }
+            // The **marks** of the block: the mark is added, and the same
+            // mark twice is one mark.
+            let mut marks: Vec<Json> = marks_of(node);
+            let held = marks.iter().any(|mark| {
+                mark.get("entry").and_then(|entry| entry.as_str()) == Some(entry.as_str())
+                    && mark.get("subentry").and_then(|subentry| subentry.as_str()).unwrap_or_default()
+                        == subentry.as_str()
             });
-        };
-        if !node.kind.starts_with("prose.block.") {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{block}` is a `{}` and not a block", node.kind),
-            });
-        }
-        let entry = self.entry.0.trim().to_string();
-        let subentry =
-            self.subentry.as_ref().map(|subentry| subentry.0.trim().to_string()).unwrap_or_default();
-        if entry.chars().count() > MAX_ENTRY {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("an entry is at most {MAX_ENTRY} characters long"),
-            });
-        }
-        // An entry that says **nothing** takes the marks away.
-        if entry.is_empty() {
+            if !held {
+                marks.push(json!({ "entry": entry.clone(), "subentry": subentry.clone() }));
+            }
             let Some(node) = session.document_mut()?.node_mut(block) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!("there is no block `{block}`"),
                 });
             };
-            let had = marks_of(node).len();
-            node.data["marks"] = Json::Array(Vec::new());
-            return Ok(Outcome::changed(format!("the block `{block}` is not marked at all"))
-                .with_data(json!({ "block": block, "taken": had })));
+            node.data["marks"] = Json::Array(marks.clone());
+            Ok(Outcome::changed(format!("the block `{block}` is marked `{entry}`")).with_data(json!({
+                "block": block,
+                "entry": entry,
+                "subentry": subentry,
+                "marks": marks.len(),
+            })))
+
         }
-        // The **marks** of the block: the mark is added, and the same
-        // mark twice is one mark.
-        let mut marks: Vec<Json> = marks_of(node);
-        let held = marks.iter().any(|mark| {
-            mark.get("entry").and_then(|entry| entry.as_str()) == Some(entry.as_str())
-                && mark.get("subentry").and_then(|subentry| subentry.as_str()).unwrap_or_default()
-                    == subentry.as_str()
-        });
-        if !held {
-            marks.push(json!({ "entry": entry.clone(), "subentry": subentry.clone() }));
-        }
-        let Some(node) = session.document_mut()?.node_mut(block) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no block `{block}`"),
-            });
-        };
-        node.data["marks"] = Json::Array(marks.clone());
-        Ok(Outcome::changed(format!("the block `{block}` is marked `{entry}`")).with_data(json!({
-            "block": block,
-            "entry": entry,
-            "subentry": subentry,
-            "marks": marks.len(),
-        })))
     }
-}
+    /// **Read** the **index** of a document.
+    ///
+    /// The index is **derived**: it is the marks of the blocks of the
+    /// document, gathered under the letters of the alphabet.
+    prose.index.read {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document.
 
-/// **Read** the **index** of a document.
-///
-/// The index is **derived**: it is the marks of the blocks of the
-/// document, gathered under the letters of the alphabet.
-#[derive(Command)]
-#[command(id = "prose.index.read", area = "prose", layer = "prose", icon = "list")]
-pub struct ReadIndex {
-    /// The document.
-    pub document: NodeRef,
-}
+            document: NodeRef,
+        },
+        run: {
 
-impl ReadIndex {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.index.read".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
+            let id = "prose.index.read".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
+            }
+            let groups = index_of(session.document(), document);
+            let entries: usize = groups
+                .iter()
+                .map(|group| {
+                    group.get("entries").and_then(|entries| entries.as_array()).map(Vec::len).unwrap_or(0)
+                })
+                .sum();
+            Ok(Outcome::new(format!("the document `{document}` has {entries} indexed entry(ies)")).with_data(
+                json!({
+                    "document": document,
+                    "groups": groups,
+                    "entries": entries,
+                }),
+            ))
+
         }
-        let groups = index_of(session.document(), document);
-        let entries: usize = groups
-            .iter()
-            .map(|group| {
-                group.get("entries").and_then(|entries| entries.as_array()).map(Vec::len).unwrap_or(0)
-            })
-            .sum();
-        Ok(Outcome::new(format!("the document `{document}` has {entries} indexed entry(ies)")).with_data(
-            json!({
-                "document": document,
-                "groups": groups,
-                "entries": entries,
-            }),
-        ))
     }
 }

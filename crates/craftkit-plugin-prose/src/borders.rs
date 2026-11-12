@@ -25,7 +25,7 @@
 //!   tree's border keeps the text a certain distance away, and that
 //!   distance is not a fact of this tree.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
@@ -140,149 +140,161 @@ fn the_border(borders: &Json, side: &str) -> Json {
     border
 }
 
-/// **Set** the **borders** of the page of a document.
-///
-/// The `kind` gives every side of the page a border (`box`) or takes
-/// them all away (`none`), and the `sides` names the sides one by one.
-#[derive(Command)]
-#[command(id = "prose.page.borders", area = "prose", layer = "prose", icon = "rect", mutates, undoable)]
-pub struct SetBorders {
-    /// The document.
-    pub document: NodeRef,
-    /// `box` for a border on every side, `none` for none at all.
-    pub kind: Option<Text>,
-    /// The style of the border.
-    pub style: Option<Text>,
-    /// The width of the border, in points.
-    pub width: Option<Number>,
-    /// The colour of the border, as `#rrggbb`.
+commands! {
+    /// **Set** the **borders** of the page of a document.
     ///
-    /// An empty colour takes the colour away.
-    pub colour: Option<Text>,
-    /// The borders of the sides named: `{"top": {…}, "left": null}`.
-    pub sides: Option<Json>,
-}
+    /// The `kind` gives every side of the page a border (`box`) or takes
+    /// them all away (`none`), and the `sides` names the sides one by one.
+    prose.page.borders {
+        area: "prose",
+        layer: "prose",
+        icon: "rect",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-impl SetBorders {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.page.borders".to_string();
-        let document = self.document.0;
-        the_document(session, &id, document)?;
-        if self.kind.is_none() && self.sides.is_none() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a border is named or it is not".to_string(),
-            });
-        }
-        if self.kind.is_some() && self.sides.is_some() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the kind and the sides are not both given".to_string(),
-            });
-        }
-        // The **parts** that are named, and they are the same for
-        // every side that is named.
-        let style = match &self.style {
-            Some(style) => Some(style_of(&style.0, &id)?),
-            None => None,
-        };
-        let width = match &self.width {
-            Some(width) => Some(width_of(width.0, &id)?),
-            None => None,
-        };
-        let colour = match &self.colour {
-            Some(colour) => Some(colour_of(&colour.0, &id)?),
-            None => None,
-        };
-        // The **borders** as they are now.
-        let mut borders: Json = session
-            .document()
-            .node(document)
-            .and_then(|node| node.data.get("page_borders"))
-            .cloned()
-            .filter(|borders| borders.is_object())
-            .unwrap_or_else(|| json!({}));
-        match &self.kind {
-            Some(kind) => {
-                let kind = kind.0.trim().to_lowercase();
-                match kind.as_str() {
-                    "box" => {
-                        for side in SIDES {
-                            let border = the_border(&borders, side);
-                            borders[side] = with_parts(&border, style, width, colour.clone());
+            document: NodeRef,
+            /// `box` for a border on every side, `none` for none at all.
+
+            kind: Option<Text>,
+            /// The style of the border.
+
+            style: Option<Text>,
+            /// The width of the border, in points.
+
+            width: Option<Number>,
+            /// The colour of the border, as `#rrggbb`.
+            ///
+            /// An empty colour takes the colour away.
+
+            colour: Option<Text>,
+            /// The borders of the sides named: `{"top": {…}, "left": null}`.
+
+            sides: Option<Json>,
+        },
+        run: {
+
+            let id = "prose.page.borders".to_string();
+            let document = self.document.0;
+            the_document(session, &id, document)?;
+            if self.kind.is_none() && self.sides.is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a border is named or it is not".to_string(),
+                });
+            }
+            if self.kind.is_some() && self.sides.is_some() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the kind and the sides are not both given".to_string(),
+                });
+            }
+            // The **parts** that are named, and they are the same for
+            // every side that is named.
+            let style = match &self.style {
+                Some(style) => Some(style_of(&style.0, &id)?),
+                None => None,
+            };
+            let width = match &self.width {
+                Some(width) => Some(width_of(width.0, &id)?),
+                None => None,
+            };
+            let colour = match &self.colour {
+                Some(colour) => Some(colour_of(&colour.0, &id)?),
+                None => None,
+            };
+            // The **borders** as they are now.
+            let mut borders: Json = session
+                .document()
+                .node(document)
+                .and_then(|node| node.data.get("page_borders"))
+                .cloned()
+                .filter(|borders| borders.is_object())
+                .unwrap_or_else(|| json!({}));
+            match &self.kind {
+                Some(kind) => {
+                    let kind = kind.0.trim().to_lowercase();
+                    match kind.as_str() {
+                        "box" => {
+                            for side in SIDES {
+                                let border = the_border(&borders, side);
+                                borders[side] = with_parts(&border, style, width, colour.clone());
+                            }
+                        }
+                        "none" => {
+                            for side in SIDES {
+                                borders.as_object_mut().map(|map| map.remove(side));
+                            }
+                        }
+                        other => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!("there is no kind `{other}`: the kinds are box and none"),
+                            });
                         }
                     }
-                    "none" => {
-                        for side in SIDES {
+                }
+                None => {
+                    let Some(sides) = &self.sides else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "a border is named or it is not".to_string(),
+                        });
+                    };
+                    let Some(list) = sides.as_object() else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "the sides are a list of pairs".to_string(),
+                        });
+                    };
+                    for (name, value) in list {
+                        let side = side_of(name, &id)?;
+                        if value.is_null() {
                             borders.as_object_mut().map(|map| map.remove(side));
+                            continue;
                         }
-                    }
-                    other => {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: format!("there is no kind `{other}`: the kinds are box and none"),
-                        });
+                        let Some(given) = value.as_object() else {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!("the border of the {side} is a list of pairs, or nothing"),
+                            });
+                        };
+                        let side_style = match given.get("style") {
+                            Some(style) => Some(style_of(style.as_str().unwrap_or_default(), &id)?),
+                            None => None,
+                        };
+                        let side_width = match given.get("width") {
+                            Some(width) => Some(width_of(width.as_f64().unwrap_or_default(), &id)?),
+                            None => None,
+                        };
+                        let side_colour = match given.get("colour") {
+                            Some(colour) => Some(colour_of(colour.as_str().unwrap_or_default(), &id)?),
+                            None => None,
+                        };
+                        let border = the_border(&borders, side);
+                        borders[side] = with_parts(&border, side_style, side_width, side_colour);
                     }
                 }
             }
-            None => {
-                let Some(sides) = &self.sides else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: "a border is named or it is not".to_string(),
-                    });
-                };
-                let Some(list) = sides.as_object() else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: "the sides are a list of pairs".to_string(),
-                    });
-                };
-                for (name, value) in list {
-                    let side = side_of(name, &id)?;
-                    if value.is_null() {
-                        borders.as_object_mut().map(|map| map.remove(side));
-                        continue;
-                    }
-                    let Some(given) = value.as_object() else {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: format!("the border of the {side} is a list of pairs, or nothing"),
-                        });
-                    };
-                    let side_style = match given.get("style") {
-                        Some(style) => Some(style_of(style.as_str().unwrap_or_default(), &id)?),
-                        None => None,
-                    };
-                    let side_width = match given.get("width") {
-                        Some(width) => Some(width_of(width.as_f64().unwrap_or_default(), &id)?),
-                        None => None,
-                    };
-                    let side_colour = match given.get("colour") {
-                        Some(colour) => Some(colour_of(colour.as_str().unwrap_or_default(), &id)?),
-                        None => None,
-                    };
-                    let border = the_border(&borders, side);
-                    borders[side] = with_parts(&border, side_style, side_width, side_colour);
-                }
+            // The **borders** are kept, and a page with no border at all
+            // has none.
+            let empty = borders.as_object().map(|map| map.is_empty()).unwrap_or(true);
+            let Some(node) = session.document_mut()?.node_mut(document) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            if empty {
+                node.data.as_object_mut().map(|map| map.remove("page_borders"));
+            } else {
+                node.data["page_borders"] = borders.clone();
             }
+            Ok(Outcome::changed(format!("the page of the document `{document}` has its borders"))
+                .with_data(json!({ "document": document, "borders": borders })))
+
         }
-        // The **borders** are kept, and a page with no border at all
-        // has none.
-        let empty = borders.as_object().map(|map| map.is_empty()).unwrap_or(true);
-        let Some(node) = session.document_mut()?.node_mut(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        if empty {
-            node.data.as_object_mut().map(|map| map.remove("page_borders"));
-        } else {
-            node.data["page_borders"] = borders.clone();
-        }
-        Ok(Outcome::changed(format!("the page of the document `{document}` has its borders"))
-            .with_data(json!({ "document": document, "borders": borders })))
     }
 }
 

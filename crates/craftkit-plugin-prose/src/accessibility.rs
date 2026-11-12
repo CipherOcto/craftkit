@@ -38,10 +38,10 @@
 //! The issues come first as **errors**, then as warnings, then as
 //! tips, and the order of the document is kept within each kind.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome};
 
 /// How many **empty paragraphs in a row** look like spacing made
 /// with the return key.
@@ -340,38 +340,43 @@ pub fn issues_of(document: &Document, node: &Node) -> Vec<Issue> {
     issues
 }
 
-/// **Check** a document: what makes it hard to use.
-///
-/// A query: it does not change the document.
-#[derive(Command)]
-#[command(id = "prose.accessibility", area = "prose", layer = "prose", icon = "list")]
-pub struct CheckAccessibility {
-    /// The document.
-    pub document: NodeRef,
-}
+commands! {
+    /// **Check** a document: what makes it hard to use.
+    ///
+    /// A query: it does not change the document.
+    prose.accessibility {
+        area: "prose",
+        layer: "prose",
+        icon: "list",
+        params: {
+            /// The document.
 
-impl CheckAccessibility {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "prose.accessibility".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        if node.kind != "prose.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
+            document: NodeRef,
+        },
+        run: {
+
+            let id = "prose.accessibility".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            if node.kind != "prose.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
+            }
+            let issues = issues_of(session.document(), &node);
+            let count = issues.len();
+            Ok(Outcome::new(format!("the document has {count} issue(s)")).with_data(json!({
+                "document": document,
+                "issues": issues.iter().map(Issue::to_json).collect::<Vec<_>>(),
+                "count": count,
+            })))
+
         }
-        let issues = issues_of(session.document(), &node);
-        let count = issues.len();
-        Ok(Outcome::new(format!("the document has {count} issue(s)")).with_data(json!({
-            "document": document,
-            "issues": issues.iter().map(Issue::to_json).collect::<Vec<_>>(),
-            "count": count,
-        })))
     }
 }
