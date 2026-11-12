@@ -4240,6 +4240,7 @@ so.
 | the **brief** of an arc | **built.** One call gives the arc the rule, the landing site, the conventions, the claims, the counts and the commands — every one of them read out of the tree (§854) | §854 |
 | the **shape** of a test | **built.** A macro writes the four lines a test of a command always writes, the refusal is not swallowed, and the session is left behind so the test can look at the document (§856) | §856 |
 | the **layering**, checked at build time | **built.** A build script reads the manifests and the authority's table as text, and a crate that reaches upward — or a plugin that reaches for a plugin — fails the build with a sentence, not a panic (§857) | §857 |
+| a **battery as a declaration** | **built.** A table declares a family of commands and the compiler writes the struct, the reader and the registration for every row — with the compilers own checks, and one of its own (§858) | §858 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -56299,3 +56300,93 @@ written, compiled, and believed to be right.
   tool is being built; `cargo xtask layers` still runs the same rules over
   the same manifests and reports them the way the gate reports everything
   else. The two are not one another's replacement.
+
+## 858. A battery as a declaration
+
+A command is declared with `#[derive(Command)]` and its parameters are the
+fields of a struct. That is one declaration per command. A battery is a
+**family** of commands, and a family of one-declaration-per-command reads as
+a list of strangers.
+
+### What was built
+
+- **`commands!`**, a macro that takes a **table** of commands and writes,
+  for every row, the same work the derive writes for one command: the
+  struct, the reader, the registration and the spec.
+  ```rust
+  commands! {
+      /// Add a workbook to the grid.
+      grid.workbook.add {
+          label: "Add workbook",
+          area: "grid",
+          mutates,
+          undoable,
+          params: {
+              /// The workbook's name.
+              name: Text,
+          },
+          run: {
+              Ok(Outcome::changed(format!("added {}", self.name.0)))
+          }
+      }
+  }
+  ```
+- **The table's shape**: the doc comment is the command's one line; the id
+  is `<area>.<thing>`; the label defaults to the id's last part and the area
+  to the id's first; `params` holds the fields and **their types are the
+  kinds**; the `run` body is ordinary Rust, where `self` is the command and
+  `session` is the session.
+- **Every row inherits the compiler's checks** — the id is dotted and lower
+  case, the id is in its area, an `Either` parameter needs its other
+  spelling, an `undoable` command must `mutate` — and the table adds one of
+  its own: **two rows may not share an id**.
+
+### What the port found
+
+- **The mechanical half and the semantic half can be separated.** The table
+  writes the *mechanical* half — the struct, the reader, the registration —
+  and leaves the *semantic* half — the body of the command — as the
+  reader's own Rust. A rule that needs reading stays readable; a rule that
+  does not becomes a row. That is the trade, and the tree can now make it
+  with the machinery in hand.
+- **The table does not need the whole vocabulary.** `capability`, `layer`,
+  `icon`, `menu` and `shortcut` are not in it, and a row that needs one is
+  a row that wants the derive. The table covers the shape a *family* has,
+  not the shape a *plugin* has.
+- **The duplicate-id check is worth writing twice.** The registry would
+  refuse such a pair when it is built — but at that point the reader has
+  left the table. The table says so while the reader is still looking at
+  it, which is the whole difference between a compiler and a runtime.
+- **The derive needed a dev-dependency on the SDK to be tested.** The
+  registry lives in the SDK, and it is the only way to see what a
+  declaration produced. A dev-dependency does not ship, so the layering
+  rules do not apply to it — and the two gates agree.
+
+### What it cost
+
+- **One new module** in the derive (`crates/craftkit-derive/src/commands.rs`),
+  the `commands!` macro in the derive's `lib.rs`, one dev-dependency, and
+  one edge in `Cargo.lock`.
+- **One new test file**: `crates/craftkit-derive/tests/commands.rs` — eight
+  tests: the rows reach the registry with the right ids, labels (including
+  the id-default), areas, parameters, flags and doc line, and the row's
+  body is the body's. Eight more are unit tests in the module itself:
+  the duplicate id, the missing `run`, the unknown entry, the unknown flag,
+  the bad id and the bad area.
+
+### What it does not settle
+
+- **No battery uses it yet, and that is deliberate.** The house values a
+  rule you can *read*, and a declaration table trades that for the speed of
+  a port. Converting a battery is a separate decision about a specific
+  battery, and it should be made by someone who has read that battery —
+  not as a side effect of a port.
+- **The table is a second way to declare a command**, and the tree's rule
+  is that there is one way. This is not a violation today, because the
+  second way produces the same registry entries through the same
+  expansion; but the day the two drift, the rule is what decides. That is
+  a cost this arc has taken on and has not yet paid.
+- **The dev-dependency cycle is deliberate and legal.** The derive depends
+  on the SDK for its tests, and the SDK depends on the derive for its
+  commands. Cargo allows it, and the layering gates skip dev-dependencies
+  — but it is one more thing a reader has to know.
