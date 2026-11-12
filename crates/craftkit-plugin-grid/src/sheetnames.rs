@@ -39,7 +39,7 @@
 //!   is renamed by renaming the **sheet** in the range and not the
 //!   name itself.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
@@ -106,97 +106,105 @@ fn taken_by(names: &[String], name: &str) -> Option<String> {
     names.iter().find(|other| other.eq_ignore_ascii_case(name)).cloned()
 }
 
-/// **Rename** a sheet.
-///
-/// Every formula that names the sheet follows it, and every name of
-/// the workbook that stands for a range in it follows it too.
-#[derive(Command)]
-#[command(id = "grid.sheet.rename", area = "grid", layer = "grid", icon = "pencil", mutates, undoable)]
-pub struct RenameSheet {
-    /// The sheet to rename.
-    pub sheet: NodeRef,
-    /// Its new name.
-    pub name: Text,
-}
+commands! {
+    /// **Rename** a sheet.
+    ///
+    /// Every formula that names the sheet follows it, and every name of
+    /// the workbook that stands for a range in it follows it too.
+    grid.sheet.rename {
+        area: "grid",
+        layer: "grid",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet to rename.
 
-impl RenameSheet {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.sheet.rename".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
-        }
-        let old = node.name.clone();
-        let name = self.name.0.trim().to_string();
-        let names = other_sheet_names(session, sheet);
-        if let Some(reason) = why_not(&name, taken_by(&names, &name).as_deref()) {
-            return Err(EngineError::Failed { id: id.clone(), message: reason });
-        }
-        // The formulas of every sheet of the document, and the names of
-        // every workbook: they name the sheet, and they follow it.
-        let mut renamed = 0usize;
-        let sheets: Vec<u64> =
-            session.document().walk().filter(|node| node.kind == "grid.sheet").map(|node| node.id).collect();
-        for other in sheets {
-            let Some(node) = session.document_mut()?.node_mut(other) else { continue };
-            let mut cells = crate::cells_of(node);
-            let changed = cells.rename_sheet(&old, &name);
-            if changed > 0 {
-                renamed += changed;
-                node.data["cells"] = crate::cells_into(&cells);
-            }
-        }
-        // The names of the workbook: a name stands for a range, and the
-        // range names its sheet.
-        let workbooks: Vec<u64> = session
-            .document()
-            .walk()
-            .filter(|node| node.kind == "grid.workbook")
-            .map(|node| node.id)
-            .collect();
-        let mut names_moved = 0usize;
-        for workbook in workbooks {
-            let Some(node) = session.document_mut()?.node_mut(workbook) else { continue };
-            let Some(map) = node.data.get("names").and_then(|names| names.as_object()).cloned() else {
-                continue;
+            sheet: NodeRef,
+            /// Its new name.
+
+            name: Text,
+        },
+        run: {
+
+            let id = "grid.sheet.rename".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{sheet}`"),
+                });
             };
-            let mut changed = false;
-            let mut moved = craftkit_sdk::serde_json::Map::new();
-            for (name_of_name, refers_to) in map {
-                let Some(text) = refers_to.as_str() else {
-                    moved.insert(name_of_name, refers_to);
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let old = node.name.clone();
+            let name = self.name.0.trim().to_string();
+            let names = other_sheet_names(session, sheet);
+            if let Some(reason) = why_not(&name, taken_by(&names, &name).as_deref()) {
+                return Err(EngineError::Failed { id: id.clone(), message: reason });
+            }
+            // The formulas of every sheet of the document, and the names of
+            // every workbook: they name the sheet, and they follow it.
+            let mut renamed = 0usize;
+            let sheets: Vec<u64> =
+                session.document().walk().filter(|node| node.kind == "grid.sheet").map(|node| node.id).collect();
+            for other in sheets {
+                let Some(node) = session.document_mut()?.node_mut(other) else { continue };
+                let mut cells = crate::cells_of(node);
+                let changed = cells.rename_sheet(&old, &name);
+                if changed > 0 {
+                    renamed += changed;
+                    node.data["cells"] = crate::cells_into(&cells);
+                }
+            }
+            // The names of the workbook: a name stands for a range, and the
+            // range names its sheet.
+            let workbooks: Vec<u64> = session
+                .document()
+                .walk()
+                .filter(|node| node.kind == "grid.workbook")
+                .map(|node| node.id)
+                .collect();
+            let mut names_moved = 0usize;
+            for workbook in workbooks {
+                let Some(node) = session.document_mut()?.node_mut(workbook) else { continue };
+                let Some(map) = node.data.get("names").and_then(|names| names.as_object()).cloned() else {
                     continue;
                 };
-                let rewritten = rename_in_refers_to(text, &old, &name);
-                if rewritten != text {
-                    changed = true;
-                    names_moved += 1;
+                let mut changed = false;
+                let mut moved = craftkit_sdk::serde_json::Map::new();
+                for (name_of_name, refers_to) in map {
+                    let Some(text) = refers_to.as_str() else {
+                        moved.insert(name_of_name, refers_to);
+                        continue;
+                    };
+                    let rewritten = rename_in_refers_to(text, &old, &name);
+                    if rewritten != text {
+                        changed = true;
+                        names_moved += 1;
+                    }
+                    moved.insert(name_of_name, json!(rewritten));
                 }
-                moved.insert(name_of_name, json!(rewritten));
+                if changed {
+                    node.data["names"] = json!(moved);
+                }
             }
-            if changed {
-                node.data["names"] = json!(moved);
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.name = name.clone();
             }
+            Ok(Outcome::changed(format!("the sheet `{old}` is now called `{name}`")).with_data(json!({
+                "sheet": sheet,
+                "old_name": old,
+                "name": name,
+                "formulas": renamed,
+                "names": names_moved,
+            })))
+
         }
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.name = name.clone();
-        }
-        Ok(Outcome::changed(format!("the sheet `{old}` is now called `{name}`")).with_data(json!({
-            "sheet": sheet,
-            "old_name": old,
-            "name": name,
-            "formulas": renamed,
-            "names": names_moved,
-        })))
     }
 }
 

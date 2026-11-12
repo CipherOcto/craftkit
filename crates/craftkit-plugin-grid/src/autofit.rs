@@ -21,7 +21,7 @@
 //!   the hiding is a fact of its own, and a row that is hidden is
 //!   still a row that has a height.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
@@ -90,138 +90,151 @@ fn lines_of(text: &str) -> Vec<&str> {
     if lines.is_empty() { vec![""] } else { lines }
 }
 
-/// **Make** a column **as wide as its text**.
-///
-/// The width is worked out from the text the cells hold, and it is
-/// worked out in **characters**: the tree measures the text with a font
-/// and works out a width in points, and here the text is counted.
-#[derive(Command)]
-#[command(id = "grid.column.autofit", area = "grid", layer = "grid", icon = "columns", mutates, undoable)]
-pub struct AutofitColumn {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// Which column: `A`, `B`, `AA`.
-    pub column: Text,
-}
+commands! {
+    /// **Make** a column **as wide as its text**.
+    ///
+    /// The width is worked out from the text the cells hold, and it is
+    /// worked out in **characters**: the tree measures the text with a font
+    /// and works out a width in points, and here the text is counted.
+    grid.column.autofit {
+        area: "grid",
+        layer: "grid",
+        icon: "columns",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl AutofitColumn {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.column.autofit".to_string();
-        let sheet = self.sheet.0;
-        let node = the_sheet(session, &id, sheet)?;
-        let (column, index) = column_of(&self.column.0, &id)?;
-        let name = node.name.clone();
-        let cells = crate::cells_of(node);
-        // The **merges**: a cell under one is not measured.
-        let merges = crate::merges::merges_of(node);
-        // The **widest** line of the column.
-        let mut widest: f64 = 0.0;
-        for (cell, _entry) in cells.iter() {
-            if cell.col != index {
-                continue;
-            }
-            if merges.iter().any(|area| area.covers(cell)) {
-                continue;
-            }
-            let text = crate::finding::text_of(session, sheet, &name, &cells, cell, false);
-            for line in lines_of(&text) {
-                let width = line.chars().count() as f64;
-                if width > widest {
-                    widest = width;
+            sheet: NodeRef,
+            /// Which column: `A`, `B`, `AA`.
+
+            column: Text,
+        },
+        run: {
+
+            let id = "grid.column.autofit".to_string();
+            let sheet = self.sheet.0;
+            let node = the_sheet(session, &id, sheet)?;
+            let (column, index) = column_of(&self.column.0, &id)?;
+            let name = node.name.clone();
+            let cells = crate::cells_of(node);
+            // The **merges**: a cell under one is not measured.
+            let merges = crate::merges::merges_of(node);
+            // The **widest** line of the column.
+            let mut widest: f64 = 0.0;
+            for (cell, _entry) in cells.iter() {
+                if cell.col != index {
+                    continue;
+                }
+                if merges.iter().any(|area| area.covers(cell)) {
+                    continue;
+                }
+                let text = crate::finding::text_of(session, sheet, &name, &cells, cell, false);
+                for line in lines_of(&text) {
+                    let width = line.chars().count() as f64;
+                    if width > widest {
+                        widest = width;
+                    }
                 }
             }
-        }
-        if widest <= 0.0 {
-            return Ok(Outcome::new(format!("the column {column} holds no text")).with_data(json!({
+            if widest <= 0.0 {
+                return Ok(Outcome::new(format!("the column {column} holds no text")).with_data(json!({
+                    "sheet": sheet,
+                    "column": column,
+                    "width": Json::Null,
+                    "fitted": false,
+                })));
+            }
+            let width = widest + ROOM;
+            let mut columns = node.data.get("columns").cloned().unwrap_or(json!({}));
+            if !columns.is_object() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the columns of the sheet `{sheet}` are not a group"),
+                });
+            }
+            columns[&column] = json!(width);
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["columns"] = columns;
+            }
+            Ok(Outcome::changed(format!("the column {column} is {width} characters wide")).with_data(json!({
                 "sheet": sheet,
                 "column": column,
-                "width": Json::Null,
-                "fitted": false,
-            })));
+                "width": width,
+                "fitted": true,
+            })))
+
         }
-        let width = widest + ROOM;
-        let mut columns = node.data.get("columns").cloned().unwrap_or(json!({}));
-        if !columns.is_object() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the columns of the sheet `{sheet}` are not a group"),
-            });
-        }
-        columns[&column] = json!(width);
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["columns"] = columns;
-        }
-        Ok(Outcome::changed(format!("the column {column} is {width} characters wide")).with_data(json!({
-            "sheet": sheet,
-            "column": column,
-            "width": width,
-            "fitted": true,
-        })))
     }
-}
+    /// **Make** a row **as tall as its text**.
+    ///
+    /// The height is worked out from the lines the cells hold, and a line
+    /// is as high as the default height of a row.
+    grid.row.autofit {
+        area: "grid",
+        layer: "grid",
+        icon: "rows",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-/// **Make** a row **as tall as its text**.
-///
-/// The height is worked out from the lines the cells hold, and a line
-/// is as high as the default height of a row.
-#[derive(Command)]
-#[command(id = "grid.row.autofit", area = "grid", layer = "grid", icon = "rows", mutates, undoable)]
-pub struct AutofitRow {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// Which row, counting from one.
-    pub row: Number,
-}
+            sheet: NodeRef,
+            /// Which row, counting from one.
 
-impl AutofitRow {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.row.autofit".to_string();
-        let sheet = self.sheet.0;
-        let node = the_sheet(session, &id, sheet)?;
-        let row = row_of(self.row, &id)?;
-        let name = node.name.clone();
-        let cells = crate::cells_of(node);
-        let merges = crate::merges::merges_of(node);
-        // The **most** lines any cell of the row holds.
-        let mut most: usize = 0;
-        for (cell, _entry) in cells.iter() {
-            if cell.row as u64 + 1 != row {
-                continue;
+            row: Number,
+        },
+        run: {
+
+            let id = "grid.row.autofit".to_string();
+            let sheet = self.sheet.0;
+            let node = the_sheet(session, &id, sheet)?;
+            let row = row_of(self.row, &id)?;
+            let name = node.name.clone();
+            let cells = crate::cells_of(node);
+            let merges = crate::merges::merges_of(node);
+            // The **most** lines any cell of the row holds.
+            let mut most: usize = 0;
+            for (cell, _entry) in cells.iter() {
+                if cell.row as u64 + 1 != row {
+                    continue;
+                }
+                if merges.iter().any(|area| area.covers(cell)) {
+                    continue;
+                }
+                let text = crate::finding::text_of(session, sheet, &name, &cells, cell, false);
+                let lines = lines_of(&text).len();
+                if lines > most {
+                    most = lines;
+                }
             }
-            if merges.iter().any(|area| area.covers(cell)) {
-                continue;
+            if most == 0 {
+                return Ok(Outcome::new(format!("the row {row} holds no text")).with_data(json!({
+                    "sheet": sheet,
+                    "row": row,
+                    "height": Json::Null,
+                    "fitted": false,
+                })));
             }
-            let text = crate::finding::text_of(session, sheet, &name, &cells, cell, false);
-            let lines = lines_of(&text).len();
-            if lines > most {
-                most = lines;
+            let height = most as f64 * LINE_HEIGHT;
+            let mut rows = node.data.get("rows").cloned().unwrap_or(json!({}));
+            if !rows.is_object() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the rows of the sheet `{sheet}` are not a group"),
+                });
             }
-        }
-        if most == 0 {
-            return Ok(Outcome::new(format!("the row {row} holds no text")).with_data(json!({
+            rows[row.to_string()] = json!(height);
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["rows"] = rows;
+            }
+            Ok(Outcome::changed(format!("the row {row} is {height} points high")).with_data(json!({
                 "sheet": sheet,
                 "row": row,
-                "height": Json::Null,
-                "fitted": false,
-            })));
+                "height": height,
+                "fitted": true,
+            })))
+
         }
-        let height = most as f64 * LINE_HEIGHT;
-        let mut rows = node.data.get("rows").cloned().unwrap_or(json!({}));
-        if !rows.is_object() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the rows of the sheet `{sheet}` are not a group"),
-            });
-        }
-        rows[row.to_string()] = json!(height);
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["rows"] = rows;
-        }
-        Ok(Outcome::changed(format!("the row {row} is {height} points high")).with_data(json!({
-            "sheet": sheet,
-            "row": row,
-            "height": height,
-            "fitted": true,
-        })))
     }
 }

@@ -31,7 +31,7 @@
 //!   it is bold and whether it is italic, and a font is not a fact a
 //!   printed sheet has here.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -298,50 +298,65 @@ pub fn to_json(node: &Node) -> craftkit_sdk::serde_json::Value {
     json!({ "header": texts("print_header"), "footer": texts("print_footer") })
 }
 
-/// **Set** the header of a sheet — or take it away.
-///
-/// The text may hold the codes of a printed page: `&P` is the page
-/// number, `&N` the number of pages, `&A` the name of the sheet, and
-/// `&L`, `&C` and `&R` the three sections the text stands in. An
-/// empty text takes the header away.
-#[derive(Command)]
-#[command(id = "grid.print.header", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
-pub struct SetHeader {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The kind of page: `odd`, `even` or `first`. Without it, the odd
-    /// pages are meant.
-    pub page: Option<Text>,
-    /// The text of the header.
-    pub text: Text,
-}
+commands! {
+    /// **Set** the header of a sheet — or take it away.
+    ///
+    /// The text may hold the codes of a printed page: `&P` is the page
+    /// number, `&N` the number of pages, `&A` the name of the sheet, and
+    /// `&L`, `&C` and `&R` the three sections the text stands in. An
+    /// empty text takes the header away.
+    grid.print.header {
+        area: "grid",
+        layer: "grid",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
 
-impl SetHeader {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        set(session, "grid.print.header", "print_header", self.sheet.0, &self.page, &self.text.0)
+            sheet: NodeRef,
+            /// The kind of page: `odd`, `even` or `first`. Without it, the odd
+            /// pages are meant.
+
+            page: Option<Text>,
+            /// The text of the header.
+
+            text: Text,
+        },
+        run: {
+
+            set(session, "grid.print.header", "print_header", self.sheet.0, &self.page, &self.text.0)
+
+        }
     }
-}
+    /// **Set** the footer of a sheet — or take it away.
+    ///
+    /// The codes are the codes of the header: `&P` is the page number,
+    /// `&N` the number of pages, `&A` the name of the sheet, and `&L`,
+    /// `&C` and `&R` the three sections the text stands in.
+    grid.print.footer {
+        area: "grid",
+        layer: "grid",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
 
-/// **Set** the footer of a sheet — or take it away.
-///
-/// The codes are the codes of the header: `&P` is the page number,
-/// `&N` the number of pages, `&A` the name of the sheet, and `&L`,
-/// `&C` and `&R` the three sections the text stands in.
-#[derive(Command)]
-#[command(id = "grid.print.footer", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
-pub struct SetFooter {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The kind of page: `odd`, `even` or `first`. Without it, the odd
-    /// pages are meant.
-    pub page: Option<Text>,
-    /// The text of the footer.
-    pub text: Text,
-}
+            sheet: NodeRef,
+            /// The kind of page: `odd`, `even` or `first`. Without it, the odd
+            /// pages are meant.
 
-impl SetFooter {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        set(session, "grid.print.footer", "print_footer", self.sheet.0, &self.page, &self.text.0)
+            page: Option<Text>,
+            /// The text of the footer.
+
+            text: Text,
+        },
+        run: {
+
+            set(session, "grid.print.footer", "print_footer", self.sheet.0, &self.page, &self.text.0)
+
+        }
     }
 }
 

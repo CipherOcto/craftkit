@@ -22,10 +22,10 @@
 //! - a cell that holds no text is **left alone**: there is nothing to
 //!   cut.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Text};
 
 use crate::formula::{CellRef, MAX_COLS, Value};
 
@@ -73,155 +73,167 @@ fn value_of(part: &str) -> Value {
     }
 }
 
-/// **Cut** the text of a column into columns.
-///
-/// A change: it writes the parts it cuts into the cells beside the
-/// column they came from.
-#[derive(Command)]
-#[command(id = "grid.text.columns", area = "grid", layer = "grid", icon = "scissors", mutates, undoable)]
-pub struct TextColumns {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The column the text is in — the letters of it, such as `A`.
-    pub column: Text,
-    /// The text the parts are separated by.
+commands! {
+    /// **Cut** the text of a column into columns.
     ///
-    /// It is a tab unless the file says otherwise.
-    pub delimiter: Option<Text>,
-    /// The character that marks a part that holds the delimiter.
-    ///
-    /// It is a double quote unless the file says otherwise.
-    pub qualifier: Option<Text>,
-    /// Whether a run of delimiters is one delimiter.
-    pub treat_consecutive: Option<Bool>,
-    /// The column the parts are written into.
-    ///
-    /// It is the column they came from unless the file says otherwise.
-    pub destination: Option<Text>,
-}
+    /// A change: it writes the parts it cuts into the cells beside the
+    /// column they came from.
+    grid.text.columns {
+        area: "grid",
+        layer: "grid",
+        icon: "scissors",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl TextColumns {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.text.columns".to_string();
-        let sheet = self.sheet.0;
-        // The **locks** the styles of the workbook carry: they are
-        // read before the document is borrowed for the change.
-        let locks = crate::style_locks(session, sheet);
-        let source = CellRef::column_index(self.column.0.trim()).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("`{}` is not a column", self.column.0.trim()),
-        })?;
-        let delimiter = match &self.delimiter {
-            None => '\t',
-            Some(text) => {
-                let mut characters = text.0.chars();
-                let Some(first) = characters.next() else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: "the delimiter is empty".to_string(),
-                    });
-                };
-                if characters.next().is_some() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the delimiter `{}` is more than one character", text.0),
-                    });
+            sheet: NodeRef,
+            /// The column the text is in — the letters of it, such as `A`.
+
+            column: Text,
+            /// The text the parts are separated by.
+            ///
+            /// It is a tab unless the file says otherwise.
+
+            delimiter: Option<Text>,
+            /// The character that marks a part that holds the delimiter.
+            ///
+            /// It is a double quote unless the file says otherwise.
+
+            qualifier: Option<Text>,
+            /// Whether a run of delimiters is one delimiter.
+
+            treat_consecutive: Option<Bool>,
+            /// The column the parts are written into.
+            ///
+            /// It is the column they came from unless the file says otherwise.
+
+            destination: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.text.columns".to_string();
+            let sheet = self.sheet.0;
+            // The **locks** the styles of the workbook carry: they are
+            // read before the document is borrowed for the change.
+            let locks = crate::style_locks(session, sheet);
+            let source = CellRef::column_index(self.column.0.trim()).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("`{}` is not a column", self.column.0.trim()),
+            })?;
+            let delimiter = match &self.delimiter {
+                None => '\t',
+                Some(text) => {
+                    let mut characters = text.0.chars();
+                    let Some(first) = characters.next() else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "the delimiter is empty".to_string(),
+                        });
+                    };
+                    if characters.next().is_some() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the delimiter `{}` is more than one character", text.0),
+                        });
+                    }
+                    first
                 }
-                first
-            }
-        };
-        let qualifier = match &self.qualifier {
-            None => '"',
-            Some(text) => {
-                let mut characters = text.0.chars();
-                let Some(first) = characters.next() else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: "the qualifier is empty".to_string(),
-                    });
-                };
-                if characters.next().is_some() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the qualifier `{}` is more than one character", text.0),
-                    });
+            };
+            let qualifier = match &self.qualifier {
+                None => '"',
+                Some(text) => {
+                    let mut characters = text.0.chars();
+                    let Some(first) = characters.next() else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "the qualifier is empty".to_string(),
+                        });
+                    };
+                    if characters.next().is_some() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the qualifier `{}` is more than one character", text.0),
+                        });
+                    }
+                    first
                 }
-                first
-            }
-        };
-        let treat_consecutive = self.treat_consecutive.map(|value| value.0).unwrap_or(false);
-        let destination = match &self.destination {
-            None => source,
-            Some(text) => CellRef::column_index(text.0.trim()).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{}` is not a column", text.0.trim()),
-            })?,
-        };
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        let cells = crate::cells_of(node);
-        // The **rows** of the column: the ones that hold something.
-        let mut rows: Vec<u32> = cells
-            .iter()
-            .filter(|(cell, entry)| cell.col == source && entry.value.is_some())
-            .map(|(cell, _)| cell.row)
-            .collect();
-        rows.sort_unstable();
-        let mut cut = 0usize;
-        let mut written = 0usize;
-        // The **plan**: the cells the parts are written into and what
-        // they hold.
-        let mut plan: Vec<(CellRef, Value)> = Vec::new();
-        for row in rows {
-            let cell = CellRef { col: source, row };
-            let Some(entry) = cells.get(cell) else { continue };
-            let Some(Value::Text(text)) = entry.value.clone() else { continue };
-            let parts = split(&text, delimiter, qualifier, treat_consecutive);
-            // The parts are written into the columns from the
-            // destination on, and a sheet has so many columns.
-            if destination as u64 + parts.len() as u64 > MAX_COLS {
+            };
+            let treat_consecutive = self.treat_consecutive.map(|value| value.0).unwrap_or(false);
+            let destination = match &self.destination {
+                None => source,
+                Some(text) => CellRef::column_index(text.0.trim()).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{}` is not a column", text.0.trim()),
+                })?,
+            };
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the parts of the text do not fit in the {MAX_COLS} columns of a sheet"),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
                 });
             }
-            for (offset, part) in parts.iter().enumerate() {
-                let target = CellRef { col: destination + offset as u32, row };
-                plan.push((target, value_of(part)));
-                written += 1;
+            let cells = crate::cells_of(node);
+            // The **rows** of the column: the ones that hold something.
+            let mut rows: Vec<u32> = cells
+                .iter()
+                .filter(|(cell, entry)| cell.col == source && entry.value.is_some())
+                .map(|(cell, _)| cell.row)
+                .collect();
+            rows.sort_unstable();
+            let mut cut = 0usize;
+            let mut written = 0usize;
+            // The **plan**: the cells the parts are written into and what
+            // they hold.
+            let mut plan: Vec<(CellRef, Value)> = Vec::new();
+            for row in rows {
+                let cell = CellRef { col: source, row };
+                let Some(entry) = cells.get(cell) else { continue };
+                let Some(Value::Text(text)) = entry.value.clone() else { continue };
+                let parts = split(&text, delimiter, qualifier, treat_consecutive);
+                // The parts are written into the columns from the
+                // destination on, and a sheet has so many columns.
+                if destination as u64 + parts.len() as u64 > MAX_COLS {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the parts of the text do not fit in the {MAX_COLS} columns of a sheet"),
+                    });
+                }
+                for (offset, part) in parts.iter().enumerate() {
+                    let target = CellRef { col: destination + offset as u32, row };
+                    plan.push((target, value_of(part)));
+                    written += 1;
+                }
+                cut += 1;
             }
-            cut += 1;
-        }
-        // The cells that are **covered** by a merge or **locked** by the
-        // sheet's protection are not written.
-        let targets: Vec<CellRef> = plan.iter().map(|(cell, _)| *cell).collect();
-        crate::merges::refuse_covered(node, &targets, "grid.text.columns")?;
-        crate::protection::refuse_locked(node, &locks, &targets, "grid.text.columns")?;
-        let mut cells = crate::sheet_cells_mut(node);
-        for (target, value) in plan {
-            if value == Value::Empty {
-                cells.clear(target);
-            } else {
-                cells.set_value(target, value);
+            // The cells that are **covered** by a merge or **locked** by the
+            // sheet's protection are not written.
+            let targets: Vec<CellRef> = plan.iter().map(|(cell, _)| *cell).collect();
+            crate::merges::refuse_covered(node, &targets, "grid.text.columns")?;
+            crate::protection::refuse_locked(node, &locks, &targets, "grid.text.columns")?;
+            let mut cells = crate::sheet_cells_mut(node);
+            for (target, value) in plan {
+                if value == Value::Empty {
+                    cells.clear(target);
+                } else {
+                    cells.set_value(target, value);
+                }
             }
+            node.data["cells"] = crate::cells_into(&cells);
+            Ok(Outcome::changed(format!("cut the text of {cut} cell(s) into columns")).with_data(json!({
+                "sheet": sheet,
+                "column": CellRef::column_text(source),
+                "destination": CellRef::column_text(destination),
+                "rows": cut,
+                "written": written,
+            })))
+
         }
-        node.data["cells"] = crate::cells_into(&cells);
-        Ok(Outcome::changed(format!("cut the text of {cut} cell(s) into columns")).with_data(json!({
-            "sheet": sheet,
-            "column": CellRef::column_text(source),
-            "destination": CellRef::column_text(destination),
-            "rows": cut,
-            "written": written,
-        })))
     }
 }

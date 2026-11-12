@@ -30,7 +30,7 @@
 
 use std::collections::BTreeMap;
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -155,229 +155,249 @@ fn sheet_of(session: &Session, sheet: u64, id: &str) -> Result<u64, EngineError>
     Ok(sheet)
 }
 
-/// **Set** the border of one edge of a cell.
-///
-/// A border of the style `none` takes the border away — the tree's
-/// own: a line of no style is no line.
-#[derive(Command)]
-#[command(id = "grid.cell.border.set", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
-pub struct SetBorder {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// The **edge**: `top`, `right`, `bottom` or `left`.
-    pub edge: Text,
-    /// The **style** of the line: `thin`, `medium`, `thick`, `dashed`,
-    /// `dotted`, `double`, `hair`, `mediumDashed`, `dashDot`,
-    /// `mediumDashDot`, `dashDotDot`, `mediumDashDotDot` or
-    /// `slantDashDot` — and `none`, which takes the border away.
-    pub style: Text,
-    /// The **colour** of the line, as `#rrggbb`. Without it the line
-    /// is black.
-    pub colour: Option<Text>,
-}
+commands! {
+    /// **Set** the border of one edge of a cell.
+    ///
+    /// A border of the style `none` takes the border away — the tree's
+    /// own: a line of no style is no line.
+    grid.cell.border.set {
+        area: "grid",
+        layer: "grid",
+        icon: "grid",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl SetBorder {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.border.set".to_string();
-        let sheet = self.sheet.0;
-        sheet_of(session, sheet, &id)?;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        let Some(edge) = edge_of(self.edge.0.trim()) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "`{}` is not an edge: a cell has four — top, right, bottom and left",
-                    self.edge.0.trim()
-                ),
-            });
-        };
-        let given = self.style.0.trim();
-        let style = if given.eq_ignore_ascii_case("none") {
-            None
-        } else {
-            match style_of(given) {
-                Some(style) => Some(style),
-                None => {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!(
-                            "`{given}` is not a border style: a style is one of {}",
-                            STYLES.join(", ")
-                        ),
-                    });
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// The **edge**: `top`, `right`, `bottom` or `left`.
+
+            edge: Text,
+            /// The **style** of the line: `thin`, `medium`, `thick`, `dashed`,
+            /// `dotted`, `double`, `hair`, `mediumDashed`, `dashDot`,
+            /// `mediumDashDot`, `dashDotDot`, `mediumDashDotDot` or
+            /// `slantDashDot` — and `none`, which takes the border away.
+
+            style: Text,
+            /// The **colour** of the line, as `#rrggbb`. Without it the line
+            /// is black.
+
+            colour: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.cell.border.set".to_string();
+            let sheet = self.sheet.0;
+            sheet_of(session, sheet, &id)?;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            let Some(edge) = edge_of(self.edge.0.trim()) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "`{}` is not an edge: a cell has four — top, right, bottom and left",
+                        self.edge.0.trim()
+                    ),
+                });
+            };
+            let given = self.style.0.trim();
+            let style = if given.eq_ignore_ascii_case("none") {
+                None
+            } else {
+                match style_of(given) {
+                    Some(style) => Some(style),
+                    None => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "`{given}` is not a border style: a style is one of {}",
+                                STYLES.join(", ")
+                            ),
+                        });
+                    }
                 }
+            };
+            let colour = match &self.colour {
+                Some(colour) => match colour_of(&colour.0) {
+                    Some(colour) => colour,
+                    None => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("`{}` is not a colour: a colour is `#rrggbb`", colour.0.trim()),
+                        });
+                    }
+                },
+                None => DEFAULT_COLOUR.to_string(),
+            };
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            crate::merges::refuse_covered(&node, &[cell], &id)?;
+            crate::protection::refuse_format(&node, &id)?;
+            let address = cell.to_text();
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                let mut borders = borders_of(node);
+                let mut edges = borders.remove(&address).unwrap_or_default();
+                match style {
+                    Some(style) => {
+                        edges.insert(
+                            edge.to_string(),
+                            Border { style: style.to_string(), colour: colour.clone() },
+                        );
+                    }
+                    None => {
+                        edges.remove(edge);
+                    }
+                }
+                if edges.is_empty() {
+                    borders.remove(&address);
+                } else {
+                    borders.insert(address.clone(), edges);
+                }
+                node.data["borders"] = borders_into(&borders);
             }
-        };
-        let colour = match &self.colour {
-            Some(colour) => match colour_of(&colour.0) {
-                Some(colour) => colour,
-                None => {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("`{}` is not a colour: a colour is `#rrggbb`", colour.0.trim()),
-                    });
-                }
-            },
-            None => DEFAULT_COLOUR.to_string(),
-        };
-        let Some(node) = session.document().node(sheet).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        crate::merges::refuse_covered(&node, &[cell], &id)?;
-        crate::protection::refuse_format(&node, &id)?;
-        let address = cell.to_text();
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            let mut borders = borders_of(node);
-            let mut edges = borders.remove(&address).unwrap_or_default();
             match style {
                 Some(style) => {
-                    edges.insert(
-                        edge.to_string(),
-                        Border { style: style.to_string(), colour: colour.clone() },
-                    );
+                    Ok(Outcome::changed(format!("the cell `{address}` has a {style} border on its {edge}"))
+                        .with_data(json!({
+                            "sheet": sheet,
+                            "cell": address,
+                            "edge": edge,
+                            "style": style,
+                            "colour": colour,
+                        })))
                 }
-                None => {
-                    edges.remove(edge);
-                }
+                None => Ok(Outcome::changed(format!("the cell `{address}` has no {edge} border"))
+                    .with_data(json!({ "sheet": sheet, "cell": address, "edge": edge, "style": "none" }))),
             }
-            if edges.is_empty() {
-                borders.remove(&address);
-            } else {
-                borders.insert(address.clone(), edges);
-            }
-            node.data["borders"] = borders_into(&borders);
-        }
-        match style {
-            Some(style) => {
-                Ok(Outcome::changed(format!("the cell `{address}` has a {style} border on its {edge}"))
-                    .with_data(json!({
-                        "sheet": sheet,
-                        "cell": address,
-                        "edge": edge,
-                        "style": style,
-                        "colour": colour,
-                    })))
-            }
-            None => Ok(Outcome::changed(format!("the cell `{address}` has no {edge} border"))
-                .with_data(json!({ "sheet": sheet, "cell": address, "edge": edge, "style": "none" }))),
+
         }
     }
-}
+    /// **Read** the borders of a cell, or of the whole sheet.
+    ///
+    /// Without a cell, every border of the sheet is read.
+    grid.cell.border.get {
+        area: "grid",
+        layer: "grid",
+        icon: "grid",
+        params: {
+            /// The sheet it is in.
 
-/// **Read** the borders of a cell, or of the whole sheet.
-///
-/// Without a cell, every border of the sheet is read.
-#[derive(Command)]
-#[command(id = "grid.cell.border.get", area = "grid", layer = "grid", icon = "grid")]
-pub struct GetBorder {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address. Without it, every border of the sheet is
-    /// read.
-    pub cell: Option<Text>,
-}
+            sheet: NodeRef,
+            /// The cell's address. Without it, every border of the sheet is
+            /// read.
 
-impl GetBorder {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.border.get".to_string();
-        let sheet = self.sheet.0;
-        sheet_of(session, sheet, &id)?;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        match &self.cell {
-            Some(cell) => {
-                let cell = crate::cell_at(&cell.0, &id)?;
-                let edges = borders_of_cell(node, &cell.to_text());
-                let mut map = craftkit_sdk::serde_json::Map::new();
-                for (edge, border) in &edges {
-                    map.insert(
-                        edge.clone(),
-                        json!({ "style": border.style.clone(), "colour": border.colour.clone() }),
-                    );
-                }
-                Ok(Outcome::new(format!("the cell {} has its borders", cell.to_text()))
-                    .with_data(json!({ "cell": cell.to_text(), "borders": Json::Object(map) })))
-            }
-            None => {
-                let borders = borders_of(node);
-                let mut map = craftkit_sdk::serde_json::Map::new();
-                for (address, edges) in &borders {
-                    let mut one = craftkit_sdk::serde_json::Map::new();
-                    for (edge, border) in edges {
-                        one.insert(
+            cell: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.cell.border.get".to_string();
+            let sheet = self.sheet.0;
+            sheet_of(session, sheet, &id)?;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            match &self.cell {
+                Some(cell) => {
+                    let cell = crate::cell_at(&cell.0, &id)?;
+                    let edges = borders_of_cell(node, &cell.to_text());
+                    let mut map = craftkit_sdk::serde_json::Map::new();
+                    for (edge, border) in &edges {
+                        map.insert(
                             edge.clone(),
                             json!({ "style": border.style.clone(), "colour": border.colour.clone() }),
                         );
                     }
-                    map.insert(address.clone(), Json::Object(one));
+                    Ok(Outcome::new(format!("the cell {} has its borders", cell.to_text()))
+                        .with_data(json!({ "cell": cell.to_text(), "borders": Json::Object(map) })))
                 }
-                Ok(Outcome::new("the sheet has its borders").with_data(json!({
-                    "borders": Json::Object(map),
-                })))
+                None => {
+                    let borders = borders_of(node);
+                    let mut map = craftkit_sdk::serde_json::Map::new();
+                    for (address, edges) in &borders {
+                        let mut one = craftkit_sdk::serde_json::Map::new();
+                        for (edge, border) in edges {
+                            one.insert(
+                                edge.clone(),
+                                json!({ "style": border.style.clone(), "colour": border.colour.clone() }),
+                            );
+                        }
+                        map.insert(address.clone(), Json::Object(one));
+                    }
+                    Ok(Outcome::new("the sheet has its borders").with_data(json!({
+                        "borders": Json::Object(map),
+                    })))
+                }
             }
+
         }
     }
-}
+    /// **Take away** the border of one edge of a cell.
+    ///
+    /// The other edges of the cell stay.
+    grid.cell.border.clear {
+        area: "grid",
+        layer: "grid",
+        icon: "eraser",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-/// **Take away** the border of one edge of a cell.
-///
-/// The other edges of the cell stay.
-#[derive(Command)]
-#[command(id = "grid.cell.border.clear", area = "grid", layer = "grid", icon = "eraser", mutates, undoable)]
-pub struct ClearBorder {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// The **edge**: `top`, `right`, `bottom` or `left`.
-    pub edge: Text,
-}
+            sheet: NodeRef,
+            /// The cell's address.
 
-impl ClearBorder {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.border.clear".to_string();
-        let sheet = self.sheet.0;
-        sheet_of(session, sheet, &id)?;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        let Some(edge) = edge_of(self.edge.0.trim()) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "`{}` is not an edge: a cell has four — top, right, bottom and left",
-                    self.edge.0.trim()
-                ),
-            });
-        };
-        let Some(node) = session.document().node(sheet).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        crate::merges::refuse_covered(&node, &[cell], &id)?;
-        crate::protection::refuse_format(&node, &id)?;
-        let address = cell.to_text();
-        let mut had = false;
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            let mut borders = borders_of(node);
-            if let Some(edges) = borders.get_mut(&address) {
-                had = edges.remove(edge).is_some();
-                if edges.is_empty() {
-                    borders.remove(&address);
+            cell: Text,
+            /// The **edge**: `top`, `right`, `bottom` or `left`.
+
+            edge: Text,
+        },
+        run: {
+
+            let id = "grid.cell.border.clear".to_string();
+            let sheet = self.sheet.0;
+            sheet_of(session, sheet, &id)?;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            let Some(edge) = edge_of(self.edge.0.trim()) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "`{}` is not an edge: a cell has four — top, right, bottom and left",
+                        self.edge.0.trim()
+                    ),
+                });
+            };
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            crate::merges::refuse_covered(&node, &[cell], &id)?;
+            crate::protection::refuse_format(&node, &id)?;
+            let address = cell.to_text();
+            let mut had = false;
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                let mut borders = borders_of(node);
+                if let Some(edges) = borders.get_mut(&address) {
+                    had = edges.remove(edge).is_some();
+                    if edges.is_empty() {
+                        borders.remove(&address);
+                    }
                 }
+                node.data["borders"] = borders_into(&borders);
             }
-            node.data["borders"] = borders_into(&borders);
+            Ok(Outcome::changed(format!("the cell `{address}` has no {edge} border"))
+                .with_data(json!({ "sheet": sheet, "cell": address, "edge": edge, "had": had })))
+
         }
-        Ok(Outcome::changed(format!("the cell `{address}` has no {edge} border"))
-            .with_data(json!({ "sheet": sheet, "cell": address, "edge": edge, "had": had })))
     }
 }

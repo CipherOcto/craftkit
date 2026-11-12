@@ -35,10 +35,10 @@
 //!   tree writes the answer into them: here the model is given as
 //!   numbers and the answer is said.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, EngineError, Number, Outcome, Session};
+use craftkit_sdk::{Bool, EngineError, Number, Outcome};
 
 /// The most **variables** a program may have.
 pub const MAX_VARS: usize = 200;
@@ -622,337 +622,350 @@ fn numbers_of(value: &Json, what: &str) -> Result<Vec<f64>, String> {
     Ok(out)
 }
 
-/// Solve a **linear program**.
-///
-/// The model is **numbers**: the costs of the objective, the rows of
-/// the constraints and the bounds of the variables. The answer is
-/// **said**, and nothing is written down.
-#[derive(Command)]
-#[command(id = "grid.solver.solve", area = "grid", layer = "grid", icon = "check")]
-pub struct SolveProgram {
-    /// The costs of the objective: a list of numbers.
-    pub objective: Option<Json>,
-    /// The rows of the constraints: a list of
-    /// `{coefficients, sense, rhs}`.
-    pub constraints: Option<Json>,
-    /// The bounds of the variables: a list of `[low, high]`, and
-    /// `null` is a bound that is not there.
-    pub bounds: Option<Json>,
-    /// Whether the program is **maximised**: it is minimised when this
-    /// is not given.
-    pub maximise: Option<Bool>,
-    /// The **budget** of the solver: the most pivots it may make.
-    pub budget: Option<Number>,
-    /// The variables that are **integers**: a list of flags, one for
-    /// each variable.
-    pub integer: Option<Json>,
-    /// The variables that are **binary**: a list of flags, one for each
-    /// variable. A binary variable is an integer variable whose values
-    /// are zero and one.
-    pub binary: Option<Json>,
-    /// The most **nodes** the branch and bound may visit.
-    pub max_nodes: Option<Number>,
-    /// The **optimality** of an integer answer, in per cent: a
-    /// hundredth of a per cent is the tree's own zero.
-    pub gap: Option<Number>,
-}
+commands! {
+    /// Solve a **linear program**.
+    ///
+    /// The model is **numbers**: the costs of the objective, the rows of
+    /// the constraints and the bounds of the variables. The answer is
+    /// **said**, and nothing is written down.
+    grid.solver.solve {
+        area: "grid",
+        layer: "grid",
+        icon: "check",
+        params: {
+            /// The costs of the objective: a list of numbers.
 
-impl SolveProgram {
-    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.solver.solve".to_string();
-        let Some(objective) = &self.objective else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the program has an objective".to_string(),
-            });
-        };
-        let mut costs = numbers_of(objective, "objective")
-            .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        if costs.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the objective has no variable in it".to_string(),
-            });
-        }
-        if costs.len() > MAX_VARS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "a program has {MAX_VARS} variables at the most, and this one has {}",
-                    costs.len()
-                ),
-            });
-        }
-        // The **rows** of the constraints.
-        let mut rows: Vec<(Vec<f64>, Sense, f64)> = Vec::new();
-        if let Some(constraints) = &self.constraints {
-            let Some(list) = constraints.as_array() else {
+            objective: Option<Json>,
+            /// The rows of the constraints: a list of
+            /// `{coefficients, sense, rhs}`.
+
+            constraints: Option<Json>,
+            /// The bounds of the variables: a list of `[low, high]`, and
+            /// `null` is a bound that is not there.
+
+            bounds: Option<Json>,
+            /// Whether the program is **maximised**: it is minimised when this
+            /// is not given.
+
+            maximise: Option<Bool>,
+            /// The **budget** of the solver: the most pivots it may make.
+
+            budget: Option<Number>,
+            /// The variables that are **integers**: a list of flags, one for
+            /// each variable.
+
+            integer: Option<Json>,
+            /// The variables that are **binary**: a list of flags, one for each
+            /// variable. A binary variable is an integer variable whose values
+            /// are zero and one.
+
+            binary: Option<Json>,
+            /// The most **nodes** the branch and bound may visit.
+
+            max_nodes: Option<Number>,
+            /// The **optimality** of an integer answer, in per cent: a
+            /// hundredth of a per cent is the tree's own zero.
+
+            gap: Option<Number>,
+        },
+        run: {
+
+            let id = "grid.solver.solve".to_string();
+            let Some(objective) = &self.objective else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: "the constraints are a list of rows".to_string(),
+                    message: "the program has an objective".to_string(),
                 });
             };
-            if list.len() > MAX_CONSTRAINTS {
+            let mut costs = numbers_of(objective, "objective")
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            if costs.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the objective has no variable in it".to_string(),
+                });
+            }
+            if costs.len() > MAX_VARS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "a program has {MAX_CONSTRAINTS} constraints at the most, and this one has {}",
-                        list.len()
+                        "a program has {MAX_VARS} variables at the most, and this one has {}",
+                        costs.len()
                     ),
                 });
             }
-            for row in list {
-                let coefficients = row
-                    .get("coefficients")
-                    .ok_or_else(|| EngineError::Failed {
+            // The **rows** of the constraints.
+            let mut rows: Vec<(Vec<f64>, Sense, f64)> = Vec::new();
+            if let Some(constraints) = &self.constraints {
+                let Some(list) = constraints.as_array() else {
+                    return Err(EngineError::Failed {
                         id: id.clone(),
-                        message: "a constraint has no coefficients".to_string(),
-                    })
-                    .and_then(|value| {
-                        numbers_of(value, "coefficients of a constraint")
-                            .map_err(|message| EngineError::Failed { id: id.clone(), message })
-                    })?;
-                if coefficients.len() != costs.len() {
+                        message: "the constraints are a list of rows".to_string(),
+                    });
+                };
+                if list.len() > MAX_CONSTRAINTS {
                     return Err(EngineError::Failed {
                         id: id.clone(),
                         message: format!(
-                            "a constraint has {} coefficient(s) and the objective has {} variable(s)",
-                            coefficients.len(),
+                            "a program has {MAX_CONSTRAINTS} constraints at the most, and this one has {}",
+                            list.len()
+                        ),
+                    });
+                }
+                for row in list {
+                    let coefficients = row
+                        .get("coefficients")
+                        .ok_or_else(|| EngineError::Failed {
+                            id: id.clone(),
+                            message: "a constraint has no coefficients".to_string(),
+                        })
+                        .and_then(|value| {
+                            numbers_of(value, "coefficients of a constraint")
+                                .map_err(|message| EngineError::Failed { id: id.clone(), message })
+                        })?;
+                    if coefficients.len() != costs.len() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "a constraint has {} coefficient(s) and the objective has {} variable(s)",
+                                coefficients.len(),
+                                costs.len()
+                            ),
+                        });
+                    }
+                    let sense =
+                        row.get("sense").and_then(Json::as_str).and_then(Sense::parse).ok_or_else(|| {
+                            EngineError::Failed {
+                                id: id.clone(),
+                                message: "the sense of a constraint is `<=`, `>=` or `=`".to_string(),
+                            }
+                        })?;
+                    let rhs =
+                        row.get("rhs").and_then(Json::as_f64).filter(|value| value.is_finite()).ok_or_else(
+                            || EngineError::Failed {
+                                id: id.clone(),
+                                message: "the right side of a constraint is a number".to_string(),
+                            },
+                        )?;
+                    rows.push((coefficients, sense, rhs));
+                }
+            }
+            // The **bounds** of the variables: without them a variable may
+            // go below zero.
+            let mut low = vec![f64::NEG_INFINITY; costs.len()];
+            let mut high = vec![f64::INFINITY; costs.len()];
+            if let Some(bounds) = &self.bounds {
+                let Some(list) = bounds.as_array() else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "the bounds are a list of pairs".to_string(),
+                    });
+                };
+                if list.len() != costs.len() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "there are {} bound(s) and the objective has {} variable(s)",
+                            list.len(),
                             costs.len()
                         ),
                     });
                 }
-                let sense =
-                    row.get("sense").and_then(Json::as_str).and_then(Sense::parse).ok_or_else(|| {
-                        EngineError::Failed {
+                for (index, bound) in list.iter().enumerate() {
+                    let Some(pair) = bound.as_array() else {
+                        return Err(EngineError::Failed {
                             id: id.clone(),
-                            message: "the sense of a constraint is `<=`, `>=` or `=`".to_string(),
-                        }
-                    })?;
-                let rhs =
-                    row.get("rhs").and_then(Json::as_f64).filter(|value| value.is_finite()).ok_or_else(
-                        || EngineError::Failed {
+                            message: "a bound is a pair of numbers".to_string(),
+                        });
+                    };
+                    if pair.len() != 2 {
+                        return Err(EngineError::Failed {
                             id: id.clone(),
-                            message: "the right side of a constraint is a number".to_string(),
-                        },
-                    )?;
-                rows.push((coefficients, sense, rhs));
+                            message: "a bound is a pair of numbers".to_string(),
+                        });
+                    }
+                    if let Some(slot) = low.get_mut(index) {
+                        *slot = match pair.first().and_then(Json::as_f64) {
+                            Some(value) if value.is_finite() => value,
+                            _ => f64::NEG_INFINITY,
+                        };
+                    }
+                    if let Some(slot) = high.get_mut(index) {
+                        *slot = match pair.get(1).and_then(Json::as_f64) {
+                            Some(value) if value.is_finite() => value,
+                            _ => f64::INFINITY,
+                        };
+                    }
+                }
             }
-        }
-        // The **bounds** of the variables: without them a variable may
-        // go below zero.
-        let mut low = vec![f64::NEG_INFINITY; costs.len()];
-        let mut high = vec![f64::INFINITY; costs.len()];
-        if let Some(bounds) = &self.bounds {
-            let Some(list) = bounds.as_array() else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "the bounds are a list of pairs".to_string(),
-                });
-            };
-            if list.len() != costs.len() {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "there are {} bound(s) and the objective has {} variable(s)",
-                        list.len(),
-                        costs.len()
-                    ),
-                });
-            }
-            for (index, bound) in list.iter().enumerate() {
-                let Some(pair) = bound.as_array() else {
+            // The **integer** variables: a flag for each of them.
+            let mut integer = vec![false; costs.len()];
+            let mut integer_given = vec![false; costs.len()];
+            let mut any_integer = false;
+            if let Some(flags) = &self.integer {
+                let Some(list) = flags.as_array() else {
                     return Err(EngineError::Failed {
                         id: id.clone(),
-                        message: "a bound is a pair of numbers".to_string(),
+                        message: "the integer variables are a list of flags".to_string(),
                     });
                 };
-                if pair.len() != 2 {
+                if list.len() != costs.len() {
                     return Err(EngineError::Failed {
                         id: id.clone(),
-                        message: "a bound is a pair of numbers".to_string(),
+                        message: format!(
+                            "there are {} flag(s) and the objective has {} variable(s)",
+                            list.len(),
+                            costs.len()
+                        ),
                     });
                 }
-                if let Some(slot) = low.get_mut(index) {
-                    *slot = match pair.first().and_then(Json::as_f64) {
-                        Some(value) if value.is_finite() => value,
-                        _ => f64::NEG_INFINITY,
+                for (index, flag) in list.iter().enumerate() {
+                    let Some(flag) = flag.as_bool() else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "a flag of an integer variable is true or false".to_string(),
+                        });
                     };
-                }
-                if let Some(slot) = high.get_mut(index) {
-                    *slot = match pair.get(1).and_then(Json::as_f64) {
-                        Some(value) if value.is_finite() => value,
-                        _ => f64::INFINITY,
-                    };
+                    if let Some(slot) = integer.get_mut(index) {
+                        *slot = flag;
+                    }
+                    if let Some(slot) = integer_given.get_mut(index) {
+                        *slot = true;
+                    }
+                    any_integer |= flag;
                 }
             }
-        }
-        // The **integer** variables: a flag for each of them.
-        let mut integer = vec![false; costs.len()];
-        let mut integer_given = vec![false; costs.len()];
-        let mut any_integer = false;
-        if let Some(flags) = &self.integer {
-            let Some(list) = flags.as_array() else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "the integer variables are a list of flags".to_string(),
-                });
-            };
-            if list.len() != costs.len() {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "there are {} flag(s) and the objective has {} variable(s)",
-                        list.len(),
-                        costs.len()
-                    ),
-                });
-            }
-            for (index, flag) in list.iter().enumerate() {
-                let Some(flag) = flag.as_bool() else {
+            // The **binary** variables: a flag for each of them. A binary
+            // variable is an integer variable whose values are zero and one,
+            // and the tree's rule is that its bounds meet that pair.
+            let mut binary = vec![false; costs.len()];
+            let mut any_binary = false;
+            if let Some(flags) = &self.binary {
+                let Some(list) = flags.as_array() else {
                     return Err(EngineError::Failed {
                         id: id.clone(),
-                        message: "a flag of an integer variable is true or false".to_string(),
+                        message: "the binary variables are a list of flags".to_string(),
                     });
                 };
+                if list.len() != costs.len() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "there are {} flag(s) and the objective has {} variable(s)",
+                            list.len(),
+                            costs.len()
+                        ),
+                    });
+                }
+                for (index, flag) in list.iter().enumerate() {
+                    let Some(flag) = flag.as_bool() else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "a flag of a binary variable is true or false".to_string(),
+                        });
+                    };
+                    if let Some(slot) = binary.get_mut(index) {
+                        *slot = flag;
+                    }
+                    any_binary |= flag;
+                }
+            }
+            for index in 0..binary.len() {
+                let is_binary = binary.get(index).copied().unwrap_or(false);
+                if !is_binary {
+                    continue;
+                }
+                // A binary variable is an integer variable: a variable that
+                // is both says two things at once, and that is refused.
+                if integer_given.get(index).copied().unwrap_or(false)
+                    && !integer.get(index).copied().unwrap_or(false)
+                {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "the variable {index} is binary, and a binary variable is an integer variable"
+                        ),
+                    });
+                }
                 if let Some(slot) = integer.get_mut(index) {
-                    *slot = flag;
-                }
-                if let Some(slot) = integer_given.get_mut(index) {
                     *slot = true;
                 }
-                any_integer |= flag;
+                // The **bounds** of a binary variable meet the pair zero and
+                // one: the tree's rule is that they are the tree's own, and a
+                // variable whose bounds leave it no value has no solution.
+                let low_value = low.get(index).copied().unwrap_or(f64::NEG_INFINITY);
+                let high_value = high.get(index).copied().unwrap_or(f64::INFINITY);
+                if let Some(slot) = low.get_mut(index) {
+                    *slot = low_value.max(0.0);
+                }
+                if let Some(slot) = high.get_mut(index) {
+                    *slot = high_value.min(1.0);
+                }
             }
-        }
-        // The **binary** variables: a flag for each of them. A binary
-        // variable is an integer variable whose values are zero and one,
-        // and the tree's rule is that its bounds meet that pair.
-        let mut binary = vec![false; costs.len()];
-        let mut any_binary = false;
-        if let Some(flags) = &self.binary {
-            let Some(list) = flags.as_array() else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "the binary variables are a list of flags".to_string(),
-                });
-            };
-            if list.len() != costs.len() {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "there are {} flag(s) and the objective has {} variable(s)",
-                        list.len(),
-                        costs.len()
-                    ),
-                });
-            }
-            for (index, flag) in list.iter().enumerate() {
-                let Some(flag) = flag.as_bool() else {
+            let any_integer = any_integer || any_binary;
+            // The **nodes** the branch and bound may visit.
+            let max_nodes = match self.max_nodes.map(|value| value.0) {
+                None => MAX_NODES_LP,
+                Some(value) if !value.is_finite() || value < 1.0 || value > MAX_NODES_LP as f64 => {
                     return Err(EngineError::Failed {
                         id: id.clone(),
-                        message: "a flag of a binary variable is true or false".to_string(),
+                        message: format!("the branch and bound visits between 1 and {MAX_NODES_LP} nodes"),
                     });
-                };
-                if let Some(slot) = binary.get_mut(index) {
-                    *slot = flag;
                 }
-                any_binary |= flag;
+                Some(value) => value as usize,
+            };
+            // The **optimality** of an integer answer, in per cent.
+            let gap = match self.gap.map(|value| value.0) {
+                None => 0.0,
+                Some(value) if !value.is_finite() || !(0.0..=100.0).contains(&value) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "the optimality of an integer answer is a number from zero to a hundred"
+                            .to_string(),
+                    });
+                }
+                Some(value) => value / 100.0,
+            };
+            let maximise = self.maximise.map(|flag| flag.0).unwrap_or(false);
+            if maximise {
+                for cost in costs.iter_mut() {
+                    *cost = -*cost;
+                }
             }
+            let mut budget = match self.budget.map(|value| value.0) {
+                None => MAX_PIVOTS,
+                Some(value) if !value.is_finite() || value < 1.0 || value > MAX_PIVOTS as f64 => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the budget of the solver is between 1 and {MAX_PIVOTS} pivots"),
+                    });
+                }
+                Some(value) => value as u64,
+            };
+            let (outcome, nodes) = if any_integer {
+                let settings = Integer { variables: integer, max_nodes, gap };
+                let (outcome, nodes) = solve_integer(&costs, &rows, &low, &high, &settings, &mut budget);
+                (outcome, nodes)
+            } else {
+                (solve_lp(&costs, &rows, &low, &high, &mut budget), 0usize)
+            };
+            let (status, values, objective) = match outcome {
+                Verdict::Solved(values, objective, _converged) => {
+                    let objective = if maximise { -objective } else { objective };
+                    ("optimal", values, objective)
+                }
+                Verdict::Infeasible => ("infeasible", Vec::new(), f64::NAN),
+                Verdict::Unbounded => ("unbounded", Vec::new(), f64::NAN),
+                Verdict::Limit => ("limit", Vec::new(), f64::NAN),
+            };
+            let values: Vec<Json> = values.iter().map(|value| json!(value)).collect();
+            Ok(Outcome::new(format!("the program is {status}")).with_data(json!({
+                "status": status,
+                "objective": if objective.is_finite() { json!(objective) } else { Json::Null },
+                "values": values,
+                "nodes": nodes,
+            })))
+
         }
-        for index in 0..binary.len() {
-            let is_binary = binary.get(index).copied().unwrap_or(false);
-            if !is_binary {
-                continue;
-            }
-            // A binary variable is an integer variable: a variable that
-            // is both says two things at once, and that is refused.
-            if integer_given.get(index).copied().unwrap_or(false)
-                && !integer.get(index).copied().unwrap_or(false)
-            {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "the variable {index} is binary, and a binary variable is an integer variable"
-                    ),
-                });
-            }
-            if let Some(slot) = integer.get_mut(index) {
-                *slot = true;
-            }
-            // The **bounds** of a binary variable meet the pair zero and
-            // one: the tree's rule is that they are the tree's own, and a
-            // variable whose bounds leave it no value has no solution.
-            let low_value = low.get(index).copied().unwrap_or(f64::NEG_INFINITY);
-            let high_value = high.get(index).copied().unwrap_or(f64::INFINITY);
-            if let Some(slot) = low.get_mut(index) {
-                *slot = low_value.max(0.0);
-            }
-            if let Some(slot) = high.get_mut(index) {
-                *slot = high_value.min(1.0);
-            }
-        }
-        let any_integer = any_integer || any_binary;
-        // The **nodes** the branch and bound may visit.
-        let max_nodes = match self.max_nodes.map(|value| value.0) {
-            None => MAX_NODES_LP,
-            Some(value) if !value.is_finite() || value < 1.0 || value > MAX_NODES_LP as f64 => {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the branch and bound visits between 1 and {MAX_NODES_LP} nodes"),
-                });
-            }
-            Some(value) => value as usize,
-        };
-        // The **optimality** of an integer answer, in per cent.
-        let gap = match self.gap.map(|value| value.0) {
-            None => 0.0,
-            Some(value) if !value.is_finite() || !(0.0..=100.0).contains(&value) => {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "the optimality of an integer answer is a number from zero to a hundred"
-                        .to_string(),
-                });
-            }
-            Some(value) => value / 100.0,
-        };
-        let maximise = self.maximise.map(|flag| flag.0).unwrap_or(false);
-        if maximise {
-            for cost in costs.iter_mut() {
-                *cost = -*cost;
-            }
-        }
-        let mut budget = match self.budget.map(|value| value.0) {
-            None => MAX_PIVOTS,
-            Some(value) if !value.is_finite() || value < 1.0 || value > MAX_PIVOTS as f64 => {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the budget of the solver is between 1 and {MAX_PIVOTS} pivots"),
-                });
-            }
-            Some(value) => value as u64,
-        };
-        let (outcome, nodes) = if any_integer {
-            let settings = Integer { variables: integer, max_nodes, gap };
-            let (outcome, nodes) = solve_integer(&costs, &rows, &low, &high, &settings, &mut budget);
-            (outcome, nodes)
-        } else {
-            (solve_lp(&costs, &rows, &low, &high, &mut budget), 0usize)
-        };
-        let (status, values, objective) = match outcome {
-            Verdict::Solved(values, objective, _converged) => {
-                let objective = if maximise { -objective } else { objective };
-                ("optimal", values, objective)
-            }
-            Verdict::Infeasible => ("infeasible", Vec::new(), f64::NAN),
-            Verdict::Unbounded => ("unbounded", Vec::new(), f64::NAN),
-            Verdict::Limit => ("limit", Vec::new(), f64::NAN),
-        };
-        let values: Vec<Json> = values.iter().map(|value| json!(value)).collect();
-        Ok(Outcome::new(format!("the program is {status}")).with_data(json!({
-            "status": status,
-            "objective": if objective.is_finite() { json!(objective) } else { Json::Null },
-            "values": values,
-            "nodes": nodes,
-        })))
     }
 }

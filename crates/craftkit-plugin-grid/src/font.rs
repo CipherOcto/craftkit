@@ -25,7 +25,7 @@
 //! - **The tree's font is a range and this one's is a cell**: the
 //!   tree's button takes the selection, and here the cell is named.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Session, Text};
@@ -84,52 +84,172 @@ fn write_font(
     })))
 }
 
-/// **Set** the face, the size, the underline or the place of the text
-/// of a cell.
-///
-/// The tree's Font, Font Size, Underline and the two places of the
-/// text.
-#[derive(Command)]
-#[command(id = "grid.cell.font", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
-pub struct SetFont {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// The **name** of the face.
-    pub name: Option<Text>,
-    /// The **size** of the text.
-    pub size: Option<Number>,
-    /// The **underline**: none, single, double, single accounting or
-    /// double accounting.
-    pub underline: Option<Text>,
-    /// Where the text sits **above or below** its line: baseline,
-    /// superscript or subscript.
-    pub vert: Option<Text>,
-}
+commands! {
+    /// **Set** the face, the size, the underline or the place of the text
+    /// of a cell.
+    ///
+    /// The tree's Font, Font Size, Underline and the two places of the
+    /// text.
+    grid.cell.font {
+        area: "grid",
+        layer: "grid",
+        icon: "grid",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl SetFont {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.font".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        if self.name.is_none() && self.size.is_none() && self.underline.is_none() && self.vert.is_none() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "name what to set: the face, the size, the underline or the place of the text"
-                    .to_string(),
-            });
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// The **name** of the face.
+
+            name: Option<Text>,
+            /// The **size** of the text.
+
+            size: Option<Number>,
+            /// The **underline**: none, single, double, single accounting or
+            /// double accounting.
+
+            underline: Option<Text>,
+            /// Where the text sits **above or below** its line: baseline,
+            /// superscript or subscript.
+
+            vert: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.cell.font".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            if self.name.is_none() && self.size.is_none() && self.underline.is_none() && self.vert.is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "name what to set: the face, the size, the underline or the place of the text"
+                        .to_string(),
+                });
+            }
+            let parts = FontParts::parse(
+                &id,
+                self.name.as_ref(),
+                self.size,
+                self.underline.as_ref(),
+                self.vert.as_ref(),
+            )?;
+            let font = font_of(session, sheet, cell);
+            let font = parts.apply(font);
+            write_font(session, sheet, cell, font, &id)
+
         }
-        let parts = FontParts::parse(
-            &id,
-            self.name.as_ref(),
-            self.size,
-            self.underline.as_ref(),
-            self.vert.as_ref(),
-        )?;
-        let font = font_of(session, sheet, cell);
-        let font = parts.apply(font);
-        write_font(session, sheet, cell, font, &id)
+    }
+    /// **Bold** the text of a cell, or take the bold away.
+    ///
+    /// The tree's Bold: a button, and a button pressed twice does the
+    /// opposite.
+    grid.cell.font.bold {
+        area: "grid",
+        layer: "grid",
+        icon: "grid",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
+
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// Whether the text is bold: the opposite of what it is when this
+            /// is not named.
+
+            on: Option<Bool>,
+        },
+        run: {
+
+            let id = "grid.cell.font.bold".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            let mut font = font_of(session, sheet, cell);
+            font.bold = match self.on {
+                Some(on) => on.0,
+                None => !font.bold,
+            };
+            write_font(session, sheet, cell, font, &id)
+
+        }
+    }
+    /// **Italic** the text of a cell, or take the italic away.
+    ///
+    /// The tree's Italic: a button, and a button pressed twice does the
+    /// opposite.
+    grid.cell.font.italic {
+        area: "grid",
+        layer: "grid",
+        icon: "grid",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
+
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// Whether the text is italic: the opposite of what it is when
+            /// this is not named.
+
+            on: Option<Bool>,
+        },
+        run: {
+
+            let id = "grid.cell.font.italic".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            let mut font = font_of(session, sheet, cell);
+            font.italic = match self.on {
+                Some(on) => on.0,
+                None => !font.italic,
+            };
+            write_font(session, sheet, cell, font, &id)
+
+        }
+    }
+    /// **Strike** the text of a cell through, or take the strike away.
+    ///
+    /// The tree's Strikethrough: a button, and a button pressed twice does
+    /// the opposite.
+    grid.cell.font.strike {
+        area: "grid",
+        layer: "grid",
+        icon: "grid",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
+
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// Whether the text is struck through: the opposite of what it is
+            /// when this is not named.
+
+            on: Option<Bool>,
+        },
+        run: {
+
+            let id = "grid.cell.font.strike".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            let mut font = font_of(session, sheet, cell);
+            font.strike = match self.on {
+                Some(on) => on.0,
+                None => !font.strike,
+            };
+            write_font(session, sheet, cell, font, &id)
+
+        }
     }
 }
 
@@ -253,95 +373,5 @@ impl FontParts {
             font.size = Some(size);
         }
         font
-    }
-}
-
-/// **Bold** the text of a cell, or take the bold away.
-///
-/// The tree's Bold: a button, and a button pressed twice does the
-/// opposite.
-#[derive(Command)]
-#[command(id = "grid.cell.font.bold", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
-pub struct SetBold {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// Whether the text is bold: the opposite of what it is when this
-    /// is not named.
-    pub on: Option<Bool>,
-}
-
-impl SetBold {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.font.bold".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        let mut font = font_of(session, sheet, cell);
-        font.bold = match self.on {
-            Some(on) => on.0,
-            None => !font.bold,
-        };
-        write_font(session, sheet, cell, font, &id)
-    }
-}
-
-/// **Italic** the text of a cell, or take the italic away.
-///
-/// The tree's Italic: a button, and a button pressed twice does the
-/// opposite.
-#[derive(Command)]
-#[command(id = "grid.cell.font.italic", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
-pub struct SetItalic {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// Whether the text is italic: the opposite of what it is when
-    /// this is not named.
-    pub on: Option<Bool>,
-}
-
-impl SetItalic {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.font.italic".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        let mut font = font_of(session, sheet, cell);
-        font.italic = match self.on {
-            Some(on) => on.0,
-            None => !font.italic,
-        };
-        write_font(session, sheet, cell, font, &id)
-    }
-}
-
-/// **Strike** the text of a cell through, or take the strike away.
-///
-/// The tree's Strikethrough: a button, and a button pressed twice does
-/// the opposite.
-#[derive(Command)]
-#[command(id = "grid.cell.font.strike", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
-pub struct SetStrike {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// Whether the text is struck through: the opposite of what it is
-    /// when this is not named.
-    pub on: Option<Bool>,
-}
-
-impl SetStrike {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.font.strike".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        let mut font = font_of(session, sheet, cell);
-        font.strike = match self.on {
-            Some(on) => on.0,
-            None => !font.strike,
-        };
-        write_font(session, sheet, cell, font, &id)
     }
 }

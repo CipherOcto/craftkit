@@ -36,10 +36,10 @@
 //!   width of its longest line, and the height of a row is the height
 //!   of its lines (the module `autofit`).
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Text};
 
 /// The **size** of a row or a column: a number of points or of
 /// characters.
@@ -62,59 +62,130 @@ fn size_of(value: Number, unit: &str, id: &str) -> Result<f64, EngineError> {
     Ok(size)
 }
 
-/// The **height** of a row, in points.
-#[derive(Command)]
-#[command(id = "grid.row.height", area = "grid", layer = "grid", icon = "rows", mutates, undoable)]
-pub struct SetRowHeight {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// Which row, counting from one.
-    pub row: Number,
-    /// How high it is, in points.
-    pub height: Number,
-}
+commands! {
+    /// The **height** of a row, in points.
+    grid.row.height {
+        area: "grid",
+        layer: "grid",
+        icon: "rows",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl SetRowHeight {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.row.height".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
+            sheet: NodeRef,
+            /// Which row, counting from one.
+
+            row: Number,
+            /// How high it is, in points.
+
+            height: Number,
+        },
+        run: {
+
+            let id = "grid.row.height".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let row = self.row.0;
+            if !row.is_finite() || row < 1.0 || row.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a row is counted from one: {row} is not one"),
+                });
+            }
+            let row = row as u64;
+            let height = size_of(self.height, "points", &id)?;
+            let mut rows = node.data.get("rows").cloned().unwrap_or(json!({}));
+            if !rows.is_object() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the rows of the sheet `{sheet}` are not a group"),
+                });
+            }
+            rows[row.to_string()] = json!(height);
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["rows"] = rows;
+            }
+            Ok(Outcome::changed(format!("the row {row} is {height} points high")).with_data(json!({
+                "sheet": sheet,
+                "row": row,
+                "height": height,
+            })))
+
         }
-        let row = self.row.0;
-        if !row.is_finite() || row < 1.0 || row.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a row is counted from one: {row} is not one"),
-            });
+    }
+    /// The **width** of a column, in characters.
+    grid.column.width {
+        area: "grid",
+        layer: "grid",
+        icon: "columns",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
+
+            sheet: NodeRef,
+            /// Which column: `A`, `B`, `AA`.
+
+            column: Text,
+            /// How wide it is, in characters.
+
+            width: Number,
+        },
+        run: {
+
+            let id = "grid.column.width".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let column = self.column.0.trim().to_string();
+            if column.is_empty() || !column.chars().all(|character| character.is_ascii_alphabetic()) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{column}` is not a column: a column is `A`, `B` or `AA`"),
+                });
+            }
+            let column = column.to_uppercase();
+            let width = size_of(self.width, "characters", &id)?;
+            let mut columns = node.data.get("columns").cloned().unwrap_or(json!({}));
+            if !columns.is_object() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the columns of the sheet `{sheet}` are not a group"),
+                });
+            }
+            columns[&column] = json!(width);
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["columns"] = columns;
+            }
+            Ok(Outcome::changed(format!("the column {column} is {width} characters wide")).with_data(json!({
+                "sheet": sheet,
+                "column": column,
+                "width": width,
+            })))
+
         }
-        let row = row as u64;
-        let height = size_of(self.height, "points", &id)?;
-        let mut rows = node.data.get("rows").cloned().unwrap_or(json!({}));
-        if !rows.is_object() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the rows of the sheet `{sheet}` are not a group"),
-            });
-        }
-        rows[row.to_string()] = json!(height);
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["rows"] = rows;
-        }
-        Ok(Outcome::changed(format!("the row {row} is {height} points high")).with_data(json!({
-            "sheet": sheet,
-            "row": row,
-            "height": height,
-        })))
     }
 }
 
@@ -126,60 +197,4 @@ impl SetRowHeight {
 pub(crate) fn column_width(node: &craftkit_sdk::Node, col: u32) -> Option<f64> {
     let name = crate::formula::CellRef::column_text(col);
     node.data.get("columns")?.get(&name)?.as_f64()
-}
-
-/// The **width** of a column, in characters.
-#[derive(Command)]
-#[command(id = "grid.column.width", area = "grid", layer = "grid", icon = "columns", mutates, undoable)]
-pub struct SetColumnWidth {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// Which column: `A`, `B`, `AA`.
-    pub column: Text,
-    /// How wide it is, in characters.
-    pub width: Number,
-}
-
-impl SetColumnWidth {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.column.width".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        let column = self.column.0.trim().to_string();
-        if column.is_empty() || !column.chars().all(|character| character.is_ascii_alphabetic()) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{column}` is not a column: a column is `A`, `B` or `AA`"),
-            });
-        }
-        let column = column.to_uppercase();
-        let width = size_of(self.width, "characters", &id)?;
-        let mut columns = node.data.get("columns").cloned().unwrap_or(json!({}));
-        if !columns.is_object() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the columns of the sheet `{sheet}` are not a group"),
-            });
-        }
-        columns[&column] = json!(width);
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["columns"] = columns;
-        }
-        Ok(Outcome::changed(format!("the column {column} is {width} characters wide")).with_data(json!({
-            "sheet": sheet,
-            "column": column,
-            "width": width,
-        })))
-    }
 }

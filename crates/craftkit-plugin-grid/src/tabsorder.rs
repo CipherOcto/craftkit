@@ -27,110 +27,118 @@
 //!   that referred to it. Copying a sheet is copying its **cells** and
 //!   its formulas, and that is a command of its own.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Outcome};
 
-/// **Move** a sheet in the order of the tabs.
-///
-/// The place is counted from **one**, and a place that is not there is
-/// refused.
-#[derive(Command)]
-#[command(id = "grid.sheet.move", area = "grid", layer = "grid", icon = "arrow", mutates, undoable)]
-pub struct MoveSheet {
-    /// The sheet to move.
-    pub sheet: NodeRef,
-    /// The place it takes, counted from one.
-    pub to: craftkit_sdk::Number,
-}
+commands! {
+    /// **Move** a sheet in the order of the tabs.
+    ///
+    /// The place is counted from **one**, and a place that is not there is
+    /// refused.
+    grid.sheet.move {
+        area: "grid",
+        layer: "grid",
+        icon: "arrow",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet to move.
 
-impl MoveSheet {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.sheet.move".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
-        }
-        let Some(workbook) = crate::tabs::workbook_of(session, sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the sheet `{sheet}` is in no workbook"),
-            });
-        };
-        let to = self.to.0;
-        if !to.is_finite() || to.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a place is a whole number".to_string(),
-            });
-        }
-        // The sheets of the workbook, in the order they are in.
-        let sheets: Vec<u64> = session
-            .document()
-            .node(workbook)
-            .map(|node| {
-                node.children
-                    .iter()
-                    .filter(|child| child.kind == "grid.sheet")
-                    .map(|child| child.id)
-                    .collect()
-            })
-            .unwrap_or_default();
-        let count = sheets.len();
-        if to < 1.0 || to > count as f64 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no place {to}: the workbook has {count} sheet(s)"),
-            });
-        }
-        let to = to as usize;
-        let from = sheets.iter().position(|other| *other == sheet).unwrap_or(0);
-        // The sheet is taken out of the order and put back at the
-        // place: the children of the workbook are the tabs, and the
-        // order of the children is the order of the tabs.
-        let Some(node) = session.document_mut()?.node_mut(workbook) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no workbook `{workbook}`"),
-            });
-        };
-        let Some(moved) = node.take_child(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let children = &mut node.children;
-        // The place is where the sheet **ends up**, counted among the
-        // sheets of the workbook once the sheet is there again: the
-        // sheet that was in that place moves along.
-        let mut at = children.len();
-        let mut seen = 0usize;
-        for (index, child) in children.iter().enumerate() {
-            if child.kind == "grid.sheet" {
-                seen += 1;
-                if seen == to {
-                    at = index;
-                    break;
+            sheet: NodeRef,
+            /// The place it takes, counted from one.
+
+            to: craftkit_sdk::Number,
+        },
+        run: {
+
+            let id = "grid.sheet.move".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let Some(workbook) = crate::tabs::workbook_of(session, sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the sheet `{sheet}` is in no workbook"),
+                });
+            };
+            let to = self.to.0;
+            if !to.is_finite() || to.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a place is a whole number".to_string(),
+                });
+            }
+            // The sheets of the workbook, in the order they are in.
+            let sheets: Vec<u64> = session
+                .document()
+                .node(workbook)
+                .map(|node| {
+                    node.children
+                        .iter()
+                        .filter(|child| child.kind == "grid.sheet")
+                        .map(|child| child.id)
+                        .collect()
+                })
+                .unwrap_or_default();
+            let count = sheets.len();
+            if to < 1.0 || to > count as f64 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no place {to}: the workbook has {count} sheet(s)"),
+                });
+            }
+            let to = to as usize;
+            let from = sheets.iter().position(|other| *other == sheet).unwrap_or(0);
+            // The sheet is taken out of the order and put back at the
+            // place: the children of the workbook are the tabs, and the
+            // order of the children is the order of the tabs.
+            let Some(node) = session.document_mut()?.node_mut(workbook) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no workbook `{workbook}`"),
+                });
+            };
+            let Some(moved) = node.take_child(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let children = &mut node.children;
+            // The place is where the sheet **ends up**, counted among the
+            // sheets of the workbook once the sheet is there again: the
+            // sheet that was in that place moves along.
+            let mut at = children.len();
+            let mut seen = 0usize;
+            for (index, child) in children.iter().enumerate() {
+                if child.kind == "grid.sheet" {
+                    seen += 1;
+                    if seen == to {
+                        at = index;
+                        break;
+                    }
                 }
             }
+            children.insert(at, std::sync::Arc::new(moved));
+            Ok(Outcome::changed(format!("the sheet `{sheet}` is now the {to}th tab")).with_data(json!({
+                "sheet": sheet,
+                "workbook": workbook,
+                "from": from + 1,
+                "to": to,
+            })))
+
         }
-        children.insert(at, std::sync::Arc::new(moved));
-        Ok(Outcome::changed(format!("the sheet `{sheet}` is now the {to}th tab")).with_data(json!({
-            "sheet": sheet,
-            "workbook": workbook,
-            "from": from + 1,
-            "to": to,
-        })))
     }
 }

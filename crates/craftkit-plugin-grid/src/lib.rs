@@ -425,92 +425,102 @@ mod whatifs;
 mod words;
 mod workbookreading;
 
-use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
+use craftkit_derive::{Evaluator, Layer, NodeKind, Panel, commands};
 use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{
     Bool, Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text,
 };
 
-pub use advancedfilter::AdvancedFilter;
-pub use align::SetAlign;
-pub use autofit::{AutofitColumn, AutofitRow};
-pub use borders::{ClearBorder, GetBorder, SetBorder};
-pub use cellread::ReadCell;
-pub use charts::{AddChart, ChartElement, ReadChart, RemoveChart, SetChart};
-pub use checkboxes::{SetCheckbox, ToggleCheckbox};
-pub use clearing::{ClearContents, ClearFormat};
-pub use colours::{SetFill, SetTextColour};
-pub use columndeleting::DeleteColumn;
-pub use columninserting::InsertColumn;
-pub use comments::{DeleteComment, GetComment, ReplyComment, ResolveComment, SetComment};
-pub use conditional::{CheckConditional, ClearConditional, SetConditional};
-pub use criteria::Condition;
-pub use deleting::DeleteRow;
-pub use duplicates::RemoveDuplicates;
-pub use errors::SheetErrors;
-pub use exporting::ExportCsv;
-use fill::FillRange;
-pub use filters::{ClearFilter, FilteredRows, SetFilter, SetFilterGroups};
-pub use finding::FindCells;
-use flash::FlashFill;
-pub use font::{SetBold, SetFont, SetItalic, SetStrike};
-use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
-pub use formatdecimals::SetFormatDecimals;
-use formula::{Book, CellRef, Cells, Value};
-pub use formulavalues::FormulaValues;
-pub use goals::{GoalScan, GoalSeek};
-pub use headers::{SetFooter, SetHeader};
-pub use hiding::{HideColumn, HideRow, ShowColumn, ShowRow};
-pub use importing::{ImportCsv, ImportJson};
-pub use inserting::InsertRow;
-pub use links::{DeleteLink, GetLink, SetLink};
-pub use marks::{SetPrintGridlines, SetPrintHeadings};
-pub use merges::{ClearMerge, SetMerge};
-pub use namereading::ReadName;
-pub use names::{DeleteName, SetName};
-pub use notes::{DeleteNote, GetNote, SetNote};
-pub use outline::{
-    GroupColumns, GroupRows, ReadColumnGroups, ReadGroups, SetSummary, UngroupColumns, UngroupRows,
+pub use advancedfilter::GridFilterAdvanced;
+pub use align::GridCellAlign;
+pub use autofit::{GridColumnAutofit, GridRowAutofit};
+pub use borders::{GridCellBorderClear, GridCellBorderGet, GridCellBorderSet};
+pub use cellread::GridCellGet;
+pub use charts::{GridChartAdd, GridChartElement, GridChartRead, GridChartRemove, GridChartSet};
+pub use checkboxes::{GridCellCheckboxSet, GridCellCheckboxToggle};
+pub use clearing::{GridCellClearContents, GridCellClearFormat};
+pub use colours::{GridCellFill, GridCellFontColour};
+pub use columndeleting::GridColumnDelete;
+pub use columninserting::GridColumnInsert;
+pub use comments::{
+    GridCellCommentDelete, GridCellCommentGet, GridCellCommentReply, GridCellCommentResolve,
+    GridCellCommentSet,
 };
-pub use pictures::{ReadPicture, RemovePicture, SetPicture};
-pub use pivotfields::ReadPivotFields;
-pub use pivots::{CreatePivot, ReadPivot, RemovePivot};
+pub use conditional::{GridConditionalCheck, GridConditionalClear, GridConditionalSet};
+pub use criteria::Condition;
+pub use deleting::GridRowDelete;
+pub use duplicates::GridDuplicatesRemove;
+pub use errors::GridErrors;
+pub use exporting::GridExportCsv;
+use fill::GridRangeFill;
+pub use filters::{GridFilterClear, GridFilterGroupsSet, GridFilterRows, GridFilterSet};
+pub use finding::GridFind;
+use flash::GridFlashFill;
+pub use font::{GridCellFont, GridCellFontBold, GridCellFontItalic, GridCellFontStrike};
+use format::{DateStyle, Format, MAX_FORMAT_CHARS, TimeStyle};
+pub use formatdecimals::GridCellFormatDecimals;
+use formula::{Book, CellRef, Cells, Value};
+pub use formulavalues::GridFormulaValues;
+pub use goals::{GridGoal, GridGoalScan};
+pub use headers::{GridPrintFooter, GridPrintHeader};
+pub use hiding::{GridColumnHide, GridColumnShow, GridRowHide, GridRowShow};
+pub use importing::{GridImportCsv, GridImportJson};
+pub use inserting::GridRowInsert;
+pub use links::{GridCellLinkDelete, GridCellLinkGet, GridCellLinkSet};
+pub use marks::{GridPrintGridlines, GridPrintHeadings};
+pub use merges::{GridMergeClear, GridMergeSet};
+pub use namereading::GridNameGet;
+pub use names::{GridNameDelete, GridNameSet};
+pub use notes::{GridCellNoteDelete, GridCellNoteGet, GridCellNoteSet};
+pub use outline::{
+    GridColumnGroup, GridColumnGroups, GridColumnUngroup, GridRowGroup, GridRowGroups, GridRowUngroup,
+    GridSheetSummary,
+};
+pub use pictures::{GridPictureRead, GridPictureRemove, GridPictureSet};
+pub use pivotfields::GridPivotFields;
+pub use pivots::{GridPivotCreate, GridPivotRead, GridPivotRemove};
 pub use pivots::{
-    SetGrandTotals, SetPivotFilter, SetPivotGroup, SetPivotShowAs, SetPivotSort, SetPivotSubtotals,
+    GridPivotFilter, GridPivotGrandtotals, GridPivotGroup, GridPivotShowas, GridPivotSort, GridPivotSubtotals,
 };
 pub use printing::{
-    ReadPages, ReadSetup, SetMargins, SetOrientation, SetPaper, SetPrintArea, SetPrintBreak, SetPrintTitles,
+    GridPrintArea, GridPrintBreak, GridPrintMargins, GridPrintOrientation, GridPrintPages, GridPrintPaper,
+    GridPrintRead, GridPrintTitles,
 };
-pub use protection::{LockCell, ProtectSheet, ReadEditRanges, SetEditRanges, UnprotectSheet};
-pub use reading::ReadRange;
-pub use removal::RemoveSheet;
-pub use replacing::ReplaceText;
-pub use scaling::{SetFit, SetScale};
+pub use protection::{
+    GridCellLock, GridSheetEditRead, GridSheetEditSet, GridSheetProtect, GridSheetUnprotect,
+};
+pub use reading::GridRangeRead;
+pub use removal::GridSheetRemove;
+pub use replacing::GridReplace;
+pub use scaling::{GridPrintFit, GridPrintScale};
 pub use scenarios::{
-    AddScenario, DeleteScenario, ListScenarios, ScenarioKind, ShowScenario, SummariseScenarios,
+    GridScenarioAdd, GridScenarioDelete, GridScenarioList, GridScenarioShow, GridScenarioSummary,
+    ScenarioKind,
 };
-pub use sheetnames::RenameSheet;
-pub use sheetreading::ReadSheet;
-pub use sizes::{SetColumnWidth, SetRowHeight};
-pub use slicers::{AddSlicer, ClearSlicer, ReadSlicer, RemoveSlicer, ToggleSlicer};
-pub use solver::SolveProgram;
-pub use sorting::SortRange;
-pub use sparklines::{ReadSparkline, RemoveSparkline, SetSparkline};
-pub use storedtext::{NumbersConvert, NumbersStoredAsText};
-pub use styles::{AddStyle, AlignStyle, FontStyle, LockStyle, RemoveStyle, SetCellStyle, SetStyle};
-pub use subtotals::Subtotal;
+pub use sheetnames::GridSheetRename;
+pub use sheetreading::GridSheetGet;
+pub use sizes::{GridColumnWidth, GridRowHeight};
+pub use slicers::{GridSlicerAdd, GridSlicerClear, GridSlicerRead, GridSlicerRemove, GridSlicerToggle};
+pub use solver::GridSolverSolve;
+pub use sorting::GridSort;
+pub use sparklines::{GridSparklineRead, GridSparklineRemove, GridSparklineSet};
+pub use storedtext::{GridNumbersConvert, GridNumbersStoredAsText};
+pub use styles::{
+    GridCellStyle, GridStyleAdd, GridStyleAlign, GridStyleFont, GridStyleLock, GridStyleRemove, GridStyleSet,
+};
+pub use subtotals::GridDataSubtotal;
 pub use tables::{
-    CreateTable, ReadTableFields, ReadTables, RemoveTable, RenameTable, ResizeTable, SetTableColumnWay,
-    SetTableLabel, SetTableTotals,
+    GridTableCreate, GridTableFields, GridTableLabel, GridTableRead, GridTableRemove, GridTableRename,
+    GridTableResize, GridTableTotals, GridTableWay,
 };
-pub use tabs::{HideSheet, SetSheetColor, UnhideSheet};
-pub use tabsorder::MoveSheet;
-pub use textcolumns::TextColumns;
-pub use trendlines::ChartTrendline;
-pub use validation::{CheckValidation, ClearValidation, SetValidation};
-pub use view::{FreezePanes, SetView, SetZoom, UnfreezePanes};
-pub use whatifs::WhatIf;
-pub use workbookreading::ReadWorkbook;
+pub use tabs::{GridSheetColor, GridSheetHide, GridSheetUnhide};
+pub use tabsorder::GridSheetMove;
+pub use textcolumns::GridTextColumns;
+pub use trendlines::GridChartTrendline;
+pub use validation::{GridValidationCheck, GridValidationClear, GridValidationSet};
+pub use view::{GridSheetFreeze, GridSheetFreezeDelete, GridSheetView, GridSheetZoom};
+pub use whatifs::GridWhatif;
+pub use workbookreading::GridWorkbookGet;
 
 /// The grid layer.
 ///
@@ -897,974 +907,1045 @@ pub fn format_code_of(session: &Session, sheet: u64, cells: &Cells, cell: CellRe
     cells.format(cell).map(|code| code.to_string())
 }
 
-/// Put a **workbook** in the document.
-#[derive(Command)]
-#[command(id = "grid.workbook.add", area = "grid", layer = "grid", icon = "plus", mutates, undoable, example)]
-pub struct AddWorkbook {
-    /// What to call it.
-    pub name: Text,
-}
+commands! {
+    /// Put a **workbook** in the document.
+    grid.workbook.add {
+        area: "grid",
+        layer: "grid",
+        icon: "plus",
+        mutates,
+        undoable,
+        example,
+        params: {
+            /// What to call it.
 
-impl AddWorkbook {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.clone();
-        if name.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "grid.workbook.add".to_string(),
-                message: "a workbook has a name".to_string(),
-            });
-        }
-        // A workbook carries the **date system** its serials are
-        // counted in, as the tree's workbook does.
-        let id = session.document_mut()?.add_node_with_under(
-            None,
-            name.clone(),
-            "grid.workbook",
-            None,
-            json!({
-                "date_system": dates::System::default().name(),
-                "custom_lists": Vec::<String>::new(),
-                "styles": Vec::<String>::new(),
-            }),
-        );
-        Ok(Outcome::changed(format!("added the workbook `{name}`"))
-            .with_data(json!({ "id": id, "name": name })))
-    }
-}
+            name: Text,
+        },
+        run: {
 
-/// **Add** a **custom list** to a workbook.
-///
-/// A custom list is a list of words a fill may step through: the
-/// tree's own lists are the days of the week, the months and the
-/// quarters, and a custom list is one of your own.
-///
-/// The words are given **one per line**, because a word is a line and
-/// a line may not be two words. A list of **one** word is not a list,
-/// and two words that are the same are one word twice — so both are
-/// refused.
-#[derive(Command)]
-#[command(id = "grid.workbook.list.add", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
-pub struct AddCustomList {
-    /// The workbook the list belongs to.
-    pub workbook: NodeRef,
-    /// The words of the list, one per line.
-    pub words: Text,
-}
-
-impl AddCustomList {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.workbook.list.add".to_string();
-        let workbook = self.workbook.0;
-        let Some(node) = session.document().node(workbook) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no workbook `{workbook}`"),
-            });
-        };
-        if node.kind != "grid.workbook" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
-            });
-        }
-        let words: Vec<String> = self
-            .words
-            .0
-            .lines()
-            .map(|line| line.trim().to_string())
-            .filter(|line| !line.is_empty())
-            .collect();
-        if words.len() < 2 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a list of one word is not a list".to_string(),
-            });
-        }
-        // The tree's list is found by **membership**, so two words
-        // that are the same are one word twice: the fill would find
-        // the first and never the second.
-        for (index, word) in words.iter().enumerate() {
-            if words[..index].iter().any(|other| other.eq_ignore_ascii_case(word)) {
+            let name = self.name.0.clone();
+            if name.trim().is_empty() {
                 return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "`{word}` is in the list twice, and a fill would find the first of them"
-                    ),
+                    id: "grid.workbook.add".to_string(),
+                    message: "a workbook has a name".to_string(),
                 });
             }
+            // A workbook carries the **date system** its serials are
+            // counted in, as the tree's workbook does.
+            let id = session.document_mut()?.add_node_with_under(
+                None,
+                name.clone(),
+                "grid.workbook",
+                None,
+                json!({
+                    "date_system": dates::System::default().name(),
+                    "custom_lists": Vec::<String>::new(),
+                    "styles": Vec::<String>::new(),
+                }),
+            );
+            Ok(Outcome::changed(format!("added the workbook `{name}`"))
+                .with_data(json!({ "id": id, "name": name })))
+
         }
-        let mut lists =
-            node.data.get("custom_lists").and_then(|lists| lists.as_array()).cloned().unwrap_or_default();
-        lists.push(json!(words));
-        if let Some(node) = session.document_mut()?.node_mut(workbook) {
-            node.data["custom_lists"] = json!(lists);
-        }
-        Ok(Outcome::changed(format!("the workbook `{workbook}` has a list of {} words", words.len()))
-            .with_data(json!({ "workbook": workbook, "words": words })))
     }
-}
-
-/// **Take away** a **custom list** of a workbook.
-///
-/// The list is named by its **place**: the first list, the second
-/// list, and so on.
-#[derive(Command)]
-#[command(id = "grid.workbook.list.remove", area = "grid", layer = "grid", icon = "minus", mutates, undoable)]
-pub struct RemoveCustomList {
-    /// The workbook the list belongs to.
-    pub workbook: NodeRef,
-    /// Which list: the first is 1, the second is 2, and so on.
-    pub list: Number,
-}
-
-impl RemoveCustomList {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.workbook.list.remove".to_string();
-        let workbook = self.workbook.0;
-        let Some(node) = session.document().node(workbook) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no workbook `{workbook}`"),
-            });
-        };
-        if node.kind != "grid.workbook" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
-            });
-        }
-        let which = self.list.0;
-        if !which.is_finite() || which.fract() != 0.0 || which < 1.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a list is named by its place, and the first list is the first".to_string(),
-            });
-        }
-        let which = which as usize - 1;
-        let mut lists =
-            node.data.get("custom_lists").and_then(|lists| lists.as_array()).cloned().unwrap_or_default();
-        if which >= lists.len() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the workbook `{workbook}` has {} lists", lists.len()),
-            });
-        }
-        let removed = lists.remove(which);
-        if let Some(node) = session.document_mut()?.node_mut(workbook) {
-            node.data["custom_lists"] = json!(lists);
-        }
-        Ok(Outcome::changed(format!("the workbook `{workbook}` has one list less"))
-            .with_data(json!({ "workbook": workbook, "list": which + 1, "removed": removed })))
-    }
-}
-
-/// **Set** the **date system** of a workbook.
-///
-/// The system is the calendar the workbook's serials are counted in:
-/// the `1900` system counts from the 31st of December 1899 and has the
-/// 29th of February of 1900 in it — the day that never happened — and
-/// the `1904` system counts from the 1st of January 1904 and has no
-/// such day.
-///
-/// The two are 1462 days apart, so every date in the workbook moves.
-#[derive(Command)]
-#[command(
-    id = "grid.workbook.date.system",
-    area = "grid",
-    layer = "grid",
-    icon = "pencil",
-    mutates,
-    undoable
-)]
-pub struct SetDateSystem {
-    /// The workbook.
-    pub workbook: NodeRef,
-    /// `1900` or `1904`.
-    pub system: Text,
-}
-
-impl SetDateSystem {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.workbook.date.system".to_string();
-        let workbook = self.workbook.0;
-        let Some(node) = session.document().node(workbook) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no workbook `{workbook}`"),
-            });
-        };
-        if node.kind != "grid.workbook" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
-            });
-        }
-        let system = dates::System::parse(&self.system.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!(
-                "`{}` is not a date system: a date system is `1900` or `1904`",
-                self.system.0.trim()
-            ),
-        })?;
-        if let Some(node) = session.document_mut()?.node_mut(workbook) {
-            node.data["date_system"] = json!(system.name());
-        }
-        Ok(Outcome::changed(format!(
-            "the workbook `{workbook}` counts its days in the {} system",
-            system.name()
-        ))
-        .with_data(json!({ "workbook": workbook, "system": system.name() })))
-    }
-}
-
-/// Put a **sheet** in a workbook.
-#[derive(Command)]
-#[command(id = "grid.sheet.add", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
-pub struct AddSheet {
-    /// The workbook it goes in.
-    pub workbook: NodeRef,
-    /// What to call it.
-    pub name: Text,
-}
-
-impl AddSheet {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.trim().to_string();
-        let workbook = self.workbook.0;
-        // The **rules** of a sheet's name are the rules of the name and
-        // not of the command that writes it: the tree's `check_sheet_name`
-        // is used when a sheet is added and when it is renamed, and here
-        // they are one rule with two doors.
-        //
-        // The uniqueness is the tree's: a name is taken **in the
-        // workbook**, and two workbooks may hold sheets of one name.
-        let taken: Vec<String> = session
-            .document()
-            .node(workbook)
-            .map(|node| {
-                node.children
-                    .iter()
-                    .filter(|child| child.kind == "grid.sheet")
-                    .map(|child| child.name.clone())
-                    .collect()
-            })
-            .unwrap_or_default();
-        let taken = taken.iter().find(|other| other.eq_ignore_ascii_case(&name)).cloned();
-        if let Some(reason) = sheetnames::why_not(&name, taken.as_deref()) {
-            return Err(EngineError::Failed { id: "grid.sheet.add".to_string(), message: reason });
-        }
-        if session.document().node(workbook).is_none() {
-            return Err(EngineError::Failed {
-                id: "grid.sheet.add".to_string(),
-                message: format!("there is no workbook `{workbook}`"),
-            });
-        }
-        let id = session.document_mut()?.add_node_with_under(
-            Some(workbook),
-            name.clone(),
-            "grid.sheet",
-            None,
-            json!({
-                "cells": {},
-                "view": crate::view::SheetView::default().to_json(),
-                "zoom": 100,
-            }),
-        );
-        Ok(Outcome::changed(format!("added the sheet `{name}`")).with_data(json!({ "id": id, "name": name })))
-    }
-}
-
-/// Put a **value** in a cell.
-#[derive(Command)]
-#[command(id = "grid.cell.set", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
-pub struct SetCell {
-    /// The sheet it goes in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// The value: a number, a text or a boolean.
-    pub value: Json,
-}
-
-impl SetCell {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let sheet = self.sheet.0;
-        let cell = cell_at(&self.cell.0, "grid.cell.set")?;
-        let value = Value::from_json(&self.value);
-        // The **locks** the styles of the workbook carry: they are
-        // read before the document is borrowed for the change.
-        let locks = crate::style_locks(session, sheet);
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: "grid.cell.set".to_string(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: "grid.cell.set".to_string(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        merges::refuse_covered(node, &[cell], "grid.cell.set")?;
-        crate::protection::refuse_locked(node, &locks, &[cell], "grid.cell.set")?;
-        let mut cells = sheet_cells_mut(node);
-        cells.set_value(cell, value.clone());
-        node.data["cells"] = cells_into(&cells);
-        Ok(Outcome::changed(format!("set the cell {}", cell.to_text()))
-            .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "value": value.to_json() })))
-    }
-}
-
-/// Put a **number format** on a cell.
-///
-/// The formats this tree knows are `general`, `0`, `0.00`, `#,##0`,
-/// `#,##0.00`, `0%` and `0.00%`. A format that is **not one of them**
-/// is refused: a format that is quietly ignored is a format the user
-/// believes in and the program does not have.
-///
-/// A cell may be formatted **before it has a value**, and the format
-/// is the cell's own: the tree's format is a style and a style is
-/// shared, and here a hundred cells with one format carry a hundred
-/// formats.
-#[derive(Command)]
-#[command(id = "grid.cell.format", area = "grid", layer = "grid", icon = "pencil", mutates, undoable)]
-pub struct SetFormat {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// The format: `general`, `0`, `0.00`, `#,##0`, `#,##0.00`, `0%` or
-    /// `0.00%` — or the **name** of a format, such as `currency` or
-    /// `scientific`.
-    pub format: Text,
-}
-
-impl SetFormat {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.format".to_string();
-        let sheet = self.sheet.0;
-        let cell = cell_at(&self.cell.0, &id)?;
-        let given = self.format.0.trim().to_string();
-        if given.chars().count() > MAX_FORMAT_CHARS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a format is at most {MAX_FORMAT_CHARS} characters long"),
-            });
-        }
-        // A format is given by its **code** or by its **name**, and the
-        // code is kept: the name is a way of saying the code.
-        let code = match formatnames::resolve(&given) {
-            Ok(code) => code,
-            Err(refusal) => {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: formatnames::message(&given, &refusal),
-                });
-            }
-        };
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        crate::protection::refuse_format(node, &id)?;
-        let mut cells = sheet_cells_mut(node);
-        cells.set_format(cell, Some(code.clone()));
-        node.data["cells"] = cells_into(&cells);
-        Ok(Outcome::changed(format!("the cell {} is formatted `{code}`", cell.to_text()))
-            .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "format": code })))
-    }
-}
-
-/// Put a **date** in a cell.
-///
-/// A date in a spreadsheet is a **number** and a **format**: the number
-/// is the number of days since the 30th of December 1899, and the
-/// format says that the number is a date and how it is written. This
-/// command puts both of them in the cell.
-///
-/// The date is written as `2026-10-26`, and a date that did not
-/// happen — the 30th of February — is refused.
-#[derive(Command)]
-#[command(id = "grid.cell.date", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
-pub struct SetDate {
-    /// The sheet it goes in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// The date, as `2026-10-26`.
-    pub date: Text,
-    /// The format the date is written with. The default is
-    /// `yyyy-mm-dd`, and a format that is not a date format is
+    /// **Add** a **custom list** to a workbook.
+    ///
+    /// A custom list is a list of words a fill may step through: the
+    /// tree's own lists are the days of the week, the months and the
+    /// quarters, and a custom list is one of your own.
+    ///
+    /// The words are given **one per line**, because a word is a line and
+    /// a line may not be two words. A list of **one** word is not a list,
+    /// and two words that are the same are one word twice — so both are
     /// refused.
-    pub format: Option<Text>,
-}
+    grid.workbook.list.add {
+        area: "grid",
+        layer: "grid",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The workbook the list belongs to.
 
-impl SetDate {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.date".to_string();
-        let sheet = self.sheet.0;
-        // The **locks** the styles of the workbook carry: they are
-        // read before the document is borrowed for the change.
-        let locks = crate::style_locks(session, sheet);
-        let cell = cell_at(&self.cell.0, &id)?;
-        // The **date system** of the workbook the sheet is in: the
-        // date is written in that calendar and the serial is that
-        // calendar's.
-        let system = system_of(session, sheet);
-        let (date, shape) = dates::parse(&self.date.0, system).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!(
-                "`{}` is not a date: a date is written as 2026-10-26, 10/26/2026 or 4-Mar-2026, and it is a day that happened",
-                self.date.0.trim()
-            ),
-        })?;
-        let serial = dates::to_serial(date.year, date.month, date.day, system).ok_or_else(|| {
-            EngineError::Failed { id: id.clone(), message: format!("`{}` is not a date", self.date.0.trim()) }
-        })?;
-        let style = match &self.format {
-            Some(code) => {
-                // A date format is given by its **code** or by its
-                // **name**, and the name says a date shape.
-                let given = code.0.trim().to_string();
-                let said = match crate::formatnames::resolve(&given) {
-                    Ok(code) => code,
-                    Err(refusal) => {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: crate::formatnames::message(&given, &refusal),
-                        });
-                    }
-                };
-                DateStyle::parse(&said).ok_or_else(|| EngineError::Failed {
+            workbook: NodeRef,
+            /// The words of the list, one per line.
+
+            words: Text,
+        },
+        run: {
+
+            let id = "grid.workbook.list.add".to_string();
+            let workbook = self.workbook.0;
+            let Some(node) = session.document().node(workbook) else {
+                return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!(
-                        "`{said}` is not a date format: the date formats are `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd`, `yyyy` and `dddd, mmmm dd, yyyy`"
-                    ),
-                })?
-            }
-            // The **shape** the date was written in is the format it is
-            // written with, as the tree has it: a date written as
-            // `10/26/2026` is written as `10/26/2026`.
-            None => DateStyle::parse(shape).unwrap_or(DateStyle::Iso),
-        };
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        merges::refuse_covered(node, &[cell], &id)?;
-        crate::protection::refuse_locked(node, &locks, &[cell], &id)?;
-        let mut cells = sheet_cells_mut(node);
-        cells.set_value(cell, Value::Number(serial));
-        cells.set_format(cell, Some(style.code().to_string()));
-        node.data["cells"] = cells_into(&cells);
-        Ok(Outcome::changed(format!("set the cell {} to the date {}", cell.to_text(), date.to_text()))
-            .with_data(json!({
-                "sheet": sheet,
-                "cell": cell.to_text(),
-                "date": date.to_text(),
-                "serial": serial,
-                "format": style.code(),
-            })))
-    }
-}
-
-/// Put a **time** in a cell.
-///
-/// A time in a spreadsheet is a **number** and a **format**: the number
-/// is the fraction of the day the time is, and the format says that the
-/// number is a time and how it is written.
-///
-/// The time is written as `13:45`, `13:45:30` or `1:45 pm`, and a time
-/// that did not happen — the 13th of the 60th minute — is refused.
-#[derive(Command)]
-#[command(id = "grid.cell.time", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
-pub struct SetTime {
-    /// The sheet it goes in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// The time, as `13:45` or `1:45 pm`.
-    pub time: Text,
-    /// The format the time is written with. The default is the format
-    /// the time was written in, and a format that is not a time format
-    /// is refused.
-    pub format: Option<Text>,
-}
-
-impl SetTime {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.time".to_string();
-        let sheet = self.sheet.0;
-        let cell = cell_at(&self.cell.0, &id)?;
-        // The **locks** the styles of the workbook carry: they are
-        // read before the document is borrowed for the change.
-        let locks = crate::style_locks(session, sheet);
-        let (time, shape) = dates::parse_time(&self.time.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!(
-                "`{}` is not a time: a time is written as 13:45, 13:45:30 or 1:45 pm, and it is a time that happened",
-                self.time.0.trim()
-            ),
-        })?;
-        let style = match &self.format {
-            Some(code) => {
-                // A time format is given by its **code** or by its
-                // **name**, and the name says a clock shape.
-                let given = code.0.trim().to_string();
-                let said = match crate::formatnames::resolve(&given) {
-                    Ok(code) => code,
-                    Err(refusal) => {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: crate::formatnames::message(&given, &refusal),
-                        });
-                    }
-                };
-                TimeStyle::parse(&said).ok_or_else(|| EngineError::Failed {
+                    message: format!("there is no workbook `{workbook}`"),
+                });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!(
-                        "`{said}` is not a time format: the time formats are `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`, `h AM/PM`, `h:mm AM/PM`, `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`, `[h]:mm`, `[h]:mm:ss` and `[mm]:ss`"
-                    ),
-                })?
+                    message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+                });
             }
-            // The **shape** the time was written in is the format it is
-            // written with, as the tree has it: a time written as
-            // `1:45 pm` is written as `1:45 pm`.
-            None => TimeStyle::parse(shape).unwrap_or(TimeStyle::HourMinute),
-        };
-        let serial = dates::time_fraction(time.hour, time.minute, time.second);
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        merges::refuse_covered(node, &[cell], &id)?;
-        crate::protection::refuse_locked(node, &locks, &[cell], &id)?;
-        let mut cells = sheet_cells_mut(node);
-        cells.set_value(cell, Value::Number(serial));
-        cells.set_format(cell, Some(style.code().to_string()));
-        node.data["cells"] = cells_into(&cells);
-        Ok(Outcome::changed(format!("set the cell {} to the time {}", cell.to_text(), time.to_text()))
-            .with_data(json!({
-                "sheet": sheet,
-                "cell": cell.to_text(),
-                "time": time.to_text(),
-                "serial": serial,
-                "format": style.code(),
-            })))
-    }
-}
-
-/// The **text** a cell shows.
-///
-/// The text is the **value** of the cell written with its format, and
-/// the value of a formula cell is computed: a cell that holds a
-/// formula has no value until it is calculated, and this is the
-/// calculation.
-#[derive(Command)]
-#[command(id = "grid.cell.text", area = "grid", layer = "grid", icon = "list")]
-pub struct CellText {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-}
-
-impl CellText {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.text".to_string();
-        let sheet = self.sheet.0;
-        let cell = cell_at(&self.cell.0, &id)?;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        let name = node.name.clone();
-        let cells = cells_of(node);
-        // The **value**: the one the cell holds, or the one its formula
-        // computes.
-        let value = match cells.get(cell) {
-            Some(entry) => match (&entry.value, &entry.formula) {
-                (Some(value), _) => value.clone(),
-                (None, Some(_)) => {
-                    let book = book_of(session.document());
-                    book.value_of(&name, cell)
-                }
-                (None, None) => Value::Empty,
-            },
-            None => Value::Empty,
-        };
-        // The **format** the cell is written with: the **conditional**
-        // format that matches it, if there is one — a rule is on top
-        // of a fact — and otherwise the format of the style it names,
-        // if it names one, and its own otherwise.
-        let format = match conditional::format_for(node, cell, &value) {
-            Some(code) => Format::parse(&code).unwrap_or(Format::General),
-            None => format_of(session, sheet, &cells, cell),
-        };
-        // The **fill** of the text: the formats that fill the cell are
-        // written in the width of the column they are in.
-        let width = sizes::column_width(node, cell.col);
-        let text = format.text_in(&value, system_of(session, sheet), width);
-        Ok(Outcome::new(format!("{} shows `{text}`", cell.to_text())).with_data(
-            json!({ "sheet": sheet, "cell": cell.to_text(), "text": text, "value": value.to_json() }),
-        ))
-    }
-}
-
-/// Put a **formula** in a cell.
-///
-/// A formula that does not parse is refused, and so is one that reads
-/// itself: the cycle is found **here**, and not later in the middle of
-/// a recalculation.
-#[derive(Command)]
-#[command(id = "grid.formula.set", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
-pub struct SetFormula {
-    /// The sheet it goes in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// The formula, with or without its `=`.
-    pub formula: Text,
-}
-
-impl SetFormula {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let sheet = self.sheet.0;
-        let cell = cell_at(&self.cell.0, "grid.formula.set")?;
-        // The **locks** the styles of the workbook carry.
-        let locks = crate::style_locks(session, sheet);
-        let text = self.formula.0.trim().to_string();
-        let expression = formula::parse(&text).map_err(|error| EngineError::Failed {
-            id: "grid.formula.set".to_string(),
-            message: error.message,
-        })?;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: "grid.formula.set".to_string(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: "grid.formula.set".to_string(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        merges::refuse_covered(node, &[cell], "grid.formula.set")?;
-        crate::protection::refuse_locked(node, &locks, &[cell], "grid.formula.set")?;
-        let name = node.name.clone();
-        let mut cells = cells_of(node);
-        // The cycle check: with the new formula in place, does the cell
-        // read itself — in this sheet or in another?
-        cells.set_formula(cell, text.clone());
-        let mut book = book_of(session.document());
-        if let Some(sheet_cells) = book.sheet_mut(&name) {
-            *sheet_cells = cells.clone();
-        }
-        if book.reads_itself(&name, cell) {
-            return Err(EngineError::Failed {
-                id: "grid.formula.set".to_string(),
-                message: format!("the formula in {name}!{} reads itself", cell.to_text()),
-            });
-        }
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: "grid.formula.set".to_string(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        node.data["cells"] = cells_into(&cells);
-        let precedents = formula::precedents(&expression, book.names());
-        Ok(Outcome::changed(format!("set the formula in {}", cell.to_text())).with_data(json!({
-            "sheet": sheet,
-            "cell": cell.to_text(),
-            "formula": text,
-            "precedents": precedents
-                .iter()
-                .map(|area| area.to_text())
-                .collect::<Vec<_>>(),
-        })))
-    }
-}
-
-/// Empty a **cell**.
-#[derive(Command)]
-#[command(id = "grid.cell.clear", area = "grid", layer = "grid", icon = "minus", mutates, undoable)]
-pub struct ClearCell {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-}
-
-impl ClearCell {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let sheet = self.sheet.0;
-        let cell = cell_at(&self.cell.0, "grid.cell.clear")?;
-        // The **locks** the styles of the workbook carry: they are
-        // read before the document is borrowed for the change.
-        let locks = crate::style_locks(session, sheet);
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: "grid.cell.clear".to_string(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        crate::protection::refuse_locked(node, &locks, &[cell], "grid.cell.clear")?;
-        let mut cells = sheet_cells_mut(node);
-        let was_there = cells.clear(cell);
-        node.data["cells"] = cells_into(&cells);
-        // The **note** and the **link** go with the cell: the tree's
-        // *clear all* takes the comment and the hyperlink of the cell
-        // with it.
-        let mut notes = notes::notes_of(node);
-        let had_note = notes.remove(&cell.to_text()).is_some();
-        node.data["notes"] = notes::notes_into(&notes);
-        // The **comment** goes with the cell too: the tree's *clear
-        // all* takes the comment of the cell with it.
-        let mut comments = comments::comments_of(node);
-        let had_comment = comments.remove(&cell.to_text()).is_some();
-        node.data["comments"] = comments::comments_into(&comments);
-        let mut links = links::links_of(node);
-        let had_link = links.remove(&cell.to_text()).is_some();
-        node.data["links"] = links::links_into(&links);
-        // The **border** goes with the cell: the tree's *clear all*
-        // takes the style of the cell with it, and the border is part
-        // of the style.
-        let had_border = crate::borders::take_borders(node, &cell.to_text());
-        Ok(Outcome::changed(format!("emptied the cell {}", cell.to_text())).with_data(json!({
-            "sheet": sheet,
-            "cell": cell.to_text(),
-            "was_there": was_there,
-            "had_note": had_note,
-            "had_comment": had_comment,
-            "had_link": had_link,
-            "had_border": had_border,
-        })))
-    }
-}
-
-/// The **precedents** of a cell: the areas its formula reads.
-///
-/// The tree's own flag: `all` says the trace is at **every** level and
-/// not only the first one, and then the answer is the **cells** the
-/// chain reads and not the areas — the tree's own rule, because at the
-/// first level the areas are what a formula reads and at every level
-/// the cells are what is read.
-#[derive(Command)]
-#[command(id = "grid.precedents", area = "grid", layer = "grid", icon = "list")]
-pub struct ReadPrecedents {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// Whether the trace is at **every** level and not only the first.
-    pub all: Option<Bool>,
-}
-
-impl ReadPrecedents {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let sheet = self.sheet.0;
-        let cell = cell_at(&self.cell.0, "grid.precedents")?;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: "grid.precedents".to_string(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let cells = cells_of(node);
-        let Some(entry) = cells.get(cell) else {
-            return Err(EngineError::Failed {
-                id: "grid.precedents".to_string(),
-                message: format!("the cell {} is empty", cell.to_text()),
-            });
-        };
-        let Some(formula) = &entry.formula else {
-            return Err(EngineError::Failed {
-                id: "grid.precedents".to_string(),
-                message: format!("the cell {} holds no formula", cell.to_text()),
-            });
-        };
-        let expression = formula::parse(formula).map_err(|error| EngineError::Failed {
-            id: "grid.precedents".to_string(),
-            message: error.message,
-        })?;
-        let book = book_of(session.document());
-        let name = node.name.clone();
-        // The trace at **every** level: the cells the chain reads.
-        if self.all.unwrap_or(Bool(false)).0 {
-            let cells = trace::precedent_cells(&book, &name, cell);
-            let count = cells.len();
-            return Ok(Outcome::new(format!("{count} cell(s)")).with_data(json!({
-                "sheet": sheet,
-                "cell": cell.to_text(),
-                "all": true,
-                "precedents": cells
-                    .iter()
-                    .map(|(sheet, cell)| json!({ "sheet": sheet, "cell": cell.to_text() }))
-                    .collect::<Vec<_>>(),
-            })));
-        }
-        let areas = formula::precedents(&expression, book.names());
-        Ok(Outcome::new(format!("{} area(s)", areas.len())).with_data(json!({
-            "sheet": sheet,
-            "cell": cell.to_text(),
-            "precedents": areas
-                .iter()
-                .map(|reference| json!({
-                    "area": reference.area.to_text(),
-                    "sheet": reference.sheet,
-                    "cells": reference.area.count(),
-                }))
-                .collect::<Vec<_>>(),
-        })))
-    }
-}
-
-/// The **dependents** of a cell: the cells whose formulas read it.
-#[derive(Command)]
-#[command(id = "grid.dependents", area = "grid", layer = "grid", icon = "list")]
-pub struct ReadDependents {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// Whether the trace is at **every** level and not only the first.
-    pub all: Option<Bool>,
-}
-
-impl ReadDependents {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let sheet = self.sheet.0;
-        let cell = cell_at(&self.cell.0, "grid.dependents")?;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: "grid.dependents".to_string(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let name = node.name.clone();
-        // The dependents of a cell are the cells that read it, in this
-        // sheet **or in another**: a formula in `Sheet2` that reads
-        // `Sheet1!A1` depends on it.
-        let book = book_of(session.document());
-        // The trace at **every** level: the cells that read the cell,
-        // and the cells that read those.
-        if self.all.unwrap_or(Bool(false)).0 {
-            let cells = trace::dependent_cells(&book, &name, cell);
-            let count = cells.len();
-            return Ok(Outcome::new(format!("{count} dependent(s)")).with_data(json!({
-                "sheet": sheet,
-                "cell": cell.to_text(),
-                "all": true,
-                "dependents": cells
-                    .iter()
-                    .map(|(sheet, cell)| json!({ "sheet": sheet, "cell": cell.to_text() }))
-                    .collect::<Vec<_>>(),
-            })));
-        }
-        let mut dependents: Vec<Json> = Vec::new();
-        for sheet_node in session.document().walk().filter(|node| node.kind == "grid.sheet") {
-            let cells = cells_of(sheet_node);
-            for (other, entry) in cells.iter() {
-                let Some(formula) = &entry.formula else { continue };
-                let Ok(expression) = formula::parse(formula) else { continue };
-                for reference in formula::precedents(&expression, book.names()) {
-                    // A reference that names no sheet is a reference to
-                    // the sheet the formula is in, and a reference that
-                    // names another sheet does not read this cell.
-                    let read = reference.sheet.as_deref().unwrap_or(sheet_node.name.as_str());
-                    if read != name {
-                        continue;
-                    }
-                    if reference.area.covers(cell) {
-                        dependents.push(json!({
-                            "sheet": sheet_node.name,
-                            "cell": other.to_text(),
-                            "reads": reference.to_text(),
-                        }));
-                        break;
-                    }
+            let words: Vec<String> = self
+                .words
+                .0
+                .lines()
+                .map(|line| line.trim().to_string())
+                .filter(|line| !line.is_empty())
+                .collect();
+            if words.len() < 2 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a list of one word is not a list".to_string(),
+                });
+            }
+            // The tree's list is found by **membership**, so two words
+            // that are the same are one word twice: the fill would find
+            // the first and never the second.
+            for (index, word) in words.iter().enumerate() {
+                if words[..index].iter().any(|other| other.eq_ignore_ascii_case(word)) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "`{word}` is in the list twice, and a fill would find the first of them"
+                        ),
+                    });
                 }
             }
-        }
-        let count = dependents.len();
-        Ok(Outcome::new(format!("{count} dependent(s)")).with_data(json!({
-            "sheet": sheet,
-            "cell": cell.to_text(),
-            "dependents": dependents,
-        })))
-    }
-}
-
-/// The **values** of a sheet: every formula, computed.
-///
-/// The same thing the evaluator says, as a command: an agent asks for
-/// the numbers.
-#[derive(Command)]
-#[command(id = "grid.calc", area = "grid", layer = "grid", icon = "list")]
-pub struct CalcSheet {
-    /// The sheet to calculate.
-    pub sheet: NodeRef,
-}
-
-impl CalcSheet {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: "grid.calc".to_string(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let name = node.name.clone();
-        let cells = cells_of(node);
-        let book = book_of(session.document());
-        let mut values = serde_json::Map::new();
-        for (cell, entry) in cells.iter() {
-            if entry.formula.is_none() {
-                continue;
+            let mut lists =
+                node.data.get("custom_lists").and_then(|lists| lists.as_array()).cloned().unwrap_or_default();
+            lists.push(json!(words));
+            if let Some(node) = session.document_mut()?.node_mut(workbook) {
+                node.data["custom_lists"] = json!(lists);
             }
-            values.insert(cell.to_text(), book.value_of(&name, cell).to_json());
+            Ok(Outcome::changed(format!("the workbook `{workbook}` has a list of {} words", words.len()))
+                .with_data(json!({ "workbook": workbook, "words": words })))
+
         }
-        let count = values.len();
-        Ok(Outcome::new(format!("{count} value(s)")).with_data(json!({
-            "sheet": sheet,
-            "cells": Json::Object(values),
-        })))
+    }
+    /// **Take away** a **custom list** of a workbook.
+    ///
+    /// The list is named by its **place**: the first list, the second
+    /// list, and so on.
+    grid.workbook.list.remove {
+        area: "grid",
+        layer: "grid",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The workbook the list belongs to.
+
+            workbook: NodeRef,
+            /// Which list: the first is 1, the second is 2, and so on.
+
+            list: Number,
+        },
+        run: {
+
+            let id = "grid.workbook.list.remove".to_string();
+            let workbook = self.workbook.0;
+            let Some(node) = session.document().node(workbook) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no workbook `{workbook}`"),
+                });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+                });
+            }
+            let which = self.list.0;
+            if !which.is_finite() || which.fract() != 0.0 || which < 1.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a list is named by its place, and the first list is the first".to_string(),
+                });
+            }
+            let which = which as usize - 1;
+            let mut lists =
+                node.data.get("custom_lists").and_then(|lists| lists.as_array()).cloned().unwrap_or_default();
+            if which >= lists.len() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the workbook `{workbook}` has {} lists", lists.len()),
+                });
+            }
+            let removed = lists.remove(which);
+            if let Some(node) = session.document_mut()?.node_mut(workbook) {
+                node.data["custom_lists"] = json!(lists);
+            }
+            Ok(Outcome::changed(format!("the workbook `{workbook}` has one list less"))
+                .with_data(json!({ "workbook": workbook, "list": which + 1, "removed": removed })))
+
+        }
+    }
+    /// **Set** the **date system** of a workbook.
+    ///
+    /// The system is the calendar the workbook's serials are counted in:
+    /// the `1900` system counts from the 31st of December 1899 and has the
+    /// 29th of February of 1900 in it — the day that never happened — and
+    /// the `1904` system counts from the 1st of January 1904 and has no
+    /// such day.
+    ///
+    /// The two are 1462 days apart, so every date in the workbook moves.
+    grid.workbook.date.system {
+        area: "grid",
+        layer: "grid",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The workbook.
+
+            workbook: NodeRef,
+            /// `1900` or `1904`.
+
+            system: Text,
+        },
+        run: {
+
+            let id = "grid.workbook.date.system".to_string();
+            let workbook = self.workbook.0;
+            let Some(node) = session.document().node(workbook) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no workbook `{workbook}`"),
+                });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+                });
+            }
+            let system = dates::System::parse(&self.system.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "`{}` is not a date system: a date system is `1900` or `1904`",
+                    self.system.0.trim()
+                ),
+            })?;
+            if let Some(node) = session.document_mut()?.node_mut(workbook) {
+                node.data["date_system"] = json!(system.name());
+            }
+            Ok(Outcome::changed(format!(
+                "the workbook `{workbook}` counts its days in the {} system",
+                system.name()
+            ))
+            .with_data(json!({ "workbook": workbook, "system": system.name() })))
+
+        }
+    }
+    /// Put a **sheet** in a workbook.
+    grid.sheet.add {
+        area: "grid",
+        layer: "grid",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The workbook it goes in.
+
+            workbook: NodeRef,
+            /// What to call it.
+
+            name: Text,
+        },
+        run: {
+
+            let name = self.name.0.trim().to_string();
+            let workbook = self.workbook.0;
+            // The **rules** of a sheet's name are the rules of the name and
+            // not of the command that writes it: the tree's `check_sheet_name`
+            // is used when a sheet is added and when it is renamed, and here
+            // they are one rule with two doors.
+            //
+            // The uniqueness is the tree's: a name is taken **in the
+            // workbook**, and two workbooks may hold sheets of one name.
+            let taken: Vec<String> = session
+                .document()
+                .node(workbook)
+                .map(|node| {
+                    node.children
+                        .iter()
+                        .filter(|child| child.kind == "grid.sheet")
+                        .map(|child| child.name.clone())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let taken = taken.iter().find(|other| other.eq_ignore_ascii_case(&name)).cloned();
+            if let Some(reason) = sheetnames::why_not(&name, taken.as_deref()) {
+                return Err(EngineError::Failed { id: "grid.sheet.add".to_string(), message: reason });
+            }
+            if session.document().node(workbook).is_none() {
+                return Err(EngineError::Failed {
+                    id: "grid.sheet.add".to_string(),
+                    message: format!("there is no workbook `{workbook}`"),
+                });
+            }
+            let id = session.document_mut()?.add_node_with_under(
+                Some(workbook),
+                name.clone(),
+                "grid.sheet",
+                None,
+                json!({
+                    "cells": {},
+                    "view": crate::view::SheetView::default().to_json(),
+                    "zoom": 100,
+                }),
+            );
+            Ok(Outcome::changed(format!("added the sheet `{name}`")).with_data(json!({ "id": id, "name": name })))
+
+        }
+    }
+    /// Put a **value** in a cell.
+    grid.cell.set {
+        area: "grid",
+        layer: "grid",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it goes in.
+
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// The value: a number, a text or a boolean.
+
+            value: Json,
+        },
+        run: {
+
+            let sheet = self.sheet.0;
+            let cell = cell_at(&self.cell.0, "grid.cell.set")?;
+            let value = Value::from_json(&self.value);
+            // The **locks** the styles of the workbook carry: they are
+            // read before the document is borrowed for the change.
+            let locks = crate::style_locks(session, sheet);
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: "grid.cell.set".to_string(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: "grid.cell.set".to_string(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            merges::refuse_covered(node, &[cell], "grid.cell.set")?;
+            crate::protection::refuse_locked(node, &locks, &[cell], "grid.cell.set")?;
+            let mut cells = sheet_cells_mut(node);
+            cells.set_value(cell, value.clone());
+            node.data["cells"] = cells_into(&cells);
+            Ok(Outcome::changed(format!("set the cell {}", cell.to_text()))
+                .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "value": value.to_json() })))
+
+        }
+    }
+    /// Put a **number format** on a cell.
+    ///
+    /// The formats this tree knows are `general`, `0`, `0.00`, `#,##0`,
+    /// `#,##0.00`, `0%` and `0.00%`. A format that is **not one of them**
+    /// is refused: a format that is quietly ignored is a format the user
+    /// believes in and the program does not have.
+    ///
+    /// A cell may be formatted **before it has a value**, and the format
+    /// is the cell's own: the tree's format is a style and a style is
+    /// shared, and here a hundred cells with one format carry a hundred
+    /// formats.
+    grid.cell.format {
+        area: "grid",
+        layer: "grid",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
+
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// The format: `general`, `0`, `0.00`, `#,##0`, `#,##0.00`, `0%` or
+            /// `0.00%` — or the **name** of a format, such as `currency` or
+            /// `scientific`.
+
+            format: Text,
+        },
+        run: {
+
+            let id = "grid.cell.format".to_string();
+            let sheet = self.sheet.0;
+            let cell = cell_at(&self.cell.0, &id)?;
+            let given = self.format.0.trim().to_string();
+            if given.chars().count() > MAX_FORMAT_CHARS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a format is at most {MAX_FORMAT_CHARS} characters long"),
+                });
+            }
+            // A format is given by its **code** or by its **name**, and the
+            // code is kept: the name is a way of saying the code.
+            let code = match formatnames::resolve(&given) {
+                Ok(code) => code,
+                Err(refusal) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: formatnames::message(&given, &refusal),
+                    });
+                }
+            };
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            crate::protection::refuse_format(node, &id)?;
+            let mut cells = sheet_cells_mut(node);
+            cells.set_format(cell, Some(code.clone()));
+            node.data["cells"] = cells_into(&cells);
+            Ok(Outcome::changed(format!("the cell {} is formatted `{code}`", cell.to_text()))
+                .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "format": code })))
+
+        }
+    }
+    /// Put a **date** in a cell.
+    ///
+    /// A date in a spreadsheet is a **number** and a **format**: the number
+    /// is the number of days since the 30th of December 1899, and the
+    /// format says that the number is a date and how it is written. This
+    /// command puts both of them in the cell.
+    ///
+    /// The date is written as `2026-10-26`, and a date that did not
+    /// happen — the 30th of February — is refused.
+    grid.cell.date {
+        area: "grid",
+        layer: "grid",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it goes in.
+
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// The date, as `2026-10-26`.
+
+            date: Text,
+            /// The format the date is written with. The default is
+            /// `yyyy-mm-dd`, and a format that is not a date format is
+            /// refused.
+
+            format: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.cell.date".to_string();
+            let sheet = self.sheet.0;
+            // The **locks** the styles of the workbook carry: they are
+            // read before the document is borrowed for the change.
+            let locks = crate::style_locks(session, sheet);
+            let cell = cell_at(&self.cell.0, &id)?;
+            // The **date system** of the workbook the sheet is in: the
+            // date is written in that calendar and the serial is that
+            // calendar's.
+            let system = system_of(session, sheet);
+            let (date, shape) = dates::parse(&self.date.0, system).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "`{}` is not a date: a date is written as 2026-10-26, 10/26/2026 or 4-Mar-2026, and it is a day that happened",
+                    self.date.0.trim()
+                ),
+            })?;
+            let serial = dates::to_serial(date.year, date.month, date.day, system).ok_or_else(|| {
+                EngineError::Failed { id: id.clone(), message: format!("`{}` is not a date", self.date.0.trim()) }
+            })?;
+            let style = match &self.format {
+                Some(code) => {
+                    // A date format is given by its **code** or by its
+                    // **name**, and the name says a date shape.
+                    let given = code.0.trim().to_string();
+                    let said = match crate::formatnames::resolve(&given) {
+                        Ok(code) => code,
+                        Err(refusal) => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: crate::formatnames::message(&given, &refusal),
+                            });
+                        }
+                    };
+                    DateStyle::parse(&said).ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "`{said}` is not a date format: the date formats are `yyyy-mm-dd`, `dd/mm/yyyy`, `m/d/yyyy`, `d-mmm-yyyy`, `mmm`, `mmmm`, `ddd`, `dddd`, `yyyy` and `dddd, mmmm dd, yyyy`"
+                        ),
+                    })?
+                }
+                // The **shape** the date was written in is the format it is
+                // written with, as the tree has it: a date written as
+                // `10/26/2026` is written as `10/26/2026`.
+                None => DateStyle::parse(shape).unwrap_or(DateStyle::Iso),
+            };
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            merges::refuse_covered(node, &[cell], &id)?;
+            crate::protection::refuse_locked(node, &locks, &[cell], &id)?;
+            let mut cells = sheet_cells_mut(node);
+            cells.set_value(cell, Value::Number(serial));
+            cells.set_format(cell, Some(style.code().to_string()));
+            node.data["cells"] = cells_into(&cells);
+            Ok(Outcome::changed(format!("set the cell {} to the date {}", cell.to_text(), date.to_text()))
+                .with_data(json!({
+                    "sheet": sheet,
+                    "cell": cell.to_text(),
+                    "date": date.to_text(),
+                    "serial": serial,
+                    "format": style.code(),
+                })))
+
+        }
+    }
+    /// Put a **time** in a cell.
+    ///
+    /// A time in a spreadsheet is a **number** and a **format**: the number
+    /// is the fraction of the day the time is, and the format says that the
+    /// number is a time and how it is written.
+    ///
+    /// The time is written as `13:45`, `13:45:30` or `1:45 pm`, and a time
+    /// that did not happen — the 13th of the 60th minute — is refused.
+    grid.cell.time {
+        area: "grid",
+        layer: "grid",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it goes in.
+
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// The time, as `13:45` or `1:45 pm`.
+
+            time: Text,
+            /// The format the time is written with. The default is the format
+            /// the time was written in, and a format that is not a time format
+            /// is refused.
+
+            format: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.cell.time".to_string();
+            let sheet = self.sheet.0;
+            let cell = cell_at(&self.cell.0, &id)?;
+            // The **locks** the styles of the workbook carry: they are
+            // read before the document is borrowed for the change.
+            let locks = crate::style_locks(session, sheet);
+            let (time, shape) = dates::parse_time(&self.time.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "`{}` is not a time: a time is written as 13:45, 13:45:30 or 1:45 pm, and it is a time that happened",
+                    self.time.0.trim()
+                ),
+            })?;
+            let style = match &self.format {
+                Some(code) => {
+                    // A time format is given by its **code** or by its
+                    // **name**, and the name says a clock shape.
+                    let given = code.0.trim().to_string();
+                    let said = match crate::formatnames::resolve(&given) {
+                        Ok(code) => code,
+                        Err(refusal) => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: crate::formatnames::message(&given, &refusal),
+                            });
+                        }
+                    };
+                    TimeStyle::parse(&said).ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "`{said}` is not a time format: the time formats are `h`, `hh`, `h:mm`, `hh:mm`, `h:mm:ss`, `hh:mm:ss`, `h AM/PM`, `h:mm AM/PM`, `h:mm:ss AM/PM`, `hh:mm:ss AM/PM`, `[h]:mm`, `[h]:mm:ss` and `[mm]:ss`"
+                        ),
+                    })?
+                }
+                // The **shape** the time was written in is the format it is
+                // written with, as the tree has it: a time written as
+                // `1:45 pm` is written as `1:45 pm`.
+                None => TimeStyle::parse(shape).unwrap_or(TimeStyle::HourMinute),
+            };
+            let serial = dates::time_fraction(time.hour, time.minute, time.second);
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            merges::refuse_covered(node, &[cell], &id)?;
+            crate::protection::refuse_locked(node, &locks, &[cell], &id)?;
+            let mut cells = sheet_cells_mut(node);
+            cells.set_value(cell, Value::Number(serial));
+            cells.set_format(cell, Some(style.code().to_string()));
+            node.data["cells"] = cells_into(&cells);
+            Ok(Outcome::changed(format!("set the cell {} to the time {}", cell.to_text(), time.to_text()))
+                .with_data(json!({
+                    "sheet": sheet,
+                    "cell": cell.to_text(),
+                    "time": time.to_text(),
+                    "serial": serial,
+                    "format": style.code(),
+                })))
+
+        }
+    }
+    /// The **text** a cell shows.
+    ///
+    /// The text is the **value** of the cell written with its format, and
+    /// the value of a formula cell is computed: a cell that holds a
+    /// formula has no value until it is calculated, and this is the
+    /// calculation.
+    grid.cell.text {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet it is in.
+
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+        },
+        run: {
+
+            let id = "grid.cell.text".to_string();
+            let sheet = self.sheet.0;
+            let cell = cell_at(&self.cell.0, &id)?;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let name = node.name.clone();
+            let cells = cells_of(node);
+            // The **value**: the one the cell holds, or the one its formula
+            // computes.
+            let value = match cells.get(cell) {
+                Some(entry) => match (&entry.value, &entry.formula) {
+                    (Some(value), _) => value.clone(),
+                    (None, Some(_)) => {
+                        let book = book_of(session.document());
+                        book.value_of(&name, cell)
+                    }
+                    (None, None) => Value::Empty,
+                },
+                None => Value::Empty,
+            };
+            // The **format** the cell is written with: the **conditional**
+            // format that matches it, if there is one — a rule is on top
+            // of a fact — and otherwise the format of the style it names,
+            // if it names one, and its own otherwise.
+            let format = match conditional::format_for(node, cell, &value) {
+                Some(code) => Format::parse(&code).unwrap_or(Format::General),
+                None => format_of(session, sheet, &cells, cell),
+            };
+            // The **fill** of the text: the formats that fill the cell are
+            // written in the width of the column they are in.
+            let width = sizes::column_width(node, cell.col);
+            let text = format.text_in(&value, system_of(session, sheet), width);
+            Ok(Outcome::new(format!("{} shows `{text}`", cell.to_text())).with_data(
+                json!({ "sheet": sheet, "cell": cell.to_text(), "text": text, "value": value.to_json() }),
+            ))
+
+        }
+    }
+    /// Put a **formula** in a cell.
+    ///
+    /// A formula that does not parse is refused, and so is one that reads
+    /// itself: the cycle is found **here**, and not later in the middle of
+    /// a recalculation.
+    grid.formula.set {
+        area: "grid",
+        layer: "grid",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it goes in.
+
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// The formula, with or without its `=`.
+
+            formula: Text,
+        },
+        run: {
+
+            let sheet = self.sheet.0;
+            let cell = cell_at(&self.cell.0, "grid.formula.set")?;
+            // The **locks** the styles of the workbook carry.
+            let locks = crate::style_locks(session, sheet);
+            let text = self.formula.0.trim().to_string();
+            let expression = formula::parse(&text).map_err(|error| EngineError::Failed {
+                id: "grid.formula.set".to_string(),
+                message: error.message,
+            })?;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: "grid.formula.set".to_string(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: "grid.formula.set".to_string(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            merges::refuse_covered(node, &[cell], "grid.formula.set")?;
+            crate::protection::refuse_locked(node, &locks, &[cell], "grid.formula.set")?;
+            let name = node.name.clone();
+            let mut cells = cells_of(node);
+            // The cycle check: with the new formula in place, does the cell
+            // read itself — in this sheet or in another?
+            cells.set_formula(cell, text.clone());
+            let mut book = book_of(session.document());
+            if let Some(sheet_cells) = book.sheet_mut(&name) {
+                *sheet_cells = cells.clone();
+            }
+            if book.reads_itself(&name, cell) {
+                return Err(EngineError::Failed {
+                    id: "grid.formula.set".to_string(),
+                    message: format!("the formula in {name}!{} reads itself", cell.to_text()),
+                });
+            }
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: "grid.formula.set".to_string(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            node.data["cells"] = cells_into(&cells);
+            let precedents = formula::precedents(&expression, book.names());
+            Ok(Outcome::changed(format!("set the formula in {}", cell.to_text())).with_data(json!({
+                "sheet": sheet,
+                "cell": cell.to_text(),
+                "formula": text,
+                "precedents": precedents
+                    .iter()
+                    .map(|area| area.to_text())
+                    .collect::<Vec<_>>(),
+            })))
+
+        }
+    }
+    /// Empty a **cell**.
+    grid.cell.clear {
+        area: "grid",
+        layer: "grid",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
+
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+        },
+        run: {
+
+            let sheet = self.sheet.0;
+            let cell = cell_at(&self.cell.0, "grid.cell.clear")?;
+            // The **locks** the styles of the workbook carry: they are
+            // read before the document is borrowed for the change.
+            let locks = crate::style_locks(session, sheet);
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: "grid.cell.clear".to_string(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            crate::protection::refuse_locked(node, &locks, &[cell], "grid.cell.clear")?;
+            let mut cells = sheet_cells_mut(node);
+            let was_there = cells.clear(cell);
+            node.data["cells"] = cells_into(&cells);
+            // The **note** and the **link** go with the cell: the tree's
+            // *clear all* takes the comment and the hyperlink of the cell
+            // with it.
+            let mut notes = notes::notes_of(node);
+            let had_note = notes.remove(&cell.to_text()).is_some();
+            node.data["notes"] = notes::notes_into(&notes);
+            // The **comment** goes with the cell too: the tree's *clear
+            // all* takes the comment of the cell with it.
+            let mut comments = comments::comments_of(node);
+            let had_comment = comments.remove(&cell.to_text()).is_some();
+            node.data["comments"] = comments::comments_into(&comments);
+            let mut links = links::links_of(node);
+            let had_link = links.remove(&cell.to_text()).is_some();
+            node.data["links"] = links::links_into(&links);
+            // The **border** goes with the cell: the tree's *clear all*
+            // takes the style of the cell with it, and the border is part
+            // of the style.
+            let had_border = crate::borders::take_borders(node, &cell.to_text());
+            Ok(Outcome::changed(format!("emptied the cell {}", cell.to_text())).with_data(json!({
+                "sheet": sheet,
+                "cell": cell.to_text(),
+                "was_there": was_there,
+                "had_note": had_note,
+                "had_comment": had_comment,
+                "had_link": had_link,
+                "had_border": had_border,
+            })))
+
+        }
+    }
+    /// The **precedents** of a cell: the areas its formula reads.
+    ///
+    /// The tree's own flag: `all` says the trace is at **every** level and
+    /// not only the first one, and then the answer is the **cells** the
+    /// chain reads and not the areas — the tree's own rule, because at the
+    /// first level the areas are what a formula reads and at every level
+    /// the cells are what is read.
+    grid.precedents {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet it is in.
+
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// Whether the trace is at **every** level and not only the first.
+
+            all: Option<Bool>,
+        },
+        run: {
+
+            let sheet = self.sheet.0;
+            let cell = cell_at(&self.cell.0, "grid.precedents")?;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: "grid.precedents".to_string(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let cells = cells_of(node);
+            let Some(entry) = cells.get(cell) else {
+                return Err(EngineError::Failed {
+                    id: "grid.precedents".to_string(),
+                    message: format!("the cell {} is empty", cell.to_text()),
+                });
+            };
+            let Some(formula) = &entry.formula else {
+                return Err(EngineError::Failed {
+                    id: "grid.precedents".to_string(),
+                    message: format!("the cell {} holds no formula", cell.to_text()),
+                });
+            };
+            let expression = formula::parse(formula).map_err(|error| EngineError::Failed {
+                id: "grid.precedents".to_string(),
+                message: error.message,
+            })?;
+            let book = book_of(session.document());
+            let name = node.name.clone();
+            // The trace at **every** level: the cells the chain reads.
+            if self.all.unwrap_or(Bool(false)).0 {
+                let cells = trace::precedent_cells(&book, &name, cell);
+                let count = cells.len();
+                return Ok(Outcome::new(format!("{count} cell(s)")).with_data(json!({
+                    "sheet": sheet,
+                    "cell": cell.to_text(),
+                    "all": true,
+                    "precedents": cells
+                        .iter()
+                        .map(|(sheet, cell)| json!({ "sheet": sheet, "cell": cell.to_text() }))
+                        .collect::<Vec<_>>(),
+                })));
+            }
+            let areas = formula::precedents(&expression, book.names());
+            Ok(Outcome::new(format!("{} area(s)", areas.len())).with_data(json!({
+                "sheet": sheet,
+                "cell": cell.to_text(),
+                "precedents": areas
+                    .iter()
+                    .map(|reference| json!({
+                        "area": reference.area.to_text(),
+                        "sheet": reference.sheet,
+                        "cells": reference.area.count(),
+                    }))
+                    .collect::<Vec<_>>(),
+            })))
+
+        }
+    }
+    /// The **dependents** of a cell: the cells whose formulas read it.
+    grid.dependents {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet it is in.
+
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// Whether the trace is at **every** level and not only the first.
+
+            all: Option<Bool>,
+        },
+        run: {
+
+            let sheet = self.sheet.0;
+            let cell = cell_at(&self.cell.0, "grid.dependents")?;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: "grid.dependents".to_string(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let name = node.name.clone();
+            // The dependents of a cell are the cells that read it, in this
+            // sheet **or in another**: a formula in `Sheet2` that reads
+            // `Sheet1!A1` depends on it.
+            let book = book_of(session.document());
+            // The trace at **every** level: the cells that read the cell,
+            // and the cells that read those.
+            if self.all.unwrap_or(Bool(false)).0 {
+                let cells = trace::dependent_cells(&book, &name, cell);
+                let count = cells.len();
+                return Ok(Outcome::new(format!("{count} dependent(s)")).with_data(json!({
+                    "sheet": sheet,
+                    "cell": cell.to_text(),
+                    "all": true,
+                    "dependents": cells
+                        .iter()
+                        .map(|(sheet, cell)| json!({ "sheet": sheet, "cell": cell.to_text() }))
+                        .collect::<Vec<_>>(),
+                })));
+            }
+            let mut dependents: Vec<Json> = Vec::new();
+            for sheet_node in session.document().walk().filter(|node| node.kind == "grid.sheet") {
+                let cells = cells_of(sheet_node);
+                for (other, entry) in cells.iter() {
+                    let Some(formula) = &entry.formula else { continue };
+                    let Ok(expression) = formula::parse(formula) else { continue };
+                    for reference in formula::precedents(&expression, book.names()) {
+                        // A reference that names no sheet is a reference to
+                        // the sheet the formula is in, and a reference that
+                        // names another sheet does not read this cell.
+                        let read = reference.sheet.as_deref().unwrap_or(sheet_node.name.as_str());
+                        if read != name {
+                            continue;
+                        }
+                        if reference.area.covers(cell) {
+                            dependents.push(json!({
+                                "sheet": sheet_node.name,
+                                "cell": other.to_text(),
+                                "reads": reference.to_text(),
+                            }));
+                            break;
+                        }
+                    }
+                }
+            }
+            let count = dependents.len();
+            Ok(Outcome::new(format!("{count} dependent(s)")).with_data(json!({
+                "sheet": sheet,
+                "cell": cell.to_text(),
+                "dependents": dependents,
+            })))
+
+        }
+    }
+    /// The **values** of a sheet: every formula, computed.
+    ///
+    /// The same thing the evaluator says, as a command: an agent asks for
+    /// the numbers.
+    grid.calc {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet to calculate.
+
+            sheet: NodeRef,
+        },
+        run: {
+
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: "grid.calc".to_string(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let name = node.name.clone();
+            let cells = cells_of(node);
+            let book = book_of(session.document());
+            let mut values = serde_json::Map::new();
+            for (cell, entry) in cells.iter() {
+                if entry.formula.is_none() {
+                    continue;
+                }
+                values.insert(cell.to_text(), book.value_of(&name, cell).to_json());
+            }
+            let count = values.len();
+            Ok(Outcome::new(format!("{count} value(s)")).with_data(json!({
+                "sheet": sheet,
+                "cells": Json::Object(values),
+            })))
+
+        }
     }
 }
 
@@ -1928,125 +2009,125 @@ craftkit_sdk::plugin_anchor!(
     SheetKind,
     ChartKind,
     ScenarioKind,
-    AddWorkbook,
-    AddSheet,
-    RenameSheet,
-    MoveSheet,
-    ClearContents,
-    ClearFormat,
-    DeleteLink,
-    DeleteNote,
-    FindCells,
-    GetLink,
-    GetNote,
-    ReadCell,
-    ReadRange,
-    ProtectSheet,
-    SetLink,
-    SetNote,
-    SortRange,
-    ReplaceText,
-    ExportCsv,
-    SetTableLabel,
-    TextColumns,
-    RemoveDuplicates,
-    SetBorder,
-    GetBorder,
-    ClearBorder,
-    InsertRow,
-    DeleteRow,
-    InsertColumn,
-    DeleteColumn,
-    GroupRows,
-    UngroupRows,
-    ReadGroups,
-    GroupColumns,
-    UngroupColumns,
-    ReadColumnGroups,
-    SetSummary,
-    SetGrandTotals,
-    SetPivotFilter,
-    SetPivotSort,
-    SetPivotGroup,
-    SetPivotShowAs,
-    SetPivotSubtotals,
-    Subtotal,
-    SetPicture,
-    ReadPicture,
-    RemovePicture,
-    SetSparkline,
-    AddScenario,
-    AdvancedFilter,
-    ListScenarios,
-    ShowScenario,
-    DeleteScenario,
-    SummariseScenarios,
-    ReadSparkline,
-    RemoveSparkline,
-    CreatePivot,
-    ReadPivot,
-    RemovePivot,
-    CreateTable,
-    ReadTables,
-    ReadTableFields,
-    RenameTable,
-    SetTableTotals,
-    SetTableColumnWay,
-    ResizeTable,
-    RemoveTable,
-    UnprotectSheet,
-    RemoveSheet,
-    SetCell,
-    SetFormula,
-    FormulaValues,
-    SheetErrors,
-    NumbersStoredAsText,
-    NumbersConvert,
-    SetName,
-    DeleteName,
-    SetMerge,
-    ClearMerge,
-    SetRowHeight,
-    SetColumnWidth,
-    HideRow,
-    ShowRow,
-    HideColumn,
-    ShowColumn,
-    SetFilter,
-    SetFilterGroups,
-    ClearFilter,
-    WhatIf,
-    GoalSeek,
-    ImportCsv,
-    ImportJson,
-    SetPaper,
-    SetOrientation,
-    SetMargins,
-    ReadSetup,
-    ReadPages,
-    SetPrintArea,
-    SetPrintBreak,
-    SetPrintTitles,
-    SetScale,
-    SetFit,
-    SetHeader,
-    SetFooter,
-    SetPrintGridlines,
-    SetPrintHeadings,
-    GoalScan,
-    FilteredRows,
-    SetConditional,
-    ClearConditional,
-    CheckConditional,
-    ClearCell,
-    ReadPrecedents,
-    ReadDependents,
-    CalcSheet,
-    FillRange,
-    FlashFill,
-    SetFormat,
-    SetTime,
-    CellText,
+    GridWorkbookAdd,
+    GridSheetAdd,
+    GridSheetRename,
+    GridSheetMove,
+    GridCellClearContents,
+    GridCellClearFormat,
+    GridCellLinkDelete,
+    GridCellNoteDelete,
+    GridFind,
+    GridCellLinkGet,
+    GridCellNoteGet,
+    GridCellGet,
+    GridRangeRead,
+    GridSheetProtect,
+    GridCellLinkSet,
+    GridCellNoteSet,
+    GridSort,
+    GridReplace,
+    GridExportCsv,
+    GridTableLabel,
+    GridTextColumns,
+    GridDuplicatesRemove,
+    GridCellBorderSet,
+    GridCellBorderGet,
+    GridCellBorderClear,
+    GridRowInsert,
+    GridRowDelete,
+    GridColumnInsert,
+    GridColumnDelete,
+    GridRowGroup,
+    GridRowUngroup,
+    GridRowGroups,
+    GridColumnGroup,
+    GridColumnUngroup,
+    GridColumnGroups,
+    GridSheetSummary,
+    GridPivotGrandtotals,
+    GridPivotFilter,
+    GridPivotSort,
+    GridPivotGroup,
+    GridPivotShowas,
+    GridPivotSubtotals,
+    GridDataSubtotal,
+    GridPictureSet,
+    GridPictureRead,
+    GridPictureRemove,
+    GridSparklineSet,
+    GridScenarioAdd,
+    GridFilterAdvanced,
+    GridScenarioList,
+    GridScenarioShow,
+    GridScenarioDelete,
+    GridScenarioSummary,
+    GridSparklineRead,
+    GridSparklineRemove,
+    GridPivotCreate,
+    GridPivotRead,
+    GridPivotRemove,
+    GridTableCreate,
+    GridTableRead,
+    GridTableFields,
+    GridTableRename,
+    GridTableTotals,
+    GridTableWay,
+    GridTableResize,
+    GridTableRemove,
+    GridSheetUnprotect,
+    GridSheetRemove,
+    GridCellSet,
+    GridFormulaSet,
+    GridFormulaValues,
+    GridErrors,
+    GridNumbersStoredAsText,
+    GridNumbersConvert,
+    GridNameSet,
+    GridNameDelete,
+    GridMergeSet,
+    GridMergeClear,
+    GridRowHeight,
+    GridColumnWidth,
+    GridRowHide,
+    GridRowShow,
+    GridColumnHide,
+    GridColumnShow,
+    GridFilterSet,
+    GridFilterGroupsSet,
+    GridFilterClear,
+    GridWhatif,
+    GridGoal,
+    GridImportCsv,
+    GridImportJson,
+    GridPrintPaper,
+    GridPrintOrientation,
+    GridPrintMargins,
+    GridPrintRead,
+    GridPrintPages,
+    GridPrintArea,
+    GridPrintBreak,
+    GridPrintTitles,
+    GridPrintScale,
+    GridPrintFit,
+    GridPrintHeader,
+    GridPrintFooter,
+    GridPrintGridlines,
+    GridPrintHeadings,
+    GridGoalScan,
+    GridFilterRows,
+    GridConditionalSet,
+    GridConditionalClear,
+    GridConditionalCheck,
+    GridCellClear,
+    GridPrecedents,
+    GridDependents,
+    GridCalc,
+    GridRangeFill,
+    GridFlashFill,
+    GridCellFormat,
+    GridCellTime,
+    GridCellText,
     CalcEvaluator,
     GridPanel
 );

@@ -9,133 +9,141 @@
 //! little program of its own, and the tree learns it from the examples
 //! and refuses to run one that does not explain all of them.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{self, json};
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
 
 use crate::formula::{CellRef, Cells, Value};
 
-/// **Flash fill** a column: learn from the rows that are filled and
-/// fill the rows that are not.
-///
-/// The cell names the column to fill, and the column to its **left**
-/// is the source. The rows that hold a value in the target column are
-/// the **examples**.
-///
-/// A column with **no examples** is refused: there is nothing to learn
-/// from, and a command that quietly does nothing is a command that
-/// answers a question nobody asked. So is a column whose examples do
-/// not share a program.
-#[derive(Command)]
-#[command(id = "grid.flash.fill", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
-pub struct FlashFill {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The cell whose column is filled.
-    pub at: Text,
-}
+commands! {
+    /// **Flash fill** a column: learn from the rows that are filled and
+    /// fill the rows that are not.
+    ///
+    /// The cell names the column to fill, and the column to its **left**
+    /// is the source. The rows that hold a value in the target column are
+    /// the **examples**.
+    ///
+    /// A column with **no examples** is refused: there is nothing to learn
+    /// from, and a command that quietly does nothing is a command that
+    /// answers a question nobody asked. So is a column whose examples do
+    /// not share a program.
+    grid.flash.fill {
+        area: "grid",
+        layer: "grid",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
 
-impl FlashFill {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.flash.fill".to_string();
-        let sheet = self.sheet.0;
-        let at = crate::cell_at(&self.at.0, &id)?;
-        if at.col == 0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the first column has nothing beside it to learn from".to_string(),
-            });
-        }
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        let cells = crate::cells_of(node);
-        // The **date system** of the workbook: the text the cells show
-        // is the text they show in that calendar.
-        let system = crate::system_of(session, sheet);
-        let source = CellRef { col: at.col - 1, row: at.row };
-        // The **region**: the rows the source column holds, above the
-        // cell and below it.
-        let mut top = at.row;
-        while top > 0 && !is_empty(&cells, CellRef { col: source.col, row: top - 1 }) {
-            top -= 1;
-        }
-        let mut bottom = at.row;
-        while !is_empty(&cells, CellRef { col: source.col, row: bottom + 1 }) {
-            bottom += 1;
-        }
-        // The **examples** are the rows that are filled, and the **todo**
-        // are the rows that are not. The tree reads the text the cells
-        // **show** — a date as it is written and not as a number.
-        let mut examples: Vec<(String, String)> = Vec::new();
-        let mut todo: Vec<(CellRef, String)> = Vec::new();
-        for row in top..=bottom {
-            let from = shown_text(session, sheet, &cells, CellRef { col: source.col, row }, system);
-            let to = CellRef { col: at.col, row };
-            if is_empty(&cells, to) {
-                todo.push((to, from));
-            } else {
-                examples.push((from, shown_text(session, sheet, &cells, to, system)));
+            sheet: NodeRef,
+            /// The cell whose column is filled.
+
+            at: Text,
+        },
+        run: {
+
+            let id = "grid.flash.fill".to_string();
+            let sheet = self.sheet.0;
+            let at = crate::cell_at(&self.at.0, &id)?;
+            if at.col == 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the first column has nothing beside it to learn from".to_string(),
+                });
             }
-        }
-        if examples.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "there is nothing to learn from: the column has no filled rows".to_string(),
-            });
-        }
-        if todo.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "there is nothing to fill: every row of the column is filled".to_string(),
-            });
-        }
-        let Some(program) = learn(&examples) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the filled rows do not share a pattern this tree can learn".to_string(),
-            });
-        };
-        // The **format** of the column: the tree's fill takes the style
-        // of the top of the column it fills.
-        let format = cells.format(CellRef { col: at.col, row: top }).map(|code| code.to_string());
-        // A cell that a **merge** covers may not be written to.
-        if let Some(node) = session.document().node(sheet) {
-            let cells: Vec<crate::formula::CellRef> = todo.iter().map(|(cell, _)| *cell).collect();
-            crate::merges::refuse_covered(node, &cells, "grid.flash.fill")?;
-            crate::protection::refuse_locked(
-                node,
-                &crate::style_locks(session, sheet),
-                &cells,
-                "grid.flash.fill",
-            )?;
-        }
-        let mut written: Vec<serde_json::Value> = Vec::new();
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            let mut cells = crate::sheet_cells_mut(node);
-            for (cell, from) in &todo {
-                let Some(out) = program.apply(from) else { continue };
-                cells.set_value(*cell, Value::Text(out.clone()));
-                if let Some(format) = &format {
-                    cells.set_format(*cell, Some(format.clone()));
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let cells = crate::cells_of(node);
+            // The **date system** of the workbook: the text the cells show
+            // is the text they show in that calendar.
+            let system = crate::system_of(session, sheet);
+            let source = CellRef { col: at.col - 1, row: at.row };
+            // The **region**: the rows the source column holds, above the
+            // cell and below it.
+            let mut top = at.row;
+            while top > 0 && !is_empty(&cells, CellRef { col: source.col, row: top - 1 }) {
+                top -= 1;
+            }
+            let mut bottom = at.row;
+            while !is_empty(&cells, CellRef { col: source.col, row: bottom + 1 }) {
+                bottom += 1;
+            }
+            // The **examples** are the rows that are filled, and the **todo**
+            // are the rows that are not. The tree reads the text the cells
+            // **show** — a date as it is written and not as a number.
+            let mut examples: Vec<(String, String)> = Vec::new();
+            let mut todo: Vec<(CellRef, String)> = Vec::new();
+            for row in top..=bottom {
+                let from = shown_text(session, sheet, &cells, CellRef { col: source.col, row }, system);
+                let to = CellRef { col: at.col, row };
+                if is_empty(&cells, to) {
+                    todo.push((to, from));
+                } else {
+                    examples.push((from, shown_text(session, sheet, &cells, to, system)));
                 }
-                written.push(json!({ "cell": cell.to_text(), "value": out }));
             }
-            node.data["cells"] = crate::cells_into(&cells);
+            if examples.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "there is nothing to learn from: the column has no filled rows".to_string(),
+                });
+            }
+            if todo.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "there is nothing to fill: every row of the column is filled".to_string(),
+                });
+            }
+            let Some(program) = learn(&examples) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the filled rows do not share a pattern this tree can learn".to_string(),
+                });
+            };
+            // The **format** of the column: the tree's fill takes the style
+            // of the top of the column it fills.
+            let format = cells.format(CellRef { col: at.col, row: top }).map(|code| code.to_string());
+            // A cell that a **merge** covers may not be written to.
+            if let Some(node) = session.document().node(sheet) {
+                let cells: Vec<crate::formula::CellRef> = todo.iter().map(|(cell, _)| *cell).collect();
+                crate::merges::refuse_covered(node, &cells, "grid.flash.fill")?;
+                crate::protection::refuse_locked(
+                    node,
+                    &crate::style_locks(session, sheet),
+                    &cells,
+                    "grid.flash.fill",
+                )?;
+            }
+            let mut written: Vec<serde_json::Value> = Vec::new();
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                let mut cells = crate::sheet_cells_mut(node);
+                for (cell, from) in &todo {
+                    let Some(out) = program.apply(from) else { continue };
+                    cells.set_value(*cell, Value::Text(out.clone()));
+                    if let Some(format) = &format {
+                        cells.set_format(*cell, Some(format.clone()));
+                    }
+                    written.push(json!({ "cell": cell.to_text(), "value": out }));
+                }
+                node.data["cells"] = crate::cells_into(&cells);
+            }
+            let count = written.len();
+            Ok(Outcome::changed(format!("filled {count} cell(s) of the column"))
+                .with_data(json!({ "sheet": sheet, "at": at.to_text(), "cells": written })))
+
         }
-        let count = written.len();
-        Ok(Outcome::changed(format!("filled {count} cell(s) of the column"))
-            .with_data(json!({ "sheet": sheet, "at": at.to_text(), "cells": written })))
     }
 }
 

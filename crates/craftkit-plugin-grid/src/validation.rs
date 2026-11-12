@@ -28,10 +28,10 @@
 //!   about the rule itself. The style is carried by the rule, and the
 //!   check says which style a failure has.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Text};
 
 use crate::formula::{self, Area, Book, CellRef, Expr, Value};
 
@@ -502,259 +502,287 @@ fn compare(operator: Operator, number: f64, first: Option<f64>, second: Option<f
     }
 }
 
-/// Put a **validation rule** on a range of a sheet.
-///
-/// The rule is a kind, an operator and the formulas that go with it.
-/// A kind that is **not a kind** is refused: the tree's command used
-/// to give an "any value" rule for a kind it did not know, and it
-/// does not any more.
-///
-/// A **list** rule needs a list: a rule with no list in it cannot be
-/// checked, and it is refused.
-#[derive(Command)]
-#[command(id = "grid.validation.set", area = "grid", layer = "grid", icon = "check", mutates, undoable)]
-pub struct SetValidation {
-    /// The sheet the rule is on.
-    pub sheet: NodeRef,
-    /// The range the rule is over: `A1:A9`.
-    pub range: Text,
-    /// The kind: `any`, `whole`, `decimal`, `list`, `date`, `time`,
-    /// `textLength`.
-    pub kind: Text,
-    /// The operator: `between` and the rest.
-    pub operator: Option<Text>,
-    /// The first formula: the number, or the list.
-    pub formula1: Option<Text>,
-    /// The second formula, for the operators that have two.
-    pub formula2: Option<Text>,
-    /// Whether a blank is allowed. The tree's default is that it is.
-    pub ignore_blank: Option<Bool>,
-    /// Whether the list of a **list** rule is shown as a dropdown in
-    /// the cell. The tree's default is that it is.
-    pub dropdown: Option<Bool>,
-    /// The title of the **input message**: what a host shows when the
-    /// cell is chosen.
-    pub input_title: Option<Text>,
-    /// The **input message** itself.
-    pub input_message: Option<Text>,
-    /// The title of the **error message**.
-    pub error_title: Option<Text>,
-    /// The **error message** itself.
-    pub error_message: Option<Text>,
-    /// The **style** of the error: `stop`, `warning` or `information`.
-    /// The tree's default is `stop`.
-    pub error_style: Option<Text>,
-}
+commands! {
+    /// Put a **validation rule** on a range of a sheet.
+    ///
+    /// The rule is a kind, an operator and the formulas that go with it.
+    /// A kind that is **not a kind** is refused: the tree's command used
+    /// to give an "any value" rule for a kind it did not know, and it
+    /// does not any more.
+    ///
+    /// A **list** rule needs a list: a rule with no list in it cannot be
+    /// checked, and it is refused.
+    grid.validation.set {
+        area: "grid",
+        layer: "grid",
+        icon: "check",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet the rule is on.
 
-impl SetValidation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.validation.set".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
-        }
-        let kind_name = self.kind.0.trim().to_string();
-        let kind = Kind::parse(&kind_name).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("unknown type `{kind_name}` ({})", Kind::NAMES.join(", ")),
-        })?;
-        let operator_name = self.operator.as_ref().map(|operator| operator.0.trim().to_string());
-        let operator = match &operator_name {
-            Some(name) => Operator::parse(name).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("unknown operator `{name}` ({})", Operator::NAMES.join(", ")),
-            })?,
-            None => Operator::Between,
-        };
-        let formula1 = self.formula1.as_ref().map(|formula| formula.0.trim().to_string()).unwrap_or_default();
-        if kind == Kind::List && formula1.is_empty() {
-            return Err(EngineError::Failed {
-                id,
-                message: "a list validation needs `formula1`".to_string(),
-            });
-        }
-        // The **style** of the error: the tree's own three, and an
-        // unknown one is refused.
-        let style_name = self.error_style.as_ref().map(|style| style.0.trim().to_string());
-        let error_style = match &style_name {
-            Some(name) => Style::parse(name).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("unknown error style `{name}` ({})", Style::NAMES.join(", ")),
-            })?,
-            None => Style::Stop,
-        };
-        // The **messages** are short: a host shows them, and a host
-        // has room for a sentence.
-        let message = |text: &Option<Text>, what: &str| -> Result<String, EngineError> {
-            let Some(text) = text else { return Ok(String::new()) };
-            let text = text.0.trim().to_string();
-            if text.chars().count() > MAX_MESSAGE {
+            sheet: NodeRef,
+            /// The range the rule is over: `A1:A9`.
+
+            range: Text,
+            /// The kind: `any`, `whole`, `decimal`, `list`, `date`, `time`,
+            /// `textLength`.
+
+            kind: Text,
+            /// The operator: `between` and the rest.
+
+            operator: Option<Text>,
+            /// The first formula: the number, or the list.
+
+            formula1: Option<Text>,
+            /// The second formula, for the operators that have two.
+
+            formula2: Option<Text>,
+            /// Whether a blank is allowed. The tree's default is that it is.
+
+            ignore_blank: Option<Bool>,
+            /// Whether the list of a **list** rule is shown as a dropdown in
+            /// the cell. The tree's default is that it is.
+
+            dropdown: Option<Bool>,
+            /// The title of the **input message**: what a host shows when the
+            /// cell is chosen.
+
+            input_title: Option<Text>,
+            /// The **input message** itself.
+
+            input_message: Option<Text>,
+            /// The title of the **error message**.
+
+            error_title: Option<Text>,
+            /// The **error message** itself.
+
+            error_message: Option<Text>,
+            /// The **style** of the error: `stop`, `warning` or `information`.
+            /// The tree's default is `stop`.
+
+            error_style: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.validation.set".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the {what} is more than {MAX_MESSAGE} characters long"),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
                 });
             }
-            Ok(text)
-        };
-        let input_title = message(&self.input_title, "input title")?;
-        let input_message = message(&self.input_message, "input message")?;
-        let error_title = message(&self.error_title, "error title")?;
-        let error_message = message(&self.error_message, "error message")?;
-        let rule = Rule {
-            range: self.range.0.trim().to_string(),
-            kind,
-            operator,
-            formula1,
-            formula2: self.formula2.as_ref().map(|formula| formula.0.trim().to_string()),
-            allow_blank: self.ignore_blank.map(|blank| blank.0).unwrap_or(true),
-            in_cell_dropdown: self.dropdown.map(|dropdown| dropdown.0).unwrap_or(true),
-            input_title,
-            input_message,
-            show_input: true,
-            error_title,
-            error_message,
-            error_style,
-            show_error: true,
-        };
-        // The **range** must be a range: a rule over nothing is a rule
-        // over no cells.
-        if area_of(&rule).is_none() {
-            return Err(EngineError::Failed { id, message: format!("`{}` is not a range", rule.range) });
-        }
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
+            let kind_name = self.kind.0.trim().to_string();
+            let kind = Kind::parse(&kind_name).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let mut rules = rules_of(node);
-        rules.push(rule.clone());
-        rules_into(node, &rules);
-        Ok(Outcome::changed(format!("put a validation rule on {}", rule.range)).with_data(json!({
-            "sheet": sheet,
-            "rule": rule.to_json(),
-        })))
-    }
-}
-
-/// Take the **validation rules** off a range of a sheet.
-#[derive(Command)]
-#[command(id = "grid.validation.clear", area = "grid", layer = "grid", icon = "minus", mutates, undoable)]
-pub struct ClearValidation {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The range to clear.
-    pub range: Text,
-}
-
-impl ClearValidation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.validation.clear".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
-        }
-        let text = self.range.0.trim().to_string();
-        let area = crate::fill::area_at(&text, &id)?;
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let mut rules = rules_of(node);
-        rules.retain(|rule| {
-            let rule_area = area_of(rule);
-            match rule_area {
-                Some(rule_area) => !(rule_area.start == area.start && rule_area.end == area.end),
-                None => true,
+                message: format!("unknown type `{kind_name}` ({})", Kind::NAMES.join(", ")),
+            })?;
+            let operator_name = self.operator.as_ref().map(|operator| operator.0.trim().to_string());
+            let operator = match &operator_name {
+                Some(name) => Operator::parse(name).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("unknown operator `{name}` ({})", Operator::NAMES.join(", ")),
+                })?,
+                None => Operator::Between,
+            };
+            let formula1 = self.formula1.as_ref().map(|formula| formula.0.trim().to_string()).unwrap_or_default();
+            if kind == Kind::List && formula1.is_empty() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a list validation needs `formula1`".to_string(),
+                });
             }
-        });
-        rules_into(node, &rules);
-        Ok(Outcome::changed(format!("cleared the validation rules on {text}"))
-            .with_data(json!({ "sheet": sheet, "range": text })))
-    }
-}
-
-/// Check a **value** against the validation rules of a cell.
-///
-/// The rule that covers the cell is the one that is checked, and the
-/// first such rule is the one: the tree's rules are in the order they
-/// were set.
-///
-/// The value passes when there is no rule, and it fails with the
-/// tree's own message.
-#[derive(Command)]
-#[command(id = "grid.validation.check", area = "grid", layer = "grid", icon = "check")]
-pub struct CheckValidation {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// The value to check.
-    pub input: Text,
-}
-
-impl CheckValidation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.validation.check".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
-        }
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        let rules = rules_of(node);
-        let name = node.name.clone();
-        let book = crate::book_of(session.document());
-        let input = self.input.0.clone();
-        let system = crate::system_of(session, sheet);
-        match check(&book, &name, &rules, cell, &input, system) {
-            None => Ok(Outcome::new(format!("the value passes the rules of {}", cell.to_text()))
-                .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "ok": true }))),
-            Some((rule, message)) => {
-                // The **style** of the failure is the tree's own: a
-                // `stop` refuses the value, and a `warning` or an
-                // `information` lets it through with a message.
-                let style = rule.error_style;
-                let said = if rule.error_message.is_empty() { message } else { rule.error_message.clone() };
-                Ok(Outcome::new("the value does not pass the rules".to_string()).with_data(json!({
-                    "sheet": sheet,
-                    "cell": cell.to_text(),
-                    "ok": false,
-                    "style": style.name(),
-                    "refused": style == Style::Stop,
-                    "title": rule.error_title,
-                    "message": said,
-                    "rule": rule.to_json(),
-                })))
+            // The **style** of the error: the tree's own three, and an
+            // unknown one is refused.
+            let style_name = self.error_style.as_ref().map(|style| style.0.trim().to_string());
+            let error_style = match &style_name {
+                Some(name) => Style::parse(name).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("unknown error style `{name}` ({})", Style::NAMES.join(", ")),
+                })?,
+                None => Style::Stop,
+            };
+            // The **messages** are short: a host shows them, and a host
+            // has room for a sentence.
+            let message = |text: &Option<Text>, what: &str| -> Result<String, EngineError> {
+                let Some(text) = text else { return Ok(String::new()) };
+                let text = text.0.trim().to_string();
+                if text.chars().count() > MAX_MESSAGE {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the {what} is more than {MAX_MESSAGE} characters long"),
+                    });
+                }
+                Ok(text)
+            };
+            let input_title = message(&self.input_title, "input title")?;
+            let input_message = message(&self.input_message, "input message")?;
+            let error_title = message(&self.error_title, "error title")?;
+            let error_message = message(&self.error_message, "error message")?;
+            let rule = Rule {
+                range: self.range.0.trim().to_string(),
+                kind,
+                operator,
+                formula1,
+                formula2: self.formula2.as_ref().map(|formula| formula.0.trim().to_string()),
+                allow_blank: self.ignore_blank.map(|blank| blank.0).unwrap_or(true),
+                in_cell_dropdown: self.dropdown.map(|dropdown| dropdown.0).unwrap_or(true),
+                input_title,
+                input_message,
+                show_input: true,
+                error_title,
+                error_message,
+                error_style,
+                show_error: true,
+            };
+            // The **range** must be a range: a rule over nothing is a rule
+            // over no cells.
+            if area_of(&rule).is_none() {
+                return Err(EngineError::Failed { id, message: format!("`{}` is not a range", rule.range) });
             }
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let mut rules = rules_of(node);
+            rules.push(rule.clone());
+            rules_into(node, &rules);
+            Ok(Outcome::changed(format!("put a validation rule on {}", rule.range)).with_data(json!({
+                "sheet": sheet,
+                "rule": rule.to_json(),
+            })))
+
+        }
+    }
+    /// Take the **validation rules** off a range of a sheet.
+    grid.validation.clear {
+        area: "grid",
+        layer: "grid",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
+
+            sheet: NodeRef,
+            /// The range to clear.
+
+            range: Text,
+        },
+        run: {
+
+            let id = "grid.validation.clear".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let text = self.range.0.trim().to_string();
+            let area = crate::fill::area_at(&text, &id)?;
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let mut rules = rules_of(node);
+            rules.retain(|rule| {
+                let rule_area = area_of(rule);
+                match rule_area {
+                    Some(rule_area) => !(rule_area.start == area.start && rule_area.end == area.end),
+                    None => true,
+                }
+            });
+            rules_into(node, &rules);
+            Ok(Outcome::changed(format!("cleared the validation rules on {text}"))
+                .with_data(json!({ "sheet": sheet, "range": text })))
+
+        }
+    }
+    /// Check a **value** against the validation rules of a cell.
+    ///
+    /// The rule that covers the cell is the one that is checked, and the
+    /// first such rule is the one: the tree's rules are in the order they
+    /// were set.
+    ///
+    /// The value passes when there is no rule, and it fails with the
+    /// tree's own message.
+    grid.validation.check {
+        area: "grid",
+        layer: "grid",
+        icon: "check",
+        params: {
+            /// The sheet.
+
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// The value to check.
+
+            input: Text,
+        },
+        run: {
+
+            let id = "grid.validation.check".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            let rules = rules_of(node);
+            let name = node.name.clone();
+            let book = crate::book_of(session.document());
+            let input = self.input.0.clone();
+            let system = crate::system_of(session, sheet);
+            match check(&book, &name, &rules, cell, &input, system) {
+                None => Ok(Outcome::new(format!("the value passes the rules of {}", cell.to_text()))
+                    .with_data(json!({ "sheet": sheet, "cell": cell.to_text(), "ok": true }))),
+                Some((rule, message)) => {
+                    // The **style** of the failure is the tree's own: a
+                    // `stop` refuses the value, and a `warning` or an
+                    // `information` lets it through with a message.
+                    let style = rule.error_style;
+                    let said = if rule.error_message.is_empty() { message } else { rule.error_message.clone() };
+                    Ok(Outcome::new("the value does not pass the rules".to_string()).with_data(json!({
+                        "sheet": sheet,
+                        "cell": cell.to_text(),
+                        "ok": false,
+                        "style": style.name(),
+                        "refused": style == Style::Stop,
+                        "title": rule.error_title,
+                        "message": said,
+                        "rule": rule.to_json(),
+                    })))
+                }
+            }
+
         }
     }
 }

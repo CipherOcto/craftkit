@@ -42,7 +42,7 @@
 //!   tree's button acts on the active sheet; here the sheet is named,
 //!   and the slicer is named by its **id**.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session, Text};
@@ -191,319 +191,348 @@ fn slicer_of(slicers: &[Slicer], id: Option<u64>, wanted: &str) -> Result<Slicer
     })
 }
 
-/// **Add** a slicer to a table of a sheet.
-///
-/// The slicer is bound to a column of the table, and it starts with
-/// every value kept — and a filter that keeps everything filters
-/// nothing, so the sheet is not filtered yet.
-#[derive(Command)]
-#[command(id = "grid.slicer.add", area = "grid", layer = "grid", icon = "filter", mutates, undoable)]
-pub struct AddSlicer {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The **table** it is bound to.
-    pub table: Text,
-    /// The **column** of the table: the first one when it is not
-    /// named.
-    pub column: Option<Text>,
-}
+commands! {
+    /// **Add** a slicer to a table of a sheet.
+    ///
+    /// The slicer is bound to a column of the table, and it starts with
+    /// every value kept — and a filter that keeps everything filters
+    /// nothing, so the sheet is not filtered yet.
+    grid.slicer.add {
+        area: "grid",
+        layer: "grid",
+        icon: "filter",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl AddSlicer {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.slicer.add".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let tables = tables_of(&node);
-        let table = table_of(&tables, self.table.0.trim(), &id)?;
-        let cells = crate::cells_of(&node);
-        let fields =
-            fields_of(&table, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let column = match &self.column {
-            Some(column) => column_of(&fields, column.0.trim(), &id)?,
-            None => fields.first().map(|(cell, _)| cell.col).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: "the table has no columns".to_string(),
-            })?,
-        };
-        let column_name = fields
-            .iter()
-            .find(|(cell, _)| cell.col == column)
-            .map(|(_, name)| name.clone())
-            .unwrap_or_default();
-        let mut slicers = slicers_of(&node);
-        if slicers.len() >= MAX_SLICERS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a sheet holds {MAX_SLICERS} slicers or fewer"),
+            sheet: NodeRef,
+            /// The **table** it is bound to.
+
+            table: Text,
+            /// The **column** of the table: the first one when it is not
+            /// named.
+
+            column: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.slicer.add".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let tables = tables_of(&node);
+            let table = table_of(&tables, self.table.0.trim(), &id)?;
+            let cells = crate::cells_of(&node);
+            let fields =
+                fields_of(&table, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let column = match &self.column {
+                Some(column) => column_of(&fields, column.0.trim(), &id)?,
+                None => fields.first().map(|(cell, _)| cell.col).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: "the table has no columns".to_string(),
+                })?,
+            };
+            let column_name = fields
+                .iter()
+                .find(|(cell, _)| cell.col == column)
+                .map(|(_, name)| name.clone())
+                .unwrap_or_default();
+            let mut slicers = slicers_of(&node);
+            if slicers.len() >= MAX_SLICERS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a sheet holds {MAX_SLICERS} slicers or fewer"),
+                });
+            }
+            if slicers.iter().any(|slicer| {
+                slicer.table.eq_ignore_ascii_case(&table.name) && slicer.column.eq_ignore_ascii_case(&column_name)
+            }) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the column `{column_name}` of the table `{}` already has a slicer",
+                        table.name
+                    ),
+                });
+            }
+            let next = slicers.iter().map(|slicer| slicer.id).max().unwrap_or(0) + 1;
+            slicers.push(Slicer {
+                id: next,
+                table: table.name.clone(),
+                column: column_name.clone(),
+                selected: None,
             });
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["slicers"] = slicers_into(&slicers);
+            }
+            Ok(Outcome::changed(format!("the table `{}` has a slicer on its column `{column_name}`", table.name))
+                .with_data(json!({
+                    "sheet": sheet,
+                    "slicer": next,
+                    "table": table.name,
+                    "column": column_name,
+                })))
+
         }
-        if slicers.iter().any(|slicer| {
-            slicer.table.eq_ignore_ascii_case(&table.name) && slicer.column.eq_ignore_ascii_case(&column_name)
-        }) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the column `{column_name}` of the table `{}` already has a slicer",
-                    table.name
-                ),
-            });
-        }
-        let next = slicers.iter().map(|slicer| slicer.id).max().unwrap_or(0) + 1;
-        slicers.push(Slicer {
-            id: next,
-            table: table.name.clone(),
-            column: column_name.clone(),
-            selected: None,
-        });
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["slicers"] = slicers_into(&slicers);
-        }
-        Ok(Outcome::changed(format!("the table `{}` has a slicer on its column `{column_name}`", table.name))
-            .with_data(json!({
+    }
+    /// **Read** a slicer: its values, and which of them are kept.
+    grid.slicer.read {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet it is in.
+
+            sheet: NodeRef,
+            /// Which slicer: the last one when it is not named.
+
+            slicer: Option<Number>,
+        },
+        run: {
+
+            let id = "grid.slicer.read".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let slicer = slicer_of(&slicers_of(&node), id_of(self.slicer, &id)?, &id)?;
+            let tables = tables_of(&node);
+            let table = table_of(&tables, &slicer.table, &id)?;
+            let cells = crate::cells_of(&node);
+            let fields =
+                fields_of(&table, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let column = column_of(&fields, &slicer.column, &id)?;
+            let values = values_of(&cells, &table, column);
+            let items: Vec<Json> = values
+                .iter()
+                .map(|value| {
+                    let selected = match &slicer.selected {
+                        Some(selected) => selected.iter().any(|other| other.eq_ignore_ascii_case(value)),
+                        None => true,
+                    };
+                    json!({ "value": value, "selected": selected })
+                })
+                .collect();
+            Ok(Outcome::new(format!("the slicer holds {} value(s)", items.len())).with_data(json!({
                 "sheet": sheet,
-                "slicer": next,
-                "table": table.name,
-                "column": column_name,
+                "slicer": slicer.id,
+                "table": slicer.table,
+                "column": slicer.column,
+                "items": items,
             })))
-    }
-}
 
-/// **Read** a slicer: its values, and which of them are kept.
-#[derive(Command)]
-#[command(id = "grid.slicer.read", area = "grid", layer = "grid", icon = "list")]
-pub struct ReadSlicer {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// Which slicer: the last one when it is not named.
-    pub slicer: Option<Number>,
-}
-
-impl ReadSlicer {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.slicer.read".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let slicer = slicer_of(&slicers_of(&node), id_of(self.slicer, &id)?, &id)?;
-        let tables = tables_of(&node);
-        let table = table_of(&tables, &slicer.table, &id)?;
-        let cells = crate::cells_of(&node);
-        let fields =
-            fields_of(&table, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let column = column_of(&fields, &slicer.column, &id)?;
-        let values = values_of(&cells, &table, column);
-        let items: Vec<Json> = values
-            .iter()
-            .map(|value| {
-                let selected = match &slicer.selected {
-                    Some(selected) => selected.iter().any(|other| other.eq_ignore_ascii_case(value)),
-                    None => true,
-                };
-                json!({ "value": value, "selected": selected })
-            })
-            .collect();
-        Ok(Outcome::new(format!("the slicer holds {} value(s)", items.len())).with_data(json!({
-            "sheet": sheet,
-            "slicer": slicer.id,
-            "table": slicer.table,
-            "column": slicer.column,
-            "items": items,
-        })))
-    }
-}
-
-/// **Toggle** a value of a slicer.
-///
-/// The value is kept, and the rows that do not show it are hidden. A
-/// **multi** toggle adds the value to the ones that are kept and takes
-/// it away again, and a single toggle keeps that value and nothing
-/// else.
-#[derive(Command)]
-#[command(id = "grid.slicer.toggle", area = "grid", layer = "grid", icon = "filter", mutates, undoable)]
-pub struct ToggleSlicer {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// Which slicer: the last one when it is not named.
-    pub slicer: Option<Number>,
-    /// The value.
-    pub value: Text,
-    /// Whether the value is added to the ones that are kept.
-    pub multi: Option<Bool>,
-}
-
-impl ToggleSlicer {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.slicer.toggle".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let mut slicers = slicers_of(&node);
-        let at = {
-            let slicer = slicer_of(&slicers, id_of(self.slicer, &id)?, &id)?;
-            slicers.iter().position(|other| other.id == slicer.id).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: "there is no slicer on this sheet".to_string(),
-            })?
-        };
-        let slicer = slicers[at].clone();
-        let tables = tables_of(&node);
-        let table = table_of(&tables, &slicer.table, &id)?;
-        let cells = crate::cells_of(&node);
-        let fields =
-            fields_of(&table, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let column = column_of(&fields, &slicer.column, &id)?;
-        let values = values_of(&cells, &table, column);
-        let value = self.value.0.clone();
-        if !values.iter().any(|other| other.eq_ignore_ascii_case(&value)) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{value}` is not in the column `{}`", slicer.column),
-            });
         }
-        let multi = self.multi.map(|multi| multi.0).unwrap_or(false);
-        let selected = if multi {
-            let mut kept = slicer.selected.clone().unwrap_or_else(|| values.clone());
-            match kept.iter().position(|other| other.eq_ignore_ascii_case(&value)) {
-                Some(at) => {
-                    kept.remove(at);
+    }
+    /// **Toggle** a value of a slicer.
+    ///
+    /// The value is kept, and the rows that do not show it are hidden. A
+    /// **multi** toggle adds the value to the ones that are kept and takes
+    /// it away again, and a single toggle keeps that value and nothing
+    /// else.
+    grid.slicer.toggle {
+        area: "grid",
+        layer: "grid",
+        icon: "filter",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
+
+            sheet: NodeRef,
+            /// Which slicer: the last one when it is not named.
+
+            slicer: Option<Number>,
+            /// The value.
+
+            value: Text,
+            /// Whether the value is added to the ones that are kept.
+
+            multi: Option<Bool>,
+        },
+        run: {
+
+            let id = "grid.slicer.toggle".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let mut slicers = slicers_of(&node);
+            let at = {
+                let slicer = slicer_of(&slicers, id_of(self.slicer, &id)?, &id)?;
+                slicers.iter().position(|other| other.id == slicer.id).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: "there is no slicer on this sheet".to_string(),
+                })?
+            };
+            let slicer = slicers[at].clone();
+            let tables = tables_of(&node);
+            let table = table_of(&tables, &slicer.table, &id)?;
+            let cells = crate::cells_of(&node);
+            let fields =
+                fields_of(&table, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let column = column_of(&fields, &slicer.column, &id)?;
+            let values = values_of(&cells, &table, column);
+            let value = self.value.0.clone();
+            if !values.iter().any(|other| other.eq_ignore_ascii_case(&value)) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{value}` is not in the column `{}`", slicer.column),
+                });
+            }
+            let multi = self.multi.map(|multi| multi.0).unwrap_or(false);
+            let selected = if multi {
+                let mut kept = slicer.selected.clone().unwrap_or_else(|| values.clone());
+                match kept.iter().position(|other| other.eq_ignore_ascii_case(&value)) {
+                    Some(at) => {
+                        kept.remove(at);
+                    }
+                    None => kept.push(value.clone()),
                 }
-                None => kept.push(value.clone()),
-            }
-            // Everything kept is the same as nothing filtered.
-            if kept.len() == values.len()
-                && values.iter().all(|other| kept.iter().any(|kept| kept.eq_ignore_ascii_case(other)))
-            {
-                None
-            } else {
-                Some(kept)
-            }
-        } else {
-            // A single click keeps that value alone, and a click on the
-            // only value that is kept takes the filter away.
-            match &slicer.selected {
-                Some(kept)
-                    if kept.len() == 1 && kept.iter().any(|other| other.eq_ignore_ascii_case(&value)) =>
+                // Everything kept is the same as nothing filtered.
+                if kept.len() == values.len()
+                    && values.iter().all(|other| kept.iter().any(|kept| kept.eq_ignore_ascii_case(other)))
                 {
                     None
+                } else {
+                    Some(kept)
                 }
-                _ => Some(vec![value.clone()]),
+            } else {
+                // A single click keeps that value alone, and a click on the
+                // only value that is kept takes the filter away.
+                match &slicer.selected {
+                    Some(kept)
+                        if kept.len() == 1 && kept.iter().any(|other| other.eq_ignore_ascii_case(&value)) =>
+                    {
+                        None
+                    }
+                    _ => Some(vec![value.clone()]),
+                }
+            };
+            slicers[at].selected = selected.clone();
+            let filter = match &selected {
+                Some(kept) => json!({
+                    "column": CellRef::column_text(column),
+                    "values": kept,
+                    "blanks": false,
+                }),
+                None => Json::Null,
+            };
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["slicers"] = slicers_into(&slicers);
+                node.data["filter"] = filter;
             }
-        };
-        slicers[at].selected = selected.clone();
-        let filter = match &selected {
-            Some(kept) => json!({
-                "column": CellRef::column_text(column),
-                "values": kept,
-                "blanks": false,
-            }),
-            None => Json::Null,
-        };
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["slicers"] = slicers_into(&slicers);
-            node.data["filter"] = filter;
+            Ok(Outcome::changed(format!("the slicer of the column `{}` keeps {value}", slicer.column)).with_data(
+                json!({
+                    "sheet": sheet,
+                    "slicer": slicer.id,
+                    "column": slicer.column,
+                    "selected": match &selected {
+                        Some(kept) => json!(kept),
+                        None => Json::Null,
+                    },
+                }),
+            ))
+
         }
-        Ok(Outcome::changed(format!("the slicer of the column `{}` keeps {value}", slicer.column)).with_data(
-            json!({
-                "sheet": sheet,
-                "slicer": slicer.id,
-                "column": slicer.column,
-                "selected": match &selected {
-                    Some(kept) => json!(kept),
-                    None => Json::Null,
-                },
-            }),
-        ))
     }
-}
+    /// **Clear** a slicer: every value is kept, and the filter is taken
+    /// away.
+    grid.slicer.clear {
+        area: "grid",
+        layer: "grid",
+        icon: "filter",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-/// **Clear** a slicer: every value is kept, and the filter is taken
-/// away.
-#[derive(Command)]
-#[command(id = "grid.slicer.clear", area = "grid", layer = "grid", icon = "filter", mutates, undoable)]
-pub struct ClearSlicer {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// Which slicer: the last one when it is not named.
-    pub slicer: Option<Number>,
-}
+            sheet: NodeRef,
+            /// Which slicer: the last one when it is not named.
 
-impl ClearSlicer {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.slicer.clear".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let mut slicers = slicers_of(&node);
-        let at = {
-            let slicer = slicer_of(&slicers, id_of(self.slicer, &id)?, &id)?;
-            slicers.iter().position(|other| other.id == slicer.id).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: "there is no slicer on this sheet".to_string(),
-            })?
-        };
-        let slicer = slicers[at].clone();
-        slicers[at].selected = None;
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["slicers"] = slicers_into(&slicers);
-            node.data["filter"] = Json::Null;
-        }
-        Ok(Outcome::changed(format!("the slicer of the column `{}` keeps every value", slicer.column))
-            .with_data(json!({
-                "sheet": sheet,
-                "slicer": slicer.id,
-                "column": slicer.column,
-            })))
-    }
-}
+            slicer: Option<Number>,
+        },
+        run: {
 
-/// **Remove** a slicer, and the filter it wrote.
-#[derive(Command)]
-#[command(id = "grid.slicer.remove", area = "grid", layer = "grid", icon = "filter", mutates, undoable)]
-pub struct RemoveSlicer {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// Which slicer: the last one when it is not named.
-    pub slicer: Option<Number>,
-}
-
-impl RemoveSlicer {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.slicer.remove".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let mut slicers = slicers_of(&node);
-        let slicer = slicer_of(&slicers, id_of(self.slicer, &id)?, &id)?;
-        slicers.retain(|other| other.id != slicer.id);
-        // The filter of the sheet is the slicer's when it is a list of
-        // values on the column of the slicer, and it is taken away with
-        // it.
-        let tables = tables_of(&node);
-        let table = table_of(&tables, &slicer.table, &id)?;
-        let cells = crate::cells_of(&node);
-        let fields =
-            fields_of(&table, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let column = column_of(&fields, &slicer.column, &id)?;
-        let filter = node.data.get("filter").cloned();
-        let mine = filter
-            .as_ref()
-            .and_then(|filter| filter.get("values"))
-            .and_then(|values| values.as_array())
-            .is_some()
-            && filter
-                .as_ref()
-                .and_then(|filter| filter.get("column"))
-                .and_then(|column| column.as_str())
-                .and_then(CellRef::column_index)
-                == Some(column);
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["slicers"] = slicers_into(&slicers);
-            if mine {
+            let id = "grid.slicer.clear".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let mut slicers = slicers_of(&node);
+            let at = {
+                let slicer = slicer_of(&slicers, id_of(self.slicer, &id)?, &id)?;
+                slicers.iter().position(|other| other.id == slicer.id).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: "there is no slicer on this sheet".to_string(),
+                })?
+            };
+            let slicer = slicers[at].clone();
+            slicers[at].selected = None;
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["slicers"] = slicers_into(&slicers);
                 node.data["filter"] = Json::Null;
             }
+            Ok(Outcome::changed(format!("the slicer of the column `{}` keeps every value", slicer.column))
+                .with_data(json!({
+                    "sheet": sheet,
+                    "slicer": slicer.id,
+                    "column": slicer.column,
+                })))
+
         }
-        Ok(Outcome::changed(format!("the slicer of the column `{}` is taken away", slicer.column)).with_data(
-            json!({
-                "sheet": sheet,
-                "slicer": slicer.id,
-                "column": slicer.column,
-            }),
-        ))
+    }
+    /// **Remove** a slicer, and the filter it wrote.
+    grid.slicer.remove {
+        area: "grid",
+        layer: "grid",
+        icon: "filter",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
+
+            sheet: NodeRef,
+            /// Which slicer: the last one when it is not named.
+
+            slicer: Option<Number>,
+        },
+        run: {
+
+            let id = "grid.slicer.remove".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let mut slicers = slicers_of(&node);
+            let slicer = slicer_of(&slicers, id_of(self.slicer, &id)?, &id)?;
+            slicers.retain(|other| other.id != slicer.id);
+            // The filter of the sheet is the slicer's when it is a list of
+            // values on the column of the slicer, and it is taken away with
+            // it.
+            let tables = tables_of(&node);
+            let table = table_of(&tables, &slicer.table, &id)?;
+            let cells = crate::cells_of(&node);
+            let fields =
+                fields_of(&table, &cells).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let column = column_of(&fields, &slicer.column, &id)?;
+            let filter = node.data.get("filter").cloned();
+            let mine = filter
+                .as_ref()
+                .and_then(|filter| filter.get("values"))
+                .and_then(|values| values.as_array())
+                .is_some()
+                && filter
+                    .as_ref()
+                    .and_then(|filter| filter.get("column"))
+                    .and_then(|column| column.as_str())
+                    .and_then(CellRef::column_index)
+                    == Some(column);
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["slicers"] = slicers_into(&slicers);
+                if mine {
+                    node.data["filter"] = Json::Null;
+                }
+            }
+            Ok(Outcome::changed(format!("the slicer of the column `{}` is taken away", slicer.column)).with_data(
+                json!({
+                    "sheet": sheet,
+                    "slicer": slicer.id,
+                    "column": slicer.column,
+                }),
+            ))
+
+        }
     }
 }

@@ -25,10 +25,10 @@
 //!   are not: a size of nothing is **refused** (the module `sizes`)
 //!   and the hiding is a fact of its own.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Text};
 
 /// The **rows** of a sheet that are hidden.
 pub(crate) fn hidden_rows(node: &craftkit_sdk::Node) -> Vec<u64> {
@@ -77,186 +77,209 @@ fn column_of(name: &str, id: &str) -> Result<String, EngineError> {
     Ok(column.to_uppercase())
 }
 
-/// **Hide** a row.
-///
-/// The row is still there: it is a row that is not shown.
-#[derive(Command)]
-#[command(id = "grid.row.hide", area = "grid", layer = "grid", icon = "eye", mutates, undoable)]
-pub struct HideRow {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// Which row, counting from one.
-    pub row: Number,
-}
+commands! {
+    /// **Hide** a row.
+    ///
+    /// The row is still there: it is a row that is not shown.
+    grid.row.hide {
+        area: "grid",
+        layer: "grid",
+        icon: "eye",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl HideRow {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.row.hide".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
+            sheet: NodeRef,
+            /// Which row, counting from one.
+
+            row: Number,
+        },
+        run: {
+
+            let id = "grid.row.hide".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let row = row_of(self.row, &id)?;
+            let mut rows = hidden_rows(node);
+            if rows.contains(&row) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the row {row} is already hidden"),
+                });
+            }
+            rows.push(row);
+            rows.sort_unstable();
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["hidden_rows"] = json!(rows);
+            }
+            Ok(Outcome::changed(format!("the row {row} is hidden")).with_data(json!({
+                "sheet": sheet,
+                "row": row,
+            })))
+
         }
-        let row = row_of(self.row, &id)?;
-        let mut rows = hidden_rows(node);
-        if rows.contains(&row) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the row {row} is already hidden"),
-            });
-        }
-        rows.push(row);
-        rows.sort_unstable();
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["hidden_rows"] = json!(rows);
-        }
-        Ok(Outcome::changed(format!("the row {row} is hidden")).with_data(json!({
-            "sheet": sheet,
-            "row": row,
-        })))
     }
-}
+    /// **Show** a row that was hidden.
+    grid.row.show {
+        area: "grid",
+        layer: "grid",
+        icon: "eye",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-/// **Show** a row that was hidden.
-#[derive(Command)]
-#[command(id = "grid.row.show", area = "grid", layer = "grid", icon = "eye", mutates, undoable)]
-pub struct ShowRow {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// Which row, counting from one.
-    pub row: Number,
-}
+            sheet: NodeRef,
+            /// Which row, counting from one.
 
-impl ShowRow {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.row.show".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
+            row: Number,
+        },
+        run: {
+
+            let id = "grid.row.show".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let row = row_of(self.row, &id)?;
+            let mut rows = hidden_rows(node);
+            if !rows.contains(&row) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the row {row} is not hidden"),
+                });
+            }
+            rows.retain(|other| *other != row);
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["hidden_rows"] = json!(rows);
+            }
+            Ok(Outcome::changed(format!("the row {row} is shown")).with_data(json!({
+                "sheet": sheet,
+                "row": row,
+            })))
+
         }
-        let row = row_of(self.row, &id)?;
-        let mut rows = hidden_rows(node);
-        if !rows.contains(&row) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the row {row} is not hidden"),
-            });
-        }
-        rows.retain(|other| *other != row);
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["hidden_rows"] = json!(rows);
-        }
-        Ok(Outcome::changed(format!("the row {row} is shown")).with_data(json!({
-            "sheet": sheet,
-            "row": row,
-        })))
     }
-}
+    /// **Hide** a column.
+    grid.column.hide {
+        area: "grid",
+        layer: "grid",
+        icon: "eye",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-/// **Hide** a column.
-#[derive(Command)]
-#[command(id = "grid.column.hide", area = "grid", layer = "grid", icon = "eye", mutates, undoable)]
-pub struct HideColumn {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// Which column: `A`, `B`, `AA`.
-    pub column: Text,
-}
+            sheet: NodeRef,
+            /// Which column: `A`, `B`, `AA`.
 
-impl HideColumn {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.column.hide".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
+            column: Text,
+        },
+        run: {
+
+            let id = "grid.column.hide".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let column = column_of(&self.column.0, &id)?;
+            let mut columns = hidden_columns(node);
+            if columns.contains(&column) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the column {column} is already hidden"),
+                });
+            }
+            columns.push(column.clone());
+            columns.sort();
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["hidden_columns"] = json!(columns);
+            }
+            Ok(Outcome::changed(format!("the column {column} is hidden")).with_data(json!({
+                "sheet": sheet,
+                "column": column,
+            })))
+
         }
-        let column = column_of(&self.column.0, &id)?;
-        let mut columns = hidden_columns(node);
-        if columns.contains(&column) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the column {column} is already hidden"),
-            });
-        }
-        columns.push(column.clone());
-        columns.sort();
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["hidden_columns"] = json!(columns);
-        }
-        Ok(Outcome::changed(format!("the column {column} is hidden")).with_data(json!({
-            "sheet": sheet,
-            "column": column,
-        })))
     }
-}
+    /// **Show** a column that was hidden.
+    grid.column.show {
+        area: "grid",
+        layer: "grid",
+        icon: "eye",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-/// **Show** a column that was hidden.
-#[derive(Command)]
-#[command(id = "grid.column.show", area = "grid", layer = "grid", icon = "eye", mutates, undoable)]
-pub struct ShowColumn {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// Which column: `A`, `B`, `AA`.
-    pub column: Text,
-}
+            sheet: NodeRef,
+            /// Which column: `A`, `B`, `AA`.
 
-impl ShowColumn {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.column.show".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        };
-        let column = column_of(&self.column.0, &id)?;
-        let mut columns = hidden_columns(node);
-        if !columns.contains(&column) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the column {column} is not hidden"),
-            });
+            column: Text,
+        },
+        run: {
+
+            let id = "grid.column.show".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            };
+            let column = column_of(&self.column.0, &id)?;
+            let mut columns = hidden_columns(node);
+            if !columns.contains(&column) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the column {column} is not hidden"),
+                });
+            }
+            columns.retain(|other| other != &column);
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["hidden_columns"] = json!(columns);
+            }
+            Ok(Outcome::changed(format!("the column {column} is shown")).with_data(json!({
+                "sheet": sheet,
+                "column": column,
+            })))
+
         }
-        columns.retain(|other| other != &column);
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["hidden_columns"] = json!(columns);
-        }
-        Ok(Outcome::changed(format!("the column {column} is shown")).with_data(json!({
-            "sheet": sheet,
-            "column": column,
-        })))
     }
 }

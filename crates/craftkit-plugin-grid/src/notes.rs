@@ -19,7 +19,7 @@
 
 use std::collections::BTreeMap;
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -79,145 +79,163 @@ pub(crate) fn sheet_of(session: &Session, sheet: u64, id: &str) -> Result<String
     Ok(node.name.clone())
 }
 
-/// Put a **note** on a cell.
-///
-/// A note that is already on the cell is **edited**: the text is the
-/// new text and the author is kept unless a new one is given.
-#[derive(Command)]
-#[command(id = "grid.cell.note.set", area = "grid", layer = "grid", icon = "pencil", mutates, undoable)]
-pub struct SetNote {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// The text of the note.
-    pub text: Text,
-    /// Who wrote it.
-    pub author: Option<Text>,
-}
+commands! {
+    /// Put a **note** on a cell.
+    ///
+    /// A note that is already on the cell is **edited**: the text is the
+    /// new text and the author is kept unless a new one is given.
+    grid.cell.note.set {
+        area: "grid",
+        layer: "grid",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl SetNote {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.note.set".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        let text = self.text.0.clone();
-        if text.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a note holds text".to_string() });
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// The text of the note.
+
+            text: Text,
+            /// Who wrote it.
+
+            author: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.cell.note.set".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            let text = self.text.0.clone();
+            if text.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a note holds text".to_string() });
+            }
+            sheet_of(session, sheet, &id)?;
+            let author = self.author.as_ref().map(|author| author.0.clone()).filter(|author| !author.is_empty());
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let mut notes = notes_of(node);
+            let address = cell.to_text();
+            let author = author.or_else(|| notes.get(&address).and_then(|note| note.author.clone()));
+            notes.insert(address.clone(), Note { text, author: author.clone() });
+            node.data["notes"] = notes_into(&notes);
+            // A **note replaces a comment**: the tree's own rule.
+            let mut comments = crate::comments::comments_of(node);
+            let took_comment = comments.remove(&address).is_some();
+            node.data["comments"] = crate::comments::comments_into(&comments);
+            let who = match &author {
+                Some(author) => format!(" by {author}"),
+                None => String::new(),
+            };
+            Ok(Outcome::changed(format!("wrote a note on {address}{who}")).with_data(json!({
+                "sheet": sheet,
+                "cell": address,
+                "text": notes.get(&address).map(|note| note.text.clone()),
+                "author": author,
+                "took_comment": took_comment,
+            })))
+
         }
-        sheet_of(session, sheet, &id)?;
-        let author = self.author.as_ref().map(|author| author.0.clone()).filter(|author| !author.is_empty());
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let mut notes = notes_of(node);
-        let address = cell.to_text();
-        let author = author.or_else(|| notes.get(&address).and_then(|note| note.author.clone()));
-        notes.insert(address.clone(), Note { text, author: author.clone() });
-        node.data["notes"] = notes_into(&notes);
-        // A **note replaces a comment**: the tree's own rule.
-        let mut comments = crate::comments::comments_of(node);
-        let took_comment = comments.remove(&address).is_some();
-        node.data["comments"] = crate::comments::comments_into(&comments);
-        let who = match &author {
-            Some(author) => format!(" by {author}"),
-            None => String::new(),
-        };
-        Ok(Outcome::changed(format!("wrote a note on {address}{who}")).with_data(json!({
-            "sheet": sheet,
-            "cell": address,
-            "text": notes.get(&address).map(|note| note.text.clone()),
-            "author": author,
-            "took_comment": took_comment,
-        })))
     }
-}
+    /// The **note** on a cell.
+    grid.cell.note.get {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet it is in.
 
-/// The **note** on a cell.
-#[derive(Command)]
-#[command(id = "grid.cell.note.get", area = "grid", layer = "grid", icon = "list")]
-pub struct GetNote {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-}
+            sheet: NodeRef,
+            /// The cell's address.
 
-impl GetNote {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.note.get".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        sheet_of(session, sheet, &id)?;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let notes = notes_of(node);
-        let address = cell.to_text();
-        let note = notes.get(&address);
-        let text = note.map(|note| note.text.clone());
-        Ok(Outcome::new(match &text {
-            Some(_) => format!("{address} holds a note"),
-            None => format!("{address} holds no note"),
-        })
-        .with_data(json!({
-            "sheet": sheet,
-            "cell": address,
-            "note": match note {
-                Some(note) => json!({
-                    "text": note.text,
-                    "author": note.author,
-                }),
-                None => Json::Null,
-            },
-        })))
+            cell: Text,
+        },
+        run: {
+
+            let id = "grid.cell.note.get".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            sheet_of(session, sheet, &id)?;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let notes = notes_of(node);
+            let address = cell.to_text();
+            let note = notes.get(&address);
+            let text = note.map(|note| note.text.clone());
+            Ok(Outcome::new(match &text {
+                Some(_) => format!("{address} holds a note"),
+                None => format!("{address} holds no note"),
+            })
+            .with_data(json!({
+                "sheet": sheet,
+                "cell": address,
+                "note": match note {
+                    Some(note) => json!({
+                        "text": note.text,
+                        "author": note.author,
+                    }),
+                    None => Json::Null,
+                },
+            })))
+
+        }
     }
-}
+    /// Take the **note** away from a cell.
+    ///
+    /// A cell that holds no note is not refused: there is nothing to take
+    /// away, and the answer says so.
+    grid.cell.note.delete {
+        area: "grid",
+        layer: "grid",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-/// Take the **note** away from a cell.
-///
-/// A cell that holds no note is not refused: there is nothing to take
-/// away, and the answer says so.
-#[derive(Command)]
-#[command(id = "grid.cell.note.delete", area = "grid", layer = "grid", icon = "minus", mutates, undoable)]
-pub struct DeleteNote {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-}
+            sheet: NodeRef,
+            /// The cell's address.
 
-impl DeleteNote {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.note.delete".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        sheet_of(session, sheet, &id)?;
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let mut notes = notes_of(node);
-        let address = cell.to_text();
-        let was_there = notes.remove(&address).is_some();
-        node.data["notes"] = notes_into(&notes);
-        let outcome = if was_there {
-            Outcome::changed(format!("took the note off {address}"))
-        } else {
-            Outcome::new(format!("{address} held no note"))
-        };
-        Ok(outcome.with_data(json!({
-            "sheet": sheet,
-            "cell": address,
-            "was_there": was_there,
-        })))
+            cell: Text,
+        },
+        run: {
+
+            let id = "grid.cell.note.delete".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            sheet_of(session, sheet, &id)?;
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let mut notes = notes_of(node);
+            let address = cell.to_text();
+            let was_there = notes.remove(&address).is_some();
+            node.data["notes"] = notes_into(&notes);
+            let outcome = if was_there {
+                Outcome::changed(format!("took the note off {address}"))
+            } else {
+                Outcome::new(format!("{address} held no note"))
+            };
+            Ok(outcome.with_data(json!({
+                "sheet": sheet,
+                "cell": address,
+                "was_there": was_there,
+            })))
+
+        }
     }
 }

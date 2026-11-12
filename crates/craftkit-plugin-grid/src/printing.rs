@@ -39,7 +39,7 @@
 //!   refused, because a margin that is not the one that was asked for
 //!   is a margin that is wrong.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::Value as Json;
 use craftkit_sdk::serde_json::json;
@@ -341,541 +341,585 @@ pub(crate) fn bands(lines: &[u32], size: impl Fn(u32) -> f64, room: f64, breaks:
     out
 }
 
-/// **Set** the paper of a sheet.
-#[derive(Command)]
-#[command(id = "grid.print.paper", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
-pub struct SetPaper {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The paper: `Letter`, `A4`, `Tabloid` and the rest.
-    pub paper: Text,
-}
+commands! {
+    /// **Set** the paper of a sheet.
+    grid.print.paper {
+        area: "grid",
+        layer: "grid",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
 
-impl SetPaper {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.print.paper".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let Some((paper, _, _)) = paper_of(&self.paper.0) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("`{}` is not a paper this tree has", self.paper.0.trim()),
-            });
-        };
-        let mut setup = Setup::of(&node);
-        setup.paper = paper.to_string();
-        let (width, height) =
-            paper_of(paper).map(|(_, width, height)| (width, height)).unwrap_or((612.0, 792.0));
-        setup.width = width;
-        setup.height = height;
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["print"] = setup.to_json();
-        }
-        Ok(Outcome::changed(format!("the sheet is printed on `{paper}`")).with_data(json!({
-            "sheet": sheet,
-            "paper": paper,
-        })))
-    }
-}
+            sheet: NodeRef,
+            /// The paper: `Letter`, `A4`, `Tabloid` and the rest.
 
-/// **Set** the orientation of a sheet.
-#[derive(Command)]
-#[command(id = "grid.print.orientation", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
-pub struct SetOrientation {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The orientation: `portrait` or `landscape`.
-    pub orientation: Text,
-}
+            paper: Text,
+        },
+        run: {
 
-impl SetOrientation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.print.orientation".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let orientation = self.orientation.0.trim().to_ascii_lowercase();
-        if orientation != "portrait" && orientation != "landscape" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("`{orientation}` is not an orientation: it is `portrait` or `landscape`"),
-            });
-        }
-        let mut setup = Setup::of(&node);
-        setup.orientation = orientation.clone();
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["print"] = setup.to_json();
-        }
-        Ok(Outcome::changed(format!("the sheet is printed `{orientation}`")).with_data(json!({
-            "sheet": sheet,
-            "orientation": orientation,
-        })))
-    }
-}
-
-/// **Set** the margins of a sheet.
-///
-/// The margins are in **inches**, the way the tree's dialogue asks for
-/// them, and a preset is the tree's own: `normal`, `wide` or
-/// `narrow`.
-#[derive(Command)]
-#[command(id = "grid.print.margins", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
-pub struct SetMargins {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The preset: `normal`, `wide` or `narrow`.
-    pub preset: Option<Text>,
-    /// The **left** margin, in inches.
-    pub left: Option<Number>,
-    /// The **right** margin, in inches.
-    pub right: Option<Number>,
-    /// The **top** margin, in inches.
-    pub top: Option<Number>,
-    /// The **bottom** margin, in inches.
-    pub bottom: Option<Number>,
-}
-
-impl SetMargins {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.print.margins".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let mut setup = Setup::of(&node);
-        if let Some(preset) = &self.preset {
-            let preset = preset.0.trim().to_ascii_lowercase();
-            let margins: [f64; 4] = match preset.as_str() {
-                "normal" => [0.7, 0.7, 0.75, 0.75],
-                "wide" => [1.0, 1.0, 1.0, 1.0],
-                "narrow" => [0.25, 0.25, 0.75, 0.75],
-                _ => {
-                    return Err(EngineError::Failed {
-                        id,
-                        message: format!("`{preset}` is not a preset: it is `normal`, `wide` or `narrow`"),
-                    });
-                }
-            };
-            for (index, margin) in margins.iter().enumerate() {
-                setup.margins[index] = margin * 72.0;
-            }
-        }
-        for (index, margin) in [self.left, self.right, self.top, self.bottom].iter().enumerate() {
-            let Some(margin) = margin else { continue };
-            let margin = margin.0;
-            if !margin.is_finite() || !(0.0..=MAX_MARGIN).contains(&margin) {
+            let id = "grid.print.paper".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let Some((paper, _, _)) = paper_of(&self.paper.0) else {
                 return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "{margin} is not a margin: a margin is a number between zero and {MAX_MARGIN} inches"
-                    ),
+                    id,
+                    message: format!("`{}` is not a paper this tree has", self.paper.0.trim()),
+                });
+            };
+            let mut setup = Setup::of(&node);
+            setup.paper = paper.to_string();
+            let (width, height) =
+                paper_of(paper).map(|(_, width, height)| (width, height)).unwrap_or((612.0, 792.0));
+            setup.width = width;
+            setup.height = height;
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["print"] = setup.to_json();
+            }
+            Ok(Outcome::changed(format!("the sheet is printed on `{paper}`")).with_data(json!({
+                "sheet": sheet,
+                "paper": paper,
+            })))
+
+        }
+    }
+    /// **Set** the orientation of a sheet.
+    grid.print.orientation {
+        area: "grid",
+        layer: "grid",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
+
+            sheet: NodeRef,
+            /// The orientation: `portrait` or `landscape`.
+
+            orientation: Text,
+        },
+        run: {
+
+            let id = "grid.print.orientation".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let orientation = self.orientation.0.trim().to_ascii_lowercase();
+            if orientation != "portrait" && orientation != "landscape" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("`{orientation}` is not an orientation: it is `portrait` or `landscape`"),
                 });
             }
-            setup.margins[index] = margin * 72.0;
+            let mut setup = Setup::of(&node);
+            setup.orientation = orientation.clone();
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["print"] = setup.to_json();
+            }
+            Ok(Outcome::changed(format!("the sheet is printed `{orientation}`")).with_data(json!({
+                "sheet": sheet,
+                "orientation": orientation,
+            })))
+
         }
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["print"] = setup.to_json();
-        }
-        Ok(Outcome::changed("the margins of the sheet are set".to_string()).with_data(json!({
-            "sheet": sheet,
-            "margins": setup.to_json()["margins"].clone(),
-        })))
     }
-}
+    /// **Set** the margins of a sheet.
+    ///
+    /// The margins are in **inches**, the way the tree's dialogue asks for
+    /// them, and a preset is the tree's own: `normal`, `wide` or
+    /// `narrow`.
+    grid.print.margins {
+        area: "grid",
+        layer: "grid",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
 
-/// **Read** the setup of a sheet.
-#[derive(Command)]
-#[command(id = "grid.print.read", area = "grid", layer = "grid", icon = "list")]
-pub struct ReadSetup {
-    /// The sheet.
-    pub sheet: NodeRef,
-}
+            sheet: NodeRef,
+            /// The preset: `normal`, `wide` or `narrow`.
 
-impl ReadSetup {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.print.read".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let setup = Setup::of(&node);
-        let (page_width, page_height) = setup.page();
-        let (printable_width, printable_height) = setup.printable();
-        let (row_breaks, column_breaks) = breaks_of(&node);
-        let (title_rows, title_columns) = titles_of(&node);
-        let title_rows: Vec<u32> = title_rows.iter().map(|row| row + 1).collect();
-        let title_columns: Vec<String> =
-            title_columns.iter().map(|column| crate::formula::CellRef::column_text(*column)).collect();
-        // The **scale** a fit works out to, when a fit is set.
-        let fit_scale = crate::scaling::effective_scale(&setup, &node, &crate::scaling::Content::of(&node));
-        Ok(Outcome::new(format!("the sheet is printed on `{}`", setup.paper)).with_data(json!({
-            "sheet": sheet,
-            "paper": setup.paper,
-            "orientation": setup.orientation,
-            "margins": setup.to_json()["margins"].clone(),
-            "scale": setup.scale,
-            "fit": match setup.fit {
-                Some((wide, tall)) => json!({ "wide": wide, "tall": tall }),
-                None => Json::Null,
-            },
-            "fit_scale": (fit_scale.0 * 10_000.0).round() / 100.0,
-            "header": crate::headers::to_json(&node)["header"].clone(),
-            "footer": crate::headers::to_json(&node)["footer"].clone(),
-            "gridlines": crate::marks::gridlines_of(&node),
-            "headings": crate::marks::headings_of(&node),
-            "page": { "width": page_width, "height": page_height },
-            "printable": { "width": printable_width, "height": printable_height },
-            "area": area_of(&node).map(|area| json!(area.to_text())).unwrap_or(Json::Null),
-            "title_rows": title_rows,
-            "title_columns": title_columns,
-            "row_breaks": row_breaks.iter().map(|row| row + 1).collect::<Vec<u32>>(),
-            "column_breaks": column_breaks
-                .iter()
-                .map(|column| crate::formula::CellRef::column_text(*column))
-                .collect::<Vec<String>>(),
-        })))
-    }
-}
+            preset: Option<Text>,
+            /// The **left** margin, in inches.
 
-/// **Read** the pages of a sheet.
-///
-/// The pages are **derived**: they are worked out from the paper, the
-/// margins and the sizes of the rows and the columns.
-#[derive(Command)]
-#[command(id = "grid.print.pages", area = "grid", layer = "grid", icon = "list")]
-pub struct ReadPages {
-    /// The sheet.
-    pub sheet: NodeRef,
-}
+            left: Option<Number>,
+            /// The **right** margin, in inches.
 
-impl ReadPages {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.print.pages".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let setup = Setup::of(&node);
-        let cells = crate::cells_of(&node);
-        // The **area** that is printed: the one that was set, or the
-        // used range of the sheet.
-        let area = match area_of(&node) {
-            Some(area) => area,
-            None => match crate::reading::used_range(&cells) {
-                Some(area) => area,
-                None => {
-                    return Ok(Outcome::new("the sheet holds nothing to print").with_data(json!({
-                        "sheet": sheet,
-                        "pages": Vec::<craftkit_sdk::serde_json::Value>::new(),
-                        "count": 0,
-                    })));
+            right: Option<Number>,
+            /// The **top** margin, in inches.
+
+            top: Option<Number>,
+            /// The **bottom** margin, in inches.
+
+            bottom: Option<Number>,
+        },
+        run: {
+
+            let id = "grid.print.margins".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let mut setup = Setup::of(&node);
+            if let Some(preset) = &self.preset {
+                let preset = preset.0.trim().to_ascii_lowercase();
+                let margins: [f64; 4] = match preset.as_str() {
+                    "normal" => [0.7, 0.7, 0.75, 0.75],
+                    "wide" => [1.0, 1.0, 1.0, 1.0],
+                    "narrow" => [0.25, 0.25, 0.75, 0.75],
+                    _ => {
+                        return Err(EngineError::Failed {
+                            id,
+                            message: format!("`{preset}` is not a preset: it is `normal`, `wide` or `narrow`"),
+                        });
+                    }
+                };
+                for (index, margin) in margins.iter().enumerate() {
+                    setup.margins[index] = margin * 72.0;
                 }
-            },
-        };
-        let (printable_width, printable_height) = setup.printable();
-        let (row_breaks, column_breaks) = breaks_of(&node);
-        // The **titles**: the rows and the columns that are printed on
-        // every page. They are not part of the pages themselves, so
-        // they are left out of the bands.
-        let (title_rows, title_columns) = titles_of(&node);
-        let content_rows: Vec<u32> =
-            (area.start.row..=area.end.row).filter(|row| !title_rows.contains(row)).collect();
-        let content_columns: Vec<u32> =
-            (area.start.col..=area.end.col).filter(|column| !title_columns.contains(column)).collect();
-        // The **scale** the sheet prints at: the scale of the setup, or
-        // the scale that fits it into the pages it was told to fit.
-        let content = crate::scaling::Content { rows: content_rows, columns: content_columns };
-        let (scale, fit_met) = crate::scaling::effective_scale(&setup, &node, &content);
-        // A sheet that is **fitted** is broken by the fit and not by
-        // hand: the fit is the way the pages are chosen.
-        let (row_breaks, column_breaks) =
-            if setup.fit.is_some() { (Vec::new(), Vec::new()) } else { (row_breaks, column_breaks) };
-        // The **headings** take room from the page: the rows are one
-        // heading shorter and the columns one heading narrower.
-        let digits = (area.end.row + 1).to_string().len() as u32;
-        let (heading_width, heading_height) = crate::marks::room_of(&node, digits);
-        let rows = bands(
-            &content.rows,
-            |row| row_height(&node, row),
-            (printable_height / scale - heading_height).max(1.0),
-            &row_breaks,
-        );
-        let columns = bands(
-            &content.columns,
-            |column| column_width(&node, column),
-            (printable_width / scale - heading_width).max(1.0),
-            &column_breaks,
-        );
-        let mut bands_of_pages: Vec<((u32, u32), (u32, u32))> = Vec::new();
-        for (first_row, last_row) in &rows {
-            for (first_column, last_column) in &columns {
-                if bands_of_pages.len() >= MAX_PAGES {
+            }
+            for (index, margin) in [self.left, self.right, self.top, self.bottom].iter().enumerate() {
+                let Some(margin) = margin else { continue };
+                let margin = margin.0;
+                if !margin.is_finite() || !(0.0..=MAX_MARGIN).contains(&margin) {
                     return Err(EngineError::Failed {
                         id: id.clone(),
                         message: format!(
-                            "the sheet is more than {MAX_PAGES} pages, and a sheet is not that long"
+                            "{margin} is not a margin: a margin is a number between zero and {MAX_MARGIN} inches"
                         ),
                     });
                 }
-                bands_of_pages.push(((*first_row, *last_row), (*first_column, *last_column)));
+                setup.margins[index] = margin * 72.0;
             }
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["print"] = setup.to_json();
+            }
+            Ok(Outcome::changed("the margins of the sheet are set".to_string()).with_data(json!({
+                "sheet": sheet,
+                "margins": setup.to_json()["margins"].clone(),
+            })))
+
         }
-        // The **header** and the **footer** of each page: the codes in
-        // them are worked out for the page they are on.
-        let count = bands_of_pages.len();
-        let mut pages: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
-        for (number, ((first_row, last_row), (first_column, last_column))) in
-            bands_of_pages.iter().enumerate()
-        {
-            let (header, footer) = crate::headers::of_page(&node, number + 1, count);
-            pages.push(json!({
-                "number": number + 1,
-                "rows": [first_row + 1, last_row + 1],
-                "columns": [
-                    crate::formula::CellRef::column_text(*first_column),
-                    crate::formula::CellRef::column_text(*last_column),
-                ],
-                "title_rows": title_rows.iter().map(|row| row + 1).collect::<Vec<u32>>(),
-                "title_columns": title_columns
+    }
+    /// **Read** the setup of a sheet.
+    grid.print.read {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet.
+
+            sheet: NodeRef,
+        },
+        run: {
+
+            let id = "grid.print.read".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let setup = Setup::of(&node);
+            let (page_width, page_height) = setup.page();
+            let (printable_width, printable_height) = setup.printable();
+            let (row_breaks, column_breaks) = breaks_of(&node);
+            let (title_rows, title_columns) = titles_of(&node);
+            let title_rows: Vec<u32> = title_rows.iter().map(|row| row + 1).collect();
+            let title_columns: Vec<String> =
+                title_columns.iter().map(|column| crate::formula::CellRef::column_text(*column)).collect();
+            // The **scale** a fit works out to, when a fit is set.
+            let fit_scale = crate::scaling::effective_scale(&setup, &node, &crate::scaling::Content::of(&node));
+            Ok(Outcome::new(format!("the sheet is printed on `{}`", setup.paper)).with_data(json!({
+                "sheet": sheet,
+                "paper": setup.paper,
+                "orientation": setup.orientation,
+                "margins": setup.to_json()["margins"].clone(),
+                "scale": setup.scale,
+                "fit": match setup.fit {
+                    Some((wide, tall)) => json!({ "wide": wide, "tall": tall }),
+                    None => Json::Null,
+                },
+                "fit_scale": (fit_scale.0 * 10_000.0).round() / 100.0,
+                "header": crate::headers::to_json(&node)["header"].clone(),
+                "footer": crate::headers::to_json(&node)["footer"].clone(),
+                "gridlines": crate::marks::gridlines_of(&node),
+                "headings": crate::marks::headings_of(&node),
+                "page": { "width": page_width, "height": page_height },
+                "printable": { "width": printable_width, "height": printable_height },
+                "area": area_of(&node).map(|area| json!(area.to_text())).unwrap_or(Json::Null),
+                "title_rows": title_rows,
+                "title_columns": title_columns,
+                "row_breaks": row_breaks.iter().map(|row| row + 1).collect::<Vec<u32>>(),
+                "column_breaks": column_breaks
                     .iter()
                     .map(|column| crate::formula::CellRef::column_text(*column))
                     .collect::<Vec<String>>(),
-                "header": header.to_json(),
-                "footer": footer.to_json(),
-                "gridlines": crate::marks::gridlines_of(&node),
-                "headings": crate::marks::headings_of(&node),
-            }));
+            })))
+
         }
-        Ok(Outcome::new(format!("the sheet is {} page(s)", pages.len())).with_data(json!({
-            "sheet": sheet,
-            "area": area.to_text(),
-            "scale": (scale * 10_000.0).round() / 100.0,
-            "fit_met": fit_met,
-            "pages": pages,
-            "count": pages.len(),
-        })))
     }
-}
+    /// **Read** the pages of a sheet.
+    ///
+    /// The pages are **derived**: they are worked out from the paper, the
+    /// margins and the sizes of the rows and the columns.
+    grid.print.pages {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet.
 
-/// **Set** the area a sheet prints.
-///
-/// Without a range the area is taken away, and the sheet prints the
-/// range it uses.
-#[derive(Command)]
-#[command(id = "grid.print.area", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
-pub struct SetPrintArea {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The range that is printed: `A1:F50`. Without it, the sheet
-    /// prints the range it uses.
-    pub range: Option<Text>,
-}
+            sheet: NodeRef,
+        },
+        run: {
 
-impl SetPrintArea {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.print.area".to_string();
-        let sheet = self.sheet.0;
-        sheet_of(session, &id, sheet)?;
-        let area = match &self.range {
-            Some(range) => {
-                let text = range.0.trim().to_string();
-                let area = crate::fill::area_at(&text, &id)?;
-                if area.start == area.end {
+            let id = "grid.print.pages".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let setup = Setup::of(&node);
+            let cells = crate::cells_of(&node);
+            // The **area** that is printed: the one that was set, or the
+            // used range of the sheet.
+            let area = match area_of(&node) {
+                Some(area) => area,
+                None => match crate::reading::used_range(&cells) {
+                    Some(area) => area,
+                    None => {
+                        return Ok(Outcome::new("the sheet holds nothing to print").with_data(json!({
+                            "sheet": sheet,
+                            "pages": Vec::<craftkit_sdk::serde_json::Value>::new(),
+                            "count": 0,
+                        })));
+                    }
+                },
+            };
+            let (printable_width, printable_height) = setup.printable();
+            let (row_breaks, column_breaks) = breaks_of(&node);
+            // The **titles**: the rows and the columns that are printed on
+            // every page. They are not part of the pages themselves, so
+            // they are left out of the bands.
+            let (title_rows, title_columns) = titles_of(&node);
+            let content_rows: Vec<u32> =
+                (area.start.row..=area.end.row).filter(|row| !title_rows.contains(row)).collect();
+            let content_columns: Vec<u32> =
+                (area.start.col..=area.end.col).filter(|column| !title_columns.contains(column)).collect();
+            // The **scale** the sheet prints at: the scale of the setup, or
+            // the scale that fits it into the pages it was told to fit.
+            let content = crate::scaling::Content { rows: content_rows, columns: content_columns };
+            let (scale, fit_met) = crate::scaling::effective_scale(&setup, &node, &content);
+            // A sheet that is **fitted** is broken by the fit and not by
+            // hand: the fit is the way the pages are chosen.
+            let (row_breaks, column_breaks) =
+                if setup.fit.is_some() { (Vec::new(), Vec::new()) } else { (row_breaks, column_breaks) };
+            // The **headings** take room from the page: the rows are one
+            // heading shorter and the columns one heading narrower.
+            let digits = (area.end.row + 1).to_string().len() as u32;
+            let (heading_width, heading_height) = crate::marks::room_of(&node, digits);
+            let rows = bands(
+                &content.rows,
+                |row| row_height(&node, row),
+                (printable_height / scale - heading_height).max(1.0),
+                &row_breaks,
+            );
+            let columns = bands(
+                &content.columns,
+                |column| column_width(&node, column),
+                (printable_width / scale - heading_width).max(1.0),
+                &column_breaks,
+            );
+            let mut bands_of_pages: Vec<((u32, u32), (u32, u32))> = Vec::new();
+            for (first_row, last_row) in &rows {
+                for (first_column, last_column) in &columns {
+                    if bands_of_pages.len() >= MAX_PAGES {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "the sheet is more than {MAX_PAGES} pages, and a sheet is not that long"
+                            ),
+                        });
+                    }
+                    bands_of_pages.push(((*first_row, *last_row), (*first_column, *last_column)));
+                }
+            }
+            // The **header** and the **footer** of each page: the codes in
+            // them are worked out for the page they are on.
+            let count = bands_of_pages.len();
+            let mut pages: Vec<craftkit_sdk::serde_json::Value> = Vec::new();
+            for (number, ((first_row, last_row), (first_column, last_column))) in
+                bands_of_pages.iter().enumerate()
+            {
+                let (header, footer) = crate::headers::of_page(&node, number + 1, count);
+                pages.push(json!({
+                    "number": number + 1,
+                    "rows": [first_row + 1, last_row + 1],
+                    "columns": [
+                        crate::formula::CellRef::column_text(*first_column),
+                        crate::formula::CellRef::column_text(*last_column),
+                    ],
+                    "title_rows": title_rows.iter().map(|row| row + 1).collect::<Vec<u32>>(),
+                    "title_columns": title_columns
+                        .iter()
+                        .map(|column| crate::formula::CellRef::column_text(*column))
+                        .collect::<Vec<String>>(),
+                    "header": header.to_json(),
+                    "footer": footer.to_json(),
+                    "gridlines": crate::marks::gridlines_of(&node),
+                    "headings": crate::marks::headings_of(&node),
+                }));
+            }
+            Ok(Outcome::new(format!("the sheet is {} page(s)", pages.len())).with_data(json!({
+                "sheet": sheet,
+                "area": area.to_text(),
+                "scale": (scale * 10_000.0).round() / 100.0,
+                "fit_met": fit_met,
+                "pages": pages,
+                "count": pages.len(),
+            })))
+
+        }
+    }
+    /// **Set** the area a sheet prints.
+    ///
+    /// Without a range the area is taken away, and the sheet prints the
+    /// range it uses.
+    grid.print.area {
+        area: "grid",
+        layer: "grid",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
+
+            sheet: NodeRef,
+            /// The range that is printed: `A1:F50`. Without it, the sheet
+            /// prints the range it uses.
+
+            range: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.print.area".to_string();
+            let sheet = self.sheet.0;
+            sheet_of(session, &id, sheet)?;
+            let area = match &self.range {
+                Some(range) => {
+                    let text = range.0.trim().to_string();
+                    let area = crate::fill::area_at(&text, &id)?;
+                    if area.start == area.end {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the range {text} is one cell, and an area of one cell is a cell"),
+                        });
+                    }
+                    Some(area)
+                }
+                None => None,
+            };
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["print_area"] = match area {
+                    Some(area) => json!(area.to_text()),
+                    None => Json::Null,
+                };
+            }
+            let text = area.map(|area| area.to_text()).unwrap_or_else(|| "the used range".to_string());
+            Ok(Outcome::changed(format!("the sheet prints {text}")).with_data(json!({
+                "sheet": sheet,
+                "area": area.map(|area| json!(area.to_text())).unwrap_or(Json::Null),
+            })))
+
+        }
+    }
+    /// **Put** a break in a sheet, or take it away.
+    ///
+    /// A break is a place where a page **begins**, put there by hand. The
+    /// row break is the row the page begins at and the column break is
+    /// the column it begins at.
+    grid.print.break {
+        area: "grid",
+        layer: "grid",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
+
+            sheet: NodeRef,
+            /// The row the page begins at. Without it, the column is meant.
+
+            row: Option<Number>,
+            /// The column the page begins at, as `A`.
+
+            column: Option<Text>,
+            /// Whether the break is **taken away**.
+
+            clear: Option<craftkit_sdk::Bool>,
+        },
+        run: {
+
+            let id = "grid.print.break".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let clear = self.clear.map(|clear| clear.0).unwrap_or(false);
+            match (&self.row, &self.column) {
+                (Some(_), Some(_)) => {
                     return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the range {text} is one cell, and an area of one cell is a cell"),
+                        id,
+                        message: "a break is a row or a column and not both".to_string(),
                     });
                 }
-                Some(area)
+                (None, None) => {
+                    return Err(EngineError::Failed { id, message: "a break is a row or a column".to_string() });
+                }
+                _ => {}
             }
-            None => None,
-        };
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["print_area"] = match area {
-                Some(area) => json!(area.to_text()),
-                None => Json::Null,
+            let (name, line_at) = if let Some(row) = &self.row {
+                let row = row.0;
+                if !row.is_finite() || row < 1.0 || row.fract() != 0.0 {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("a row is counted from one: {row} is not one"),
+                    });
+                }
+                ("row_breaks", row as u32 - 1)
+            } else {
+                let column = self.column.as_ref().map(|column| column.0.trim().to_string()).unwrap_or_default();
+                let Some(index) = crate::formula::CellRef::column_index(&column.to_ascii_uppercase()) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("`{column}` is not a column: a column is `A`, `B` or `AA`"),
+                    });
+                };
+                ("column_breaks", index)
             };
+            let breaks = node.data.get(name).and_then(|breaks| breaks.as_array()).cloned().unwrap_or_default();
+            let mut lines: Vec<u64> =
+                breaks.iter().filter_map(|line| line.as_u64()).filter(|line| *line != line_at as u64).collect();
+            if !clear {
+                lines.push(line_at as u64);
+                lines.sort_unstable();
+            }
+            let list: Vec<craftkit_sdk::serde_json::Value> = lines.into_iter().map(|line| json!(line)).collect();
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data[name] = craftkit_sdk::serde_json::Value::Array(list.clone());
+            }
+            Ok(Outcome::changed(format!(
+                "the break is {} in the sheet `{sheet}`",
+                if clear { "taken away" } else { "set" }
+            ))
+            .with_data(json!({ "sheet": sheet, "break": list, "kind": name })))
+
         }
-        let text = area.map(|area| area.to_text()).unwrap_or_else(|| "the used range".to_string());
-        Ok(Outcome::changed(format!("the sheet prints {text}")).with_data(json!({
-            "sheet": sheet,
-            "area": area.map(|area| json!(area.to_text())).unwrap_or(Json::Null),
-        })))
     }
-}
+    /// **Set** the titles of a sheet: the rows and the columns that are
+    /// printed on **every** page.
+    ///
+    /// The titles are not part of the pages: they are printed above them,
+    /// again and again.
+    grid.print.titles {
+        area: "grid",
+        layer: "grid",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
 
-/// **Put** a break in a sheet, or take it away.
-///
-/// A break is a place where a page **begins**, put there by hand. The
-/// row break is the row the page begins at and the column break is
-/// the column it begins at.
-#[derive(Command)]
-#[command(id = "grid.print.break", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
-pub struct SetPrintBreak {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The row the page begins at. Without it, the column is meant.
-    pub row: Option<Number>,
-    /// The column the page begins at, as `A`.
-    pub column: Option<Text>,
-    /// Whether the break is **taken away**.
-    pub clear: Option<craftkit_sdk::Bool>,
-}
+            sheet: NodeRef,
+            /// The rows that are printed on every page, counted from one. The
+            /// first row is the first title.
 
-impl SetPrintBreak {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.print.break".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let clear = self.clear.map(|clear| clear.0).unwrap_or(false);
-        match (&self.row, &self.column) {
-            (Some(_), Some(_)) => {
-                return Err(EngineError::Failed {
-                    id,
-                    message: "a break is a row or a column and not both".to_string(),
-                });
-            }
-            (None, None) => {
-                return Err(EngineError::Failed { id, message: "a break is a row or a column".to_string() });
-            }
-            _ => {}
-        }
-        let (name, line_at) = if let Some(row) = &self.row {
-            let row = row.0;
-            if !row.is_finite() || row < 1.0 || row.fract() != 0.0 {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("a row is counted from one: {row} is not one"),
-                });
-            }
-            ("row_breaks", row as u32 - 1)
-        } else {
-            let column = self.column.as_ref().map(|column| column.0.trim().to_string()).unwrap_or_default();
-            let Some(index) = crate::formula::CellRef::column_index(&column.to_ascii_uppercase()) else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("`{column}` is not a column: a column is `A`, `B` or `AA`"),
-                });
-            };
-            ("column_breaks", index)
-        };
-        let breaks = node.data.get(name).and_then(|breaks| breaks.as_array()).cloned().unwrap_or_default();
-        let mut lines: Vec<u64> =
-            breaks.iter().filter_map(|line| line.as_u64()).filter(|line| *line != line_at as u64).collect();
-        if !clear {
-            lines.push(line_at as u64);
-            lines.sort_unstable();
-        }
-        let list: Vec<craftkit_sdk::serde_json::Value> = lines.into_iter().map(|line| json!(line)).collect();
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data[name] = craftkit_sdk::serde_json::Value::Array(list.clone());
-        }
-        Ok(Outcome::changed(format!(
-            "the break is {} in the sheet `{sheet}`",
-            if clear { "taken away" } else { "set" }
-        ))
-        .with_data(json!({ "sheet": sheet, "break": list, "kind": name })))
-    }
-}
+            rows: Option<Text>,
+            /// The columns that are printed on every page, as `A`. The first
+            /// column is the first title.
 
-/// **Set** the titles of a sheet: the rows and the columns that are
-/// printed on **every** page.
-///
-/// The titles are not part of the pages: they are printed above them,
-/// again and again.
-#[derive(Command)]
-#[command(id = "grid.print.titles", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
-pub struct SetPrintTitles {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The rows that are printed on every page, counted from one. The
-    /// first row is the first title.
-    pub rows: Option<Text>,
-    /// The columns that are printed on every page, as `A`. The first
-    /// column is the first title.
-    pub columns: Option<Text>,
-}
+            columns: Option<Text>,
+        },
+        run: {
 
-impl SetPrintTitles {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.print.titles".to_string();
-        let sheet = self.sheet.0;
-        sheet_of(session, &id, sheet)?;
-        let mut rows: Vec<u32> = Vec::new();
-        if let Some(text) = &self.rows {
-            let text = text.0.trim().to_string();
-            if !text.is_empty() {
-                for part in text.split(',') {
-                    let part = part.trim();
-                    let Some((first, last)) = part.split_once(':') else {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: format!("`{part}` is not a range of rows"),
-                        });
-                    };
-                    let number = |text: &str| -> Result<u32, EngineError> {
-                        let row = text.trim().parse::<u64>().map_err(|_| EngineError::Failed {
-                            id: id.clone(),
-                            message: format!("`{text}` is not a row"),
-                        })?;
-                        if row == 0 {
+            let id = "grid.print.titles".to_string();
+            let sheet = self.sheet.0;
+            sheet_of(session, &id, sheet)?;
+            let mut rows: Vec<u32> = Vec::new();
+            if let Some(text) = &self.rows {
+                let text = text.0.trim().to_string();
+                if !text.is_empty() {
+                    for part in text.split(',') {
+                        let part = part.trim();
+                        let Some((first, last)) = part.split_once(':') else {
                             return Err(EngineError::Failed {
                                 id: id.clone(),
-                                message: "a row is counted from one: 0 is not one".to_string(),
+                                message: format!("`{part}` is not a range of rows"),
                             });
-                        }
-                        Ok(row as u32 - 1)
-                    };
-                    let first = number(first)?;
-                    let last = number(last)?;
-                    let (low, high) = (first.min(last), first.max(last));
-                    for row in low..=high {
-                        if !rows.contains(&row) {
-                            rows.push(row);
-                        }
-                    }
-                }
-                rows.sort_unstable();
-            }
-        }
-        let mut columns: Vec<u32> = Vec::new();
-        if let Some(text) = &self.columns {
-            let text = text.0.trim().to_string();
-            if !text.is_empty() {
-                for part in text.split(',') {
-                    let part = part.trim().to_ascii_uppercase();
-                    let Some((first, last)) = part.split_once(':') else {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: format!("`{part}` is not a range of columns"),
-                        });
-                    };
-                    let Some(first) = crate::formula::CellRef::column_index(first.trim()) else {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: format!("`{first}` is not a column"),
-                        });
-                    };
-                    let Some(last) = crate::formula::CellRef::column_index(last.trim()) else {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: format!("`{last}` is not a column"),
-                        });
-                    };
-                    let (low, high) = (first.min(last), first.max(last));
-                    for column in low..=high {
-                        if !columns.contains(&column) {
-                            columns.push(column);
+                        };
+                        let number = |text: &str| -> Result<u32, EngineError> {
+                            let row = text.trim().parse::<u64>().map_err(|_| EngineError::Failed {
+                                id: id.clone(),
+                                message: format!("`{text}` is not a row"),
+                            })?;
+                            if row == 0 {
+                                return Err(EngineError::Failed {
+                                    id: id.clone(),
+                                    message: "a row is counted from one: 0 is not one".to_string(),
+                                });
+                            }
+                            Ok(row as u32 - 1)
+                        };
+                        let first = number(first)?;
+                        let last = number(last)?;
+                        let (low, high) = (first.min(last), first.max(last));
+                        for row in low..=high {
+                            if !rows.contains(&row) {
+                                rows.push(row);
+                            }
                         }
                     }
+                    rows.sort_unstable();
                 }
-                columns.sort_unstable();
             }
+            let mut columns: Vec<u32> = Vec::new();
+            if let Some(text) = &self.columns {
+                let text = text.0.trim().to_string();
+                if !text.is_empty() {
+                    for part in text.split(',') {
+                        let part = part.trim().to_ascii_uppercase();
+                        let Some((first, last)) = part.split_once(':') else {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!("`{part}` is not a range of columns"),
+                            });
+                        };
+                        let Some(first) = crate::formula::CellRef::column_index(first.trim()) else {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!("`{first}` is not a column"),
+                            });
+                        };
+                        let Some(last) = crate::formula::CellRef::column_index(last.trim()) else {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!("`{last}` is not a column"),
+                            });
+                        };
+                        let (low, high) = (first.min(last), first.max(last));
+                        for column in low..=high {
+                            if !columns.contains(&column) {
+                                columns.push(column);
+                            }
+                        }
+                    }
+                    columns.sort_unstable();
+                }
+            }
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["title_rows"] = json!(rows.clone());
+                node.data["title_columns"] = json!(columns.clone());
+            }
+            Ok(Outcome::changed("the titles of the sheet are set".to_string()).with_data(json!({
+                "sheet": sheet,
+                "rows": rows.iter().map(|row| row + 1).collect::<Vec<u32>>(),
+                "columns": columns
+                    .iter()
+                    .map(|column| crate::formula::CellRef::column_text(*column))
+                    .collect::<Vec<String>>(),
+            })))
+
         }
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["title_rows"] = json!(rows.clone());
-            node.data["title_columns"] = json!(columns.clone());
-        }
-        Ok(Outcome::changed("the titles of the sheet are set".to_string()).with_data(json!({
-            "sheet": sheet,
-            "rows": rows.iter().map(|row| row + 1).collect::<Vec<u32>>(),
-            "columns": columns
-                .iter()
-                .map(|column| crate::formula::CellRef::column_text(*column))
-                .collect::<Vec<String>>(),
-        })))
     }
 }

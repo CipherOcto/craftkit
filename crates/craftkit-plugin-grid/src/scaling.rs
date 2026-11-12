@@ -28,10 +28,10 @@
 //!   **worked out** — the largest scale at which the pages fit — and it
 //!   is reported.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome};
 
 use crate::printing::{Setup, bands, column_width, row_height, sheet_of};
 
@@ -154,122 +154,136 @@ pub fn fit_scale(setup: &Setup, node: &Node, content: &Content, wide: u16, tall:
     (low, true)
 }
 
-/// **Set** the scale a sheet prints at.
-///
-/// The scale is a whole number of percent, from ten to four hundred.
-/// Setting it takes the **fit** away: a fit is another way of saying
-/// the scale, and a sheet prints at one of them.
-#[derive(Command)]
-#[command(id = "grid.print.scale", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
-pub struct SetScale {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The scale, in percent: a whole number from 10 to 400.
-    pub percent: Number,
-}
+commands! {
+    /// **Set** the scale a sheet prints at.
+    ///
+    /// The scale is a whole number of percent, from ten to four hundred.
+    /// Setting it takes the **fit** away: a fit is another way of saying
+    /// the scale, and a sheet prints at one of them.
+    grid.print.scale {
+        area: "grid",
+        layer: "grid",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
 
-impl SetScale {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.print.scale".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let percent = self.percent.0;
-        if !percent.is_finite() || percent.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a scale is a whole number of percent: {percent} is not one"),
-            });
-        }
-        if !(MIN_SCALE..=MAX_SCALE).contains(&percent) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "a scale is a number of percent from {MIN_SCALE} to {MAX_SCALE}: {percent} is not one"
-                ),
-            });
-        }
-        let mut setup = Setup::of(&node);
-        setup.scale = percent;
-        setup.fit = None;
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["print"] = setup.to_json();
-        }
-        Ok(Outcome::changed(format!("the sheet is printed at {percent} percent")).with_data(json!({
-            "sheet": sheet,
-            "scale": percent,
-        })))
-    }
-}
+            sheet: NodeRef,
+            /// The scale, in percent: a whole number from 10 to 400.
 
-/// **Print** a sheet to fit: so many pages wide and so many pages tall.
-///
-/// The scale that does it is **derived** — the largest scale at which
-/// the pages fit — and it is reported. A fit that cannot be met is
-/// refused: the sheet does not fit, and saying otherwise would be a
-/// lie.
-#[derive(Command)]
-#[command(id = "grid.print.fit", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
-pub struct SetFit {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The number of pages the sheet is **wide**: one, two or three.
-    /// Zero means as many as it takes.
-    pub wide: Number,
-    /// The number of pages the sheet is **tall**. Zero means as many
-    /// as it takes.
-    pub tall: Number,
-}
+            percent: Number,
+        },
+        run: {
 
-impl SetFit {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.print.fit".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let pages = |value: f64, what: &str| -> Result<u32, EngineError> {
-            if !value.is_finite() || value.fract() != 0.0 {
+            let id = "grid.print.scale".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let percent = self.percent.0;
+            if !percent.is_finite() || percent.fract() != 0.0 {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the number of pages {what} is a whole number: {value} is not one"),
+                    message: format!("a scale is a whole number of percent: {percent} is not one"),
                 });
             }
-            if value < 0.0 || value > f64::from(MAX_FIT_PAGES) {
+            if !(MIN_SCALE..=MAX_SCALE).contains(&percent) {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "the number of pages {what} is from zero to {MAX_FIT_PAGES}: {value} is not one"
+                        "a scale is a number of percent from {MIN_SCALE} to {MAX_SCALE}: {percent} is not one"
                     ),
                 });
             }
-            Ok(value as u32)
-        };
-        let wide = pages(self.wide.0, "wide")?;
-        let tall = pages(self.tall.0, "tall")?;
-        if wide == 0 && tall == 0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "a fit of no pages at all is not a fit: it is the whole sheet".to_string(),
-            });
+            let mut setup = Setup::of(&node);
+            setup.scale = percent;
+            setup.fit = None;
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["print"] = setup.to_json();
+            }
+            Ok(Outcome::changed(format!("the sheet is printed at {percent} percent")).with_data(json!({
+                "sheet": sheet,
+                "scale": percent,
+            })))
+
         }
-        let mut setup = Setup::of(&node);
-        let content = Content::of(&node);
-        let (scale, met) = fit_scale(&setup, &node, &content, wide as u16, tall as u16);
-        if !met {
-            return Err(EngineError::Failed {
-                id,
-                message: format!(
-                    "the sheet does not fit into {wide} page(s) wide and {tall} page(s) tall, even at ten percent"
-                ),
-            });
+    }
+    /// **Print** a sheet to fit: so many pages wide and so many pages tall.
+    ///
+    /// The scale that does it is **derived** — the largest scale at which
+    /// the pages fit — and it is reported. A fit that cannot be met is
+    /// refused: the sheet does not fit, and saying otherwise would be a
+    /// lie.
+    grid.print.fit {
+        area: "grid",
+        layer: "grid",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
+
+            sheet: NodeRef,
+            /// The number of pages the sheet is **wide**: one, two or three.
+            /// Zero means as many as it takes.
+
+            wide: Number,
+            /// The number of pages the sheet is **tall**. Zero means as many
+            /// as it takes.
+
+            tall: Number,
+        },
+        run: {
+
+            let id = "grid.print.fit".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let pages = |value: f64, what: &str| -> Result<u32, EngineError> {
+                if !value.is_finite() || value.fract() != 0.0 {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the number of pages {what} is a whole number: {value} is not one"),
+                    });
+                }
+                if value < 0.0 || value > f64::from(MAX_FIT_PAGES) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "the number of pages {what} is from zero to {MAX_FIT_PAGES}: {value} is not one"
+                        ),
+                    });
+                }
+                Ok(value as u32)
+            };
+            let wide = pages(self.wide.0, "wide")?;
+            let tall = pages(self.tall.0, "tall")?;
+            if wide == 0 && tall == 0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a fit of no pages at all is not a fit: it is the whole sheet".to_string(),
+                });
+            }
+            let mut setup = Setup::of(&node);
+            let content = Content::of(&node);
+            let (scale, met) = fit_scale(&setup, &node, &content, wide as u16, tall as u16);
+            if !met {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!(
+                        "the sheet does not fit into {wide} page(s) wide and {tall} page(s) tall, even at ten percent"
+                    ),
+                });
+            }
+            setup.fit = Some((wide as u16, tall as u16));
+            setup.scale = 100.0;
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["print"] = setup.to_json();
+            }
+            Ok(Outcome::changed(format!("the sheet is printed to fit {wide} by {tall}")).with_data(json!({
+                "sheet": sheet,
+                "fit": { "wide": wide, "tall": tall },
+                "scale": (scale * 10_000.0).round() / 100.0,
+            })))
+
         }
-        setup.fit = Some((wide as u16, tall as u16));
-        setup.scale = 100.0;
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["print"] = setup.to_json();
-        }
-        Ok(Outcome::changed(format!("the sheet is printed to fit {wide} by {tall}")).with_data(json!({
-            "sheet": sheet,
-            "fit": { "wide": wide, "tall": tall },
-            "scale": (scale * 10_000.0).round() / 100.0,
-        })))
     }
 }

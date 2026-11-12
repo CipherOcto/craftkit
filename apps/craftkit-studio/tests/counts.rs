@@ -136,6 +136,15 @@ fn rows_of(block: &str) -> usize {
         }
         match c {
             '"' => in_string = true,
+            '\'' => {
+                // A character is **text**: `'"'` is a quote, and the
+                // reader that took it for a string would read the rest
+                // of the file as text.
+                if let Some(step) = the_character(bytes, at) {
+                    at += step;
+                    continue;
+                }
+            }
             '{' => {
                 if depth == 0 {
                     let head = block[head_start..at].trim();
@@ -157,6 +166,22 @@ fn rows_of(block: &str) -> usize {
         at += 1;
     }
     total
+}
+
+/// The length of the character literal at `at`, if there is one.
+///
+/// A character is `'x'` or `'\\x'`, and it is **text**. A lifetime —
+/// `'a` — is not a character, and this says so.
+fn the_character(bytes: &[u8], at: usize) -> Option<usize> {
+    // `'x'` — three bytes, and the middle one may be a quote.
+    if bytes.get(at + 2) == Some(&b'\'') {
+        return Some(3);
+    }
+    // `'\\x'` — four bytes.
+    if bytes.get(at + 1) == Some(&b'\\') && bytes.get(at + 3) == Some(&b'\'') {
+        return Some(4);
+    }
+    None
 }
 
 /// Whether a word is a command's **id**: dotted, lower case.
@@ -202,6 +227,12 @@ fn matching_brace(text: &str, body_start: usize) -> Option<usize> {
         } else {
             match c {
                 '"' => in_string = true,
+                '\'' => {
+                    if let Some(step) = the_character(bytes, at) {
+                        at += step;
+                        continue;
+                    }
+                }
                 '{' => depth += 1,
                 '}' => {
                     depth -= 1;

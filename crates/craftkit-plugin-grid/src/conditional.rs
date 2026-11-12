@@ -49,10 +49,10 @@
 //!   something about it. And the tree's **stop if true** — a rule
 //!   that ends the walk when it matched — is here as a **stop**.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Text};
 
 use crate::formula::{Area, CellRef, Criterion, FILTER_OPS};
 
@@ -187,313 +187,335 @@ pub fn format_for(node: &craftkit_sdk::Node, cell: CellRef, value: &crate::formu
     looks_for(node, cell, value).format
 }
 
-/// Put a **conditional format** on a range of cells.
-///
-/// The cells of the range whose value matches the criterion are
-/// written with the format.
-#[derive(Command)]
-#[command(id = "grid.conditional.set", area = "grid", layer = "grid", icon = "brush", mutates, undoable)]
-pub struct SetConditional {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The range it is about: `A1:A10`.
-    pub range: Text,
-    /// The operation: `=`, `!=`, `<`, `<=`, `>` or `>=`.
-    pub op: Text,
-    /// The value it compares with.
-    pub value: Text,
-    /// The format the matching cells are written with. A rule may
-    /// carry the format, the fill, or both.
-    pub format: Option<Text>,
-    /// The fill the matching cells are filled with: `#rrggbb`. A rule
-    /// may carry the fill and no format.
-    pub fill: Option<Text>,
-    /// The tree's **stop if true**: the walk ends at this rule when it
-    /// matched, and the rules after it are not tried.
-    pub stop: Option<Bool>,
-    /// The **priority** of the rule: the lower the number, the earlier
-    /// the rule is tried.
-    pub priority: Option<Number>,
-}
+commands! {
+    /// Put a **conditional format** on a range of cells.
+    ///
+    /// The cells of the range whose value matches the criterion are
+    /// written with the format.
+    grid.conditional.set {
+        area: "grid",
+        layer: "grid",
+        icon: "brush",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl SetConditional {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.conditional.set".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        let range = self.range.0.trim().to_string();
-        let Some(area) = area_of(&range) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{range}` is not a range of cells"),
-            });
-        };
-        let op = self.op.0.trim().to_string();
-        if !Criterion::op_is_known(&op) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "there is no operation `{op}`: the operations are {}",
-                    FILTER_OPS.join(", ")
-                ),
-            });
-        }
-        let value = self.value.0.clone();
-        if (op == "<" || op == "<=" || op == ">" || op == ">=") && value.trim().parse::<f64>().is_err() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the operation `{op}` compares numbers, and `{value}` is not one"),
-            });
-        }
-        // The **format**: the tree's rule says the format of the
-        // cells, and a rule may say the fill and no format.
-        let format = match &self.format {
-            Some(given) => {
-                let given = given.0.trim().to_string();
-                if given.chars().count() > crate::format::MAX_FORMAT_CHARS {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!(
-                            "a format is at most {} characters long",
-                            crate::format::MAX_FORMAT_CHARS
-                        ),
-                    });
-                }
-                match crate::formatnames::resolve(&given) {
-                    Ok(code) => Some(code),
-                    Err(refusal) => {
+            sheet: NodeRef,
+            /// The range it is about: `A1:A10`.
+
+            range: Text,
+            /// The operation: `=`, `!=`, `<`, `<=`, `>` or `>=`.
+
+            op: Text,
+            /// The value it compares with.
+
+            value: Text,
+            /// The format the matching cells are written with. A rule may
+            /// carry the format, the fill, or both.
+
+            format: Option<Text>,
+            /// The fill the matching cells are filled with: `#rrggbb`. A rule
+            /// may carry the fill and no format.
+
+            fill: Option<Text>,
+            /// The tree's **stop if true**: the walk ends at this rule when it
+            /// matched, and the rules after it are not tried.
+
+            stop: Option<Bool>,
+            /// The **priority** of the rule: the lower the number, the earlier
+            /// the rule is tried.
+
+            priority: Option<Number>,
+        },
+        run: {
+
+            let id = "grid.conditional.set".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let range = self.range.0.trim().to_string();
+            let Some(area) = area_of(&range) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{range}` is not a range of cells"),
+                });
+            };
+            let op = self.op.0.trim().to_string();
+            if !Criterion::op_is_known(&op) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "there is no operation `{op}`: the operations are {}",
+                        FILTER_OPS.join(", ")
+                    ),
+                });
+            }
+            let value = self.value.0.clone();
+            if (op == "<" || op == "<=" || op == ">" || op == ">=") && value.trim().parse::<f64>().is_err() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the operation `{op}` compares numbers, and `{value}` is not one"),
+                });
+            }
+            // The **format**: the tree's rule says the format of the
+            // cells, and a rule may say the fill and no format.
+            let format = match &self.format {
+                Some(given) => {
+                    let given = given.0.trim().to_string();
+                    if given.chars().count() > crate::format::MAX_FORMAT_CHARS {
                         return Err(EngineError::Failed {
                             id: id.clone(),
-                            message: crate::formatnames::message(&given, &refusal),
+                            message: format!(
+                                "a format is at most {} characters long",
+                                crate::format::MAX_FORMAT_CHARS
+                            ),
                         });
                     }
+                    match crate::formatnames::resolve(&given) {
+                        Ok(code) => Some(code),
+                        Err(refusal) => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: crate::formatnames::message(&given, &refusal),
+                            });
+                        }
+                    }
                 }
-            }
-            None => None,
-        };
-        // The **fill**: a colour, and nothing else.
-        let fill = match &self.fill {
-            Some(given) => {
-                let Some(colour) = crate::colours::colour_of(&given.0) else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("`{}` is not a colour: a colour is `#rrggbb`", given.0.trim()),
-                    });
-                };
-                match colour {
-                    Some(colour) => Some(colour),
-                    None => {
+                None => None,
+            };
+            // The **fill**: a colour, and nothing else.
+            let fill = match &self.fill {
+                Some(given) => {
+                    let Some(colour) = crate::colours::colour_of(&given.0) else {
                         return Err(EngineError::Failed {
                             id: id.clone(),
-                            message: "a rule's fill is a colour, and `none` is not one".to_string(),
+                            message: format!("`{}` is not a colour: a colour is `#rrggbb`", given.0.trim()),
                         });
+                    };
+                    match colour {
+                        Some(colour) => Some(colour),
+                        None => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: "a rule's fill is a colour, and `none` is not one".to_string(),
+                            });
+                        }
                     }
                 }
+                None => None,
+            };
+            if format.is_none() && fill.is_none() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "name what the rule says: the format, the fill, or both".to_string(),
+                });
             }
-            None => None,
-        };
-        if format.is_none() && fill.is_none() {
-            return Err(EngineError::Failed {
-                id,
-                message: "name what the rule says: the format, the fill, or both".to_string(),
-            });
-        }
-        let stop = self.stop.map(|stop| stop.0);
-        let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
-        // The **priority** is a whole number, and it is not a negative
-        // one.
-        let priority = match self.priority {
-            Some(priority) => {
-                let number = priority.0;
-                if !number.is_finite() || number.fract() != 0.0 || number < 0.0 || number > u32::MAX as f64 {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the priority of a rule is a whole number, and {number} is not one"),
-                    });
+            let stop = self.stop.map(|stop| stop.0);
+            let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
+            // The **priority** is a whole number, and it is not a negative
+            // one.
+            let priority = match self.priority {
+                Some(priority) => {
+                    let number = priority.0;
+                    if !number.is_finite() || number.fract() != 0.0 || number < 0.0 || number > u32::MAX as f64 {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the priority of a rule is a whole number, and {number} is not one"),
+                        });
+                    }
+                    Some(number as u32)
                 }
-                Some(number as u32)
-            }
-            None => None,
-        };
-        let mut list = conditionals_of(node)
-            .into_iter()
-            .map(|conditional| {
-                json!({
-                    "range": conditional.range,
-                    "op": conditional.criterion.op,
-                    "value": conditional.criterion.value,
-                    "format": conditional.format,
-                    "fill": conditional.fill,
-                    "stop": conditional.stop,
-                    "priority": conditional.priority,
+                None => None,
+            };
+            let mut list = conditionals_of(node)
+                .into_iter()
+                .map(|conditional| {
+                    json!({
+                        "range": conditional.range,
+                        "op": conditional.criterion.op,
+                        "value": conditional.criterion.value,
+                        "format": conditional.format,
+                        "fill": conditional.fill,
+                        "stop": conditional.stop,
+                        "priority": conditional.priority,
+                    })
                 })
-            })
-            .collect::<Vec<_>>();
-        // A range may have **one** conditional format: a second one for
-        // the same range replaces the first.
-        list.retain(|entry| entry["range"].as_str() != Some(range.as_str()));
-        list.push(json!({
-            "range": range,
-            "op": op,
-            "value": value,
-            "format": format,
-            "fill": fill,
-            "stop": stop,
-            "priority": priority,
-        }));
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["conditionals"] = json!(list);
-        }
-        Ok(Outcome::changed(format!("the range {range} of the sheet `{sheet}` is conditional")).with_data(
-            json!({
-                "sheet": sheet,
+                .collect::<Vec<_>>();
+            // A range may have **one** conditional format: a second one for
+            // the same range replaces the first.
+            list.retain(|entry| entry["range"].as_str() != Some(range.as_str()));
+            list.push(json!({
                 "range": range,
                 "op": op,
                 "value": value,
                 "format": format,
                 "fill": fill,
                 "stop": stop,
-            }),
-        ))
-    }
-}
-
-/// Take a **conditional format** away.
-#[derive(Command)]
-#[command(id = "grid.conditional.clear", area = "grid", layer = "grid", icon = "trash", mutates, undoable)]
-pub struct ClearConditional {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The range it was about: `A1:A10`.
-    pub range: Text,
-}
-
-impl ClearConditional {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.conditional.clear".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        let range = self.range.0.trim().to_string();
-        let Some(area) = area_of(&range) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{range}` is not a range of cells"),
-            });
-        };
-        let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
-        let conditionals = conditionals_of(node);
-        if !conditionals.iter().any(|conditional| conditional.range == range) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no conditional format of {range} on the sheet `{sheet}`"),
-            });
-        }
-        let list: Vec<_> = conditionals
-            .into_iter()
-            .filter(|conditional| conditional.range != range)
-            .map(|conditional| {
+                "priority": priority,
+            }));
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["conditionals"] = json!(list);
+            }
+            Ok(Outcome::changed(format!("the range {range} of the sheet `{sheet}` is conditional")).with_data(
                 json!({
-                    "range": conditional.range,
-                    "op": conditional.criterion.op,
-                    "value": conditional.criterion.value,
-                    "format": conditional.format,
-                    "fill": conditional.fill,
-                    "stop": conditional.stop,
-                    "priority": conditional.priority,
-                })
-            })
-            .collect();
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data["conditionals"] = json!(list);
+                    "sheet": sheet,
+                    "range": range,
+                    "op": op,
+                    "value": value,
+                    "format": format,
+                    "fill": fill,
+                    "stop": stop,
+                }),
+            ))
+
         }
-        Ok(Outcome::changed(format!("the conditional format of {range} is taken away"))
-            .with_data(json!({ "sheet": sheet, "range": range })))
     }
-}
+    /// Take a **conditional format** away.
+    grid.conditional.clear {
+        area: "grid",
+        layer: "grid",
+        icon: "trash",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-/// The **cells** of a range that a conditional format holds for.
-///
-/// The cells are **derived**: they are worked out from the cells each
-/// time they are asked for.
-#[derive(Command)]
-#[command(id = "grid.conditional.check", area = "grid", layer = "grid", icon = "list")]
-pub struct CheckConditional {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The range it is about: `A1:A10`.
-    pub range: Text,
-}
+            sheet: NodeRef,
+            /// The range it was about: `A1:A10`.
 
-impl CheckConditional {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.conditional.check".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        let range = self.range.0.trim().to_string();
-        let Some(area) = area_of(&range) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{range}` is not a range of cells"),
-            });
-        };
-        let conditionals = ordered_conditionals(node);
-        let book = crate::book_of(session.document());
-        let name = node.name.clone();
-        let mut cells: Vec<Json> = Vec::new();
-        for row in area.start.row..=area.end.row {
-            for col in area.start.col..=area.end.col {
-                let cell = CellRef { col, row };
-                let value = book.value_of(&name, cell);
-                let matched = conditionals.iter().find(|conditional| {
-                    area_of(&conditional.range).is_some_and(|area| area.covers(cell))
-                        && conditional.criterion.matches(&value)
+            range: Text,
+        },
+        run: {
+
+            let id = "grid.conditional.clear".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
                 });
-                if let Some(matched) = matched {
-                    cells.push(json!({
-                        "cell": cell.to_text(),
-                        "format": matched.format,
-                    }));
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let range = self.range.0.trim().to_string();
+            let Some(area) = area_of(&range) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{range}` is not a range of cells"),
+                });
+            };
+            let range = format!("{}:{}", area.start.to_text(), area.end.to_text());
+            let conditionals = conditionals_of(node);
+            if !conditionals.iter().any(|conditional| conditional.range == range) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no conditional format of {range} on the sheet `{sheet}`"),
+                });
+            }
+            let list: Vec<_> = conditionals
+                .into_iter()
+                .filter(|conditional| conditional.range != range)
+                .map(|conditional| {
+                    json!({
+                        "range": conditional.range,
+                        "op": conditional.criterion.op,
+                        "value": conditional.criterion.value,
+                        "format": conditional.format,
+                        "fill": conditional.fill,
+                        "stop": conditional.stop,
+                        "priority": conditional.priority,
+                    })
+                })
+                .collect();
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data["conditionals"] = json!(list);
+            }
+            Ok(Outcome::changed(format!("the conditional format of {range} is taken away"))
+                .with_data(json!({ "sheet": sheet, "range": range })))
+
+        }
+    }
+    /// The **cells** of a range that a conditional format holds for.
+    ///
+    /// The cells are **derived**: they are worked out from the cells each
+    /// time they are asked for.
+    grid.conditional.check {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet it is in.
+
+            sheet: NodeRef,
+            /// The range it is about: `A1:A10`.
+
+            range: Text,
+        },
+        run: {
+
+            let id = "grid.conditional.check".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let range = self.range.0.trim().to_string();
+            let Some(area) = area_of(&range) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{range}` is not a range of cells"),
+                });
+            };
+            let conditionals = ordered_conditionals(node);
+            let book = crate::book_of(session.document());
+            let name = node.name.clone();
+            let mut cells: Vec<Json> = Vec::new();
+            for row in area.start.row..=area.end.row {
+                for col in area.start.col..=area.end.col {
+                    let cell = CellRef { col, row };
+                    let value = book.value_of(&name, cell);
+                    let matched = conditionals.iter().find(|conditional| {
+                        area_of(&conditional.range).is_some_and(|area| area.covers(cell))
+                            && conditional.criterion.matches(&value)
+                    });
+                    if let Some(matched) = matched {
+                        cells.push(json!({
+                            "cell": cell.to_text(),
+                            "format": matched.format,
+                        }));
+                    }
                 }
             }
+            let count = cells.len();
+            Ok(Outcome::new(format!("{count} cell(s) match")).with_data(json!({
+                "sheet": sheet,
+                "range": range,
+                "cells": cells,
+            })))
+
         }
-        let count = cells.len();
-        Ok(Outcome::new(format!("{count} cell(s) match")).with_data(json!({
-            "sheet": sheet,
-            "range": range,
-            "cells": cells,
-        })))
     }
 }

@@ -11,7 +11,7 @@
 //! seven for every digit of the last row, and their height is the
 //! height of a row.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session};
@@ -47,38 +47,51 @@ pub fn room_of(node: &Node, digits: u32) -> (f64, f64) {
     (HEADING_MARGIN + HEADING_DIGIT * digits as f64, height)
 }
 
-/// **Print** the gridlines of a sheet, or do not.
-#[derive(Command)]
-#[command(id = "grid.print.gridlines", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
-pub struct SetPrintGridlines {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// Whether the gridlines are printed.
-    pub on: Bool,
-}
+commands! {
+    /// **Print** the gridlines of a sheet, or do not.
+    grid.print.gridlines {
+        area: "grid",
+        layer: "grid",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
 
-impl SetPrintGridlines {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        set(session, "grid.print.gridlines", "print_gridlines", self.sheet.0, self.on.0)
+            sheet: NodeRef,
+            /// Whether the gridlines are printed.
+
+            on: Bool,
+        },
+        run: {
+
+            set(session, "grid.print.gridlines", "print_gridlines", self.sheet.0, self.on.0)
+
+        }
     }
-}
+    /// **Print** the headings of a sheet, or do not.
+    ///
+    /// The headings take room from the page, so the pages of a sheet with
+    /// its headings are not the pages of a sheet without them.
+    grid.print.headings {
+        area: "grid",
+        layer: "grid",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
 
-/// **Print** the headings of a sheet, or do not.
-///
-/// The headings take room from the page, so the pages of a sheet with
-/// its headings are not the pages of a sheet without them.
-#[derive(Command)]
-#[command(id = "grid.print.headings", area = "grid", layer = "grid", icon = "page", mutates, undoable)]
-pub struct SetPrintHeadings {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// Whether the headings are printed.
-    pub on: Bool,
-}
+            sheet: NodeRef,
+            /// Whether the headings are printed.
 
-impl SetPrintHeadings {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        set(session, "grid.print.headings", "print_headings", self.sheet.0, self.on.0)
+            on: Bool,
+        },
+        run: {
+
+            set(session, "grid.print.headings", "print_headings", self.sheet.0, self.on.0)
+
+        }
     }
 }
 

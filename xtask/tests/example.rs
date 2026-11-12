@@ -48,12 +48,15 @@ fn the_source_of_the_example_is_the_whole_declaration() {
     let index = index::build(&root()).expect("the index is built");
     let example = example_of(&index, "grid").expect("the grid battery has an example");
     let source = the_source(&root(), example).expect("the source is read");
-    assert!(source.contains("#[derive(Command)]"), "the declaration is whole:\n{source}");
-    assert!(source.contains("#[command("), "the attribute is there:\n{source}");
-    assert!(source.contains("pub struct"), "the struct is there:\n{source}");
+    assert!(source.contains("grid.workbook.add"), "the id is there:\n{source}");
     assert!(source.contains("example"), "the marker is there:\n{source}");
-    // The documentation is above the derive, so it is in the source too.
+    // The documentation is above the declaration, so it is in the source too.
     assert!(source.contains("///"), "the documentation is there:\n{source}");
+    // The declaration is whole, in **whichever spelling the battery
+    // uses**: a struct with an attribute, or a row of a table.
+    let struct_form = source.contains("#[derive(Command)]") && source.contains("pub struct");
+    let table_form = source.contains("params: {") && source.contains("run: {");
+    assert!(struct_form || table_form, "the declaration is whole:\n{source}");
 }
 
 #[test]

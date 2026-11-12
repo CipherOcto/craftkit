@@ -38,10 +38,10 @@
 //!   hides the rows that do not match, and here the command copies the
 //!   rows that do.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Text};
 
 use crate::formula::{Anchor, Area, CellRef, Cells, Value};
 
@@ -250,168 +250,179 @@ pub fn kept_rows(cells: &Cells, list: &Area, criteria: &Area, unique: bool) -> R
     Ok(kept)
 }
 
-/// **Filter** a list of rows by a **criteria range** — the tree's own
-/// advanced filter.
-#[derive(Command)]
-#[command(id = "grid.filter.advanced", area = "grid", layer = "grid", icon = "filter", mutates, undoable)]
-pub struct AdvancedFilter {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The **list**: a range of rows under a row of headings.
-    pub range: Text,
-    /// The **criteria**: a range of headings and criteria rows.
-    pub criteria: Text,
-    /// The range the rows that are kept are **copied** to.
-    ///
-    /// Leave it out and the command only says which rows are kept.
-    pub copy_to: Option<Text>,
-    /// Whether only the **first** row of a set of the same values is
-    /// kept.
-    pub unique: Option<Bool>,
-}
+commands! {
+    /// **Filter** a list of rows by a **criteria range** — the tree's own
+    /// advanced filter.
+    grid.filter.advanced {
+        area: "grid",
+        layer: "grid",
+        icon: "filter",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl AdvancedFilter {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = COMMAND.to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
-        }
-        // The **list**: a range with a row of headings at the top.
-        let Some(list) = area_of(&self.range.0) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{}` is not a range of cells", self.range.0.trim()),
-            });
-        };
-        if list.start.row > list.end.row {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the list of the advanced filter is empty".to_string(),
-            });
-        }
-        // The **criteria**: a range with a row of headings at the top.
-        let Some(criteria) = area_of(&self.criteria.0) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{}` is not a range of cells", self.criteria.0.trim()),
-            });
-        };
-        if criteria.count() > MAX_CRITERIA_COLUMNS * MAX_CRITERIA_ROWS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the criteria range is too large".to_string(),
-            });
-        }
-        let cells = crate::cells_of(node);
-        // The **rows of the list** that match: the rows of the criteria
-        // are judged one by one, and the columns of a row together.
-        let unique = matches!(self.unique, Some(Bool(true)));
-        let kept = kept_rows(&cells, &list, &criteria, unique)
-            .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        // The rows of the list are counted from **one**, as the rows of
-        // a filter are: the tree's own counting.
-        let kept: Vec<u64> = kept.iter().map(|row| *row as u64 + 1).collect();
-        let matched = kept.len();
-        // The **copy**: the heading row and the rows that are kept are
-        // written to the range the caller names.
-        let Some(copy_to) = &self.copy_to else {
-            // The tree's own **filtering in place**: the filter is set
-            // on the sheet, and the rows that do not match are hidden.
-            let fact = json!({
-                "range": self.range.0.trim(),
-                "criteria": self.criteria.0.trim(),
-                "unique": unique,
-            });
-            if let Some(node) = session.document_mut()?.node_mut(sheet) {
-                node.data["advanced_filter"] = fact;
+            sheet: NodeRef,
+            /// The **list**: a range of rows under a row of headings.
+
+            range: Text,
+            /// The **criteria**: a range of headings and criteria rows.
+
+            criteria: Text,
+            /// The range the rows that are kept are **copied** to.
+            ///
+            /// Leave it out and the command only says which rows are kept.
+
+            copy_to: Option<Text>,
+            /// Whether only the **first** row of a set of the same values is
+            /// kept.
+
+            unique: Option<Bool>,
+        },
+        run: {
+
+            let id = COMMAND.to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
             }
-            // The rows that do **not** match are hidden — and the rows a
-            // filter hides are **derived**: they are worked out from the
-            // cells each time they are asked for, and they are not
-            // written down.
-            let hidden: Vec<u64> = (list.start.row + 1..=list.end.row)
-                .map(|row| row as u64 + 1)
-                .filter(|row| !kept.contains(row))
-                .collect();
-            return Ok(Outcome::changed(format!("{} rows of the list match", matched)).with_data(json!({
-                "sheet": sheet,
-                "matched": matched,
-                "rows": kept,
-                "hidden_rows": hidden,
-            })));
-        };
-        let Some(destination) = area_of(&copy_to.0) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{}` is not a range of cells", copy_to.0.trim()),
-            });
-        };
-        // The destination may not **overlap** the list: the tree's own
-        // rule.
-        if destination.start.row <= list.end.row
-            && list.start.row <= destination.end.row
-            && destination.start.col <= list.end.col
-            && list.start.col <= destination.end.col
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the range the rows are copied to overlaps the list".to_string(),
-            });
-        }
-        let width = list.end.col - list.start.col + 1;
-        let rows_out: Vec<u32> =
-            std::iter::once(list.start.row).chain(kept.iter().map(|row| *row as u32 - 1)).collect();
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let mut cells = crate::sheet_cells_mut(node);
-        for (index, row) in rows_out.iter().enumerate() {
-            for column in 0..width {
-                let from = CellRef { col: list.start.col + column, row: *row };
-                let to = CellRef {
-                    col: destination.start.col + column,
-                    row: destination.start.row + index as u32,
-                };
-                let entry = cells.get(from).cloned();
-                match entry {
-                    Some(entry) => {
-                        cells.set_value(to, entry.value.clone().unwrap_or(Value::Empty));
-                        if let Some(format) = entry.format.clone() {
-                            cells.set_format(to, Some(format));
+            // The **list**: a range with a row of headings at the top.
+            let Some(list) = area_of(&self.range.0) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{}` is not a range of cells", self.range.0.trim()),
+                });
+            };
+            if list.start.row > list.end.row {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the list of the advanced filter is empty".to_string(),
+                });
+            }
+            // The **criteria**: a range with a row of headings at the top.
+            let Some(criteria) = area_of(&self.criteria.0) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{}` is not a range of cells", self.criteria.0.trim()),
+                });
+            };
+            if criteria.count() > MAX_CRITERIA_COLUMNS * MAX_CRITERIA_ROWS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the criteria range is too large".to_string(),
+                });
+            }
+            let cells = crate::cells_of(node);
+            // The **rows of the list** that match: the rows of the criteria
+            // are judged one by one, and the columns of a row together.
+            let unique = matches!(self.unique, Some(Bool(true)));
+            let kept = kept_rows(&cells, &list, &criteria, unique)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            // The rows of the list are counted from **one**, as the rows of
+            // a filter are: the tree's own counting.
+            let kept: Vec<u64> = kept.iter().map(|row| *row as u64 + 1).collect();
+            let matched = kept.len();
+            // The **copy**: the heading row and the rows that are kept are
+            // written to the range the caller names.
+            let Some(copy_to) = &self.copy_to else {
+                // The tree's own **filtering in place**: the filter is set
+                // on the sheet, and the rows that do not match are hidden.
+                let fact = json!({
+                    "range": self.range.0.trim(),
+                    "criteria": self.criteria.0.trim(),
+                    "unique": unique,
+                });
+                if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                    node.data["advanced_filter"] = fact;
+                }
+                // The rows that do **not** match are hidden — and the rows a
+                // filter hides are **derived**: they are worked out from the
+                // cells each time they are asked for, and they are not
+                // written down.
+                let hidden: Vec<u64> = (list.start.row + 1..=list.end.row)
+                    .map(|row| row as u64 + 1)
+                    .filter(|row| !kept.contains(row))
+                    .collect();
+                return Ok(Outcome::changed(format!("{} rows of the list match", matched)).with_data(json!({
+                    "sheet": sheet,
+                    "matched": matched,
+                    "rows": kept,
+                    "hidden_rows": hidden,
+                })));
+            };
+            let Some(destination) = area_of(&copy_to.0) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{}` is not a range of cells", copy_to.0.trim()),
+                });
+            };
+            // The destination may not **overlap** the list: the tree's own
+            // rule.
+            if destination.start.row <= list.end.row
+                && list.start.row <= destination.end.row
+                && destination.start.col <= list.end.col
+                && list.start.col <= destination.end.col
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the range the rows are copied to overlaps the list".to_string(),
+                });
+            }
+            let width = list.end.col - list.start.col + 1;
+            let rows_out: Vec<u32> =
+                std::iter::once(list.start.row).chain(kept.iter().map(|row| *row as u32 - 1)).collect();
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let mut cells = crate::sheet_cells_mut(node);
+            for (index, row) in rows_out.iter().enumerate() {
+                for column in 0..width {
+                    let from = CellRef { col: list.start.col + column, row: *row };
+                    let to = CellRef {
+                        col: destination.start.col + column,
+                        row: destination.start.row + index as u32,
+                    };
+                    let entry = cells.get(from).cloned();
+                    match entry {
+                        Some(entry) => {
+                            cells.set_value(to, entry.value.clone().unwrap_or(Value::Empty));
+                            if let Some(format) = entry.format.clone() {
+                                cells.set_format(to, Some(format));
+                            }
+                            if let Some(style) = entry.style.clone() {
+                                cells.set_style(to, Some(style));
+                            }
                         }
-                        if let Some(style) = entry.style.clone() {
-                            cells.set_style(to, Some(style));
+                        None => {
+                            cells.clear_contents(to);
                         }
-                    }
-                    None => {
-                        cells.clear_contents(to);
                     }
                 }
             }
+            node.data["cells"] = crate::cells_into(&cells);
+            let end = CellRef {
+                col: destination.start.col + width - 1,
+                row: destination.start.row + rows_out.len() as u32 - 1,
+            };
+            Ok(Outcome::changed(format!("{} rows of the list are copied", matched)).with_data(json!({
+                "sheet": sheet,
+                "matched": matched,
+                "rows": kept,
+                "range": Area::new(destination.start, end).to_text(),
+            })))
+
         }
-        node.data["cells"] = crate::cells_into(&cells);
-        let end = CellRef {
-            col: destination.start.col + width - 1,
-            row: destination.start.row + rows_out.len() as u32 - 1,
-        };
-        Ok(Outcome::changed(format!("{} rows of the list are copied", matched)).with_data(json!({
-            "sheet": sheet,
-            "matched": matched,
-            "rows": kept,
-            "range": Area::new(destination.start, end).to_text(),
-        })))
     }
 }

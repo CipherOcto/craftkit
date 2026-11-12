@@ -45,10 +45,10 @@
 //!   name that is not there. That is an error in the cell, and the
 //!   error says which name is missing.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
 use crate::formula::{Anchor, Area};
 
@@ -154,118 +154,132 @@ fn area_to_text(area: &Area) -> String {
     }
 }
 
-/// Write a **name** into a workbook.
-///
-/// The name stands for a range of cells in a sheet, and the range names
-/// its sheet: `Sheet1!A1:B4`.
-#[derive(Command)]
-#[command(id = "grid.name.set", area = "grid", layer = "grid", icon = "tag", mutates, undoable)]
-pub struct SetName {
-    /// The workbook.
-    pub workbook: NodeRef,
-    /// The name.
-    pub name: Text,
-    /// The range it stands for: `Sheet1!A1:B4`.
-    pub refers_to: Text,
-}
+commands! {
+    /// Write a **name** into a workbook.
+    ///
+    /// The name stands for a range of cells in a sheet, and the range names
+    /// its sheet: `Sheet1!A1:B4`.
+    grid.name.set {
+        area: "grid",
+        layer: "grid",
+        icon: "tag",
+        mutates,
+        undoable,
+        params: {
+            /// The workbook.
 
-impl SetName {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.name.set".to_string();
-        let workbook = self.workbook.0;
-        let Some(node) = session.document().node(workbook) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{workbook}`"),
-            });
-        };
-        if node.kind != "grid.workbook" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
-            });
+            workbook: NodeRef,
+            /// The name.
+
+            name: Text,
+            /// The range it stands for: `Sheet1!A1:B4`.
+
+            refers_to: Text,
+        },
+        run: {
+
+            let id = "grid.name.set".to_string();
+            let workbook = self.workbook.0;
+            let Some(node) = session.document().node(workbook) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{workbook}`"),
+                });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+                });
+            }
+            let name = self.name.0.trim().to_string();
+            if let Some(reason) = why_not(&name) {
+                return Err(EngineError::Failed { id: id.clone(), message: reason });
+            }
+            let (sheet, area) = parse_refers_to(&self.refers_to.0)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let sheets: Vec<String> = session
+                .document()
+                .walk()
+                .filter(|node| node.kind == "grid.sheet")
+                .map(|node| node.name.clone())
+                .collect();
+            if !sheets.contains(&sheet) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`: the sheets are {}", sheets.join(", ")),
+                });
+            }
+            let refers_to = format!("{sheet}!{}", area_to_text(&area));
+            let mut names = node.data.get("names").cloned().unwrap_or(json!({}));
+            if !names.is_object() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the names of the workbook `{workbook}` are not a group"),
+                });
+            }
+            let replacing = names.get(&name).is_some();
+            names[&name] = json!(refers_to.clone());
+            if let Some(node) = session.document_mut()?.node_mut(workbook) {
+                node.data["names"] = names;
+            }
+            Ok(Outcome::changed(if replacing {
+                format!("the name `{name}` now stands for {refers_to}")
+            } else {
+                format!("the name `{name}` stands for {refers_to}")
+            })
+            .with_data(json!({ "workbook": workbook, "name": name, "refers_to": refers_to })))
+
         }
-        let name = self.name.0.trim().to_string();
-        if let Some(reason) = why_not(&name) {
-            return Err(EngineError::Failed { id: id.clone(), message: reason });
-        }
-        let (sheet, area) = parse_refers_to(&self.refers_to.0)
-            .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let sheets: Vec<String> = session
-            .document()
-            .walk()
-            .filter(|node| node.kind == "grid.sheet")
-            .map(|node| node.name.clone())
-            .collect();
-        if !sheets.contains(&sheet) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`: the sheets are {}", sheets.join(", ")),
-            });
-        }
-        let refers_to = format!("{sheet}!{}", area_to_text(&area));
-        let mut names = node.data.get("names").cloned().unwrap_or(json!({}));
-        if !names.is_object() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the names of the workbook `{workbook}` are not a group"),
-            });
-        }
-        let replacing = names.get(&name).is_some();
-        names[&name] = json!(refers_to.clone());
-        if let Some(node) = session.document_mut()?.node_mut(workbook) {
-            node.data["names"] = names;
-        }
-        Ok(Outcome::changed(if replacing {
-            format!("the name `{name}` now stands for {refers_to}")
-        } else {
-            format!("the name `{name}` stands for {refers_to}")
-        })
-        .with_data(json!({ "workbook": workbook, "name": name, "refers_to": refers_to })))
     }
-}
+    /// Take a **name** away from a workbook.
+    grid.name.delete {
+        area: "grid",
+        layer: "grid",
+        icon: "trash",
+        mutates,
+        undoable,
+        params: {
+            /// The workbook.
 
-/// Take a **name** away from a workbook.
-#[derive(Command)]
-#[command(id = "grid.name.delete", area = "grid", layer = "grid", icon = "trash", mutates, undoable)]
-pub struct DeleteName {
-    /// The workbook.
-    pub workbook: NodeRef,
-    /// The name.
-    pub name: Text,
-}
+            workbook: NodeRef,
+            /// The name.
 
-impl DeleteName {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.name.delete".to_string();
-        let workbook = self.workbook.0;
-        let Some(node) = session.document().node(workbook) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{workbook}`"),
-            });
-        };
-        if node.kind != "grid.workbook" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
-            });
+            name: Text,
+        },
+        run: {
+
+            let id = "grid.name.delete".to_string();
+            let workbook = self.workbook.0;
+            let Some(node) = session.document().node(workbook) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{workbook}`"),
+                });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+                });
+            }
+            let name = self.name.0.trim().to_string();
+            let mut names = node.data.get("names").cloned().unwrap_or(json!({}));
+            if names.get(&name).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no name `{name}` in the workbook `{workbook}`"),
+                });
+            }
+            if let Some(names) = names.as_object_mut() {
+                names.remove(&name);
+            }
+            if let Some(node) = session.document_mut()?.node_mut(workbook) {
+                node.data["names"] = names;
+            }
+            Ok(Outcome::changed(format!("the name `{name}` is taken away"))
+                .with_data(json!({ "workbook": workbook, "name": name })))
+
         }
-        let name = self.name.0.trim().to_string();
-        let mut names = node.data.get("names").cloned().unwrap_or(json!({}));
-        if names.get(&name).is_none() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no name `{name}` in the workbook `{workbook}`"),
-            });
-        }
-        if let Some(names) = names.as_object_mut() {
-            names.remove(&name);
-        }
-        if let Some(node) = session.document_mut()?.node_mut(workbook) {
-            node.data["names"] = names;
-        }
-        Ok(Outcome::changed(format!("the name `{name}` is taken away"))
-            .with_data(json!({ "workbook": workbook, "name": name })))
     }
 }

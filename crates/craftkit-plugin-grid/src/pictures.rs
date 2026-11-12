@@ -19,10 +19,10 @@
 //! - the **alt text** is what a reader says when it cannot show the
 //!   picture, and it is the tree's own.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Text};
 
 /// The most bytes of a picture that are read to measure it.
 const MAX_HEAD_BYTES: u64 = 1024 * 1024;
@@ -58,193 +58,211 @@ fn format_of(path: &str) -> Option<&'static str> {
     }
 }
 
-/// **Set** the picture of a cell.
-///
-/// The picture is a file beside the document: the cell says where the
-/// bytes are, and how big the picture is.
-#[derive(Command)]
-#[command(id = "grid.picture.set", area = "grid", layer = "grid", icon = "image", mutates, undoable)]
-pub struct SetPicture {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The cell the picture is drawn in.
-    pub cell: Text,
-    /// The **file** the bytes are in.
-    pub path: Text,
-    /// The **alt text**: what a reader says when it cannot show the
-    /// picture.
-    pub alt: Option<Text>,
-}
+commands! {
+    /// **Set** the picture of a cell.
+    ///
+    /// The picture is a file beside the document: the cell says where the
+    /// bytes are, and how big the picture is.
+    grid.picture.set {
+        area: "grid",
+        layer: "grid",
+        icon: "image",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
 
-impl SetPicture {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.picture.set".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
-        }
-        let cell = crate::cell_at(self.cell.0.trim(), &id)?;
-        crate::merges::refuse_covered(&node, &[cell], &id)?;
-        crate::protection::refuse_locked(&node, &crate::style_locks(session, sheet), &[cell], &id)?;
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a picture is a file, and a file has a name".to_string(),
-            });
-        }
-        let size = measure(&path).map_err(|why| EngineError::Failed { id: id.clone(), message: why })?;
-        let format = format_of(&path).unwrap_or("unknown");
-        let alt = self.alt.as_ref().map(|alt| alt.0.clone()).unwrap_or_default();
-        let picture = json!({
-            "path": path,
-            "width": size.width,
-            "height": size.height,
-            "format": format,
-            "alt": alt,
-        });
-        let address = cell.to_text();
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            if !node.data["pictures"].is_object() {
-                node.data["pictures"] = json!({});
+            sheet: NodeRef,
+            /// The cell the picture is drawn in.
+
+            cell: Text,
+            /// The **file** the bytes are in.
+
+            path: Text,
+            /// The **alt text**: what a reader says when it cannot show the
+            /// picture.
+
+            alt: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.picture.set".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
             }
-            if let Some(map) = node.data["pictures"].as_object_mut() {
-                map.insert(address.clone(), picture.clone());
+            let cell = crate::cell_at(self.cell.0.trim(), &id)?;
+            crate::merges::refuse_covered(&node, &[cell], &id)?;
+            crate::protection::refuse_locked(&node, &crate::style_locks(session, sheet), &[cell], &id)?;
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a picture is a file, and a file has a name".to_string(),
+                });
             }
-        }
-        Ok(Outcome::changed(format!("the cell `{address}` holds a picture")).with_data(json!({
-            "sheet": sheet,
-            "cell": address,
-            "picture": picture,
-        })))
-    }
-}
-
-/// **Read** the picture of a cell: where its bytes are and how big it
-/// is.
-///
-/// Without a cell, every picture of the sheet is read.
-///
-/// The **pixels** and the **aspect ratio** are derived.
-#[derive(Command)]
-#[command(id = "grid.picture.read", area = "grid", layer = "grid", icon = "image")]
-pub struct ReadPicture {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The cell. Without it, every picture of the sheet is read.
-    pub cell: Option<Text>,
-}
-
-impl ReadPicture {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.picture.read".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
+            let size = measure(&path).map_err(|why| EngineError::Failed { id: id.clone(), message: why })?;
+            let format = format_of(&path).unwrap_or("unknown");
+            let alt = self.alt.as_ref().map(|alt| alt.0.clone()).unwrap_or_default();
+            let picture = json!({
+                "path": path,
+                "width": size.width,
+                "height": size.height,
+                "format": format,
+                "alt": alt,
             });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
-        }
-        let read = |address: &str, picture: &Json| -> Json {
-            let width = picture.get("width").and_then(|width| width.as_u64()).unwrap_or(0);
-            let height = picture.get("height").and_then(|height| height.as_u64()).unwrap_or(0);
-            let aspect = if height == 0 { None } else { Some(width as f64 / height as f64) };
-            json!({
+            let address = cell.to_text();
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                if !node.data["pictures"].is_object() {
+                    node.data["pictures"] = json!({});
+                }
+                if let Some(map) = node.data["pictures"].as_object_mut() {
+                    map.insert(address.clone(), picture.clone());
+                }
+            }
+            Ok(Outcome::changed(format!("the cell `{address}` holds a picture")).with_data(json!({
+                "sheet": sheet,
                 "cell": address,
                 "picture": picture,
-                "pixels": width * height,
-                "aspect": match aspect {
-                    Some(aspect) => json!(aspect),
-                    None => Json::Null,
-                },
-            })
-        };
-        match &self.cell {
-            Some(cell) => {
-                let address = crate::cell_at(cell.0.trim(), &id)?.to_text();
-                let Some(picture) = picture_of(&node, &address) else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the cell `{address}` holds no picture"),
-                    });
-                };
-                let read = read(&address, &picture);
-                let mut data = json!({ "sheet": sheet });
-                if let Some(map) = data.as_object_mut()
-                    && let Some(read) = read.as_object()
-                {
-                    for (key, value) in read {
-                        map.insert(key.clone(), value.clone());
-                    }
-                }
-                Ok(Outcome::new(format!("the cell `{address}` holds a picture")).with_data(data))
-            }
-            None => {
-                let mut pictures: Vec<Json> = Vec::new();
-                for (address, picture) in pictures_of(&node) {
-                    pictures.push(read(&address, &picture));
-                }
-                Ok(Outcome::new(format!("the sheet holds {} picture(s)", pictures.len()))
-                    .with_data(json!({ "sheet": sheet, "pictures": pictures })))
-            }
+            })))
+
         }
     }
-}
+    /// **Read** the picture of a cell: where its bytes are and how big it
+    /// is.
+    ///
+    /// Without a cell, every picture of the sheet is read.
+    ///
+    /// The **pixels** and the **aspect ratio** are derived.
+    grid.picture.read {
+        area: "grid",
+        layer: "grid",
+        icon: "image",
+        params: {
+            /// The sheet.
 
-/// **Take** the picture of a cell away.
-#[derive(Command)]
-#[command(id = "grid.picture.remove", area = "grid", layer = "grid", icon = "trash", mutates, undoable)]
-pub struct RemovePicture {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The cell.
-    pub cell: Text,
-}
+            sheet: NodeRef,
+            /// The cell. Without it, every picture of the sheet is read.
 
-impl RemovePicture {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.picture.remove".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
+            cell: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.picture.read".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let read = |address: &str, picture: &Json| -> Json {
+                let width = picture.get("width").and_then(|width| width.as_u64()).unwrap_or(0);
+                let height = picture.get("height").and_then(|height| height.as_u64()).unwrap_or(0);
+                let aspect = if height == 0 { None } else { Some(width as f64 / height as f64) };
+                json!({
+                    "cell": address,
+                    "picture": picture,
+                    "pixels": width * height,
+                    "aspect": match aspect {
+                        Some(aspect) => json!(aspect),
+                        None => Json::Null,
+                    },
+                })
+            };
+            match &self.cell {
+                Some(cell) => {
+                    let address = crate::cell_at(cell.0.trim(), &id)?.to_text();
+                    let Some(picture) = picture_of(&node, &address) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the cell `{address}` holds no picture"),
+                        });
+                    };
+                    let read = read(&address, &picture);
+                    let mut data = json!({ "sheet": sheet });
+                    if let Some(map) = data.as_object_mut()
+                        && let Some(read) = read.as_object()
+                    {
+                        for (key, value) in read {
+                            map.insert(key.clone(), value.clone());
+                        }
+                    }
+                    Ok(Outcome::new(format!("the cell `{address}` holds a picture")).with_data(data))
+                }
+                None => {
+                    let mut pictures: Vec<Json> = Vec::new();
+                    for (address, picture) in pictures_of(&node) {
+                        pictures.push(read(&address, &picture));
+                    }
+                    Ok(Outcome::new(format!("the sheet holds {} picture(s)", pictures.len()))
+                        .with_data(json!({ "sheet": sheet, "pictures": pictures })))
+                }
+            }
+
         }
-        let address = crate::cell_at(self.cell.0.trim(), &id)?.to_text();
-        if picture_of(&node, &address).is_none() {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the cell `{address}` holds no picture"),
-            });
+    }
+    /// **Take** the picture of a cell away.
+    grid.picture.remove {
+        area: "grid",
+        layer: "grid",
+        icon: "trash",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
+
+            sheet: NodeRef,
+            /// The cell.
+
+            cell: Text,
+        },
+        run: {
+
+            let id = "grid.picture.remove".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let address = crate::cell_at(self.cell.0.trim(), &id)?.to_text();
+            if picture_of(&node, &address).is_none() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the cell `{address}` holds no picture"),
+                });
+            }
+            if let Some(node) = session.document_mut()?.node_mut(sheet)
+                && let Some(map) = node.data["pictures"].as_object_mut()
+            {
+                map.remove(&address);
+            }
+            Ok(Outcome::changed(format!("the cell `{address}` holds no picture"))
+                .with_data(json!({ "sheet": sheet, "cell": address })))
+
         }
-        if let Some(node) = session.document_mut()?.node_mut(sheet)
-            && let Some(map) = node.data["pictures"].as_object_mut()
-        {
-            map.remove(&address);
-        }
-        Ok(Outcome::changed(format!("the cell `{address}` holds no picture"))
-            .with_data(json!({ "sheet": sheet, "cell": address })))
     }
 }

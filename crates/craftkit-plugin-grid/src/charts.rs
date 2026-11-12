@@ -38,7 +38,7 @@
 //!   value that is not a number is **nothing**: it is not a zero, and
 //!   nothing is written as nothing.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -202,121 +202,521 @@ pub(crate) fn sheet_of(session: &Session, id: &str, chart: u64) -> Result<Node, 
     Ok(sheet.clone())
 }
 
-/// **Add** a chart to a sheet.
-///
-/// The chart reads a range: the first row names the series, the first
-/// column holds the categories and the rest are the values.
-#[derive(Command)]
-#[command(id = "grid.chart.add", area = "grid", layer = "grid", icon = "chart", mutates, undoable)]
-pub struct AddChart {
-    /// The sheet the chart is in.
-    pub sheet: NodeRef,
-    /// The range the chart reads: `A1:C10`.
-    pub range: Text,
-    /// The kind of chart: `column`, `bar`, `line` or `pie`.
-    pub kind: Option<Text>,
-    /// The title of the chart.
-    pub title: Option<Text>,
-    /// Where the legend is: `none`, `bottom`, `top`, `left` or `right`.
-    pub legend: Option<Text>,
-    /// Whether the data labels are shown.
-    pub data_labels: Option<Bool>,
-    /// Whether the gridlines are shown.
-    pub gridlines: Option<Bool>,
-    /// The title of the axis of the categories.
-    pub x_title: Option<Text>,
-    /// The title of the axis of the values.
-    pub y_title: Option<Text>,
-}
+commands! {
+    /// **Add** a chart to a sheet.
+    ///
+    /// The chart reads a range: the first row names the series, the first
+    /// column holds the categories and the rest are the values.
+    grid.chart.add {
+        area: "grid",
+        layer: "grid",
+        icon: "chart",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet the chart is in.
 
-impl AddChart {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.chart.add".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
-        }
-        let area = crate::fill::area_at(self.range.0.trim(), &id)?;
-        if area.start.row == area.end.row || area.start.col == area.end.col {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the range {} is one row or one column, and a chart needs a name and something to show",
-                    self.range.0.trim()
-                ),
-            });
-        }
-        let kind = match &self.kind {
-            Some(kind) => match kind_of(&kind.0) {
-                Some(kind) => kind.to_string(),
+            sheet: NodeRef,
+            /// The range the chart reads: `A1:C10`.
+
+            range: Text,
+            /// The kind of chart: `column`, `bar`, `line` or `pie`.
+
+            kind: Option<Text>,
+            /// The title of the chart.
+
+            title: Option<Text>,
+            /// Where the legend is: `none`, `bottom`, `top`, `left` or `right`.
+
+            legend: Option<Text>,
+            /// Whether the data labels are shown.
+
+            data_labels: Option<Bool>,
+            /// Whether the gridlines are shown.
+
+            gridlines: Option<Bool>,
+            /// The title of the axis of the categories.
+
+            x_title: Option<Text>,
+            /// The title of the axis of the values.
+
+            y_title: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.chart.add".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let area = crate::fill::area_at(self.range.0.trim(), &id)?;
+            if area.start.row == area.end.row || area.start.col == area.end.col {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the range {} is one row or one column, and a chart needs a name and something to show",
+                        self.range.0.trim()
+                    ),
+                });
+            }
+            let kind = match &self.kind {
+                Some(kind) => match kind_of(&kind.0) {
+                    Some(kind) => kind.to_string(),
+                    None => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "`{}` is not a kind of chart: it is one of {}",
+                                kind.0.trim(),
+                                KINDS.join(", ")
+                            ),
+                        });
+                    }
+                },
+                None => "column".to_string(),
+            };
+            let title =
+                self.title.as_ref().map(|title| title.0.trim().to_string()).filter(|title| !title.is_empty());
+            // The **legend**: the tree's own default is the bottom, and
+            // the right for a pie.
+            let legend = match &self.legend {
+                Some(legend) => match legend_of(&legend.0) {
+                    Some(legend) => legend.to_string(),
+                    None => {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!(
+                                "`{}` is not a place for the legend: it is one of {}",
+                                legend.0.trim(),
+                                LEGENDS.join(", ")
+                            ),
+                        });
+                    }
+                },
                 None => {
+                    if kind == "pie" {
+                        "right".to_string()
+                    } else {
+                        "bottom".to_string()
+                    }
+                }
+            };
+            let name = title.clone().unwrap_or_else(|| "the chart".to_string());
+            let chart = session.document_mut()?.add_node_with_under(
+                Some(sheet),
+                name,
+                "grid.chart",
+                None,
+                json!({
+                    "range": area.to_text(),
+                    "kind": kind.clone(),
+                    "title": title,
+                    "legend": legend,
+                    "dataLabels": self.data_labels.map(|on| on.0).unwrap_or(false),
+                    "gridlines": self.gridlines.map(|on| on.0).unwrap_or(kind != "pie"),
+                    "xTitle": self.x_title.as_ref().map(|title| title.0.trim().to_string()),
+                    "yTitle": self.y_title.as_ref().map(|title| title.0.trim().to_string()),
+                    "smooth": false,
+                }),
+            );
+            Ok(Outcome::changed(format!("the chart reads {}", area.to_text()))
+                .with_data(json!({ "chart": chart, "range": area.to_text(), "kind": kind })))
+
+        }
+    }
+    /// **Read** a chart: what it reads and what it shows.
+    ///
+    /// The data is **derived**: it is worked out from the cells of the
+    /// sheet, every time it is asked for.
+    grid.chart.read {
+        area: "grid",
+        layer: "grid",
+        icon: "chart",
+        params: {
+            /// The chart.
+
+            chart: NodeRef,
+        },
+        run: {
+
+            let id = "grid.chart.read".to_string();
+            let chart = self.chart.0;
+            let Some(node) = session.document().node(chart).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no chart `{chart}`"),
+                });
+            };
+            if node.kind != "grid.chart" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{chart}` is a `{}` and not a chart", node.kind),
+                });
+            }
+            let sheet = sheet_of(session, &id, chart)?;
+            let area = area_of(&node);
+            let data = match area {
+                Some(area) => data_to_json(&sheet, &area),
+                None => json!({ "categories": Vec::<Json>::new(), "series": Vec::<Json>::new() }),
+            };
+            let kind = kind_of_chart(&node);
+            Ok(Outcome::new(format!("the chart `{chart}` reads a range")).with_data(json!({
+                "chart": chart,
+                "range": match area {
+                    Some(area) => json!(area.to_text()),
+                    None => Json::Null,
+                },
+                "kind": kind.clone(),
+                "title": title_of(&node),
+                "legend": legend_of_chart(&node, &kind),
+                "dataLabels": element_on(&node, "dataLabels"),
+                "gridlines": element_on(&node, "gridlines"),
+                "xTitle": node.data.get("xTitle").cloned().unwrap_or(Json::Null),
+                "yTitle": node.data.get("yTitle").cloned().unwrap_or(Json::Null),
+                "smooth": element_on(&node, "smooth"),
+                "data": data,
+            })))
+
+        }
+    }
+    /// **Change** a chart: its range, its kind or its title.
+    ///
+    /// What is not said stays as it was.
+    grid.chart.set {
+        area: "grid",
+        layer: "grid",
+        icon: "chart",
+        mutates,
+        undoable,
+        params: {
+            /// The chart.
+
+            chart: NodeRef,
+            /// The range the chart reads.
+
+            range: Option<Text>,
+            /// The kind of chart.
+
+            kind: Option<Text>,
+            /// The title of the chart.
+
+            title: Option<Text>,
+            /// Where the legend is: `none`, `bottom`, `top`, `left` or `right`.
+
+            legend: Option<Text>,
+            /// Whether the data labels are shown.
+
+            data_labels: Option<Bool>,
+            /// Whether the gridlines are shown.
+
+            gridlines: Option<Bool>,
+            /// The title of the axis of the categories.
+
+            x_title: Option<Text>,
+            /// The title of the axis of the values.
+
+            y_title: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.chart.set".to_string();
+            let chart = self.chart.0;
+            let Some(node) = session.document().node(chart).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no chart `{chart}`"),
+                });
+            };
+            if node.kind != "grid.chart" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{chart}` is a `{}` and not a chart", node.kind),
+                });
+            }
+            let mut range = area_of(&node).map(|area| area.to_text());
+            let mut kind = kind_of_chart(&node);
+            let mut title = title_of(&node);
+            if let Some(text) = &self.range {
+                let area = crate::fill::area_at(text.0.trim(), &id)?;
+                if area.start.row == area.end.row || area.start.col == area.end.col {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "the range {} is one row or one column, and a chart needs a name and something to show",
+                            text.0.trim()
+                        ),
+                    });
+                }
+                range = Some(area.to_text());
+            }
+            if let Some(text) = &self.kind {
+                let Some(new_kind) = kind_of(&text.0) else {
                     return Err(EngineError::Failed {
                         id: id.clone(),
                         message: format!(
                             "`{}` is not a kind of chart: it is one of {}",
-                            kind.0.trim(),
+                            text.0.trim(),
                             KINDS.join(", ")
                         ),
                     });
-                }
-            },
-            None => "column".to_string(),
-        };
-        let title =
-            self.title.as_ref().map(|title| title.0.trim().to_string()).filter(|title| !title.is_empty());
-        // The **legend**: the tree's own default is the bottom, and
-        // the right for a pie.
-        let legend = match &self.legend {
-            Some(legend) => match legend_of(&legend.0) {
-                Some(legend) => legend.to_string(),
-                None => {
+                };
+                kind = new_kind.to_string();
+            }
+            if let Some(text) = &self.title {
+                let text = text.0.trim().to_string();
+                title = if text.is_empty() { Json::Null } else { json!(text) };
+            }
+            // The **legend**.
+            let mut legend = legend_of_chart(&node, &kind);
+            if let Some(text) = &self.legend {
+                let Some(place) = legend_of(&text.0) else {
                     return Err(EngineError::Failed {
                         id: id.clone(),
                         message: format!(
                             "`{}` is not a place for the legend: it is one of {}",
-                            legend.0.trim(),
+                            text.0.trim(),
                             LEGENDS.join(", ")
                         ),
                     });
+                };
+                legend = place.to_string();
+            }
+            if let Some(node) = session.document_mut()?.node_mut(chart) {
+                node.data["range"] = match &range {
+                    Some(range) => json!(range),
+                    None => Json::Null,
+                };
+                node.data["kind"] = json!(kind.clone());
+                node.data["title"] = title.clone();
+                node.data["legend"] = json!(legend.clone());
+                if let Some(on) = self.data_labels {
+                    node.data["dataLabels"] = json!(on.0);
                 }
-            },
-            None => {
-                if kind == "pie" {
-                    "right".to_string()
-                } else {
-                    "bottom".to_string()
+                if let Some(on) = self.gridlines {
+                    node.data["gridlines"] = json!(on.0);
+                }
+                if let Some(text) = &self.x_title {
+                    let text = text.0.trim().to_string();
+                    node.data["xTitle"] = if text.is_empty() { Json::Null } else { json!(text) };
+                }
+                if let Some(text) = &self.y_title {
+                    let text = text.0.trim().to_string();
+                    node.data["yTitle"] = if text.is_empty() { Json::Null } else { json!(text) };
                 }
             }
-        };
-        let name = title.clone().unwrap_or_else(|| "the chart".to_string());
-        let chart = session.document_mut()?.add_node_with_under(
-            Some(sheet),
-            name,
-            "grid.chart",
-            None,
-            json!({
-                "range": area.to_text(),
-                "kind": kind.clone(),
-                "title": title,
-                "legend": legend,
-                "dataLabels": self.data_labels.map(|on| on.0).unwrap_or(false),
-                "gridlines": self.gridlines.map(|on| on.0).unwrap_or(kind != "pie"),
-                "xTitle": self.x_title.as_ref().map(|title| title.0.trim().to_string()),
-                "yTitle": self.y_title.as_ref().map(|title| title.0.trim().to_string()),
-                "smooth": false,
-            }),
-        );
-        Ok(Outcome::changed(format!("the chart reads {}", area.to_text()))
-            .with_data(json!({ "chart": chart, "range": area.to_text(), "kind": kind })))
+            Ok(Outcome::changed(format!("the chart `{chart}` is set")).with_data(json!({
+                "chart": chart,
+                "range": range,
+                "kind": kind,
+            })))
+
+        }
+    }
+    /// **Turn** an **element** of a chart on or off.
+    ///
+    /// The tree's own: the elements of a chart are the **title**, the
+    /// **legend**, the **data labels**, the **gridlines**, the **titles of
+    /// the axes** and the **smooth** line — and an element that is not one
+    /// of them is refused.
+    ///
+    /// The rules:
+    ///
+    /// - the element is turned **on** unless it is said to be off;
+    /// - the **title** is the title the chart has, or `Chart Title` when
+    ///   it has none, and an empty title when the title is turned off;
+    /// - the **legend** is `none` when it is turned off, and it is put
+    ///   where it is said to be when it is turned on;
+    /// - the **titles of the axes** are the titles the chart has, or
+    ///   `Axis Title` when it has none, and they are taken away when they
+    ///   are turned off.
+    grid.chart.element {
+        area: "grid",
+        layer: "grid",
+        icon: "chart",
+        mutates,
+        undoable,
+        params: {
+            /// The chart.
+
+            chart: NodeRef,
+            /// The element: `title`, `legend`, `dataLabels`, `gridlines`,
+            /// `axisTitles` or `smooth`.
+
+            element: Text,
+            /// Whether the element is on; it is on unless it is said to be
+            /// off.
+
+            on: Option<Bool>,
+            /// Where the legend is: `bottom`, `top`, `left` or `right`.
+
+            position: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.chart.element".to_string();
+            let chart = self.chart.0;
+            let Some(node) = session.document().node(chart).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no chart `{chart}`"),
+                });
+            };
+            if node.kind != "grid.chart" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{chart}` is a `{}` and not a chart", node.kind),
+                });
+            }
+            let Some(element) = element_of(&self.element.0) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "`{}` is not an element of a chart: it is one of {}",
+                        self.element.0.trim(),
+                        ELEMENTS.join(", ")
+                    ),
+                });
+            };
+            let on = self.on.map(|on| on.0).unwrap_or(true);
+            let kind = kind_of_chart(&node);
+            // The **legend**: where it is put.
+            let mut legend = legend_of_chart(&node, &kind);
+            if element == "legend"
+                && on
+                && let Some(text) = &self.position
+            {
+                let Some(place) = legend_of(&text.0) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "`{}` is not a place for the legend: it is one of {}",
+                            text.0.trim(),
+                            LEGENDS.join(", ")
+                        ),
+                    });
+                };
+                legend = place.to_string();
+            }
+            if element == "legend" && !on {
+                legend = "none".to_string();
+            }
+            // The **title**: the one it has, or the tree's own.
+            let title = if element == "title" {
+                if on {
+                    node.data
+                        .get("title")
+                        .and_then(|title| title.as_str())
+                        .map(|title| title.to_string())
+                        .filter(|title| !title.is_empty())
+                        .unwrap_or_else(|| "Chart Title".to_string())
+                } else {
+                    String::new()
+                }
+            } else {
+                node.data
+                    .get("title")
+                    .and_then(|title| title.as_str())
+                    .map(|title| title.to_string())
+                    .unwrap_or_default()
+            };
+            // The **titles of the axes**.
+            let axis = |name: &str| {
+                node.data
+                    .get(name)
+                    .and_then(|title| title.as_str())
+                    .map(|title| title.to_string())
+                    .filter(|title| !title.is_empty())
+            };
+            let (x_title, y_title) = if element == "axistitles" {
+                if on {
+                    (
+                        axis("xTitle").or_else(|| Some("Axis Title".to_string())),
+                        axis("yTitle").or_else(|| Some("Axis Title".to_string())),
+                    )
+                } else {
+                    (None, None)
+                }
+            } else {
+                (axis("xTitle"), axis("yTitle"))
+            };
+            if let Some(node) = session.document_mut()?.node_mut(chart) {
+                node.data["legend"] = json!(legend.clone());
+                if element == "title" {
+                    node.data["title"] = if title.is_empty() { Json::Null } else { json!(title.clone()) };
+                }
+                if element == "datalabels" {
+                    node.data["dataLabels"] = json!(on);
+                }
+                if element == "gridlines" {
+                    node.data["gridlines"] = json!(on);
+                }
+                if element == "smooth" {
+                    node.data["smooth"] = json!(on);
+                }
+                if element == "axistitles" {
+                    node.data["xTitle"] = match &x_title {
+                        Some(title) => json!(title),
+                        None => Json::Null,
+                    };
+                    node.data["yTitle"] = match &y_title {
+                        Some(title) => json!(title),
+                        None => Json::Null,
+                    };
+                }
+            }
+            Ok(Outcome::changed(format!("the element `{element}` of the chart `{chart}` is set")).with_data(
+                json!({
+                    "chart": chart,
+                    "element": element,
+                    "on": on,
+                    "legend": legend,
+                }),
+            ))
+
+        }
+    }
+    /// **Take** a chart away.
+    grid.chart.remove {
+        area: "grid",
+        layer: "grid",
+        icon: "chart",
+        mutates,
+        undoable,
+        params: {
+            /// The chart.
+
+            chart: NodeRef,
+        },
+        run: {
+
+            let id = "grid.chart.remove".to_string();
+            let chart = self.chart.0;
+            let Some(node) = session.document().node(chart).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no chart `{chart}`"),
+                });
+            };
+            if node.kind != "grid.chart" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{chart}` is a `{}` and not a chart", node.kind),
+                });
+            }
+            session.document_mut()?.remove_node(chart);
+            Ok(Outcome::changed(format!("the chart `{chart}` is taken away"))
+                .with_data(json!({ "chart": chart })))
+
+        }
     }
 }
 
@@ -327,365 +727,5 @@ pub fn element_on(chart: &Node, key: &str) -> bool {
     match chart.data.get(key) {
         Some(value) => value.as_bool().unwrap_or(false),
         None => key == "gridlines",
-    }
-}
-
-/// **Read** a chart: what it reads and what it shows.
-///
-/// The data is **derived**: it is worked out from the cells of the
-/// sheet, every time it is asked for.
-#[derive(Command)]
-#[command(id = "grid.chart.read", area = "grid", layer = "grid", icon = "chart")]
-pub struct ReadChart {
-    /// The chart.
-    pub chart: NodeRef,
-}
-
-impl ReadChart {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.chart.read".to_string();
-        let chart = self.chart.0;
-        let Some(node) = session.document().node(chart).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no chart `{chart}`"),
-            });
-        };
-        if node.kind != "grid.chart" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{chart}` is a `{}` and not a chart", node.kind),
-            });
-        }
-        let sheet = sheet_of(session, &id, chart)?;
-        let area = area_of(&node);
-        let data = match area {
-            Some(area) => data_to_json(&sheet, &area),
-            None => json!({ "categories": Vec::<Json>::new(), "series": Vec::<Json>::new() }),
-        };
-        let kind = kind_of_chart(&node);
-        Ok(Outcome::new(format!("the chart `{chart}` reads a range")).with_data(json!({
-            "chart": chart,
-            "range": match area {
-                Some(area) => json!(area.to_text()),
-                None => Json::Null,
-            },
-            "kind": kind.clone(),
-            "title": title_of(&node),
-            "legend": legend_of_chart(&node, &kind),
-            "dataLabels": element_on(&node, "dataLabels"),
-            "gridlines": element_on(&node, "gridlines"),
-            "xTitle": node.data.get("xTitle").cloned().unwrap_or(Json::Null),
-            "yTitle": node.data.get("yTitle").cloned().unwrap_or(Json::Null),
-            "smooth": element_on(&node, "smooth"),
-            "data": data,
-        })))
-    }
-}
-
-/// **Change** a chart: its range, its kind or its title.
-///
-/// What is not said stays as it was.
-#[derive(Command)]
-#[command(id = "grid.chart.set", area = "grid", layer = "grid", icon = "chart", mutates, undoable)]
-pub struct SetChart {
-    /// The chart.
-    pub chart: NodeRef,
-    /// The range the chart reads.
-    pub range: Option<Text>,
-    /// The kind of chart.
-    pub kind: Option<Text>,
-    /// The title of the chart.
-    pub title: Option<Text>,
-    /// Where the legend is: `none`, `bottom`, `top`, `left` or `right`.
-    pub legend: Option<Text>,
-    /// Whether the data labels are shown.
-    pub data_labels: Option<Bool>,
-    /// Whether the gridlines are shown.
-    pub gridlines: Option<Bool>,
-    /// The title of the axis of the categories.
-    pub x_title: Option<Text>,
-    /// The title of the axis of the values.
-    pub y_title: Option<Text>,
-}
-
-impl SetChart {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.chart.set".to_string();
-        let chart = self.chart.0;
-        let Some(node) = session.document().node(chart).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no chart `{chart}`"),
-            });
-        };
-        if node.kind != "grid.chart" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{chart}` is a `{}` and not a chart", node.kind),
-            });
-        }
-        let mut range = area_of(&node).map(|area| area.to_text());
-        let mut kind = kind_of_chart(&node);
-        let mut title = title_of(&node);
-        if let Some(text) = &self.range {
-            let area = crate::fill::area_at(text.0.trim(), &id)?;
-            if area.start.row == area.end.row || area.start.col == area.end.col {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "the range {} is one row or one column, and a chart needs a name and something to show",
-                        text.0.trim()
-                    ),
-                });
-            }
-            range = Some(area.to_text());
-        }
-        if let Some(text) = &self.kind {
-            let Some(new_kind) = kind_of(&text.0) else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "`{}` is not a kind of chart: it is one of {}",
-                        text.0.trim(),
-                        KINDS.join(", ")
-                    ),
-                });
-            };
-            kind = new_kind.to_string();
-        }
-        if let Some(text) = &self.title {
-            let text = text.0.trim().to_string();
-            title = if text.is_empty() { Json::Null } else { json!(text) };
-        }
-        // The **legend**.
-        let mut legend = legend_of_chart(&node, &kind);
-        if let Some(text) = &self.legend {
-            let Some(place) = legend_of(&text.0) else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "`{}` is not a place for the legend: it is one of {}",
-                        text.0.trim(),
-                        LEGENDS.join(", ")
-                    ),
-                });
-            };
-            legend = place.to_string();
-        }
-        if let Some(node) = session.document_mut()?.node_mut(chart) {
-            node.data["range"] = match &range {
-                Some(range) => json!(range),
-                None => Json::Null,
-            };
-            node.data["kind"] = json!(kind.clone());
-            node.data["title"] = title.clone();
-            node.data["legend"] = json!(legend.clone());
-            if let Some(on) = self.data_labels {
-                node.data["dataLabels"] = json!(on.0);
-            }
-            if let Some(on) = self.gridlines {
-                node.data["gridlines"] = json!(on.0);
-            }
-            if let Some(text) = &self.x_title {
-                let text = text.0.trim().to_string();
-                node.data["xTitle"] = if text.is_empty() { Json::Null } else { json!(text) };
-            }
-            if let Some(text) = &self.y_title {
-                let text = text.0.trim().to_string();
-                node.data["yTitle"] = if text.is_empty() { Json::Null } else { json!(text) };
-            }
-        }
-        Ok(Outcome::changed(format!("the chart `{chart}` is set")).with_data(json!({
-            "chart": chart,
-            "range": range,
-            "kind": kind,
-        })))
-    }
-}
-
-/// **Turn** an **element** of a chart on or off.
-///
-/// The tree's own: the elements of a chart are the **title**, the
-/// **legend**, the **data labels**, the **gridlines**, the **titles of
-/// the axes** and the **smooth** line — and an element that is not one
-/// of them is refused.
-///
-/// The rules:
-///
-/// - the element is turned **on** unless it is said to be off;
-/// - the **title** is the title the chart has, or `Chart Title` when
-///   it has none, and an empty title when the title is turned off;
-/// - the **legend** is `none` when it is turned off, and it is put
-///   where it is said to be when it is turned on;
-/// - the **titles of the axes** are the titles the chart has, or
-///   `Axis Title` when it has none, and they are taken away when they
-///   are turned off.
-#[derive(Command)]
-#[command(id = "grid.chart.element", area = "grid", layer = "grid", icon = "chart", mutates, undoable)]
-pub struct ChartElement {
-    /// The chart.
-    pub chart: NodeRef,
-    /// The element: `title`, `legend`, `dataLabels`, `gridlines`,
-    /// `axisTitles` or `smooth`.
-    pub element: Text,
-    /// Whether the element is on; it is on unless it is said to be
-    /// off.
-    pub on: Option<Bool>,
-    /// Where the legend is: `bottom`, `top`, `left` or `right`.
-    pub position: Option<Text>,
-}
-
-impl ChartElement {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.chart.element".to_string();
-        let chart = self.chart.0;
-        let Some(node) = session.document().node(chart).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no chart `{chart}`"),
-            });
-        };
-        if node.kind != "grid.chart" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{chart}` is a `{}` and not a chart", node.kind),
-            });
-        }
-        let Some(element) = element_of(&self.element.0) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "`{}` is not an element of a chart: it is one of {}",
-                    self.element.0.trim(),
-                    ELEMENTS.join(", ")
-                ),
-            });
-        };
-        let on = self.on.map(|on| on.0).unwrap_or(true);
-        let kind = kind_of_chart(&node);
-        // The **legend**: where it is put.
-        let mut legend = legend_of_chart(&node, &kind);
-        if element == "legend"
-            && on
-            && let Some(text) = &self.position
-        {
-            let Some(place) = legend_of(&text.0) else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "`{}` is not a place for the legend: it is one of {}",
-                        text.0.trim(),
-                        LEGENDS.join(", ")
-                    ),
-                });
-            };
-            legend = place.to_string();
-        }
-        if element == "legend" && !on {
-            legend = "none".to_string();
-        }
-        // The **title**: the one it has, or the tree's own.
-        let title = if element == "title" {
-            if on {
-                node.data
-                    .get("title")
-                    .and_then(|title| title.as_str())
-                    .map(|title| title.to_string())
-                    .filter(|title| !title.is_empty())
-                    .unwrap_or_else(|| "Chart Title".to_string())
-            } else {
-                String::new()
-            }
-        } else {
-            node.data
-                .get("title")
-                .and_then(|title| title.as_str())
-                .map(|title| title.to_string())
-                .unwrap_or_default()
-        };
-        // The **titles of the axes**.
-        let axis = |name: &str| {
-            node.data
-                .get(name)
-                .and_then(|title| title.as_str())
-                .map(|title| title.to_string())
-                .filter(|title| !title.is_empty())
-        };
-        let (x_title, y_title) = if element == "axistitles" {
-            if on {
-                (
-                    axis("xTitle").or_else(|| Some("Axis Title".to_string())),
-                    axis("yTitle").or_else(|| Some("Axis Title".to_string())),
-                )
-            } else {
-                (None, None)
-            }
-        } else {
-            (axis("xTitle"), axis("yTitle"))
-        };
-        if let Some(node) = session.document_mut()?.node_mut(chart) {
-            node.data["legend"] = json!(legend.clone());
-            if element == "title" {
-                node.data["title"] = if title.is_empty() { Json::Null } else { json!(title.clone()) };
-            }
-            if element == "datalabels" {
-                node.data["dataLabels"] = json!(on);
-            }
-            if element == "gridlines" {
-                node.data["gridlines"] = json!(on);
-            }
-            if element == "smooth" {
-                node.data["smooth"] = json!(on);
-            }
-            if element == "axistitles" {
-                node.data["xTitle"] = match &x_title {
-                    Some(title) => json!(title),
-                    None => Json::Null,
-                };
-                node.data["yTitle"] = match &y_title {
-                    Some(title) => json!(title),
-                    None => Json::Null,
-                };
-            }
-        }
-        Ok(Outcome::changed(format!("the element `{element}` of the chart `{chart}` is set")).with_data(
-            json!({
-                "chart": chart,
-                "element": element,
-                "on": on,
-                "legend": legend,
-            }),
-        ))
-    }
-}
-
-/// **Take** a chart away.
-#[derive(Command)]
-#[command(id = "grid.chart.remove", area = "grid", layer = "grid", icon = "chart", mutates, undoable)]
-pub struct RemoveChart {
-    /// The chart.
-    pub chart: NodeRef,
-}
-
-impl RemoveChart {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.chart.remove".to_string();
-        let chart = self.chart.0;
-        let Some(node) = session.document().node(chart).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no chart `{chart}`"),
-            });
-        };
-        if node.kind != "grid.chart" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{chart}` is a `{}` and not a chart", node.kind),
-            });
-        }
-        session.document_mut()?.remove_node(chart);
-        Ok(Outcome::changed(format!("the chart `{chart}` is taken away"))
-            .with_data(json!({ "chart": chart })))
     }
 }

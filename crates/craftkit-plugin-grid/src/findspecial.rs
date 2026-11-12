@@ -43,10 +43,10 @@
 //!   underscores are taken out before the kind is looked for, and the
 //!   case does not matter.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Map, Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
 use crate::formula::{Area, CellRef, Cells, Value};
 
@@ -200,158 +200,166 @@ fn current_region(cells: &Cells, cell: CellRef) -> Area {
     Area::new(CellRef { col: left, row: top }, CellRef { col: right, row: bottom })
 }
 
-/// The **special** cells of a sheet.
-///
-/// The tree's own `edit.goToSpecial`.
-#[derive(Command)]
-#[command(id = "grid.find.special", area = "grid", layer = "grid", icon = "list")]
-pub struct FindSpecial {
-    /// The sheet it is on.
-    pub sheet: NodeRef,
-    /// The kind of cell that is looked for: `blanks`, `constants`,
-    /// `formulas`, `comments`, `notes`, `errors`, `numbers`, `text`,
-    /// `visible`, `conditionalFormats`, `dataValidation`, `lastCell` or
-    /// `currentRegion`.
-    pub kind: Text,
-    /// The range to look in. Without it, the **used range** of the
-    /// sheet is looked in.
-    pub range: Option<Text>,
-    /// The cell the **current region** is worked out from: `A1` when
-    /// it is not given.
-    pub cell: Option<Text>,
-}
+commands! {
+    /// The **special** cells of a sheet.
+    ///
+    /// The tree's own `edit.goToSpecial`.
+    grid.find.special {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet it is on.
 
-impl FindSpecial {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.find.special".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
-        }
-        // The **kind**: the tree refuses a kind it does not know, and
-        // it says what the kinds are.
-        let kind = Kind::parse(&self.kind.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!(
-                "`{}` is not a kind: the kinds are {}",
-                self.kind.0.trim(),
-                Kind::NAMES.join(", ")
-            ),
-        })?;
-        let name = node.name.clone();
-        let cells = crate::cells_of(node);
-        let book = crate::book_of(session.document());
-        // The **scope**: the range the question is asked about, or the
-        // used range of the sheet.
-        let scope: Option<Area> = match &self.range {
-            Some(text) => Some(crate::conditional::area_of(&text.0).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{}` is not a range of cells", text.0.trim()),
-            })?),
-            None => crate::reading::used_range(&cells),
-        };
-        // The **hits**, and the area they lie in.
-        let (area, hits): (Option<Area>, Vec<(CellRef, Value)>) = match kind {
-            // The **last cell**: the far corner of the used range, and
-            // `A1` on a sheet that holds nothing.
-            Kind::LastCell => {
-                let cell = scope.map(|area| area.end).unwrap_or(CellRef { col: 0, row: 0 });
-                let value = book.value_of(&name, cell);
-                (Some(Area::new(cell, cell)), vec![(cell, value)])
+            sheet: NodeRef,
+            /// The kind of cell that is looked for: `blanks`, `constants`,
+            /// `formulas`, `comments`, `notes`, `errors`, `numbers`, `text`,
+            /// `visible`, `conditionalFormats`, `dataValidation`, `lastCell` or
+            /// `currentRegion`.
+
+            kind: Text,
+            /// The range to look in. Without it, the **used range** of the
+            /// sheet is looked in.
+
+            range: Option<Text>,
+            /// The cell the **current region** is worked out from: `A1` when
+            /// it is not given.
+
+            cell: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.find.special".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
             }
-            // The **current region**: the block of data around a cell.
-            Kind::CurrentRegion => {
-                let cell = match &self.cell {
-                    Some(text) => crate::cell_at(&text.0, &id)?,
-                    None => CellRef { col: 0, row: 0 },
-                };
-                let region = current_region(&cells, cell);
-                let hits = (region.start.row..=region.end.row)
-                    .flat_map(|row| (region.start.col..=region.end.col).map(move |col| CellRef { col, row }))
-                    .map(|cell| {
-                        let value = book.value_of(&name, cell);
-                        (cell, value)
-                    })
-                    .collect();
-                (Some(region), hits)
-            }
-            // The other kinds: the cells of the scope, one by one.
-            _ => {
-                let Some(area) = scope else {
-                    return Ok(answer(sheet, &name, kind, None, Vec::new()));
-                };
-                if area.count() > MAX_CELLS {
-                    return Err(EngineError::Failed {
-                        id,
-                        message: format!("the range is too large to look through ({MAX_CELLS} cells max)"),
-                    });
+            // The **kind**: the tree refuses a kind it does not know, and
+            // it says what the kinds are.
+            let kind = Kind::parse(&self.kind.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!(
+                    "`{}` is not a kind: the kinds are {}",
+                    self.kind.0.trim(),
+                    Kind::NAMES.join(", ")
+                ),
+            })?;
+            let name = node.name.clone();
+            let cells = crate::cells_of(node);
+            let book = crate::book_of(session.document());
+            // The **scope**: the range the question is asked about, or the
+            // used range of the sheet.
+            let scope: Option<Area> = match &self.range {
+                Some(text) => Some(crate::conditional::area_of(&text.0).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{}` is not a range of cells", text.0.trim()),
+                })?),
+                None => crate::reading::used_range(&cells),
+            };
+            // The **hits**, and the area they lie in.
+            let (area, hits): (Option<Area>, Vec<(CellRef, Value)>) = match kind {
+                // The **last cell**: the far corner of the used range, and
+                // `A1` on a sheet that holds nothing.
+                Kind::LastCell => {
+                    let cell = scope.map(|area| area.end).unwrap_or(CellRef { col: 0, row: 0 });
+                    let value = book.value_of(&name, cell);
+                    (Some(Area::new(cell, cell)), vec![(cell, value)])
                 }
-                // The **comments** and the **notes** of the sheet, and
-                // the rules that are about its cells.
-                let comments = crate::comments::comments_of(node);
-                let notes = crate::notes::notes_of(node);
-                let conditionals = crate::conditional::conditionals_of(node);
-                let validations = crate::validation::rules_of(node);
-                let hidden_rows = crate::hiding::hidden_rows(node);
-                let hidden_columns = crate::hiding::hidden_columns(node);
-                let mut hits: Vec<(CellRef, Value)> = Vec::new();
-                for row in area.start.row..=area.end.row {
-                    for col in area.start.col..=area.end.col {
-                        let cell = CellRef { col, row };
-                        let entry = cells.get(cell);
-                        // The **value** of the cell: what it says, and
-                        // what it works out to when it holds a formula.
-                        let value = match entry {
-                            Some(entry) if entry.formula.is_some() => book.value_of(&name, cell),
-                            Some(entry) => entry.value.clone().unwrap_or(Value::Empty),
-                            None => Value::Empty,
-                        };
-                        let address = cell.to_text();
-                        let found = match kind {
-                            Kind::Blanks => {
-                                entry.is_none_or(|entry| entry.value.is_none() && entry.formula.is_none())
+                // The **current region**: the block of data around a cell.
+                Kind::CurrentRegion => {
+                    let cell = match &self.cell {
+                        Some(text) => crate::cell_at(&text.0, &id)?,
+                        None => CellRef { col: 0, row: 0 },
+                    };
+                    let region = current_region(&cells, cell);
+                    let hits = (region.start.row..=region.end.row)
+                        .flat_map(|row| (region.start.col..=region.end.col).map(move |col| CellRef { col, row }))
+                        .map(|cell| {
+                            let value = book.value_of(&name, cell);
+                            (cell, value)
+                        })
+                        .collect();
+                    (Some(region), hits)
+                }
+                // The other kinds: the cells of the scope, one by one.
+                _ => {
+                    let Some(area) = scope else {
+                        return Ok(answer(sheet, &name, kind, None, Vec::new()));
+                    };
+                    if area.count() > MAX_CELLS {
+                        return Err(EngineError::Failed {
+                            id,
+                            message: format!("the range is too large to look through ({MAX_CELLS} cells max)"),
+                        });
+                    }
+                    // The **comments** and the **notes** of the sheet, and
+                    // the rules that are about its cells.
+                    let comments = crate::comments::comments_of(node);
+                    let notes = crate::notes::notes_of(node);
+                    let conditionals = crate::conditional::conditionals_of(node);
+                    let validations = crate::validation::rules_of(node);
+                    let hidden_rows = crate::hiding::hidden_rows(node);
+                    let hidden_columns = crate::hiding::hidden_columns(node);
+                    let mut hits: Vec<(CellRef, Value)> = Vec::new();
+                    for row in area.start.row..=area.end.row {
+                        for col in area.start.col..=area.end.col {
+                            let cell = CellRef { col, row };
+                            let entry = cells.get(cell);
+                            // The **value** of the cell: what it says, and
+                            // what it works out to when it holds a formula.
+                            let value = match entry {
+                                Some(entry) if entry.formula.is_some() => book.value_of(&name, cell),
+                                Some(entry) => entry.value.clone().unwrap_or(Value::Empty),
+                                None => Value::Empty,
+                            };
+                            let address = cell.to_text();
+                            let found = match kind {
+                                Kind::Blanks => {
+                                    entry.is_none_or(|entry| entry.value.is_none() && entry.formula.is_none())
+                                }
+                                Kind::Constants => entry.is_some_and(|entry| {
+                                    entry.formula.is_none()
+                                        && entry.value.as_ref().is_some_and(|value| *value != Value::Empty)
+                                }),
+                                Kind::Formulas => entry.is_some_and(|entry| entry.formula.is_some()),
+                                Kind::Comments => comments.contains_key(&address),
+                                Kind::Notes => notes.contains_key(&address),
+                                Kind::Errors => matches!(value, Value::Error(_)),
+                                Kind::Numbers => matches!(value, Value::Number(_)),
+                                Kind::Text => matches!(value, Value::Text(_)),
+                                Kind::Visible => {
+                                    !hidden_rows.contains(&(row as u64 + 1))
+                                        && !hidden_columns.contains(&CellRef::column_text(col))
+                                }
+                                Kind::ConditionalFormats => conditionals.iter().any(|conditional| {
+                                    crate::conditional::area_of(&conditional.range)
+                                        .is_some_and(|area| area.covers(cell))
+                                }),
+                                Kind::DataValidation => validations.iter().any(|rule| {
+                                    crate::conditional::area_of(&rule.range).is_some_and(|area| area.covers(cell))
+                                }),
+                                Kind::LastCell | Kind::CurrentRegion => false,
+                            };
+                            if found {
+                                hits.push((cell, value));
                             }
-                            Kind::Constants => entry.is_some_and(|entry| {
-                                entry.formula.is_none()
-                                    && entry.value.as_ref().is_some_and(|value| *value != Value::Empty)
-                            }),
-                            Kind::Formulas => entry.is_some_and(|entry| entry.formula.is_some()),
-                            Kind::Comments => comments.contains_key(&address),
-                            Kind::Notes => notes.contains_key(&address),
-                            Kind::Errors => matches!(value, Value::Error(_)),
-                            Kind::Numbers => matches!(value, Value::Number(_)),
-                            Kind::Text => matches!(value, Value::Text(_)),
-                            Kind::Visible => {
-                                !hidden_rows.contains(&(row as u64 + 1))
-                                    && !hidden_columns.contains(&CellRef::column_text(col))
-                            }
-                            Kind::ConditionalFormats => conditionals.iter().any(|conditional| {
-                                crate::conditional::area_of(&conditional.range)
-                                    .is_some_and(|area| area.covers(cell))
-                            }),
-                            Kind::DataValidation => validations.iter().any(|rule| {
-                                crate::conditional::area_of(&rule.range).is_some_and(|area| area.covers(cell))
-                            }),
-                            Kind::LastCell | Kind::CurrentRegion => false,
-                        };
-                        if found {
-                            hits.push((cell, value));
                         }
                     }
+                    (Some(area), hits)
                 }
-                (Some(area), hits)
-            }
-        };
-        Ok(answer(sheet, &name, kind, area, hits))
+            };
+            Ok(answer(sheet, &name, kind, area, hits))
+
+        }
     }
 }
 

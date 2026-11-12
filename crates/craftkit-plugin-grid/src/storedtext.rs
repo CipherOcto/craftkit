@@ -27,7 +27,7 @@
 //! format, and a cell that is locked by the sheet's protection, or
 //! covered by a merge, is not written.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
@@ -174,91 +174,100 @@ fn sheet_of(session: &Session, sheet: u64, id: &str) -> Result<(u64, String), En
     Ok((sheet, node.name.clone()))
 }
 
-/// **Read** the cells of a sheet that hold a number as text.
-///
-/// The answer is every cell that holds a number as text, with the
-/// **number** it stands for.
-#[derive(Command)]
-#[command(id = "grid.numbers.stored.as.text", area = "grid", layer = "grid", icon = "list")]
-pub struct NumbersStoredAsText {
-    /// The sheet.
-    pub sheet: NodeRef,
-}
+commands! {
+    /// **Read** the cells of a sheet that hold a number as text.
+    ///
+    /// The answer is every cell that holds a number as text, with the
+    /// **number** it stands for.
+    grid.numbers.stored.as.text {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet.
 
-impl NumbersStoredAsText {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.numbers.stored.as.text".to_string();
-        let (sheet, _) = sheet_of(session, self.sheet.0, &id)?;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let cells = crate::cells_of(node);
-        let found = stored_in(&cells);
-        if found.len() > MAX_STORED {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the sheet has more than {MAX_STORED} numbers stored as text, and the list is refused"
-                ),
-            });
+            sheet: NodeRef,
+        },
+        run: {
+
+            let id = "grid.numbers.stored.as.text".to_string();
+            let (sheet, _) = sheet_of(session, self.sheet.0, &id)?;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let cells = crate::cells_of(node);
+            let found = stored_in(&cells);
+            if found.len() > MAX_STORED {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the sheet has more than {MAX_STORED} numbers stored as text, and the list is refused"
+                    ),
+                });
+            }
+            let numbers: Vec<_> =
+                found.iter().map(|(cell, number)| json!({ "cell": cell.to_text(), "number": number })).collect();
+            let count = numbers.len();
+            Ok(Outcome::new(format!("the sheet `{sheet}` has {count} number(s) stored as text"))
+                .with_data(json!({ "sheet": sheet, "numbers": numbers })))
+
         }
-        let numbers: Vec<_> =
-            found.iter().map(|(cell, number)| json!({ "cell": cell.to_text(), "number": number })).collect();
-        let count = numbers.len();
-        Ok(Outcome::new(format!("the sheet `{sheet}` has {count} number(s) stored as text"))
-            .with_data(json!({ "sheet": sheet, "numbers": numbers })))
     }
-}
+    /// **Turn** the numbers stored as text of a sheet into numbers.
+    ///
+    /// A change: the cell holds the number it stood for, and it keeps its
+    /// format.
+    grid.numbers.convert {
+        area: "grid",
+        layer: "grid",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
 
-/// **Turn** the numbers stored as text of a sheet into numbers.
-///
-/// A change: the cell holds the number it stood for, and it keeps its
-/// format.
-#[derive(Command)]
-#[command(id = "grid.numbers.convert", area = "grid", layer = "grid", icon = "pencil", mutates, undoable)]
-pub struct NumbersConvert {
-    /// The sheet.
-    pub sheet: NodeRef,
-}
+            sheet: NodeRef,
+        },
+        run: {
 
-impl NumbersConvert {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.numbers.convert".to_string();
-        let (sheet, _) = sheet_of(session, self.sheet.0, &id)?;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let cells = crate::cells_of(node);
-        let found = stored_in(&cells);
-        if found.len() > MAX_STORED {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the sheet has more than {MAX_STORED} numbers stored as text, and they are not converted"
-                ),
-            });
+            let id = "grid.numbers.convert".to_string();
+            let (sheet, _) = sheet_of(session, self.sheet.0, &id)?;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let cells = crate::cells_of(node);
+            let found = stored_in(&cells);
+            if found.len() > MAX_STORED {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the sheet has more than {MAX_STORED} numbers stored as text, and they are not converted"
+                    ),
+                });
+            }
+            // The cells that are **locked** or **covered** are not written.
+            let addresses: Vec<CellRef> = found.iter().map(|(cell, _)| *cell).collect();
+            crate::protection::refuse_locked(node, &crate::style_locks(session, sheet), &addresses, &id)?;
+            crate::merges::refuse_covered(node, &addresses, &id)?;
+            // The **writing**: every cell holds the number it stood for.
+            let mut written = 0usize;
+            for (cell, number) in &found {
+                let Some(node) = session.document_mut()?.node_mut(sheet) else { continue };
+                let mut cells: Cells = crate::sheet_cells_mut(node);
+                cells.set_value(*cell, Value::Number(*number));
+                node.data["cells"] = crate::cells_into(&cells);
+                written += 1;
+            }
+            let converted: Vec<String> = found.iter().map(|(cell, _)| cell.to_text()).collect();
+            Ok(Outcome::changed(format!("converted {written} number(s) stored as text"))
+                .with_data(json!({ "sheet": sheet, "converted": converted, "count": written })))
+
         }
-        // The cells that are **locked** or **covered** are not written.
-        let addresses: Vec<CellRef> = found.iter().map(|(cell, _)| *cell).collect();
-        crate::protection::refuse_locked(node, &crate::style_locks(session, sheet), &addresses, &id)?;
-        crate::merges::refuse_covered(node, &addresses, &id)?;
-        // The **writing**: every cell holds the number it stood for.
-        let mut written = 0usize;
-        for (cell, number) in &found {
-            let Some(node) = session.document_mut()?.node_mut(sheet) else { continue };
-            let mut cells: Cells = crate::sheet_cells_mut(node);
-            cells.set_value(*cell, Value::Number(*number));
-            node.data["cells"] = crate::cells_into(&cells);
-            written += 1;
-        }
-        let converted: Vec<String> = found.iter().map(|(cell, _)| cell.to_text()).collect();
-        Ok(Outcome::changed(format!("converted {written} number(s) stored as text"))
-            .with_data(json!({ "sheet": sheet, "converted": converted, "count": written })))
     }
 }

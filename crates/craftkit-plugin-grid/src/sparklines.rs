@@ -17,7 +17,7 @@
 //! - a cell may hold a value **and** a sparkline: they are two facts,
 //!   and the tree keeps them apart as well.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -104,176 +104,196 @@ fn area_of(text: &str, id: &str) -> Result<Area, EngineError> {
     Ok(area)
 }
 
-/// **Set** the sparkline of a cell.
-///
-/// The cell shows a line, a set of columns or a row of wins and
-/// losses, taken from the range.
-#[derive(Command)]
-#[command(id = "grid.sparkline.set", area = "grid", layer = "grid", icon = "chart", mutates, undoable)]
-pub struct SetSparkline {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The cell the sparkline is drawn in.
-    pub cell: Text,
-    /// The range it reads.
-    pub range: Text,
-    /// The kind: `line`, `column` or `win_loss`.
-    pub kind: Option<Text>,
-    /// The colour of the sparkline, as `#rrggbb`.
-    pub colour: Option<Text>,
-    /// Whether the **markers** are drawn.
-    pub markers: Option<Bool>,
-}
+commands! {
+    /// **Set** the sparkline of a cell.
+    ///
+    /// The cell shows a line, a set of columns or a row of wins and
+    /// losses, taken from the range.
+    grid.sparkline.set {
+        area: "grid",
+        layer: "grid",
+        icon: "chart",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
 
-impl SetSparkline {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.sparkline.set".to_string();
-        let sheet = self.sheet.0;
-        sheet_of(session, &id, sheet)?;
-        let cell = crate::cell_at(self.cell.0.trim(), &id)?.to_text();
-        let area = area_of(&self.range.0, &id)?;
-        let kind = match &self.kind {
-            Some(kind) => match kind_of(&kind.0) {
-                Some(kind) => kind.to_string(),
-                None => {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!(
-                            "`{}` is not a kind of sparkline: it is one of {}",
-                            kind.0.trim(),
-                            KINDS.join(", ")
-                        ),
-                    });
-                }
-            },
-            None => "line".to_string(),
-        };
-        let colour = match &self.colour {
-            Some(colour) => {
-                let text = colour.0.trim();
-                match craftkit_sdk::Colour::from_hex(text) {
-                    Ok(colour) => Some(colour),
-                    Err(why) => {
+            sheet: NodeRef,
+            /// The cell the sparkline is drawn in.
+
+            cell: Text,
+            /// The range it reads.
+
+            range: Text,
+            /// The kind: `line`, `column` or `win_loss`.
+
+            kind: Option<Text>,
+            /// The colour of the sparkline, as `#rrggbb`.
+
+            colour: Option<Text>,
+            /// Whether the **markers** are drawn.
+
+            markers: Option<Bool>,
+        },
+        run: {
+
+            let id = "grid.sparkline.set".to_string();
+            let sheet = self.sheet.0;
+            sheet_of(session, &id, sheet)?;
+            let cell = crate::cell_at(self.cell.0.trim(), &id)?.to_text();
+            let area = area_of(&self.range.0, &id)?;
+            let kind = match &self.kind {
+                Some(kind) => match kind_of(&kind.0) {
+                    Some(kind) => kind.to_string(),
+                    None => {
                         return Err(EngineError::Failed {
                             id: id.clone(),
-                            message: format!("`{text}` is not a colour: {why}"),
+                            message: format!(
+                                "`{}` is not a kind of sparkline: it is one of {}",
+                                kind.0.trim(),
+                                KINDS.join(", ")
+                            ),
                         });
                     }
-                }
-            }
-            None => None,
-        };
-        let markers = self.markers.map(|markers| markers.0).unwrap_or(false);
-        let sparkline = json!({
-            "range": area.to_text(),
-            "kind": kind.clone(),
-            "colour": match &colour {
-                Some(colour) => json!([colour.0[0], colour.0[1], colour.0[2], colour.0[3]]),
-                None => Json::Null,
-            },
-            "markers": markers,
-        });
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            if !node.data["sparklines"].is_object() {
-                node.data["sparklines"] = json!({});
-            }
-            if let Some(map) = node.data["sparklines"].as_object_mut() {
-                map.insert(cell.clone(), sparkline.clone());
-            }
-        }
-        Ok(Outcome::changed(format!("the cell `{cell}` holds a sparkline of {}", area.to_text()))
-            .with_data(json!({ "sheet": sheet, "cell": cell, "sparkline": sparkline })))
-    }
-}
-
-/// **Read** the sparkline of a cell: what it reads and what it shows.
-///
-/// Without a cell, every sparkline of the sheet is read.
-///
-/// The values are **derived**: they are worked out from the cells of
-/// the sheet every time they are asked for.
-#[derive(Command)]
-#[command(id = "grid.sparkline.read", area = "grid", layer = "grid", icon = "chart")]
-pub struct ReadSparkline {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The cell. Without it, every sparkline of the sheet is read.
-    pub cell: Option<Text>,
-}
-
-impl ReadSparkline {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.sparkline.read".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let read = |cell: &str, sparkline: &Json| -> Result<Json, EngineError> {
-            let range = sparkline.get("range").and_then(|range| range.as_str()).unwrap_or_default();
-            let area = crate::fill::area_at(range, &id)?;
-            let values = values_of(&node, &area);
-            let kind = sparkline.get("kind").and_then(|kind| kind.as_str()).unwrap_or("line").to_string();
-            let mut derived = json!({ "values": values });
-            if kind == "win_loss" {
-                derived["signs"] = json!(signs_of(&values));
-            }
-            Ok(json!({ "cell": cell, "sparkline": sparkline, "data": derived }))
-        };
-        match &self.cell {
-            Some(cell) => {
-                let cell = crate::cell_at(cell.0.trim(), &id)?.to_text();
-                let Some(sparkline) = sparkline_of(&node, &cell) else {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the cell `{cell}` holds no sparkline"),
-                    });
-                };
-                let read = read(&cell, &sparkline)?;
-                let mut data = json!({ "sheet": sheet });
-                if let Some(map) = data.as_object_mut()
-                    && let Some(read) = read.as_object()
-                {
-                    for (key, value) in read {
-                        map.insert(key.clone(), value.clone());
+                },
+                None => "line".to_string(),
+            };
+            let colour = match &self.colour {
+                Some(colour) => {
+                    let text = colour.0.trim();
+                    match craftkit_sdk::Colour::from_hex(text) {
+                        Ok(colour) => Some(colour),
+                        Err(why) => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!("`{text}` is not a colour: {why}"),
+                            });
+                        }
                     }
                 }
-                Ok(Outcome::new(format!("the cell `{cell}` holds a sparkline")).with_data(data))
-            }
-            None => {
-                let mut sparklines: Vec<Json> = Vec::new();
-                for (cell, sparkline) in sparklines_of(&node) {
-                    sparklines.push(read(&cell, &sparkline)?);
+                None => None,
+            };
+            let markers = self.markers.map(|markers| markers.0).unwrap_or(false);
+            let sparkline = json!({
+                "range": area.to_text(),
+                "kind": kind.clone(),
+                "colour": match &colour {
+                    Some(colour) => json!([colour.0[0], colour.0[1], colour.0[2], colour.0[3]]),
+                    None => Json::Null,
+                },
+                "markers": markers,
+            });
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                if !node.data["sparklines"].is_object() {
+                    node.data["sparklines"] = json!({});
                 }
-                Ok(Outcome::new(format!("the sheet holds {} sparkline(s)", sparklines.len()))
-                    .with_data(json!({ "sheet": sheet, "sparklines": sparklines })))
+                if let Some(map) = node.data["sparklines"].as_object_mut() {
+                    map.insert(cell.clone(), sparkline.clone());
+                }
             }
+            Ok(Outcome::changed(format!("the cell `{cell}` holds a sparkline of {}", area.to_text()))
+                .with_data(json!({ "sheet": sheet, "cell": cell, "sparkline": sparkline })))
+
         }
     }
-}
+    /// **Read** the sparkline of a cell: what it reads and what it shows.
+    ///
+    /// Without a cell, every sparkline of the sheet is read.
+    ///
+    /// The values are **derived**: they are worked out from the cells of
+    /// the sheet every time they are asked for.
+    grid.sparkline.read {
+        area: "grid",
+        layer: "grid",
+        icon: "chart",
+        params: {
+            /// The sheet.
 
-/// **Take** the sparkline of a cell away.
-#[derive(Command)]
-#[command(id = "grid.sparkline.remove", area = "grid", layer = "grid", icon = "trash", mutates, undoable)]
-pub struct RemoveSparkline {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The cell.
-    pub cell: Text,
-}
+            sheet: NodeRef,
+            /// The cell. Without it, every sparkline of the sheet is read.
 
-impl RemoveSparkline {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.sparkline.remove".to_string();
-        let sheet = self.sheet.0;
-        let node = sheet_of(session, &id, sheet)?;
-        let cell = crate::cell_at(self.cell.0.trim(), &id)?.to_text();
-        if sparkline_of(&node, &cell).is_none() {
-            return Err(EngineError::Failed { id, message: format!("the cell `{cell}` holds no sparkline") });
+            cell: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.sparkline.read".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let read = |cell: &str, sparkline: &Json| -> Result<Json, EngineError> {
+                let range = sparkline.get("range").and_then(|range| range.as_str()).unwrap_or_default();
+                let area = crate::fill::area_at(range, &id)?;
+                let values = values_of(&node, &area);
+                let kind = sparkline.get("kind").and_then(|kind| kind.as_str()).unwrap_or("line").to_string();
+                let mut derived = json!({ "values": values });
+                if kind == "win_loss" {
+                    derived["signs"] = json!(signs_of(&values));
+                }
+                Ok(json!({ "cell": cell, "sparkline": sparkline, "data": derived }))
+            };
+            match &self.cell {
+                Some(cell) => {
+                    let cell = crate::cell_at(cell.0.trim(), &id)?.to_text();
+                    let Some(sparkline) = sparkline_of(&node, &cell) else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the cell `{cell}` holds no sparkline"),
+                        });
+                    };
+                    let read = read(&cell, &sparkline)?;
+                    let mut data = json!({ "sheet": sheet });
+                    if let Some(map) = data.as_object_mut()
+                        && let Some(read) = read.as_object()
+                    {
+                        for (key, value) in read {
+                            map.insert(key.clone(), value.clone());
+                        }
+                    }
+                    Ok(Outcome::new(format!("the cell `{cell}` holds a sparkline")).with_data(data))
+                }
+                None => {
+                    let mut sparklines: Vec<Json> = Vec::new();
+                    for (cell, sparkline) in sparklines_of(&node) {
+                        sparklines.push(read(&cell, &sparkline)?);
+                    }
+                    Ok(Outcome::new(format!("the sheet holds {} sparkline(s)", sparklines.len()))
+                        .with_data(json!({ "sheet": sheet, "sparklines": sparklines })))
+                }
+            }
+
         }
-        if let Some(node) = session.document_mut()?.node_mut(sheet)
-            && let Some(map) = node.data["sparklines"].as_object_mut()
-        {
-            map.remove(&cell);
+    }
+    /// **Take** the sparkline of a cell away.
+    grid.sparkline.remove {
+        area: "grid",
+        layer: "grid",
+        icon: "trash",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
+
+            sheet: NodeRef,
+            /// The cell.
+
+            cell: Text,
+        },
+        run: {
+
+            let id = "grid.sparkline.remove".to_string();
+            let sheet = self.sheet.0;
+            let node = sheet_of(session, &id, sheet)?;
+            let cell = crate::cell_at(self.cell.0.trim(), &id)?.to_text();
+            if sparkline_of(&node, &cell).is_none() {
+                return Err(EngineError::Failed { id, message: format!("the cell `{cell}` holds no sparkline") });
+            }
+            if let Some(node) = session.document_mut()?.node_mut(sheet)
+                && let Some(map) = node.data["sparklines"].as_object_mut()
+            {
+                map.remove(&cell);
+            }
+            Ok(Outcome::changed(format!("the cell `{cell}` holds no sparkline"))
+                .with_data(json!({ "sheet": sheet, "cell": cell })))
+
         }
-        Ok(Outcome::changed(format!("the cell `{cell}` holds no sparkline"))
-            .with_data(json!({ "sheet": sheet, "cell": cell })))
     }
 }

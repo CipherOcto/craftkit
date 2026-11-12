@@ -300,6 +300,12 @@ fn braces_of(text: &str, body_start: usize) -> Option<(String, usize)> {
         } else {
             match c {
                 '"' => in_string = true,
+                '\'' => {
+                    if let Some(step) = the_character(bytes, at) {
+                        at += step;
+                        continue;
+                    }
+                }
                 '{' => depth += 1,
                 '}' => {
                     depth -= 1;
@@ -311,6 +317,23 @@ fn braces_of(text: &str, body_start: usize) -> Option<(String, usize)> {
             }
         }
         at += 1;
+    }
+    None
+}
+
+/// The length of the character literal at `at`, if there is one.
+///
+/// A character is `'x'` or `'\\x'`, and it is **text**: the braces and
+/// the quotes in it are not the file's braces and quotes. A lifetime — `'a`
+/// — is not a character, and this says so.
+pub fn the_character(bytes: &[u8], at: usize) -> Option<usize> {
+    // `'x'` — three bytes, and the middle one may be a quote.
+    if bytes.get(at + 2) == Some(&b'\'') {
+        return Some(3);
+    }
+    // `'\\x'` — four bytes.
+    if bytes.get(at + 1) == Some(&b'\\') && bytes.get(at + 3) == Some(&b'\'') {
+        return Some(4);
     }
     None
 }
@@ -354,6 +377,12 @@ fn block_of(text: &str, body_start: usize) -> Option<(String, usize)> {
         } else {
             match c {
                 '"' => in_string = true,
+                '\'' => {
+                    if let Some(step) = the_character(bytes, at) {
+                        at += step;
+                        continue;
+                    }
+                }
                 '(' => depth += 1,
                 ')' => {
                     depth -= 1;

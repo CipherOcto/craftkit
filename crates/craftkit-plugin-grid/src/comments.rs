@@ -30,10 +30,10 @@
 
 use std::collections::BTreeMap;
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Text};
 
 /// A **reply** in a thread: the text of it, and who wrote it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -142,245 +142,276 @@ pub fn comment_of(comment: &Comment) -> Json {
     Json::Object(one)
 }
 
-/// Put a **comment** on a cell.
-///
-/// A comment that is already on the cell is **edited**: the text is
-/// the new text, the author is kept unless a new one is given, and the
-/// replies and the resolved flag stay. A **note** on the cell goes
-/// away: the tree's own rule, that a note replaces a comment and a
-/// comment replaces a note.
-#[derive(Command)]
-#[command(id = "grid.cell.comment.set", area = "grid", layer = "grid", icon = "pencil", mutates, undoable)]
-pub struct SetComment {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// The text of the comment.
-    pub text: Text,
-    /// Who wrote it.
-    pub author: Option<Text>,
-}
+commands! {
+    /// Put a **comment** on a cell.
+    ///
+    /// A comment that is already on the cell is **edited**: the text is
+    /// the new text, the author is kept unless a new one is given, and the
+    /// replies and the resolved flag stay. A **note** on the cell goes
+    /// away: the tree's own rule, that a note replaces a comment and a
+    /// comment replaces a note.
+    grid.cell.comment.set {
+        area: "grid",
+        layer: "grid",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl SetComment {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.comment.set".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        let text = self.text.0.clone();
-        if text.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a comment holds text".to_string() });
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// The text of the comment.
+
+            text: Text,
+            /// Who wrote it.
+
+            author: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.cell.comment.set".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            let text = self.text.0.clone();
+            if text.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a comment holds text".to_string() });
+            }
+            crate::notes::sheet_of(session, sheet, &id)?;
+            let author = self.author.as_ref().map(|author| author.0.clone()).filter(|author| !author.is_empty());
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let mut comments = comments_of(node);
+            let address = cell.to_text();
+            // The **author** of an edited comment is kept unless a new one
+            // is given: the tree's own rule.
+            let author = author.or_else(|| comments.get(&address).and_then(|comment| comment.author.clone()));
+            // The **replies** and the **resolved** flag of an edited
+            // comment stay: the tree's own rule.
+            let held = comments.get(&address);
+            let replies = held.map(|comment| comment.replies.clone()).unwrap_or_default();
+            let resolved = held.map(|comment| comment.resolved).unwrap_or(false);
+            comments.insert(address.clone(), Comment { text, author: author.clone(), replies, resolved });
+            node.data["comments"] = comments_into(&comments);
+            // A **note replaces a comment**: the note on the cell goes away.
+            let mut notes = crate::notes::notes_of(node);
+            let took_note = notes.remove(&address).is_some();
+            node.data["notes"] = crate::notes::notes_into(&notes);
+            let who = match &author {
+                Some(author) => format!(" by {author}"),
+                None => String::new(),
+            };
+            Ok(Outcome::changed(format!("wrote a comment on {address}{who}")).with_data(json!({
+                "sheet": sheet,
+                "cell": address,
+                "text": comments.get(&address).map(|comment| comment.text.clone()),
+                "author": author,
+                "took_note": took_note,
+            })))
+
         }
-        crate::notes::sheet_of(session, sheet, &id)?;
-        let author = self.author.as_ref().map(|author| author.0.clone()).filter(|author| !author.is_empty());
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let mut comments = comments_of(node);
-        let address = cell.to_text();
-        // The **author** of an edited comment is kept unless a new one
-        // is given: the tree's own rule.
-        let author = author.or_else(|| comments.get(&address).and_then(|comment| comment.author.clone()));
-        // The **replies** and the **resolved** flag of an edited
-        // comment stay: the tree's own rule.
-        let held = comments.get(&address);
-        let replies = held.map(|comment| comment.replies.clone()).unwrap_or_default();
-        let resolved = held.map(|comment| comment.resolved).unwrap_or(false);
-        comments.insert(address.clone(), Comment { text, author: author.clone(), replies, resolved });
-        node.data["comments"] = comments_into(&comments);
-        // A **note replaces a comment**: the note on the cell goes away.
-        let mut notes = crate::notes::notes_of(node);
-        let took_note = notes.remove(&address).is_some();
-        node.data["notes"] = crate::notes::notes_into(&notes);
-        let who = match &author {
-            Some(author) => format!(" by {author}"),
-            None => String::new(),
-        };
-        Ok(Outcome::changed(format!("wrote a comment on {address}{who}")).with_data(json!({
-            "sheet": sheet,
-            "cell": address,
-            "text": comments.get(&address).map(|comment| comment.text.clone()),
-            "author": author,
-            "took_note": took_note,
-        })))
     }
-}
+    /// **Reply** to the comment of a cell.
+    ///
+    /// The reply joins the thread of the cell. A cell that has no comment
+    /// has no thread to join, and that is refused by name.
+    grid.cell.comment.reply {
+        area: "grid",
+        layer: "grid",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-/// **Reply** to the comment of a cell.
-///
-/// The reply joins the thread of the cell. A cell that has no comment
-/// has no thread to join, and that is refused by name.
-#[derive(Command)]
-#[command(id = "grid.cell.comment.reply", area = "grid", layer = "grid", icon = "pencil", mutates, undoable)]
-pub struct ReplyComment {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// The text of the reply.
-    pub text: Text,
-    /// Who wrote it.
-    pub author: Option<Text>,
-}
+            sheet: NodeRef,
+            /// The cell's address.
 
-impl ReplyComment {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.comment.reply".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        let text = self.text.0.clone();
-        if text.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a reply holds text".to_string() });
+            cell: Text,
+            /// The text of the reply.
+
+            text: Text,
+            /// Who wrote it.
+
+            author: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.cell.comment.reply".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            let text = self.text.0.clone();
+            if text.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a reply holds text".to_string() });
+            }
+            crate::notes::sheet_of(session, sheet, &id)?;
+            let author = self.author.as_ref().map(|author| author.0.clone()).filter(|author| !author.is_empty());
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let mut comments = comments_of(node);
+            let address = cell.to_text();
+            let Some(comment) = comments.get_mut(&address) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no comment in {address}"),
+                });
+            };
+            comment.replies.push(Reply { text: text.clone(), author: author.clone() });
+            let replies = comment.replies.len();
+            node.data["comments"] = comments_into(&comments);
+            Ok(Outcome::changed(format!("replied to the comment on {address}")).with_data(json!({
+                "sheet": sheet,
+                "cell": address,
+                "text": text,
+                "author": author,
+                "replies": replies,
+            })))
+
         }
-        crate::notes::sheet_of(session, sheet, &id)?;
-        let author = self.author.as_ref().map(|author| author.0.clone()).filter(|author| !author.is_empty());
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let mut comments = comments_of(node);
-        let address = cell.to_text();
-        let Some(comment) = comments.get_mut(&address) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no comment in {address}"),
-            });
-        };
-        comment.replies.push(Reply { text: text.clone(), author: author.clone() });
-        let replies = comment.replies.len();
-        node.data["comments"] = comments_into(&comments);
-        Ok(Outcome::changed(format!("replied to the comment on {address}")).with_data(json!({
-            "sheet": sheet,
-            "cell": address,
-            "text": text,
-            "author": author,
-            "replies": replies,
-        })))
     }
-}
+    /// **Resolve** the comment of a cell, or leave it unresolved again.
+    grid.cell.comment.resolve {
+        area: "grid",
+        layer: "grid",
+        icon: "check",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-/// **Resolve** the comment of a cell, or leave it unresolved again.
-#[derive(Command)]
-#[command(id = "grid.cell.comment.resolve", area = "grid", layer = "grid", icon = "check", mutates, undoable)]
-pub struct ResolveComment {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// Whether the thread is resolved: yes, unless it is said no.
-    pub resolved: Option<craftkit_sdk::Bool>,
-}
+            sheet: NodeRef,
+            /// The cell's address.
 
-impl ResolveComment {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.comment.resolve".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        crate::notes::sheet_of(session, sheet, &id)?;
-        let resolved = self.resolved.map(|flag| flag.0).unwrap_or(true);
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let mut comments = comments_of(node);
-        let address = cell.to_text();
-        let Some(comment) = comments.get_mut(&address) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no comment in {address}"),
-            });
-        };
-        comment.resolved = resolved;
-        node.data["comments"] = comments_into(&comments);
-        Ok(Outcome::changed(format!(
-            "{} the comment on {address}",
-            if resolved { "resolved" } else { "unresolved" }
-        ))
-        .with_data(json!({ "sheet": sheet, "cell": address, "resolved": resolved })))
+            cell: Text,
+            /// Whether the thread is resolved: yes, unless it is said no.
+
+            resolved: Option<craftkit_sdk::Bool>,
+        },
+        run: {
+
+            let id = "grid.cell.comment.resolve".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            crate::notes::sheet_of(session, sheet, &id)?;
+            let resolved = self.resolved.map(|flag| flag.0).unwrap_or(true);
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let mut comments = comments_of(node);
+            let address = cell.to_text();
+            let Some(comment) = comments.get_mut(&address) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no comment in {address}"),
+                });
+            };
+            comment.resolved = resolved;
+            node.data["comments"] = comments_into(&comments);
+            Ok(Outcome::changed(format!(
+                "{} the comment on {address}",
+                if resolved { "resolved" } else { "unresolved" }
+            ))
+            .with_data(json!({ "sheet": sheet, "cell": address, "resolved": resolved })))
+
+        }
     }
-}
+    /// The **comment** of a cell: the thread and its replies.
+    grid.cell.comment.get {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet it is in.
 
-/// The **comment** of a cell: the thread and its replies.
-#[derive(Command)]
-#[command(id = "grid.cell.comment.get", area = "grid", layer = "grid", icon = "list")]
-pub struct GetComment {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-}
+            sheet: NodeRef,
+            /// The cell's address.
 
-impl GetComment {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.comment.get".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        crate::notes::sheet_of(session, sheet, &id)?;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let comments = comments_of(node);
-        let address = cell.to_text();
-        let comment = comments.get(&address);
-        Ok(Outcome::new(match &comment {
-            Some(_) => format!("{address} holds a comment"),
-            None => format!("{address} holds no comment"),
-        })
-        .with_data(json!({
-            "sheet": sheet,
-            "cell": address,
-            "comment": match comment {
-                Some(comment) => comment_of(comment),
-                None => Json::Null,
-            },
-        })))
+            cell: Text,
+        },
+        run: {
+
+            let id = "grid.cell.comment.get".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            crate::notes::sheet_of(session, sheet, &id)?;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let comments = comments_of(node);
+            let address = cell.to_text();
+            let comment = comments.get(&address);
+            Ok(Outcome::new(match &comment {
+                Some(_) => format!("{address} holds a comment"),
+                None => format!("{address} holds no comment"),
+            })
+            .with_data(json!({
+                "sheet": sheet,
+                "cell": address,
+                "comment": match comment {
+                    Some(comment) => comment_of(comment),
+                    None => Json::Null,
+                },
+            })))
+
+        }
     }
-}
+    /// Take the **comment** away from a cell.
+    ///
+    /// A cell that holds no comment is not refused: there is nothing to
+    /// take away, and the answer says so.
+    grid.cell.comment.delete {
+        area: "grid",
+        layer: "grid",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-/// Take the **comment** away from a cell.
-///
-/// A cell that holds no comment is not refused: there is nothing to
-/// take away, and the answer says so.
-#[derive(Command)]
-#[command(id = "grid.cell.comment.delete", area = "grid", layer = "grid", icon = "minus", mutates, undoable)]
-pub struct DeleteComment {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-}
+            sheet: NodeRef,
+            /// The cell's address.
 
-impl DeleteComment {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.comment.delete".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        crate::notes::sheet_of(session, sheet, &id)?;
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let mut comments = comments_of(node);
-        let address = cell.to_text();
-        let was_there = comments.remove(&address).is_some();
-        node.data["comments"] = comments_into(&comments);
-        let outcome = if was_there {
-            Outcome::changed(format!("took the comment off {address}"))
-        } else {
-            Outcome::new(format!("{address} held no comment"))
-        };
-        Ok(outcome.with_data(json!({ "sheet": sheet, "cell": address, "was_there": was_there })))
+            cell: Text,
+        },
+        run: {
+
+            let id = "grid.cell.comment.delete".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            crate::notes::sheet_of(session, sheet, &id)?;
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let mut comments = comments_of(node);
+            let address = cell.to_text();
+            let was_there = comments.remove(&address).is_some();
+            node.data["comments"] = comments_into(&comments);
+            let outcome = if was_there {
+                Outcome::changed(format!("took the comment off {address}"))
+            } else {
+                Outcome::new(format!("{address} held no comment"))
+            };
+            Ok(outcome.with_data(json!({ "sheet": sheet, "cell": address, "was_there": was_there })))
+
+        }
     }
 }

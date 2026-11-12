@@ -43,11 +43,11 @@
 //!   text is refused, because a sheet with a hole in a row is a
 //!   sheet whose cells say nothing about where the hole is.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::Value as Json;
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
 use crate::formula::{CellRef, Value};
 
@@ -126,142 +126,304 @@ fn value_of(field: &str) -> Option<Value> {
     Some(Value::Text(field.to_string()))
 }
 
-/// **Import** a text of values into a workbook, as a sheet.
-///
-/// The text is a **CSV**: its fields are separated by a delimiter, and
-/// a field may be quoted.
-#[derive(Command)]
-#[command(id = "grid.import.csv", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
-pub struct ImportCsv {
-    /// The workbook the sheet goes in.
-    pub workbook: NodeRef,
-    /// The text.
-    pub text: Text,
-    /// What to call the sheet. Without it, the sheet is called
-    /// `imported`.
-    pub name: Option<Text>,
-    /// The **delimiter**: one character. The default is a comma.
-    pub delimiter: Option<Text>,
-}
+commands! {
+    /// **Import** a text of values into a workbook, as a sheet.
+    ///
+    /// The text is a **CSV**: its fields are separated by a delimiter, and
+    /// a field may be quoted.
+    grid.import.csv {
+        area: "grid",
+        layer: "grid",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The workbook the sheet goes in.
 
-impl ImportCsv {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.import.csv".to_string();
-        let workbook = self.workbook.0;
-        let Some(node) = session.document().node(workbook) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no workbook `{workbook}`"),
-            });
-        };
-        if node.kind != "grid.workbook" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
-            });
-        }
-        // The **delimiter**: one character.
-        let delimiter = match &self.delimiter {
-            Some(delimiter) => {
-                let trimmed = delimiter.0.trim();
-                let mut characters = trimmed.chars();
-                let Some(character) = characters.next() else {
+            workbook: NodeRef,
+            /// The text.
+
+            text: Text,
+            /// What to call the sheet. Without it, the sheet is called
+            /// `imported`.
+
+            name: Option<Text>,
+            /// The **delimiter**: one character. The default is a comma.
+
+            delimiter: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.import.csv".to_string();
+            let workbook = self.workbook.0;
+            let Some(node) = session.document().node(workbook) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no workbook `{workbook}`"),
+                });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+                });
+            }
+            // The **delimiter**: one character.
+            let delimiter = match &self.delimiter {
+                Some(delimiter) => {
+                    let trimmed = delimiter.0.trim();
+                    let mut characters = trimmed.chars();
+                    let Some(character) = characters.next() else {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "a delimiter is one character, and this is none".to_string(),
+                        });
+                    };
+                    if characters.next().is_some() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("`{trimmed}` is not a delimiter: a delimiter is one character"),
+                        });
+                    }
+                    character
+                }
+                None => DELIMITER,
+            };
+            // The **rows** of the text.
+            let rows = fields_of(&self.text.0, delimiter)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            if rows.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the text holds nothing to import".to_string(),
+                });
+            }
+            if rows.len() > MAX_ROWS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the text holds {} rows, and a text holds at most {MAX_ROWS}", rows.len()),
+                });
+            }
+            let width = rows[0].len();
+            if width > MAX_COLUMNS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the text holds {width} columns, and a text holds at most {MAX_COLUMNS}"),
+                });
+            }
+            // The **rows** are the same length, or the text is refused.
+            for (number, row) in rows.iter().enumerate() {
+                if row.len() != width {
                     return Err(EngineError::Failed {
                         id: id.clone(),
-                        message: "a delimiter is one character, and this is none".to_string(),
-                    });
-                };
-                if characters.next().is_some() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("`{trimmed}` is not a delimiter: a delimiter is one character"),
+                        message: format!(
+                            "the row {} holds {} fields and the first row holds {width}: the rows of a text are the same length",
+                            number + 1,
+                            row.len()
+                        ),
                     });
                 }
-                character
             }
-            None => DELIMITER,
-        };
-        // The **rows** of the text.
-        let rows = fields_of(&self.text.0, delimiter)
-            .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        if rows.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the text holds nothing to import".to_string(),
+            // The **name** of the sheet: the tree's rules for a name.
+            let name = match &self.name {
+                Some(name) => name.0.trim().to_string(),
+                None => "imported".to_string(),
+            };
+            let taken: Vec<String> = node
+                .children
+                .iter()
+                .filter(|child| child.kind == "grid.sheet")
+                .map(|child| child.name.clone())
+                .collect();
+            let taken = taken.iter().find(|other| other.eq_ignore_ascii_case(&name)).cloned();
+            if let Some(reason) = crate::sheetnames::why_not(&name, taken.as_deref()) {
+                return Err(EngineError::Failed { id: id.clone(), message: reason });
+            }
+            // The **cells**: the text, read.
+            let mut cells = craftkit_sdk::serde_json::Map::new();
+            let mut filled = 0u64;
+            for (row, fields) in rows.iter().enumerate() {
+                for (column, field) in fields.iter().enumerate() {
+                    let Some(value) = value_of(field) else { continue };
+                    let address = CellRef { col: column as u32, row: row as u32 }.to_text();
+                    cells.insert(address, json!({ "value": value.to_json() }));
+                    filled += 1;
+                }
+            }
+            let data = json!({
+                "cells": craftkit_sdk::serde_json::Value::Object(cells),
+                "view": crate::view::SheetView::default().to_json(),
+                "zoom": 100,
             });
+            let sheet = session.document_mut()?.add_node_with_under(
+                Some(workbook),
+                name.clone(),
+                "grid.sheet",
+                None,
+                data,
+            );
+            Ok(Outcome::changed(format!("imported {filled} cell(s) into the sheet `{name}`")).with_data(json!({
+                "workbook": workbook,
+                "id": sheet,
+                "name": name,
+                "rows": rows.len(),
+                "columns": width,
+                "cells": filled,
+            })))
+
         }
-        if rows.len() > MAX_ROWS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the text holds {} rows, and a text holds at most {MAX_ROWS}", rows.len()),
-            });
-        }
-        let width = rows[0].len();
-        if width > MAX_COLUMNS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the text holds {width} columns, and a text holds at most {MAX_COLUMNS}"),
-            });
-        }
-        // The **rows** are the same length, or the text is refused.
-        for (number, row) in rows.iter().enumerate() {
-            if row.len() != width {
+    }
+    /// **Import** a list of objects into a workbook, as a sheet.
+    ///
+    /// The **keys** of the objects are the columns of the sheet, in the
+    /// order they first appear, and the first row of the sheet holds
+    /// them.
+    grid.import.json {
+        area: "grid",
+        layer: "grid",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The workbook the sheet goes in.
+
+            workbook: NodeRef,
+            /// The **list of objects**: `[{ "who": "ann", "amount": 3 }]`.
+
+            data: Json,
+            /// What to call the sheet. Without it, the sheet is called
+            /// `imported`.
+
+            name: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.import.json".to_string();
+            let workbook = self.workbook.0;
+            let Some(node) = session.document().node(workbook) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no workbook `{workbook}`"),
+                });
+            };
+            if node.kind != "grid.workbook" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
+                });
+            }
+            let Some(list) = self.data.as_array() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the data is a list of objects".to_string(),
+                });
+            };
+            if list.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the data holds nothing to import".to_string(),
+                });
+            }
+            if list.len() > MAX_ROWS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the data holds {} rows, and a text holds at most {MAX_ROWS}", list.len()),
+                });
+            }
+            // The **keys**: the columns, in the order they first appear.
+            let mut keys: Vec<String> = Vec::new();
+            for entry in list {
+                let Some(object) = entry.as_object() else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "the data is a list of objects, and a thing in it is not one".to_string(),
+                    });
+                };
+                for key in object.keys() {
+                    if !keys.contains(key) {
+                        keys.push(key.clone());
+                    }
+                }
+            }
+            if keys.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the data holds nothing to import".to_string(),
+                });
+            }
+            if keys.len() > MAX_COLUMNS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
                     message: format!(
-                        "the row {} holds {} fields and the first row holds {width}: the rows of a text are the same length",
-                        number + 1,
-                        row.len()
+                        "the data holds {} columns, and a text holds at most {MAX_COLUMNS}",
+                        keys.len()
                     ),
                 });
             }
-        }
-        // The **name** of the sheet: the tree's rules for a name.
-        let name = match &self.name {
-            Some(name) => name.0.trim().to_string(),
-            None => "imported".to_string(),
-        };
-        let taken: Vec<String> = node
-            .children
-            .iter()
-            .filter(|child| child.kind == "grid.sheet")
-            .map(|child| child.name.clone())
-            .collect();
-        let taken = taken.iter().find(|other| other.eq_ignore_ascii_case(&name)).cloned();
-        if let Some(reason) = crate::sheetnames::why_not(&name, taken.as_deref()) {
-            return Err(EngineError::Failed { id: id.clone(), message: reason });
-        }
-        // The **cells**: the text, read.
-        let mut cells = craftkit_sdk::serde_json::Map::new();
-        let mut filled = 0u64;
-        for (row, fields) in rows.iter().enumerate() {
-            for (column, field) in fields.iter().enumerate() {
-                let Some(value) = value_of(field) else { continue };
-                let address = CellRef { col: column as u32, row: row as u32 }.to_text();
-                cells.insert(address, json!({ "value": value.to_json() }));
-                filled += 1;
+            // The **cells**: the keys are the first row and the values are
+            // the rest.
+            let mut cells = craftkit_sdk::serde_json::Map::new();
+            for (index, key) in keys.iter().enumerate() {
+                let address = CellRef { col: index as u32, row: 0 }.to_text();
+                cells.insert(address, json!({ "value": key }));
             }
+            let mut filled = keys.len() as u64;
+            for (row, entry) in list.iter().enumerate() {
+                let Some(object) = entry.as_object() else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "the data is a list of objects, and a thing in it is not one".to_string(),
+                    });
+                };
+                for (index, key) in keys.iter().enumerate() {
+                    let Some(value) = object.get(key) else { continue };
+                    let Some(value) =
+                        json_value(value).map_err(|message| EngineError::Failed { id: id.clone(), message })?
+                    else {
+                        continue;
+                    };
+                    let address = CellRef { col: index as u32, row: row as u32 + 1 }.to_text();
+                    cells.insert(address, json!({ "value": value.to_json() }));
+                    filled += 1;
+                }
+            }
+            // The **name** of the sheet: the tree's rules for a name.
+            let name = match &self.name {
+                Some(name) => name.0.trim().to_string(),
+                None => "imported".to_string(),
+            };
+            let taken: Vec<String> = node
+                .children
+                .iter()
+                .filter(|child| child.kind == "grid.sheet")
+                .map(|child| child.name.clone())
+                .collect();
+            let taken = taken.iter().find(|other| other.eq_ignore_ascii_case(&name)).cloned();
+            if let Some(reason) = crate::sheetnames::why_not(&name, taken.as_deref()) {
+                return Err(EngineError::Failed { id: id.clone(), message: reason });
+            }
+            let data = json!({
+                "cells": craftkit_sdk::serde_json::Value::Object(cells),
+                "view": crate::view::SheetView::default().to_json(),
+                "zoom": 100,
+            });
+            let sheet = session.document_mut()?.add_node_with_under(
+                Some(workbook),
+                name.clone(),
+                "grid.sheet",
+                None,
+                data,
+            );
+            Ok(Outcome::changed(format!("imported {filled} cell(s) into the sheet `{name}`")).with_data(json!({
+                "workbook": workbook,
+                "id": sheet,
+                "name": name,
+                "rows": list.len() + 1,
+                "columns": keys.len(),
+                "cells": filled,
+            })))
+
         }
-        let data = json!({
-            "cells": craftkit_sdk::serde_json::Value::Object(cells),
-            "view": crate::view::SheetView::default().to_json(),
-            "zoom": 100,
-        });
-        let sheet = session.document_mut()?.add_node_with_under(
-            Some(workbook),
-            name.clone(),
-            "grid.sheet",
-            None,
-            data,
-        );
-        Ok(Outcome::changed(format!("imported {filled} cell(s) into the sheet `{name}`")).with_data(json!({
-            "workbook": workbook,
-            "id": sheet,
-            "name": name,
-            "rows": rows.len(),
-            "columns": width,
-            "cells": filled,
-        })))
     }
 }
 
@@ -279,150 +441,4 @@ fn json_value(value: &craftkit_sdk::serde_json::Value) -> Result<Option<Value>, 
             return Err("a cell holds a value and not a structure".to_string());
         }
     })
-}
-
-/// **Import** a list of objects into a workbook, as a sheet.
-///
-/// The **keys** of the objects are the columns of the sheet, in the
-/// order they first appear, and the first row of the sheet holds
-/// them.
-#[derive(Command)]
-#[command(id = "grid.import.json", area = "grid", layer = "grid", icon = "plus", mutates, undoable)]
-pub struct ImportJson {
-    /// The workbook the sheet goes in.
-    pub workbook: NodeRef,
-    /// The **list of objects**: `[{ "who": "ann", "amount": 3 }]`.
-    pub data: Json,
-    /// What to call the sheet. Without it, the sheet is called
-    /// `imported`.
-    pub name: Option<Text>,
-}
-
-impl ImportJson {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.import.json".to_string();
-        let workbook = self.workbook.0;
-        let Some(node) = session.document().node(workbook) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no workbook `{workbook}`"),
-            });
-        };
-        if node.kind != "grid.workbook" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{workbook}` is a `{}` and not a workbook", node.kind),
-            });
-        }
-        let Some(list) = self.data.as_array() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the data is a list of objects".to_string(),
-            });
-        };
-        if list.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the data holds nothing to import".to_string(),
-            });
-        }
-        if list.len() > MAX_ROWS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the data holds {} rows, and a text holds at most {MAX_ROWS}", list.len()),
-            });
-        }
-        // The **keys**: the columns, in the order they first appear.
-        let mut keys: Vec<String> = Vec::new();
-        for entry in list {
-            let Some(object) = entry.as_object() else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "the data is a list of objects, and a thing in it is not one".to_string(),
-                });
-            };
-            for key in object.keys() {
-                if !keys.contains(key) {
-                    keys.push(key.clone());
-                }
-            }
-        }
-        if keys.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the data holds nothing to import".to_string(),
-            });
-        }
-        if keys.len() > MAX_COLUMNS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the data holds {} columns, and a text holds at most {MAX_COLUMNS}",
-                    keys.len()
-                ),
-            });
-        }
-        // The **cells**: the keys are the first row and the values are
-        // the rest.
-        let mut cells = craftkit_sdk::serde_json::Map::new();
-        for (index, key) in keys.iter().enumerate() {
-            let address = CellRef { col: index as u32, row: 0 }.to_text();
-            cells.insert(address, json!({ "value": key }));
-        }
-        let mut filled = keys.len() as u64;
-        for (row, entry) in list.iter().enumerate() {
-            let Some(object) = entry.as_object() else {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "the data is a list of objects, and a thing in it is not one".to_string(),
-                });
-            };
-            for (index, key) in keys.iter().enumerate() {
-                let Some(value) = object.get(key) else { continue };
-                let Some(value) =
-                    json_value(value).map_err(|message| EngineError::Failed { id: id.clone(), message })?
-                else {
-                    continue;
-                };
-                let address = CellRef { col: index as u32, row: row as u32 + 1 }.to_text();
-                cells.insert(address, json!({ "value": value.to_json() }));
-                filled += 1;
-            }
-        }
-        // The **name** of the sheet: the tree's rules for a name.
-        let name = match &self.name {
-            Some(name) => name.0.trim().to_string(),
-            None => "imported".to_string(),
-        };
-        let taken: Vec<String> = node
-            .children
-            .iter()
-            .filter(|child| child.kind == "grid.sheet")
-            .map(|child| child.name.clone())
-            .collect();
-        let taken = taken.iter().find(|other| other.eq_ignore_ascii_case(&name)).cloned();
-        if let Some(reason) = crate::sheetnames::why_not(&name, taken.as_deref()) {
-            return Err(EngineError::Failed { id: id.clone(), message: reason });
-        }
-        let data = json!({
-            "cells": craftkit_sdk::serde_json::Value::Object(cells),
-            "view": crate::view::SheetView::default().to_json(),
-            "zoom": 100,
-        });
-        let sheet = session.document_mut()?.add_node_with_under(
-            Some(workbook),
-            name.clone(),
-            "grid.sheet",
-            None,
-            data,
-        );
-        Ok(Outcome::changed(format!("imported {filled} cell(s) into the sheet `{name}`")).with_data(json!({
-            "workbook": workbook,
-            "id": sheet,
-            "name": name,
-            "rows": list.len() + 1,
-            "columns": keys.len(),
-            "cells": filled,
-        })))
-    }
 }

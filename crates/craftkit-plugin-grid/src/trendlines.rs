@@ -29,10 +29,10 @@
 //!   **derived**: it is worked out from the cells of the sheet every
 //!   time it is asked for, and the chart keeps no trace of it.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Text};
 
 use crate::charts::{Series, area_of, data_of, kind_of_chart, sheet_of};
 
@@ -426,137 +426,146 @@ pub fn points_of(series: &Series, categories: &[String]) -> Vec<(f64, f64)> {
     out
 }
 
-/// **The trendline of a chart**: the fit of a kind of fit to the
-/// values of its series.
-///
-/// The fit is **derived**: it is worked out from the cells of the
-/// sheet every time it is asked for.
-#[derive(Command)]
-#[command(id = "grid.chart.trendline", area = "grid", layer = "grid", icon = "chart")]
-pub struct ChartTrendline {
-    /// The chart.
-    pub chart: NodeRef,
-    /// The kind of fit: `linear`, `exponential`, `logarithmic`,
-    /// `power`, `polynomial` or `moving_average`.
-    pub kind: Text,
-    /// The order of a polynomial: between two and six.
-    pub order: Option<Number>,
-    /// The period of a moving average: between two and two hundred and
-    /// fifty-five.
-    pub period: Option<Number>,
-    /// The name of one series: every series is fitted when it is not
-    /// said.
-    pub series: Option<Text>,
-}
+commands! {
+    /// **The trendline of a chart**: the fit of a kind of fit to the
+    /// values of its series.
+    ///
+    /// The fit is **derived**: it is worked out from the cells of the
+    /// sheet every time it is asked for.
+    grid.chart.trendline {
+        area: "grid",
+        layer: "grid",
+        icon: "chart",
+        params: {
+            /// The chart.
 
-impl ChartTrendline {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.chart.trendline".to_string();
-        let chart = self.chart.0;
-        let Some(node) = session.document().node(chart).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no chart `{chart}`"),
-            });
-        };
-        if node.kind != "grid.chart" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{chart}` is a `{}` and not a chart", node.kind),
-            });
-        }
-        let kind = trend_of(&self.kind.0, self.order, self.period)
-            .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let sheet = sheet_of(session, &id, chart)?;
-        let Some(area) = area_of(&node) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the chart `{chart}` reads no range"),
-            });
-        };
-        let (categories, series) = data_of(&sheet, &area);
-        let wanted = self.series.as_ref().map(|name| name.0.trim().to_string());
-        let mut fitted: Vec<Json> = Vec::new();
-        for one in &series {
-            if let Some(wanted) = &wanted
-                && one.name.trim() != wanted
-            {
-                continue;
+            chart: NodeRef,
+            /// The kind of fit: `linear`, `exponential`, `logarithmic`,
+            /// `power`, `polynomial` or `moving_average`.
+
+            kind: Text,
+            /// The order of a polynomial: between two and six.
+
+            order: Option<Number>,
+            /// The period of a moving average: between two and two hundred and
+            /// fifty-five.
+
+            period: Option<Number>,
+            /// The name of one series: every series is fitted when it is not
+            /// said.
+
+            series: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.chart.trendline".to_string();
+            let chart = self.chart.0;
+            let Some(node) = session.document().node(chart).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no chart `{chart}`"),
+                });
+            };
+            if node.kind != "grid.chart" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{chart}` is a `{}` and not a chart", node.kind),
+                });
             }
-            let points = points_of(one, &categories);
-            let used = points.len();
-            let entry = match kind {
-                Trend::MovingAverage(period) => {
-                    let average = moving_average(&points, period);
-                    json!({
-                        "name": one.name,
-                        "kind": kind.name(),
-                        "equation": Json::Null,
-                        "r_squared": Json::Null,
-                        "points": average
-                            .iter()
-                            .map(|(x, y)| json!({ "x": x, "y": y }))
-                            .collect::<Vec<Json>>(),
-                        "used": used,
-                        "skipped": used - average.len(),
-                    })
+            let kind = trend_of(&self.kind.0, self.order, self.period)
+                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let sheet = sheet_of(session, &id, chart)?;
+            let Some(area) = area_of(&node) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the chart `{chart}` reads no range"),
+                });
+            };
+            let (categories, series) = data_of(&sheet, &area);
+            let wanted = self.series.as_ref().map(|name| name.0.trim().to_string());
+            let mut fitted: Vec<Json> = Vec::new();
+            for one in &series {
+                if let Some(wanted) = &wanted
+                    && one.name.trim() != wanted
+                {
+                    continue;
                 }
-                _ => match fit(kind, &points) {
-                    Some(fit) => {
-                        // The **points the fit uses**, and the value of
-                        // the fit at each of them.
-                        let used_points: Vec<(f64, f64)> = points
-                            .iter()
-                            .copied()
-                            .filter(|(x, y)| {
-                                x.is_finite()
-                                    && y.is_finite()
-                                    && (!kind.log_x() || *x > 0.0)
-                                    && (!kind.log_y() || *y > 0.0)
-                            })
-                            .collect();
-                        let fitted_points: Vec<Json> = used_points
-                            .iter()
-                            .filter_map(|(x, _)| fit.eval(*x).map(|y| json!({ "x": x, "y": y })))
-                            .collect();
+                let points = points_of(one, &categories);
+                let used = points.len();
+                let entry = match kind {
+                    Trend::MovingAverage(period) => {
+                        let average = moving_average(&points, period);
                         json!({
                             "name": one.name,
                             "kind": kind.name(),
-                            "equation": fit.equation(),
-                            "r_squared": match fit.r2 {
-                                Some(value) => json!(value),
-                                None => Json::Null,
-                            },
-                            "points": used_points
+                            "equation": Json::Null,
+                            "r_squared": Json::Null,
+                            "points": average
                                 .iter()
                                 .map(|(x, y)| json!({ "x": x, "y": y }))
                                 .collect::<Vec<Json>>(),
-                            "fitted": fitted_points,
-                            "used": used_points.len(),
-                            "skipped": used - used_points.len(),
+                            "used": used,
+                            "skipped": used - average.len(),
                         })
                     }
-                    None => {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: format!("the series `{}` cannot carry a {} fit", one.name, kind.name()),
-                        });
-                    }
-                },
-            };
-            fitted.push(entry);
+                    _ => match fit(kind, &points) {
+                        Some(fit) => {
+                            // The **points the fit uses**, and the value of
+                            // the fit at each of them.
+                            let used_points: Vec<(f64, f64)> = points
+                                .iter()
+                                .copied()
+                                .filter(|(x, y)| {
+                                    x.is_finite()
+                                        && y.is_finite()
+                                        && (!kind.log_x() || *x > 0.0)
+                                        && (!kind.log_y() || *y > 0.0)
+                                })
+                                .collect();
+                            let fitted_points: Vec<Json> = used_points
+                                .iter()
+                                .filter_map(|(x, _)| fit.eval(*x).map(|y| json!({ "x": x, "y": y })))
+                                .collect();
+                            json!({
+                                "name": one.name,
+                                "kind": kind.name(),
+                                "equation": fit.equation(),
+                                "r_squared": match fit.r2 {
+                                    Some(value) => json!(value),
+                                    None => Json::Null,
+                                },
+                                "points": used_points
+                                    .iter()
+                                    .map(|(x, y)| json!({ "x": x, "y": y }))
+                                    .collect::<Vec<Json>>(),
+                                "fitted": fitted_points,
+                                "used": used_points.len(),
+                                "skipped": used - used_points.len(),
+                            })
+                        }
+                        None => {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!("the series `{}` cannot carry a {} fit", one.name, kind.name()),
+                            });
+                        }
+                    },
+                };
+                fitted.push(entry);
+            }
+            if wanted.is_some() && fitted.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the chart `{chart}` has no series of that name"),
+                });
+            }
+            Ok(Outcome::new(format!("the chart `{chart}` is fitted by a {}", kind.name())).with_data(json!({
+                "chart": chart,
+                "kind": kind.name(),
+                "chart_kind": kind_of_chart(&node),
+                "series": fitted,
+            })))
+
         }
-        if wanted.is_some() && fitted.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the chart `{chart}` has no series of that name"),
-            });
-        }
-        Ok(Outcome::new(format!("the chart `{chart}` is fitted by a {}", kind.name())).with_data(json!({
-            "chart": chart,
-            "kind": kind.name(),
-            "chart_kind": kind_of_chart(&node),
-            "series": fitted,
-        })))
     }
 }

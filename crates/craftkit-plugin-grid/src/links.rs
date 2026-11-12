@@ -19,7 +19,7 @@
 
 use std::collections::BTreeMap;
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -102,140 +102,158 @@ fn sheet_names(session: &Session) -> Vec<String> {
     session.document().walk().filter(|node| node.kind == "grid.sheet").map(|node| node.name.clone()).collect()
 }
 
-/// Put a **link** on a cell.
-///
-/// A link that is already on the cell is **edited**: the target is the
-/// new target and the tooltip is kept unless a new one is given.
-#[derive(Command)]
-#[command(id = "grid.cell.link.set", area = "grid", layer = "grid", icon = "pencil", mutates, undoable)]
-pub struct SetLink {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// Where it goes: a place in this workbook, or a place outside it.
-    pub target: Text,
-    /// The text that is shown when the mouse rests on it.
-    pub tooltip: Option<Text>,
-}
+commands! {
+    /// Put a **link** on a cell.
+    ///
+    /// A link that is already on the cell is **edited**: the target is the
+    /// new target and the tooltip is kept unless a new one is given.
+    grid.cell.link.set {
+        area: "grid",
+        layer: "grid",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl SetLink {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.link.set".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        let target = self.target.0.trim().to_string();
-        if target.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a link goes somewhere".to_string() });
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// Where it goes: a place in this workbook, or a place outside it.
+
+            target: Text,
+            /// The text that is shown when the mouse rests on it.
+
+            tooltip: Option<Text>,
+        },
+        run: {
+
+            let id = "grid.cell.link.set".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            let target = self.target.0.trim().to_string();
+            if target.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a link goes somewhere".to_string() });
+            }
+            sheet_of(session, sheet, &id)?;
+            let tooltip =
+                self.tooltip.as_ref().map(|tooltip| tooltip.0.clone()).filter(|tooltip| !tooltip.is_empty());
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let mut links = links_of(node);
+            let address = cell.to_text();
+            let tooltip = tooltip.or_else(|| links.get(&address).and_then(|link| link.tooltip.clone()));
+            links.insert(address.clone(), Link { target: target.clone(), tooltip: tooltip.clone() });
+            node.data["links"] = links_into(&links);
+            let inside = is_inside(&target, &sheet_names(session));
+            Ok(Outcome::changed(format!("put a link on {address}")).with_data(json!({
+                "sheet": sheet,
+                "cell": address,
+                "target": target,
+                "tooltip": tooltip,
+                "inside": inside,
+            })))
+
         }
-        sheet_of(session, sheet, &id)?;
-        let tooltip =
-            self.tooltip.as_ref().map(|tooltip| tooltip.0.clone()).filter(|tooltip| !tooltip.is_empty());
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let mut links = links_of(node);
-        let address = cell.to_text();
-        let tooltip = tooltip.or_else(|| links.get(&address).and_then(|link| link.tooltip.clone()));
-        links.insert(address.clone(), Link { target: target.clone(), tooltip: tooltip.clone() });
-        node.data["links"] = links_into(&links);
-        let inside = is_inside(&target, &sheet_names(session));
-        Ok(Outcome::changed(format!("put a link on {address}")).with_data(json!({
-            "sheet": sheet,
-            "cell": address,
-            "target": target,
-            "tooltip": tooltip,
-            "inside": inside,
-        })))
     }
-}
+    /// The **link** on a cell.
+    grid.cell.link.get {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet it is in.
 
-/// The **link** on a cell.
-#[derive(Command)]
-#[command(id = "grid.cell.link.get", area = "grid", layer = "grid", icon = "list")]
-pub struct GetLink {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-}
+            sheet: NodeRef,
+            /// The cell's address.
 
-impl GetLink {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.link.get".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        sheet_of(session, sheet, &id)?;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let links = links_of(node);
-        let address = cell.to_text();
-        let link = links.get(&address);
-        let inside = link.map(|link| is_inside(&link.target, &sheet_names(session)));
-        Ok(Outcome::new(match link {
-            Some(_) => format!("{address} holds a link"),
-            None => format!("{address} holds no link"),
-        })
-        .with_data(json!({
-            "sheet": sheet,
-            "cell": address,
-            "link": match link {
-                Some(link) => json!({
-                    "target": link.target,
-                    "tooltip": link.tooltip,
-                    "inside": inside.unwrap_or(false),
-                }),
-                None => Json::Null,
-            },
-        })))
+            cell: Text,
+        },
+        run: {
+
+            let id = "grid.cell.link.get".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            sheet_of(session, sheet, &id)?;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let links = links_of(node);
+            let address = cell.to_text();
+            let link = links.get(&address);
+            let inside = link.map(|link| is_inside(&link.target, &sheet_names(session)));
+            Ok(Outcome::new(match link {
+                Some(_) => format!("{address} holds a link"),
+                None => format!("{address} holds no link"),
+            })
+            .with_data(json!({
+                "sheet": sheet,
+                "cell": address,
+                "link": match link {
+                    Some(link) => json!({
+                        "target": link.target,
+                        "tooltip": link.tooltip,
+                        "inside": inside.unwrap_or(false),
+                    }),
+                    None => Json::Null,
+                },
+            })))
+
+        }
     }
-}
+    /// Take the **link** away from a cell.
+    ///
+    /// A cell that holds no link is not refused: there is nothing to take
+    /// away, and the answer says so.
+    grid.cell.link.delete {
+        area: "grid",
+        layer: "grid",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-/// Take the **link** away from a cell.
-///
-/// A cell that holds no link is not refused: there is nothing to take
-/// away, and the answer says so.
-#[derive(Command)]
-#[command(id = "grid.cell.link.delete", area = "grid", layer = "grid", icon = "minus", mutates, undoable)]
-pub struct DeleteLink {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-}
+            sheet: NodeRef,
+            /// The cell's address.
 
-impl DeleteLink {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.link.delete".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        sheet_of(session, sheet, &id)?;
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        let mut links = links_of(node);
-        let address = cell.to_text();
-        let was_there = links.remove(&address).is_some();
-        node.data["links"] = links_into(&links);
-        let outcome = if was_there {
-            Outcome::changed(format!("took the link off {address}"))
-        } else {
-            Outcome::new(format!("{address} held no link"))
-        };
-        Ok(outcome.with_data(json!({
-            "sheet": sheet,
-            "cell": address,
-            "was_there": was_there,
-        })))
+            cell: Text,
+        },
+        run: {
+
+            let id = "grid.cell.link.delete".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            sheet_of(session, sheet, &id)?;
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            let mut links = links_of(node);
+            let address = cell.to_text();
+            let was_there = links.remove(&address).is_some();
+            node.data["links"] = links_into(&links);
+            let outcome = if was_there {
+                Outcome::changed(format!("took the link off {address}"))
+            } else {
+                Outcome::new(format!("{address} held no link"))
+            };
+            Ok(outcome.with_data(json!({
+                "sheet": sheet,
+                "cell": address,
+                "was_there": was_there,
+            })))
+
+        }
     }
 }

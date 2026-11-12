@@ -24,10 +24,10 @@
 //!   decimals to take away is **refused** and the cell is left as it
 //!   was.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Text};
 
 use crate::formula::Value;
 
@@ -119,110 +119,112 @@ fn decimals_of_number(value: &Value) -> usize {
     text.split_once('.').map(|(_, decimals)| decimals.chars().count()).unwrap_or(0)
 }
 
-/// **Move** the decimals of the format of a cell.
-///
-/// The tree's Increase Decimal and Decrease Decimal: the format of the
-/// cell gains a decimal or loses one, and everything else of it stays
-/// as it is.
-#[derive(Command)]
-#[command(
-    id = "grid.cell.format.decimals",
-    area = "grid",
-    layer = "grid",
-    icon = "pencil",
-    mutates,
-    undoable
-)]
-pub struct SetFormatDecimals {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// How many decimals to move: one more, or one less.
-    pub delta: Number,
-}
+commands! {
+    /// **Move** the decimals of the format of a cell.
+    ///
+    /// The tree's Increase Decimal and Decrease Decimal: the format of the
+    /// cell gains a decimal or loses one, and everything else of it stays
+    /// as it is.
+    grid.cell.format.decimals {
+        area: "grid",
+        layer: "grid",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl SetFormatDecimals {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.format.decimals".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        let delta = self.delta.0;
-        if !delta.is_finite() || delta.fract() != 0.0 || delta == 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the decimals of a format move by a whole number, and {delta} is not one"),
-            });
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// How many decimals to move: one more, or one less.
+
+            delta: Number,
+        },
+        run: {
+
+            let id = "grid.cell.format.decimals".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            let delta = self.delta.0;
+            if !delta.is_finite() || delta.fract() != 0.0 || delta == 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the decimals of a format move by a whole number, and {delta} is not one"),
+                });
+            }
+            if delta.abs() > MAX_DECIMALS as f64 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the decimals of a format move by {MAX_DECIMALS} or fewer at a time"),
+                });
+            }
+            let delta = delta as i32;
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            crate::protection::refuse_format(node, &id)?;
+            let cells = crate::cells_of(node);
+            let entry = cells.get(cell);
+            let code = entry.and_then(|entry| entry.format.clone());
+            // The **General** format has the decimals of the number the
+            // cell shows: the tree's own rule.
+            let general = match &code {
+                Some(code) => crate::format::Format::parse(code) == Some(crate::format::Format::General),
+                None => true,
+            };
+            let moved = if general {
+                let shown = entry.and_then(|entry| entry.value.as_ref()).map(decimals_of_number).unwrap_or(0);
+                let count = (shown as i32 + delta).max(0) as usize;
+                if count == 0 { "0".to_string() } else { format!("0.{}", "0".repeat(count)) }
+            } else {
+                let code = code.clone().unwrap_or_default();
+                decimals_of(&code, delta).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the format `{code}` has no decimals to take away"),
+                })?
+            };
+            if moved.chars().count() > MAX_FORMAT_CHARS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a format holds {MAX_FORMAT_CHARS} characters or fewer"),
+                });
+            }
+            if crate::format::Format::parse(&moved).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the format `{moved}` is not one this tree writes"),
+                });
+            }
+            let same = code.as_deref() == Some(moved.as_str());
+            if !same {
+                let mut cells = crate::sheet_cells_mut(node);
+                cells.set_format(cell, Some(moved.clone()));
+                node.data["cells"] = crate::cells_into(&cells);
+            }
+            let message = if same {
+                format!("the format of the cell {} has no decimals to move", cell.to_text())
+            } else {
+                format!("the format of the cell {} is `{moved}`", cell.to_text())
+            };
+            let outcome = if same { Outcome::new(message) } else { Outcome::changed(message) };
+            Ok(outcome.with_data(json!({
+                "sheet": sheet,
+                "cell": cell.to_text(),
+                "format": moved,
+                "delta": delta,
+            })))
+
         }
-        if delta.abs() > MAX_DECIMALS as f64 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the decimals of a format move by {MAX_DECIMALS} or fewer at a time"),
-            });
-        }
-        let delta = delta as i32;
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        crate::protection::refuse_format(node, &id)?;
-        let cells = crate::cells_of(node);
-        let entry = cells.get(cell);
-        let code = entry.and_then(|entry| entry.format.clone());
-        // The **General** format has the decimals of the number the
-        // cell shows: the tree's own rule.
-        let general = match &code {
-            Some(code) => crate::format::Format::parse(code) == Some(crate::format::Format::General),
-            None => true,
-        };
-        let moved = if general {
-            let shown = entry.and_then(|entry| entry.value.as_ref()).map(decimals_of_number).unwrap_or(0);
-            let count = (shown as i32 + delta).max(0) as usize;
-            if count == 0 { "0".to_string() } else { format!("0.{}", "0".repeat(count)) }
-        } else {
-            let code = code.clone().unwrap_or_default();
-            decimals_of(&code, delta).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("the format `{code}` has no decimals to take away"),
-            })?
-        };
-        if moved.chars().count() > MAX_FORMAT_CHARS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a format holds {MAX_FORMAT_CHARS} characters or fewer"),
-            });
-        }
-        if crate::format::Format::parse(&moved).is_none() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the format `{moved}` is not one this tree writes"),
-            });
-        }
-        let same = code.as_deref() == Some(moved.as_str());
-        if !same {
-            let mut cells = crate::sheet_cells_mut(node);
-            cells.set_format(cell, Some(moved.clone()));
-            node.data["cells"] = crate::cells_into(&cells);
-        }
-        let message = if same {
-            format!("the format of the cell {} has no decimals to move", cell.to_text())
-        } else {
-            format!("the format of the cell {} is `{moved}`", cell.to_text())
-        };
-        let outcome = if same { Outcome::new(message) } else { Outcome::changed(message) };
-        Ok(outcome.with_data(json!({
-            "sheet": sheet,
-            "cell": cell.to_text(),
-            "format": moved,
-            "delta": delta,
-        })))
     }
 }

@@ -28,10 +28,10 @@
 //!   the tree's button aligns the selection, and here the cell is
 //!   named.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Text};
 
 use crate::formula::{Align, AlignH, AlignV};
 
@@ -142,69 +142,81 @@ impl AlignParts {
     }
 }
 
-/// **Align** a cell: how its text lies across it and how it lies down
-/// it, and how far it is indented and whether it wraps.
-#[derive(Command)]
-#[command(id = "grid.cell.align", area = "grid", layer = "grid", icon = "grid", mutates, undoable)]
-pub struct SetAlign {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The cell's address.
-    pub cell: Text,
-    /// How the text lies **across** the cell: general, left, center,
-    /// right, fill, justify or center-across.
-    pub horizontal: Option<Text>,
-    /// How the text lies **down** the cell: top, middle or bottom.
-    pub vertical: Option<Text>,
-    /// How far the text is indented.
-    pub indent: Option<Number>,
-    /// Whether the text wraps.
-    pub wrap: Option<Bool>,
-}
+commands! {
+    /// **Align** a cell: how its text lies across it and how it lies down
+    /// it, and how far it is indented and whether it wraps.
+    grid.cell.align {
+        area: "grid",
+        layer: "grid",
+        icon: "grid",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it is in.
 
-impl SetAlign {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.cell.align".to_string();
-        let sheet = self.sheet.0;
-        let cell = crate::cell_at(&self.cell.0, &id)?;
-        if self.horizontal.is_none()
-            && self.vertical.is_none()
-            && self.indent.is_none()
-            && self.wrap.is_none()
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "name what to align: the alignment across the cell, down it, the indent or the wrap"
-                    .to_string(),
-            });
+            sheet: NodeRef,
+            /// The cell's address.
+
+            cell: Text,
+            /// How the text lies **across** the cell: general, left, center,
+            /// right, fill, justify or center-across.
+
+            horizontal: Option<Text>,
+            /// How the text lies **down** the cell: top, middle or bottom.
+
+            vertical: Option<Text>,
+            /// How far the text is indented.
+
+            indent: Option<Number>,
+            /// Whether the text wraps.
+
+            wrap: Option<Bool>,
+        },
+        run: {
+
+            let id = "grid.cell.align".to_string();
+            let sheet = self.sheet.0;
+            let cell = crate::cell_at(&self.cell.0, &id)?;
+            if self.horizontal.is_none()
+                && self.vertical.is_none()
+                && self.indent.is_none()
+                && self.wrap.is_none()
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "name what to align: the alignment across the cell, down it, the indent or the wrap"
+                        .to_string(),
+                });
+            }
+            let parts =
+                AlignParts::parse(&id, self.horizontal.as_ref(), self.vertical.as_ref(), self.indent, self.wrap)?;
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            crate::protection::refuse_format(node, &id)?;
+            let cells = crate::cells_of(node);
+            let align = parts.apply(cells.align(cell).copied().unwrap_or_else(Align::plain));
+            let mut cells = crate::sheet_cells_mut(node);
+            cells.set_align(cell, Some(align));
+            node.data["cells"] = crate::cells_into(&cells);
+            Ok(Outcome::changed(format!("the cell {} is aligned", cell.to_text())).with_data(json!({
+                "sheet": sheet,
+                "cell": cell.to_text(),
+                "horizontal": align.horizontal.to_text(),
+                "vertical": align.vertical.to_text(),
+                "indent": align.indent,
+                "wrap": align.wrap,
+            })))
+
         }
-        let parts =
-            AlignParts::parse(&id, self.horizontal.as_ref(), self.vertical.as_ref(), self.indent, self.wrap)?;
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        crate::protection::refuse_format(node, &id)?;
-        let cells = crate::cells_of(node);
-        let align = parts.apply(cells.align(cell).copied().unwrap_or_else(Align::plain));
-        let mut cells = crate::sheet_cells_mut(node);
-        cells.set_align(cell, Some(align));
-        node.data["cells"] = crate::cells_into(&cells);
-        Ok(Outcome::changed(format!("the cell {} is aligned", cell.to_text())).with_data(json!({
-            "sheet": sheet,
-            "cell": cell.to_text(),
-            "horizontal": align.horizontal.to_text(),
-            "vertical": align.vertical.to_text(),
-            "indent": align.indent,
-            "wrap": align.wrap,
-        })))
     }
 }

@@ -25,10 +25,10 @@
 //!   with the format and the conditional format and the date system of
 //!   the workbook in it.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Text};
 
 use crate::formula::{Area, CellRef, Cells, Value};
 
@@ -56,79 +56,86 @@ pub(crate) fn used_range(cells: &Cells) -> Option<Area> {
     }
 }
 
-/// **Read** a range of cells.
-///
-/// The answer is the values of the cells, row by row. Without a range
-/// the **used range** is read.
-#[derive(Command)]
-#[command(id = "grid.range.read", area = "grid", layer = "grid", icon = "list")]
-pub struct ReadRange {
-    /// The sheet it is in.
-    pub sheet: NodeRef,
-    /// The range: `A1:D10`. Without it, the used range is read.
-    pub range: Option<Text>,
-    /// Whether the **formulas** are given instead of the values.
-    pub formulas: Option<Bool>,
-}
+commands! {
+    /// **Read** a range of cells.
+    ///
+    /// The answer is the values of the cells, row by row. Without a range
+    /// the **used range** is read.
+    grid.range.read {
+        area: "grid",
+        layer: "grid",
+        icon: "list",
+        params: {
+            /// The sheet it is in.
 
-impl ReadRange {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.range.read".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
-        }
-        let name = node.name.clone();
-        let cells = crate::cells_of(node);
-        let area = match &self.range {
-            Some(range) => crate::fill::area_at(&range.0, &id)?,
-            None => match used_range(&cells) {
-                Some(area) => area,
-                None => {
-                    return Ok(Outcome::new(format!("{name} holds nothing"))
-                        .with_data(json!({ "sheet": sheet, "range": Value::Empty.to_json(), "values": Vec::<Json>::new() })));
-                }
-            },
-        };
-        // The **values** are derived: the book computes them.
-        let book = crate::book_of(session.document());
-        let formulas = self.formulas.map(|formulas| formulas.0).unwrap_or(false);
-        let mut rows: Vec<Vec<Json>> = Vec::new();
-        for row in area.start.row..=area.end.row {
-            let mut cells_in_row: Vec<Json> = Vec::new();
-            for col in area.start.col..=area.end.col {
-                let cell = CellRef { col, row };
-                let value = match cells.get(cell) {
-                    Some(entry) => match (&entry.value, &entry.formula) {
-                        (Some(value), _) => value.clone(),
-                        (None, Some(_)) => book.value_of(&name, cell),
-                        (None, None) => Value::Empty,
-                    },
-                    None => Value::Empty,
-                };
-                if formulas {
-                    let formula = cells.get(cell).and_then(|entry| entry.formula.clone());
-                    cells_in_row.push(match formula {
-                        Some(formula) => Json::String(formula),
-                        None => value.to_json(),
-                    });
-                } else {
-                    cells_in_row.push(value.to_json());
-                }
+            sheet: NodeRef,
+            /// The range: `A1:D10`. Without it, the used range is read.
+
+            range: Option<Text>,
+            /// Whether the **formulas** are given instead of the values.
+
+            formulas: Option<Bool>,
+        },
+        run: {
+
+            let id = "grid.range.read".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
             }
-            rows.push(cells_in_row);
+            let name = node.name.clone();
+            let cells = crate::cells_of(node);
+            let area = match &self.range {
+                Some(range) => crate::fill::area_at(&range.0, &id)?,
+                None => match used_range(&cells) {
+                    Some(area) => area,
+                    None => {
+                        return Ok(Outcome::new(format!("{name} holds nothing"))
+                            .with_data(json!({ "sheet": sheet, "range": Value::Empty.to_json(), "values": Vec::<Json>::new() })));
+                    }
+                },
+            };
+            // The **values** are derived: the book computes them.
+            let book = crate::book_of(session.document());
+            let formulas = self.formulas.map(|formulas| formulas.0).unwrap_or(false);
+            let mut rows: Vec<Vec<Json>> = Vec::new();
+            for row in area.start.row..=area.end.row {
+                let mut cells_in_row: Vec<Json> = Vec::new();
+                for col in area.start.col..=area.end.col {
+                    let cell = CellRef { col, row };
+                    let value = match cells.get(cell) {
+                        Some(entry) => match (&entry.value, &entry.formula) {
+                            (Some(value), _) => value.clone(),
+                            (None, Some(_)) => book.value_of(&name, cell),
+                            (None, None) => Value::Empty,
+                        },
+                        None => Value::Empty,
+                    };
+                    if formulas {
+                        let formula = cells.get(cell).and_then(|entry| entry.formula.clone());
+                        cells_in_row.push(match formula {
+                            Some(formula) => Json::String(formula),
+                            None => value.to_json(),
+                        });
+                    } else {
+                        cells_in_row.push(value.to_json());
+                    }
+                }
+                rows.push(cells_in_row);
+            }
+            let count = area.count();
+            Ok(Outcome::new(format!("{name}!{} holds {count} cell(s)", area.to_text()))
+                .with_data(json!({ "sheet": sheet, "range": area.to_text(), "values": rows })))
+
         }
-        let count = area.count();
-        Ok(Outcome::new(format!("{name}!{} holds {count} cell(s)", area.to_text()))
-            .with_data(json!({ "sheet": sheet, "range": area.to_text(), "values": rows })))
     }
 }

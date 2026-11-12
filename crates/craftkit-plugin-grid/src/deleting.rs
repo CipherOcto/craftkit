@@ -32,10 +32,10 @@
 //!   so does a **print area** that names one;
 //! - a sheet that is **protected** refuses: its cells are locked.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome};
 
 use crate::formula::{CellRef, MAX_ROWS};
 
@@ -264,103 +264,112 @@ pub fn delete_rows(sheet: &mut Node, name: &str, at: u64, count: u64) -> Result<
     Ok(deleted)
 }
 
-/// **Delete** a row from a sheet.
-///
-/// The rows below it move up, and the cells of the deleted rows are
-/// taken away with them.
-#[derive(Command)]
-#[command(id = "grid.row.delete", area = "grid", layer = "grid", icon = "minus", mutates, undoable)]
-pub struct DeleteRow {
-    /// The sheet it goes from.
-    pub sheet: NodeRef,
-    /// The row that is deleted, counted from one.
-    pub row: Number,
-    /// How many rows are deleted. Without it, one row.
-    pub count: Option<Number>,
-}
+commands! {
+    /// **Delete** a row from a sheet.
+    ///
+    /// The rows below it move up, and the cells of the deleted rows are
+    /// taken away with them.
+    grid.row.delete {
+        area: "grid",
+        layer: "grid",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet it goes from.
 
-impl DeleteRow {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.row.delete".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is not a sheet"),
-            });
-        }
-        let at = self.row.0;
-        if !at.is_finite() || at < 1.0 || at.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a row is counted from one: {at} is not one"),
-            });
-        }
-        let at = at as u64;
-        let count = self.count.map(|count| count.0).unwrap_or(1.0);
-        if !count.is_finite() || count < 1.0 || count.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("{count} is not a number of rows: the rows are counted from one"),
-            });
-        }
-        let count = count as u64;
-        if at + count > MAX_ROWS {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a sheet has at most {MAX_ROWS} rows"),
-            });
-        }
-        // A **protected** sheet has locked cells, and a locked cell may
-        // not be changed.
-        if crate::protection::Protection::of(&node).is_some_and(|protection| protection.locked) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the sheet `{sheet}` is protected, and the cells of a protected sheet may not be changed"
-                ),
-            });
-        }
-        let name = node.name.clone();
-        let mut sheet_node = node;
-        let deleted = delete_rows(&mut sheet_node, &name, at, count)
-            .map_err(|why| EngineError::Failed { id: id.clone(), message: why })?;
-        // The **charts** of the sheet: the ranges they read move with
-        // the cells.
-        let charts = crate::moving::moved_charts(&sheet_node, crate::moving::Way::Rows, at, count, false)
-            .map_err(|why| EngineError::Failed { id: id.clone(), message: why })?;
-        // The **names** of the workbook that point at the sheet: their
-        // areas move with it.
-        let names =
-            crate::moving::moved_names(session, sheet, &name, crate::moving::Way::Rows, at, count, false)
+            sheet: NodeRef,
+            /// The row that is deleted, counted from one.
+
+            row: Number,
+            /// How many rows are deleted. Without it, one row.
+
+            count: Option<Number>,
+        },
+        run: {
+
+            let id = "grid.row.delete".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is not a sheet"),
+                });
+            }
+            let at = self.row.0;
+            if !at.is_finite() || at < 1.0 || at.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a row is counted from one: {at} is not one"),
+                });
+            }
+            let at = at as u64;
+            let count = self.count.map(|count| count.0).unwrap_or(1.0);
+            if !count.is_finite() || count < 1.0 || count.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{count} is not a number of rows: the rows are counted from one"),
+                });
+            }
+            let count = count as u64;
+            if at + count > MAX_ROWS {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a sheet has at most {MAX_ROWS} rows"),
+                });
+            }
+            // A **protected** sheet has locked cells, and a locked cell may
+            // not be changed.
+            if crate::protection::Protection::of(&node).is_some_and(|protection| protection.locked) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the sheet `{sheet}` is protected, and the cells of a protected sheet may not be changed"
+                    ),
+                });
+            }
+            let name = node.name.clone();
+            let mut sheet_node = node;
+            let deleted = delete_rows(&mut sheet_node, &name, at, count)
                 .map_err(|why| EngineError::Failed { id: id.clone(), message: why })?;
-        if let Some(node) = session.document_mut()?.node_mut(sheet) {
-            node.data = sheet_node.data;
-        }
-        for (chart, range) in charts {
-            match range {
-                Some(range) => {
-                    if let Some(node) = session.document_mut()?.node_mut(chart) {
-                        node.data["range"] = Json::String(range);
+            // The **charts** of the sheet: the ranges they read move with
+            // the cells.
+            let charts = crate::moving::moved_charts(&sheet_node, crate::moving::Way::Rows, at, count, false)
+                .map_err(|why| EngineError::Failed { id: id.clone(), message: why })?;
+            // The **names** of the workbook that point at the sheet: their
+            // areas move with it.
+            let names =
+                crate::moving::moved_names(session, sheet, &name, crate::moving::Way::Rows, at, count, false)
+                    .map_err(|why| EngineError::Failed { id: id.clone(), message: why })?;
+            if let Some(node) = session.document_mut()?.node_mut(sheet) {
+                node.data = sheet_node.data;
+            }
+            for (chart, range) in charts {
+                match range {
+                    Some(range) => {
+                        if let Some(node) = session.document_mut()?.node_mut(chart) {
+                            node.data["range"] = Json::String(range);
+                        }
+                    }
+                    None => {
+                        session.document_mut()?.remove_node(chart);
                     }
                 }
-                None => {
-                    session.document_mut()?.remove_node(chart);
-                }
             }
+            if let Some((workbook, names)) = names
+                && let Some(node) = session.document_mut()?.node_mut(workbook)
+            {
+                node.data["names"] = names;
+            }
+            Ok(Outcome::changed(format!("{count} row(s) were deleted at the row {at} of `{sheet}`"))
+                .with_data(json!({ "sheet": sheet, "row": at, "count": count, "deleted": deleted })))
+
         }
-        if let Some((workbook, names)) = names
-            && let Some(node) = session.document_mut()?.node_mut(workbook)
-        {
-            node.data["names"] = names;
-        }
-        Ok(Outcome::changed(format!("{count} row(s) were deleted at the row {at} of `{sheet}`"))
-            .with_data(json!({ "sheet": sheet, "row": at, "count": count, "deleted": deleted })))
     }
 }

@@ -14,7 +14,7 @@
 //! command takes a hex colour and `none`, and a colour that is not a
 //! colour is refused.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
@@ -40,144 +40,160 @@ pub(crate) fn workbook_of(session: &Session, sheet: u64) -> Option<u64> {
         .map(|node| node.id)
 }
 
-/// **Hide** a sheet.
-///
-/// The last **visible** sheet of a workbook may not be hidden: the
-/// tree's command refuses it, because a workbook with no sheet to look
-/// at is not a workbook.
-#[derive(Command)]
-#[command(id = "grid.sheet.hide", area = "grid", layer = "grid", icon = "eye", mutates, undoable)]
-pub struct HideSheet {
-    /// The sheet to hide.
-    pub sheet: NodeRef,
-}
+commands! {
+    /// **Hide** a sheet.
+    ///
+    /// The last **visible** sheet of a workbook may not be hidden: the
+    /// tree's command refuses it, because a workbook with no sheet to look
+    /// at is not a workbook.
+    grid.sheet.hide {
+        area: "grid",
+        layer: "grid",
+        icon: "eye",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet to hide.
 
-impl HideSheet {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.sheet.hide".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
+            sheet: NodeRef,
+        },
+        run: {
+
+            let id = "grid.sheet.hide".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let Some(workbook) = workbook_of(session, sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the sheet `{sheet}` is in no workbook"),
+                });
+            };
+            let visible = sheets_of(session, workbook).iter().filter(|(_, shown)| *shown).count();
+            if visible <= 1 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a workbook must keep one visible sheet".to_string(),
+                });
+            }
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            node.data["hidden"] = json!(true);
+            Ok(Outcome::changed(format!("hid the sheet `{sheet}`")).with_data(json!({ "sheet": sheet })))
+
         }
-        let Some(workbook) = workbook_of(session, sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the sheet `{sheet}` is in no workbook"),
-            });
-        };
-        let visible = sheets_of(session, workbook).iter().filter(|(_, shown)| *shown).count();
-        if visible <= 1 {
-            return Err(EngineError::Failed {
-                id,
-                message: "a workbook must keep one visible sheet".to_string(),
-            });
-        }
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        node.data["hidden"] = json!(true);
-        Ok(Outcome::changed(format!("hid the sheet `{sheet}`")).with_data(json!({ "sheet": sheet })))
     }
-}
+    /// **Unhide** a sheet.
+    grid.sheet.unhide {
+        area: "grid",
+        layer: "grid",
+        icon: "eye",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet to unhide.
 
-/// **Unhide** a sheet.
-#[derive(Command)]
-#[command(id = "grid.sheet.unhide", area = "grid", layer = "grid", icon = "eye", mutates, undoable)]
-pub struct UnhideSheet {
-    /// The sheet to unhide.
-    pub sheet: NodeRef,
-}
+            sheet: NodeRef,
+        },
+        run: {
 
-impl UnhideSheet {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.sheet.unhide".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
+            let id = "grid.sheet.unhide".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            node.data["hidden"] = json!(false);
+            Ok(Outcome::changed(format!("unhid the sheet `{sheet}`")).with_data(json!({ "sheet": sheet })))
+
         }
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        node.data["hidden"] = json!(false);
-        Ok(Outcome::changed(format!("unhid the sheet `{sheet}`")).with_data(json!({ "sheet": sheet })))
     }
-}
+    /// The **colour** of a sheet's tab.
+    ///
+    /// The colour is a hex colour — `#RRGGBB` — and `none` takes it away.
+    /// A colour that is not a colour is **refused**: the tree's command
+    /// takes a colour and not a word.
+    grid.sheet.color {
+        area: "grid",
+        layer: "grid",
+        icon: "paint",
+        mutates,
+        undoable,
+        params: {
+            /// The sheet.
 
-/// The **colour** of a sheet's tab.
-///
-/// The colour is a hex colour — `#RRGGBB` — and `none` takes it away.
-/// A colour that is not a colour is **refused**: the tree's command
-/// takes a colour and not a word.
-#[derive(Command)]
-#[command(id = "grid.sheet.color", area = "grid", layer = "grid", icon = "paint", mutates, undoable)]
-pub struct SetSheetColor {
-    /// The sheet.
-    pub sheet: NodeRef,
-    /// The colour: `#FF0000`, or `none`.
-    pub color: Text,
-}
+            sheet: NodeRef,
+            /// The colour: `#FF0000`, or `none`.
 
-impl SetSheetColor {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "grid.sheet.color".to_string();
-        let sheet = self.sheet.0;
-        let Some(node) = session.document().node(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        if node.kind != "grid.sheet" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
-            });
+            color: Text,
+        },
+        run: {
+
+            let id = "grid.sheet.color".to_string();
+            let sheet = self.sheet.0;
+            let Some(node) = session.document().node(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            if node.kind != "grid.sheet" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sheet}` is a `{}` and not a sheet", node.kind),
+                });
+            }
+            let wanted = self.color.0.trim().to_string();
+            let colour = if wanted.eq_ignore_ascii_case("none") || wanted.eq_ignore_ascii_case("auto") {
+                None
+            } else {
+                Some(hex_colour(&wanted).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{wanted}` is not a colour"),
+                })?)
+            };
+            let Some(node) = session.document_mut()?.node_mut(sheet) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sheet `{sheet}`"),
+                });
+            };
+            match &colour {
+                Some(colour) => node.data["tab_color"] = json!(colour),
+                None => node.data["tab_color"] = json!(null),
+            }
+            Ok(Outcome::changed(format!("the tab of the sheet `{sheet}` is coloured"))
+                .with_data(json!({ "sheet": sheet, "color": colour })))
+
         }
-        let wanted = self.color.0.trim().to_string();
-        let colour = if wanted.eq_ignore_ascii_case("none") || wanted.eq_ignore_ascii_case("auto") {
-            None
-        } else {
-            Some(hex_colour(&wanted).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{wanted}` is not a colour"),
-            })?)
-        };
-        let Some(node) = session.document_mut()?.node_mut(sheet) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sheet `{sheet}`"),
-            });
-        };
-        match &colour {
-            Some(colour) => node.data["tab_color"] = json!(colour),
-            None => node.data["tab_color"] = json!(null),
-        }
-        Ok(Outcome::changed(format!("the tab of the sheet `{sheet}` is coloured"))
-            .with_data(json!({ "sheet": sheet, "color": colour })))
     }
 }
 
