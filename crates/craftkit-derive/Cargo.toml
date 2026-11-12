@@ -14,3 +14,10 @@ syn = { workspace = true }
 quote = { workspace = true }
 proc-macro2 = { workspace = true }
 proc-macro-crate = { workspace = true }
+
+# The **registry** is the only way to see what a declaration produced, and
+# the registry lives in the SDK. So the SDK is a **dev** dependency: a test
+# that reads the registry needs it, and a dev dependency does not ship —
+# which is why the layering rules do not apply to it.
+[dev-dependencies]
+craftkit-sdk = { workspace = true }

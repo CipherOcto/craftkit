@@ -76,6 +76,7 @@
 use proc_macro::TokenStream;
 
 mod command;
+mod commands;
 mod common;
 mod format;
 mod seams;
@@ -88,6 +89,46 @@ mod seams;
 pub fn derive_command(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
     match command::expand(input) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+/// Declare a **family** of commands in one table.
+///
+/// The table's rows are commands, and the compiler writes for each of them
+/// the same work it writes for one derived command: the struct, the reader,
+/// the registration and the spec.
+///
+/// ```ignore
+/// commands! {
+///     /// Add a workbook to the grid.
+///     grid.workbook.add {
+///         label: "Add workbook",
+///         area: "grid",
+///         mutates,
+///         undoable,
+///         params: {
+///             /// The workbook's name.
+///             name: Text,
+///         },
+///         run: {
+///             Ok(Outcome::changed(format!("added {}", self.name.0)))
+///         }
+///     }
+/// }
+/// ```
+///
+/// The body's `self` is the command and its `session` is the session, so the
+/// body is ordinary Rust: the table declares the **shape**, and the body
+/// says what the command **does**.
+///
+/// No battery uses this yet, and that is deliberate — see the module's own
+/// note: the house values a rule you can *read*, and the conversion of a
+/// battery is the next arc and a separate decision.
+#[proc_macro]
+pub fn commands(input: TokenStream) -> TokenStream {
+    match commands::expand(input.into()) {
         Ok(tokens) => tokens.into(),
         Err(error) => error.to_compile_error().into(),
     }
