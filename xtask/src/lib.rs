@@ -30,6 +30,7 @@
 //! | [`bundle`] | the browser bundle is built, and written |
 //! | [`doctor`] | the machine is set up to build this at all |
 //! | [`ci`] | all of the above, in order, then the tests |
+//! | [`verify`] | the same checks, over the packages a change can break |
 //!
 //! A gate that cannot run on this machine is reported as skipped with a reason,
 //! never as passed. `doctor` is how you find out which.
@@ -51,8 +52,10 @@ pub mod deny;
 pub mod doctor;
 pub mod layers;
 pub mod lists;
+pub mod packages;
 pub mod temp;
 pub mod tree;
+pub mod verify;
 pub mod wasm;
 pub mod web;
 
@@ -130,6 +133,11 @@ pub const COMMANDS: &[Subcommand] = &[
         what: "fmt --check, assets, cleanroom, lists, layers, web, clippy -D warnings, tests, wasm",
         run: run_ci,
     },
+    Subcommand {
+        name: "verify",
+        what: "fmt, clippy and test the packages a change can break (--package, --changed, --all)",
+        run: verify::run,
+    },
 ];
 
 /// The commands `ci` does not run, and why each one is not a phase of it.
@@ -155,6 +163,11 @@ pub const NOT_GATES: &[(&str, &str)] = &[
     ("doctor", "it reports on the machine, not on the code"),
     ("deny", "it needs the network and a licence database; CI runs it by name"),
     ("ci", "it is the runner"),
+    (
+        "verify",
+        "it runs the gate's own checks over the packages a change can break; `ci` runs the same \
+         checks over the whole tree, so the checks are not left to be remembered",
+    ),
 ];
 
 /// Whether `ci` runs this command.

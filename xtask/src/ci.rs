@@ -37,6 +37,7 @@
 use std::path::Path;
 use std::time::Instant;
 
+use crate::packages::{Package, workspace_packages};
 use crate::{assets, cargo, cleanroom, doctor, layers, lists, step, wasm, web};
 
 /// One step of the gate.
@@ -183,97 +184,6 @@ fn build_the_shared_libraries(root: &Path, packages: &[Package]) -> Result<(), S
     cargo(&args, root)
 }
 
-/// One package of the workspace, and where its tests live.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Package {
-    /// The package name, as cargo calls it.
-    name: String,
-    /// Cargo's own id for the package, which is how a build message says which
-    /// package it is about.
-    id: String,
-    /// The directory the package lives in. Cargo runs a package's test
-    /// binaries with that directory as the working directory, and a test that
-    /// opens a file by a relative path depends on it.
-    dir: std::path::PathBuf,
-    /// Whether the package has a library target, and therefore doc tests.
-    has_lib: bool,
-    /// Whether the package's library is also a **shared library**.
-    ///
-    /// A shared library is a file on disk, and a test that opens it with
-    /// `dlopen` needs the file to exist before the test runs. Cargo writes
-    /// that file only when the package is **built**, not when it is used as a
-    /// dependency — so a package that is only ever a dev-dependency of another
-    /// package never gets its `.so` written, and the test that opens it fails
-    /// with a file that is not there.
-    is_cdylib: bool,
-}
-
-/// The packages of the workspace, in the order cargo lists them.
-///
-/// Read from cargo's own metadata, so a new crate is tested the moment it is
-/// created and not the moment somebody remembers.
-fn workspace_packages(root: &Path) -> Result<Vec<Package>, String> {
-    let out = crate::command("cargo", &["metadata", "--no-deps", "--format-version", "1", "--offline"], root)
-        .or_else(|_| crate::command("cargo", &["metadata", "--no-deps", "--format-version", "1"], root))?;
-    if !out.ok() {
-        return Err(format!("cargo metadata failed\n\n{}", out.all()));
-    }
-    let value: serde_json::Value =
-        serde_json::from_str(&out.stdout).map_err(|e| format!("cargo metadata is not JSON: {e}"))?;
-    let packages = value
-        .get("packages")
-        .and_then(|p| p.as_array())
-        .ok_or_else(|| "cargo metadata has no packages".to_string())?;
-    let mut found: Vec<Package> = Vec::new();
-    for entry in packages {
-        let id = entry
-            .get("id")
-            .and_then(|i| i.as_str())
-            .ok_or_else(|| "a package in cargo metadata has no id".to_string())?
-            .to_string();
-        let name = entry
-            .get("name")
-            .and_then(|n| n.as_str())
-            .ok_or_else(|| "a package in cargo metadata has no name".to_string())?
-            .to_string();
-        let manifest = entry
-            .get("manifest_path")
-            .and_then(|m| m.as_str())
-            .ok_or_else(|| format!("{name} has no manifest path in cargo metadata"))?;
-        let dir = std::path::Path::new(manifest)
-            .parent()
-            .ok_or_else(|| format!("{name} has no directory in cargo metadata"))?
-            .to_path_buf();
-        let has_lib = entry
-            .get("targets")
-            .and_then(|t| t.as_array())
-            .map(|targets| {
-                targets.iter().any(|t| {
-                    t.get("kind")
-                        .and_then(|k| k.as_array())
-                        .map(|kinds| kinds.iter().any(|k| k.as_str() == Some("lib")))
-                        .unwrap_or(false)
-                })
-            })
-            .unwrap_or(false);
-        let is_cdylib = entry
-            .get("targets")
-            .and_then(|t| t.as_array())
-            .map(|targets| {
-                targets.iter().any(|t| {
-                    t.get("crate_types")
-                        .and_then(|c| c.as_array())
-                        .map(|kinds| kinds.iter().any(|k| k.as_str() == Some("cdylib")))
-                        .unwrap_or(false)
-                })
-            })
-            .unwrap_or(false);
-        found.push(Package { name, id, dir, has_lib, is_cdylib });
-    }
-    found.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(found)
-}
-
 /// Run one package's tests, naming the test that hangs.
 ///
 /// **The test binaries are run directly, not through `cargo test`.** Cargo
@@ -285,7 +195,7 @@ fn workspace_packages(root: &Path) -> Result<Vec<Package>, String> {
 ///
 /// Doc tests still go through cargo: they are compiled by cargo and there is
 /// no binary to run ourselves.
-fn test_package(root: &Path, package: &Package) -> Result<(), String> {
+pub fn test_package(root: &Path, package: &Package) -> Result<(), String> {
     let built = crate::command(
         "cargo",
         &[
