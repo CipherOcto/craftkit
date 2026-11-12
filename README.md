@@ -4242,6 +4242,7 @@ so.
 | the **layering**, checked at build time | **built.** A build script reads the manifests and the authority's table as text, and a crate that reaches upward — or a plugin that reaches for a plugin — fails the build with a sentence, not a panic (§857) | §857 |
 | a **battery as a declaration** | **built.** A table declares a family of commands and the compiler writes the struct, the reader and the registration for every row — with the compilers own checks, and one of its own (§858) | §858 |
 | the **bounds**, checked where the compiler is | **built.** The SDK publishes each of its bounds and the number is the constant itself, so the prose is checked against the code — and a number that cannot be worked out is a failure, not a skip (§850) | §850 |
+| the **conventions** of the house | **built.** One call prints the rules of the house, each quoted from the file that writes it, and the conventions of a battery — and a rule that has gone is a failure, not a line of prose (§855) | §855 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -56494,3 +56495,81 @@ something had to make them agree.
   be: a number the README states as `32 * 1024 * 1024` is a number, and a
   number the README states in a form the evaluator does not know is a
   failure to be fixed, not a form to be supported.
+
+## 855. The conventions of the house, in one place
+
+An arc keeps re-learning the same things: the deny list, the refusal style,
+the shape of a commit message, the four headings a README section has. Every
+one of them is written down somewhere — and every one of them was **found**
+by searching, arc after arc, because there was no single place to look.
+
+### What was built
+
+- **`cargo xtask digest --house`** — the rules of the house, each one
+  **quoted from the file that writes it**, with the file and the line:
+  - the deny list, read out of the tree's own table
+    (`crates/craftkit-gates/src/lib.rs`);
+  - the refusal style and the two trust boundaries, from `AGENTS.md`;
+  - the command's shape, the layering, the modelling rules, from
+    `AGENTS.md`;
+  - the non-negotiables, the commit-message form, the shared machine, from
+    `CONTRIBUTING.md`;
+  - the claim row's shape and the four headings of a README section, from
+    the README itself.
+- **`cargo xtask digest --battery grid`** — the conventions of one battery:
+  its crate and its layer, how many commands it has, **which one is its
+  example**, and the layout of its modules and its tests.
+- **The house digest is a gate.** A rule it states that cannot be found
+  where it says it is **fails**, and the failure names the rule: a digest
+  that prints a retired rule is worse than no digest, because a retired
+  rule is still being obeyed.
+
+### What the port found
+
+- **The rules were not missing; they were scattered.** Every rule the
+  digest states was in the tree already — in `AGENTS.md`,
+  `CONTRIBUTING.md` or the README. What was missing was a way to *arrive*
+  at them, and the survey measured what that cost: 9.6 % of the searches
+  an arc made were looking for conventions, and the reference search fell
+  from 3.73 calls to a lookup.
+- **The commit-msg hook's rule was not in the tree at all.** The hook
+  lives in the repository's `.git/hooks/`, which is not part of the tree,
+  so an arc could only learn the rule by **failing** a commit. The rule is
+  now written down in `CONTRIBUTING.md` — a backtick or a shell
+  metacharacter in a message is refused — and the digest quotes it.
+- **The four headings are a rule, and nothing said so.** Every section of
+  the README has them, and the shape was a habit rather than a rule. The
+  digest reads the headings of the README's **last** section and compares
+  them with the house's four: a section that has three is a section that
+  has forgotten one.
+- **A digest and a search are different.** The search answered *where is
+  it?*; the digest answers *what is it, and where is it written* — and it
+  answers with a **citation**, so a reader who wants more reads the file
+  the digest names.
+
+### What it cost
+
+- **One new module** in the xtask (`xtask/src/digest.rs`), one new
+  command, and one new phase of the gate (`digest`, after `lists` — it
+  reads a handful of files).
+- **One new test file**: `xtask/tests/digest.rs` — eight tests: every rule
+  of the house is in the tree; the digest cites the file of each rule; a
+  rule that has gone is a failure; a rule that is there is not; a section
+  without the four headings is a failure; the last section has them; the
+  battery digest names the battery; and a battery that is not there is an
+  error rather than an empty digest.
+- **One line of `CONTRIBUTING.md`**: the message may not carry a shell.
+
+### What it does not settle
+
+- **The digest is not the house.** It quotes the house; the house is
+  `AGENTS.md` and `CONTRIBUTING.md`, and those are the documents a reader
+  should read. The digest is the **way in**, not the place.
+- **A battery's conventions are only its shape.** The digest says which
+  command is the example, how many there are and where the modules and
+  the tests are. It does not say what the battery's rules *are* — that is
+  the port's work, and no tool can do it.
+- **The markers are phrases, and phrases move.** A rule that is reworded
+  is a failure of the digest until its marker is moved with it. That is
+  the intended friction: the digest and the prose are edited together or
+  not at all.
