@@ -4232,6 +4232,7 @@ so.
 | the **check** that is the size of the change | **built.** The gate's own checks, over the packages a change can break: the ones that changed and the ones that depend on them — and the ones that were left out are named (§845) | §845 |
 | the **gate** that says what it did not check | **built.** The gate checks the packages a change can break, names the packages it left out, and the build machine still checks the whole tree (§846) | §846 |
 | the **delegation**, priced | **built.** The rule is in the prose — a sub-agent gets a bounded, mechanical brief, or it does not get spawned — and the gate checks that the prose still says it (§847) | §847 |
+| the **counts**, from the registry | **built.** The counts of the batteries are read out of the registry — the commands the linker put in — and the source is checked against it, so neither can drift alone (§848) | §848 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -55791,3 +55792,82 @@ arc writes the rule down and makes the gate keep it.
 - **The rule names the tools that make it unnecessary.** `cargo xtask find`
   and `cargo xtask brief` are the answer to "ask the tree instead" — and
   they are the next arcs.
+## 848. The counts, from the registry
+
+The README's numbers were checked by counting a string in the source. They
+are checked now by asking the tree what it has.
+
+### What was built
+
+- **The registry answers by area.** `Registry::of_area` is one more filter on
+  the one registry, and `CommandSpec` says which area it is in — the **area**,
+  not the id, because the two agree by rule and the rule has an exception.
+- **The counts test asks the registry.** The studio's test no longer counts
+  the string `#[command(`; it builds the **ecosystem of the program** — the
+  application, with the batteries the build script linked in — and counts
+  what is in it.
+- **The text scan is kept, as a cross-check.** The tree's own tools read the
+  source, and a tool that reads the source must be right about it: so the
+  source's count and the registry's count must be the same number, and the
+  test says so.
+- **`cargo xtask counts`**, and a **counted block** in this README where the
+  tree's nine numbers are written down together — written by the command,
+  checked against the registry by the test.
+
+<!-- the counts of the tree: begin -->
+| battery | commands |
+|---|---|
+| grid | 188 |
+| prose | 110 |
+| pdf | 119 |
+| film | 113 |
+| layout | 73 |
+| cad | 55 |
+| fx | 47 |
+| sound | 144 |
+| vector | 67 |
+<!-- the counts of the tree: end -->
+
+### What the port found
+
+- **A count of a spelling is not a count of the tree.** The old test counted
+  `#[command(` in the source, and it was right — but it was right by
+  accident, and it could have been wrong without anybody noticing: a command
+  declared across two lines, a command in a file the scan does not read, a
+  command whose area is not its crate's name.
+- **A test that does not link the batteries sees an empty tree.** The first
+  version of this test built a bare inventory and found **no** commands at
+  all: the batteries are linked in by the application's build script, and a
+  test binary that never asks the application never reaches them. The fix is
+  to ask the **application** for its ecosystem, which is also the more honest
+  question: the tree's counts are the application's counts.
+- **A battery that is not linked in must not be counted as a battery with no
+  commands.** The studio's batteries are optional features, so the test
+  checks the batteries **this build links**, by feature — and the MCP
+  server's test, whose program links **all** of them, refuses if a battery is
+  missing rather than counting the ones that are there.
+
+### What it cost
+
+- **One new test file**: `apps/craftkit-mcp-server/tests/registry.rs` — two
+  tests: every battery is linked in and carries the commands the README
+  says, and the MCP server has one tool per command.
+- **One test rewritten** (`apps/craftkit-studio/tests/counts.rs`): the counts
+  come from the registry, and the source's count must agree with it.
+- **Two lines in the SDK**: the trait says which area a contribution is in,
+  and the registry answers by it.
+
+### What it does not settle
+
+- **The prose still says what a section's battery carried at the time.** Those
+  numbers are the narrative of the port, and the highest one is the tree's
+  count — which the test checks against the registry. The **counted block**
+  is the one place that says what the tree is *now*.
+- **The xtask still reads the source.** It cannot link the tree's own crates
+  — a checker that cannot be built when the tree does not compile is a
+  checker that is silent exactly when it is needed — so the numbers it
+  writes come from the source, and the tree's test is what says that the
+  source and the registry agree.
+- **The counts are of the commands.** A command that is in the registry and
+  is not in the source would show here, and that is the point: the two are
+  compared, so neither can drift alone.
