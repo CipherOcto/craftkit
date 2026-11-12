@@ -4245,6 +4245,7 @@ so.
 | the **conventions** of the house | **built.** One call prints the rules of the house, each quoted from the file that writes it, and the conventions of a battery — and a rule that has gone is a failure, not a line of prose (§855) | §855 |
 | the **census** of the tree | **built.** One call measures the history — the arcs, the lines and the files each one touched, the gap between them, the commands per battery and per file — and the scope is found, not remembered (§859) | §859 |
 | the **fx battery**, as a table | **built.** The smallest battery's 47 commands are thirteen tables of rows; the table learned the layer, the icon, the menu and the rest, the tools read both spellings, and the registry is pinned to what it was (§860) | §860 |
+| the **measurement**, and its procedure | **built.** The session-side half of the census has its procedure in the playbook — the rule, the baseline and the wave exits — and the gate says so when the procedure goes (§861) | §861 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -56756,3 +56757,68 @@ it costs least.
 - **The body is still Rust.** The table writes the edges; the rule is still
   the programmer's own text, read by a person. Nothing in this arc made a
   rule easier to read — that is the trade §858 named, and it is still open.
+
+## 861. The measurement, and where its procedure lives
+
+The plan's exit numbers are **session-side**: the calls an arc makes, the
+round trips and the machine time are properties of the *session* that did
+the work, not of the tree. The tree measures its own half — `cargo xtask
+census` (§859) says how big an arc is — and the plan says where the other
+half's **procedure** lives: `docs/agent-playbook.md`.
+
+It was not there.
+
+### What was built
+
+- **§9 of the agent playbook** — *How the next session is measured*:
+  - **what is measured**: the calls an arc makes, the split between
+    reading and writing, the round trips, the machine time, the workspace
+    runs and the sub-agents — and where each one comes from (the session's
+    own record);
+  - **the baseline**: the survey's numbers, named one by one, and the
+    survey they are read from;
+  - **the rule**: *a shortcut that does not move a number did not happen*;
+  - **the wave exits**: the table of the numbers that have to move.
+- **The gate checks that the procedure is in the prose**
+  (`the_measurement_procedure_is_stated`): the playbook states the rule,
+  names the baseline and names the tree's own half — and the survey still
+  holds the numbers the waves move against.
+
+### What the port found
+
+- **Half of the plan's own measure was missing.** The census (§859) is the
+  tree's half ✓; the session's half was "not the tree's business", and the
+  *procedure* is. Without it, a wave's exit number had nothing that said
+  how to read it, and an exit number with no procedure is a wish.
+- **A baseline that is remembered is a baseline that drifts.** The playbook
+  now names the numbers — 35.4 calls an arc makes, 959 workspace runs,
+  26.8 h of machine time — and points at
+  `docs/survey-cost-and-meta.md` for them; and the gate says so when
+  either file loses them.
+- **The tree's half is measured by the tree.** When the question is *how
+  big is an arc*, the answer is `cargo xtask census`; when it is *how many
+  commands does the grid carry*, it is `cargo xtask counts` — not an
+  estimate, and not a session-side number.
+
+### What it cost
+
+- **One page** of the agent playbook (§9).
+- **One new check** in the outer gate, and one line in the gate's run.
+- **One new test file**: `xtask/tests/measurement.rs` — five tests: the
+  playbook states the rule; it names the baseline; the survey holds the
+  baseline; the gate is happy with the tree; and **a playbook without the
+  procedure is caught**.
+
+### What it does not settle
+
+- **The numbers themselves are not in the tree.** They are in the session's
+  own record, and the runtime's database is not the tree's business. The
+  procedure reads them; the tree does not hold them.
+- **The baseline is a moment.** The survey describes the session that made
+  this tree. A different model writes different numbers — the plan says so
+  — and the figures that travel are the machine-time ones, because they are
+  about the tree and not about the model.
+- **The exits are targets, not a promise.** A wave that moves no number has
+  not happened, whatever it did to the tree. That is a rule about how the
+  numbers are **read**, and it is not the tree's business to enforce it —
+  which is why the procedure is a procedure and not a gate.

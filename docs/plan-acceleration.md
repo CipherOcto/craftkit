@@ -443,6 +443,16 @@ has to move.
 The census is the honest half of the plan: a shortcut that does not move the
 number is a shortcut that did not happen.
 
+**As built (§859, §861)**: the tree's half is `cargo xtask census` — the
+arcs, the lines and the files each one touched, the gap between them, the
+commands per battery and per file, with the scope **found** (the commit that
+created the v2 tree) rather than remembered. The session's half is not in
+the tree — it is in the session's own record — but the **procedure** that
+reads it against the baseline is: `docs/agent-playbook.md` §9 says what is
+measured, names the baseline, states the rule (*a shortcut that does not
+move a number did not happen*) and holds the wave exits, and the gate says
+so when the procedure goes.
+
 ---
 
 ## Part 7 — the risks, and what this plan does not settle
