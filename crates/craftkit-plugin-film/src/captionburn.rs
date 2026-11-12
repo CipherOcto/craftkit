@@ -26,14 +26,14 @@
 //! same letters beneath them, where the tree widens the filled letters
 //! themselves.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_font::Font;
 use craftkit_raster::Image;
 use craftkit_sdk::document::{BlendMode, Colour};
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Text};
 
 use crate::captionlayout;
 
@@ -123,113 +123,123 @@ fn fill_box(image: &mut Image, left: f64, top: f64, right: f64, bottom: f64, col
     }
 }
 
-/// **Burn** a caption into a frame: the caption is drawn, and the
-/// picture of it is written.
-///
-/// The tree's own: the layout is the tree's, and the letters are drawn
-/// over the background of the style and over its outline.
-#[derive(Command)]
-#[command(id = "film.caption.burn", area = "film", layer = "film", icon = "image")]
-pub struct BurnCaption {
-    /// The text of the caption.
-    pub text: Text,
-    /// The caption track that holds the style; the tree's own style
-    /// when it is not said.
-    pub track: Option<NodeRef>,
-    /// The width of the frame.
-    pub width: Number,
-    /// The height of the frame.
-    pub height: Number,
-    /// The settings of the cue: `line:50% align:center`.
-    pub settings: Option<Text>,
-    /// Where the picture is written.
-    pub to: Text,
-}
+commands! {
+    /// **Burn** a caption into a frame: the caption is drawn, and the
+    /// picture of it is written.
+    ///
+    /// The tree's own: the layout is the tree's, and the letters are drawn
+    /// over the background of the style and over its outline.
+    film.caption.burn {
+        area: "film",
+        layer: "film",
+        icon: "image",
+        params: {
+            /// The text of the caption.
 
-impl BurnCaption {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let style = captionlayout::style_of(session, self.track)?;
-        let settings = self.settings.as_ref().map(|text| text.0.clone()).unwrap_or_default();
-        let laid = captionlayout::placement(&self.text.0, &style, &settings, self.width.0, self.height.0)
-            .map_err(|message| EngineError::Failed { id: COMMAND.to_string(), message })?;
-        let width = self.width.0;
-        let height = self.height.0;
-        // The **frame** is a picture of its own size, and the size of
-        // it is the kit's own bound.
-        let pixels = width * height;
-        if !pixels.is_finite() || pixels <= 0.0 || pixels > craftkit_raster::MAX_IMAGE_PIXELS as f64 {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!(
-                    "the frame of a caption holds at most {} pixels",
-                    craftkit_raster::MAX_IMAGE_PIXELS
-                ),
-            });
-        }
-        let mut image = Image::new(width as usize, height as usize, Colour([0.0, 0.0, 0.0, 0.0]));
-        // The **colours** of the style.
-        let text_colour = colour_of(&style, "colour", "#ffffffff");
-        let background_colour = colour_of(&style, "background_colour", "#000000bf");
-        let outline_colour = colour_of(&style, "outline_colour", "#000000ff");
-        let background = style.get("background").and_then(Json::as_bool).unwrap_or(true);
-        // The **letters**, and where each line of them stands.
-        let font = Font::builtin();
-        let Some(metrics) = craftkit_font::Metrics::new(laid.size) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the size of the letters of a caption is a number that is positive".to_string(),
-            });
-        };
-        let stroke = laid.size * STROKE;
-        for (index, line) in laid.lines.iter().enumerate() {
-            let line_top = laid.top + laid.line_height * index as f64;
-            let baseline = line_top + (laid.line_height - (laid.ascent + laid.descent)) / 2.0 + laid.ascent;
-            let left = laid.x[index] - laid.padding;
-            let right = laid.x[index] + laid.widths[index] + laid.padding;
-            // The **background** of the line.
-            if background && background_colour.0[3] > 0.0 {
-                fill_box(&mut image, left, line_top, right, line_top + laid.line_height, background_colour);
+            text: Text,
+            /// The caption track that holds the style; the tree's own style
+            /// when it is not said.
+
+            track: Option<NodeRef>,
+            /// The width of the frame.
+
+            width: Number,
+            /// The height of the frame.
+
+            height: Number,
+            /// The settings of the cue: `line:50% align:center`.
+
+            settings: Option<Text>,
+            /// Where the picture is written.
+
+            to: Text,
+        },
+        run: {
+
+            let style = captionlayout::style_of(session, self.track)?;
+            let settings = self.settings.as_ref().map(|text| text.0.clone()).unwrap_or_default();
+            let laid = captionlayout::placement(&self.text.0, &style, &settings, self.width.0, self.height.0)
+                .map_err(|message| EngineError::Failed { id: COMMAND.to_string(), message })?;
+            let width = self.width.0;
+            let height = self.height.0;
+            // The **frame** is a picture of its own size, and the size of
+            // it is the kit's own bound.
+            let pixels = width * height;
+            if !pixels.is_finite() || pixels <= 0.0 || pixels > craftkit_raster::MAX_IMAGE_PIXELS as f64 {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!(
+                        "the frame of a caption holds at most {} pixels",
+                        craftkit_raster::MAX_IMAGE_PIXELS
+                    ),
+                });
             }
-            // The **letters** of the line, and the **outline** under
-            // them.
-            let placed = craftkit_font::layout(line, font, &metrics);
-            for character in placed {
-                let Some(strokes) =
-                    font.outline(character.character, &metrics, laid.x[index] + character.x, baseline)
-                else {
-                    continue;
-                };
-                if laid.outline > 0.0 {
+            let mut image = Image::new(width as usize, height as usize, Colour([0.0, 0.0, 0.0, 0.0]));
+            // The **colours** of the style.
+            let text_colour = colour_of(&style, "colour", "#ffffffff");
+            let background_colour = colour_of(&style, "background_colour", "#000000bf");
+            let outline_colour = colour_of(&style, "outline_colour", "#000000ff");
+            let background = style.get("background").and_then(Json::as_bool).unwrap_or(true);
+            // The **letters**, and where each line of them stands.
+            let font = Font::builtin();
+            let Some(metrics) = craftkit_font::Metrics::new(laid.size) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the size of the letters of a caption is a number that is positive".to_string(),
+                });
+            };
+            let stroke = laid.size * STROKE;
+            for (index, line) in laid.lines.iter().enumerate() {
+                let line_top = laid.top + laid.line_height * index as f64;
+                let baseline = line_top + (laid.line_height - (laid.ascent + laid.descent)) / 2.0 + laid.ascent;
+                let left = laid.x[index] - laid.padding;
+                let right = laid.x[index] + laid.widths[index] + laid.padding;
+                // The **background** of the line.
+                if background && background_colour.0[3] > 0.0 {
+                    fill_box(&mut image, left, line_top, right, line_top + laid.line_height, background_colour);
+                }
+                // The **letters** of the line, and the **outline** under
+                // them.
+                let placed = craftkit_font::layout(line, font, &metrics);
+                for character in placed {
+                    let Some(strokes) =
+                        font.outline(character.character, &metrics, laid.x[index] + character.x, baseline)
+                    else {
+                        continue;
+                    };
+                    if laid.outline > 0.0 {
+                        for stroke_points in &strokes {
+                            draw_line(&mut image, stroke_points, stroke + laid.outline * 2.0, outline_colour);
+                        }
+                    }
                     for stroke_points in &strokes {
-                        draw_line(&mut image, stroke_points, stroke + laid.outline * 2.0, outline_colour);
+                        draw_line(&mut image, stroke_points, stroke, text_colour);
                     }
                 }
-                for stroke_points in &strokes {
-                    draw_line(&mut image, stroke_points, stroke, text_colour);
-                }
             }
-        }
-        // The **picture** is written where the caller says.
-        let path = self.to.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed {
+            // The **picture** is written where the caller says.
+            let path = self.to.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the picture of the caption goes somewhere".to_string(),
+                });
+            }
+            let png = image.to_png();
+            std::fs::write(&path, &png).map_err(|error| EngineError::Failed {
                 id: COMMAND.to_string(),
-                message: "the picture of the caption goes somewhere".to_string(),
-            });
+                message: format!("the picture cannot be written: {error}"),
+            })?;
+            Ok(Outcome::new("the caption is burnt into the frame".to_string()).with_data(json!({
+                "lines": laid.lines,
+                "size": laid.size,
+                "top": laid.top,
+                "box": laid.extent,
+                "frame": [width, height],
+                "path": path,
+                "bytes": png.len(),
+            })))
+
         }
-        let png = image.to_png();
-        std::fs::write(&path, &png).map_err(|error| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("the picture cannot be written: {error}"),
-        })?;
-        Ok(Outcome::new("the caption is burnt into the frame".to_string()).with_data(json!({
-            "lines": laid.lines,
-            "size": laid.size,
-            "top": laid.top,
-            "box": laid.extent,
-            "frame": [width, height],
-            "path": path,
-            "bytes": png.len(),
-        })))
     }
 }

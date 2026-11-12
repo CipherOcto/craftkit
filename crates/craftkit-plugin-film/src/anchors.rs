@@ -33,7 +33,7 @@
 //!   audio method needs the waveforms; this tree has the frames of
 //!   the media and nothing else.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
@@ -110,124 +110,133 @@ fn target_of(clip: &Clip, reference: &Clip, method: Method) -> Option<i64> {
     }
 }
 
-/// **Synchronise** a clip with another one.
-#[derive(Command)]
-#[command(id = "film.clip.synchronise", area = "film", layer = "film", icon = "link", mutates, undoable)]
-pub struct SynchroniseClip {
-    /// The clip.
-    pub clip: NodeRef,
-    /// The clip it lines up with.
-    pub reference: NodeRef,
-    /// Which point of the reference lines up: `in` or `out`. The
-    /// default is `in`.
-    pub method: Option<Text>,
-}
+commands! {
+    /// **Synchronise** a clip with another one.
+    film.clip.synchronise {
+        area: "film",
+        layer: "film",
+        icon: "link",
+        mutates,
+        undoable,
+        params: {
+            /// The clip.
 
-impl SynchroniseClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.clip.synchronise".to_string();
-        let clip = self.clip.0;
-        let reference = self.reference.0;
-        if clip == reference {
-            return Err(EngineError::Failed {
-                id,
-                message: "a clip cannot be in step with itself".to_string(),
-            });
-        }
-        let method = match &self.method {
-            Some(method) => Method::parse(&method.0).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{}` is not a method: a method is `in` or `out`", method.0),
-            })?,
-            None => Method::In,
-        };
-        let clip_info = the_clip(session, &id, clip)?;
-        let reference_info = the_clip(session, &id, reference)?;
-        // A **locked** track cannot be edited.
-        if let Some(track) = crate::track_of(session, clip)
-            && crate::is_locked(session, track)
-        {
-            return Err(crate::locked_error(&id, track));
-        }
-        let Some(target) = target_of(&clip_info, &reference_info, method) else {
-            return Err(EngineError::Failed { id, message: "the clips cannot be in step".to_string() });
-        };
-        if target < 0 {
-            return Err(EngineError::Failed {
-                id,
-                message: format!(
-                    "the clip is {} frame(s) longer than the reference, and their out points cannot be the same frame",
-                    clip_info.duration as i64 - reference_info.duration as i64
-                ),
-            });
-        }
-        let target = target as u64;
-        // The **delta** in the timeline: the media moves by the speed's
-        // worth of it, and the delta is a whole number of frames.
-        let moved = target as f64 - clip_info.anchor as f64;
-        let delta = (moved / clip_info.speed).round() as i64;
-        if delta == 0 {
-            return Err(EngineError::Failed { id, message: "the clip is already in step".to_string() });
-        }
-        // The **media** the clip may play: the clip may not begin
-        // before it and may not run past the end of it.
-        if let Some(media) = crate::media_range_of(session, clip) {
-            let end = target + clip_info.duration;
-            if target < media.start || end > media.end {
+            clip: NodeRef,
+            /// The clip it lines up with.
+
+            reference: NodeRef,
+            /// Which point of the reference lines up: `in` or `out`. The
+            /// default is `in`.
+
+            method: Option<Text>,
+        },
+        run: {
+
+            let id = "film.clip.synchronise".to_string();
+            let clip = self.clip.0;
+            let reference = self.reference.0;
+            if clip == reference {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a clip cannot be in step with itself".to_string(),
+                });
+            }
+            let method = match &self.method {
+                Some(method) => Method::parse(&method.0).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{}` is not a method: a method is `in` or `out`", method.0),
+                })?,
+                None => Method::In,
+            };
+            let clip_info = the_clip(session, &id, clip)?;
+            let reference_info = the_clip(session, &id, reference)?;
+            // A **locked** track cannot be edited.
+            if let Some(track) = crate::track_of(session, clip)
+                && crate::is_locked(session, track)
+            {
+                return Err(crate::locked_error(&id, track));
+            }
+            let Some(target) = target_of(&clip_info, &reference_info, method) else {
+                return Err(EngineError::Failed { id, message: "the clips cannot be in step".to_string() });
+            };
+            if target < 0 {
                 return Err(EngineError::Failed {
                     id,
                     message: format!(
-                        "the clip would play the frames {target} to {end} of the media, and the media runs from {} to {}",
-                        media.start, media.end
+                        "the clip is {} frame(s) longer than the reference, and their out points cannot be the same frame",
+                        clip_info.duration as i64 - reference_info.duration as i64
                     ),
                 });
             }
-        }
-        // The **link** is here: the tree moves the linked clips
-        // together, and this tree does the same.
-        let members = crate::linking::group(session, clip);
-        let mut planned: Vec<(u64, u64)> = Vec::new();
-        let mut skipped: Vec<u64> = Vec::new();
-        for member in &members {
-            if *member != clip
-                && let Some(track) = crate::track_of(session, *member)
-                && crate::is_locked(session, track)
-            {
-                skipped.push(*member);
-                continue;
+            let target = target as u64;
+            // The **delta** in the timeline: the media moves by the speed's
+            // worth of it, and the delta is a whole number of frames.
+            let moved = target as f64 - clip_info.anchor as f64;
+            let delta = (moved / clip_info.speed).round() as i64;
+            if delta == 0 {
+                return Err(EngineError::Failed { id, message: "the clip is already in step".to_string() });
             }
-            let Some(node) = session.document().node(*member) else { continue };
-            let Some(anchor) = node.data.get("source_in").and_then(|source_in| source_in.as_u64()) else {
-                continue;
-            };
-            let speed = crate::speed::speed_of(&node.data);
-            let shifted = (anchor as f64 + delta as f64 * speed).round();
-            if shifted < 0.0 {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the clip `{member}` would begin before the media begins"),
-                });
+            // The **media** the clip may play: the clip may not begin
+            // before it and may not run past the end of it.
+            if let Some(media) = crate::media_range_of(session, clip) {
+                let end = target + clip_info.duration;
+                if target < media.start || end > media.end {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: format!(
+                            "the clip would play the frames {target} to {end} of the media, and the media runs from {} to {}",
+                            media.start, media.end
+                        ),
+                    });
+                }
             }
-            planned.push((*member, shifted as u64));
-        }
-        for (member, anchor) in &planned {
-            if let Some(node) = session.document_mut()?.node_mut(*member) {
-                node.data["source_in"] = serde_json::json!(*anchor);
+            // The **link** is here: the tree moves the linked clips
+            // together, and this tree does the same.
+            let members = crate::linking::group(session, clip);
+            let mut planned: Vec<(u64, u64)> = Vec::new();
+            let mut skipped: Vec<u64> = Vec::new();
+            for member in &members {
+                if *member != clip
+                    && let Some(track) = crate::track_of(session, *member)
+                    && crate::is_locked(session, track)
+                {
+                    skipped.push(*member);
+                    continue;
+                }
+                let Some(node) = session.document().node(*member) else { continue };
+                let Some(anchor) = node.data.get("source_in").and_then(|source_in| source_in.as_u64()) else {
+                    continue;
+                };
+                let speed = crate::speed::speed_of(&node.data);
+                let shifted = (anchor as f64 + delta as f64 * speed).round();
+                if shifted < 0.0 {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the clip `{member}` would begin before the media begins"),
+                    });
+                }
+                planned.push((*member, shifted as u64));
             }
+            for (member, anchor) in &planned {
+                if let Some(node) = session.document_mut()?.node_mut(*member) {
+                    node.data["source_in"] = serde_json::json!(*anchor);
+                }
+            }
+            let anchor =
+                planned.iter().find(|(member, _)| *member == clip).map(|(_, anchor)| *anchor).unwrap_or(target);
+            let partners: Vec<u64> = members.iter().copied().filter(|member| *member != clip).collect();
+            Ok(Outcome::changed(format!("the clip `{clip}` is in step with the clip `{reference}`")).with_data(
+                serde_json::json!({
+                    "clip": clip,
+                    "reference": reference,
+                    "method": method.name(),
+                    "anchor": anchor,
+                    "group": members,
+                    "partners": partners,
+                    "skipped": skipped,
+                }),
+            ))
+
         }
-        let anchor =
-            planned.iter().find(|(member, _)| *member == clip).map(|(_, anchor)| *anchor).unwrap_or(target);
-        let partners: Vec<u64> = members.iter().copied().filter(|member| *member != clip).collect();
-        Ok(Outcome::changed(format!("the clip `{clip}` is in step with the clip `{reference}`")).with_data(
-            serde_json::json!({
-                "clip": clip,
-                "reference": reference,
-                "method": method.name(),
-                "anchor": anchor,
-                "group": members,
-                "partners": partners,
-                "skipped": skipped,
-            }),
-        ))
     }
 }

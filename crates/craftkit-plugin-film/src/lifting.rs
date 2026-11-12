@@ -28,159 +28,174 @@
 //! - **The tree's locked tracks are not here**, and neither are its
 //!   **links** and its **transitions**.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
 
-/// **Lift** a range of a track: take the clips that are in it away.
-///
-/// The clips that are in the range are gone, and the gap they leave is
-/// a gap. A clip that **spans** an edge of the range is refused: the
-/// tree splits it, and the split is a command of its own.
-#[derive(Command)]
-#[command(id = "film.clip.lift", area = "film", layer = "film", icon = "minus", mutates, undoable)]
-pub struct LiftRange {
-    /// The track the range is on.
-    pub track: NodeRef,
-    /// Where the range starts, in frames.
-    pub from: Number,
-    /// Where the range ends, in frames.
-    pub to: Number,
-}
+commands! {
+    /// **Lift** a range of a track: take the clips that are in it away.
+    ///
+    /// The clips that are in the range are gone, and the gap they leave is
+    /// a gap. A clip that **spans** an edge of the range is refused: the
+    /// tree splits it, and the split is a command of its own.
+    film.clip.lift {
+        area: "film",
+        layer: "film",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The track the range is on.
 
-impl LiftRange {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.clip.lift".to_string();
-        let track = self.track.0;
-        let Some(node) = session.document().node(track) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{track}`"),
-            });
-        };
-        if node.kind != "film.track" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
-            });
-        }
-        // A **locked** track cannot be edited.
-        if crate::is_locked(session, track) {
-            return Err(crate::locked_error(&id, track));
-        }
-        let from = frames(self.from, &id)?;
-        let to = frames(self.to, &id)?;
-        if to < from {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a range ends after it starts, and this one ends at frame {to}"),
-            });
-        }
-        // The **clips** on the track: the ones that are in the range go,
-        // and the ones that span an edge of it are refused.
-        let Clips { inside, after: _after } = the_clips(session, track, from, to, &id)?;
-        // The **gap** the clips leave is a gap: the clips that are
-        // after the range do not move.
-        let mut removed: Vec<serde_json::Value> = Vec::with_capacity(inside.len());
-        for clip in inside {
-            if !session.document_mut()?.remove_node(clip) {
-                continue;
+            track: NodeRef,
+            /// Where the range starts, in frames.
+
+            from: Number,
+            /// Where the range ends, in frames.
+
+            to: Number,
+        },
+        run: {
+
+            let id = "film.clip.lift".to_string();
+            let track = self.track.0;
+            let Some(node) = session.document().node(track) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{track}`"),
+                });
+            };
+            if node.kind != "film.track" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                });
             }
-            removed.push(serde_json::json!({ "id": clip }));
+            // A **locked** track cannot be edited.
+            if crate::is_locked(session, track) {
+                return Err(crate::locked_error(&id, track));
+            }
+            let from = frames(self.from, &id)?;
+            let to = frames(self.to, &id)?;
+            if to < from {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a range ends after it starts, and this one ends at frame {to}"),
+                });
+            }
+            // The **clips** on the track: the ones that are in the range go,
+            // and the ones that span an edge of it are refused.
+            let Clips { inside, after: _after } = the_clips(session, track, from, to, &id)?;
+            // The **gap** the clips leave is a gap: the clips that are
+            // after the range do not move.
+            let mut removed: Vec<serde_json::Value> = Vec::with_capacity(inside.len());
+            for clip in inside {
+                if !session.document_mut()?.remove_node(clip) {
+                    continue;
+                }
+                removed.push(serde_json::json!({ "id": clip }));
+            }
+            let count = removed.len();
+            Ok(Outcome::changed(format!("{count} clip(s) lifted from frames {from} to {to}")).with_data(
+                serde_json::json!({
+                    "track": track,
+                    "from": from,
+                    "to": to,
+                    "removed": removed,
+                }),
+            ))
+
         }
-        let count = removed.len();
-        Ok(Outcome::changed(format!("{count} clip(s) lifted from frames {from} to {to}")).with_data(
-            serde_json::json!({
-                "track": track,
-                "from": from,
-                "to": to,
-                "removed": removed,
-            }),
-        ))
     }
-}
+    /// **Extract** a range of a track: take the clips that are in it away
+    /// and close the gap.
+    ///
+    /// The clips that are in the range go, and the clips that were after
+    /// the range move **up** by the length of the range: the time the
+    /// range took is time that is free again. A clip that **spans an edge**
+    /// of the range is refused, as it is for the lift.
+    film.clip.extract {
+        area: "film",
+        layer: "film",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The track the range is on.
 
-/// **Extract** a range of a track: take the clips that are in it away
-/// and close the gap.
-///
-/// The clips that are in the range go, and the clips that were after
-/// the range move **up** by the length of the range: the time the
-/// range took is time that is free again. A clip that **spans an edge**
-/// of the range is refused, as it is for the lift.
-#[derive(Command)]
-#[command(id = "film.clip.extract", area = "film", layer = "film", icon = "minus", mutates, undoable)]
-pub struct ExtractRange {
-    /// The track the range is on.
-    pub track: NodeRef,
-    /// Where the range starts, in frames.
-    pub from: Number,
-    /// Where the range ends, in frames.
-    pub to: Number,
-}
+            track: NodeRef,
+            /// Where the range starts, in frames.
 
-impl ExtractRange {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.clip.extract".to_string();
-        let track = self.track.0;
-        let Some(node) = session.document().node(track) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{track}`"),
-            });
-        };
-        if node.kind != "film.track" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{track}` is a `{}` and not a track", node.kind),
-            });
-        }
-        // A **locked** track cannot be edited.
-        if crate::is_locked(session, track) {
-            return Err(crate::locked_error(&id, track));
-        }
-        let from = frames(self.from, &id)?;
-        let to = frames(self.to, &id)?;
-        if to < from {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a range ends after it starts, and this one ends at frame {to}"),
-            });
-        }
-        let Clips { inside, after } = the_clips(session, track, from, to, &id)?;
-        // The **gap closes**: the clips that were after the range move
-        // up by the length of the range.
-        let mut moved: Vec<serde_json::Value> = Vec::new();
-        for (clip, start, duration) in after {
-            let new_start = start - (to - from);
-            let source_in = session
-                .document()
-                .node(clip)
-                .and_then(|node| node.data.get("source_in").cloned())
-                .unwrap_or(serde_json::Value::Null);
-            if let Some(node) = session.document_mut()?.node_mut(clip) {
-                node.data = crate::clocks_of(&node.data, new_start, duration, &source_in);
-                crate::set_clip_name(node, new_start);
+            from: Number,
+            /// Where the range ends, in frames.
+
+            to: Number,
+        },
+        run: {
+
+            let id = "film.clip.extract".to_string();
+            let track = self.track.0;
+            let Some(node) = session.document().node(track) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{track}`"),
+                });
+            };
+            if node.kind != "film.track" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{track}` is a `{}` and not a track", node.kind),
+                });
             }
-            moved.push(serde_json::json!({ "id": clip, "start": new_start }));
-        }
-        let mut removed: Vec<serde_json::Value> = Vec::with_capacity(inside.len());
-        for clip in inside {
-            if !session.document_mut()?.remove_node(clip) {
-                continue;
+            // A **locked** track cannot be edited.
+            if crate::is_locked(session, track) {
+                return Err(crate::locked_error(&id, track));
             }
-            removed.push(serde_json::json!({ "id": clip }));
+            let from = frames(self.from, &id)?;
+            let to = frames(self.to, &id)?;
+            if to < from {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a range ends after it starts, and this one ends at frame {to}"),
+                });
+            }
+            let Clips { inside, after } = the_clips(session, track, from, to, &id)?;
+            // The **gap closes**: the clips that were after the range move
+            // up by the length of the range.
+            let mut moved: Vec<serde_json::Value> = Vec::new();
+            for (clip, start, duration) in after {
+                let new_start = start - (to - from);
+                let source_in = session
+                    .document()
+                    .node(clip)
+                    .and_then(|node| node.data.get("source_in").cloned())
+                    .unwrap_or(serde_json::Value::Null);
+                if let Some(node) = session.document_mut()?.node_mut(clip) {
+                    node.data = crate::clocks_of(&node.data, new_start, duration, &source_in);
+                    crate::set_clip_name(node, new_start);
+                }
+                moved.push(serde_json::json!({ "id": clip, "start": new_start }));
+            }
+            let mut removed: Vec<serde_json::Value> = Vec::with_capacity(inside.len());
+            for clip in inside {
+                if !session.document_mut()?.remove_node(clip) {
+                    continue;
+                }
+                removed.push(serde_json::json!({ "id": clip }));
+            }
+            let count = removed.len();
+            Ok(Outcome::changed(format!("{count} clip(s) extracted from frames {from} to {to}")).with_data(
+                serde_json::json!({
+                    "track": track,
+                    "from": from,
+                    "to": to,
+                    "removed": removed,
+                    "moved": moved,
+                }),
+            ))
+
         }
-        let count = removed.len();
-        Ok(Outcome::changed(format!("{count} clip(s) extracted from frames {from} to {to}")).with_data(
-            serde_json::json!({
-                "track": track,
-                "from": from,
-                "to": to,
-                "removed": removed,
-                "moved": moved,
-            }),
-        ))
     }
 }
 

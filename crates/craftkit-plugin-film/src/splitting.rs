@@ -26,30 +26,38 @@
 //! - **The tree's reversed clips are not here**: a reversed clip's cut
 //!   moves the media the other way.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
 
-/// **Split** a clip at a place.
-///
-/// The piece before the place keeps the clip's id and is shortened, and
-/// the piece after it is a **new clip** that begins that much later in
-/// the media. The place must be **inside** the clip: a place at its
-/// edge would cut nothing, and a place outside it is not in it.
-#[derive(Command)]
-#[command(id = "film.clip.split", area = "film", layer = "film", icon = "scissors", mutates, undoable)]
-pub struct SplitClip {
-    /// The clip.
-    pub clip: NodeRef,
-    /// Where it is divided, in frames.
-    pub at: Number,
-}
+commands! {
+    /// **Split** a clip at a place.
+    ///
+    /// The piece before the place keeps the clip's id and is shortened, and
+    /// the piece after it is a **new clip** that begins that much later in
+    /// the media. The place must be **inside** the clip: a place at its
+    /// edge would cut nothing, and a place outside it is not in it.
+    film.clip.split {
+        area: "film",
+        layer: "film",
+        icon: "scissors",
+        mutates,
+        undoable,
+        params: {
+            /// The clip.
 
-impl SplitClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.clip.split".to_string();
-        split_at(session, &id, self.clip.0, self.at.0)
+            clip: NodeRef,
+            /// Where it is divided, in frames.
+
+            at: Number,
+        },
+        run: {
+
+            let id = "film.clip.split".to_string();
+            split_at(session, &id, self.clip.0, self.at.0)
+
+        }
     }
 }
 

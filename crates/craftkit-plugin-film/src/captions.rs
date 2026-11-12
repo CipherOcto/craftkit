@@ -49,10 +49,10 @@
 //! here a fraction finer than a millisecond is rounded to the
 //! nearest millisecond.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, EngineError, Outcome, Session, Text};
+use craftkit_sdk::{Bool, EngineError, Outcome, Text};
 
 /// The most a caption file may be: sixteen megabytes.
 pub(crate) const MAX_BYTES: u64 = 16 * 1024 * 1024;
@@ -415,40 +415,318 @@ pub fn cues_of(text: &str) -> Result<(Vec<Cue>, Vec<String>), String> {
     Ok((cues, warnings))
 }
 
-/// **Detect** the format of a caption file.
-///
-/// The tree's own rule: the extension of the file and the content of
-/// it say together what the file is, and a file they do not name is
-/// not a caption file.
-#[derive(Command)]
-#[command(id = "film.captions.detect", area = "film", layer = "film", icon = "search")]
-pub struct DetectCaptions {
-    /// The file to look at.
-    pub path: Text,
-}
+commands! {
+    /// **Detect** the format of a caption file.
+    ///
+    /// The tree's own rule: the extension of the file and the content of
+    /// it say together what the file is, and a file they do not name is
+    /// not a caption file.
+    film.captions.detect {
+        area: "film",
+        layer: "film",
+        icon: "search",
+        params: {
+            /// The file to look at.
 
-impl DetectCaptions {
-    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.captions.detect".to_string();
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
+            path: Text,
+        },
+        run: {
+
+            let id = "film.captions.detect".to_string();
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
+            }
+            let bytes =
+                craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(|message| {
+                    EngineError::Failed { id: id.clone(), message: format!("the file cannot be read: {message}") }
+                })?;
+            let Some(format) = crate::detect::detect(&path, &bytes) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{path}` is not a caption file of this tree"),
+                });
+            };
+            Ok(Outcome::new(format!("`{path}` is a {format} file")).with_data(json!({
+                "path": path,
+                "format": format,
+                "bytes": bytes.len(),
+            })))
+
         }
-        let bytes =
-            craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(|message| {
-                EngineError::Failed { id: id.clone(), message: format!("the file cannot be read: {message}") }
-            })?;
-        let Some(format) = crate::detect::detect(&path, &bytes) else {
-            return Err(EngineError::Failed {
+    }
+    /// **Read** the **cues** of a caption file.
+    ///
+    /// The cues are read out of the file, and they are not kept: a
+    /// caption file is a file, and what is said about it is said here.
+    ///
+    /// The **format** of the file is named: `subrip` or `webvtt`. A format
+    /// that is not one of them is refused by name.
+    film.captions.read {
+        area: "film",
+        layer: "film",
+        icon: "list",
+        params: {
+            /// The file to read.
+
+            path: Text,
+            /// The format of the file: `subrip` when it is not given.
+
+            format: Option<Text>,
+        },
+        run: {
+
+            let id = "film.captions.read".to_string();
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
+            }
+            // The **format** of the file: the tree's own names for the
+            // formats, and the extension of a file is one of them too.
+            let named = self.format.as_ref().map(|format| format.0.trim().to_ascii_lowercase());
+            let format = match named.as_deref() {
+                None | Some("") | Some("subrip") | Some("srt") => "subrip",
+                Some("webvtt") | Some("vtt") => "webvtt",
+                Some("stl") => "stl",
+                Some("scc") => "scc",
+                Some("mcc") => "mcc",
+                Some("ttml") | Some("dfxp") | Some("xml") => "ttml",
+                Some(other) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "`{other}` is not a format of a caption file: the formats are {}",
+                            FORMATS.join(", ")
+                        ),
+                    });
+                }
+            };
+            let bytes =
+                craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(|message| {
+                    EngineError::Failed { id: id.clone(), message: format!("the file cannot be read: {message}") }
+                })?;
+            if format == "stl" {
+                // An STL file is **binary**: its bytes are the file.
+                let (cues, warnings) = crate::stl::cues_of(&bytes).map_err(|message| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{message}: `{path}`"),
+                })?;
+                let read = crate::stl::cues_as_json(&cues);
+                return Ok(Outcome::new(format!("`{path}` holds {} cue(s)", cues.len())).with_data(json!({
+                    "path": path,
+                    "format": format,
+                    "cues": read,
+                    "blocks": Vec::<Json>::new(),
+                    "warnings": warnings,
+                    "count": cues.len(),
+                })));
+            }
+            let text = decode(&bytes);
+            let (cues, blocks, warnings) = if format == "ttml" {
+                // A TTML file is **XML**: the cues are in the paragraphs of
+                // its body.
+                let (cues, warnings) = crate::ttml::cues_of(&text).map_err(|message| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{message}: `{path}`"),
+                })?;
+                (crate::ttml::cues_as_json(&cues), Vec::new(), warnings)
+            } else if format == "mcc" {
+                // An MCC file is **text**: its lines carry the caption
+                // distribution packets, and the pairs of the field one are
+                // the CEA-608 pairs of the caption.
+                let (cues, warnings) = crate::mcc::cues_of(&text).map_err(|message| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{message}: `{path}`"),
+                })?;
+                (crate::mcc::cues_as_json(&cues), Vec::new(), warnings)
+            } else if format == "scc" {
+                // An SCC file is **text**: its pairs are read and the
+                // captions they carry are decoded.
+                let (cues, warnings) = crate::scc::cues_of(&text).map_err(|message| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{message}: `{path}`"),
+                })?;
+                (crate::scc::cues_as_json(&cues), Vec::new(), warnings)
+            } else if format == "webvtt" {
+                let document = vtt_cues(&text).map_err(|message| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{message}: `{path}`"),
+                })?;
+                let read: Vec<Json> = document
+                    .cues
+                    .iter()
+                    .map(|cue| {
+                        json!({
+                            "start": cue.start,
+                            "end": cue.end,
+                            "startClock": format_clock_marked(cue.start, '.'),
+                            "endClock": format_clock_marked(cue.end, '.'),
+                            "id": cue.id,
+                            "speaker": cue.speaker,
+                            "settings": cue.settings,
+                            "text": cue.text,
+                        })
+                    })
+                    .collect();
+                (read, document.blocks, document.warnings)
+            } else {
+                let (cues, warnings) = cues_of(&text).map_err(|message| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{message}: `{path}`"),
+                })?;
+                let read: Vec<Json> = cues
+                    .iter()
+                    .map(|cue| {
+                        json!({
+                            "start": cue.start,
+                            "end": cue.end,
+                            "startClock": format_clock(cue.start),
+                            "endClock": format_clock(cue.end),
+                            "id": Json::Null,
+                            "speaker": Json::Null,
+                            "settings": Json::Null,
+                            "text": cue.text,
+                        })
+                    })
+                    .collect();
+                (read, Vec::new(), warnings)
+            };
+            Ok(Outcome::new(format!("`{path}` holds {} cue(s)", cues.len())).with_data(json!({
+                "path": path,
+                "format": format,
+                "cues": cues,
+                "blocks": blocks,
+                "warnings": warnings,
+                "count": cues.len(),
+            })))
+
+        }
+    }
+    /// **Write** a caption file.
+    ///
+    /// The cues are given to the command and the file is written. The
+    /// rules are the tree's own: the cues are numbered from one, the
+    /// clock is rounded to the nearest millisecond, and a blank line
+    /// inside the text of a cue is dropped.
+    film.captions.write {
+        area: "film",
+        layer: "film",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The file to write.
+
+            path: Text,
+            /// The format of the file: `subrip` when it is not given.
+
+            format: Option<Text>,
+            /// The cues: each one a `start`, an `end` and a `text`.
+
+            cues: Json,
+            /// The blocks of a WebVTT file: the notes, the styles and the
+            /// regions.
+
+            blocks: Option<Json>,
+            /// Whether an SCC file carries the **drop-frame** timecode: it does
+            /// not when this is not given.
+
+            drop_frame: Option<Bool>,
+            /// Whether an MCC file carries the **CEA-608** pairs of the field
+            /// one: it does when this is not given.
+
+            cea_608: Option<Bool>,
+            /// Whether an MCC file carries the **CEA-708** service data: it
+            /// does when this is not given.
+
+            cea_708: Option<Bool>,
+        },
+        run: {
+
+            let id = "film.captions.write".to_string();
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
+            }
+            let named = self.format.as_ref().map(|format| format.0.trim().to_ascii_lowercase());
+            let format = match named.as_deref() {
+                None | Some("") | Some("subrip") | Some("srt") => "subrip",
+                Some("webvtt") | Some("vtt") => "webvtt",
+                Some("scc") => "scc",
+                Some("mcc") => "mcc",
+                Some("ttml") => "ttml",
+                Some("dfxp") => "dfxp",
+                Some(other) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "`{other}` is not a format of a caption file: the formats are {}",
+                            WRITABLE.join(", ")
+                        ),
+                    });
+                }
+            };
+            let written = if format == "webvtt" {
+                let cues = vtt_cues_from(&self.cues, &id)?;
+                let blocks = match &self.blocks {
+                    Some(blocks) => blocks_from(blocks, &id)?,
+                    None => Vec::new(),
+                };
+                write_vtt(&cues, &blocks)
+            } else if format == "scc" {
+                // An SCC file carries **frames**, and the cues are in
+                // milliseconds: each one is rounded to the nearest frame of
+                // the format.
+                let cues = cues_from(&self.cues, &id)?;
+                let cues: Vec<(i64, i64, String)> = cues
+                    .into_iter()
+                    .map(|cue| (crate::scc::frame_of(cue.start), crate::scc::frame_of(cue.end), cue.text))
+                    .collect();
+                let drop_frame = self.drop_frame.map(|flag| flag.0).unwrap_or(false);
+                crate::scc::write(&cues, drop_frame)
+            } else if format == "mcc" {
+                // The **MCC file**: the CEA-608 pairs of the field one, in
+                // a caption distribution packet a frame.
+                let cues = cues_from(&self.cues, &id)?;
+                let cues: Vec<(i64, i64, String)> = cues
+                    .into_iter()
+                    .map(|cue| (crate::scc::frame_of(cue.start), crate::scc::frame_of(cue.end), cue.text))
+                    .collect();
+                let drop_frame = self.drop_frame.map(|flag| flag.0).unwrap_or(false);
+                // The **streams** of the file: the CEA-608 field one and the
+                // CEA-708 service one are two streams of their own, and
+                // either may be left out.
+                let cea_608 = self.cea_608.map(|flag| flag.0).unwrap_or(true);
+                let cea_708 = self.cea_708.map(|flag| flag.0).unwrap_or(true);
+                if cea_608 && cea_708 {
+                    crate::mcc::write(&cues, drop_frame)
+                } else {
+                    crate::mcc::write_with(&cues, drop_frame, cea_608, cea_708)
+                }
+            } else if format == "ttml" || format == "dfxp" {
+                // A TTML file has no rate of its own here: the times of the
+                // captions are clock times.
+                let cues = cues_from(&self.cues, &id)?;
+                let flavour =
+                    if format == "dfxp" { crate::ttml::Flavour::Dfxp } else { crate::ttml::Flavour::Imsc1 };
+                crate::ttml::write(&cues, None, flavour)
+            } else {
+                let cues = cues_from(&self.cues, &id)?;
+                write_subrip(&cues)
+            };
+            std::fs::write(&path, written.as_bytes()).map_err(|error| EngineError::Failed {
                 id: id.clone(),
-                message: format!("`{path}` is not a caption file of this tree"),
-            });
-        };
-        Ok(Outcome::new(format!("`{path}` is a {format} file")).with_data(json!({
-            "path": path,
-            "format": format,
-            "bytes": bytes.len(),
-        })))
+                message: format!("the file cannot be written: {error}"),
+            })?;
+            let count = self.cues.as_array().map(|cues| cues.len()).unwrap_or(0);
+            Ok(Outcome::changed(format!("`{path}` was written with {count} cue(s)")).with_data(json!({
+                "path": path,
+                "format": format,
+                "count": count,
+                "bytes": written.len(),
+            })))
+
+        }
     }
 }
 
@@ -479,22 +757,6 @@ pub fn cues_of_file(format: &str, bytes: &[u8]) -> Result<(Vec<Cue>, Vec<String>
     }
 }
 
-/// **Read** the **cues** of a caption file.
-///
-/// The cues are read out of the file, and they are not kept: a
-/// caption file is a file, and what is said about it is said here.
-///
-/// The **format** of the file is named: `subrip` or `webvtt`. A format
-/// that is not one of them is refused by name.
-#[derive(Command)]
-#[command(id = "film.captions.read", area = "film", layer = "film", icon = "list")]
-pub struct ReadCaptions {
-    /// The file to read.
-    pub path: Text,
-    /// The format of the file: `subrip` when it is not given.
-    pub format: Option<Text>,
-}
-
 /// The **formats** of a caption file this tree reads.
 pub const FORMATS: [&str; 6] = ["subrip", "webvtt", "stl", "scc", "mcc", "ttml"];
 
@@ -510,134 +772,6 @@ pub const WRITABLE: [&str; 7] = ["subrip", "webvtt", "stl", "scc", "mcc", "ttml"
 /// They are the formats that are read: a file that may be read may be
 /// imported.
 pub const IMPORTED: [&str; 6] = ["subrip", "webvtt", "stl", "scc", "mcc", "ttml"];
-
-impl ReadCaptions {
-    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.captions.read".to_string();
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
-        }
-        // The **format** of the file: the tree's own names for the
-        // formats, and the extension of a file is one of them too.
-        let named = self.format.as_ref().map(|format| format.0.trim().to_ascii_lowercase());
-        let format = match named.as_deref() {
-            None | Some("") | Some("subrip") | Some("srt") => "subrip",
-            Some("webvtt") | Some("vtt") => "webvtt",
-            Some("stl") => "stl",
-            Some("scc") => "scc",
-            Some("mcc") => "mcc",
-            Some("ttml") | Some("dfxp") | Some("xml") => "ttml",
-            Some(other) => {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "`{other}` is not a format of a caption file: the formats are {}",
-                        FORMATS.join(", ")
-                    ),
-                });
-            }
-        };
-        let bytes =
-            craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(|message| {
-                EngineError::Failed { id: id.clone(), message: format!("the file cannot be read: {message}") }
-            })?;
-        if format == "stl" {
-            // An STL file is **binary**: its bytes are the file.
-            let (cues, warnings) = crate::stl::cues_of(&bytes).map_err(|message| EngineError::Failed {
-                id: id.clone(),
-                message: format!("{message}: `{path}`"),
-            })?;
-            let read = crate::stl::cues_as_json(&cues);
-            return Ok(Outcome::new(format!("`{path}` holds {} cue(s)", cues.len())).with_data(json!({
-                "path": path,
-                "format": format,
-                "cues": read,
-                "blocks": Vec::<Json>::new(),
-                "warnings": warnings,
-                "count": cues.len(),
-            })));
-        }
-        let text = decode(&bytes);
-        let (cues, blocks, warnings) = if format == "ttml" {
-            // A TTML file is **XML**: the cues are in the paragraphs of
-            // its body.
-            let (cues, warnings) = crate::ttml::cues_of(&text).map_err(|message| EngineError::Failed {
-                id: id.clone(),
-                message: format!("{message}: `{path}`"),
-            })?;
-            (crate::ttml::cues_as_json(&cues), Vec::new(), warnings)
-        } else if format == "mcc" {
-            // An MCC file is **text**: its lines carry the caption
-            // distribution packets, and the pairs of the field one are
-            // the CEA-608 pairs of the caption.
-            let (cues, warnings) = crate::mcc::cues_of(&text).map_err(|message| EngineError::Failed {
-                id: id.clone(),
-                message: format!("{message}: `{path}`"),
-            })?;
-            (crate::mcc::cues_as_json(&cues), Vec::new(), warnings)
-        } else if format == "scc" {
-            // An SCC file is **text**: its pairs are read and the
-            // captions they carry are decoded.
-            let (cues, warnings) = crate::scc::cues_of(&text).map_err(|message| EngineError::Failed {
-                id: id.clone(),
-                message: format!("{message}: `{path}`"),
-            })?;
-            (crate::scc::cues_as_json(&cues), Vec::new(), warnings)
-        } else if format == "webvtt" {
-            let document = vtt_cues(&text).map_err(|message| EngineError::Failed {
-                id: id.clone(),
-                message: format!("{message}: `{path}`"),
-            })?;
-            let read: Vec<Json> = document
-                .cues
-                .iter()
-                .map(|cue| {
-                    json!({
-                        "start": cue.start,
-                        "end": cue.end,
-                        "startClock": format_clock_marked(cue.start, '.'),
-                        "endClock": format_clock_marked(cue.end, '.'),
-                        "id": cue.id,
-                        "speaker": cue.speaker,
-                        "settings": cue.settings,
-                        "text": cue.text,
-                    })
-                })
-                .collect();
-            (read, document.blocks, document.warnings)
-        } else {
-            let (cues, warnings) = cues_of(&text).map_err(|message| EngineError::Failed {
-                id: id.clone(),
-                message: format!("{message}: `{path}`"),
-            })?;
-            let read: Vec<Json> = cues
-                .iter()
-                .map(|cue| {
-                    json!({
-                        "start": cue.start,
-                        "end": cue.end,
-                        "startClock": format_clock(cue.start),
-                        "endClock": format_clock(cue.end),
-                        "id": Json::Null,
-                        "speaker": Json::Null,
-                        "settings": Json::Null,
-                        "text": cue.text,
-                    })
-                })
-                .collect();
-            (read, Vec::new(), warnings)
-        };
-        Ok(Outcome::new(format!("`{path}` holds {} cue(s)", cues.len())).with_data(json!({
-            "path": path,
-            "format": format,
-            "cues": cues,
-            "blocks": blocks,
-            "warnings": warnings,
-            "count": cues.len(),
-        })))
-    }
-}
 
 /// The most **cues** a caption file may hold.
 pub const MAX_CUES: usize = 10_000;
@@ -836,120 +970,4 @@ pub fn write_vtt(cues: &[VttCue], blocks: &[String]) -> String {
         out.push('\n');
     }
     out
-}
-
-/// **Write** a caption file.
-///
-/// The cues are given to the command and the file is written. The
-/// rules are the tree's own: the cues are numbered from one, the
-/// clock is rounded to the nearest millisecond, and a blank line
-/// inside the text of a cue is dropped.
-#[derive(Command)]
-#[command(id = "film.captions.write", area = "film", layer = "film", icon = "plus", mutates, undoable)]
-pub struct WriteCaptions {
-    /// The file to write.
-    pub path: Text,
-    /// The format of the file: `subrip` when it is not given.
-    pub format: Option<Text>,
-    /// The cues: each one a `start`, an `end` and a `text`.
-    pub cues: Json,
-    /// The blocks of a WebVTT file: the notes, the styles and the
-    /// regions.
-    pub blocks: Option<Json>,
-    /// Whether an SCC file carries the **drop-frame** timecode: it does
-    /// not when this is not given.
-    pub drop_frame: Option<Bool>,
-    /// Whether an MCC file carries the **CEA-608** pairs of the field
-    /// one: it does when this is not given.
-    pub cea_608: Option<Bool>,
-    /// Whether an MCC file carries the **CEA-708** service data: it
-    /// does when this is not given.
-    pub cea_708: Option<Bool>,
-}
-
-impl WriteCaptions {
-    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.captions.write".to_string();
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
-        }
-        let named = self.format.as_ref().map(|format| format.0.trim().to_ascii_lowercase());
-        let format = match named.as_deref() {
-            None | Some("") | Some("subrip") | Some("srt") => "subrip",
-            Some("webvtt") | Some("vtt") => "webvtt",
-            Some("scc") => "scc",
-            Some("mcc") => "mcc",
-            Some("ttml") => "ttml",
-            Some("dfxp") => "dfxp",
-            Some(other) => {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!(
-                        "`{other}` is not a format of a caption file: the formats are {}",
-                        WRITABLE.join(", ")
-                    ),
-                });
-            }
-        };
-        let written = if format == "webvtt" {
-            let cues = vtt_cues_from(&self.cues, &id)?;
-            let blocks = match &self.blocks {
-                Some(blocks) => blocks_from(blocks, &id)?,
-                None => Vec::new(),
-            };
-            write_vtt(&cues, &blocks)
-        } else if format == "scc" {
-            // An SCC file carries **frames**, and the cues are in
-            // milliseconds: each one is rounded to the nearest frame of
-            // the format.
-            let cues = cues_from(&self.cues, &id)?;
-            let cues: Vec<(i64, i64, String)> = cues
-                .into_iter()
-                .map(|cue| (crate::scc::frame_of(cue.start), crate::scc::frame_of(cue.end), cue.text))
-                .collect();
-            let drop_frame = self.drop_frame.map(|flag| flag.0).unwrap_or(false);
-            crate::scc::write(&cues, drop_frame)
-        } else if format == "mcc" {
-            // The **MCC file**: the CEA-608 pairs of the field one, in
-            // a caption distribution packet a frame.
-            let cues = cues_from(&self.cues, &id)?;
-            let cues: Vec<(i64, i64, String)> = cues
-                .into_iter()
-                .map(|cue| (crate::scc::frame_of(cue.start), crate::scc::frame_of(cue.end), cue.text))
-                .collect();
-            let drop_frame = self.drop_frame.map(|flag| flag.0).unwrap_or(false);
-            // The **streams** of the file: the CEA-608 field one and the
-            // CEA-708 service one are two streams of their own, and
-            // either may be left out.
-            let cea_608 = self.cea_608.map(|flag| flag.0).unwrap_or(true);
-            let cea_708 = self.cea_708.map(|flag| flag.0).unwrap_or(true);
-            if cea_608 && cea_708 {
-                crate::mcc::write(&cues, drop_frame)
-            } else {
-                crate::mcc::write_with(&cues, drop_frame, cea_608, cea_708)
-            }
-        } else if format == "ttml" || format == "dfxp" {
-            // A TTML file has no rate of its own here: the times of the
-            // captions are clock times.
-            let cues = cues_from(&self.cues, &id)?;
-            let flavour =
-                if format == "dfxp" { crate::ttml::Flavour::Dfxp } else { crate::ttml::Flavour::Imsc1 };
-            crate::ttml::write(&cues, None, flavour)
-        } else {
-            let cues = cues_from(&self.cues, &id)?;
-            write_subrip(&cues)
-        };
-        std::fs::write(&path, written.as_bytes()).map_err(|error| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the file cannot be written: {error}"),
-        })?;
-        let count = self.cues.as_array().map(|cues| cues.len()).unwrap_or(0);
-        Ok(Outcome::changed(format!("`{path}` was written with {count} cue(s)")).with_data(json!({
-            "path": path,
-            "format": format,
-            "count": count,
-            "bytes": written.len(),
-        })))
-    }
 }

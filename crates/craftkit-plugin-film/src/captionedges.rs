@@ -28,7 +28,7 @@
 //!   may be given the selection. Here the times are the **frames** of
 //!   the sequence, and the cues are named.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
@@ -93,295 +93,318 @@ fn delta_of(command: &str, delta: Number) -> Result<i64, EngineError> {
     Ok(number as i64)
 }
 
-/// **Trim** a cue at its **in** edge or at its **out** edge.
-///
-/// The delta is in frames, and it may be negative: a negative delta
-/// makes the cue longer. A delta that does not fit the room the cue
-/// has is refused.
-#[derive(Command)]
-#[command(id = "film.caption.trim", area = "film", layer = "film", icon = "trim", mutates, undoable)]
-pub struct TrimCaption {
-    /// The cue.
-    pub caption: NodeRef,
-    /// The edge: `in` or `out`.
-    pub edge: Text,
-    /// The frames to take away, or to add.
-    pub delta: Number,
-}
+commands! {
+    /// **Trim** a cue at its **in** edge or at its **out** edge.
+    ///
+    /// The delta is in frames, and it may be negative: a negative delta
+    /// makes the cue longer. A delta that does not fit the room the cue
+    /// has is refused.
+    film.caption.trim {
+        area: "film",
+        layer: "film",
+        icon: "trim",
+        mutates,
+        undoable,
+        params: {
+            /// The cue.
 
-impl TrimCaption {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "film.caption.trim";
-        let caption = self.caption.0;
-        let (node, track) = the_caption(session, command, caption)?;
-        let start = node.data.get("start").and_then(|start| start.as_i64()).unwrap_or(0);
-        let end = node.data.get("end").and_then(|end| end.as_i64()).unwrap_or(0);
-        let edge = self.edge.0.trim().to_ascii_lowercase();
-        if edge != "in" && edge != "out" {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: "the edge is `in` or `out`".to_string(),
-            });
-        }
-        let delta = delta_of(command, self.delta)?;
-        if delta == 0 {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: "a trim of nothing is nothing".to_string(),
-            });
-        }
-        let Some(track_node) = session.document().node(track) else {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        let cues = cues_of(track_node);
-        let (before, after) = room_of(&cues, caption);
-        // The **room** the trim has: the cue keeps a frame, and it does
-        // not run into its neighbours.
-        let (new_start, new_end) = if edge == "in" {
-            let lowest = before - start;
-            let highest = end - start - MIN_DURATION;
-            if delta < lowest || delta > highest {
+            caption: NodeRef,
+            /// The edge: `in` or `out`.
+
+            edge: Text,
+            /// The frames to take away, or to add.
+
+            delta: Number,
+        },
+        run: {
+
+            let command = "film.caption.trim";
+            let caption = self.caption.0;
+            let (node, track) = the_caption(session, command, caption)?;
+            let start = node.data.get("start").and_then(|start| start.as_i64()).unwrap_or(0);
+            let end = node.data.get("end").and_then(|end| end.as_i64()).unwrap_or(0);
+            let edge = self.edge.0.trim().to_ascii_lowercase();
+            if edge != "in" && edge != "out" {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
-                    message: format!(
-                        "the in edge of the cue may move between {lowest} and {highest} frames, and {delta} is not one of them"
-                    ),
+                    message: "the edge is `in` or `out`".to_string(),
                 });
             }
-            (start + delta, end)
-        } else {
-            let lowest = MIN_DURATION - (end - start);
+            let delta = delta_of(command, self.delta)?;
+            if delta == 0 {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: "a trim of nothing is nothing".to_string(),
+                });
+            }
+            let Some(track_node) = session.document().node(track) else {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            let cues = cues_of(track_node);
+            let (before, after) = room_of(&cues, caption);
+            // The **room** the trim has: the cue keeps a frame, and it does
+            // not run into its neighbours.
+            let (new_start, new_end) = if edge == "in" {
+                let lowest = before - start;
+                let highest = end - start - MIN_DURATION;
+                if delta < lowest || delta > highest {
+                    return Err(EngineError::Failed {
+                        id: command.to_string(),
+                        message: format!(
+                            "the in edge of the cue may move between {lowest} and {highest} frames, and {delta} is not one of them"
+                        ),
+                    });
+                }
+                (start + delta, end)
+            } else {
+                let lowest = MIN_DURATION - (end - start);
+                let highest = if after == i64::MAX { i64::MAX - end } else { after - end };
+                if delta < lowest || delta > highest {
+                    return Err(EngineError::Failed {
+                        id: command.to_string(),
+                        message: format!(
+                            "the out edge of the cue may move between {lowest} and {highest} frames, and {delta} is not one of them"
+                        ),
+                    });
+                }
+                (start, end + delta)
+            };
+            if let Some(node) = session.document_mut()?.node_mut(caption) {
+                node.data["start"] = json!(new_start);
+                node.data["end"] = json!(new_end);
+                node.name = format!("{new_start}–{new_end}");
+            }
+            Ok(Outcome::changed(format!("the cue `{caption}` is from {new_start} to {new_end}")).with_data(
+                json!({
+                    "caption": caption,
+                    "start": new_start,
+                    "end": new_end,
+                }),
+            ))
+
+        }
+    }
+    /// **Move** a cue: it stays at or after the start of the sequence and
+    /// it does not run into its neighbours.
+    film.caption.move {
+        area: "film",
+        layer: "film",
+        icon: "arrow",
+        mutates,
+        undoable,
+        params: {
+            /// The cue.
+
+            caption: NodeRef,
+            /// The frames to move it by.
+
+            delta: Number,
+        },
+        run: {
+
+            let command = "film.caption.move";
+            let caption = self.caption.0;
+            let (node, track) = the_caption(session, command, caption)?;
+            let start = node.data.get("start").and_then(|start| start.as_i64()).unwrap_or(0);
+            let end = node.data.get("end").and_then(|end| end.as_i64()).unwrap_or(0);
+            let delta = delta_of(command, self.delta)?;
+            if delta == 0 {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: "a move of nothing is nothing".to_string(),
+                });
+            }
+            let Some(track_node) = session.document().node(track) else {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            let cues = cues_of(track_node);
+            let (before, after) = room_of(&cues, caption);
+            let lowest = before - start;
             let highest = if after == i64::MAX { i64::MAX - end } else { after - end };
             if delta < lowest || delta > highest {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
                     message: format!(
-                        "the out edge of the cue may move between {lowest} and {highest} frames, and {delta} is not one of them"
+                        "the cue may move between {lowest} and {highest} frames, and {delta} is not one of them"
                     ),
                 });
             }
-            (start, end + delta)
-        };
-        if let Some(node) = session.document_mut()?.node_mut(caption) {
-            node.data["start"] = json!(new_start);
-            node.data["end"] = json!(new_end);
-            node.name = format!("{new_start}–{new_end}");
-        }
-        Ok(Outcome::changed(format!("the cue `{caption}` is from {new_start} to {new_end}")).with_data(
-            json!({
+            let (new_start, new_end) = (start + delta, end + delta);
+            if let Some(node) = session.document_mut()?.node_mut(caption) {
+                node.data["start"] = json!(new_start);
+                node.data["end"] = json!(new_end);
+                node.name = format!("{new_start}–{new_end}");
+            }
+            Ok(Outcome::changed(format!("the cue `{caption}` is moved to {new_start}")).with_data(json!({
                 "caption": caption,
                 "start": new_start,
                 "end": new_end,
-            }),
-        ))
+            })))
+
+        }
     }
-}
+    /// **Split** a cue in two at a frame.
+    ///
+    /// The frame leaves a frame on either side of it, and the two halves
+    /// are the two cues.
+    film.caption.split {
+        area: "film",
+        layer: "film",
+        icon: "split",
+        mutates,
+        undoable,
+        params: {
+            /// The cue.
 
-/// **Move** a cue: it stays at or after the start of the sequence and
-/// it does not run into its neighbours.
-#[derive(Command)]
-#[command(id = "film.caption.move", area = "film", layer = "film", icon = "arrow", mutates, undoable)]
-pub struct MoveCaption {
-    /// The cue.
-    pub caption: NodeRef,
-    /// The frames to move it by.
-    pub delta: Number,
-}
+            caption: NodeRef,
+            /// The frame to split it at.
 
-impl MoveCaption {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "film.caption.move";
-        let caption = self.caption.0;
-        let (node, track) = the_caption(session, command, caption)?;
-        let start = node.data.get("start").and_then(|start| start.as_i64()).unwrap_or(0);
-        let end = node.data.get("end").and_then(|end| end.as_i64()).unwrap_or(0);
-        let delta = delta_of(command, self.delta)?;
-        if delta == 0 {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: "a move of nothing is nothing".to_string(),
-            });
-        }
-        let Some(track_node) = session.document().node(track) else {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        let cues = cues_of(track_node);
-        let (before, after) = room_of(&cues, caption);
-        let lowest = before - start;
-        let highest = if after == i64::MAX { i64::MAX - end } else { after - end };
-        if delta < lowest || delta > highest {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!(
-                    "the cue may move between {lowest} and {highest} frames, and {delta} is not one of them"
-                ),
-            });
-        }
-        let (new_start, new_end) = (start + delta, end + delta);
-        if let Some(node) = session.document_mut()?.node_mut(caption) {
-            node.data["start"] = json!(new_start);
-            node.data["end"] = json!(new_end);
-            node.name = format!("{new_start}–{new_end}");
-        }
-        Ok(Outcome::changed(format!("the cue `{caption}` is moved to {new_start}")).with_data(json!({
-            "caption": caption,
-            "start": new_start,
-            "end": new_end,
-        })))
-    }
-}
+            at: Number,
+        },
+        run: {
 
-/// **Split** a cue in two at a frame.
-///
-/// The frame leaves a frame on either side of it, and the two halves
-/// are the two cues.
-#[derive(Command)]
-#[command(id = "film.caption.split", area = "film", layer = "film", icon = "split", mutates, undoable)]
-pub struct SplitCaption {
-    /// The cue.
-    pub caption: NodeRef,
-    /// The frame to split it at.
-    pub at: Number,
-}
-
-impl SplitCaption {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "film.caption.split";
-        let caption = self.caption.0;
-        let (node, track) = the_caption(session, command, caption)?;
-        let start = node.data.get("start").and_then(|start| start.as_i64()).unwrap_or(0);
-        let end = node.data.get("end").and_then(|end| end.as_i64()).unwrap_or(0);
-        let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
-        let at = delta_of(command, self.at)?;
-        if at - start < MIN_DURATION || end - at < MIN_DURATION {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: "the cue may be split at a frame that leaves a frame on either side of it"
-                    .to_string(),
-            });
-        }
-        // The **second half** is a new cue of its own.
-        let id = session.document_mut()?.add_node_with_under(
-            Some(track),
-            format!("{at}–{end}"),
-            "film.caption",
-            None,
-            json!({ "start": at, "end": end, "text": text }),
-        );
-        if let Some(node) = session.document_mut()?.node_mut(caption) {
-            node.data["end"] = json!(at);
-            node.name = format!("{start}–{at}");
-        }
-        Ok(Outcome::changed(format!("the cue `{caption}` is split at {at}")).with_data(json!({
-            "caption": caption,
-            "split": id,
-            "at": at,
-        })))
-    }
-}
-
-/// **Merge** the cues that are next to each other into one.
-///
-/// The merged cue runs from the start of the first to the end of the
-/// last, and the texts are joined with line breaks.
-#[derive(Command)]
-#[command(id = "film.caption.merge", area = "film", layer = "film", icon = "merge", mutates, undoable)]
-pub struct MergeCaptions {
-    /// The cues, in the order they stand in.
-    pub captions: Option<Json>,
-}
-
-impl MergeCaptions {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "film.caption.merge";
-        let given = match self.captions.clone() {
-            Some(Json::Array(items)) => {
-                let mut ids = Vec::new();
-                for item in items {
-                    let Some(id) = item.as_u64() else {
-                        return Err(EngineError::Failed {
-                            id: command.to_string(),
-                            message: "the cues are a list of ids".to_string(),
-                        });
-                    };
-                    ids.push(id);
-                }
-                ids
-            }
-            Some(_) => {
+            let command = "film.caption.split";
+            let caption = self.caption.0;
+            let (node, track) = the_caption(session, command, caption)?;
+            let start = node.data.get("start").and_then(|start| start.as_i64()).unwrap_or(0);
+            let end = node.data.get("end").and_then(|end| end.as_i64()).unwrap_or(0);
+            let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
+            let at = delta_of(command, self.at)?;
+            if at - start < MIN_DURATION || end - at < MIN_DURATION {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
-                    message: "the cues are a list of ids".to_string(),
+                    message: "the cue may be split at a frame that leaves a frame on either side of it"
+                        .to_string(),
                 });
             }
-            None => Vec::new(),
-        };
-        if given.len() < 2 {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: "two cues are merged, and there is less".to_string(),
-            });
+            // The **second half** is a new cue of its own.
+            let id = session.document_mut()?.add_node_with_under(
+                Some(track),
+                format!("{at}–{end}"),
+                "film.caption",
+                None,
+                json!({ "start": at, "end": end, "text": text }),
+            );
+            if let Some(node) = session.document_mut()?.node_mut(caption) {
+                node.data["end"] = json!(at);
+                node.name = format!("{start}–{at}");
+            }
+            Ok(Outcome::changed(format!("the cue `{caption}` is split at {at}")).with_data(json!({
+                "caption": caption,
+                "split": id,
+                "at": at,
+            })))
+
         }
-        // The **track**: every cue is on one track.
-        let mut track = None;
-        for cue in &given {
-            let (_, of) = the_caption(session, command, *cue)?;
-            match track {
-                None => track = Some(of),
-                Some(track) if track != of => {
+    }
+    /// **Merge** the cues that are next to each other into one.
+    ///
+    /// The merged cue runs from the start of the first to the end of the
+    /// last, and the texts are joined with line breaks.
+    film.caption.merge {
+        area: "film",
+        layer: "film",
+        icon: "merge",
+        mutates,
+        undoable,
+        params: {
+            /// The cues, in the order they stand in.
+
+            captions: Option<Json>,
+        },
+        run: {
+
+            let command = "film.caption.merge";
+            let given = match self.captions.clone() {
+                Some(Json::Array(items)) => {
+                    let mut ids = Vec::new();
+                    for item in items {
+                        let Some(id) = item.as_u64() else {
+                            return Err(EngineError::Failed {
+                                id: command.to_string(),
+                                message: "the cues are a list of ids".to_string(),
+                            });
+                        };
+                        ids.push(id);
+                    }
+                    ids
+                }
+                Some(_) => {
                     return Err(EngineError::Failed {
                         id: command.to_string(),
-                        message: "the cues to merge must be on one track".to_string(),
+                        message: "the cues are a list of ids".to_string(),
                     });
                 }
-                Some(_) => {}
+                None => Vec::new(),
+            };
+            if given.len() < 2 {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: "two cues are merged, and there is less".to_string(),
+                });
             }
+            // The **track**: every cue is on one track.
+            let mut track = None;
+            for cue in &given {
+                let (_, of) = the_caption(session, command, *cue)?;
+                match track {
+                    None => track = Some(of),
+                    Some(track) if track != of => {
+                        return Err(EngineError::Failed {
+                            id: command.to_string(),
+                            message: "the cues to merge must be on one track".to_string(),
+                        });
+                    }
+                    Some(_) => {}
+                }
+            }
+            let track = track.unwrap_or(0);
+            let Some(track_node) = session.document().node(track) else {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            let cues = cues_of(track_node);
+            // The **cues** must be next to each other.
+            let mut at: Vec<usize> =
+                given.iter().filter_map(|id| cues.iter().position(|cue| cue.0 == *id)).collect();
+            at.sort_unstable();
+            at.dedup();
+            if at.len() < 2 || at.windows(2).any(|pair| pair[1] != pair[0] + 1) {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: "the cues to merge must be next to each other".to_string(),
+                });
+            }
+            let first = at[0];
+            let last = at[at.len() - 1];
+            let start = cues[first].1;
+            let end = cues[last].2;
+            let text: Vec<String> =
+                at.iter().map(|at| cues[*at].3.trim().to_string()).filter(|text| !text.is_empty()).collect();
+            let keep = cues[first].0;
+            if let Some(node) = session.document_mut()?.node_mut(keep) {
+                node.data["start"] = json!(start);
+                node.data["end"] = json!(end);
+                node.data["text"] = json!(text.join("\n"));
+                node.name = format!("{start}–{end}");
+            }
+            for cue in at.iter().skip(1) {
+                session.document_mut()?.remove_node(cues[*cue].0);
+            }
+            Ok(Outcome::changed(format!("the cues are merged into `{keep}`")).with_data(json!({
+                "caption": keep,
+                "start": start,
+                "end": end,
+            })))
+
         }
-        let track = track.unwrap_or(0);
-        let Some(track_node) = session.document().node(track) else {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        let cues = cues_of(track_node);
-        // The **cues** must be next to each other.
-        let mut at: Vec<usize> =
-            given.iter().filter_map(|id| cues.iter().position(|cue| cue.0 == *id)).collect();
-        at.sort_unstable();
-        at.dedup();
-        if at.len() < 2 || at.windows(2).any(|pair| pair[1] != pair[0] + 1) {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: "the cues to merge must be next to each other".to_string(),
-            });
-        }
-        let first = at[0];
-        let last = at[at.len() - 1];
-        let start = cues[first].1;
-        let end = cues[last].2;
-        let text: Vec<String> =
-            at.iter().map(|at| cues[*at].3.trim().to_string()).filter(|text| !text.is_empty()).collect();
-        let keep = cues[first].0;
-        if let Some(node) = session.document_mut()?.node_mut(keep) {
-            node.data["start"] = json!(start);
-            node.data["end"] = json!(end);
-            node.data["text"] = json!(text.join("\n"));
-            node.name = format!("{start}–{end}");
-        }
-        for cue in at.iter().skip(1) {
-            session.document_mut()?.remove_node(cues[*cue].0);
-        }
-        Ok(Outcome::changed(format!("the cues are merged into `{keep}`")).with_data(json!({
-            "caption": keep,
-            "start": start,
-            "end": end,
-        })))
     }
 }

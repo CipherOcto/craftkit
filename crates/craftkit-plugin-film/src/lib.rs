@@ -188,7 +188,7 @@
 )]
 #![forbid(unsafe_code)]
 
-use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
+use craftkit_derive::{Evaluator, Layer, NodeKind, Panel, commands};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
@@ -258,66 +258,75 @@ mod trim;
 mod ttml;
 mod workarea;
 
-pub use ale::ExportAle;
-pub use aleimport::ImportAle;
-pub use anchors::SynchroniseClip;
-pub use binreading::ReadBin;
-pub use binremoval::RemoveBin;
-pub use captionburn::BurnCaption;
-pub use captioncopy::{DeleteCaptionTrack, DuplicateCaption};
-pub use captionedges::{MergeCaptions, MoveCaption, SplitCaption, TrimCaption};
-pub use captionedits::{SetCaption, SetCaptionTimes};
-pub use captionlayout::LayoutCaption;
-pub use captions::ReadCaptions;
-pub use captionstyle::{SetCaptionStyle, SetCaptionTrack};
+pub use ale::FilmExportAle;
+pub use aleimport::FilmImportAle;
+pub use anchors::FilmClipSynchronise;
+pub use binreading::FilmBinGet;
+pub use binremoval::FilmBinRemove;
+pub use captionburn::FilmCaptionBurn;
+pub use captioncopy::{FilmCaptionDuplicate, FilmCaptionTrackDelete};
+pub use captionedges::{FilmCaptionMerge, FilmCaptionMove, FilmCaptionSplit, FilmCaptionTrim};
+pub use captionedits::{FilmCaptionSet, FilmCaptionTimes};
+pub use captionlayout::FilmCaptionLayout;
+pub use captions::FilmCaptionsRead;
+pub use captionstyle::{FilmCaptionTrackSet, FilmCaptionTrackStyle};
 pub use captiontracks::{
-    AddCaption, AddCaptionTrack, ExportCaptions, ImportCaptions, ReadCaptions as ReadCaptionTrack,
-    RemoveCaption,
+    FilmCaptionAdd, FilmCaptionImport, FilmCaptionRead as ReadCaptionTrack, FilmCaptionRemove,
+    FilmCaptionTrackAdd, FilmCaptionsExport,
 };
-pub use clipreading::ReadClip;
-pub use edits::{NextEdit, PrevEdit, Razor};
-pub use edl::ExportEdl;
-pub use edlimport::ImportEdl;
-pub use enabling::EnableClip;
-pub use fcp7import::ImportFcp7;
-pub use fcpxml::ExportFcpxml;
-pub use fcpxmlimport::ImportFcpxml;
-pub use gaps::CloseGap;
-pub use generators::{AddGenerator, SetMatteColour};
-pub use hold::{DeleteHold, SetHold};
-pub use inserting::InsertClip;
-pub use itemnaming::{RenameBin, RenameItem};
-pub use itemreading::ReadItem;
-pub use itemremoval::RemoveItem;
-pub use labels::{DeleteItemLabel, DeleteLabel, ItemLabelGroup, LabelGroup, SetItemLabel, SetLabel};
-pub use lifting::LiftRange;
-pub use linking::{LinkClips, UnlinkClip};
-pub use locking::LockTrack;
-pub use markers::{AddMarker, ClearMarkers, MarkerKind, RemoveMarker, SetMarker};
-pub use mediamarks::SetMarks;
-pub use moving::MoveClip;
-pub use naming::RenameClip;
-pub use otio::ExportOtio;
-pub use otioimport::ImportOtio;
-pub use playhead::{GetPlayhead, GoToEnd, GoToMark, GoToStart, SetPlayhead, StepPlayhead};
-pub use project::ReadProject;
-pub use rates::{GetRate, SetRate};
-pub use removal::RemoveClip;
-pub use replacing::ReplaceMedia;
-pub use reversing::ReverseClip;
-pub use rippling::RippleClip;
-pub use rolling::RollCut;
-pub use sequencemarks::{ClearMarks, SetMarkIn, SetMarkOut};
-pub use sliding::SlideClip;
-pub use slipping::SlipClip;
-pub use speed::SetSpeed;
-pub use splitting::SplitClip;
-pub use stretching::StretchClip;
-pub use trackreading::ReadTrack;
-pub use trackremoval::RemoveTrack;
-pub use tracks::{EnableTrack, MuteTrack, RenameTrack, SetPan, SetTrackLabel, SetVolume, SoloTrack};
-pub use transitions::{AddTransition, RemoveTransition, SetTransition, TransitionKind};
-pub use trim::TrimClip;
+pub use clipreading::FilmClipGet;
+pub use edits::{FilmPlayheadNextedit, FilmPlayheadPrevedit, FilmTimelineRazor};
+pub use edl::FilmExportEdl;
+pub use edlimport::FilmImportEdl;
+pub use enabling::FilmClipEnable;
+pub use fcp7import::FilmImportFcp7;
+pub use fcpxml::FilmExportFcpxml;
+pub use fcpxmlimport::FilmImportFcpxml;
+pub use gaps::FilmTimelineClosegap;
+pub use generators::{FilmItemGenerator, FilmItemMatteColour};
+pub use hold::{FilmClipHold, FilmClipHoldDelete};
+pub use inserting::FilmClipInsert;
+pub use itemnaming::{FilmBinRename, FilmItemRename};
+pub use itemreading::FilmItemGet;
+pub use itemremoval::FilmItemRemove;
+pub use labels::{
+    FilmClipLabel, FilmClipLabelDelete, FilmClipLabelGroup, FilmItemLabel, FilmItemLabelDelete,
+    FilmItemLabelGroup,
+};
+pub use lifting::FilmClipLift;
+pub use linking::{FilmClipLink, FilmClipUnlink};
+pub use locking::FilmTrackLock;
+pub use markers::{FilmMarkerAdd, FilmMarkerClear, FilmMarkerRemove, FilmMarkerSet, MarkerKind};
+pub use mediamarks::FilmItemMark;
+pub use moving::FilmClipMove;
+pub use naming::FilmClipRename;
+pub use otio::FilmExportOtio;
+pub use otioimport::FilmImportOtio;
+pub use playhead::{
+    FilmPlayheadEnd, FilmPlayheadGet, FilmPlayheadGotoMark, FilmPlayheadSet, FilmPlayheadStart,
+    FilmPlayheadStep,
+};
+pub use project::FilmProject;
+pub use rates::{FilmSequenceRateGet, FilmSequenceRateSet};
+pub use removal::FilmClipRemove;
+pub use replacing::FilmClipReplace;
+pub use reversing::FilmClipReverse;
+pub use rippling::FilmClipRipple;
+pub use rolling::FilmClipRoll;
+pub use sequencemarks::{FilmSequenceMarkClear, FilmSequenceMarkIn, FilmSequenceMarkOut};
+pub use sliding::FilmClipSlide;
+pub use slipping::FilmClipSlip;
+pub use speed::FilmClipSpeed;
+pub use splitting::FilmClipSplit;
+pub use stretching::FilmClipStretch;
+pub use trackreading::FilmTrackGet;
+pub use trackremoval::FilmTrackRemove;
+pub use tracks::{
+    FilmTrackEnable, FilmTrackLabel, FilmTrackMute, FilmTrackPan, FilmTrackRename, FilmTrackSolo,
+    FilmTrackVolume,
+};
+pub use transitions::{FilmTransitionAdd, FilmTransitionRemove, FilmTransitionSet, TransitionKind};
+pub use trim::FilmClipTrim;
 
 /// The film layer.
 ///
@@ -481,247 +490,281 @@ impl ClipKind {
     }
 }
 
-/// Put a **bin** in the project.
-#[derive(Command)]
-#[command(id = "film.bin.add", area = "film", layer = "film", icon = "plus", mutates, undoable, example)]
-pub struct AddBin {
-    /// What to call it.
-    pub name: Text,
-    /// The bin it goes in, if it goes in one.
-    pub parent: Option<NodeRef>,
-}
+commands! {
+    /// Put a **bin** in the project.
+    film.bin.add {
+        area: "film",
+        layer: "film",
+        icon: "plus",
+        mutates,
+        undoable,
+        example,
+        params: {
+            /// What to call it.
 
-impl AddBin {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.clone();
-        if name.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "film.bin.add".to_string(),
-                message: "a bin has a name".to_string(),
-            });
-        }
-        let parent = self.parent.map(|parent| parent.0);
-        let id = session.document_mut()?.add_node_under(parent, name.clone(), "film.bin", None);
-        Ok(Outcome::changed(format!("added the bin `{name}`"))
-            .with_data(serde_json::json!({ "id": id, "name": name })))
-    }
-}
+            name: Text,
+            /// The bin it goes in, if it goes in one.
 
-/// Put an **item** in a bin.
-///
-/// The item's own id is the editor's, and it is kept in the payload:
-/// the ids of the nodes are the core's.
-#[derive(Command)]
-#[command(id = "film.item.add", area = "film", layer = "film", icon = "plus", mutates, undoable)]
-pub struct AddItem {
-    /// What to call it.
-    pub name: Text,
-    /// The bin it goes in.
-    pub bin: NodeRef,
-    /// The item's own id, in the editor.
-    pub item: Number,
-    /// Where the media is, if it is a media file.
-    pub path: Option<Text>,
-    /// How long it is, in frames.
-    pub duration: Option<Number>,
-    /// Whether it was made offline on purpose.
-    pub offline: Option<craftkit_sdk::Bool>,
-}
+            parent: Option<NodeRef>,
+        },
+        run: {
 
-impl AddItem {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.clone();
-        if name.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "film.item.add".to_string(),
-                message: "an item has a name".to_string(),
-            });
-        }
-        let bin = self.bin.0;
-        if session.document().node(bin).is_none() {
-            return Err(EngineError::Failed {
-                id: "film.item.add".to_string(),
-                message: format!("there is no bin `{bin}`"),
-            });
-        }
-        let item = frames(self.item, "film.item.add")?;
-        let duration = match &self.duration {
-            Some(duration) => frames(*duration, "film.item.add")?,
-            None => 0,
-        };
-        let offline = self.offline.map(|offline| offline.0).unwrap_or(false);
-        let data = serde_json::json!({
-            "item": item,
-            "path": match &self.path {
-                Some(path) => serde_json::Value::String(path.0.clone()),
-                None => serde_json::Value::Null,
-            },
-            "duration": duration,
-            "offline": offline,
-        });
-        let id =
-            session.document_mut()?.add_node_with_under(Some(bin), name.clone(), "film.item", None, data);
-        Ok(Outcome::changed(format!("added the item `{name}`"))
-            .with_data(serde_json::json!({ "id": id, "item": item, "name": name })))
-    }
-}
-
-/// Put a **track** in a sequence.
-#[derive(Command)]
-#[command(id = "film.track.add", area = "film", layer = "film", icon = "plus", mutates, undoable)]
-pub struct AddTrack {
-    /// What to call it.
-    pub name: Text,
-    /// The sequence it is in.
-    pub sequence: NodeRef,
-    /// What kind of track it is: `video`, `audio`, `title`, …
-    pub kind: Text,
-}
-
-impl AddTrack {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.clone();
-        if name.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "film.track.add".to_string(),
-                message: "a track has a name".to_string(),
-            });
-        }
-        let sequence = self.sequence.0;
-        if session.document().node(sequence).is_none() {
-            return Err(EngineError::Failed {
-                id: "film.track.add".to_string(),
-                message: format!("there is no sequence `{sequence}`"),
-            });
-        }
-        let kind = self.kind.0.clone();
-        let data = serde_json::json!({ "kind": kind });
-        let id = session.document_mut()?.add_node_with_under(
-            Some(sequence),
-            name.clone(),
-            "film.track",
-            None,
-            data,
-        );
-        Ok(Outcome::changed(format!("added the track `{name}`"))
-            .with_data(serde_json::json!({ "id": id, "name": name, "kind": kind })))
-    }
-}
-
-/// Put a **clip** on a track.
-///
-/// The clip has the **two clocks**: where it starts on the timeline and
-/// how long it is, and where in the media it begins. And it says which
-/// item it plays, with a relation.
-#[derive(Command)]
-#[command(id = "film.clip.add", area = "film", layer = "film", icon = "plus", mutates, undoable)]
-pub struct AddClip {
-    /// The track it goes on.
-    pub track: NodeRef,
-    /// The item it plays.
-    pub item: NodeRef,
-    /// Where it starts on the timeline, in frames.
-    pub start: Number,
-    /// How long it is, in frames.
-    pub duration: Number,
-    /// Where in the media it begins, in frames.
-    pub source_in: Option<Number>,
-}
-
-impl AddClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let track = self.track.0;
-        let item = self.item.0;
-        for id in [track, item] {
-            if session.document().node(id).is_none() {
+            let name = self.name.0.clone();
+            if name.trim().is_empty() {
                 return Err(EngineError::Failed {
-                    id: "film.clip.add".to_string(),
-                    message: format!("there is no node `{id}`"),
+                    id: "film.bin.add".to_string(),
+                    message: "a bin has a name".to_string(),
                 });
             }
+            let parent = self.parent.map(|parent| parent.0);
+            let id = session.document_mut()?.add_node_under(parent, name.clone(), "film.bin", None);
+            Ok(Outcome::changed(format!("added the bin `{name}`"))
+                .with_data(serde_json::json!({ "id": id, "name": name })))
+
         }
-        // A **locked** track cannot be edited, and a clip on it is an
-        // edit.
-        if is_locked(session, track) {
-            return Err(locked_error("film.clip.add", track));
-        }
-        let start = frames(self.start, "film.clip.add")?;
-        let duration = frames(self.duration, "film.clip.add")?;
-        if duration == 0 {
-            return Err(EngineError::Failed {
-                id: "film.clip.add".to_string(),
-                message: "a clip is not zero frames long".to_string(),
-            });
-        }
-        let source_in = match &self.source_in {
-            Some(source_in) => frames(*source_in, "film.clip.add")?,
-            None => 0,
-        };
-        let data = serde_json::json!({
-            "start": start,
-            "duration": duration,
-            "source_in": source_in,
-            "speed": 1.0,
-            "link": serde_json::Value::Null,
-        });
-        let name = format!("clip at {start}");
-        let id =
-            session.document_mut()?.add_node_with_under(Some(track), name.clone(), "film.clip", None, data);
-        // The item the clip plays: an edge, not containment.
-        let relation = craftkit_sdk::Relation::with_payload(id, item, "clip", serde_json::json!({}));
-        session.document_mut()?.add_relation(relation);
-        Ok(Outcome::changed(format!("added a {duration}-frame clip at {start}"))
-            .with_data(serde_json::json!({ "id": id, "item": item, "start": start, "duration": duration })))
     }
-}
+    /// Put an **item** in a bin.
+    ///
+    /// The item's own id is the editor's, and it is kept in the payload:
+    /// the ids of the nodes are the core's.
+    film.item.add {
+        area: "film",
+        layer: "film",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// What to call it.
 
-/// The timeline of the document.
-///
-/// A query: the clips in the order they start, and the length of every
-/// track. Both are **derived**: neither is written down.
-#[derive(Command)]
-#[command(id = "film.timeline", area = "film", layer = "film", icon = "list")]
-pub struct ReadTimeline {}
+            name: Text,
+            /// The bin it goes in.
 
-impl ReadTimeline {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let mut tracks: Vec<serde_json::Value> = Vec::new();
-        for track in session.document().walk().filter(|node| node.kind == "film.track") {
-            let mut clips: Vec<(u64, u64)> = track
-                .children
-                .iter()
-                .filter(|child| child.kind == "film.clip")
-                .map(|child| {
-                    let start = child.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
-                    let duration =
-                        child.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
-                    (start, duration)
-                })
-                .collect();
-            // The order of a timeline is not the order of the tree.
-            clips.sort_by_key(|(start, _)| *start);
-            let end = clips.iter().map(|(start, duration)| start + duration).max().unwrap_or(0);
-            // A clip that does not **play** is on the track and it takes
-            // its place there, and it is not played: the count of the
-            // clips that play is **derived**.
-            let playing = track
-                .children
-                .iter()
-                .filter(|child| child.kind == "film.clip" && crate::enabling::is_enabled(&child.data))
-                .count();
-            tracks.push(serde_json::json!({
-                "track": track.id,
-                "name": track.name,
-                "clips": clips.iter().map(|(start, duration)| serde_json::json!({
-                    "start": start,
-                    "duration": duration,
-                })).collect::<Vec<_>>(),
-                "end": end,
-                "playing": playing,
-            }));
+            bin: NodeRef,
+            /// The item's own id, in the editor.
+
+            item: Number,
+            /// Where the media is, if it is a media file.
+
+            path: Option<Text>,
+            /// How long it is, in frames.
+
+            duration: Option<Number>,
+            /// Whether it was made offline on purpose.
+
+            offline: Option<craftkit_sdk::Bool>,
+        },
+        run: {
+
+            let name = self.name.0.clone();
+            if name.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "film.item.add".to_string(),
+                    message: "an item has a name".to_string(),
+                });
+            }
+            let bin = self.bin.0;
+            if session.document().node(bin).is_none() {
+                return Err(EngineError::Failed {
+                    id: "film.item.add".to_string(),
+                    message: format!("there is no bin `{bin}`"),
+                });
+            }
+            let item = frames(self.item, "film.item.add")?;
+            let duration = match &self.duration {
+                Some(duration) => frames(*duration, "film.item.add")?,
+                None => 0,
+            };
+            let offline = self.offline.map(|offline| offline.0).unwrap_or(false);
+            let data = serde_json::json!({
+                "item": item,
+                "path": match &self.path {
+                    Some(path) => serde_json::Value::String(path.0.clone()),
+                    None => serde_json::Value::Null,
+                },
+                "duration": duration,
+                "offline": offline,
+            });
+            let id =
+                session.document_mut()?.add_node_with_under(Some(bin), name.clone(), "film.item", None, data);
+            Ok(Outcome::changed(format!("added the item `{name}`"))
+                .with_data(serde_json::json!({ "id": id, "item": item, "name": name })))
+
         }
-        let count = tracks.len();
-        Ok(Outcome::new(format!("{count} track(s)")).with_data(serde_json::json!({ "tracks": tracks })))
+    }
+    /// Put a **track** in a sequence.
+    film.track.add {
+        area: "film",
+        layer: "film",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// What to call it.
+
+            name: Text,
+            /// The sequence it is in.
+
+            sequence: NodeRef,
+            /// What kind of track it is: `video`, `audio`, `title`, …
+
+            kind: Text,
+        },
+        run: {
+
+            let name = self.name.0.clone();
+            if name.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "film.track.add".to_string(),
+                    message: "a track has a name".to_string(),
+                });
+            }
+            let sequence = self.sequence.0;
+            if session.document().node(sequence).is_none() {
+                return Err(EngineError::Failed {
+                    id: "film.track.add".to_string(),
+                    message: format!("there is no sequence `{sequence}`"),
+                });
+            }
+            let kind = self.kind.0.clone();
+            let data = serde_json::json!({ "kind": kind });
+            let id = session.document_mut()?.add_node_with_under(
+                Some(sequence),
+                name.clone(),
+                "film.track",
+                None,
+                data,
+            );
+            Ok(Outcome::changed(format!("added the track `{name}`"))
+                .with_data(serde_json::json!({ "id": id, "name": name, "kind": kind })))
+
+        }
+    }
+    /// Put a **clip** on a track.
+    ///
+    /// The clip has the **two clocks**: where it starts on the timeline and
+    /// how long it is, and where in the media it begins. And it says which
+    /// item it plays, with a relation.
+    film.clip.add {
+        area: "film",
+        layer: "film",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The track it goes on.
+
+            track: NodeRef,
+            /// The item it plays.
+
+            item: NodeRef,
+            /// Where it starts on the timeline, in frames.
+
+            start: Number,
+            /// How long it is, in frames.
+
+            duration: Number,
+            /// Where in the media it begins, in frames.
+
+            source_in: Option<Number>,
+        },
+        run: {
+
+            let track = self.track.0;
+            let item = self.item.0;
+            for id in [track, item] {
+                if session.document().node(id).is_none() {
+                    return Err(EngineError::Failed {
+                        id: "film.clip.add".to_string(),
+                        message: format!("there is no node `{id}`"),
+                    });
+                }
+            }
+            // A **locked** track cannot be edited, and a clip on it is an
+            // edit.
+            if is_locked(session, track) {
+                return Err(locked_error("film.clip.add", track));
+            }
+            let start = frames(self.start, "film.clip.add")?;
+            let duration = frames(self.duration, "film.clip.add")?;
+            if duration == 0 {
+                return Err(EngineError::Failed {
+                    id: "film.clip.add".to_string(),
+                    message: "a clip is not zero frames long".to_string(),
+                });
+            }
+            let source_in = match &self.source_in {
+                Some(source_in) => frames(*source_in, "film.clip.add")?,
+                None => 0,
+            };
+            let data = serde_json::json!({
+                "start": start,
+                "duration": duration,
+                "source_in": source_in,
+                "speed": 1.0,
+                "link": serde_json::Value::Null,
+            });
+            let name = format!("clip at {start}");
+            let id =
+                session.document_mut()?.add_node_with_under(Some(track), name.clone(), "film.clip", None, data);
+            // The item the clip plays: an edge, not containment.
+            let relation = craftkit_sdk::Relation::with_payload(id, item, "clip", serde_json::json!({}));
+            session.document_mut()?.add_relation(relation);
+            Ok(Outcome::changed(format!("added a {duration}-frame clip at {start}"))
+                .with_data(serde_json::json!({ "id": id, "item": item, "start": start, "duration": duration })))
+
+        }
+    }
+    /// The timeline of the document.
+    ///
+    /// A query: the clips in the order they start, and the length of every
+    /// track. Both are **derived**: neither is written down.
+    film.timeline {
+        area: "film",
+        layer: "film",
+        icon: "list",
+        params: {
+        },
+        run: {
+
+            let mut tracks: Vec<serde_json::Value> = Vec::new();
+            for track in session.document().walk().filter(|node| node.kind == "film.track") {
+                let mut clips: Vec<(u64, u64)> = track
+                    .children
+                    .iter()
+                    .filter(|child| child.kind == "film.clip")
+                    .map(|child| {
+                        let start = child.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
+                        let duration =
+                            child.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
+                        (start, duration)
+                    })
+                    .collect();
+                // The order of a timeline is not the order of the tree.
+                clips.sort_by_key(|(start, _)| *start);
+                let end = clips.iter().map(|(start, duration)| start + duration).max().unwrap_or(0);
+                // A clip that does not **play** is on the track and it takes
+                // its place there, and it is not played: the count of the
+                // clips that play is **derived**.
+                let playing = track
+                    .children
+                    .iter()
+                    .filter(|child| child.kind == "film.clip" && crate::enabling::is_enabled(&child.data))
+                    .count();
+                tracks.push(serde_json::json!({
+                    "track": track.id,
+                    "name": track.name,
+                    "clips": clips.iter().map(|(start, duration)| serde_json::json!({
+                        "start": start,
+                        "duration": duration,
+                    })).collect::<Vec<_>>(),
+                    "end": end,
+                    "playing": playing,
+                }));
+            }
+            let count = tracks.len();
+            Ok(Outcome::new(format!("{count} track(s)")).with_data(serde_json::json!({ "tracks": tracks })))
+
+        }
     }
 }
 
@@ -1006,85 +1049,85 @@ craftkit_sdk::plugin_anchor!(
     ItemKind,
     TrackKind,
     ClipKind,
-    AddBin,
-    AddItem,
-    AddGenerator,
-    SetMatteColour,
-    AddTrack,
-    AddClip,
-    ExportEdl,
-    ImportEdl,
-    ExportAle,
-    ImportAle,
-    ExportFcpxml,
-    ImportFcpxml,
-    ImportFcp7,
-    ExportOtio,
-    ImportOtio,
-    ReadTimeline,
-    TrimClip,
-    SetPlayhead,
-    GetPlayhead,
-    NextEdit,
-    PrevEdit,
-    Razor,
-    GoToStart,
-    GoToEnd,
-    StepPlayhead,
-    MoveClip,
-    InsertClip,
-    SplitClip,
-    RemoveClip,
-    ReadProject,
-    RemoveBin,
-    RemoveItem,
-    RenameBin,
-    RenameItem,
-    RippleClip,
-    LiftRange,
+    FilmBinAdd,
+    FilmItemAdd,
+    FilmItemGenerator,
+    FilmItemMatteColour,
+    FilmTrackAdd,
+    FilmClipAdd,
+    FilmExportEdl,
+    FilmImportEdl,
+    FilmExportAle,
+    FilmImportAle,
+    FilmExportFcpxml,
+    FilmImportFcpxml,
+    FilmImportFcp7,
+    FilmExportOtio,
+    FilmImportOtio,
+    FilmTimeline,
+    FilmClipTrim,
+    FilmPlayheadSet,
+    FilmPlayheadGet,
+    FilmPlayheadNextedit,
+    FilmPlayheadPrevedit,
+    FilmTimelineRazor,
+    FilmPlayheadStart,
+    FilmPlayheadEnd,
+    FilmPlayheadStep,
+    FilmClipMove,
+    FilmClipInsert,
+    FilmClipSplit,
+    FilmClipRemove,
+    FilmProject,
+    FilmBinRemove,
+    FilmItemRemove,
+    FilmBinRename,
+    FilmItemRename,
+    FilmClipRipple,
+    FilmClipLift,
     TransitionKind,
     MarkerKind,
-    AddMarker,
-    GoToMark,
-    SetMarkIn,
-    SetMarkOut,
-    ClearMarks,
-    SetMarker,
-    RemoveMarker,
-    ClearMarkers,
-    SetSpeed,
-    LinkClips,
-    UnlinkClip,
-    SetHold,
-    SynchroniseClip,
-    DeleteHold,
-    AddTransition,
-    SetTransition,
-    RemoveTransition,
-    ReverseClip,
-    LockTrack,
-    RemoveTrack,
-    EnableTrack,
-    MuteTrack,
-    SoloTrack,
-    SetVolume,
-    SetPan,
-    SetTrackLabel,
-    RenameTrack,
-    EnableClip,
-    RenameClip,
-    SetItemLabel,
-    DeleteItemLabel,
-    ItemLabelGroup,
-    ReplaceMedia,
-    CloseGap,
-    SlipClip,
-    SlideClip,
-    SetMarks,
-    StretchClip,
-    RollCut,
-    LayoutCaption,
-    BurnCaption,
+    FilmMarkerAdd,
+    FilmPlayheadGotoMark,
+    FilmSequenceMarkIn,
+    FilmSequenceMarkOut,
+    FilmSequenceMarkClear,
+    FilmMarkerSet,
+    FilmMarkerRemove,
+    FilmMarkerClear,
+    FilmClipSpeed,
+    FilmClipLink,
+    FilmClipUnlink,
+    FilmClipHold,
+    FilmClipSynchronise,
+    FilmClipHoldDelete,
+    FilmTransitionAdd,
+    FilmTransitionSet,
+    FilmTransitionRemove,
+    FilmClipReverse,
+    FilmTrackLock,
+    FilmTrackRemove,
+    FilmTrackEnable,
+    FilmTrackMute,
+    FilmTrackSolo,
+    FilmTrackVolume,
+    FilmTrackPan,
+    FilmTrackLabel,
+    FilmTrackRename,
+    FilmClipEnable,
+    FilmClipRename,
+    FilmItemLabel,
+    FilmItemLabelDelete,
+    FilmItemLabelGroup,
+    FilmClipReplace,
+    FilmTimelineClosegap,
+    FilmClipSlip,
+    FilmClipSlide,
+    FilmItemMark,
+    FilmClipStretch,
+    FilmClipRoll,
+    FilmCaptionLayout,
+    FilmCaptionBurn,
     TimelineEvaluator,
     FilmPanel
 );

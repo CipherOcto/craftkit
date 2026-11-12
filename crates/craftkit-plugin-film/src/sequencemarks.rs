@@ -28,7 +28,7 @@
 //!   of the video and the split of the audio away when a mark is set,
 //!   and this tree has no split points.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
@@ -95,147 +95,165 @@ pub(crate) fn marks_of(node: &craftkit_sdk::Node) -> (Option<u64>, Option<u64>) 
     (mark_in, mark_out)
 }
 
-/// **Set** the **mark in** of a sequence.
-///
-/// The tree's own rule: the mark in is the frame the caller says, and
-/// a mark out that is **before** it is **taken away** — the tree's own
-/// `mark`.
-#[derive(Command)]
-#[command(id = "film.sequence.mark.in", area = "film", layer = "film", icon = "flag", mutates, undoable)]
-pub struct SetMarkIn {
-    /// The sequence.
-    pub sequence: NodeRef,
-    /// The frame the mark in is at.
-    pub frame: Number,
-}
+commands! {
+    /// **Set** the **mark in** of a sequence.
+    ///
+    /// The tree's own rule: the mark in is the frame the caller says, and
+    /// a mark out that is **before** it is **taken away** — the tree's own
+    /// `mark`.
+    film.sequence.mark.in {
+        area: "film",
+        layer: "film",
+        icon: "flag",
+        mutates,
+        undoable,
+        params: {
+            /// The sequence.
 
-impl SetMarkIn {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.sequence.mark.in".to_string();
-        let sequence = self.sequence.0;
-        the_sequence(session, &id, sequence)?;
-        let frame = frame_of(&id, self.frame.0)?;
-        let (_mark_in, mark_out) = marks_of(session.document().node(sequence).ok_or_else(|| {
-            EngineError::Failed { id: id.clone(), message: format!("there is no sequence `{sequence}`") }
-        })?);
-        // The tree's own rule: a mark out **before** the new mark in
-        // is taken away.
-        let mark_out = match mark_out {
-            Some(mark_out) if mark_out < frame => None,
-            mark_out => mark_out,
-        };
-        if let Some(node) = session.document_mut()?.node_mut(sequence) {
-            node.data[MARK_IN] = json!(frame);
-            if mark_out.is_none() {
-                if let craftkit_sdk::serde_json::Value::Object(map) = &mut node.data {
-                    map.remove(MARK_OUT);
+            sequence: NodeRef,
+            /// The frame the mark in is at.
+
+            frame: Number,
+        },
+        run: {
+
+            let id = "film.sequence.mark.in".to_string();
+            let sequence = self.sequence.0;
+            the_sequence(session, &id, sequence)?;
+            let frame = frame_of(&id, self.frame.0)?;
+            let (_mark_in, mark_out) = marks_of(session.document().node(sequence).ok_or_else(|| {
+                EngineError::Failed { id: id.clone(), message: format!("there is no sequence `{sequence}`") }
+            })?);
+            // The tree's own rule: a mark out **before** the new mark in
+            // is taken away.
+            let mark_out = match mark_out {
+                Some(mark_out) if mark_out < frame => None,
+                mark_out => mark_out,
+            };
+            if let Some(node) = session.document_mut()?.node_mut(sequence) {
+                node.data[MARK_IN] = json!(frame);
+                if mark_out.is_none() {
+                    if let craftkit_sdk::serde_json::Value::Object(map) = &mut node.data {
+                        map.remove(MARK_OUT);
+                    }
+                } else {
+                    node.data[MARK_OUT] = json!(mark_out);
                 }
-            } else {
-                node.data[MARK_OUT] = json!(mark_out);
             }
+            Ok(Outcome::changed(format!("the mark in of the sequence `{sequence}` is frame {frame}")).with_data(
+                json!({
+                    "sequence": sequence,
+                    "mark_in": frame,
+                    "mark_out": mark_out,
+                }),
+            ))
+
         }
-        Ok(Outcome::changed(format!("the mark in of the sequence `{sequence}` is frame {frame}")).with_data(
-            json!({
-                "sequence": sequence,
-                "mark_in": frame,
-                "mark_out": mark_out,
-            }),
-        ))
     }
-}
+    /// **Set** the **mark out** of a sequence.
+    ///
+    /// The tree's own rule: the mark out is the frame the caller says, and
+    /// a mark in that is **after** it is **taken away** — the tree's own
+    /// `mark`.
+    film.sequence.mark.out {
+        area: "film",
+        layer: "film",
+        icon: "flag",
+        mutates,
+        undoable,
+        params: {
+            /// The sequence.
 
-/// **Set** the **mark out** of a sequence.
-///
-/// The tree's own rule: the mark out is the frame the caller says, and
-/// a mark in that is **after** it is **taken away** — the tree's own
-/// `mark`.
-#[derive(Command)]
-#[command(id = "film.sequence.mark.out", area = "film", layer = "film", icon = "flag", mutates, undoable)]
-pub struct SetMarkOut {
-    /// The sequence.
-    pub sequence: NodeRef,
-    /// The frame the mark out is at.
-    pub frame: Number,
-}
+            sequence: NodeRef,
+            /// The frame the mark out is at.
 
-impl SetMarkOut {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.sequence.mark.out".to_string();
-        let sequence = self.sequence.0;
-        the_sequence(session, &id, sequence)?;
-        let frame = frame_of(&id, self.frame.0)?;
-        let (mark_in, _mark_out) = marks_of(session.document().node(sequence).ok_or_else(|| {
-            EngineError::Failed { id: id.clone(), message: format!("there is no sequence `{sequence}`") }
-        })?);
-        // The tree's own rule: a mark in **after** the new mark out is
-        // taken away.
-        let mark_in = match mark_in {
-            Some(mark_in) if mark_in > frame => None,
-            mark_in => mark_in,
-        };
-        if let Some(node) = session.document_mut()?.node_mut(sequence) {
-            node.data[MARK_OUT] = json!(frame);
-            if mark_in.is_none() {
-                if let craftkit_sdk::serde_json::Value::Object(map) = &mut node.data {
+            frame: Number,
+        },
+        run: {
+
+            let id = "film.sequence.mark.out".to_string();
+            let sequence = self.sequence.0;
+            the_sequence(session, &id, sequence)?;
+            let frame = frame_of(&id, self.frame.0)?;
+            let (mark_in, _mark_out) = marks_of(session.document().node(sequence).ok_or_else(|| {
+                EngineError::Failed { id: id.clone(), message: format!("there is no sequence `{sequence}`") }
+            })?);
+            // The tree's own rule: a mark in **after** the new mark out is
+            // taken away.
+            let mark_in = match mark_in {
+                Some(mark_in) if mark_in > frame => None,
+                mark_in => mark_in,
+            };
+            if let Some(node) = session.document_mut()?.node_mut(sequence) {
+                node.data[MARK_OUT] = json!(frame);
+                if mark_in.is_none() {
+                    if let craftkit_sdk::serde_json::Value::Object(map) = &mut node.data {
+                        map.remove(MARK_IN);
+                    }
+                } else {
+                    node.data[MARK_IN] = json!(mark_in);
+                }
+            }
+            Ok(Outcome::changed(format!("the mark out of the sequence `{sequence}` is frame {frame}")).with_data(
+                json!({
+                    "sequence": sequence,
+                    "mark_in": mark_in,
+                    "mark_out": frame,
+                }),
+            ))
+
+        }
+    }
+    /// **Take** the **marks** of a sequence away.
+    ///
+    /// The tree's own three commands — the clear in, the clear out and the
+    /// clear of both — are one command here, and the caller says which.
+    film.sequence.mark.clear {
+        area: "film",
+        layer: "film",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The sequence.
+
+            sequence: NodeRef,
+            /// Which mark is taken away: `in`, `out` or `both`.
+
+            which: Text,
+        },
+        run: {
+
+            let id = "film.sequence.mark.clear".to_string();
+            let sequence = self.sequence.0;
+            the_sequence(session, &id, sequence)?;
+            let which = self.which.0.trim().to_ascii_lowercase();
+            if !matches!(which.as_str(), "in" | "out" | "both") {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!(
+                        "`{}` is not a mark to take away: it is `in`, `out` or `both`",
+                        self.which.0
+                    ),
+                });
+            }
+            let Some(node) = session.document_mut()?.node_mut(sequence) else {
+                return Err(EngineError::Failed {
+                    id: "film.sequence.mark.clear".to_string(),
+                    message: format!("there is no sequence `{sequence}`"),
+                });
+            };
+            if let craftkit_sdk::serde_json::Value::Object(map) = &mut node.data {
+                if which == "in" || which == "both" {
                     map.remove(MARK_IN);
                 }
-            } else {
-                node.data[MARK_IN] = json!(mark_in);
+                if which == "out" || which == "both" {
+                    map.remove(MARK_OUT);
+                }
             }
-        }
-        Ok(Outcome::changed(format!("the mark out of the sequence `{sequence}` is frame {frame}")).with_data(
-            json!({
-                "sequence": sequence,
-                "mark_in": mark_in,
-                "mark_out": frame,
-            }),
-        ))
-    }
-}
+            Ok(Outcome::changed(format!("the sequence `{sequence}` has no `{which}` mark"))
+                .with_data(json!({ "sequence": sequence, "which": which })))
 
-/// **Take** the **marks** of a sequence away.
-///
-/// The tree's own three commands — the clear in, the clear out and the
-/// clear of both — are one command here, and the caller says which.
-#[derive(Command)]
-#[command(id = "film.sequence.mark.clear", area = "film", layer = "film", icon = "minus", mutates, undoable)]
-pub struct ClearMarks {
-    /// The sequence.
-    pub sequence: NodeRef,
-    /// Which mark is taken away: `in`, `out` or `both`.
-    pub which: Text,
-}
-
-impl ClearMarks {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.sequence.mark.clear".to_string();
-        let sequence = self.sequence.0;
-        the_sequence(session, &id, sequence)?;
-        let which = self.which.0.trim().to_ascii_lowercase();
-        if !matches!(which.as_str(), "in" | "out" | "both") {
-            return Err(EngineError::Failed {
-                id,
-                message: format!(
-                    "`{}` is not a mark to take away: it is `in`, `out` or `both`",
-                    self.which.0
-                ),
-            });
         }
-        let Some(node) = session.document_mut()?.node_mut(sequence) else {
-            return Err(EngineError::Failed {
-                id: "film.sequence.mark.clear".to_string(),
-                message: format!("there is no sequence `{sequence}`"),
-            });
-        };
-        if let craftkit_sdk::serde_json::Value::Object(map) = &mut node.data {
-            if which == "in" || which == "both" {
-                map.remove(MARK_IN);
-            }
-            if which == "out" || which == "both" {
-                map.remove(MARK_OUT);
-            }
-        }
-        Ok(Outcome::changed(format!("the sequence `{sequence}` has no `{which}` mark"))
-            .with_data(json!({ "sequence": sequence, "which": which })))
     }
 }

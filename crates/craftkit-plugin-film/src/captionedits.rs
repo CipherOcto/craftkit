@@ -26,7 +26,7 @@
 //!   Here the times are the **frames** of the sequence, as they are
 //!   everywhere in this battery.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
@@ -87,132 +87,147 @@ fn frames_of(command: &str, value: Number) -> Result<i64, EngineError> {
     Ok(number as i64)
 }
 
-/// **Set** the text of a cue, and the **speaker** of it.
-///
-/// A command that changes neither is refused.
-#[derive(Command)]
-#[command(id = "film.caption.set", area = "film", layer = "film", icon = "pencil", mutates, undoable)]
-pub struct SetCaption {
-    /// The cue.
-    pub caption: NodeRef,
-    /// Its new text.
-    pub text: Option<Text>,
-    /// Its new speaker. An empty speaker takes it away.
-    pub speaker: Option<Text>,
-}
+commands! {
+    /// **Set** the text of a cue, and the **speaker** of it.
+    ///
+    /// A command that changes neither is refused.
+    film.caption.set {
+        area: "film",
+        layer: "film",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The cue.
 
-impl SetCaption {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "film.caption.set";
-        let caption = self.caption.0;
-        let (node, _track) = the_caption(session, command, caption)?;
-        if self.text.is_none() && self.speaker.is_none() {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: "a cue has a text or a speaker".to_string(),
-            });
-        }
-        // The **text**: the line breaks of the tree are line breaks.
-        let text = self.text.as_ref().map(|text| text.0.replace("\r\n", "\n"));
-        if let Some(text) = text.as_ref()
-            && text.chars().count() > MAX_TEXT
-        {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("the text of a cue is not longer than {MAX_TEXT} characters"),
-            });
-        }
-        // The **speaker**: a name, and an empty name takes it away.
-        let speaker = self.speaker.as_ref().map(|speaker| {
-            let speaker = speaker.0.trim();
-            if speaker.is_empty() { None } else { Some(speaker.to_string()) }
-        });
-        if let Some(node) = session.document_mut()?.node_mut(caption) {
-            if let Some(text) = text.clone() {
-                node.data["text"] = json!(text);
-            }
-            if let Some(speaker) = speaker.clone() {
-                node.data["speaker"] = match speaker {
-                    Some(speaker) => json!(speaker),
-                    None => Json::Null,
-                };
-            }
-        }
-        let _ = node;
-        Ok(Outcome::changed(format!("the cue `{caption}` is set")).with_data(json!({
-            "caption": caption,
-            "text": text,
-            "speaker": speaker,
-        })))
-    }
-}
+            caption: NodeRef,
+            /// Its new text.
 
-/// **Set** the times of a cue.
-///
-/// The times that are not given keep the ones the cue has, and a cue
-/// that would overlap another one is refused.
-#[derive(Command)]
-#[command(id = "film.caption.times", area = "film", layer = "film", icon = "clock", mutates, undoable)]
-pub struct SetCaptionTimes {
-    /// The cue.
-    pub caption: NodeRef,
-    /// The frame it starts at.
-    pub start: Option<Number>,
-    /// The frame it ends at.
-    pub end: Option<Number>,
-}
+            text: Option<Text>,
+            /// Its new speaker. An empty speaker takes it away.
 
-impl SetCaptionTimes {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "film.caption.times";
-        let caption = self.caption.0;
-        let (node, track) = the_caption(session, command, caption)?;
-        let held_start = node.data.get("start").and_then(|start| start.as_i64()).unwrap_or(0);
-        let held_end = node.data.get("end").and_then(|end| end.as_i64()).unwrap_or(0);
-        // The **times**: the ones that are given, and the ones that
-        // are not keep what they were.
-        let start = match self.start {
-            Some(start) => frames_of(command, start)?,
-            None => held_start,
-        };
-        let end = match self.end {
-            Some(end) => frames_of(command, end)?,
-            None => held_end,
-        };
-        if end <= start {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: "a cue ends after it starts".to_string(),
-            });
-        }
-        // The **overlap**: the tree's own rule, and the cue itself is
-        // not an overlap.
-        let Some(track_node) = session.document().node(track) else {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("there is no track `{track}`"),
-            });
-        };
-        for (id, other_start, other_end) in cues_of(track_node) {
-            if id == caption {
-                continue;
-            }
-            if start < other_end && other_start < end {
+            speaker: Option<Text>,
+        },
+        run: {
+
+            let command = "film.caption.set";
+            let caption = self.caption.0;
+            let (node, _track) = the_caption(session, command, caption)?;
+            if self.text.is_none() && self.speaker.is_none() {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
-                    message: format!("the cue from {start} to {end} overlaps a cue of the track"),
+                    message: "a cue has a text or a speaker".to_string(),
                 });
             }
+            // The **text**: the line breaks of the tree are line breaks.
+            let text = self.text.as_ref().map(|text| text.0.replace("\r\n", "\n"));
+            if let Some(text) = text.as_ref()
+                && text.chars().count() > MAX_TEXT
+            {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("the text of a cue is not longer than {MAX_TEXT} characters"),
+                });
+            }
+            // The **speaker**: a name, and an empty name takes it away.
+            let speaker = self.speaker.as_ref().map(|speaker| {
+                let speaker = speaker.0.trim();
+                if speaker.is_empty() { None } else { Some(speaker.to_string()) }
+            });
+            if let Some(node) = session.document_mut()?.node_mut(caption) {
+                if let Some(text) = text.clone() {
+                    node.data["text"] = json!(text);
+                }
+                if let Some(speaker) = speaker.clone() {
+                    node.data["speaker"] = match speaker {
+                        Some(speaker) => json!(speaker),
+                        None => Json::Null,
+                    };
+                }
+            }
+            let _ = node;
+            Ok(Outcome::changed(format!("the cue `{caption}` is set")).with_data(json!({
+                "caption": caption,
+                "text": text,
+                "speaker": speaker,
+            })))
+
         }
-        if let Some(node) = session.document_mut()?.node_mut(caption) {
-            node.data["start"] = json!(start);
-            node.data["end"] = json!(end);
-            node.name = format!("{start}–{end}");
+    }
+    /// **Set** the times of a cue.
+    ///
+    /// The times that are not given keep the ones the cue has, and a cue
+    /// that would overlap another one is refused.
+    film.caption.times {
+        area: "film",
+        layer: "film",
+        icon: "clock",
+        mutates,
+        undoable,
+        params: {
+            /// The cue.
+
+            caption: NodeRef,
+            /// The frame it starts at.
+
+            start: Option<Number>,
+            /// The frame it ends at.
+
+            end: Option<Number>,
+        },
+        run: {
+
+            let command = "film.caption.times";
+            let caption = self.caption.0;
+            let (node, track) = the_caption(session, command, caption)?;
+            let held_start = node.data.get("start").and_then(|start| start.as_i64()).unwrap_or(0);
+            let held_end = node.data.get("end").and_then(|end| end.as_i64()).unwrap_or(0);
+            // The **times**: the ones that are given, and the ones that
+            // are not keep what they were.
+            let start = match self.start {
+                Some(start) => frames_of(command, start)?,
+                None => held_start,
+            };
+            let end = match self.end {
+                Some(end) => frames_of(command, end)?,
+                None => held_end,
+            };
+            if end <= start {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: "a cue ends after it starts".to_string(),
+                });
+            }
+            // The **overlap**: the tree's own rule, and the cue itself is
+            // not an overlap.
+            let Some(track_node) = session.document().node(track) else {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("there is no track `{track}`"),
+                });
+            };
+            for (id, other_start, other_end) in cues_of(track_node) {
+                if id == caption {
+                    continue;
+                }
+                if start < other_end && other_start < end {
+                    return Err(EngineError::Failed {
+                        id: command.to_string(),
+                        message: format!("the cue from {start} to {end} overlaps a cue of the track"),
+                    });
+                }
+            }
+            if let Some(node) = session.document_mut()?.node_mut(caption) {
+                node.data["start"] = json!(start);
+                node.data["end"] = json!(end);
+                node.name = format!("{start}–{end}");
+            }
+            Ok(Outcome::changed(format!("the cue `{caption}` is from {start} to {end}")).with_data(json!({
+                "caption": caption,
+                "start": start,
+                "end": end,
+            })))
+
         }
-        Ok(Outcome::changed(format!("the cue `{caption}` is from {start} to {end}")).with_data(json!({
-            "caption": caption,
-            "start": start,
-            "end": end,
-        })))
     }
 }

@@ -55,103 +55,111 @@
 //!   **marks** and the slip stays between them (the module
 //!   `mediamarks`), but a subclip is not here.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
 
-/// **Slip** a clip: show a different part of its media.
-///
-/// The clip stays where it is on the timeline and how long it is, and
-/// its place in the media moves.
-///
-/// The slip is refused when it would run past the end of the media or
-/// begin before it: the tree clamps such a slip and says nothing, and
-/// here the refusal says how long the media is.
-#[derive(Command)]
-#[command(id = "film.clip.slip", area = "film", layer = "film", icon = "move", mutates, undoable)]
-pub struct SlipClip {
-    /// The clip.
-    pub clip: NodeRef,
-    /// How far the clip slips, in frames of the timeline. A negative
-    /// number slips it the other way.
-    pub delta: Number,
-}
+commands! {
+    /// **Slip** a clip: show a different part of its media.
+    ///
+    /// The clip stays where it is on the timeline and how long it is, and
+    /// its place in the media moves.
+    ///
+    /// The slip is refused when it would run past the end of the media or
+    /// begin before it: the tree clamps such a slip and says nothing, and
+    /// here the refusal says how long the media is.
+    film.clip.slip {
+        area: "film",
+        layer: "film",
+        icon: "move",
+        mutates,
+        undoable,
+        params: {
+            /// The clip.
 
-impl SlipClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.clip.slip".to_string();
-        let clip = self.clip.0;
-        let Some(node) = session.document().node(clip) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip}`"),
-            });
-        };
-        if node.kind != "film.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-            });
-        }
-        // A **locked** track cannot be edited.
-        if let Some(track) = crate::track_of(session, clip)
-            && crate::is_locked(session, track)
-        {
-            return Err(crate::locked_error(&id, track));
-        }
-        let delta = self.delta.0;
-        if !delta.is_finite() || delta.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a number of frames is a whole number".to_string(),
-            });
-        }
-        let delta = delta as i64;
-        if delta == 0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a slip of zero frames is not a slip".to_string(),
-            });
-        }
-        // The **link** is here: the tree slips the linked clips
-        // together, so that the picture and the sound stay in step.
-        let members = crate::linking::group(session, clip);
-        let mut planned: Vec<(u64, u64)> = Vec::new();
-        let mut skipped: Vec<u64> = Vec::new();
-        for member in &members {
-            // A partner on a **locked** track stays where it is: the
-            // tree's rule, and the rule of the move as well.
-            if *member != clip
-                && let Some(track) = crate::track_of(session, *member)
+            clip: NodeRef,
+            /// How far the clip slips, in frames of the timeline. A negative
+            /// number slips it the other way.
+
+            delta: Number,
+        },
+        run: {
+
+            let id = "film.clip.slip".to_string();
+            let clip = self.clip.0;
+            let Some(node) = session.document().node(clip) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip}`"),
+                });
+            };
+            if node.kind != "film.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            // A **locked** track cannot be edited.
+            if let Some(track) = crate::track_of(session, clip)
                 && crate::is_locked(session, track)
             {
-                skipped.push(*member);
-                continue;
+                return Err(crate::locked_error(&id, track));
             }
-            let source_in = slipped(session, *member, delta).map_err(|message| EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{member}`: {message}"),
-            })?;
-            planned.push((*member, source_in));
-        }
-        for (member, source_in) in &planned {
-            if let Some(node) = session.document_mut()?.node_mut(*member) {
-                node.data["source_in"] = serde_json::json!(*source_in);
+            let delta = self.delta.0;
+            if !delta.is_finite() || delta.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a number of frames is a whole number".to_string(),
+                });
             }
+            let delta = delta as i64;
+            if delta == 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a slip of zero frames is not a slip".to_string(),
+                });
+            }
+            // The **link** is here: the tree slips the linked clips
+            // together, so that the picture and the sound stay in step.
+            let members = crate::linking::group(session, clip);
+            let mut planned: Vec<(u64, u64)> = Vec::new();
+            let mut skipped: Vec<u64> = Vec::new();
+            for member in &members {
+                // A partner on a **locked** track stays where it is: the
+                // tree's rule, and the rule of the move as well.
+                if *member != clip
+                    && let Some(track) = crate::track_of(session, *member)
+                    && crate::is_locked(session, track)
+                {
+                    skipped.push(*member);
+                    continue;
+                }
+                let source_in = slipped(session, *member, delta).map_err(|message| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{member}`: {message}"),
+                })?;
+                planned.push((*member, source_in));
+            }
+            for (member, source_in) in &planned {
+                if let Some(node) = session.document_mut()?.node_mut(*member) {
+                    node.data["source_in"] = serde_json::json!(*source_in);
+                }
+            }
+            let source_in =
+                planned.iter().find(|(member, _)| *member == clip).map(|(_, source_in)| *source_in).unwrap_or(0);
+            let partners: Vec<u64> = members.iter().copied().filter(|member| *member != clip).collect();
+            Ok(Outcome::changed(format!("the clip `{clip}` is slipped by {delta} frames")).with_data(
+                serde_json::json!({
+                    "id": clip,
+                    "source_in": source_in,
+                    "group": members,
+                    "partners": partners,
+                    "skipped": skipped,
+                }),
+            ))
+
         }
-        let source_in =
-            planned.iter().find(|(member, _)| *member == clip).map(|(_, source_in)| *source_in).unwrap_or(0);
-        let partners: Vec<u64> = members.iter().copied().filter(|member| *member != clip).collect();
-        Ok(Outcome::changed(format!("the clip `{clip}` is slipped by {delta} frames")).with_data(
-            serde_json::json!({
-                "id": clip,
-                "source_in": source_in,
-                "group": members,
-                "partners": partners,
-                "skipped": skipped,
-            }),
-        ))
     }
 }
 

@@ -46,10 +46,10 @@
 //!   turned into an underscore. A **nested clip** has no item, and its
 //!   reel is `AX` and its name is in a comment.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Text};
 
 /// The most a **reel** may be long: the tree's rule.
 const MAX_REEL: usize = 8;
@@ -187,166 +187,172 @@ fn source_of(clip: &Node) -> u64 {
     clip.data.get("source_in").and_then(|source| source.as_u64()).unwrap_or(0)
 }
 
-/// **Write** the edit decision list of a sequence.
-///
-/// The list is derived from the sequence as it is now, and it is
-/// returned as a text.
-#[derive(Command)]
-#[command(id = "film.export.edl", area = "film", layer = "film", icon = "list")]
-pub struct ExportEdl {
-    /// The sequence.
-    pub sequence: NodeRef,
-    /// The title of the list. Without it, the name of the sequence.
-    pub title: Option<Text>,
-}
+commands! {
+    /// **Write** the edit decision list of a sequence.
+    ///
+    /// The list is derived from the sequence as it is now, and it is
+    /// returned as a text.
+    film.export.edl {
+        area: "film",
+        layer: "film",
+        icon: "list",
+        params: {
+            /// The sequence.
 
-impl ExportEdl {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.export.edl".to_string();
-        let sequence = self.sequence.0;
-        let Some(node) = session.document().node(sequence) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sequence `{sequence}`"),
-            });
-        };
-        if node.kind != "film.item" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sequence}` is a `{}`, and a sequence is an item", node.kind),
-            });
-        }
-        let title = match &self.title {
-            Some(title) => title.0.trim().to_string(),
-            None => node.name.clone(),
-        };
-        if title.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a list has a title".to_string() });
-        }
-        let (num, den) = rate_of(node);
-        let per_second = ((num as f64 / den as f64).round() as u64).max(1);
-        let document = session.document();
-        // The **tracks**: the video ones first, and then the audio
-        // ones, and each of them in the order it is in the sequence.
-        let mut tracks: Vec<std::sync::Arc<Node>> =
-            node.children.iter().filter(|child| child.kind == "film.track").cloned().collect();
-        let is_audio = |track: &Node| {
-            track.data.get("kind").and_then(|kind| kind.as_str()).unwrap_or_default() == "audio"
-        };
-        tracks.sort_by_key(|track| is_audio(track.as_ref()));
-        let mut lines: Vec<String> = Vec::new();
-        let mut number = 0usize;
-        let mut audio = 0usize;
-        for track in tracks {
-            if is_audio(track.as_ref()) {
-                audio += 1;
+            sequence: NodeRef,
+            /// The title of the list. Without it, the name of the sequence.
+
+            title: Option<Text>,
+        },
+        run: {
+
+            let id = "film.export.edl".to_string();
+            let sequence = self.sequence.0;
+            let Some(node) = session.document().node(sequence) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sequence `{sequence}`"),
+                });
+            };
+            if node.kind != "film.item" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sequence}` is a `{}`, and a sequence is an item", node.kind),
+                });
             }
-            let channel = channel_of(track.as_ref(), audio.saturating_sub(1));
-            let transitions = transitions_of(track.as_ref());
-            let mut clips: Vec<&std::sync::Arc<Node>> =
-                track.children.iter().filter(|child| child.kind == "film.clip").collect();
-            clips.sort_by_key(|clip| start_of(clip));
-            for clip in &clips {
-                // The **reel** of the clip, and the **comment** that
-                // says which clip it is when the reel does not.
-                let reel = the_reel(document, clip, &id)?;
-                let comment = the_comment(clip);
-                let start = start_of(clip);
-                let duration = clip.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
-                let source_in = source_of(clip);
-                // The **dissolve** that comes into this clip, and the
-                // one that goes out of it.
-                let into = transitions.iter().find(|transition| transition.to == clip.id);
-                let out = transitions.iter().find(|transition| transition.from == clip.id);
-                // The **end** of the clip on the timeline: a clip that
-                // dissolves into the next one ends at the cut.
-                let end = match out {
-                    Some(out) => (start + duration).min(out.start).max(start),
-                    None => start + duration,
-                };
-                if let Some(into) = into {
-                    // A dissolve that sits **before the cut** would
-                    // need source media the clip does not have.
-                    if into.align != "start" {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: format!(
-                                "the transition `{}` is `{}` and not at the cut, and the list would need source media that the clip does not have",
-                                into.from, into.align
-                            ),
-                        });
-                    }
-                    let Some(outgoing) = clips.iter().find(|other| other.id == into.from) else {
-                        return Err(EngineError::Failed {
-                            id: id.clone(),
-                            message: format!("the clip `{}` has no item, and it has no reel", clip.name),
-                        });
+            let title = match &self.title {
+                Some(title) => title.0.trim().to_string(),
+                None => node.name.clone(),
+            };
+            if title.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a list has a title".to_string() });
+            }
+            let (num, den) = rate_of(node);
+            let per_second = ((num as f64 / den as f64).round() as u64).max(1);
+            let document = session.document();
+            // The **tracks**: the video ones first, and then the audio
+            // ones, and each of them in the order it is in the sequence.
+            let mut tracks: Vec<std::sync::Arc<Node>> =
+                node.children.iter().filter(|child| child.kind == "film.track").cloned().collect();
+            let is_audio = |track: &Node| {
+                track.data.get("kind").and_then(|kind| kind.as_str()).unwrap_or_default() == "audio"
+            };
+            tracks.sort_by_key(|track| is_audio(track.as_ref()));
+            let mut lines: Vec<String> = Vec::new();
+            let mut number = 0usize;
+            let mut audio = 0usize;
+            for track in tracks {
+                if is_audio(track.as_ref()) {
+                    audio += 1;
+                }
+                let channel = channel_of(track.as_ref(), audio.saturating_sub(1));
+                let transitions = transitions_of(track.as_ref());
+                let mut clips: Vec<&std::sync::Arc<Node>> =
+                    track.children.iter().filter(|child| child.kind == "film.clip").collect();
+                clips.sort_by_key(|clip| start_of(clip));
+                for clip in &clips {
+                    // The **reel** of the clip, and the **comment** that
+                    // says which clip it is when the reel does not.
+                    let reel = the_reel(document, clip, &id)?;
+                    let comment = the_comment(clip);
+                    let start = start_of(clip);
+                    let duration = clip.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
+                    let source_in = source_of(clip);
+                    // The **dissolve** that comes into this clip, and the
+                    // one that goes out of it.
+                    let into = transitions.iter().find(|transition| transition.to == clip.id);
+                    let out = transitions.iter().find(|transition| transition.from == clip.id);
+                    // The **end** of the clip on the timeline: a clip that
+                    // dissolves into the next one ends at the cut.
+                    let end = match out {
+                        Some(out) => (start + duration).min(out.start).max(start),
+                        None => start + duration,
                     };
-                    let outgoing_reel = the_reel(document, outgoing, &id)?;
-                    // The **cut**: the source of the outgoing clip at
-                    // the cut, and the source of the incoming one.
-                    let cut_source = source_of(outgoing) + into.start.saturating_sub(start_of(outgoing));
-                    let in_source = source_in + into.start.saturating_sub(start);
+                    if let Some(into) = into {
+                        // A dissolve that sits **before the cut** would
+                        // need source media the clip does not have.
+                        if into.align != "start" {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!(
+                                    "the transition `{}` is `{}` and not at the cut, and the list would need source media that the clip does not have",
+                                    into.from, into.align
+                                ),
+                            });
+                        }
+                        let Some(outgoing) = clips.iter().find(|other| other.id == into.from) else {
+                            return Err(EngineError::Failed {
+                                id: id.clone(),
+                                message: format!("the clip `{}` has no item, and it has no reel", clip.name),
+                            });
+                        };
+                        let outgoing_reel = the_reel(document, outgoing, &id)?;
+                        // The **cut**: the source of the outgoing clip at
+                        // the cut, and the source of the incoming one.
+                        let cut_source = source_of(outgoing) + into.start.saturating_sub(start_of(outgoing));
+                        let in_source = source_in + into.start.saturating_sub(start);
+                        number += 1;
+                        // The **first line** is the cut itself: the
+                        // outgoing clip, a cut of no length at the point
+                        // the dissolve begins.
+                        if let Some(comment) = &comment {
+                            lines.push(comment.clone());
+                        }
+                        lines.push(format!(
+                            "{number:03}  {:<MAX_REEL$} {:<4} {:<8} {} {} {} {}",
+                            outgoing_reel,
+                            channel,
+                            "C",
+                            timecode(cut_source, per_second),
+                            timecode(cut_source, per_second),
+                            timecode(into.start, per_second),
+                            timecode(into.start, per_second),
+                        ));
+                        // The **second line** is the dissolve: the
+                        // incoming clip, and how long the dissolve is.
+                        lines.push(format!(
+                            "{number:03}  {:<MAX_REEL$} {:<4} {:<4} {:<3} {} {} {} {}",
+                            reel,
+                            channel,
+                            "D",
+                            format!("{:03}", into.duration),
+                            timecode(in_source, per_second),
+                            timecode(in_source + (end - into.start), per_second),
+                            timecode(into.start, per_second),
+                            timecode(end, per_second),
+                        ));
+                        continue;
+                    }
                     number += 1;
-                    // The **first line** is the cut itself: the
-                    // outgoing clip, a cut of no length at the point
-                    // the dissolve begins.
                     if let Some(comment) = &comment {
                         lines.push(comment.clone());
                     }
                     lines.push(format!(
                         "{number:03}  {:<MAX_REEL$} {:<4} {:<8} {} {} {} {}",
-                        outgoing_reel,
-                        channel,
-                        "C",
-                        timecode(cut_source, per_second),
-                        timecode(cut_source, per_second),
-                        timecode(into.start, per_second),
-                        timecode(into.start, per_second),
-                    ));
-                    // The **second line** is the dissolve: the
-                    // incoming clip, and how long the dissolve is.
-                    lines.push(format!(
-                        "{number:03}  {:<MAX_REEL$} {:<4} {:<4} {:<3} {} {} {} {}",
                         reel,
                         channel,
-                        "D",
-                        format!("{:03}", into.duration),
-                        timecode(in_source, per_second),
-                        timecode(in_source + (end - into.start), per_second),
-                        timecode(into.start, per_second),
+                        "C",
+                        timecode(source_in, per_second),
+                        timecode(source_in + duration, per_second),
+                        timecode(start, per_second),
                         timecode(end, per_second),
                     ));
-                    continue;
                 }
-                number += 1;
-                if let Some(comment) = &comment {
-                    lines.push(comment.clone());
-                }
-                lines.push(format!(
-                    "{number:03}  {:<MAX_REEL$} {:<4} {:<8} {} {} {} {}",
-                    reel,
-                    channel,
-                    "C",
-                    timecode(source_in, per_second),
-                    timecode(source_in + duration, per_second),
-                    timecode(start, per_second),
-                    timecode(end, per_second),
-                ));
             }
+            let mut text = format!("TITLE: {title}\nFCM: NON-DROP FRAME\n");
+            if !lines.is_empty() {
+                text.push('\n');
+                text.push_str(&lines.join("\n"));
+                text.push('\n');
+            }
+            Ok(Outcome::new(format!("the list of the sequence `{title}`")).with_data(json!({
+                "sequence": sequence,
+                "title": title,
+                "edl": text,
+                "events": number,
+                "rate": { "num": num, "den": den },
+            })))
+
         }
-        let mut text = format!("TITLE: {title}\nFCM: NON-DROP FRAME\n");
-        if !lines.is_empty() {
-            text.push('\n');
-            text.push_str(&lines.join("\n"));
-            text.push('\n');
-        }
-        Ok(Outcome::new(format!("the list of the sequence `{title}`")).with_data(json!({
-            "sequence": sequence,
-            "title": title,
-            "edl": text,
-            "events": number,
-            "rate": { "num": num, "den": den },
-        })))
     }
 }

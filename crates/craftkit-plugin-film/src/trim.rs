@@ -47,7 +47,7 @@
 //!   the same delta, and a member that cannot take it refuses the trim
 //!   (the module `linking`).
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
@@ -73,124 +73,133 @@ impl Clock {
     }
 }
 
-/// **Trim** one edge of a clip.
-///
-/// The **in** edge is the head: the clip gets shorter or longer, the
-/// media it begins at moves, and the clip moves on the timeline with
-/// it. The **out** edge is the tail: the clip gets shorter or longer
-/// and stays where it is.
-///
-/// A trim that would cross a bound is **refused**, and the refusal
-/// says which bound: a clip is at least one frame long, a clip may not
-/// run past the end of the media or begin before it, a clip may not
-/// overlap its neighbours, and a clip may not start before the
-/// timeline.
-#[derive(Command)]
-#[command(id = "film.clip.trim", area = "film", layer = "film", icon = "scissors", mutates, undoable)]
-pub struct TrimClip {
-    /// The clip.
-    pub clip: NodeRef,
-    /// The edge that is trimmed: `in` or `out`.
-    pub edge: Text,
-    /// How much it is trimmed, in frames. A negative number trims the
-    /// other way.
-    pub delta: Number,
-}
+commands! {
+    /// **Trim** one edge of a clip.
+    ///
+    /// The **in** edge is the head: the clip gets shorter or longer, the
+    /// media it begins at moves, and the clip moves on the timeline with
+    /// it. The **out** edge is the tail: the clip gets shorter or longer
+    /// and stays where it is.
+    ///
+    /// A trim that would cross a bound is **refused**, and the refusal
+    /// says which bound: a clip is at least one frame long, a clip may not
+    /// run past the end of the media or begin before it, a clip may not
+    /// overlap its neighbours, and a clip may not start before the
+    /// timeline.
+    film.clip.trim {
+        area: "film",
+        layer: "film",
+        icon: "scissors",
+        mutates,
+        undoable,
+        params: {
+            /// The clip.
 
-impl TrimClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.clip.trim".to_string();
-        let clip = self.clip.0;
-        let Some(node) = session.document().node(clip) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip}`"),
-            });
-        };
-        if node.kind != "film.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-            });
-        }
-        // A clip that is **linked** is trimmed with its partners: the
-        // tree trims the group as one edit, with the delta that every
-        // member can take.
-        let members = crate::linking::group(session, clip);
-        let Some(clock) = Clock::of(&node.data) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip}` does not say where it is"),
-            });
-        };
-        // A **locked** track cannot be edited.
-        if let Some(track) = crate::track_of(session, clip)
-            && crate::is_locked(session, track)
-        {
-            return Err(crate::locked_error(&id, track));
-        }
-        let edge = self.edge.0.trim().to_lowercase();
-        if edge != "in" && edge != "out" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{}` is not an edge: an edge is `in` or `out`", self.edge.0.trim()),
-            });
-        }
-        let delta = self.delta.0;
-        if !delta.is_finite() || delta.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a number of frames is a whole number".to_string(),
-            });
-        }
-        let delta = delta as i64;
-        if delta == 0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a trim of zero frames is not a trim".to_string(),
-            });
-        }
-        // Every member of the group is trimmed by the same delta, and
-        // a member that cannot take it refuses the whole trim.
-        let mut planned: Vec<(u64, i64, i64, i64)> = Vec::new();
-        for member in &members {
-            let (start, duration, source_in) =
-                trimmed(session, *member, &edge, delta).map_err(|message| EngineError::Failed {
+            clip: NodeRef,
+            /// The edge that is trimmed: `in` or `out`.
+
+            edge: Text,
+            /// How much it is trimmed, in frames. A negative number trims the
+            /// other way.
+
+            delta: Number,
+        },
+        run: {
+
+            let id = "film.clip.trim".to_string();
+            let clip = self.clip.0;
+            let Some(node) = session.document().node(clip) else {
+                return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("the clip `{member}`: {message}"),
-                })?;
-            planned.push((*member, start, duration, source_in));
-        }
-        for (member, start, duration, source_in) in &planned {
-            let Some(node) = session.document_mut()?.node_mut(*member) else {
-                continue;
+                    message: format!("there is no node `{clip}`"),
+                });
             };
-            let source_in = serde_json::json!(*source_in as u64);
-            node.data = crate::clocks_of(&node.data, *start as u64, *duration as u64, &source_in);
-            crate::set_clip_name(node, *start as u64);
+            if node.kind != "film.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            // A clip that is **linked** is trimmed with its partners: the
+            // tree trims the group as one edit, with the delta that every
+            // member can take.
+            let members = crate::linking::group(session, clip);
+            let Some(clock) = Clock::of(&node.data) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip}` does not say where it is"),
+                });
+            };
+            // A **locked** track cannot be edited.
+            if let Some(track) = crate::track_of(session, clip)
+                && crate::is_locked(session, track)
+            {
+                return Err(crate::locked_error(&id, track));
+            }
+            let edge = self.edge.0.trim().to_lowercase();
+            if edge != "in" && edge != "out" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{}` is not an edge: an edge is `in` or `out`", self.edge.0.trim()),
+                });
+            }
+            let delta = self.delta.0;
+            if !delta.is_finite() || delta.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a number of frames is a whole number".to_string(),
+                });
+            }
+            let delta = delta as i64;
+            if delta == 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a trim of zero frames is not a trim".to_string(),
+                });
+            }
+            // Every member of the group is trimmed by the same delta, and
+            // a member that cannot take it refuses the whole trim.
+            let mut planned: Vec<(u64, i64, i64, i64)> = Vec::new();
+            for member in &members {
+                let (start, duration, source_in) =
+                    trimmed(session, *member, &edge, delta).map_err(|message| EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the clip `{member}`: {message}"),
+                    })?;
+                planned.push((*member, start, duration, source_in));
+            }
+            for (member, start, duration, source_in) in &planned {
+                let Some(node) = session.document_mut()?.node_mut(*member) else {
+                    continue;
+                };
+                let source_in = serde_json::json!(*source_in as u64);
+                node.data = crate::clocks_of(&node.data, *start as u64, *duration as u64, &source_in);
+                crate::set_clip_name(node, *start as u64);
+            }
+            // The **transitions** that join the trimmed clips stay within
+            // the two clips they join: a trim that made a clip shorter
+            // brings a transition back inside the clips (the module
+            // `transitions`).
+            for member in &members {
+                crate::transitions::keep_within_clips(session, *member)?;
+            }
+            let (start, duration, source_in) = planned
+                .first()
+                .map(|(_, start, duration, source_in)| (*start, *duration, *source_in))
+                .unwrap_or((clock.start as i64, clock.duration as i64, clock.source_in as i64));
+            let partners: Vec<u64> = members.iter().copied().filter(|member| *member != clip).collect();
+            Ok(Outcome::changed(format!("the clip `{clip}` is trimmed by {delta} frames")).with_data(
+                serde_json::json!({
+                    "id": clip,
+                    "start": start,
+                    "duration": duration,
+                    "source_in": source_in,
+                    "group": members,
+                    "partners": partners,
+                }),
+            ))
+
         }
-        // The **transitions** that join the trimmed clips stay within
-        // the two clips they join: a trim that made a clip shorter
-        // brings a transition back inside the clips (the module
-        // `transitions`).
-        for member in &members {
-            crate::transitions::keep_within_clips(session, *member)?;
-        }
-        let (start, duration, source_in) = planned
-            .first()
-            .map(|(_, start, duration, source_in)| (*start, *duration, *source_in))
-            .unwrap_or((clock.start as i64, clock.duration as i64, clock.source_in as i64));
-        let partners: Vec<u64> = members.iter().copied().filter(|member| *member != clip).collect();
-        Ok(Outcome::changed(format!("the clip `{clip}` is trimmed by {delta} frames")).with_data(
-            serde_json::json!({
-                "id": clip,
-                "start": start,
-                "duration": duration,
-                "source_in": source_in,
-                "group": members,
-                "partners": partners,
-            }),
-        ))
     }
 }
 

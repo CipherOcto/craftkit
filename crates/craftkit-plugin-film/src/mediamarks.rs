@@ -28,97 +28,106 @@
 //!   not of a media. Here the marks are the media's and a sequence's
 //!   marks are not here.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome};
 
-/// Put the **marks** on a media.
-///
-/// The marks are the media's own frames: the material a clip plays is
-/// between them. Only what is named is changed, and a mark that is
-/// outside the media is refused.
-#[derive(Command)]
-#[command(id = "film.item.mark", area = "film", layer = "film", icon = "flag", mutates, undoable)]
-pub struct SetMarks {
-    /// The media.
-    pub item: NodeRef,
-    /// The mark in: the first frame of the media that may be played.
-    pub mark_in: Option<Number>,
-    /// The mark out: the frame after the last one that may be played.
-    pub mark_out: Option<Number>,
-}
+commands! {
+    /// Put the **marks** on a media.
+    ///
+    /// The marks are the media's own frames: the material a clip plays is
+    /// between them. Only what is named is changed, and a mark that is
+    /// outside the media is refused.
+    film.item.mark {
+        area: "film",
+        layer: "film",
+        icon: "flag",
+        mutates,
+        undoable,
+        params: {
+            /// The media.
 
-impl SetMarks {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.item.mark".to_string();
-        let item = self.item.0;
-        let Some(node) = session.document().node(item) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{item}`"),
-            });
-        };
-        if node.kind != "film.item" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{item}` is a `{}` and not an item", node.kind),
-            });
+            item: NodeRef,
+            /// The mark in: the first frame of the media that may be played.
+
+            mark_in: Option<Number>,
+            /// The mark out: the frame after the last one that may be played.
+
+            mark_out: Option<Number>,
+        },
+        run: {
+
+            let id = "film.item.mark".to_string();
+            let item = self.item.0;
+            let Some(node) = session.document().node(item) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{item}`"),
+                });
+            };
+            if node.kind != "film.item" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{item}` is a `{}` and not an item", node.kind),
+                });
+            }
+            let Some(length) = node.data.get("duration").and_then(|duration| duration.as_u64()) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the item `{item}` does not say how long it is"),
+                });
+            };
+            let mark_in = frame(self.mark_in, &id)?;
+            let mark_out = frame(self.mark_out, &id)?;
+            if let Some(mark_in) = mark_in
+                && mark_in > length
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the mark in is at frame {mark_in}, and the media is {length} frames long"),
+                });
+            }
+            if let Some(mark_out) = mark_out
+                && mark_out > length
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the mark out is at frame {mark_out}, and the media is {length} frames long"
+                    ),
+                });
+            }
+            let start = mark_in.or_else(|| node.data.get("mark_in").and_then(|mark| mark.as_u64()));
+            let end = mark_out.or_else(|| node.data.get("mark_out").and_then(|mark| mark.as_u64()));
+            if let (Some(start), Some(end)) = (start, end)
+                && start > end
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the mark in is at frame {start} and the mark out is at frame {end}, and the first is after the second"
+                    ),
+                });
+            }
+            let mut data = node.data.clone();
+            if let Some(mark_in) = mark_in {
+                data["mark_in"] = json!(mark_in);
+            }
+            if let Some(mark_out) = mark_out {
+                data["mark_out"] = json!(mark_out);
+            }
+            if let Some(node) = session.document_mut()?.node_mut(item) {
+                node.data = data;
+            }
+            Ok(Outcome::changed(format!("the marks of the media `{item}` are set")).with_data(json!({
+                "item": item,
+                "mark_in": start,
+                "mark_out": end,
+                "length": length,
+            })))
+
         }
-        let Some(length) = node.data.get("duration").and_then(|duration| duration.as_u64()) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the item `{item}` does not say how long it is"),
-            });
-        };
-        let mark_in = frame(self.mark_in, &id)?;
-        let mark_out = frame(self.mark_out, &id)?;
-        if let Some(mark_in) = mark_in
-            && mark_in > length
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the mark in is at frame {mark_in}, and the media is {length} frames long"),
-            });
-        }
-        if let Some(mark_out) = mark_out
-            && mark_out > length
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the mark out is at frame {mark_out}, and the media is {length} frames long"
-                ),
-            });
-        }
-        let start = mark_in.or_else(|| node.data.get("mark_in").and_then(|mark| mark.as_u64()));
-        let end = mark_out.or_else(|| node.data.get("mark_out").and_then(|mark| mark.as_u64()));
-        if let (Some(start), Some(end)) = (start, end)
-            && start > end
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the mark in is at frame {start} and the mark out is at frame {end}, and the first is after the second"
-                ),
-            });
-        }
-        let mut data = node.data.clone();
-        if let Some(mark_in) = mark_in {
-            data["mark_in"] = json!(mark_in);
-        }
-        if let Some(mark_out) = mark_out {
-            data["mark_out"] = json!(mark_out);
-        }
-        if let Some(node) = session.document_mut()?.node_mut(item) {
-            node.data = data;
-        }
-        Ok(Outcome::changed(format!("the marks of the media `{item}` are set")).with_data(json!({
-            "item": item,
-            "mark_in": start,
-            "mark_out": end,
-            "length": length,
-        })))
     }
 }
 

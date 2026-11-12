@@ -41,7 +41,7 @@
 //!   timeline; here the length of a track is derived and there is no
 //!   end to pass.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Bool, EngineError, NodeRef, Number, Outcome, Session};
@@ -64,134 +64,143 @@ pub fn media_frames(duration: u64, speed: f64) -> u64 {
     (duration as f64 * speed).round().max(0.0) as u64
 }
 
-/// **Set** the speed of a clip.
-///
-/// The clip's **length** follows: a clip that plays twice as fast is
-/// half as long, and it plays the same material.
-///
-/// A clip may not **overlap** the clip after it: the tree bounds the
-/// new length by the space there is, and a clip that would run into
-/// its neighbour is refused rather than shortened.
-///
-/// The tree has a second way: the change may **ripple**. The clips
-/// that were after the clip move **up** by the change in its length,
-/// and the time the clip took is time that is free — which is the
-/// tree's ripple delete, done by a speed change.
-#[derive(Command)]
-#[command(id = "film.clip.speed", area = "film", layer = "film", icon = "repeat", mutates, undoable)]
-pub struct SetSpeed {
-    /// The clip.
-    pub clip: NodeRef,
-    /// The speed: one is the media as it is, two is twice as fast.
-    pub speed: Number,
-    /// Whether the clips that were after it move up by the change in
-    /// its length.
+commands! {
+    /// **Set** the speed of a clip.
     ///
-    /// Leave it out and the change is bounded by the space there is:
-    /// a clip that would run into its neighbour is refused.
-    pub ripple: Option<Bool>,
-}
+    /// The clip's **length** follows: a clip that plays twice as fast is
+    /// half as long, and it plays the same material.
+    ///
+    /// A clip may not **overlap** the clip after it: the tree bounds the
+    /// new length by the space there is, and a clip that would run into
+    /// its neighbour is refused rather than shortened.
+    ///
+    /// The tree has a second way: the change may **ripple**. The clips
+    /// that were after the clip move **up** by the change in its length,
+    /// and the time the clip took is time that is free — which is the
+    /// tree's ripple delete, done by a speed change.
+    film.clip.speed {
+        area: "film",
+        layer: "film",
+        icon: "repeat",
+        mutates,
+        undoable,
+        params: {
+            /// The clip.
 
-impl SetSpeed {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.clip.speed".to_string();
-        let clip = self.clip.0;
-        let speed = self.speed.0;
-        if !speed.is_finite() || speed <= 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a speed is a number that is there and is more than nothing: {speed}"),
-            });
+            clip: NodeRef,
+            /// The speed: one is the media as it is, two is twice as fast.
+
+            speed: Number,
+            /// Whether the clips that were after it move up by the change in
+            /// its length.
+            ///
+            /// Leave it out and the change is bounded by the space there is:
+            /// a clip that would run into its neighbour is refused.
+
+            ripple: Option<Bool>,
+        },
+        run: {
+
+            let id = "film.clip.speed".to_string();
+            let clip = self.clip.0;
+            let speed = self.speed.0;
+            if !speed.is_finite() || speed <= 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a speed is a number that is there and is more than nothing: {speed}"),
+                });
+            }
+            let Some(node) = session.document().node(clip) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no clip `{clip}`"),
+                });
+            };
+            if node.kind != "film.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            // A **locked** track cannot be edited.
+            if let Some(track) = crate::track_of(session, clip)
+                && crate::is_locked(session, track)
+            {
+                return Err(crate::locked_error(&id, track));
+            }
+            let Some(duration) = node.data.get("duration").and_then(|duration| duration.as_u64()) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the clip `{clip}` does not say how long it is"),
+                });
+            };
+            let start = node.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
+            let source_in = node.data.get("source_in").and_then(|source_in| source_in.as_u64()).unwrap_or(0);
+            // The **media** the clip plays now, and the media it will play:
+            // the same material, at another rate.
+            let media = media_frames(duration, speed_of(&node.data));
+            let old_duration = duration;
+            let duration = (media as f64 / speed).round() as i64;
+            if duration < 1 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the clip would be less than one frame long".to_string(),
+                });
+            }
+            // The clip may not **overlap** the clip after it: the tree
+            // bounds the new length by the space there is. A **ripple**
+            // moves the clips that were after it, so there is no bound.
+            let ripple = self.ripple.map(|ripple| ripple.0).unwrap_or(false);
+            if !ripple
+                && let Some(next) = the_next_start(session, clip, start)
+                && start as i64 + duration > next as i64
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the clip would end at frame {}, and the clip after it starts at frame {next}",
+                        start as i64 + duration
+                    ),
+                });
+            }
+            // The media may not run past the **end** of the item the clip
+            // plays.
+            if let Some(media) = crate::media_range_of(session, clip)
+                && source_in as i64 + media_frames(duration as u64, speed) as i64 > media.end as i64
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the clip would run to frame {} of the media, and {}",
+                        source_in as i64 + media_frames(duration as u64, speed) as i64,
+                        media.bound()
+                    ),
+                });
+            }
+            let mut data = node.data.clone();
+            data["duration"] = serde_json::json!(duration);
+            data["speed"] = serde_json::json!(speed);
+            if let Some(node) = session.document_mut()?.node_mut(clip) {
+                node.data = data;
+                crate::set_clip_name(node, start);
+            }
+            // The **ripple**: the clips that were after it move up by the
+            // change in its length, and the transitions follow the cuts.
+            let moved =
+                if ripple { ripple_after(session, clip, start, old_duration, duration)? } else { Vec::new() };
+            Ok(Outcome::changed(format!("the clip `{clip}` plays at {speed} times")).with_data(
+                serde_json::json!({
+                    "clip": clip,
+                    "speed": speed,
+                    "duration": duration,
+                    "start": start,
+                    "source_in": source_in,
+                    "ripple": ripple,
+                    "moved": moved,
+                }),
+            ))
+
         }
-        let Some(node) = session.document().node(clip) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no clip `{clip}`"),
-            });
-        };
-        if node.kind != "film.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-            });
-        }
-        // A **locked** track cannot be edited.
-        if let Some(track) = crate::track_of(session, clip)
-            && crate::is_locked(session, track)
-        {
-            return Err(crate::locked_error(&id, track));
-        }
-        let Some(duration) = node.data.get("duration").and_then(|duration| duration.as_u64()) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the clip `{clip}` does not say how long it is"),
-            });
-        };
-        let start = node.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
-        let source_in = node.data.get("source_in").and_then(|source_in| source_in.as_u64()).unwrap_or(0);
-        // The **media** the clip plays now, and the media it will play:
-        // the same material, at another rate.
-        let media = media_frames(duration, speed_of(&node.data));
-        let old_duration = duration;
-        let duration = (media as f64 / speed).round() as i64;
-        if duration < 1 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the clip would be less than one frame long".to_string(),
-            });
-        }
-        // The clip may not **overlap** the clip after it: the tree
-        // bounds the new length by the space there is. A **ripple**
-        // moves the clips that were after it, so there is no bound.
-        let ripple = self.ripple.map(|ripple| ripple.0).unwrap_or(false);
-        if !ripple
-            && let Some(next) = the_next_start(session, clip, start)
-            && start as i64 + duration > next as i64
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the clip would end at frame {}, and the clip after it starts at frame {next}",
-                    start as i64 + duration
-                ),
-            });
-        }
-        // The media may not run past the **end** of the item the clip
-        // plays.
-        if let Some(media) = crate::media_range_of(session, clip)
-            && source_in as i64 + media_frames(duration as u64, speed) as i64 > media.end as i64
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the clip would run to frame {} of the media, and {}",
-                    source_in as i64 + media_frames(duration as u64, speed) as i64,
-                    media.bound()
-                ),
-            });
-        }
-        let mut data = node.data.clone();
-        data["duration"] = serde_json::json!(duration);
-        data["speed"] = serde_json::json!(speed);
-        if let Some(node) = session.document_mut()?.node_mut(clip) {
-            node.data = data;
-            crate::set_clip_name(node, start);
-        }
-        // The **ripple**: the clips that were after it move up by the
-        // change in its length, and the transitions follow the cuts.
-        let moved =
-            if ripple { ripple_after(session, clip, start, old_duration, duration)? } else { Vec::new() };
-        Ok(Outcome::changed(format!("the clip `{clip}` plays at {speed} times")).with_data(
-            serde_json::json!({
-                "clip": clip,
-                "speed": speed,
-                "duration": duration,
-                "start": start,
-                "source_in": source_in,
-                "ripple": ripple,
-                "moved": moved,
-            }),
-        ))
     }
 }
 

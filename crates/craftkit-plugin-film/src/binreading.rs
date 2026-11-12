@@ -11,49 +11,54 @@
 //! the bin that holds it, and the tree's bin has no parent either —
 //! it is found by walking.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Outcome};
 
-/// Read a **bin**.
-#[derive(Command)]
-#[command(id = "film.bin.get", area = "film", layer = "film", icon = "list")]
-pub struct ReadBin {
-    /// The bin to read.
-    pub bin: NodeRef,
-}
+commands! {
+    /// Read a **bin**.
+    film.bin.get {
+        area: "film",
+        layer: "film",
+        icon: "list",
+        params: {
+            /// The bin to read.
 
-impl ReadBin {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.bin.get".to_string();
-        let bin = self.bin.0;
-        let Some(node) = session.document().node(bin) else {
-            return Err(EngineError::Failed { id, message: format!("there is no bin `{bin}`") });
-        };
-        if node.kind != "film.bin" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{bin}` is a `{}` and not a bin", node.kind),
-            });
+            bin: NodeRef,
+        },
+        run: {
+
+            let id = "film.bin.get".to_string();
+            let bin = self.bin.0;
+            let Some(node) = session.document().node(bin) else {
+                return Err(EngineError::Failed { id, message: format!("there is no bin `{bin}`") });
+            };
+            if node.kind != "film.bin" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{bin}` is a `{}` and not a bin", node.kind),
+                });
+            }
+            // The **items** and the **bins** the bin holds.
+            let items: Vec<u64> =
+                node.children.iter().filter(|child| child.kind == "film.item").map(|child| child.id).collect();
+            let bins: Vec<u64> =
+                node.children.iter().filter(|child| child.kind == "film.bin").map(|child| child.id).collect();
+            // The **parent** of the bin: the bin that holds it.
+            let parent = session
+                .document()
+                .walk()
+                .find(|node| node.children.iter().any(|child| child.id == bin))
+                .map(|node| node.id);
+            Ok(Outcome::new(format!("the bin `{bin}`")).with_data(json!({
+                "id": bin,
+                "name": node.name,
+                "items": items,
+                "bins": bins,
+                "parent": parent,
+            })))
+
         }
-        // The **items** and the **bins** the bin holds.
-        let items: Vec<u64> =
-            node.children.iter().filter(|child| child.kind == "film.item").map(|child| child.id).collect();
-        let bins: Vec<u64> =
-            node.children.iter().filter(|child| child.kind == "film.bin").map(|child| child.id).collect();
-        // The **parent** of the bin: the bin that holds it.
-        let parent = session
-            .document()
-            .walk()
-            .find(|node| node.children.iter().any(|child| child.id == bin))
-            .map(|node| node.id);
-        Ok(Outcome::new(format!("the bin `{bin}`")).with_data(json!({
-            "id": bin,
-            "name": node.name,
-            "items": items,
-            "bins": bins,
-            "parent": parent,
-        })))
     }
 }

@@ -51,25 +51,128 @@
 //! - **The tree's sync-locked tracks are not here**, so the tracks that
 //!   are locked to the track that changed do not move with it.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
 
-/// **Stretch** one edge of a clip.
-///
-/// The clip gets longer or shorter and its speed changes the other
-/// way, so that it plays the same material.
-#[derive(Command)]
-#[command(id = "film.clip.stretch", area = "film", layer = "film", icon = "expand", mutates, undoable)]
-pub struct StretchClip {
-    /// The clip.
-    pub clip: NodeRef,
-    /// The edge that is stretched: `in` or `out`.
-    pub edge: Text,
-    /// How much it is stretched, in frames. A negative number stretches
-    /// it the other way.
-    pub delta: Number,
+commands! {
+    /// **Stretch** one edge of a clip.
+    ///
+    /// The clip gets longer or shorter and its speed changes the other
+    /// way, so that it plays the same material.
+    film.clip.stretch {
+        area: "film",
+        layer: "film",
+        icon: "expand",
+        mutates,
+        undoable,
+        params: {
+            /// The clip.
+
+            clip: NodeRef,
+            /// The edge that is stretched: `in` or `out`.
+
+            edge: Text,
+            /// How much it is stretched, in frames. A negative number stretches
+            /// it the other way.
+
+            delta: Number,
+        },
+        run: {
+
+            let id = "film.clip.stretch".to_string();
+            let clip = self.clip.0;
+            let Some(node) = session.document().node(clip) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip}`"),
+                });
+            };
+            if node.kind != "film.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let edge = self.edge.0.trim().to_lowercase();
+            if edge != "in" && edge != "out" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{}` is not an edge: an edge is `in` or `out`", self.edge.0.trim()),
+                });
+            }
+            let delta = self.delta.0;
+            if !delta.is_finite() || delta.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a number of frames is a whole number".to_string(),
+                });
+            }
+            let delta = delta as i64;
+            if delta == 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a stretch of zero frames is not a stretch".to_string(),
+                });
+            }
+            // A **locked** track cannot be edited.
+            let track = crate::track_of(session, clip).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the clip `{clip}` is on no track"),
+            })?;
+            if crate::is_locked(session, track) {
+                return Err(crate::locked_error(&id, track));
+            }
+            // The **link** is here: the linked clips stretch together, by
+            // the same delta on their own tracks.
+            let members = crate::linking::group(session, clip);
+            // Every member takes the same delta, and a member that cannot
+            // take it refuses the whole stretch: the tree scales the group
+            // down and says nothing.
+            let mut plans: Vec<Plan> = Vec::new();
+            for member in &members {
+                let plan = plan(session, *member, &edge, delta)
+                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+                plans.push(plan);
+            }
+            for plan in &plans {
+                if let Some(node) = session.document_mut()?.node_mut(plan.clip) {
+                    node.data =
+                        crate::clocks_of(&node.data, plan.start, plan.duration, &node.data["source_in"].clone());
+                    node.data["speed"] = serde_json::json!(plan.speed);
+                    crate::set_clip_name(node, plan.start);
+                }
+            }
+            // The **transitions** that sit over a cut that moved follow the
+            // cut, and they stay inside the two clips they join (the
+            // module `transitions`).
+            for plan in &plans {
+                let (before, after) = crate::neighbours_of(session, plan.clip);
+                if edge == "in" {
+                    if let Some(before) = before {
+                        crate::transitions::follow_cut(session, before.id, plan.clip, delta)?;
+                    }
+                } else if let Some(after) = after {
+                    crate::transitions::follow_cut(session, plan.clip, after.id, delta)?;
+                }
+                crate::transitions::keep_within_clips(session, plan.clip)?;
+            }
+            let stretched: Vec<u64> = plans.iter().map(|plan| plan.clip).collect();
+            let speed = plans.first().map(|plan| plan.speed).unwrap_or(1.0);
+            Ok(Outcome::changed(format!("the clip `{clip}` is stretched by {delta} frames")).with_data(
+                serde_json::json!({
+                    "id": clip,
+                    "edge": edge,
+                    "delta": delta,
+                    "speed": speed,
+                    "clips": stretched,
+                    "group": members,
+                }),
+            ))
+
+        }
+    }
 }
 
 /// What a stretch does to one clip.
@@ -82,100 +185,6 @@ struct Plan {
     duration: u64,
     /// How fast it plays its media afterwards.
     speed: f64,
-}
-
-impl StretchClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.clip.stretch".to_string();
-        let clip = self.clip.0;
-        let Some(node) = session.document().node(clip) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip}`"),
-            });
-        };
-        if node.kind != "film.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-            });
-        }
-        let edge = self.edge.0.trim().to_lowercase();
-        if edge != "in" && edge != "out" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{}` is not an edge: an edge is `in` or `out`", self.edge.0.trim()),
-            });
-        }
-        let delta = self.delta.0;
-        if !delta.is_finite() || delta.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a number of frames is a whole number".to_string(),
-            });
-        }
-        let delta = delta as i64;
-        if delta == 0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a stretch of zero frames is not a stretch".to_string(),
-            });
-        }
-        // A **locked** track cannot be edited.
-        let track = crate::track_of(session, clip).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the clip `{clip}` is on no track"),
-        })?;
-        if crate::is_locked(session, track) {
-            return Err(crate::locked_error(&id, track));
-        }
-        // The **link** is here: the linked clips stretch together, by
-        // the same delta on their own tracks.
-        let members = crate::linking::group(session, clip);
-        // Every member takes the same delta, and a member that cannot
-        // take it refuses the whole stretch: the tree scales the group
-        // down and says nothing.
-        let mut plans: Vec<Plan> = Vec::new();
-        for member in &members {
-            let plan = plan(session, *member, &edge, delta)
-                .map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-            plans.push(plan);
-        }
-        for plan in &plans {
-            if let Some(node) = session.document_mut()?.node_mut(plan.clip) {
-                node.data =
-                    crate::clocks_of(&node.data, plan.start, plan.duration, &node.data["source_in"].clone());
-                node.data["speed"] = serde_json::json!(plan.speed);
-                crate::set_clip_name(node, plan.start);
-            }
-        }
-        // The **transitions** that sit over a cut that moved follow the
-        // cut, and they stay inside the two clips they join (the
-        // module `transitions`).
-        for plan in &plans {
-            let (before, after) = crate::neighbours_of(session, plan.clip);
-            if edge == "in" {
-                if let Some(before) = before {
-                    crate::transitions::follow_cut(session, before.id, plan.clip, delta)?;
-                }
-            } else if let Some(after) = after {
-                crate::transitions::follow_cut(session, plan.clip, after.id, delta)?;
-            }
-            crate::transitions::keep_within_clips(session, plan.clip)?;
-        }
-        let stretched: Vec<u64> = plans.iter().map(|plan| plan.clip).collect();
-        let speed = plans.first().map(|plan| plan.speed).unwrap_or(1.0);
-        Ok(Outcome::changed(format!("the clip `{clip}` is stretched by {delta} frames")).with_data(
-            serde_json::json!({
-                "id": clip,
-                "edge": edge,
-                "delta": delta,
-                "speed": speed,
-                "clips": stretched,
-                "group": members,
-            }),
-        ))
-    }
 }
 
 /// The **plan** of one clip that is stretched: where it starts, how

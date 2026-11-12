@@ -11,7 +11,7 @@
 //! The rate is a **fact**, and the length of a sequence in **seconds**
 //! is **derived**: it is the length in frames and the rate.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
@@ -141,70 +141,80 @@ fn the_sequence<'a>(
     Ok(found)
 }
 
-/// **Set** the rate of a sequence.
-///
-/// The rate is a number of frames in a second, and it may be the
-/// tree's own name — `25`, `23.976` — or the fraction behind it,
-/// `30000/1001`.
-#[derive(Command)]
-#[command(id = "film.sequence.rate.set", area = "film", layer = "film", icon = "clock", mutates, undoable)]
-pub struct SetRate {
-    /// The sequence.
-    pub sequence: NodeRef,
-    /// The rate: `25`, `23.976` or `30000/1001`.
-    pub rate: Text,
-}
+commands! {
+    /// **Set** the rate of a sequence.
+    ///
+    /// The rate is a number of frames in a second, and it may be the
+    /// tree's own name — `25`, `23.976` — or the fraction behind it,
+    /// `30000/1001`.
+    film.sequence.rate.set {
+        area: "film",
+        layer: "film",
+        icon: "clock",
+        mutates,
+        undoable,
+        params: {
+            /// The sequence.
 
-impl SetRate {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.sequence.rate.set".to_string();
-        let sequence = self.sequence.0;
-        the_sequence(session, &id, sequence)?;
-        let (num, den) =
-            rate_of(&self.rate.0).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
-        let rate = json!({ "num": num, "den": den });
-        let Some(node) = session.document_mut()?.node_mut(sequence) else {
-            return Err(EngineError::Failed { id, message: format!("there is no sequence `{sequence}`") });
-        };
-        node.data["rate"] = rate.clone();
-        Ok(Outcome::changed(format!("the sequence `{sequence}` runs at {num}/{den}"))
-            .with_data(json!({ "sequence": sequence, "rate": rate })))
+            sequence: NodeRef,
+            /// The rate: `25`, `23.976` or `30000/1001`.
+
+            rate: Text,
+        },
+        run: {
+
+            let id = "film.sequence.rate.set".to_string();
+            let sequence = self.sequence.0;
+            the_sequence(session, &id, sequence)?;
+            let (num, den) =
+                rate_of(&self.rate.0).map_err(|message| EngineError::Failed { id: id.clone(), message })?;
+            let rate = json!({ "num": num, "den": den });
+            let Some(node) = session.document_mut()?.node_mut(sequence) else {
+                return Err(EngineError::Failed { id, message: format!("there is no sequence `{sequence}`") });
+            };
+            node.data["rate"] = rate.clone();
+            Ok(Outcome::changed(format!("the sequence `{sequence}` runs at {num}/{den}"))
+                .with_data(json!({ "sequence": sequence, "rate": rate })))
+
+        }
     }
-}
+    /// **Read** the rate of a sequence.
+    ///
+    /// The answer is the rate, the length of the sequence in **frames** and
+    /// its length in **seconds**. The lengths are **derived**, and a
+    /// sequence with no rate has no length in seconds.
+    film.sequence.rate.get {
+        area: "film",
+        layer: "film",
+        icon: "list",
+        params: {
+            /// The sequence.
 
-/// **Read** the rate of a sequence.
-///
-/// The answer is the rate, the length of the sequence in **frames** and
-/// its length in **seconds**. The lengths are **derived**, and a
-/// sequence with no rate has no length in seconds.
-#[derive(Command)]
-#[command(id = "film.sequence.rate.get", area = "film", layer = "film", icon = "list")]
-pub struct GetRate {
-    /// The sequence.
-    pub sequence: NodeRef,
-}
+            sequence: NodeRef,
+        },
+        run: {
 
-impl GetRate {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.sequence.rate.get".to_string();
-        let sequence = self.sequence.0;
-        let node = the_sequence(session, &id, sequence)?;
-        let rate = node.data.get("rate").cloned().unwrap_or(Json::Null);
-        let frames = length_in_frames(node);
-        // The length in **seconds**: the frames and the rate.
-        let seconds = match rate
-            .get("num")
-            .and_then(|num| num.as_i64())
-            .zip(rate.get("den").and_then(|den| den.as_i64()))
-        {
-            Some((num, den)) if num > 0 => Json::from(frames as f64 * den as f64 / num as f64),
-            _ => Json::Null,
-        };
-        Ok(Outcome::new(format!("the sequence `{sequence}`")).with_data(json!({
-            "sequence": sequence,
-            "rate": rate,
-            "frames": frames,
-            "seconds": seconds,
-        })))
+            let id = "film.sequence.rate.get".to_string();
+            let sequence = self.sequence.0;
+            let node = the_sequence(session, &id, sequence)?;
+            let rate = node.data.get("rate").cloned().unwrap_or(Json::Null);
+            let frames = length_in_frames(node);
+            // The length in **seconds**: the frames and the rate.
+            let seconds = match rate
+                .get("num")
+                .and_then(|num| num.as_i64())
+                .zip(rate.get("den").and_then(|den| den.as_i64()))
+            {
+                Some((num, den)) if num > 0 => Json::from(frames as f64 * den as f64 / num as f64),
+                _ => Json::Null,
+            };
+            Ok(Outcome::new(format!("the sequence `{sequence}`")).with_data(json!({
+                "sequence": sequence,
+                "rate": rate,
+                "frames": frames,
+                "seconds": seconds,
+            })))
+
+        }
     }
 }

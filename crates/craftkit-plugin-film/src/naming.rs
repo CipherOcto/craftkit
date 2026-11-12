@@ -24,10 +24,10 @@
 //!   name is therefore a fact and a derivation, and the payload says
 //!   which one it is.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
 /// The name a clip has been **given**, if it has one.
 pub fn given_name(data: &serde_json::Value) -> Option<String> {
@@ -37,44 +37,52 @@ pub fn given_name(data: &serde_json::Value) -> Option<String> {
         .map(|name| name.to_string())
 }
 
-/// **Name** a clip.
-///
-/// The name is the clip's own, and it survives the clip being moved.
-#[derive(Command)]
-#[command(id = "film.clip.rename", area = "film", layer = "film", icon = "pencil", mutates, undoable)]
-pub struct RenameClip {
-    /// The clip.
-    pub clip: NodeRef,
-    /// What to call it.
-    pub name: Text,
-}
+commands! {
+    /// **Name** a clip.
+    ///
+    /// The name is the clip's own, and it survives the clip being moved.
+    film.clip.rename {
+        area: "film",
+        layer: "film",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The clip.
 
-impl RenameClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.clip.rename".to_string();
-        let clip = self.clip.0;
-        let Some(node) = session.document().node(clip) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip}`"),
-            });
-        };
-        if node.kind != "film.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-            });
+            clip: NodeRef,
+            /// What to call it.
+
+            name: Text,
+        },
+        run: {
+
+            let id = "film.clip.rename".to_string();
+            let clip = self.clip.0;
+            let Some(node) = session.document().node(clip) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip}`"),
+                });
+            };
+            if node.kind != "film.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a clip has a name".to_string() });
+            }
+            let start = node.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
+            if let Some(node) = session.document_mut()?.node_mut(clip) {
+                node.data["name"] = serde_json::json!(name);
+                crate::set_clip_name(node, start);
+            }
+            Ok(Outcome::changed(format!("the clip `{clip}` is called `{name}`"))
+                .with_data(serde_json::json!({ "clip": clip, "name": name })))
+
         }
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a clip has a name".to_string() });
-        }
-        let start = node.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
-        if let Some(node) = session.document_mut()?.node_mut(clip) {
-            node.data["name"] = serde_json::json!(name);
-            crate::set_clip_name(node, start);
-        }
-        Ok(Outcome::changed(format!("the clip `{clip}` is called `{name}`"))
-            .with_data(serde_json::json!({ "clip": clip, "name": name })))
     }
 }

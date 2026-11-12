@@ -21,7 +21,7 @@
 //! - **The tree clamps the delta** of a copy so that the copy is not
 //!   before the start of the sequence. Here such a copy is **refused**.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session};
@@ -66,110 +66,122 @@ fn the_track<'a>(session: &'a Session, command: &str, track: u64) -> Result<&'a 
     Ok(node)
 }
 
-/// **Duplicate** a cue: the copy stands by the delta that is given.
-///
-/// The copy is never before the start of the sequence, and a copy that
-/// would be is refused.
-#[derive(Command)]
-#[command(id = "film.caption.duplicate", area = "film", layer = "film", icon = "copy", mutates, undoable)]
-pub struct DuplicateCaption {
-    /// The cue.
-    pub caption: NodeRef,
-    /// The frames to stand it by.
-    pub delta: Number,
-}
+commands! {
+    /// **Duplicate** a cue: the copy stands by the delta that is given.
+    ///
+    /// The copy is never before the start of the sequence, and a copy that
+    /// would be is refused.
+    film.caption.duplicate {
+        area: "film",
+        layer: "film",
+        icon: "copy",
+        mutates,
+        undoable,
+        params: {
+            /// The cue.
 
-impl DuplicateCaption {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "film.caption.duplicate";
-        let caption = self.caption.0;
-        let (node, track) = the_caption(session, command, caption)?;
-        let start = node.data.get("start").and_then(|start| start.as_i64()).unwrap_or(0);
-        let end = node.data.get("end").and_then(|end| end.as_i64()).unwrap_or(0);
-        let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
-        let speaker =
-            node.data.get("speaker").and_then(|speaker| speaker.as_str()).map(|speaker| speaker.to_string());
-        let delta = self.delta.0;
-        if !delta.is_finite() || delta.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("a delta is a whole number of frames: {delta} is not one"),
-            });
-        }
-        let delta = delta as i64;
-        if delta == 0 {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: "a copy of nothing is nothing".to_string(),
-            });
-        }
-        if start + delta < 0 {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!(
-                    "the copy may not stand before the start of the sequence: {delta} is too far"
-                ),
-            });
-        }
-        let (new_start, new_end) = (start + delta, end + delta);
-        // The **overlap**: the cues of a track never overlap, and the
-        // tree writes its copies over what is there. Here a copy that
-        // runs into another cue is refused.
-        if let Some(track_node) = session.document().node(track) {
-            for child in track_node.children.iter().filter(|child| child.kind == "film.caption") {
-                if child.id == caption {
-                    continue;
-                }
-                let other_start = child.data.get("start").and_then(|start| start.as_i64()).unwrap_or(0);
-                let other_end = child.data.get("end").and_then(|end| end.as_i64()).unwrap_or(0);
-                if new_start < other_end && other_start < new_end {
-                    return Err(EngineError::Failed {
-                        id: command.to_string(),
-                        message: format!(
-                            "the copy from {new_start} to {new_end} overlaps a cue of the track"
-                        ),
-                    });
+            caption: NodeRef,
+            /// The frames to stand it by.
+
+            delta: Number,
+        },
+        run: {
+
+            let command = "film.caption.duplicate";
+            let caption = self.caption.0;
+            let (node, track) = the_caption(session, command, caption)?;
+            let start = node.data.get("start").and_then(|start| start.as_i64()).unwrap_or(0);
+            let end = node.data.get("end").and_then(|end| end.as_i64()).unwrap_or(0);
+            let text = node.data.get("text").and_then(|text| text.as_str()).unwrap_or_default().to_string();
+            let speaker =
+                node.data.get("speaker").and_then(|speaker| speaker.as_str()).map(|speaker| speaker.to_string());
+            let delta = self.delta.0;
+            if !delta.is_finite() || delta.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("a delta is a whole number of frames: {delta} is not one"),
+                });
+            }
+            let delta = delta as i64;
+            if delta == 0 {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: "a copy of nothing is nothing".to_string(),
+                });
+            }
+            if start + delta < 0 {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!(
+                        "the copy may not stand before the start of the sequence: {delta} is too far"
+                    ),
+                });
+            }
+            let (new_start, new_end) = (start + delta, end + delta);
+            // The **overlap**: the cues of a track never overlap, and the
+            // tree writes its copies over what is there. Here a copy that
+            // runs into another cue is refused.
+            if let Some(track_node) = session.document().node(track) {
+                for child in track_node.children.iter().filter(|child| child.kind == "film.caption") {
+                    if child.id == caption {
+                        continue;
+                    }
+                    let other_start = child.data.get("start").and_then(|start| start.as_i64()).unwrap_or(0);
+                    let other_end = child.data.get("end").and_then(|end| end.as_i64()).unwrap_or(0);
+                    if new_start < other_end && other_start < new_end {
+                        return Err(EngineError::Failed {
+                            id: command.to_string(),
+                            message: format!(
+                                "the copy from {new_start} to {new_end} overlaps a cue of the track"
+                            ),
+                        });
+                    }
                 }
             }
+            let mut data = json!({ "start": new_start, "end": new_end, "text": text });
+            if let Some(speaker) = speaker {
+                data["speaker"] = json!(speaker);
+            }
+            let id = session.document_mut()?.add_node_with_under(
+                Some(track),
+                format!("{new_start}–{new_end}"),
+                "film.caption",
+                None,
+                data,
+            );
+            Ok(Outcome::changed(format!("the cue `{caption}` is copied into `{id}`")).with_data(json!({
+                "caption": caption,
+                "copy": id,
+                "start": new_start,
+                "end": new_end,
+            })))
+
         }
-        let mut data = json!({ "start": new_start, "end": new_end, "text": text });
-        if let Some(speaker) = speaker {
-            data["speaker"] = json!(speaker);
-        }
-        let id = session.document_mut()?.add_node_with_under(
-            Some(track),
-            format!("{new_start}–{new_end}"),
-            "film.caption",
-            None,
-            data,
-        );
-        Ok(Outcome::changed(format!("the cue `{caption}` is copied into `{id}`")).with_data(json!({
-            "caption": caption,
-            "copy": id,
-            "start": new_start,
-            "end": new_end,
-        })))
     }
-}
+    /// **Delete** a caption track, and its cues go with it.
+    film.caption.track.delete {
+        area: "film",
+        layer: "film",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The caption track.
 
-/// **Delete** a caption track, and its cues go with it.
-#[derive(Command)]
-#[command(id = "film.caption.track.delete", area = "film", layer = "film", icon = "minus", mutates, undoable)]
-pub struct DeleteCaptionTrack {
-    /// The caption track.
-    pub track: NodeRef,
-}
+            track: NodeRef,
+        },
+        run: {
 
-impl DeleteCaptionTrack {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "film.caption.track.delete";
-        let track = self.track.0;
-        let node = the_track(session, command, track)?;
-        let cues = node.children.iter().filter(|child| child.kind == "film.caption").count();
-        session.document_mut()?.remove_node(track);
-        Ok(Outcome::changed(format!("the caption track `{track}` is gone")).with_data(json!({
-            "track": track,
-            "cues": cues,
-        })))
+            let command = "film.caption.track.delete";
+            let track = self.track.0;
+            let node = the_track(session, command, track)?;
+            let cues = node.children.iter().filter(|child| child.kind == "film.caption").count();
+            session.document_mut()?.remove_node(track);
+            Ok(Outcome::changed(format!("the caption track `{track}` is gone")).with_data(json!({
+                "track": track,
+                "cues": cues,
+            })))
+
+        }
     }
 }

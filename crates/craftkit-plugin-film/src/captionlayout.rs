@@ -40,7 +40,7 @@
 //!   sixty-four pixels, and the box grows by that much and one;
 //! - a caption with **no words** has no place, and it is **refused**.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_font::{Font, Metrics};
 use craftkit_sdk::serde_json::{Value as Json, json};
@@ -304,47 +304,56 @@ pub fn placement(
     })
 }
 
-/// **Lay** a **caption** out on a frame of a given size.
-///
-/// The tree's own: the size of the letters is relative to a frame of
-/// a thousand and eighty lines, the lines are wrapped at ninety per
-/// cent of the width of the frame, and the block of them hangs from
-/// the anchor of the style.
-#[derive(Command)]
-#[command(id = "film.caption.layout", area = "film", layer = "film", icon = "list")]
-pub struct LayoutCaption {
-    /// The text of the caption.
-    pub text: Text,
-    /// The caption track that holds the style; the tree's own style
-    /// when it is not said.
-    pub track: Option<NodeRef>,
-    /// The width of the frame.
-    pub width: Number,
-    /// The height of the frame.
-    pub height: Number,
-    /// The settings of the cue: `line:50% align:center`.
-    pub settings: Option<Text>,
-}
+commands! {
+    /// **Lay** a **caption** out on a frame of a given size.
+    ///
+    /// The tree's own: the size of the letters is relative to a frame of
+    /// a thousand and eighty lines, the lines are wrapped at ninety per
+    /// cent of the width of the frame, and the block of them hangs from
+    /// the anchor of the style.
+    film.caption.layout {
+        area: "film",
+        layer: "film",
+        icon: "list",
+        params: {
+            /// The text of the caption.
 
-impl LayoutCaption {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let style = style_of(session, self.track)?;
-        let settings = self.settings.as_ref().map(|text| text.0.clone()).unwrap_or_default();
-        let laid = placement(&self.text.0, &style, &settings, self.width.0, self.height.0)
-            .map_err(|message| EngineError::Failed { id: COMMAND.to_string(), message })?;
-        Ok(Outcome::new("the caption is laid out on the frame".to_string()).with_data(json!({
-            "lines": laid.lines,
-            "widths": laid.widths,
-            "x": laid.x,
-            "size": laid.size,
-            "line_height": laid.line_height,
-            "top": laid.top,
-            "align": laid.align,
-            "anchor": laid.anchor,
-            "margin": laid.margin,
-            "outline": laid.outline,
-            "box": laid.extent,
-            "frame": [self.width.0, self.height.0],
-        })))
+            text: Text,
+            /// The caption track that holds the style; the tree's own style
+            /// when it is not said.
+
+            track: Option<NodeRef>,
+            /// The width of the frame.
+
+            width: Number,
+            /// The height of the frame.
+
+            height: Number,
+            /// The settings of the cue: `line:50% align:center`.
+
+            settings: Option<Text>,
+        },
+        run: {
+
+            let style = style_of(session, self.track)?;
+            let settings = self.settings.as_ref().map(|text| text.0.clone()).unwrap_or_default();
+            let laid = placement(&self.text.0, &style, &settings, self.width.0, self.height.0)
+                .map_err(|message| EngineError::Failed { id: COMMAND.to_string(), message })?;
+            Ok(Outcome::new("the caption is laid out on the frame".to_string()).with_data(json!({
+                "lines": laid.lines,
+                "widths": laid.widths,
+                "x": laid.x,
+                "size": laid.size,
+                "line_height": laid.line_height,
+                "top": laid.top,
+                "align": laid.align,
+                "anchor": laid.anchor,
+                "margin": laid.margin,
+                "outline": laid.outline,
+                "box": laid.extent,
+                "frame": [self.width.0, self.height.0],
+            })))
+
+        }
     }
 }

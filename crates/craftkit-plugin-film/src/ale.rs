@@ -47,10 +47,10 @@
 //!   defaults for a media it knows nothing about — and the `FPS` is
 //!   the rate of the sequence.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, Node, NodeRef, Outcome};
 
 /// The **tracks** of a sequence.
 fn tracks_of(sequence: &Node) -> Vec<std::sync::Arc<Node>> {
@@ -136,77 +136,82 @@ fn clean(text: &str) -> String {
     text.replace(['\t', '\r', '\n'], " ")
 }
 
-/// **Write** the Avid log exchange of a sequence.
-///
-/// The log is derived from the sequence as it is now, and it is
-/// returned as a text.
-#[derive(Command)]
-#[command(id = "film.export.ale", area = "film", layer = "film", icon = "list")]
-pub struct ExportAle {
-    /// The sequence.
-    pub sequence: NodeRef,
-}
+commands! {
+    /// **Write** the Avid log exchange of a sequence.
+    ///
+    /// The log is derived from the sequence as it is now, and it is
+    /// returned as a text.
+    film.export.ale {
+        area: "film",
+        layer: "film",
+        icon: "list",
+        params: {
+            /// The sequence.
 
-impl ExportAle {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.export.ale".to_string();
-        let sequence = self.sequence.0;
-        let Some(node) = session.document().node(sequence) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no sequence `{sequence}`"),
-            });
-        };
-        if node.kind != "film.item" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sequence}` is a `{}` and not a sequence", node.kind),
-            });
-        }
-        let (num, den) = rate_of(node);
-        let per_second = ((num as f64 / den as f64).round() as u64).max(1);
-        let mut out = String::from("Heading\r\n");
-        out.push_str("FIELD_DELIM\tTABS\r\n");
-        // The tree probes the media and says what it finds; this tree
-        // knows neither the height nor the rate of the audio, and the
-        // tree's own defaults are said.
-        out.push_str("VIDEO_FORMAT\t1080\r\n");
-        out.push_str("AUDIO_FORMAT\t48khz\r\n");
-        out.push_str(&format!("FPS\t{}\r\n", fps_text((num, den))));
-        out.push_str("\r\nColumn\r\n");
-        out.push_str("Name\tTracks\tStart\tEnd\tTape\tSource File\r\n");
-        out.push_str("\r\nData\r\n");
-        let tracks = tracks_of(node);
-        // The **audio** tracks are numbered: `A1`, `A2` and so on.
-        let mut audio = 0u32;
-        for track in &tracks {
-            if is_audio(track) {
-                audio += 1;
+            sequence: NodeRef,
+        },
+        run: {
+
+            let id = "film.export.ale".to_string();
+            let sequence = self.sequence.0;
+            let Some(node) = session.document().node(sequence) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no sequence `{sequence}`"),
+                });
+            };
+            if node.kind != "film.item" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sequence}` is a `{}` and not a sequence", node.kind),
+                });
             }
-            for clip in clips_of(track) {
-                // A clip with **no item** plays no media, and the log
-                // holds media.
-                let Some(item) = item_of(session.document(), clip.id) else { continue };
-                let source_in = clip.data.get("source_in").and_then(|source| source.as_u64()).unwrap_or(0);
-                let duration = clip.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
-                let tracks_column = if is_audio(track) { format!("A{audio}") } else { "V".to_string() };
-                let path =
-                    item.data.get("path").and_then(|path| path.as_str()).unwrap_or_default().to_string();
-                let row = [
-                    clean(&item.name),
-                    tracks_column,
-                    timecode(source_in, per_second),
-                    timecode(source_in + duration, per_second),
-                    reel_of(&item.name),
-                    clean(&path),
-                ];
-                out.push_str(&row.join("\t"));
-                out.push_str("\r\n");
+            let (num, den) = rate_of(node);
+            let per_second = ((num as f64 / den as f64).round() as u64).max(1);
+            let mut out = String::from("Heading\r\n");
+            out.push_str("FIELD_DELIM\tTABS\r\n");
+            // The tree probes the media and says what it finds; this tree
+            // knows neither the height nor the rate of the audio, and the
+            // tree's own defaults are said.
+            out.push_str("VIDEO_FORMAT\t1080\r\n");
+            out.push_str("AUDIO_FORMAT\t48khz\r\n");
+            out.push_str(&format!("FPS\t{}\r\n", fps_text((num, den))));
+            out.push_str("\r\nColumn\r\n");
+            out.push_str("Name\tTracks\tStart\tEnd\tTape\tSource File\r\n");
+            out.push_str("\r\nData\r\n");
+            let tracks = tracks_of(node);
+            // The **audio** tracks are numbered: `A1`, `A2` and so on.
+            let mut audio = 0u32;
+            for track in &tracks {
+                if is_audio(track) {
+                    audio += 1;
+                }
+                for clip in clips_of(track) {
+                    // A clip with **no item** plays no media, and the log
+                    // holds media.
+                    let Some(item) = item_of(session.document(), clip.id) else { continue };
+                    let source_in = clip.data.get("source_in").and_then(|source| source.as_u64()).unwrap_or(0);
+                    let duration = clip.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
+                    let tracks_column = if is_audio(track) { format!("A{audio}") } else { "V".to_string() };
+                    let path =
+                        item.data.get("path").and_then(|path| path.as_str()).unwrap_or_default().to_string();
+                    let row = [
+                        clean(&item.name),
+                        tracks_column,
+                        timecode(source_in, per_second),
+                        timecode(source_in + duration, per_second),
+                        reel_of(&item.name),
+                        clean(&path),
+                    ];
+                    out.push_str(&row.join("\t"));
+                    out.push_str("\r\n");
+                }
             }
+            Ok(Outcome::new(format!("the sequence `{sequence}` has an Avid log")).with_data(json!({
+                "sequence": sequence,
+                "ale": out,
+            })))
+
         }
-        Ok(Outcome::new(format!("the sequence `{sequence}` has an Avid log")).with_data(json!({
-            "sequence": sequence,
-            "ale": out,
-        })))
     }
 }

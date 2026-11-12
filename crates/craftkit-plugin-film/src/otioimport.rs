@@ -36,7 +36,7 @@
 //!   not read. Only the timeline, the tracks, the clips, the media,
 //!   the transitions and the markers are.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{self, Value as Json, json};
 use craftkit_sdk::{EngineError, Outcome, Relation, Session, Text};
@@ -412,139 +412,147 @@ impl Reader<'_> {
     }
 }
 
-/// **Read** an OTIO file and make the **sequence** it names.
-///
-/// The media of the file are items, and the clips of its tracks are
-/// clips on the tracks of the sequence.
-#[derive(Command)]
-#[command(id = "film.import.otio", area = "film", layer = "film", icon = "plus", mutates, undoable)]
-pub struct ImportOtio {
-    /// The file to read.
-    pub path: Text,
-    /// What to call the sequence.
+commands! {
+    /// **Read** an OTIO file and make the **sequence** it names.
     ///
-    /// Without it, the name of the file.
-    pub name: Option<Text>,
-}
+    /// The media of the file are items, and the clips of its tracks are
+    /// clips on the tracks of the sequence.
+    film.import.otio {
+        area: "film",
+        layer: "film",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The file to read.
 
-impl ImportOtio {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.import.otio".to_string();
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
-        }
-        let bytes =
-            craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(|message| {
-                EngineError::Failed { id: id.clone(), message: format!("the file cannot be read: {message}") }
-            })?;
-        let text: Json = serde_json::from_slice(&bytes).map_err(|_| EngineError::Failed {
-            id: id.clone(),
-            message: "the file is not OTIO: it is not a JSON text".to_string(),
-        })?;
-        let Some(timeline) = timeline_of(&text) else {
-            return Err(EngineError::Failed {
+            path: Text,
+            /// What to call the sequence.
+            ///
+            /// Without it, the name of the file.
+
+            name: Option<Text>,
+        },
+        run: {
+
+            let id = "film.import.otio".to_string();
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
+            }
+            let bytes =
+                craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(|message| {
+                    EngineError::Failed { id: id.clone(), message: format!("the file cannot be read: {message}") }
+                })?;
+            let text: Json = serde_json::from_slice(&bytes).map_err(|_| EngineError::Failed {
                 id: id.clone(),
-                message: format!(
-                    "the file is not OTIO: there is no timeline in a `{}` document",
-                    schema_of(&text)
-                ),
-            });
-        };
-        // The **rate**: the timeline's own, or the first time in it.
-        let rate = timeline
-            .get("global_start_time")
-            .and_then(|time| time.get("rate"))
-            .and_then(|rate| rate.as_f64())
-            .or_else(|| stack_of(timeline).and_then(first_rate))
-            .map(crate::rates::rate_from_float)
-            .unwrap_or((25, 1));
-        // The **name** of the sequence.
-        let name = match &self.name {
-            Some(name) if !name.0.trim().is_empty() => name.0.trim().to_string(),
-            _ => {
-                let from_file = std::path::Path::new(&path)
-                    .file_stem()
-                    .map(|stem| stem.to_string_lossy().to_string())
-                    .unwrap_or_default();
-                if from_file.is_empty() { name_of(timeline).to_string() } else { from_file }
-            }
-        };
-        // The **bin** the media goes in, and the **sequence**.
-        let bin = session.document_mut()?.add_node_under(None, format!("{name} media"), "film.bin", None);
-        // The **bin** the sequence goes in: a sequence is not a media.
-        let sequences =
-            session.document_mut()?.add_node_under(None, format!("{name} sequences"), "film.bin", None);
-        let sequence = session.document_mut()?.add_node_with_under(
-            Some(sequences),
-            name.clone(),
-            "film.item",
-            None,
-            json!({
-                "item": 0,
-                "path": Json::Null,
-                "duration": 0,
-                "offline": false,
-                "rate": { "num": rate.0, "den": rate.1 },
-            }),
-        );
-        let mut reader = Reader {
-            session,
-            bin,
-            number: 0,
-            clips: 0,
-            said: Vec::new(),
-            base: crate::paths::folder_of(&path),
-        };
-        let mut end = 0u64;
-        let mut tracks = 0usize;
-        if let Some(stack) = stack_of(timeline)
-            && let Some(children) = stack.get("children").and_then(|children| children.as_array())
-        {
-            for child in children {
-                if schema_of(child) != "Track" {
-                    continue;
+                message: "the file is not OTIO: it is not a JSON text".to_string(),
+            })?;
+            let Some(timeline) = timeline_of(&text) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the file is not OTIO: there is no timeline in a `{}` document",
+                        schema_of(&text)
+                    ),
+                });
+            };
+            // The **rate**: the timeline's own, or the first time in it.
+            let rate = timeline
+                .get("global_start_time")
+                .and_then(|time| time.get("rate"))
+                .and_then(|rate| rate.as_f64())
+                .or_else(|| stack_of(timeline).and_then(first_rate))
+                .map(crate::rates::rate_from_float)
+                .unwrap_or((25, 1));
+            // The **name** of the sequence.
+            let name = match &self.name {
+                Some(name) if !name.0.trim().is_empty() => name.0.trim().to_string(),
+                _ => {
+                    let from_file = std::path::Path::new(&path)
+                        .file_stem()
+                        .map(|stem| stem.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    if from_file.is_empty() { name_of(timeline).to_string() } else { from_file }
                 }
-                let kind = match child.get("kind").and_then(|kind| kind.as_str()) {
-                    Some("Audio") => "audio",
-                    _ => "video",
-                };
-                let track_name = name_of(child);
-                let track = reader.node(
-                    Some(sequence),
-                    if track_name.is_empty() { "the track".to_string() } else { track_name.to_string() },
-                    "film.track",
-                    json!({ "kind": kind }),
-                )?;
-                tracks += 1;
-                // The **markers** of the track are markers of the
-                // sequence.
-                reader.markers(child, sequence)?;
-                let length = reader.track_children(child.get("children").unwrap_or(&Json::Null), track)?;
-                end = end.max(length);
+            };
+            // The **bin** the media goes in, and the **sequence**.
+            let bin = session.document_mut()?.add_node_under(None, format!("{name} media"), "film.bin", None);
+            // The **bin** the sequence goes in: a sequence is not a media.
+            let sequences =
+                session.document_mut()?.add_node_under(None, format!("{name} sequences"), "film.bin", None);
+            let sequence = session.document_mut()?.add_node_with_under(
+                Some(sequences),
+                name.clone(),
+                "film.item",
+                None,
+                json!({
+                    "item": 0,
+                    "path": Json::Null,
+                    "duration": 0,
+                    "offline": false,
+                    "rate": { "num": rate.0, "den": rate.1 },
+                }),
+            );
+            let mut reader = Reader {
+                session,
+                bin,
+                number: 0,
+                clips: 0,
+                said: Vec::new(),
+                base: crate::paths::folder_of(&path),
+            };
+            let mut end = 0u64;
+            let mut tracks = 0usize;
+            if let Some(stack) = stack_of(timeline)
+                && let Some(children) = stack.get("children").and_then(|children| children.as_array())
+            {
+                for child in children {
+                    if schema_of(child) != "Track" {
+                        continue;
+                    }
+                    let kind = match child.get("kind").and_then(|kind| kind.as_str()) {
+                        Some("Audio") => "audio",
+                        _ => "video",
+                    };
+                    let track_name = name_of(child);
+                    let track = reader.node(
+                        Some(sequence),
+                        if track_name.is_empty() { "the track".to_string() } else { track_name.to_string() },
+                        "film.track",
+                        json!({ "kind": kind }),
+                    )?;
+                    tracks += 1;
+                    // The **markers** of the track are markers of the
+                    // sequence.
+                    reader.markers(child, sequence)?;
+                    let length = reader.track_children(child.get("children").unwrap_or(&Json::Null), track)?;
+                    end = end.max(length);
+                }
+                // The **markers** of the stack of the tracks are markers of
+                // the sequence too.
+                reader.markers(stack, sequence)?;
             }
-            // The **markers** of the stack of the tracks are markers of
-            // the sequence too.
-            reader.markers(stack, sequence)?;
+            // The **length** of the sequence is what its tracks hold.
+            if let Some(node) =
+                reader.session.document_mut().ok().and_then(|document| document.node_mut(sequence))
+            {
+                node.data["duration"] = Json::from(end);
+            }
+            let said = reader.said.clone();
+            let clips = reader.clips;
+            Ok(Outcome::changed(format!("the timeline of `{path}` made {tracks} track(s) and {clips} clip(s)"))
+                .with_data(json!({
+                    "path": path,
+                    "bin": bin,
+                    "sequence_bin": sequences,
+                    "sequence": sequence,
+                    "tracks": tracks,
+                    "clips": clips,
+                    "rate": { "num": rate.0, "den": rate.1 },
+                    "left_out": said,
+                })))
+
         }
-        // The **length** of the sequence is what its tracks hold.
-        if let Some(node) =
-            reader.session.document_mut().ok().and_then(|document| document.node_mut(sequence))
-        {
-            node.data["duration"] = Json::from(end);
-        }
-        let said = reader.said.clone();
-        let clips = reader.clips;
-        Ok(Outcome::changed(format!("the timeline of `{path}` made {tracks} track(s) and {clips} clip(s)"))
-            .with_data(json!({
-                "path": path,
-                "bin": bin,
-                "sequence_bin": sequences,
-                "sequence": sequence,
-                "tracks": tracks,
-                "clips": clips,
-                "rate": { "num": rate.0, "den": rate.1 },
-                "left_out": said,
-            })))
     }
 }

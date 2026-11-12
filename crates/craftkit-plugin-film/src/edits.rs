@@ -18,7 +18,7 @@
 //! the clip under the playhead — the same command and the same edit
 //! (the module `splitting`).
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
@@ -66,31 +66,112 @@ fn the_sequence<'a>(
     Ok(found)
 }
 
-/// **Go to** the next edit point of a sequence.
-#[derive(Command)]
-#[command(id = "film.playhead.nextedit", area = "film", layer = "film", icon = "next", mutates, undoable)]
-pub struct NextEdit {
-    /// The sequence.
-    pub sequence: NodeRef,
-}
+commands! {
+    /// **Go to** the next edit point of a sequence.
+    film.playhead.nextedit {
+        area: "film",
+        layer: "film",
+        icon: "next",
+        mutates,
+        undoable,
+        params: {
+            /// The sequence.
 
-impl NextEdit {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        go_to_edit(session, "film.playhead.nextedit", self.sequence.0, true)
+            sequence: NodeRef,
+        },
+        run: {
+
+            go_to_edit(session, "film.playhead.nextedit", self.sequence.0, true)
+
+        }
     }
-}
+    /// **Go to** the previous edit point of a sequence.
+    film.playhead.prevedit {
+        area: "film",
+        layer: "film",
+        icon: "previous",
+        mutates,
+        undoable,
+        params: {
+            /// The sequence.
 
-/// **Go to** the previous edit point of a sequence.
-#[derive(Command)]
-#[command(id = "film.playhead.prevedit", area = "film", layer = "film", icon = "previous", mutates, undoable)]
-pub struct PrevEdit {
-    /// The sequence.
-    pub sequence: NodeRef,
-}
+            sequence: NodeRef,
+        },
+        run: {
 
-impl PrevEdit {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        go_to_edit(session, "film.playhead.prevedit", self.sequence.0, false)
+            go_to_edit(session, "film.playhead.prevedit", self.sequence.0, false)
+
+        }
+    }
+    /// **Cut** the clip that is under the playhead with the **razor**.
+    film.timeline.razor {
+        area: "film",
+        layer: "film",
+        icon: "razor",
+        mutates,
+        undoable,
+        params: {
+            /// The sequence.
+
+            sequence: NodeRef,
+            /// The track the clip is on.
+
+            track: NodeRef,
+            /// The frame to cut at. The playhead of the sequence when it is
+            /// not said.
+
+            at: Option<Number>,
+        },
+        run: {
+
+            let id = "film.timeline.razor".to_string();
+            let sequence = self.sequence.0;
+            let track = self.track.0;
+            let node = the_sequence(session, &id, sequence)?;
+            let at = match self.at {
+                Some(at) => at.0,
+                None => crate::playhead::playhead_of(node) as f64,
+            };
+            if !at.is_finite() || at.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a number of frames is a whole number".to_string(),
+                });
+            }
+            let at = at as u64;
+            // The **track**: a child of the sequence.
+            let Some(track_node) = node.children.iter().find(|child| child.id == track) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("there is no track `{track}` in the sequence `{sequence}`"),
+                });
+            };
+            if track_node.kind != "film.track" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{track}` is a `{}` and not a track", track_node.kind),
+                });
+            }
+            // The **clip** that is under the place.
+            let clip = track_node.children.iter().find(|child| {
+                child.kind == "film.clip"
+                    && child.data.get("start").and_then(|start| start.as_u64()).is_some_and(|start| {
+                        child
+                            .data
+                            .get("duration")
+                            .and_then(|duration| duration.as_u64())
+                            .is_some_and(|duration| start <= at && at < start + duration)
+                    })
+            });
+            let Some(clip) = clip.map(|clip| clip.id) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("there is no clip at frame {at} on the track `{track}`"),
+                });
+            };
+            crate::splitting::split_at(session, &id, clip, at as f64)
+
+        }
     }
 }
 
@@ -116,68 +197,4 @@ fn go_to_edit(session: &mut Session, id: &str, sequence: u64, forward: bool) -> 
     node.data["playhead"] = json!(frame);
     Ok(Outcome::changed(format!("the playhead is at frame {frame}"))
         .with_data(json!({ "sequence": sequence, "frame": frame })))
-}
-
-/// **Cut** the clip that is under the playhead with the **razor**.
-#[derive(Command)]
-#[command(id = "film.timeline.razor", area = "film", layer = "film", icon = "razor", mutates, undoable)]
-pub struct Razor {
-    /// The sequence.
-    pub sequence: NodeRef,
-    /// The track the clip is on.
-    pub track: NodeRef,
-    /// The frame to cut at. The playhead of the sequence when it is
-    /// not said.
-    pub at: Option<Number>,
-}
-
-impl Razor {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.timeline.razor".to_string();
-        let sequence = self.sequence.0;
-        let track = self.track.0;
-        let node = the_sequence(session, &id, sequence)?;
-        let at = match self.at {
-            Some(at) => at.0,
-            None => crate::playhead::playhead_of(node) as f64,
-        };
-        if !at.is_finite() || at.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "a number of frames is a whole number".to_string(),
-            });
-        }
-        let at = at as u64;
-        // The **track**: a child of the sequence.
-        let Some(track_node) = node.children.iter().find(|child| child.id == track) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("there is no track `{track}` in the sequence `{sequence}`"),
-            });
-        };
-        if track_node.kind != "film.track" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{track}` is a `{}` and not a track", track_node.kind),
-            });
-        }
-        // The **clip** that is under the place.
-        let clip = track_node.children.iter().find(|child| {
-            child.kind == "film.clip"
-                && child.data.get("start").and_then(|start| start.as_u64()).is_some_and(|start| {
-                    child
-                        .data
-                        .get("duration")
-                        .and_then(|duration| duration.as_u64())
-                        .is_some_and(|duration| start <= at && at < start + duration)
-                })
-        });
-        let Some(clip) = clip.map(|clip| clip.id) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("there is no clip at frame {at} on the track `{track}`"),
-            });
-        };
-        crate::splitting::split_at(session, &id, clip, at as f64)
-    }
 }

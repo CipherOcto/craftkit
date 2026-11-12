@@ -21,7 +21,7 @@
 //!   to the end of the sequence when the sequence is shorter than it;
 //!   here the work area is what the caller says it is.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
@@ -86,86 +86,101 @@ pub(crate) fn work_area_of(node: &craftkit_sdk::Node) -> Option<(u64, u64)> {
     Some((start, end))
 }
 
-/// **Set** the work area of a sequence.
-#[derive(Command)]
-#[command(id = "film.workarea.set", area = "film", layer = "film", icon = "marker", mutates, undoable)]
-pub struct SetWorkArea {
-    /// The sequence.
-    pub sequence: NodeRef,
-    /// The in point, in frames.
-    pub start: Number,
-    /// The out point, in frames.
-    pub end: Number,
-}
+commands! {
+    /// **Set** the work area of a sequence.
+    film.workarea.set {
+        area: "film",
+        layer: "film",
+        icon: "marker",
+        mutates,
+        undoable,
+        params: {
+            /// The sequence.
 
-impl SetWorkArea {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.workarea.set".to_string();
-        let sequence = self.sequence.0;
-        the_sequence(session, &id, sequence)?;
-        let start = frame_of(&id, self.start.0, "the in point")?;
-        let end = frame_of(&id, self.end.0, "the out point")?;
-        if end < start {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the work area ends at frame {end}, and it begins at frame {start}"),
-            });
+            sequence: NodeRef,
+            /// The in point, in frames.
+
+            start: Number,
+            /// The out point, in frames.
+
+            end: Number,
+        },
+        run: {
+
+            let id = "film.workarea.set".to_string();
+            let sequence = self.sequence.0;
+            the_sequence(session, &id, sequence)?;
+            let start = frame_of(&id, self.start.0, "the in point")?;
+            let end = frame_of(&id, self.end.0, "the out point")?;
+            if end < start {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the work area ends at frame {end}, and it begins at frame {start}"),
+                });
+            }
+            let Some(node) = session.document_mut()?.node_mut(sequence) else {
+                return Err(EngineError::Failed { id, message: format!("there is no sequence `{sequence}`") });
+            };
+            node.data["work_in"] = json!(start);
+            node.data["work_out"] = json!(end);
+            Ok(Outcome::changed(format!("the work area runs from frame {start} to frame {end}"))
+                .with_data(json!({ "sequence": sequence, "start": start, "end": end })))
+
         }
-        let Some(node) = session.document_mut()?.node_mut(sequence) else {
-            return Err(EngineError::Failed { id, message: format!("there is no sequence `{sequence}`") });
-        };
-        node.data["work_in"] = json!(start);
-        node.data["work_out"] = json!(end);
-        Ok(Outcome::changed(format!("the work area runs from frame {start} to frame {end}"))
-            .with_data(json!({ "sequence": sequence, "start": start, "end": end })))
     }
-}
+    /// **Read** the work area of a sequence.
+    film.workarea.get {
+        area: "film",
+        layer: "film",
+        icon: "list",
+        params: {
+            /// The sequence.
 
-/// **Read** the work area of a sequence.
-#[derive(Command)]
-#[command(id = "film.workarea.get", area = "film", layer = "film", icon = "list")]
-pub struct ReadWorkArea {
-    /// The sequence.
-    pub sequence: NodeRef,
-}
+            sequence: NodeRef,
+        },
+        run: {
 
-impl ReadWorkArea {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.workarea.get".to_string();
-        let sequence = self.sequence.0;
-        let node = the_sequence(session, &id, sequence)?;
-        let area = match work_area_of(node) {
-            Some((start, end)) => json!({ "start": start, "end": end, "length": end - start + 1 }),
-            None => json!(null),
-        };
-        Ok(Outcome::new(format!("the work area of the sequence `{sequence}`")).with_data(json!({
-            "sequence": sequence,
-            "work_area": area,
-        })))
-    }
-}
+            let id = "film.workarea.get".to_string();
+            let sequence = self.sequence.0;
+            let node = the_sequence(session, &id, sequence)?;
+            let area = match work_area_of(node) {
+                Some((start, end)) => json!({ "start": start, "end": end, "length": end - start + 1 }),
+                None => json!(null),
+            };
+            Ok(Outcome::new(format!("the work area of the sequence `{sequence}`")).with_data(json!({
+                "sequence": sequence,
+                "work_area": area,
+            })))
 
-/// **Take the work area away** from a sequence.
-#[derive(Command)]
-#[command(id = "film.workarea.clear", area = "film", layer = "film", icon = "minus", mutates, undoable)]
-pub struct ClearWorkArea {
-    /// The sequence.
-    pub sequence: NodeRef,
-}
-
-impl ClearWorkArea {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.workarea.clear".to_string();
-        let sequence = self.sequence.0;
-        the_sequence(session, &id, sequence)?;
-        let Some(node) = session.document_mut()?.node_mut(sequence) else {
-            return Err(EngineError::Failed { id, message: format!("there is no sequence `{sequence}`") });
-        };
-        if let craftkit_sdk::serde_json::Value::Object(map) = &mut node.data {
-            map.remove("work_in");
-            map.remove("work_out");
         }
-        Ok(Outcome::changed(format!("the sequence `{sequence}` has no work area"))
-            .with_data(json!({ "sequence": sequence })))
+    }
+    /// **Take the work area away** from a sequence.
+    film.workarea.clear {
+        area: "film",
+        layer: "film",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The sequence.
+
+            sequence: NodeRef,
+        },
+        run: {
+
+            let id = "film.workarea.clear".to_string();
+            let sequence = self.sequence.0;
+            the_sequence(session, &id, sequence)?;
+            let Some(node) = session.document_mut()?.node_mut(sequence) else {
+                return Err(EngineError::Failed { id, message: format!("there is no sequence `{sequence}`") });
+            };
+            if let craftkit_sdk::serde_json::Value::Object(map) = &mut node.data {
+                map.remove("work_in");
+                map.remove("work_out");
+            }
+            Ok(Outcome::changed(format!("the sequence `{sequence}` has no work area"))
+                .with_data(json!({ "sequence": sequence })))
+
+        }
     }
 }

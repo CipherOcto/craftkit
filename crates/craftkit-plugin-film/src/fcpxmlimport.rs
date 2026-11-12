@@ -43,7 +43,7 @@
 //! - A **marker** of a connected clip is a marker of the clip, and
 //!   this tree has no such marker: it is left out, and said.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Outcome, Relation, Session, Text};
@@ -312,270 +312,278 @@ impl Reader<'_> {
     }
 }
 
-/// **Read** an FCPXML file and make the **sequence** it names.
-///
-/// The media of the file are items, and the clips of its spine are
-/// clips on the first track of the sequence.
-#[derive(Command)]
-#[command(id = "film.import.fcpxml", area = "film", layer = "film", icon = "plus", mutates, undoable)]
-pub struct ImportFcpxml {
-    /// The file to read.
-    pub path: Text,
-    /// What to call the sequence.
+commands! {
+    /// **Read** an FCPXML file and make the **sequence** it names.
     ///
-    /// Without it, the name of the file.
-    pub name: Option<Text>,
-}
+    /// The media of the file are items, and the clips of its spine are
+    /// clips on the first track of the sequence.
+    film.import.fcpxml {
+        area: "film",
+        layer: "film",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The file to read.
 
-impl ImportFcpxml {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.import.fcpxml".to_string();
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
-        }
-        let bytes =
-            craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(|message| {
-                EngineError::Failed { id: id.clone(), message: format!("the file cannot be read: {message}") }
+            path: Text,
+            /// What to call the sequence.
+            ///
+            /// Without it, the name of the file.
+
+            name: Option<Text>,
+        },
+        run: {
+
+            let id = "film.import.fcpxml".to_string();
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
+            }
+            let bytes =
+                craftkit_sdk::files::read_bounded(std::path::Path::new(&path), MAX_BYTES).map_err(|message| {
+                    EngineError::Failed { id: id.clone(), message: format!("the file cannot be read: {message}") }
+                })?;
+            let text = String::from_utf8(bytes).map_err(|_| EngineError::Failed {
+                id: id.clone(),
+                message: "the file is not a text".to_string(),
             })?;
-        let text = String::from_utf8(bytes).map_err(|_| EngineError::Failed {
-            id: id.clone(),
-            message: "the file is not a text".to_string(),
-        })?;
-        let root = craftkit_sdk::xml::parse(&text).map_err(|message| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the file is not FCPXML: {message}"),
-        })?;
-        if root.name != "fcpxml" {
-            return Err(EngineError::Failed {
+            let root = craftkit_sdk::xml::parse(&text).map_err(|message| EngineError::Failed {
                 id: id.clone(),
-                message: format!("the file is not FCPXML: its root is `{}` and not `fcpxml`", root.name),
-            });
-        }
-        let Some(sequence) = sequence_of(&root) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the file is not FCPXML: there is no sequence in it".to_string(),
-            });
-        };
-        let resources = root.child("resources");
-        let formats = formats_of(resources);
-        let assets = assets_of(resources, crate::paths::folder_of(&path).as_deref());
-        let rate = rate_of(sequence.attribute("format"), &formats);
-        // The **name** of the sequence.
-        let name = match &self.name {
-            Some(name) if !name.0.trim().is_empty() => name.0.trim().to_string(),
-            _ => {
-                let from_file = std::path::Path::new(&path)
-                    .file_stem()
-                    .map(|stem| stem.to_string_lossy().to_string())
-                    .unwrap_or_default();
-                if from_file.is_empty() {
-                    sequence.attribute("name").unwrap_or("the sequence").to_string()
-                } else {
-                    from_file
+                message: format!("the file is not FCPXML: {message}"),
+            })?;
+            if root.name != "fcpxml" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the file is not FCPXML: its root is `{}` and not `fcpxml`", root.name),
+                });
+            }
+            let Some(sequence) = sequence_of(&root) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the file is not FCPXML: there is no sequence in it".to_string(),
+                });
+            };
+            let resources = root.child("resources");
+            let formats = formats_of(resources);
+            let assets = assets_of(resources, crate::paths::folder_of(&path).as_deref());
+            let rate = rate_of(sequence.attribute("format"), &formats);
+            // The **name** of the sequence.
+            let name = match &self.name {
+                Some(name) if !name.0.trim().is_empty() => name.0.trim().to_string(),
+                _ => {
+                    let from_file = std::path::Path::new(&path)
+                        .file_stem()
+                        .map(|stem| stem.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    if from_file.is_empty() {
+                        sequence.attribute("name").unwrap_or("the sequence").to_string()
+                    } else {
+                        from_file
+                    }
+                }
+            };
+            // The **bin** the media goes in, and the **sequence**.
+            let bin = session.document_mut()?.add_node_under(None, format!("{name} media"), "film.bin", None);
+            // The **bin** the sequence goes in: a sequence is not a media.
+            let sequences =
+                session.document_mut()?.add_node_under(None, format!("{name} sequences"), "film.bin", None);
+            let sequence_id = session.document_mut()?.add_node_with_under(
+                Some(sequences),
+                name.clone(),
+                "film.item",
+                None,
+                json!({
+                    "item": 0,
+                    "path": Json::Null,
+                    "duration": 0,
+                    "offline": false,
+                    "rate": { "num": rate.0, "den": rate.1 },
+                }),
+            );
+            let media = media_of(resources);
+            let mut reader = Reader { session, bin, number: 0, rate, media, clips: 0, said: Vec::new() };
+            // The **spine** is the first video track.
+            let spine = reader.node(
+                Some(sequence_id),
+                "the spine".to_string(),
+                "film.track",
+                json!({ "kind": "video" }),
+            )?;
+            let mut end = 0u64;
+            let mut tracks = 1usize;
+            let mut lanes: Vec<(i64, u64)> = Vec::new();
+            // The **clips** of the spine, in the order they are on the
+            // timeline, and the **transitions** that sit between them.
+            let mut laid: Vec<(u64, u64, u64)> = Vec::new();
+            let mut transitions: Vec<(usize, &Element)> = Vec::new();
+            if let Some(spine_element) = sequence.child("spine") {
+                for element in spine_element.children.iter() {
+                    if element.name == "transition" {
+                        // A transition is **between** two clips: it is
+                        // counted where it stands in the spine.
+                        transitions.push((laid.len(), element));
+                        continue;
+                    }
+                    if element.name != "clip" {
+                        continue;
+                    }
+                    let start = frames_of(element.attribute("offset").unwrap_or("0s"), rate);
+                    let duration = frames_of(element.attribute("duration").unwrap_or("0s"), rate);
+                    let source_in = frames_of(element.attribute("start").unwrap_or("0s"), rate);
+                    let name = element.attribute("name").unwrap_or("a clip");
+                    let reference = element.attribute("ref").unwrap_or_default();
+                    if reader.media.iter().any(|id| id == reference) {
+                        reader.said.push(format!("the nested media of the clip `{name}` is left out"));
+                        continue;
+                    }
+                    let asset = assets.iter().find(|(other, _)| other == reference).map(|(_, asset)| asset);
+                    let clip = reader.clip(spine, name, start, duration, source_in, asset)?;
+                    laid.push((start, start + duration, clip));
+                    end = end.max(start + duration);
+                    // The **connected clips** over this one: the other
+                    // tracks of the sequence.
+                    for connected in element.children_named("clip") {
+                        let Some(lane) =
+                            connected.attribute("lane").and_then(|lane| lane.trim().parse::<i64>().ok())
+                        else {
+                            continue;
+                        };
+                        if lanes.iter().any(|(other, _)| *other == lane) {
+                            continue;
+                        }
+                        let kind = if lane < 0 { "audio" } else { "video" };
+                        let track = reader.node(
+                            Some(sequence_id),
+                            format!("the lane {lane}"),
+                            "film.track",
+                            json!({ "kind": kind }),
+                        )?;
+                        lanes.push((lane, track));
+                        tracks += 1;
+                    }
+                    // The **connected clips** themselves.
+                    for connected in element.children_named("clip") {
+                        let Some(lane) =
+                            connected.attribute("lane").and_then(|lane| lane.trim().parse::<i64>().ok())
+                        else {
+                            continue;
+                        };
+                        let Some((_, track)) = lanes.iter().find(|(other, _)| *other == lane) else { continue };
+                        let offset = frames_of(connected.attribute("offset").unwrap_or("0s"), rate);
+                        let duration = frames_of(connected.attribute("duration").unwrap_or("0s"), rate);
+                        let source_in = frames_of(connected.attribute("start").unwrap_or("0s"), rate);
+                        let name = connected.attribute("name").unwrap_or("a clip");
+                        let asset = connected
+                            .attribute("ref")
+                            .and_then(|id| assets.iter().find(|(other, _)| other == id))
+                            .map(|(_, asset)| asset);
+                        reader.clip(*track, name, start + offset, duration, source_in, asset)?;
+                        end = end.max(start + offset + duration);
+                    }
+                    // The **markers** of this clip: they are markers of
+                    // the sequence, and they start where the clip starts
+                    // plus what the element says.
+                    for marker in element.children.iter() {
+                        if marker.name != "marker" && marker.name != "chapter-marker" {
+                            continue;
+                        }
+                        let offset = frames_of(marker.attribute("start").unwrap_or("0s"), rate);
+                        let duration = frames_of(marker.attribute("duration").unwrap_or("0s"), rate);
+                        let chapter = marker.name == "chapter-marker";
+                        let name = marker.attribute("value").unwrap_or_default().to_string();
+                        let comment = marker.attribute("note").unwrap_or_default().to_string();
+                        reader.marker(sequence_id, start + offset, duration, name, comment, chapter)?;
+                    }
+                    // A **transition** inside a clip is not a transition of
+                    // the spine, and it is left out, and said.
+                    for transition in element.children_named("transition") {
+                        reader.said.push(format!(
+                            "the transition `{}` is inside a clip and it is left out",
+                            transition.attribute("name").unwrap_or("a transition")
+                        ));
+                    }
                 }
             }
-        };
-        // The **bin** the media goes in, and the **sequence**.
-        let bin = session.document_mut()?.add_node_under(None, format!("{name} media"), "film.bin", None);
-        // The **bin** the sequence goes in: a sequence is not a media.
-        let sequences =
-            session.document_mut()?.add_node_under(None, format!("{name} sequences"), "film.bin", None);
-        let sequence_id = session.document_mut()?.add_node_with_under(
-            Some(sequences),
-            name.clone(),
-            "film.item",
-            None,
-            json!({
-                "item": 0,
-                "path": Json::Null,
-                "duration": 0,
-                "offline": false,
-                "rate": { "num": rate.0, "den": rate.1 },
-            }),
-        );
-        let media = media_of(resources);
-        let mut reader = Reader { session, bin, number: 0, rate, media, clips: 0, said: Vec::new() };
-        // The **spine** is the first video track.
-        let spine = reader.node(
-            Some(sequence_id),
-            "the spine".to_string(),
-            "film.track",
-            json!({ "kind": "video" }),
-        )?;
-        let mut end = 0u64;
-        let mut tracks = 1usize;
-        let mut lanes: Vec<(i64, u64)> = Vec::new();
-        // The **clips** of the spine, in the order they are on the
-        // timeline, and the **transitions** that sit between them.
-        let mut laid: Vec<(u64, u64, u64)> = Vec::new();
-        let mut transitions: Vec<(usize, &Element)> = Vec::new();
-        if let Some(spine_element) = sequence.child("spine") {
-            for element in spine_element.children.iter() {
-                if element.name == "transition" {
-                    // A transition is **between** two clips: it is
-                    // counted where it stands in the spine.
-                    transitions.push((laid.len(), element));
-                    continue;
-                }
-                if element.name != "clip" {
-                    continue;
-                }
+            // The **transitions** of the spine: each one joins the clip
+            // before it and the clip after it.
+            for (position, element) in transitions {
                 let start = frames_of(element.attribute("offset").unwrap_or("0s"), rate);
                 let duration = frames_of(element.attribute("duration").unwrap_or("0s"), rate);
-                let source_in = frames_of(element.attribute("start").unwrap_or("0s"), rate);
-                let name = element.attribute("name").unwrap_or("a clip");
-                let reference = element.attribute("ref").unwrap_or_default();
-                if reader.media.iter().any(|id| id == reference) {
-                    reader.said.push(format!("the nested media of the clip `{name}` is left out"));
+                if duration == 0 {
                     continue;
                 }
-                let asset = assets.iter().find(|(other, _)| other == reference).map(|(_, asset)| asset);
-                let clip = reader.clip(spine, name, start, duration, source_in, asset)?;
-                laid.push((start, start + duration, clip));
-                end = end.max(start + duration);
-                // The **connected clips** over this one: the other
-                // tracks of the sequence.
-                for connected in element.children_named("clip") {
-                    let Some(lane) =
-                        connected.attribute("lane").and_then(|lane| lane.trim().parse::<i64>().ok())
-                    else {
-                        continue;
-                    };
-                    if lanes.iter().any(|(other, _)| *other == lane) {
-                        continue;
-                    }
-                    let kind = if lane < 0 { "audio" } else { "video" };
-                    let track = reader.node(
-                        Some(sequence_id),
-                        format!("the lane {lane}"),
-                        "film.track",
-                        json!({ "kind": kind }),
-                    )?;
-                    lanes.push((lane, track));
-                    tracks += 1;
+                let previous = position.checked_sub(1).and_then(|index| laid.get(index));
+                let next = laid.get(position);
+                let from = previous.map(|(_, _, clip)| *clip);
+                let to = next.map(|(_, _, clip)| *clip);
+                if from.is_none() && to.is_none() {
+                    continue;
                 }
-                // The **connected clips** themselves.
-                for connected in element.children_named("clip") {
-                    let Some(lane) =
-                        connected.attribute("lane").and_then(|lane| lane.trim().parse::<i64>().ok())
-                    else {
-                        continue;
-                    };
-                    let Some((_, track)) = lanes.iter().find(|(other, _)| *other == lane) else { continue };
-                    let offset = frames_of(connected.attribute("offset").unwrap_or("0s"), rate);
-                    let duration = frames_of(connected.attribute("duration").unwrap_or("0s"), rate);
-                    let source_in = frames_of(connected.attribute("start").unwrap_or("0s"), rate);
-                    let name = connected.attribute("name").unwrap_or("a clip");
-                    let asset = connected
-                        .attribute("ref")
-                        .and_then(|id| assets.iter().find(|(other, _)| other == id))
-                        .map(|(_, asset)| asset);
-                    reader.clip(*track, name, start + offset, duration, source_in, asset)?;
-                    end = end.max(start + offset + duration);
-                }
-                // The **markers** of this clip: they are markers of
-                // the sequence, and they start where the clip starts
-                // plus what the element says.
-                for marker in element.children.iter() {
-                    if marker.name != "marker" && marker.name != "chapter-marker" {
-                        continue;
-                    }
-                    let offset = frames_of(marker.attribute("start").unwrap_or("0s"), rate);
-                    let duration = frames_of(marker.attribute("duration").unwrap_or("0s"), rate);
-                    let chapter = marker.name == "chapter-marker";
-                    let name = marker.attribute("value").unwrap_or_default().to_string();
-                    let comment = marker.attribute("note").unwrap_or_default().to_string();
-                    reader.marker(sequence_id, start + offset, duration, name, comment, chapter)?;
-                }
-                // A **transition** inside a clip is not a transition of
-                // the spine, and it is left out, and said.
-                for transition in element.children_named("transition") {
+                // The two clips must be **next to each other**: a
+                // transition is over a cut, and a cut is where one clip
+                // ends and the next begins.
+                let joined = match (previous, next) {
+                    (Some((_, end, _)), Some((start, _, _))) => end == start,
+                    _ => true,
+                };
+                if !joined {
                     reader.said.push(format!(
-                        "the transition `{}` is inside a clip and it is left out",
-                        transition.attribute("name").unwrap_or("a transition")
+                        "the transition `{}` is not over a cut and it is left out",
+                        element.attribute("name").unwrap_or("a transition")
                     ));
+                    continue;
                 }
+                // The **cut** the transition sits over: the start of the
+                // clip it comes into, or the end of the one it comes
+                // from.
+                let cut = next
+                    .map(|(start, _, _)| *start)
+                    .or_else(|| previous.map(|(_, end, _)| *end))
+                    .unwrap_or(start);
+                // The **alignment** is the tree's own: one that starts at
+                // the cut starts at it, one that ends at it ends at it,
+                // and any other is centred on it.
+                let align = if cut == start {
+                    "start"
+                } else if cut == start + duration {
+                    "end"
+                } else {
+                    "center"
+                };
+                // The **effect**: the name of the filter the transition
+                // names, or the name of the transition itself.
+                let effect = element
+                    .child("filter-video")
+                    .and_then(|filter| filter.attribute("name"))
+                    .or_else(|| element.attribute("name"))
+                    .unwrap_or("cross_dissolve")
+                    .to_string();
+                reader.transition(
+                    spine,
+                    Transition { from, to, start, duration, align: align.to_string(), effect },
+                )?;
             }
+            // The **length** of the sequence is what its tracks hold.
+            if let Some(node) =
+                reader.session.document_mut().ok().and_then(|document| document.node_mut(sequence_id))
+            {
+                node.data["duration"] = Json::from(end);
+            }
+            let said = reader.said.clone();
+            let clips = reader.clips;
+            Ok(Outcome::changed(format!("the document of `{path}` made {tracks} track(s) and {clips} clip(s)"))
+                .with_data(json!({
+                    "path": path,
+                    "bin": bin,
+                    "sequence_bin": sequences,
+                    "sequence": sequence_id,
+                    "tracks": tracks,
+                    "clips": clips,
+                    "rate": { "num": rate.0, "den": rate.1 },
+                    "left_out": said,
+                })))
+
         }
-        // The **transitions** of the spine: each one joins the clip
-        // before it and the clip after it.
-        for (position, element) in transitions {
-            let start = frames_of(element.attribute("offset").unwrap_or("0s"), rate);
-            let duration = frames_of(element.attribute("duration").unwrap_or("0s"), rate);
-            if duration == 0 {
-                continue;
-            }
-            let previous = position.checked_sub(1).and_then(|index| laid.get(index));
-            let next = laid.get(position);
-            let from = previous.map(|(_, _, clip)| *clip);
-            let to = next.map(|(_, _, clip)| *clip);
-            if from.is_none() && to.is_none() {
-                continue;
-            }
-            // The two clips must be **next to each other**: a
-            // transition is over a cut, and a cut is where one clip
-            // ends and the next begins.
-            let joined = match (previous, next) {
-                (Some((_, end, _)), Some((start, _, _))) => end == start,
-                _ => true,
-            };
-            if !joined {
-                reader.said.push(format!(
-                    "the transition `{}` is not over a cut and it is left out",
-                    element.attribute("name").unwrap_or("a transition")
-                ));
-                continue;
-            }
-            // The **cut** the transition sits over: the start of the
-            // clip it comes into, or the end of the one it comes
-            // from.
-            let cut = next
-                .map(|(start, _, _)| *start)
-                .or_else(|| previous.map(|(_, end, _)| *end))
-                .unwrap_or(start);
-            // The **alignment** is the tree's own: one that starts at
-            // the cut starts at it, one that ends at it ends at it,
-            // and any other is centred on it.
-            let align = if cut == start {
-                "start"
-            } else if cut == start + duration {
-                "end"
-            } else {
-                "center"
-            };
-            // The **effect**: the name of the filter the transition
-            // names, or the name of the transition itself.
-            let effect = element
-                .child("filter-video")
-                .and_then(|filter| filter.attribute("name"))
-                .or_else(|| element.attribute("name"))
-                .unwrap_or("cross_dissolve")
-                .to_string();
-            reader.transition(
-                spine,
-                Transition { from, to, start, duration, align: align.to_string(), effect },
-            )?;
-        }
-        // The **length** of the sequence is what its tracks hold.
-        if let Some(node) =
-            reader.session.document_mut().ok().and_then(|document| document.node_mut(sequence_id))
-        {
-            node.data["duration"] = Json::from(end);
-        }
-        let said = reader.said.clone();
-        let clips = reader.clips;
-        Ok(Outcome::changed(format!("the document of `{path}` made {tracks} track(s) and {clips} clip(s)"))
-            .with_data(json!({
-                "path": path,
-                "bin": bin,
-                "sequence_bin": sequences,
-                "sequence": sequence_id,
-                "tracks": tracks,
-                "clips": clips,
-                "rate": { "num": rate.0, "den": rate.1 },
-                "left_out": said,
-            })))
     }
 }

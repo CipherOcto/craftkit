@@ -53,10 +53,10 @@
 //!   object. Here the text says what the document says and nothing
 //!   else.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{self, Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, Node, NodeRef, Outcome};
 
 /// The most characters the text may have.
 const MAX_TEXT: usize = 4_000_000;
@@ -324,85 +324,90 @@ fn stack_of(
     }))
 }
 
-/// The **text** of the OTIO of a sequence.
-///
-/// The text is derived from the sequence as it is now, and it is
-/// returned as a text.
-#[derive(Command)]
-#[command(id = "film.export.otio", area = "film", layer = "film", icon = "list")]
-pub struct ExportOtio {
-    /// The sequence.
-    pub sequence: NodeRef,
-}
+commands! {
+    /// The **text** of the OTIO of a sequence.
+    ///
+    /// The text is derived from the sequence as it is now, and it is
+    /// returned as a text.
+    film.export.otio {
+        area: "film",
+        layer: "film",
+        icon: "list",
+        params: {
+            /// The sequence.
 
-impl ExportOtio {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.export.otio".to_string();
-        let sequence = self.sequence.0;
-        let Some(node) = session.document().node(sequence).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{sequence}`"),
-            });
-        };
-        if node.kind != "film.item" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{sequence}` is a `{}`, and a sequence is an item", node.kind),
-            });
-        }
-        let rate = rate_of(&node);
-        let document = session.document();
-        let mut tracks: Vec<Json> = Vec::new();
-        for track in tracks_of(&node) {
-            tracks.push(track_of(document, track.as_ref(), rate, &id)?);
-        }
-        let markers: Vec<Json> = markers_of(&node)
-            .iter()
-            .map(|marker| {
-                let start = marker.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
-                let duration =
-                    marker.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
-                json!({
-                    "OTIO_SCHEMA": "Marker.2",
-                    "name": marker.name,
-                    "comment": marker.data.get("comment").cloned().unwrap_or(Json::Null),
-                    "color": marker.data.get("color").cloned().unwrap_or(Json::Null),
-                    "marked_range": range(start, duration, rate),
-                    "metadata": {},
+            sequence: NodeRef,
+        },
+        run: {
+
+            let id = "film.export.otio".to_string();
+            let sequence = self.sequence.0;
+            let Some(node) = session.document().node(sequence).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{sequence}`"),
+                });
+            };
+            if node.kind != "film.item" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{sequence}` is a `{}`, and a sequence is an item", node.kind),
+                });
+            }
+            let rate = rate_of(&node);
+            let document = session.document();
+            let mut tracks: Vec<Json> = Vec::new();
+            for track in tracks_of(&node) {
+                tracks.push(track_of(document, track.as_ref(), rate, &id)?);
+            }
+            let markers: Vec<Json> = markers_of(&node)
+                .iter()
+                .map(|marker| {
+                    let start = marker.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
+                    let duration =
+                        marker.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
+                    json!({
+                        "OTIO_SCHEMA": "Marker.2",
+                        "name": marker.name,
+                        "comment": marker.data.get("comment").cloned().unwrap_or(Json::Null),
+                        "color": marker.data.get("color").cloned().unwrap_or(Json::Null),
+                        "marked_range": range(start, duration, rate),
+                        "metadata": {},
+                    })
                 })
-            })
-            .collect();
-        let timeline = json!({
-            "OTIO_SCHEMA": "Timeline.1",
-            "name": node.name,
-            "global_start_time": time(0, rate),
-            "metadata": {},
-            "tracks": {
-                "OTIO_SCHEMA": "Stack.1",
+                .collect();
+            let timeline = json!({
+                "OTIO_SCHEMA": "Timeline.1",
                 "name": node.name,
-                "children": tracks,
-                "source_range": Json::Null,
-                "effects": Vec::<Json>::new(),
-                "markers": markers,
-                "enabled": true,
+                "global_start_time": time(0, rate),
                 "metadata": {},
-            },
-        });
-        let text = serde_json::to_string_pretty(&timeline)
-            .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
-        if text.chars().count() > MAX_TEXT {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the text is more than {MAX_TEXT} characters long, and it is not written"),
+                "tracks": {
+                    "OTIO_SCHEMA": "Stack.1",
+                    "name": node.name,
+                    "children": tracks,
+                    "source_range": Json::Null,
+                    "effects": Vec::<Json>::new(),
+                    "markers": markers,
+                    "enabled": true,
+                    "metadata": {},
+                },
             });
+            let text = serde_json::to_string_pretty(&timeline)
+                .map_err(|error| EngineError::Failed { id: id.clone(), message: error.to_string() })?;
+            if text.chars().count() > MAX_TEXT {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the text is more than {MAX_TEXT} characters long, and it is not written"),
+                });
+            }
+            Ok(Outcome::new(format!("the sequence is {} characters of OTIO", text.chars().count())).with_data(
+                json!({
+                    "sequence": sequence,
+                    "otio": text,
+                    "timeline": timeline,
+                }),
+            ))
+
         }
-        Ok(Outcome::new(format!("the sequence is {} characters of OTIO", text.chars().count())).with_data(
-            json!({
-                "sequence": sequence,
-                "otio": text,
-                "timeline": timeline,
-            }),
-        ))
     }
 }

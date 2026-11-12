@@ -19,53 +19,60 @@
 //!   the tree's **linked** clip, which the tree removes with its
 //!   partner.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Outcome};
 
-/// **Take away** a clip.
-///
-/// The clip is gone, the edge that says which item it played goes with
-/// it, and the gap it leaves is a gap.
-#[derive(Command)]
-#[command(id = "film.clip.remove", area = "film", layer = "film", icon = "minus", mutates, undoable)]
-pub struct RemoveClip {
-    /// The clip.
-    pub clip: NodeRef,
-}
+commands! {
+    /// **Take away** a clip.
+    ///
+    /// The clip is gone, the edge that says which item it played goes with
+    /// it, and the gap it leaves is a gap.
+    film.clip.remove {
+        area: "film",
+        layer: "film",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The clip.
 
-impl RemoveClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.clip.remove".to_string();
-        let clip = self.clip.0;
-        let Some(node) = session.document().node(clip) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip}`"),
-            });
-        };
-        if node.kind != "film.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-            });
+            clip: NodeRef,
+        },
+        run: {
+
+            let id = "film.clip.remove".to_string();
+            let clip = self.clip.0;
+            let Some(node) = session.document().node(clip) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip}`"),
+                });
+            };
+            if node.kind != "film.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            // A **locked** track cannot be edited.
+            if let Some(track) = crate::track_of(session, clip)
+                && crate::is_locked(session, track)
+            {
+                return Err(crate::locked_error(&id, track));
+            }
+            let duration = node.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
+            let start = node.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
+            if !session.document_mut()?.remove_node(clip) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip}`"),
+                });
+            }
+            Ok(Outcome::changed(format!("the clip `{clip}` is gone"))
+                .with_data(serde_json::json!({ "id": clip, "start": start, "duration": duration })))
+
         }
-        // A **locked** track cannot be edited.
-        if let Some(track) = crate::track_of(session, clip)
-            && crate::is_locked(session, track)
-        {
-            return Err(crate::locked_error(&id, track));
-        }
-        let duration = node.data.get("duration").and_then(|duration| duration.as_u64()).unwrap_or(0);
-        let start = node.data.get("start").and_then(|start| start.as_u64()).unwrap_or(0);
-        if !session.document_mut()?.remove_node(clip) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip}`"),
-            });
-        }
-        Ok(Outcome::changed(format!("the clip `{clip}` is gone"))
-            .with_data(serde_json::json!({ "id": clip, "start": start, "duration": duration })))
     }
 }

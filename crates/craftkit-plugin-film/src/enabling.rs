@@ -24,52 +24,60 @@
 //!   a clip that does not play is a clip that does not play, and the
 //!   track is not a thing that plays.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{Bool, EngineError, NodeRef, Outcome};
 
 /// Whether a clip **plays**.
 pub fn is_enabled(data: &serde_json::Value) -> bool {
     data.get("enabled").and_then(|enabled| enabled.as_bool()).unwrap_or(true)
 }
 
-/// **Enable** a clip, or disable it.
-///
-/// Without the `on` the flag is **toggled**, and the answer says which
-/// way it went.
-#[derive(Command)]
-#[command(id = "film.clip.enable", area = "film", layer = "film", icon = "power", mutates, undoable)]
-pub struct EnableClip {
-    /// The clip.
-    pub clip: NodeRef,
-    /// Whether the clip plays. Without it the flag is toggled.
-    pub on: Option<Bool>,
-}
+commands! {
+    /// **Enable** a clip, or disable it.
+    ///
+    /// Without the `on` the flag is **toggled**, and the answer says which
+    /// way it went.
+    film.clip.enable {
+        area: "film",
+        layer: "film",
+        icon: "power",
+        mutates,
+        undoable,
+        params: {
+            /// The clip.
 
-impl EnableClip {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "film.clip.enable".to_string();
-        let clip = self.clip.0;
-        let Some(node) = session.document().node(clip) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{clip}`"),
-            });
-        };
-        if node.kind != "film.clip" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
-            });
+            clip: NodeRef,
+            /// Whether the clip plays. Without it the flag is toggled.
+
+            on: Option<Bool>,
+        },
+        run: {
+
+            let id = "film.clip.enable".to_string();
+            let clip = self.clip.0;
+            let Some(node) = session.document().node(clip) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{clip}`"),
+                });
+            };
+            if node.kind != "film.clip" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{clip}` is a `{}` and not a clip", node.kind),
+                });
+            }
+            let was = is_enabled(&node.data);
+            let now = self.on.map(|on| on.0).unwrap_or(!was);
+            if let Some(node) = session.document_mut()?.node_mut(clip) {
+                node.data["enabled"] = serde_json::json!(now);
+            }
+            let message =
+                if now { format!("the clip `{clip}` plays") } else { format!("the clip `{clip}` does not play") };
+            Ok(Outcome::changed(message).with_data(serde_json::json!({ "clip": clip, "enabled": now })))
+
         }
-        let was = is_enabled(&node.data);
-        let now = self.on.map(|on| on.0).unwrap_or(!was);
-        if let Some(node) = session.document_mut()?.node_mut(clip) {
-            node.data["enabled"] = serde_json::json!(now);
-        }
-        let message =
-            if now { format!("the clip `{clip}` plays") } else { format!("the clip `{clip}` does not play") };
-        Ok(Outcome::changed(message).with_data(serde_json::json!({ "clip": clip, "enabled": now })))
     }
 }
