@@ -31,6 +31,7 @@
 //! | [`doctor`] | the machine is set up to build this at all |
 //! | [`ci`] | all of the above, in order, then the tests |
 //! | [`counts`] | the commands each battery carries, and the README's counted block |
+//! | [`find`] | where a command lives, what an area holds, what a bound is |
 //! | [`verify`] | the same checks, over the packages a change can break |
 //!
 //! A gate that cannot run on this machine is reported as skipped with a reason,
@@ -52,6 +53,8 @@ pub mod cleanroom;
 pub mod counts;
 pub mod deny;
 pub mod doctor;
+pub mod find;
+pub mod index;
 pub mod layers;
 pub mod lists;
 pub mod packages;
@@ -136,6 +139,11 @@ pub const COMMANDS: &[Subcommand] = &[
         run: run_ci,
     },
     Subcommand {
+        name: "find",
+        what: "where a command lives, what an area holds, what a bound is (one call)",
+        run: find::run,
+    },
+    Subcommand {
         name: "counts",
         what: "the commands each battery carries, and the README's counted block",
         run: counts::run,
@@ -170,6 +178,11 @@ pub const NOT_GATES: &[(&str, &str)] = &[
     ("doctor", "it reports on the machine, not on the code"),
     ("deny", "it needs the network and a licence database; CI runs it by name"),
     ("ci", "it is the runner"),
+    (
+        "find",
+        "it answers a question about the tree; it checks nothing, and the tree's own tests check \
+         what it reads",
+    ),
     (
         "counts",
         "it writes the README's counted block; the tree's own test checks that block against the \
