@@ -4234,6 +4234,7 @@ so.
 | the **delegation**, priced | **built.** The rule is in the prose — a sub-agent gets a bounded, mechanical brief, or it does not get spawned — and the gate checks that the prose still says it (§847) | §847 |
 | the **counts**, from the registry | **built.** The counts of the batteries are read out of the registry — the commands the linker put in — and the source is checked against it, so neither can drift alone (§848) | §848 |
 | the tree's **answers**, in one call | **built.**  answers where a command lives, what an area holds and what a bound is — with the file and the line — from an index of the tree's own commands (§851) | §851 |
+| the **claim table**, as an index | **built.** Every § the table cites exists, every row says where it is, and every arc the tree made has a row — so a port cannot land without saying what it claims (§849) | §849 |
 | the **example** of a battery | **built.** One command per battery is marked  in its own declaration, and  prints it — with the battery's other commands and a test of it (§852) | §852 |
 | the **port manifest** | **built.** One row per ported rule — the rule, where it came from, the crate, the module, the command, the test and the section — and the gate checks every row against the tree (§853) | §853 |
 | the **brief** of an arc | **built.** One call gives the arc the rule, the landing site, the conventions, the claims, the counts and the commands — every one of them read out of the tree (§854) | §854 |
@@ -56105,3 +56106,52 @@ them. Now it asks for them together.
   should say. It is the ground the arc stands on, not the arc.
 - **The counts in the brief are the counts of the source**, and the tree's
   own test is what says that the source and the registry agree (§848).
+## 849. The claim table becomes an index
+
+The claim table is prose, and prose stays prose. But two of its three columns
+can be made true by machine.
+
+### What was built
+
+- **The claim table is read, and checked**:
+  - every § the table cites **exists** as a section of the README;
+  - every row **says where** it is — a row that points at nothing is a row
+    that says "somewhere";
+  - and every arc the tree made **has a row**: the port manifest (§853)
+    names each arc's section, and each of those sections must be claimed.
+- The check is in the outer gate, beside the manifest's own check.
+
+### What the port found
+
+- **A section may be claimed by several rows, and that is fine.** One arc may
+  make more than one claim — the table says so, and the first rule written
+  here ("a section is claimed twice") was wrong for exactly that reason. The
+  rule is now the one that matters: **a row that points at nothing**.
+- **The rows that said "ten thousand" were never checked.** The inner gate
+  reads the table's number and evaluates it; "ten thousand" is not an
+  expression, so the check **skipped** those rows — silently, and in a way
+  that looked like a pass. That is the next arc (§850).
+- **The tree's record of the arcs is the manifest, not the history.** The
+  git history of this repository holds the v1 tree's arcs as well, whose §
+  numbers mean other things; a rule read from the history would be wrong
+  about the v2. So the rule reads the **manifest**, which is the tree's own
+  record and has one meaning.
+
+### What it cost
+
+- **One new test file**: `xtask/tests/claims.rs` — six tests: the table is
+  found and is a table, the numbers of a cell are read out of it, the table
+  of the tree is an index, an arc with no row is a problem, a row that points
+  at nothing is a problem, and the sections of the README are read out of it.
+- **One new module** (`claims`) and one more check in the outer gate.
+
+### What it does not settle
+
+- **The truth column is still prose.** "The truth today" is a sentence about
+  what the tree does, and a compiler cannot write it — only a person can,
+  and only about the tree they know.
+- **The rule knows about the arcs the manifest knows about.** A section that
+  was written without a port — a section of explanation, a section of
+  history — has no row and is not asked for one.
+- **The table is checked, not generated.** Generating it would mean
+  generating the prose, and the prose is the part a person writes.
