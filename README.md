@@ -4253,6 +4253,7 @@ so.
 | the **film battery**, as a table | **built.** The battery of a cut is a table; what is between a declaration and its body stays, and the constants of a file are the file's own (§866) | §866 |
 | the **pdf battery**, as a table | **built.** The object model of a file is a table in 75 files, and the registry is pinned to what it was (§867) | §867 |
 | the **sound battery**, as a table | **built.** The battery of a sound document is a table; the table learned a parameter's other spelling, a body is found by its name and not by what comes next, and a rename touches no string (§868) | §868 |
+| the **grid battery**, as a table | **built.** The last battery is a table in 69 files, and the tree's readers read a character literal — a quote, as a character — so the source and the registry agree again (§869) | §869 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -57329,3 +57330,74 @@ commands whose parameters have **two spellings**.
 - **The conversion is a script, and the script is not in the tree.** What
   the tree holds is the result and the check; the rules the script
   followed are not written down anywhere a reader can go.
+
+## 869. The grid battery is a table, and the tree's readers read it
+
+§868 converted sound. grid is the last battery and the biggest — 188
+commands in 69 files — and its conversion found the **readers** of the
+tree: the tools that count the commands by reading the source.
+
+### What was built
+
+- **The grid battery is a table.** Its 188 commands, in its 69 files, are
+  now **one table per file** — `commands! { … }` — with a row per command.
+- **The registry is pinned.** `apps/craftkit-studio/tests/grid_registry.rs`
+  holds all 188 commands as they were — every id, label, area, capability,
+  layer, icon, documentation, chord, menu path, parameter and flag — and
+  the test says whether the registry still says it.
+- **The tree's readers read a character literal.** A file may hold the
+  character `'"'` — a quote, as a character — and a reader that took it
+  for the start of a string read the rest of the file as text:
+  ```rust
+  None => '"',
+  ```
+  Both readers — the xtask's index and the tree's own counts test — now
+  step over a character, and a lifetime is not a character.
+
+### What the port found
+
+- **The readers were wrong, and the counts said so.** The tree's counts
+  test says the registry carries 188 grid commands and the source carries
+  187: the tools that read the source must agree with the tree. The
+  missing row was `grid.text.columns` — the file that holds the quote
+  character — and the fix was in the **reader**, not in the battery.
+- **Two readers, and they have to agree.** The xtask's index and the
+  tree's own test read the source with two different readers, and the
+  test compares them with the registry. That is what found the fault:
+  one reader could have been wrong alone, and the tree would have said
+  187 and believed it.
+- **A character is text, and a brace in text is not a brace.** The
+  scanner that counts braces already stepped over **strings** — a run
+  body may hold a string with a brace in it — and it did not step over
+  **characters**. The rule is one sentence, and it was missing half of
+  itself.
+- **The table is still not shorter.** grid's diff is 15 034 lines in and
+  13 778 out — the largest diff of the eight, for the largest battery.
+
+### What it cost
+
+- **The readers**: two scanners, and the rule that a character is text.
+- **The battery**: 69 files, 188 commands, the plugin's anchor — and the
+  crate's exports.
+- **One new test file**: `apps/craftkit-studio/tests/grid_registry.rs` —
+  one test, and 188 rows of snapshot: the registry the tree had before
+  the conversion.
+
+### What it does not settle
+
+- **Every battery is a table now, and the trade is still the trade.** The
+  eight conversions made the tree's commands **declared in one place per
+  file**, and made every diff **bigger**. What the house values — a rule
+  a person can read — is unchanged: the body of a command is still the
+  programmer's own text, and the table wrote the edges around it.
+- **The conversion is not in the tree.** The rules the script followed —
+  what a rename may touch, what a file's own words are, where a body's
+  ends — are not written down anywhere a reader can go. The tree holds
+  the result and the check; the next conversion will write its own
+  script.
+- **The registry is the only witness.** The snapshot proves that the
+  **registry** did not change: the ids, the labels, the documentation,
+  the menu paths, the parameters and the flags. What it cannot see is
+  the **body** of a command and the **name** of its struct — and a
+  conversion that changed either would not be caught by it. The compiler
+  and the anchor are the witnesses for those.

@@ -368,15 +368,22 @@ six kinds of contribution macro (`expand_node_kind`, `expand_tool`,
 so the machinery is close — but this wave should be done **one battery at a
 time, and measured**, not taken wholesale.
 
-**As built (§858, §860)**: the table learned the rest of the derive'"'"'s
+**As built (§858, §860–§869)**: the table learned the rest of the derive'"'"'s
 vocabulary — `layer`, `icon`, `shortcut`, `capability`, `menu`, `enabled`,
-`no_journal`, `no_prefix` and `example` — so a battery can be a table. And
-the **fx battery is one**: its 47 commands are thirteen tables of rows, the
-tools read both spellings, and the registry is **pinned** to what it was
-before the conversion. fx was the best battery to start with: the smallest,
-the most uniform, and the one whose example command the tree points at.
-The other eight are still declarations, and each is a decision about a
-battery, not about the table.
+`no_journal`, `no_prefix` and `example` — and a parameter's own
+`#[param(or = "…")]`, so a battery can be a table. And **every battery is
+one**: fx's 47 commands (§860), and then cad, vector, layout, prose, film,
+pdf, sound and grid (§862–§869) — **961 commands** in all — are tables of
+rows, the tools read both spellings, and each battery's registry is
+**pinned** to what it was before its conversion. fx was the best battery
+to start with: the smallest, the most uniform, and the one whose example
+command the tree points at. The eight that followed were the same work, and
+each was a decision about a battery: the **rename** follows the crate's
+export (§864), a rename touches neither the prose (§865) nor a string
+(§868), what stands between a declaration and its body is the file's own
+(§866), a body is found by its command's **name** and not by what comes
+next (§868), and the tree's own readers had to learn that a character is
+text (§869).
 
 ### §859 — the census, measured from the tree
 
