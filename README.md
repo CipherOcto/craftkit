@@ -4244,6 +4244,7 @@ so.
 | the **bounds**, checked where the compiler is | **built.** The SDK publishes each of its bounds and the number is the constant itself, so the prose is checked against the code — and a number that cannot be worked out is a failure, not a skip (§850) | §850 |
 | the **conventions** of the house | **built.** One call prints the rules of the house, each quoted from the file that writes it, and the conventions of a battery — and a rule that has gone is a failure, not a line of prose (§855) | §855 |
 | the **census** of the tree | **built.** One call measures the history — the arcs, the lines and the files each one touched, the gap between them, the commands per battery and per file — and the scope is found, not remembered (§859) | §859 |
+| the **fx battery**, as a table | **built.** The smallest battery's 47 commands are thirteen tables of rows; the table learned the layer, the icon, the menu and the rest, the tools read both spellings, and the registry is pinned to what it was (§860) | §860 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -56652,3 +56653,106 @@ generalises — it says how big an arc is, whatever wrote it.
 - **The scope is a commit, and a commit can be wrong.** If the v2 tree's
   first commit were rewritten, the census would measure a different
   history — and it would say which one it measured, every time.
+
+## 860. The fx battery is a table
+
+§858 built the table and refused to convert a battery with it, on purpose:
+the house values a rule you can *read*, and a declaration table trades that
+for the speed of a port. That trade is now made — once, on the battery where
+it costs least.
+
+### What was built
+
+- **The fx battery is a table.** Its 47 commands, in its 13 files, are now
+  **one table per file** — `commands! { … }` — with a row per command:
+  ```rust
+  commands! {
+      /// Put a **switch** on a layer, or off.
+      ///
+      /// A switch with no value is **toggled**: the tree's command toggles
+      /// a switch that is asked for without a value, and a switch that is
+      /// asked for with a value is set.
+      fx.layer.switch {
+          area: "fx",
+          layer: "fx",
+          icon: "eye",
+          mutates,
+          undoable,
+          params: {
+              /// The layer the switch is on.
+              layer: NodeRef,
+              /// The switch: `video`, `audio`, `solo`, `lock`, `shy`, …
+              switch: Text,
+              /// Whether it is on. Without it, the switch is toggled.
+              value: Option<Bool>,
+          },
+          run: { … }
+      }
+  }
+  ```
+- **The table learned the rest of the derive's vocabulary**: `layer`,
+  `icon`, `shortcut`, `capability`, `menu`, `enabled`, `no_journal`,
+  `no_prefix` and `example`. It could not be a battery before: **every**
+  battery's commands carry a layer and an icon.
+- **The tools read both spellings.** The xtask's index, the counts command
+  and the tree's own counts test all count the commands of the tree, and
+  all three had to learn a table.
+- **The registry is pinned.** `apps/craftkit-studio/tests/fx_registry.rs`
+  holds all 47 commands as they were — every id, label, area, capability,
+  layer, icon, documentation, chord, menu path, parameter and flag — and
+  the test says whether the registry still says it.
+
+### What the port found
+
+- **fx is the best battery to convert, and the reasons are countable.** It
+  is the **smallest** of the nine (47 commands), every one of its commands
+  has the **same shape** (an id, an area, a layer, an icon, the flags and
+  the fields), it needs no menu path and no capability of its own, and it
+  is the battery whose **example** command the tree points at — so the
+  tooling's example path was exercised by the conversion itself.
+- **A row is named after its id.** The table writes the struct's name from
+  the id — `fx.comp.add` becomes `FxCompAdd` — so the conversion renamed
+  the battery's 47 structs and the plugin's anchor with them. The registry
+  does not hold the names, so the snapshot could not see the rename: the
+  **compiler** is what holds it to account, and the anchor is what says so.
+- **Three readers count the commands, and all three had to learn the
+  table.** The xtask's index, the counts command and the tree's own test —
+  and the tree's test still reads the source with **its own** reader, so
+  the two can be checked against each other and are.
+- **A table's rows are not its braces.** The first scan of the tree's test
+  counted **73** rows for 47 commands: the floats (`0.0`) and the field
+  paths (`self.frame`) in the bodies look exactly like ids. A row is a row
+  at the table's **top level**, and the reader now says so.
+- **A row's body may not use the session.** The derive let a command name
+  its own parameter (`_session`); the table names it `session` for every
+  row, so the table's expansion borrows it once — a row that does not need
+  the session is not a warning.
+
+### What it cost
+
+- **The table**: the rest of the derive's vocabulary, and the tests that
+  say a row's layer, icon, capability, chord and menu are the row's.
+- **The tools**: the index, the counts command and the tree's counts test —
+  three readers, and the two that count the commands still count the
+  **text**.
+- **The battery**: 13 files, 47 commands, the plugin's anchor — 2 878 lines
+  in and 2 633 out.
+- **One new test file**: `apps/craftkit-studio/tests/fx_registry.rs` — one
+  test, and 47 rows of snapshot: the registry the tree had before the
+  conversion.
+
+### What it does not settle
+
+- **The other eight batteries are still declarations.** fx was the smallest
+  and the most uniform; the others are bigger, and the vector and sound
+  batteries carry menu paths. Each conversion is the same work and needs
+  its own snapshot — and each is a decision about a battery, not about the
+  table.
+- **A table is not shorter than a struct.** The fx battery's diff is
+  *larger*, not smaller: the table writes the id and the fields in its own
+  shape. What the conversion bought is not fewer lines; it is that the
+  **declaration** of a command is one row, and the compiler writes the
+  reader, the registration and the spec around it.
+- **The body is still Rust.** The table writes the edges; the rule is still
+  the programmer's own text, read by a person. Nothing in this arc made a
+  rule easier to read — that is the trade §858 named, and it is still open.

@@ -368,6 +368,16 @@ six kinds of contribution macro (`expand_node_kind`, `expand_tool`,
 so the machinery is close — but this wave should be done **one battery at a
 time, and measured**, not taken wholesale.
 
+**As built (§858, §860)**: the table learned the rest of the derive'"'"'s
+vocabulary — `layer`, `icon`, `shortcut`, `capability`, `menu`, `enabled`,
+`no_journal`, `no_prefix` and `example` — so a battery can be a table. And
+the **fx battery is one**: its 47 commands are thirteen tables of rows, the
+tools read both spellings, and the registry is **pinned** to what it was
+before the conversion. fx was the best battery to start with: the smallest,
+the most uniform, and the one whose example command the tree points at.
+The other eight are still declarations, and each is a decision about a
+battery, not about the table.
+
 ### §859 — the census, measured from the tree
 
 The plan's Part 6 says the census is an xtask command; this is that arc.
