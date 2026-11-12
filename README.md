@@ -4250,6 +4250,7 @@ so.
 | the **vector battery**, as a table | **built.** The battery of a path is a table in 26 files; the table says a menu as a tuple and holds a command's helper, and the registry is pinned to what it was (§863) | §863 |
 | the **layout battery**, as a table | **built.** The battery of a page is a table; the rename follows the crate's export and not the word, because two modules hold a command with the same name (§864) | §864 |
 | the **prose battery**, as a table | **built.** The battery of a document is a table; the snapshot caught a rename that ate a word in a doc comment, and the rule is now that a rename touches code and nothing else (§865) | §865 |
+| the **film battery**, as a table | **built.** The battery of a cut is a table; what is between a declaration and its body stays, and the constants of a file are the file's own (§866) | §866 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -57137,3 +57138,62 @@ conversion found the one thing the earlier ones had not: **the prose**.
   "**ProseReplace**".
 - **The table is still not shorter.** The diff is bigger for it, and the
   trade §858 named is still the trade.
+
+## 866. The film battery is a table
+
+§865 converted prose. film is the battery of a video editor, and its
+conversion found the file's own **words**: the constants that stand
+between a command's declaration and its body.
+
+### What was built
+
+- **The film battery is a table.** Its 113 commands, in its 60 files, are
+  now **one table per file** — `commands! { … }` — with a row per command.
+- **What is between a declaration and its body stays.** A file may hold
+  things of its own between the two — a constant, a helper — and the
+  conversion takes the declaration and the body and leaves the rest:
+  ```rust
+  /// The formats a caption file may be in.
+  pub const FORMATS: [&str; 6] = ["subrip", "webvtt", "stl", "scc", "mcc", "ttml"];
+  ```
+- **The registry is pinned.** `apps/craftkit-studio/tests/film_registry.rs`
+  holds all 113 commands as they were — every id, label, area, capability,
+  layer, icon, documentation, chord, menu path, parameter and flag — and
+  the test says whether the registry still says it.
+
+### What the port found
+
+- **A file's layout is not a formality.** film's `captions.rs` holds a
+  command's declaration, then three constants, then the command's body —
+  and the first conversion read the span from the declaration to the body
+  and took the constants with it. The build failed with three constants
+  that were not there, and the rule is now one line: **the conversion
+  takes the declaration and the body, and nothing else**.
+- **The constants are the file's, not the command's.** `FORMATS`,
+  `WRITABLE` and `IMPORTED` are the caption formats, and they are read by
+  the *commands* of another file. A conversion that cannot tell the
+  file's words from the command's words will take the wrong ones.
+- **The table is still not shorter.** film's diff is 8 873 lines in and
+  8 125 out — a bigger diff for a bigger battery, and the trade §858
+  named is the trade.
+
+### What it cost
+
+- **The battery**: 60 files, 113 commands, the plugin's anchor — and the
+  crate's exports.
+- **One new test file**: `apps/craftkit-studio/tests/film_registry.rs` —
+  one test, and 113 rows of snapshot: the registry the tree had before the
+  conversion.
+
+### What it does not settle
+
+- **The other three batteries are still declarations.** pdf, sound and
+  grid are each the same work and each needs its own snapshot. sound is
+  the one to watch: it is the largest of them, and it has 132 menu paths.
+- **A conversion is a program, and a program has to be careful.** Three
+  of the eight conversions failed on something the **compiler** said and
+  a reader could not: a constant that was taken away, a word in a doc
+  comment, a word in a string. Every one of them was found by a check
+  that compares the tree with what it was.
+- **Nothing here made a rule easier to read.** The body is still the
+  programmer's own text.
