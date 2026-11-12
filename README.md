@@ -4252,6 +4252,7 @@ so.
 | the **prose battery**, as a table | **built.** The battery of a document is a table; the snapshot caught a rename that ate a word in a doc comment, and the rule is now that a rename touches code and nothing else (§865) | §865 |
 | the **film battery**, as a table | **built.** The battery of a cut is a table; what is between a declaration and its body stays, and the constants of a file are the file's own (§866) | §866 |
 | the **pdf battery**, as a table | **built.** The object model of a file is a table in 75 files, and the registry is pinned to what it was (§867) | §867 |
+| the **sound battery**, as a table | **built.** The battery of a sound document is a table; the table learned a parameter's other spelling, a body is found by its name and not by what comes next, and a rename touches no string (§868) | §868 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -57248,3 +57249,83 @@ model of a file format — and it is the biggest battery so far.
 - **Nothing here made a rule easier to read.** What the conversion bought
   is one place where a command is declared; the body is still the
   programmer's own text.
+
+## 868. The sound battery is a table
+
+§867 converted pdf. sound is the battery of a sound document, and it is
+the one the plan called the **hardest**: 144 commands, 132 menu paths, and
+commands whose parameters have **two spellings**.
+
+### What was built
+
+- **The sound battery is a table.** Its 144 commands, in its 31 files, are
+  now **one table per file** — `commands! { … }` — with a row per command:
+  ```rust
+  commands! {
+      /// **Recall** a marker: the playhead goes to it.
+      sound.marker.recall {
+          area: "sound",
+          layer: "sound",
+          icon: "play",
+          mutates,
+          undoable,
+          menu: ("Marker"),
+          params: {
+              /// The marker: the node, or the name it is called.
+              #[param(or = "name")]
+              marker: Either<NodeRef, Text>,
+          },
+          run: { … }
+      }
+  }
+  ```
+- **The table learned a parameter's own attributes.** A parameter may say
+  that it has another spelling — `#[param(or = "name")]` — and the table
+  carries it, so the parameter is not a reason to leave the command
+  behind.
+- **The registry is pinned.** `apps/craftkit-studio/tests/sound_registry.rs`
+  holds all 144 commands as they were — every id, label, area, capability,
+  layer, icon, documentation, chord, menu path, parameter and flag — and
+  the test says whether the registry still says it.
+
+### What the port found
+
+- **A file may hold all its declarations first and all its bodies after.**
+  sound's `markers.rs` declares three commands, and only then writes
+  their bodies. A conversion that reads a declaration and then looks for
+  the body **after it** finds the wrong body — or none — so the body is
+  found by the **name** of the command, and not by what comes next.
+- **A menu path is a word, and a word is a name.** The command
+  `sound.clip.group` was called `Group`, and its menu path said
+  "Clip/Group". The rename — `Group` becomes `SoundClipGroup` — reached
+  into the string and the menu became "Clip/SoundClipGroup": the command
+  moved in the menu bar. The snapshot said no, and the rule is now one
+  line: **a rename does not touch a string**.
+- **A parameter may have two spellings, and the table now says so.**
+  `marker` is a node **or** a name, and the reader is written by the
+  derive's own machinery. The table could not say that before this arc,
+  and the command could not be a row.
+- **The table is still not shorter.** sound's diff is 11 759 lines in and
+  11 808 out — and for once it is *smaller*, by forty-nine lines.
+
+### What it cost
+
+- **The table**: the parameter's own attributes.
+- **The battery**: 31 files, 144 commands, the plugin's anchor — and the
+  crate's exports.
+- **One new test file**: `apps/craftkit-studio/tests/sound_registry.rs` —
+  one test, and 144 rows of snapshot: the registry the tree had before
+  the conversion.
+
+### What it does not settle
+
+- **The last battery is still a declaration.** grid — 188 commands, 69
+  files — is the biggest of them all, and it is the one that will say
+  whether the conversion is worth it at that size.
+- **A table's row is not a struct's field list.** The diff is bigger for
+  it, and the declaration of a command is now a row in a table rather
+  than a struct with a body: what is bought is one place where a
+  command is declared.
+- **The conversion is a script, and the script is not in the tree.** What
+  the tree holds is the result and the check; the rules the script
+  followed are not written down anywhere a reader can go.
