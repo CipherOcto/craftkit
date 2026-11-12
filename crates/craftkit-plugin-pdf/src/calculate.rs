@@ -23,10 +23,10 @@
 //! in the way the script says. An expression is **not** worked out —
 //! there is no evaluator for it here — and the answer says so.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome};
 
 /// The **way** a value is worked out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -138,55 +138,124 @@ pub fn calculation_of(document: &Document, node: &Node) -> Calculation {
     }
 }
 
-/// **Read** the **calculation** of a field.
-///
-/// A query: it does not change the document. A field that says nothing
-/// about how its value is worked out calculates nothing, and the
-/// answer says so.
-#[derive(Command)]
-#[command(id = "pdf.field.calculate", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadCalculation {
-    /// The field to read.
-    pub field: NodeRef,
-}
+commands! {
+    /// **Read** the **calculation** of a field.
+    ///
+    /// A query: it does not change the document. A field that says nothing
+    /// about how its value is worked out calculates nothing, and the
+    /// answer says so.
+    pdf.field.calculate {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The field to read.
 
-impl ReadCalculation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.field.calculate".to_string();
-        let document = session.document();
-        let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{}`", self.field.0),
-        })?;
-        let calculation = calculation_of(document, node);
-        let (kind, operation, fields, expression) = match &calculation {
-            Calculation::Nothing => ("nothing", Json::Null, Vec::new(), Json::Null),
-            Calculation::Simple { operation, fields } => {
-                ("simple", json!(operation.code()), fields.clone(), Json::Null)
-            }
-            Calculation::Notation(expression) => {
-                ("notation", Json::Null, Vec::new(), json!(expression.clone()))
-            }
-            Calculation::Unsupported(script) => {
-                ("unsupported", Json::Null, Vec::new(), json!(script.clone()))
-            }
-        };
-        let name = crate::fields::qualified_name(document, node);
-        Ok(Outcome::new(match &calculation {
-            Calculation::Nothing => "the field calculates nothing".to_string(),
-            Calculation::Simple { operation, .. } => {
-                format!("the field is calculated by a {}", operation.code())
-            }
-            Calculation::Notation(_) => "the field is calculated by an expression".to_string(),
-            Calculation::Unsupported(_) => "the field has a script this tree does not understand".to_string(),
-        })
-        .with_data(json!({
-            "field": name.clone().map(|name| json!(name)).unwrap_or(Json::Null),
-            "kind": kind,
-            "operation": operation,
-            "fields": fields,
-            "expression": expression,
-        })))
+            field: NodeRef,
+        },
+        run: {
+
+            let id = "pdf.field.calculate".to_string();
+            let document = session.document();
+            let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{}`", self.field.0),
+            })?;
+            let calculation = calculation_of(document, node);
+            let (kind, operation, fields, expression) = match &calculation {
+                Calculation::Nothing => ("nothing", Json::Null, Vec::new(), Json::Null),
+                Calculation::Simple { operation, fields } => {
+                    ("simple", json!(operation.code()), fields.clone(), Json::Null)
+                }
+                Calculation::Notation(expression) => {
+                    ("notation", Json::Null, Vec::new(), json!(expression.clone()))
+                }
+                Calculation::Unsupported(script) => {
+                    ("unsupported", Json::Null, Vec::new(), json!(script.clone()))
+                }
+            };
+            let name = crate::fields::qualified_name(document, node);
+            Ok(Outcome::new(match &calculation {
+                Calculation::Nothing => "the field calculates nothing".to_string(),
+                Calculation::Simple { operation, .. } => {
+                    format!("the field is calculated by a {}", operation.code())
+                }
+                Calculation::Notation(_) => "the field is calculated by an expression".to_string(),
+                Calculation::Unsupported(_) => "the field has a script this tree does not understand".to_string(),
+            })
+            .with_data(json!({
+                "field": name.clone().map(|name| json!(name)).unwrap_or(Json::Null),
+                "kind": kind,
+                "operation": operation,
+                "fields": fields,
+                "expression": expression,
+            })))
+
+        }
+    }
+    /// **Read** the **value** a field is **calculated** to hold.
+    ///
+    /// A query: it does not change the document. A field that is not
+    /// calculated holds nothing, and the answer says so.
+    pdf.field.value {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The field to read.
+
+            field: NodeRef,
+        },
+        run: {
+
+            let id = "pdf.field.value".to_string();
+            let document = session.document();
+            let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{}`", self.field.0),
+            })?;
+            let name = crate::fields::qualified_name(document, node);
+            let calculation = calculation_of(document, node);
+            let kind = match &calculation {
+                Calculation::Nothing => "nothing",
+                Calculation::Simple { .. } => "simple",
+                Calculation::Notation(_) => "notation",
+                Calculation::Unsupported(_) => "unsupported",
+            };
+            let value = match value_of(document, &calculation) {
+                Ok(value) => json!(value),
+                Err(message) => {
+                    // A value that cannot be worked out is an **error**,
+                    // and an error says why.
+                    if matches!(calculation, Calculation::Simple { .. }) {
+                        return Err(EngineError::Failed { id: id.clone(), message });
+                    }
+                    Json::Null
+                }
+            };
+            let (operation, fields) = match &calculation {
+                Calculation::Simple { operation, fields } => (json!(operation.code()), json!(fields.clone())),
+                _ => (Json::Null, json!([])),
+            };
+            Ok(Outcome::new(match &calculation {
+                Calculation::Nothing => "the field is not calculated".to_string(),
+                Calculation::Simple { .. } => {
+                    format!("the field is calculated to hold {}", json!(value))
+                }
+                Calculation::Notation(_) => {
+                    "the field is calculated by an expression, and it is not worked out here".to_string()
+                }
+                Calculation::Unsupported(_) => "the field has a script this tree does not understand".to_string(),
+            })
+            .with_data(json!({
+                "field": name.clone().map(|name| json!(name)).unwrap_or(Json::Null),
+                "kind": kind,
+                "operation": operation,
+                "fields": fields,
+                "value": value,
+            })))
+
+        }
     }
 }
 
@@ -240,67 +309,5 @@ pub fn value_of(document: &Document, calculation: &Calculation) -> Result<f64, S
             .copied()
             .reduce(f64::max)
             .ok_or_else(|| "the largest of nothing is not a number".to_string()),
-    }
-}
-
-/// **Read** the **value** a field is **calculated** to hold.
-///
-/// A query: it does not change the document. A field that is not
-/// calculated holds nothing, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.field.value", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadCalculatedValue {
-    /// The field to read.
-    pub field: NodeRef,
-}
-
-impl ReadCalculatedValue {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.field.value".to_string();
-        let document = session.document();
-        let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{}`", self.field.0),
-        })?;
-        let name = crate::fields::qualified_name(document, node);
-        let calculation = calculation_of(document, node);
-        let kind = match &calculation {
-            Calculation::Nothing => "nothing",
-            Calculation::Simple { .. } => "simple",
-            Calculation::Notation(_) => "notation",
-            Calculation::Unsupported(_) => "unsupported",
-        };
-        let value = match value_of(document, &calculation) {
-            Ok(value) => json!(value),
-            Err(message) => {
-                // A value that cannot be worked out is an **error**,
-                // and an error says why.
-                if matches!(calculation, Calculation::Simple { .. }) {
-                    return Err(EngineError::Failed { id: id.clone(), message });
-                }
-                Json::Null
-            }
-        };
-        let (operation, fields) = match &calculation {
-            Calculation::Simple { operation, fields } => (json!(operation.code()), json!(fields.clone())),
-            _ => (Json::Null, json!([])),
-        };
-        Ok(Outcome::new(match &calculation {
-            Calculation::Nothing => "the field is not calculated".to_string(),
-            Calculation::Simple { .. } => {
-                format!("the field is calculated to hold {}", json!(value))
-            }
-            Calculation::Notation(_) => {
-                "the field is calculated by an expression, and it is not worked out here".to_string()
-            }
-            Calculation::Unsupported(_) => "the field has a script this tree does not understand".to_string(),
-        })
-        .with_data(json!({
-            "field": name.clone().map(|name| json!(name)).unwrap_or(Json::Null),
-            "kind": kind,
-            "operation": operation,
-            "fields": fields,
-            "value": value,
-        })))
     }
 }

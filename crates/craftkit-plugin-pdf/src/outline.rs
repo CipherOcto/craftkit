@@ -32,7 +32,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
@@ -48,272 +48,284 @@ const MAX_OUTLINE_ITEMS: usize = 4096;
 /// How deep an outline may be.
 const MAX_OUTLINE_DEPTH: usize = 64;
 
-/// Put a **bookmark** in the outline.
-///
-/// The bookmark is a new object with a **title**, and it hangs under a
-/// parent: the outline's root, or another bookmark. It is put at the
-/// end of its parent's list, and the list is relinked: the parent names
-/// it as its last, and the item that was last names it as its next.
-#[derive(Command)]
-#[command(id = "pdf.outline.add", area = "pdf", layer = "pdf", icon = "plus", mutates, undoable)]
-pub struct AddOutline {
-    /// The bookmark's title.
-    pub title: Text,
-    /// The page the bookmark goes to.
-    pub destination: Option<NodeRef>,
-    /// The bookmark it goes under: the outline's root, or another
-    /// bookmark.
-    pub parent: Option<NodeRef>,
-    /// The object number of the bookmark in the file.
+commands! {
+    /// Put a **bookmark** in the outline.
     ///
-    /// Leave it out and the next free number is used.
-    pub object: Option<Number>,
-}
+    /// The bookmark is a new object with a **title**, and it hangs under a
+    /// parent: the outline's root, or another bookmark. It is put at the
+    /// end of its parent's list, and the list is relinked: the parent names
+    /// it as its last, and the item that was last names it as its next.
+    pdf.outline.add {
+        area: "pdf",
+        layer: "pdf",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The bookmark's title.
 
-impl AddOutline {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.outline.add".to_string();
-        let title = self.title.0.trim().to_string();
-        if title.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a bookmark has a title".to_string(),
-            });
-        }
-        // The **page** the bookmark goes to.
-        let destination = match self.destination {
-            Some(page) => {
-                let node = session.document().node(page.0).ok_or_else(|| EngineError::Failed {
+            title: Text,
+            /// The page the bookmark goes to.
+
+            destination: Option<NodeRef>,
+            /// The bookmark it goes under: the outline's root, or another
+            /// bookmark.
+
+            parent: Option<NodeRef>,
+            /// The object number of the bookmark in the file.
+            ///
+            /// Leave it out and the next free number is used.
+
+            object: Option<Number>,
+        },
+        run: {
+
+            let id = "pdf.outline.add".to_string();
+            let title = self.title.0.trim().to_string();
+            if title.is_empty() {
+                return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("there is no node `{}`", page.0),
-                })?;
-                let page_number = the_number_of(node).ok_or_else(|| EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the node `{}` has no object number", page.0),
-                })?;
-                Some((page.0, page_number))
+                    message: "a bookmark has a title".to_string(),
+                });
             }
-            None => None,
-        };
-        // The **parent**: the outline's root, or another bookmark. The
-        // root is made when the document has no outline yet — an
-        // outline hangs from the catalog, and a document without a
-        // catalog has nowhere to hang it.
-        let (parent, root) = match self.parent {
-            Some(parent) => {
-                if session.document().node(parent.0).is_none() {
-                    return Err(EngineError::Failed {
+            // The **page** the bookmark goes to.
+            let destination = match self.destination {
+                Some(page) => {
+                    let node = session.document().node(page.0).ok_or_else(|| EngineError::Failed {
                         id: id.clone(),
-                        message: format!("there is no node `{}`", parent.0),
-                    });
+                        message: format!("there is no node `{}`", page.0),
+                    })?;
+                    let page_number = the_number_of(node).ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{}` has no object number", page.0),
+                    })?;
+                    Some((page.0, page_number))
                 }
-                let root = the_root_of(session, parent.0).ok_or_else(|| EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the node `{}` is not in an outline", parent.0),
-                })?;
-                (parent.0, root)
-            }
-            None => {
-                let root = match the_root(session) {
-                    Some(root) => root,
-                    None => {
-                        let catalog = the_catalog(session).ok_or_else(|| EngineError::Failed {
+                None => None,
+            };
+            // The **parent**: the outline's root, or another bookmark. The
+            // root is made when the document has no outline yet — an
+            // outline hangs from the catalog, and a document without a
+            // catalog has nowhere to hang it.
+            let (parent, root) = match self.parent {
+                Some(parent) => {
+                    if session.document().node(parent.0).is_none() {
+                        return Err(EngineError::Failed {
                             id: id.clone(),
-                            message: "the document has no catalog, and an outline hangs from it".to_string(),
-                        })?;
-                        let root_number = the_next_number(session.document(), 0);
-                        let root_data = serde_json::json!({
-                            "object": root_number,
-                            "entries": pairs_of(&[("Type".to_string(), serde_json::json!("Outlines"))]),
+                            message: format!("there is no node `{}`", parent.0),
                         });
-                        let root =
-                            session.document_mut()?.add_node_with("outline", "pdf.object", None, root_data);
-                        // The **catalog** names the outline.
-                        let reference = a_reference(session, root, 0, &id)?;
-                        add_reference(session, catalog, "Outlines", reference, false)?;
-                        let relation = craftkit_sdk::Relation::with_payload(
-                            catalog,
-                            root,
-                            "ref",
-                            serde_json::json!({ "key": "Outlines", "generation": 0 }),
-                        );
-                        session.document_mut()?.add_relation(relation);
-                        root
                     }
-                };
-                (root, root)
-            }
-        };
-        // The **object number** of the bookmark: a whole number of its
-        // own, and one that nothing else has.
-        //
-        // It is worked out **after** the parent, because the outline
-        // may have been made on the way: the root is an object of the
-        // file too, and it takes a number of its own.
-        let number = match self.object {
-            Some(number) => {
-                let number = number.0;
-                if !number.is_finite() || number < 0.0 || number.fract() != 0.0 {
-                    return Err(EngineError::Failed {
+                    let root = the_root_of(session, parent.0).ok_or_else(|| EngineError::Failed {
                         id: id.clone(),
-                        message: "an object number is a whole number".to_string(),
-                    });
+                        message: format!("the node `{}` is not in an outline", parent.0),
+                    })?;
+                    (parent.0, root)
                 }
-                let number = number as u64;
-                if number == 0 {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: "object numbers start at one".to_string(),
-                    });
+                None => {
+                    let root = match the_root(session) {
+                        Some(root) => root,
+                        None => {
+                            let catalog = the_catalog(session).ok_or_else(|| EngineError::Failed {
+                                id: id.clone(),
+                                message: "the document has no catalog, and an outline hangs from it".to_string(),
+                            })?;
+                            let root_number = the_next_number(session.document(), 0);
+                            let root_data = serde_json::json!({
+                                "object": root_number,
+                                "entries": pairs_of(&[("Type".to_string(), serde_json::json!("Outlines"))]),
+                            });
+                            let root =
+                                session.document_mut()?.add_node_with("outline", "pdf.object", None, root_data);
+                            // The **catalog** names the outline.
+                            let reference = a_reference(session, root, 0, &id)?;
+                            add_reference(session, catalog, "Outlines", reference, false)?;
+                            let relation = craftkit_sdk::Relation::with_payload(
+                                catalog,
+                                root,
+                                "ref",
+                                serde_json::json!({ "key": "Outlines", "generation": 0 }),
+                            );
+                            session.document_mut()?.add_relation(relation);
+                            root
+                        }
+                    };
+                    (root, root)
                 }
-                if session.document().walk().any(|node| the_number_of(node) == Some(number)) {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the object {number} is already in the document"),
-                    });
+            };
+            // The **object number** of the bookmark: a whole number of its
+            // own, and one that nothing else has.
+            //
+            // It is worked out **after** the parent, because the outline
+            // may have been made on the way: the root is an object of the
+            // file too, and it takes a number of its own.
+            let number = match self.object {
+                Some(number) => {
+                    let number = number.0;
+                    if !number.is_finite() || number < 0.0 || number.fract() != 0.0 {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "an object number is a whole number".to_string(),
+                        });
+                    }
+                    let number = number as u64;
+                    if number == 0 {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: "object numbers start at one".to_string(),
+                        });
+                    }
+                    if session.document().walk().any(|node| the_number_of(node) == Some(number)) {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the object {number} is already in the document"),
+                        });
+                    }
+                    number
                 }
-                number
-            }
-            None => the_next_number(session.document(), 0),
-        };
-        let parent_number = the_number_of(session.document().node(parent).ok_or_else(|| {
-            EngineError::Failed { id: id.clone(), message: format!("there is no node `{parent}`") }
-        })?)
-        .ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the node `{parent}` has no object number"),
-        })?;
-        // The **bookmark** itself.
-        let mut entries: Vec<(String, serde_json::Value)> = vec![
-            ("Title".to_string(), serde_json::json!({ "string": title })),
-            ("Parent".to_string(), serde_json::json!({ "ref": [parent_number, 0] })),
-        ];
-        if let Some((_, page_number)) = destination {
-            entries.push(("Dest".to_string(), serde_json::json!([{ "ref": [page_number, 0] }, "Fit"])));
-        }
-        let data = serde_json::json!({ "object": number, "entries": pairs_of(&entries) });
-        let item = session.document_mut()?.add_node_with(title.clone(), "pdf.object", None, data);
-        // The **list** of the parent's children: the new bookmark goes
-        // at the end of it, and the list is relinked.
-        let children = the_children(session, parent);
-        let last = children.last().copied();
-        match last {
-            Some(last) => {
-                let last_number = the_number_of(session.document().node(last).ok_or_else(|| {
-                    EngineError::Failed { id: id.clone(), message: format!("there is no node `{last}`") }
-                })?)
-                .ok_or_else(|| EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the node `{last}` has no object number"),
-                })?;
-                // The item that was last names the new one as its next.
-                add_reference(session, last, "Next", serde_json::json!({ "ref": [number, 0] }), false)?;
-                let relation = craftkit_sdk::Relation::with_payload(
-                    last,
-                    item,
-                    "ref",
-                    serde_json::json!({ "key": "Next", "generation": 0 }),
-                );
-                session.document_mut()?.add_relation(relation);
-                // And the new one names the old last as its previous.
-                add_reference(session, item, "Prev", serde_json::json!({ "ref": [last_number, 0] }), false)?;
-                let relation = craftkit_sdk::Relation::with_payload(
-                    item,
-                    last,
-                    "ref",
-                    serde_json::json!({ "key": "Prev", "generation": 0 }),
-                );
-                session.document_mut()?.add_relation(relation);
-            }
-            None => {
-                // The parent had no children, and the new one is the
-                // first.
-                add_reference(session, parent, "First", serde_json::json!({ "ref": [number, 0] }), false)?;
-                let relation = craftkit_sdk::Relation::with_payload(
-                    parent,
-                    item,
-                    "ref",
-                    serde_json::json!({ "key": "First", "generation": 0 }),
-                );
-                session.document_mut()?.add_relation(relation);
-            }
-        }
-        // The parent names the new one as its last.
-        add_reference(session, parent, "Last", serde_json::json!({ "ref": [number, 0] }), false)?;
-        let relation = craftkit_sdk::Relation::with_payload(
-            parent,
-            item,
-            "ref",
-            serde_json::json!({ "key": "Last", "generation": 0 }),
-        );
-        session.document_mut()?.add_relation(relation);
-        // And the new one names its parent.
-        let relation = craftkit_sdk::Relation::with_payload(
-            item,
-            parent,
-            "ref",
-            serde_json::json!({ "key": "Parent", "generation": 0 }),
-        );
-        session.document_mut()?.add_relation(relation);
-        // A parent that was **closed** is opened: it has a child now,
-        // and a child that cannot be seen is a child that is not there.
-        if parent != root {
-            let count = the_count(session, parent);
-            let closed = count.map(|count| count <= 0).unwrap_or(true);
-            if closed {
-                let node = session.document_mut()?.node_mut(parent);
-                if let Some(node) = node {
-                    node.data = crate::with_entry(&node.data, "Count", serde_json::json!(1));
-                }
-            }
-        }
-        // The **counts** are derived, and they are worked out again.
-        recount(session, root)?;
-        Ok(Outcome::changed(format!("added the bookmark `{title}`")).with_data(serde_json::json!({
-            "id": item,
-            "object": number,
-            "title": title,
-            "parent": parent,
-            "root": root,
-            "destination": destination.map(|(page, _)| page),
-        })))
-    }
-}
-
-/// Read the **outline**: the bookmarks, in the order they are in.
-///
-/// A query: it does not change the document.
-#[derive(Command)]
-#[command(id = "pdf.outline.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadOutline {
-    /// The root of the outline.
-    ///
-    /// Leave it out and the outline of the document's catalog is read.
-    pub root: Option<NodeRef>,
-}
-
-impl ReadOutline {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.outline.read".to_string();
-        let root = match self.root {
-            Some(root) => {
-                if session.document().node(root.0).is_none() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("there is no node `{}`", root.0),
-                    });
-                }
-                root.0
-            }
-            None => the_root(session).ok_or_else(|| EngineError::Failed {
+                None => the_next_number(session.document(), 0),
+            };
+            let parent_number = the_number_of(session.document().node(parent).ok_or_else(|| {
+                EngineError::Failed { id: id.clone(), message: format!("there is no node `{parent}`") }
+            })?)
+            .ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
-                message: "the document has no outline".to_string(),
-            })?,
-        };
-        let items = the_tree(session, root, 0);
-        let count = items.len();
-        Ok(Outcome::new(format!("{count} bookmark(s)"))
-            .with_data(serde_json::json!({ "root": root, "items": items })))
+                message: format!("the node `{parent}` has no object number"),
+            })?;
+            // The **bookmark** itself.
+            let mut entries: Vec<(String, serde_json::Value)> = vec![
+                ("Title".to_string(), serde_json::json!({ "string": title })),
+                ("Parent".to_string(), serde_json::json!({ "ref": [parent_number, 0] })),
+            ];
+            if let Some((_, page_number)) = destination {
+                entries.push(("Dest".to_string(), serde_json::json!([{ "ref": [page_number, 0] }, "Fit"])));
+            }
+            let data = serde_json::json!({ "object": number, "entries": pairs_of(&entries) });
+            let item = session.document_mut()?.add_node_with(title.clone(), "pdf.object", None, data);
+            // The **list** of the parent's children: the new bookmark goes
+            // at the end of it, and the list is relinked.
+            let children = the_children(session, parent);
+            let last = children.last().copied();
+            match last {
+                Some(last) => {
+                    let last_number = the_number_of(session.document().node(last).ok_or_else(|| {
+                        EngineError::Failed { id: id.clone(), message: format!("there is no node `{last}`") }
+                    })?)
+                    .ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{last}` has no object number"),
+                    })?;
+                    // The item that was last names the new one as its next.
+                    add_reference(session, last, "Next", serde_json::json!({ "ref": [number, 0] }), false)?;
+                    let relation = craftkit_sdk::Relation::with_payload(
+                        last,
+                        item,
+                        "ref",
+                        serde_json::json!({ "key": "Next", "generation": 0 }),
+                    );
+                    session.document_mut()?.add_relation(relation);
+                    // And the new one names the old last as its previous.
+                    add_reference(session, item, "Prev", serde_json::json!({ "ref": [last_number, 0] }), false)?;
+                    let relation = craftkit_sdk::Relation::with_payload(
+                        item,
+                        last,
+                        "ref",
+                        serde_json::json!({ "key": "Prev", "generation": 0 }),
+                    );
+                    session.document_mut()?.add_relation(relation);
+                }
+                None => {
+                    // The parent had no children, and the new one is the
+                    // first.
+                    add_reference(session, parent, "First", serde_json::json!({ "ref": [number, 0] }), false)?;
+                    let relation = craftkit_sdk::Relation::with_payload(
+                        parent,
+                        item,
+                        "ref",
+                        serde_json::json!({ "key": "First", "generation": 0 }),
+                    );
+                    session.document_mut()?.add_relation(relation);
+                }
+            }
+            // The parent names the new one as its last.
+            add_reference(session, parent, "Last", serde_json::json!({ "ref": [number, 0] }), false)?;
+            let relation = craftkit_sdk::Relation::with_payload(
+                parent,
+                item,
+                "ref",
+                serde_json::json!({ "key": "Last", "generation": 0 }),
+            );
+            session.document_mut()?.add_relation(relation);
+            // And the new one names its parent.
+            let relation = craftkit_sdk::Relation::with_payload(
+                item,
+                parent,
+                "ref",
+                serde_json::json!({ "key": "Parent", "generation": 0 }),
+            );
+            session.document_mut()?.add_relation(relation);
+            // A parent that was **closed** is opened: it has a child now,
+            // and a child that cannot be seen is a child that is not there.
+            if parent != root {
+                let count = the_count(session, parent);
+                let closed = count.map(|count| count <= 0).unwrap_or(true);
+                if closed {
+                    let node = session.document_mut()?.node_mut(parent);
+                    if let Some(node) = node {
+                        node.data = crate::with_entry(&node.data, "Count", serde_json::json!(1));
+                    }
+                }
+            }
+            // The **counts** are derived, and they are worked out again.
+            recount(session, root)?;
+            Ok(Outcome::changed(format!("added the bookmark `{title}`")).with_data(serde_json::json!({
+                "id": item,
+                "object": number,
+                "title": title,
+                "parent": parent,
+                "root": root,
+                "destination": destination.map(|(page, _)| page),
+            })))
+
+        }
+    }
+    /// Read the **outline**: the bookmarks, in the order they are in.
+    ///
+    /// A query: it does not change the document.
+    pdf.outline.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The root of the outline.
+            ///
+            /// Leave it out and the outline of the document's catalog is read.
+
+            root: Option<NodeRef>,
+        },
+        run: {
+
+            let id = "pdf.outline.read".to_string();
+            let root = match self.root {
+                Some(root) => {
+                    if session.document().node(root.0).is_none() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("there is no node `{}`", root.0),
+                        });
+                    }
+                    root.0
+                }
+                None => the_root(session).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: "the document has no outline".to_string(),
+                })?,
+            };
+            let items = the_tree(session, root, 0);
+            let count = items.len();
+            Ok(Outcome::new(format!("{count} bookmark(s)"))
+                .with_data(serde_json::json!({ "root": root, "items": items })))
+
+        }
     }
 }
 

@@ -18,10 +18,10 @@
 //! - the **words** are escaped, so that a title with an ampersand in
 //!   it does not break the packet.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{Document, EngineError, Node, Outcome, Session, Text};
+use craftkit_sdk::{Document, EngineError, Node, Outcome, Text};
 
 use crate::preflight::Level;
 
@@ -137,96 +137,104 @@ pub fn packet(document: &Document, level: Level) -> String {
     )
 }
 
-/// **Write** the **XMP metadata** of a file.
-///
-/// The packet is built from the information the file has, and it is
-/// written to a **file** of its own — the bytes of a stream are bytes
-/// in a file, and that is the truth here too. The catalog then names
-/// it, and the file says what it is.
-///
-/// The rules:
-///
-/// - a path that is **empty** is refused;
-/// - a level that is **not a level** is refused;
-/// - a file with **no catalog** is refused: there is nothing to name
-///   the metadata.
-#[derive(Command)]
-#[command(id = "pdf.metadata.write", area = "pdf", layer = "pdf", icon = "file", mutates, undoable)]
-pub struct WriteMetadata {
-    /// Where the packet's **bytes** are written.
-    pub path: Text,
-    /// The level the file is: `a2b` or `a3b`.
-    pub level: Text,
-}
+commands! {
+    /// **Write** the **XMP metadata** of a file.
+    ///
+    /// The packet is built from the information the file has, and it is
+    /// written to a **file** of its own — the bytes of a stream are bytes
+    /// in a file, and that is the truth here too. The catalog then names
+    /// it, and the file says what it is.
+    ///
+    /// The rules:
+    ///
+    /// - a path that is **empty** is refused;
+    /// - a level that is **not a level** is refused;
+    /// - a file with **no catalog** is refused: there is nothing to name
+    ///   the metadata.
+    pdf.metadata.write {
+        area: "pdf",
+        layer: "pdf",
+        icon: "file",
+        mutates,
+        undoable,
+        params: {
+            /// Where the packet's **bytes** are written.
 
-impl WriteMetadata {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.metadata.write".to_string();
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed {
+            path: Text,
+            /// The level the file is: `a2b` or `a3b`.
+
+            level: Text,
+        },
+        run: {
+
+            let id = "pdf.metadata.write".to_string();
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the packet's bytes go somewhere".to_string(),
+                });
+            }
+            let level = Level::from_id(&self.level.0).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
-                message: "the packet's bytes go somewhere".to_string(),
-            });
-        }
-        let level = Level::from_id(&self.level.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("`{}` is not a level: the levels are a2b, a3b", self.level.0.trim()),
-        })?;
-        let Some(catalog) = crate::preflight::the_catalog(session.document()).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the file has no catalog".to_string(),
-            });
-        };
-        // The **packet**: what the file says about itself.
-        let packet = packet(session.document(), level);
-        // The **bytes**: they go in a file of their own.
-        if let Some(parent) = std::path::Path::new(&path).parent()
-            && !parent.as_os_str().is_empty()
-        {
-            std::fs::create_dir_all(parent).map_err(|error| EngineError::Failed {
-                id: id.clone(),
-                message: format!("the packet's bytes have nowhere to go: {error}"),
+                message: format!("`{}` is not a level: the levels are a2b, a3b", self.level.0.trim()),
             })?;
+            let Some(catalog) = crate::preflight::the_catalog(session.document()).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the file has no catalog".to_string(),
+                });
+            };
+            // The **packet**: what the file says about itself.
+            let packet = packet(session.document(), level);
+            // The **bytes**: they go in a file of their own.
+            if let Some(parent) = std::path::Path::new(&path).parent()
+                && !parent.as_os_str().is_empty()
+            {
+                std::fs::create_dir_all(parent).map_err(|error| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the packet's bytes have nowhere to go: {error}"),
+                })?;
+            }
+            std::fs::write(&path, packet.as_bytes()).map_err(|error| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the packet's bytes cannot be written: {error}"),
+            })?;
+            // The **object**: the metadata, uncompressed.
+            let number = crate::the_next_number(session.document(), 0);
+            let entries = json!([["Type", "Metadata"], ["Subtype", "XML"]]);
+            let data = json!({ "object": number, "entries": entries });
+            let metadata =
+                session.document_mut()?.add_node_with(format!("metadata {number}"), "pdf.stream", None, data);
+            if let Some(node) = session.document_mut()?.node_mut(metadata) {
+                node.stream = Some(path.clone());
+            }
+            // The **catalog** names the metadata.
+            let mut catalog_entries = crate::entries_of(&catalog.data);
+            let value = json!({ "ref": [number, 0] });
+            match catalog_entries.iter_mut().find(|(key, _)| key == "Metadata") {
+                Some(entry) => entry.1 = value,
+                None => catalog_entries.push(("Metadata".to_string(), value)),
+            }
+            let data = json!({
+                "object": catalog.data.get("object").cloned().unwrap_or(craftkit_sdk::serde_json::Value::Null),
+                "entries": catalog_entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+            });
+            if let Some(node) = session.document_mut()?.node_mut(catalog.id) {
+                node.data = data;
+            }
+            // And the **edge**: the catalog names the metadata.
+            let payload = json!({ "key": "Metadata", "generation": 0 });
+            let relation = craftkit_sdk::Relation::with_payload(catalog.id, metadata, "ref", payload);
+            session.document_mut()?.add_relation(relation);
+            Ok(Outcome::changed(format!("the file says it is {}", level.label())).with_data(json!({
+                "id": metadata,
+                "object": number,
+                "path": path,
+                "level": level.label(),
+                "part": level.part(),
+            })))
+
         }
-        std::fs::write(&path, packet.as_bytes()).map_err(|error| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the packet's bytes cannot be written: {error}"),
-        })?;
-        // The **object**: the metadata, uncompressed.
-        let number = crate::the_next_number(session.document(), 0);
-        let entries = json!([["Type", "Metadata"], ["Subtype", "XML"]]);
-        let data = json!({ "object": number, "entries": entries });
-        let metadata =
-            session.document_mut()?.add_node_with(format!("metadata {number}"), "pdf.stream", None, data);
-        if let Some(node) = session.document_mut()?.node_mut(metadata) {
-            node.stream = Some(path.clone());
-        }
-        // The **catalog** names the metadata.
-        let mut catalog_entries = crate::entries_of(&catalog.data);
-        let value = json!({ "ref": [number, 0] });
-        match catalog_entries.iter_mut().find(|(key, _)| key == "Metadata") {
-            Some(entry) => entry.1 = value,
-            None => catalog_entries.push(("Metadata".to_string(), value)),
-        }
-        let data = json!({
-            "object": catalog.data.get("object").cloned().unwrap_or(craftkit_sdk::serde_json::Value::Null),
-            "entries": catalog_entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
-        });
-        if let Some(node) = session.document_mut()?.node_mut(catalog.id) {
-            node.data = data;
-        }
-        // And the **edge**: the catalog names the metadata.
-        let payload = json!({ "key": "Metadata", "generation": 0 });
-        let relation = craftkit_sdk::Relation::with_payload(catalog.id, metadata, "ref", payload);
-        session.document_mut()?.add_relation(relation);
-        Ok(Outcome::changed(format!("the file says it is {}", level.label())).with_data(json!({
-            "id": metadata,
-            "object": number,
-            "path": path,
-            "level": level.label(),
-            "part": level.part(),
-        })))
     }
 }

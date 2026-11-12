@@ -17,10 +17,10 @@
 //! - a script that is **not a stream** is skipped, and the answer says
 //!   what it skipped.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Outcome};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.scripts.read";
@@ -135,46 +135,51 @@ fn walk(
     }
 }
 
-/// **Read** the **JavaScript** of a PDF file.
-///
-/// A query: it does not change the document. The scripts are read and
-/// not run: a program in a file is a program and not a fact.
-#[derive(Command)]
-#[command(id = "pdf.scripts.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadScripts {
-    /// The script to read.
+commands! {
+    /// **Read** the **JavaScript** of a PDF file.
     ///
-    /// Leave it out and every script is read.
-    pub name: Option<craftkit_sdk::Text>,
-}
+    /// A query: it does not change the document. The scripts are read and
+    /// not run: a program in a file is a program and not a fact.
+    pdf.scripts.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The script to read.
+            ///
+            /// Leave it out and every script is read.
 
-impl ReadScripts {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = COMMAND.to_string();
-        let (all, skipped) = scripts_of(session.document());
-        let listed: Vec<Json> = match &self.name {
-            None => all.iter().map(|script| script.to_json()).collect(),
-            Some(name) => {
-                let wanted = name.0.trim();
-                let one: Vec<Json> = all
-                    .iter()
-                    .filter(|script| script.name == wanted)
-                    .map(|script| script.to_json())
-                    .collect();
-                if one.is_empty() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the file has no script called `{wanted}`"),
-                    });
+            name: Option<craftkit_sdk::Text>,
+        },
+        run: {
+
+            let id = COMMAND.to_string();
+            let (all, skipped) = scripts_of(session.document());
+            let listed: Vec<Json> = match &self.name {
+                None => all.iter().map(|script| script.to_json()).collect(),
+                Some(name) => {
+                    let wanted = name.0.trim();
+                    let one: Vec<Json> = all
+                        .iter()
+                        .filter(|script| script.name == wanted)
+                        .map(|script| script.to_json())
+                        .collect();
+                    if one.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the file has no script called `{wanted}`"),
+                        });
+                    }
+                    one
                 }
-                one
-            }
-        };
-        let count = listed.len();
-        Ok(Outcome::new(format!("the file holds {count} script(s)")).with_data(json!({
-            "scripts": listed,
-            "count": count,
-            "skipped": skipped,
-        })))
+            };
+            let count = listed.len();
+            Ok(Outcome::new(format!("the file holds {count} script(s)")).with_data(json!({
+                "scripts": listed,
+                "count": count,
+                "skipped": skipped,
+            })))
+
+        }
     }
 }

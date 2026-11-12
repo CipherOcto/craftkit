@@ -20,10 +20,10 @@
 //! - a flag that is **not said** leaves the annotation as it was, and
 //!   a flag that is not named is left as it was.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session};
+use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome};
 
 /// The flag of an annotation that is **hidden**.
 pub const HIDDEN: i64 = 1 << 1;
@@ -82,72 +82,81 @@ pub fn show(node: &mut Node) -> bool {
     true
 }
 
-/// **Say** the **flags** of an annotation.
-///
-/// The flags that are asked about are said; the flags that are not
-/// asked about are left as they were.
-///
-/// The rules:
-///
-/// - a node that is **not an annotation** is refused;
-/// - a flag that is **not said** leaves the annotation as it was.
-#[derive(Command)]
-#[command(id = "pdf.annot.flags", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct SetAnnotationFlags {
-    /// The annotation.
-    pub annotation: NodeRef,
-    /// Whether the annotation prints.
+commands! {
+    /// **Say** the **flags** of an annotation.
     ///
-    /// Leave it out and the annotation keeps the flag it has.
-    pub print: Option<Bool>,
-    /// Whether the annotation is hidden.
+    /// The flags that are asked about are said; the flags that are not
+    /// asked about are left as they were.
     ///
-    /// Leave it out and the annotation keeps the flag it has.
-    pub hidden: Option<Bool>,
-}
+    /// The rules:
+    ///
+    /// - a node that is **not an annotation** is refused;
+    /// - a flag that is **not said** leaves the annotation as it was.
+    pdf.annot.flags {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The annotation.
 
-impl SetAnnotationFlags {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.annot.flags".to_string();
-        let annotation = self.annotation.0;
-        let Some(node) = session.document().node(annotation).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{annotation}`"),
+            annotation: NodeRef,
+            /// Whether the annotation prints.
+            ///
+            /// Leave it out and the annotation keeps the flag it has.
+
+            print: Option<Bool>,
+            /// Whether the annotation is hidden.
+            ///
+            /// Leave it out and the annotation keeps the flag it has.
+
+            hidden: Option<Bool>,
+        },
+        run: {
+
+            let id = "pdf.annot.flags".to_string();
+            let annotation = self.annotation.0;
+            let Some(node) = session.document().node(annotation).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{annotation}`"),
+                });
+            };
+            let entries = crate::entries_of(&node.data);
+            if !crate::preflight::is_an_annotation(&entries) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{annotation}` is not an annotation"),
+                });
+            }
+            let mut bits = flags_of(&node);
+            if let Some(print) = &self.print {
+                bits = if print.0 { bits | PRINT } else { bits & !PRINT };
+            }
+            if let Some(hidden) = &self.hidden {
+                bits = if hidden.0 { bits | (HIDDEN | NO_VIEW) } else { bits & !(HIDDEN | NO_VIEW) };
+            }
+            let mut entries = entries;
+            let value = json!(bits);
+            match entries.iter_mut().find(|(key, _)| key == "F") {
+                Some(entry) => entry.1 = value,
+                None => entries.push(("F".to_string(), value)),
+            }
+            let data = json!({
+                "object": node.data.get("object").cloned().unwrap_or(craftkit_sdk::serde_json::Value::Null),
+                "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
             });
-        };
-        let entries = crate::entries_of(&node.data);
-        if !crate::preflight::is_an_annotation(&entries) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{annotation}` is not an annotation"),
-            });
+            if let Some(node) = session.document_mut()?.node_mut(annotation) {
+                node.data = data;
+            }
+            Ok(Outcome::changed(format!("the annotation `{annotation}` has the flags {bits}")).with_data(json!({
+                "annotation": annotation,
+                "flags": bits,
+                "print": bits & PRINT != 0,
+                "hidden": bits & (HIDDEN | NO_VIEW) != 0,
+            })))
+
         }
-        let mut bits = flags_of(&node);
-        if let Some(print) = &self.print {
-            bits = if print.0 { bits | PRINT } else { bits & !PRINT };
-        }
-        if let Some(hidden) = &self.hidden {
-            bits = if hidden.0 { bits | (HIDDEN | NO_VIEW) } else { bits & !(HIDDEN | NO_VIEW) };
-        }
-        let mut entries = entries;
-        let value = json!(bits);
-        match entries.iter_mut().find(|(key, _)| key == "F") {
-            Some(entry) => entry.1 = value,
-            None => entries.push(("F".to_string(), value)),
-        }
-        let data = json!({
-            "object": node.data.get("object").cloned().unwrap_or(craftkit_sdk::serde_json::Value::Null),
-            "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
-        });
-        if let Some(node) = session.document_mut()?.node_mut(annotation) {
-            node.data = data;
-        }
-        Ok(Outcome::changed(format!("the annotation `{annotation}` has the flags {bits}")).with_data(json!({
-            "annotation": annotation,
-            "flags": bits,
-            "print": bits & PRINT != 0,
-            "hidden": bits & (HIDDEN | NO_VIEW) != 0,
-        })))
     }
 }

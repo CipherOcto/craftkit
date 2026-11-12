@@ -20,10 +20,10 @@
 //! - The marks of a page are not **listed**: the command says how many
 //!   it took away and not where they were.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Outcome, Text};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.page.marks.remove";
@@ -108,70 +108,78 @@ fn without_marks(content: &str, mark: &str) -> (String, usize) {
     (out, taken)
 }
 
-/// **Take away** the marks of a page: the watermark, the header, the
-/// footer or the background.
-///
-/// The tree's own: the mark is found by the name the tree gives it and
-/// the content of it is cut out of the page.
-#[derive(Command)]
-#[command(id = "pdf.page.marks.remove", area = "pdf", layer = "pdf", icon = "trash", mutates, undoable)]
-pub struct RemoveMarks {
-    /// The page the marks are taken away from.
-    pub page: NodeRef,
-    /// The kind of mark: `headerfooter`, `watermark` or `background`.
-    pub kind: Text,
-}
+commands! {
+    /// **Take away** the marks of a page: the watermark, the header, the
+    /// footer or the background.
+    ///
+    /// The tree's own: the mark is found by the name the tree gives it and
+    /// the content of it is cut out of the page.
+    pdf.page.marks.remove {
+        area: "pdf",
+        layer: "pdf",
+        icon: "trash",
+        mutates,
+        undoable,
+        params: {
+            /// The page the marks are taken away from.
 
-impl RemoveMarks {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let Some(mark) = mark_of(&self.kind.0) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!(
-                    "`{}` is not a kind of mark: the kinds are {}",
-                    self.kind.0.trim(),
-                    KINDS.join(", ")
-                ),
-            });
-        };
-        let Some(node) = session.document().node(self.page.0) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no node `{}`", self.page.0),
-            });
-        };
-        let streams = content_streams(session.document(), node);
-        let mut taken = 0usize;
-        for stream in streams {
-            let stream_node = session.document().node(stream).ok_or_else(|| EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no node `{stream}`"),
-            })?;
-            let Some(path) = stream_node.stream.clone() else {
-                continue;
+            page: NodeRef,
+            /// The kind of mark: `headerfooter`, `watermark` or `background`.
+
+            kind: Text,
+        },
+        run: {
+
+            let Some(mark) = mark_of(&self.kind.0) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!(
+                        "`{}` is not a kind of mark: the kinds are {}",
+                        self.kind.0.trim(),
+                        KINDS.join(", ")
+                    ),
+                });
             };
-            let limits = crate::filters::Limits::default();
-            let bytes =
-                craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
-                    .map_err(|message| EngineError::Failed {
-                        id: COMMAND.to_string(),
-                        message: format!("the page's content cannot be read: {message}"),
-                    })?;
-            let content = String::from_utf8_lossy(&bytes).to_string();
-            let (without, count) = without_marks(&content, &format!("/PCMark /{mark}"));
-            if count == 0 {
-                continue;
+            let Some(node) = session.document().node(self.page.0) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no node `{}`", self.page.0),
+                });
+            };
+            let streams = content_streams(session.document(), node);
+            let mut taken = 0usize;
+            for stream in streams {
+                let stream_node = session.document().node(stream).ok_or_else(|| EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no node `{stream}`"),
+                })?;
+                let Some(path) = stream_node.stream.clone() else {
+                    continue;
+                };
+                let limits = crate::filters::Limits::default();
+                let bytes =
+                    craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
+                        .map_err(|message| EngineError::Failed {
+                            id: COMMAND.to_string(),
+                            message: format!("the page's content cannot be read: {message}"),
+                        })?;
+                let content = String::from_utf8_lossy(&bytes).to_string();
+                let (without, count) = without_marks(&content, &format!("/PCMark /{mark}"));
+                if count == 0 {
+                    continue;
+                }
+                taken += count;
+                std::fs::write(&path, without.as_bytes()).map_err(|error| EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the page's content cannot be written: {error}"),
+                })?;
             }
-            taken += count;
-            std::fs::write(&path, without.as_bytes()).map_err(|error| EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the page's content cannot be written: {error}"),
-            })?;
+            Ok(Outcome::changed(format!("{taken} mark(s) taken away")).with_data(json!({
+                "page": self.page.0,
+                "kind": self.kind.0.trim().to_ascii_lowercase(),
+                "removed": taken,
+            })))
+
         }
-        Ok(Outcome::changed(format!("{taken} mark(s) taken away")).with_data(json!({
-            "page": self.page.0,
-            "kind": self.kind.0.trim().to_ascii_lowercase(),
-            "removed": taken,
-        })))
     }
 }

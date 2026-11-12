@@ -36,7 +36,7 @@
 //!   counts the content of the off layers as well, and that is not
 //!   here.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Outcome, Session};
@@ -327,77 +327,86 @@ fn remove_annotations(session: &mut Session, category: &str) -> Result<usize, En
     Ok(removed)
 }
 
-/// The **hidden information** of a file is taken away.
-///
-/// A change: the annotations of the category are gone from the
-/// document, and the pop-ups that belong to them go with them.
-#[derive(Command)]
-#[command(id = "pdf.hidden.remove", area = "pdf", layer = "pdf", icon = "remove", mutates, undoable)]
-pub struct RemoveHidden {
-    /// The category to take away: `Comments`, `Attachments` or
-    /// `LinksActionsScripts`.
-    pub category: craftkit_sdk::Text,
-}
-
-impl RemoveHidden {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let category = self.category.0.trim().to_string();
-        if !CATEGORIES.contains(&category.as_str()) {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no category called `{category}`"),
-            });
-        }
-        if !ANNOTATION_CATEGORIES.contains(&category.as_str()) {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("not supported yet: the {category} is not taken away yet"),
-            });
-        }
-        let removed = remove_annotations(session, &category)?;
-        Ok(Outcome::changed(format!("{removed} annotation(s) taken away")).with_data(json!({
-            "category": category,
-            "removed": removed,
-        })))
-    }
-}
-
-/// The **hidden information** of a file is counted.
-///
-/// A query: it does not change the document. A file that hides nothing
-/// says so, and every category is named.
-#[derive(Command)]
-#[command(id = "pdf.hidden.scan", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ScanHidden {
-    /// The category to count.
+commands! {
+    /// The **hidden information** of a file is taken away.
     ///
-    /// Leave it out and every category is counted.
-    pub category: Option<craftkit_sdk::Text>,
-}
+    /// A change: the annotations of the category are gone from the
+    /// document, and the pop-ups that belong to them go with them.
+    pdf.hidden.remove {
+        area: "pdf",
+        layer: "pdf",
+        icon: "remove",
+        mutates,
+        undoable,
+        params: {
+            /// The category to take away: `Comments`, `Attachments` or
+            /// `LinksActionsScripts`.
 
-impl ScanHidden {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let counts = scan(session);
-        let listed: Vec<Json> = match &self.category {
-            None => counts
-                .iter()
-                .map(|(category, count)| json!({ "category": category.clone(), "count": count }))
-                .collect(),
-            Some(category) => {
-                let wanted = category.0.trim();
-                let Some((name, count)) = counts.iter().find(|(name, _)| name == wanted) else {
-                    return Err(EngineError::Failed {
-                        id: COMMAND.to_string(),
-                        message: format!("there is no category called `{wanted}`"),
-                    });
-                };
-                vec![json!({ "category": name.clone(), "count": count })]
+            category: craftkit_sdk::Text,
+        },
+        run: {
+
+            let category = self.category.0.trim().to_string();
+            if !CATEGORIES.contains(&category.as_str()) {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no category called `{category}`"),
+                });
             }
-        };
-        let total: usize = counts.iter().map(|(_, count)| count).sum();
-        Ok(Outcome::new(format!("the file hides {total} thing(s)")).with_data(json!({
-            "categories": listed,
-            "total": total,
-        })))
+            if !ANNOTATION_CATEGORIES.contains(&category.as_str()) {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("not supported yet: the {category} is not taken away yet"),
+                });
+            }
+            let removed = remove_annotations(session, &category)?;
+            Ok(Outcome::changed(format!("{removed} annotation(s) taken away")).with_data(json!({
+                "category": category,
+                "removed": removed,
+            })))
+
+        }
+    }
+    /// The **hidden information** of a file is counted.
+    ///
+    /// A query: it does not change the document. A file that hides nothing
+    /// says so, and every category is named.
+    pdf.hidden.scan {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The category to count.
+            ///
+            /// Leave it out and every category is counted.
+
+            category: Option<craftkit_sdk::Text>,
+        },
+        run: {
+
+            let counts = scan(session);
+            let listed: Vec<Json> = match &self.category {
+                None => counts
+                    .iter()
+                    .map(|(category, count)| json!({ "category": category.clone(), "count": count }))
+                    .collect(),
+                Some(category) => {
+                    let wanted = category.0.trim();
+                    let Some((name, count)) = counts.iter().find(|(name, _)| name == wanted) else {
+                        return Err(EngineError::Failed {
+                            id: COMMAND.to_string(),
+                            message: format!("there is no category called `{wanted}`"),
+                        });
+                    };
+                    vec![json!({ "category": name.clone(), "count": count })]
+                }
+            };
+            let total: usize = counts.iter().map(|(_, count)| count).sum();
+            Ok(Outcome::new(format!("the file hides {total} thing(s)")).with_data(json!({
+                "categories": listed,
+                "total": total,
+            })))
+
+        }
     }
 }

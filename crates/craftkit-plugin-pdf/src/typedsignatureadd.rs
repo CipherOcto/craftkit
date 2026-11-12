@@ -35,10 +35,10 @@
 //!   the outlines of a font the tree carries, and this tree carries no
 //!   fonts, so the contours are the caller's.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.annot.typedsignature.add";
@@ -98,154 +98,158 @@ fn the_contours(value: &Json) -> Result<Vec<Vec<f64>>, EngineError> {
     Ok(contours)
 }
 
-/// **Put** a **typed signature** on a page.
-#[derive(Command)]
-#[command(
-    id = "pdf.annot.typedsignature.add",
-    area = "pdf",
-    layer = "pdf",
-    icon = "pencil",
-    mutates,
-    undoable
-)]
-pub struct AddTypedSignature {
-    /// The page the signature is on.
-    pub page: NodeRef,
-    /// The object number the annotation has in the file.
-    pub object: Number,
-    /// The rectangle the signature covers: four numbers.
-    pub rect: Json,
-    /// The contours of the signature: each one a list of points.
-    pub contours: Json,
-    /// The colour of the signature: three numbers.
-    pub colour: Option<Json>,
-}
+commands! {
+    /// **Put** a **typed signature** on a page.
+    pdf.annot.typedsignature.add {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The page the signature is on.
 
-impl AddTypedSignature {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        // The **rectangle**: four numbers, and the corners may come in
-        // any order.
-        let numbers = numbers_of(&self.rect);
-        if numbers.len() != 4 || numbers.iter().any(|number| !number.is_finite()) {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the rectangle of a typed signature is four numbers".to_string(),
-            });
-        }
-        let rect = [
-            numbers[0].min(numbers[2]),
-            numbers[1].min(numbers[3]),
-            numbers[0].max(numbers[2]),
-            numbers[1].max(numbers[3]),
-        ];
-        // A rectangle that is too small is refused: the tree's own rule.
-        if rect[2] - rect[0] < 1.0 || rect[3] - rect[1] < 1.0 {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "a typed signature is at least a point wide and a point high".to_string(),
-            });
-        }
-        // The **contours** of the signature.
-        let contours = the_contours(&self.contours)?;
-        // The **colour**: the tree's own black when nothing is said.
-        let colour = match &self.colour {
-            Some(colour) => {
-                let numbers = numbers_of(colour);
-                if numbers.len() != 3 || numbers.iter().any(|number| !number.is_finite()) {
-                    return Err(EngineError::Failed {
-                        id: COMMAND.to_string(),
-                        message: "the colour of a typed signature is three numbers".to_string(),
-                    });
-                }
-                if numbers.iter().any(|number| !(0.0..=1.0).contains(number)) {
-                    return Err(EngineError::Failed {
-                        id: COMMAND.to_string(),
-                        message: "the colour of a typed signature is between zero and one".to_string(),
-                    });
-                }
-                [numbers[0], numbers[1], numbers[2]]
+            page: NodeRef,
+            /// The object number the annotation has in the file.
+
+            object: Number,
+            /// The rectangle the signature covers: four numbers.
+
+            rect: Json,
+            /// The contours of the signature: each one a list of points.
+
+            contours: Json,
+            /// The colour of the signature: three numbers.
+
+            colour: Option<Json>,
+        },
+        run: {
+
+            // The **rectangle**: four numbers, and the corners may come in
+            // any order.
+            let numbers = numbers_of(&self.rect);
+            if numbers.len() != 4 || numbers.iter().any(|number| !number.is_finite()) {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the rectangle of a typed signature is four numbers".to_string(),
+                });
             }
-            None => COLOUR,
-        };
-        // The **page**: a page of the document.
-        let Some(page) = session.document().node(self.page.0) else {
-            return Err(EngineError::Failed {
+            let rect = [
+                numbers[0].min(numbers[2]),
+                numbers[1].min(numbers[3]),
+                numbers[0].max(numbers[2]),
+                numbers[1].max(numbers[3]),
+            ];
+            // A rectangle that is too small is refused: the tree's own rule.
+            if rect[2] - rect[0] < 1.0 || rect[3] - rect[1] < 1.0 {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "a typed signature is at least a point wide and a point high".to_string(),
+                });
+            }
+            // The **contours** of the signature.
+            let contours = the_contours(&self.contours)?;
+            // The **colour**: the tree's own black when nothing is said.
+            let colour = match &self.colour {
+                Some(colour) => {
+                    let numbers = numbers_of(colour);
+                    if numbers.len() != 3 || numbers.iter().any(|number| !number.is_finite()) {
+                        return Err(EngineError::Failed {
+                            id: COMMAND.to_string(),
+                            message: "the colour of a typed signature is three numbers".to_string(),
+                        });
+                    }
+                    if numbers.iter().any(|number| !(0.0..=1.0).contains(number)) {
+                        return Err(EngineError::Failed {
+                            id: COMMAND.to_string(),
+                            message: "the colour of a typed signature is between zero and one".to_string(),
+                        });
+                    }
+                    [numbers[0], numbers[1], numbers[2]]
+                }
+                None => COLOUR,
+            };
+            // The **page**: a page of the document.
+            let Some(page) = session.document().node(self.page.0) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no node `{}`", self.page.0),
+                });
+            };
+            let page_number = crate::the_number_of(page).ok_or_else(|| EngineError::Failed {
                 id: COMMAND.to_string(),
-                message: format!("there is no node `{}`", self.page.0),
-            });
-        };
-        let page_number = crate::the_number_of(page).ok_or_else(|| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("the node `{}` has no object number", self.page.0),
-        })?;
-        // The **object number** of the annotation: a whole number, and
-        // one that nothing else has.
-        let object = self.object.0;
-        if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "an object number is a whole number".to_string(),
-            });
+                message: format!("the node `{}` has no object number", self.page.0),
+            })?;
+            // The **object number** of the annotation: a whole number, and
+            // one that nothing else has.
+            let object = self.object.0;
+            if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "an object number is a whole number".to_string(),
+                });
+            }
+            let number = object as u64;
+            if number == 0 {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "object numbers start at one".to_string(),
+                });
+            }
+            if session.document().walk().any(|node| crate::the_number_of(node) == Some(number)) {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the object {number} is already in the document"),
+                });
+            }
+            // The page's own **annotations**, before the new one is made.
+            let annots = crate::entries_of(&page.data)
+                .into_iter()
+                .find(|(key, _)| key == "Annots")
+                .and_then(|(_, value)| value.as_array().cloned())
+                .unwrap_or_default();
+            // The **annotation** itself: the tree's own typed signature.
+            let entries: Vec<(String, Json)> = vec![
+                ("Type".to_string(), json!("Annot")),
+                ("Subtype".to_string(), json!("Stamp")),
+                ("Rect".to_string(), json!(rect)),
+                ("Name".to_string(), json!("PCTypedSignature")),
+                ("C".to_string(), json!(colour)),
+                ("PCOutline".to_string(), json!(contours)),
+                ("P".to_string(), json!({ "ref": [page_number, 0] })),
+            ];
+            let data = json!({ "object": number, "entries": entries });
+            let name = format!("annotation {number}");
+            let annot = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
+            // The page **names** the annotation.
+            let mut annots = annots;
+            annots.push(json!({ "ref": [number, 0] }));
+            if let Some(node) = session.document_mut()?.node_mut(self.page.0) {
+                node.data = crate::with_entry(&node.data, "Annots", json!(annots));
+            }
+            // And the **edge**: the page names the annotation.
+            let relation = craftkit_sdk::Relation::with_payload(
+                self.page.0,
+                annot,
+                "ref",
+                json!({ "key": "Annots", "generation": 0 }),
+            );
+            if !session.document_mut()?.add_relation(relation) {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the page already refers to the annotation `{annot}`"),
+                });
+            }
+            Ok(Outcome::changed(format!("added the `{name}` to the page")).with_data(json!({
+                "id": annot,
+                "object": number,
+                "page": self.page.0,
+                "subtype": "Stamp",
+                "rect": rect,
+                "contours": contours.len(),
+                "colour": colour,
+            })))
+
         }
-        let number = object as u64;
-        if number == 0 {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "object numbers start at one".to_string(),
-            });
-        }
-        if session.document().walk().any(|node| crate::the_number_of(node) == Some(number)) {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the object {number} is already in the document"),
-            });
-        }
-        // The page's own **annotations**, before the new one is made.
-        let annots = crate::entries_of(&page.data)
-            .into_iter()
-            .find(|(key, _)| key == "Annots")
-            .and_then(|(_, value)| value.as_array().cloned())
-            .unwrap_or_default();
-        // The **annotation** itself: the tree's own typed signature.
-        let entries: Vec<(String, Json)> = vec![
-            ("Type".to_string(), json!("Annot")),
-            ("Subtype".to_string(), json!("Stamp")),
-            ("Rect".to_string(), json!(rect)),
-            ("Name".to_string(), json!("PCTypedSignature")),
-            ("C".to_string(), json!(colour)),
-            ("PCOutline".to_string(), json!(contours)),
-            ("P".to_string(), json!({ "ref": [page_number, 0] })),
-        ];
-        let data = json!({ "object": number, "entries": entries });
-        let name = format!("annotation {number}");
-        let annot = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
-        // The page **names** the annotation.
-        let mut annots = annots;
-        annots.push(json!({ "ref": [number, 0] }));
-        if let Some(node) = session.document_mut()?.node_mut(self.page.0) {
-            node.data = crate::with_entry(&node.data, "Annots", json!(annots));
-        }
-        // And the **edge**: the page names the annotation.
-        let relation = craftkit_sdk::Relation::with_payload(
-            self.page.0,
-            annot,
-            "ref",
-            json!({ "key": "Annots", "generation": 0 }),
-        );
-        if !session.document_mut()?.add_relation(relation) {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the page already refers to the annotation `{annot}`"),
-            });
-        }
-        Ok(Outcome::changed(format!("added the `{name}` to the page")).with_data(json!({
-            "id": annot,
-            "object": number,
-            "page": self.page.0,
-            "subtype": "Stamp",
-            "rect": rect,
-            "contours": contours.len(),
-            "colour": colour,
-        })))
     }
 }

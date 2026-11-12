@@ -25,10 +25,10 @@
 //!   file with many attachments splits its name tree, and the
 //!   attachments are in the kids.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Outcome};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.attachments.read";
@@ -187,45 +187,50 @@ fn attachment_of(document: &Document, spec: &[(String, Json)], name: &str) -> At
     attachment
 }
 
-/// **Read** the **attachments** of a PDF file.
-///
-/// A query: it does not change the document. A file that carries no
-/// file has none, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.attachments.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadAttachments {
-    /// The attachment to read.
+commands! {
+    /// **Read** the **attachments** of a PDF file.
     ///
-    /// Leave it out and every attachment is read.
-    pub name: Option<craftkit_sdk::Text>,
-}
+    /// A query: it does not change the document. A file that carries no
+    /// file has none, and the answer says so.
+    pdf.attachments.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The attachment to read.
+            ///
+            /// Leave it out and every attachment is read.
 
-impl ReadAttachments {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = COMMAND.to_string();
-        let all = attachments_of(session.document());
-        let listed: Vec<Json> = match &self.name {
-            None => all.iter().map(|attachment| attachment.to_json()).collect(),
-            Some(name) => {
-                let wanted = name.0.trim();
-                let one: Vec<Json> = all
-                    .iter()
-                    .filter(|attachment| attachment.name == wanted)
-                    .map(|attachment| attachment.to_json())
-                    .collect();
-                if one.is_empty() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the file has no attachment called `{wanted}`"),
-                    });
+            name: Option<craftkit_sdk::Text>,
+        },
+        run: {
+
+            let id = COMMAND.to_string();
+            let all = attachments_of(session.document());
+            let listed: Vec<Json> = match &self.name {
+                None => all.iter().map(|attachment| attachment.to_json()).collect(),
+                Some(name) => {
+                    let wanted = name.0.trim();
+                    let one: Vec<Json> = all
+                        .iter()
+                        .filter(|attachment| attachment.name == wanted)
+                        .map(|attachment| attachment.to_json())
+                        .collect();
+                    if one.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the file has no attachment called `{wanted}`"),
+                        });
+                    }
+                    one
                 }
-                one
-            }
-        };
-        let count = listed.len();
-        Ok(Outcome::new(format!("the file carries {count} attachment(s)")).with_data(json!({
-            "attachments": listed,
-            "count": count,
-        })))
+            };
+            let count = listed.len();
+            Ok(Outcome::new(format!("the file carries {count} attachment(s)")).with_data(json!({
+                "attachments": listed,
+                "count": count,
+            })))
+
+        }
     }
 }

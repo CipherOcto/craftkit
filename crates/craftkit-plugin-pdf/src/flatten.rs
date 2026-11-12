@@ -40,7 +40,7 @@
 //! - The **comments** of a file and its **fields** are flattened by
 //!   two commands here, and by one in the tree.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session};
@@ -604,57 +604,68 @@ fn the_pages(session: &Session, page: Option<NodeRef>) -> Result<Vec<u64>, Engin
     }
 }
 
-/// **Flatten** the form of a file: the fields are drawn into the pages
-/// they are on, and taken away.
-///
-/// The tree's own: the appearance of a widget is drawn with the matrix
-/// of ISO 32000-2 §12.5.5, and the widget is taken away.
-#[derive(Command)]
-#[command(id = "pdf.form.flatten", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct FlattenForm {
-    /// The page that is flattened; every page of the file when it is
-    /// not said.
-    pub page: Option<NodeRef>,
-}
+commands! {
+    /// **Flatten** the form of a file: the fields are drawn into the pages
+    /// they are on, and taken away.
+    ///
+    /// The tree's own: the appearance of a widget is drawn with the matrix
+    /// of ISO 32000-2 §12.5.5, and the widget is taken away.
+    pdf.form.flatten {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The page that is flattened; every page of the file when it is
+            /// not said.
 
-impl FlattenForm {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let pages = the_pages(session, self.page)?;
-        let report = flatten_pages(session, &pages, What::Fields)?;
-        Ok(Outcome::changed(format!("{} appearance(s) drawn", report.drawn)).with_data(json!({
-            "drawn": report.drawn,
-            "taken": report.taken,
-            "left": report.left,
-            "pruned": report.pruned,
-            "flattened": report.flattened,
-        })))
+            page: Option<NodeRef>,
+        },
+        run: {
+
+            let pages = the_pages(session, self.page)?;
+            let report = flatten_pages(session, &pages, What::Fields)?;
+            Ok(Outcome::changed(format!("{} appearance(s) drawn", report.drawn)).with_data(json!({
+                "drawn": report.drawn,
+                "taken": report.taken,
+                "left": report.left,
+                "pruned": report.pruned,
+                "flattened": report.flattened,
+            })))
+
+        }
     }
-}
+    /// **Flatten** the comments of a file: they are drawn into the pages
+    /// they are on, and taken away.
+    ///
+    /// The tree's own: the appearance of a comment is drawn with the matrix
+    /// of ISO 32000-2 §12.5.5, and the comment is taken away — with its
+    /// popup and its replies.
+    pdf.comment.flatten {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The page that is flattened; every page of the file when it is
+            /// not said.
 
-/// **Flatten** the comments of a file: they are drawn into the pages
-/// they are on, and taken away.
-///
-/// The tree's own: the appearance of a comment is drawn with the matrix
-/// of ISO 32000-2 §12.5.5, and the comment is taken away — with its
-/// popup and its replies.
-#[derive(Command)]
-#[command(id = "pdf.comment.flatten", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct FlattenComments {
-    /// The page that is flattened; every page of the file when it is
-    /// not said.
-    pub page: Option<NodeRef>,
-}
+            page: Option<NodeRef>,
+        },
+        run: {
 
-impl FlattenComments {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let pages = the_pages(session, self.page)?;
-        let report = flatten_pages(session, &pages, What::Comments)?;
-        Ok(Outcome::changed(format!("{} appearance(s) drawn", report.drawn)).with_data(json!({
-            "drawn": report.drawn,
-            "taken": report.taken,
-            "left": report.left,
-            "pruned": report.pruned,
-            "flattened": report.flattened,
-        })))
+            let pages = the_pages(session, self.page)?;
+            let report = flatten_pages(session, &pages, What::Comments)?;
+            Ok(Outcome::changed(format!("{} appearance(s) drawn", report.drawn)).with_data(json!({
+                "drawn": report.drawn,
+                "taken": report.taken,
+                "left": report.left,
+                "pruned": report.pruned,
+                "flattened": report.flattened,
+            })))
+
+        }
     }
 }

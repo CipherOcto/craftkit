@@ -28,7 +28,7 @@
 //!   file of PDF syntax, and this tree writes files of PDF syntax
 //!   (`src/fdf.rs`). It is not **read** back yet.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, Outcome, Session, Text};
@@ -277,130 +277,143 @@ fn field_node(document: &Document, name: &str) -> Option<Node> {
         .cloned()
 }
 
-/// **Write** the **data of a form** as a file.
-///
-/// The data is **derived**: it is read from the form every time it is
-/// asked for.
-#[derive(Command)]
-#[command(id = "pdf.form.data.export", area = "pdf", layer = "pdf", icon = "file", mutates, undoable)]
-pub struct ExportFormData {
-    /// The file to write.
-    pub path: Text,
-    /// The format of the file: `xfdf` when it is not given.
-    pub format: Option<Text>,
-    /// The file the data came from: it is written in the XFDF file.
-    pub file: Option<Text>,
-}
+commands! {
+    /// **Write** the **data of a form** as a file.
+    ///
+    /// The data is **derived**: it is read from the form every time it is
+    /// asked for.
+    pdf.form.data.export {
+        area: "pdf",
+        layer: "pdf",
+        icon: "file",
+        mutates,
+        undoable,
+        params: {
+            /// The file to write.
 
-impl ExportFormData {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = COMMAND.to_string();
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
+            path: Text,
+            /// The format of the file: `xfdf` when it is not given.
+
+            format: Option<Text>,
+            /// The file the data came from: it is written in the XFDF file.
+
+            file: Option<Text>,
+        },
+        run: {
+
+            let id = COMMAND.to_string();
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
+            }
+            let named = self.format.as_ref().map(|format| format.0.trim().to_ascii_lowercase());
+            let format = match named.as_deref() {
+                None | Some("") | Some("xfdf") => "xfdf",
+                Some("xml") => "xml",
+                Some("csv") => "csv",
+                Some("fdf") => "fdf",
+                Some(other) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "`{other}` is not a format of the data of a form: the formats are {}",
+                            FORMATS.join(", ")
+                        ),
+                    });
+                }
+            };
+            let entries = data_of(session.document());
+            let file = self.file.as_ref().map(|file| file.0.trim().to_string()).unwrap_or_default();
+            let (written, count) = match format {
+                "xml" => (xml_of(&entries).into_bytes(), entries.len()),
+                "csv" => (csv_of(&entries).into_bytes(), entries.len()),
+                "fdf" => {
+                    let fields = crate::fields::fields_of(session.document());
+                    crate::fdf::fdf_of(&fields, &file)
+                }
+                _ => (xfdf_of(&entries, &file).into_bytes(), entries.len()),
+            };
+            std::fs::write(&path, &written).map_err(|error| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the file cannot be written: {error}"),
+            })?;
+            Ok(Outcome::changed(format!("`{path}` was written with {count} field(s)")).with_data(json!({
+                "path": path,
+                "format": format,
+                "count": count,
+                "bytes": written.len(),
+            })))
+
         }
-        let named = self.format.as_ref().map(|format| format.0.trim().to_ascii_lowercase());
-        let format = match named.as_deref() {
-            None | Some("") | Some("xfdf") => "xfdf",
-            Some("xml") => "xml",
-            Some("csv") => "csv",
-            Some("fdf") => "fdf",
-            Some(other) => {
+    }
+    /// **Read** the **data of a form** from a file, and write it into the
+    /// form.
+    ///
+    /// The tree's own rule: a field the file names and the form does not
+    /// have is **left out**, and a field that takes its value is counted.
+    pdf.form.data.import {
+        area: "pdf",
+        layer: "pdf",
+        icon: "file",
+        mutates,
+        undoable,
+        params: {
+            /// The file to read.
+
+            path: Text,
+        },
+        run: {
+
+            let id = "pdf.form.data.import".to_string();
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
+            }
+            let metadata = std::fs::metadata(&path).map_err(|error| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the file cannot be read: {error}"),
+            })?;
+            if metadata.len() as usize > MAX_CHARS {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!(
-                        "`{other}` is not a format of the data of a form: the formats are {}",
-                        FORMATS.join(", ")
-                    ),
+                    message: format!("the file is more than {MAX_CHARS} bytes long"),
                 });
             }
-        };
-        let entries = data_of(session.document());
-        let file = self.file.as_ref().map(|file| file.0.trim().to_string()).unwrap_or_default();
-        let (written, count) = match format {
-            "xml" => (xml_of(&entries).into_bytes(), entries.len()),
-            "csv" => (csv_of(&entries).into_bytes(), entries.len()),
-            "fdf" => {
-                let fields = crate::fields::fields_of(session.document());
-                crate::fdf::fdf_of(&fields, &file)
-            }
-            _ => (xfdf_of(&entries, &file).into_bytes(), entries.len()),
-        };
-        std::fs::write(&path, &written).map_err(|error| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the file cannot be written: {error}"),
-        })?;
-        Ok(Outcome::changed(format!("`{path}` was written with {count} field(s)")).with_data(json!({
-            "path": path,
-            "format": format,
-            "count": count,
-            "bytes": written.len(),
-        })))
-    }
-}
-
-/// **Read** the **data of a form** from a file, and write it into the
-/// form.
-///
-/// The tree's own rule: a field the file names and the form does not
-/// have is **left out**, and a field that takes its value is counted.
-#[derive(Command)]
-#[command(id = "pdf.form.data.import", area = "pdf", layer = "pdf", icon = "file", mutates, undoable)]
-pub struct ImportFormData {
-    /// The file to read.
-    pub path: Text,
-}
-
-impl ImportFormData {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.form.data.import".to_string();
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a file has a path".to_string() });
-        }
-        let metadata = std::fs::metadata(&path).map_err(|error| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the file cannot be read: {error}"),
-        })?;
-        if metadata.len() as usize > MAX_CHARS {
-            return Err(EngineError::Failed {
+            let bytes = std::fs::read(&path).map_err(|error| EngineError::Failed {
                 id: id.clone(),
-                message: format!("the file is more than {MAX_CHARS} bytes long"),
-            });
-        }
-        let bytes = std::fs::read(&path).map_err(|error| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the file cannot be read: {error}"),
-        })?;
-        // The **FDF file** is a file of PDF syntax, and the rest are
-        // files of text: the file says which it is.
-        let values: Vec<(String, Vec<String>)> = if bytes.starts_with(b"%FDF") {
-            crate::fdf::values_of(&bytes)
-                .map_err(|message| EngineError::Failed { id: id.clone(), message })?
-                .into_iter()
-                .map(|(name, value)| (name, value.into_iter().collect()))
-                .collect()
-        } else {
-            let text = String::from_utf8_lossy(&bytes).to_string();
-            values_of(&text).map_err(|message| EngineError::Failed { id: id.clone(), message })?
-        };
-        let mut taken = 0usize;
-        let mut left_out: Vec<String> = Vec::new();
-        for (name, values) in values {
-            let Some(node) = field_node(session.document(), &name) else {
-                left_out.push(name);
-                continue;
+                message: format!("the file cannot be read: {error}"),
+            })?;
+            // The **FDF file** is a file of PDF syntax, and the rest are
+            // files of text: the file says which it is.
+            let values: Vec<(String, Vec<String>)> = if bytes.starts_with(b"%FDF") {
+                crate::fdf::values_of(&bytes)
+                    .map_err(|message| EngineError::Failed { id: id.clone(), message })?
+                    .into_iter()
+                    .map(|(name, value)| (name, value.into_iter().collect()))
+                    .collect()
+            } else {
+                let text = String::from_utf8_lossy(&bytes).to_string();
+                values_of(&text).map_err(|message| EngineError::Failed { id: id.clone(), message })?
             };
-            let value = values.first().cloned().unwrap_or_default();
-            match set_value(session, &node, &value) {
-                Ok(()) => taken += 1,
-                Err(_) => left_out.push(name),
+            let mut taken = 0usize;
+            let mut left_out: Vec<String> = Vec::new();
+            for (name, values) in values {
+                let Some(node) = field_node(session.document(), &name) else {
+                    left_out.push(name);
+                    continue;
+                };
+                let value = values.first().cloned().unwrap_or_default();
+                match set_value(session, &node, &value) {
+                    Ok(()) => taken += 1,
+                    Err(_) => left_out.push(name),
+                }
             }
+            Ok(Outcome::changed(format!("{taken} field(s) took their value")).with_data(json!({
+                "path": path,
+                "count": taken,
+                "left_out": left_out,
+            })))
+
         }
-        Ok(Outcome::changed(format!("{taken} field(s) took their value")).with_data(json!({
-            "path": path,
-            "count": taken,
-            "left_out": left_out,
-        })))
     }
 }

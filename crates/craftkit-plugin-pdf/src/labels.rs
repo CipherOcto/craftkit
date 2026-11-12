@@ -19,10 +19,10 @@
 //!   second copy of them, and a second copy is a copy that can be
 //!   wrong.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{self, json};
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Outcome};
 
 use crate::{a_reference, add_reference, pairs_of, the_next_number};
 
@@ -112,69 +112,77 @@ fn runs_of(labels: &serde_json::Value, id: &str) -> Result<Vec<Run>, EngineError
     Ok(runs)
 }
 
-/// Give the **pages** of a document their labels.
-#[derive(Command)]
-#[command(id = "pdf.page.labels", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct SetPageLabels {
-    /// The pages: the object that holds them.
-    pub pages: NodeRef,
-    /// The labels: a list of `{"page": 1, "style": "D", "prefix": "A-",
-    /// "start": 1}`.
-    pub labels: serde_json::Value,
-}
+commands! {
+    /// Give the **pages** of a document their labels.
+    pdf.page.labels {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The pages: the object that holds them.
 
-impl SetPageLabels {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.page.labels".to_string();
-        let pages = self.pages.0;
-        let Some(node) = session.document().node(pages) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{pages}`"),
-            });
-        };
-        let is_pages = crate::objects::pairs_of(&node.data)
-            .iter()
-            .any(|(key, value)| key == "Type" && value.as_str() == Some("Pages"));
-        if !is_pages {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{pages}` is not the pages of a document"),
-            });
-        }
-        let runs = runs_of(&self.labels, &id)?;
-        // The **number tree**: an object of the file that holds the
-        // runs, and the pages name it.
-        let number = the_next_number(session.document(), 0);
-        let mut nums: Vec<serde_json::Value> = Vec::with_capacity(runs.len());
-        for run in &runs {
-            let mut entries: Vec<(String, serde_json::Value)> = vec![("S".to_string(), json!(run.style))];
-            if let Some(prefix) = &run.prefix {
-                entries.push(("P".to_string(), json!({ "string": prefix })));
+            pages: NodeRef,
+            /// The labels: a list of `{"page": 1, "style": "D", "prefix": "A-",
+            /// "start": 1}`.
+
+            labels: serde_json::Value,
+        },
+        run: {
+
+            let id = "pdf.page.labels".to_string();
+            let pages = self.pages.0;
+            let Some(node) = session.document().node(pages) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{pages}`"),
+                });
+            };
+            let is_pages = crate::objects::pairs_of(&node.data)
+                .iter()
+                .any(|(key, value)| key == "Type" && value.as_str() == Some("Pages"));
+            if !is_pages {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{pages}` is not the pages of a document"),
+                });
             }
-            entries.push(("St".to_string(), json!(run.start)));
-            // A **pair**: the page the run begins at and the run
-            // itself, written one after the other.
-            nums.push(json!({
-                "pair": [
-                    run.page - 1,
-                    { "entries": pairs_of(&entries) },
-                ],
-            }));
+            let runs = runs_of(&self.labels, &id)?;
+            // The **number tree**: an object of the file that holds the
+            // runs, and the pages name it.
+            let number = the_next_number(session.document(), 0);
+            let mut nums: Vec<serde_json::Value> = Vec::with_capacity(runs.len());
+            for run in &runs {
+                let mut entries: Vec<(String, serde_json::Value)> = vec![("S".to_string(), json!(run.style))];
+                if let Some(prefix) = &run.prefix {
+                    entries.push(("P".to_string(), json!({ "string": prefix })));
+                }
+                entries.push(("St".to_string(), json!(run.start)));
+                // A **pair**: the page the run begins at and the run
+                // itself, written one after the other.
+                nums.push(json!({
+                    "pair": [
+                        run.page - 1,
+                        { "entries": pairs_of(&entries) },
+                    ],
+                }));
+            }
+            let tree_data = json!({
+                "object": number,
+                "entries": pairs_of(&[("Nums".to_string(), json!(nums))]),
+            });
+            let tree = session.document_mut()?.add_node_with("the page labels", "pdf.object", None, tree_data);
+            // The **pages** name the tree.
+            let reference = a_reference(session, tree, 0, &id)?;
+            add_reference(session, pages, "PageLabels", reference, false)?;
+            Ok(Outcome::changed(format!(
+                "the pages of the document `{}` have {} run(s) of labels",
+                pages,
+                runs.len()
+            ))
+            .with_data(json!({ "pages": pages, "tree": tree, "number": number, "runs": runs.len() })))
+
         }
-        let tree_data = json!({
-            "object": number,
-            "entries": pairs_of(&[("Nums".to_string(), json!(nums))]),
-        });
-        let tree = session.document_mut()?.add_node_with("the page labels", "pdf.object", None, tree_data);
-        // The **pages** name the tree.
-        let reference = a_reference(session, tree, 0, &id)?;
-        add_reference(session, pages, "PageLabels", reference, false)?;
-        Ok(Outcome::changed(format!(
-            "the pages of the document `{}` have {} run(s) of labels",
-            pages,
-            runs.len()
-        ))
-        .with_data(json!({ "pages": pages, "tree": tree, "number": number, "runs": runs.len() })))
     }
 }

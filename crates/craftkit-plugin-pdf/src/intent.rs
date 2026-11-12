@@ -19,10 +19,10 @@
 //! - the intent says what it is with the name the file uses: `/S` is
 //!   `GTS_PDFA1`, and `/Type` is `OutputIntent`.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Outcome, Text};
 
 /// The **name** the file gives the PDF/A output intent.
 const PDFA: &str = "GTS_PDFA1";
@@ -144,117 +144,124 @@ pub fn profile() -> Vec<u8> {
     header
 }
 
-/// **Write** the **output intent** of a file.
-///
-/// The intent names an ICC profile — the sRGB one, built in code — and
-/// the catalog names the intent. The profile's bytes go in a file of
-/// their own, because that is where the bytes of a stream live here.
-///
-/// The rules:
-///
-/// - a path that is **empty** is refused;
-/// - a file with **no catalog** is refused: there is nothing to name
-///   the intent.
-#[derive(Command)]
-#[command(id = "pdf.intent.write", area = "pdf", layer = "pdf", icon = "file", mutates, undoable)]
-pub struct WriteIntent {
-    /// Where the profile's **bytes** are written.
-    pub path: Text,
-}
+commands! {
+    /// **Write** the **output intent** of a file.
+    ///
+    /// The intent names an ICC profile — the sRGB one, built in code — and
+    /// the catalog names the intent. The profile's bytes go in a file of
+    /// their own, because that is where the bytes of a stream live here.
+    ///
+    /// The rules:
+    ///
+    /// - a path that is **empty** is refused;
+    /// - a file with **no catalog** is refused: there is nothing to name
+    ///   the intent.
+    pdf.intent.write {
+        area: "pdf",
+        layer: "pdf",
+        icon: "file",
+        mutates,
+        undoable,
+        params: {
+            /// Where the profile's **bytes** are written.
 
-impl WriteIntent {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.intent.write".to_string();
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed {
+            path: Text,
+        },
+        run: {
+
+            let id = "pdf.intent.write".to_string();
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the profile's bytes go somewhere".to_string(),
+                });
+            }
+            let Some(catalog) = crate::preflight::the_catalog(session.document()).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the file has no catalog".to_string(),
+                });
+            };
+            // The **profile**: the bytes of the sRGB profile.
+            let bytes = profile();
+            if let Some(parent) = std::path::Path::new(&path).parent()
+                && !parent.as_os_str().is_empty()
+            {
+                std::fs::create_dir_all(parent).map_err(|error| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the profile's bytes have nowhere to go: {error}"),
+                })?;
+            }
+            std::fs::write(&path, &bytes).map_err(|error| EngineError::Failed {
                 id: id.clone(),
-                message: "the profile's bytes go somewhere".to_string(),
-            });
-        }
-        let Some(catalog) = crate::preflight::the_catalog(session.document()).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the file has no catalog".to_string(),
-            });
-        };
-        // The **profile**: the bytes of the sRGB profile.
-        let bytes = profile();
-        if let Some(parent) = std::path::Path::new(&path).parent()
-            && !parent.as_os_str().is_empty()
-        {
-            std::fs::create_dir_all(parent).map_err(|error| EngineError::Failed {
-                id: id.clone(),
-                message: format!("the profile's bytes have nowhere to go: {error}"),
+                message: format!("the profile's bytes cannot be written: {error}"),
             })?;
+            // The **profile object**: the stream the profile is in.
+            let profile_number = crate::the_next_number(session.document(), 0);
+            let data = json!({ "object": profile_number, "entries": json!([["N", 3]]) });
+            let profile = session.document_mut()?.add_node_with(
+                format!("profile {profile_number}"),
+                "pdf.stream",
+                None,
+                data,
+            );
+            if let Some(node) = session.document_mut()?.node_mut(profile) {
+                node.stream = Some(path.clone());
+            }
+            // The **intent**: the dictionary that names the profile.
+            let intent_number = crate::the_next_number(session.document(), profile_number);
+            let entries = json!([
+                ["Type", "OutputIntent"],
+                ["S", PDFA],
+                ["OutputConditionIdentifier", SRGB],
+                ["Info", SRGB],
+                ["DestOutputProfile", { "ref": [profile_number, 0] }],
+            ]);
+            let data = json!({ "object": intent_number, "entries": entries });
+            let intent = session.document_mut()?.add_node_with(
+                format!("output intent {intent_number}"),
+                "pdf.object",
+                None,
+                data,
+            );
+            // The **catalog** names the intent, and the intents it already
+            // had are kept.
+            let mut catalog_entries = crate::entries_of(&catalog.data);
+            let mut intents = catalog_entries
+                .iter()
+                .find(|(key, _)| key == "OutputIntents")
+                .and_then(|(_, value)| value.as_array().cloned())
+                .unwrap_or_default();
+            intents.push(json!({ "ref": [intent_number, 0] }));
+            match catalog_entries.iter_mut().find(|(key, _)| key == "OutputIntents") {
+                Some(entry) => entry.1 = json!(intents),
+                None => catalog_entries.push(("OutputIntents".to_string(), json!(intents))),
+            }
+            let data = json!({
+                "object": catalog.data.get("object").cloned().unwrap_or(craftkit_sdk::serde_json::Value::Null),
+                "entries": catalog_entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+            });
+            if let Some(node) = session.document_mut()?.node_mut(catalog.id) {
+                node.data = data;
+            }
+            // And the **edges**: the catalog names the intent, and the
+            // intent names the profile.
+            for (from, to, key) in [(catalog.id, intent, "OutputIntents"), (intent, profile, "DestOutputProfile")]
+            {
+                let payload = json!({ "key": key, "generation": 0 });
+                let relation = craftkit_sdk::Relation::with_payload(from, to, "ref", payload);
+                session.document_mut()?.add_relation(relation);
+            }
+            Ok(Outcome::changed(format!("the file says its colours are {SRGB}")).with_data(json!({
+                "intent": intent,
+                "object": intent_number,
+                "profile": profile,
+                "profile_object": profile_number,
+                "path": path,
+                "bytes": bytes.len(),
+            })))
+
         }
-        std::fs::write(&path, &bytes).map_err(|error| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the profile's bytes cannot be written: {error}"),
-        })?;
-        // The **profile object**: the stream the profile is in.
-        let profile_number = crate::the_next_number(session.document(), 0);
-        let data = json!({ "object": profile_number, "entries": json!([["N", 3]]) });
-        let profile = session.document_mut()?.add_node_with(
-            format!("profile {profile_number}"),
-            "pdf.stream",
-            None,
-            data,
-        );
-        if let Some(node) = session.document_mut()?.node_mut(profile) {
-            node.stream = Some(path.clone());
-        }
-        // The **intent**: the dictionary that names the profile.
-        let intent_number = crate::the_next_number(session.document(), profile_number);
-        let entries = json!([
-            ["Type", "OutputIntent"],
-            ["S", PDFA],
-            ["OutputConditionIdentifier", SRGB],
-            ["Info", SRGB],
-            ["DestOutputProfile", { "ref": [profile_number, 0] }],
-        ]);
-        let data = json!({ "object": intent_number, "entries": entries });
-        let intent = session.document_mut()?.add_node_with(
-            format!("output intent {intent_number}"),
-            "pdf.object",
-            None,
-            data,
-        );
-        // The **catalog** names the intent, and the intents it already
-        // had are kept.
-        let mut catalog_entries = crate::entries_of(&catalog.data);
-        let mut intents = catalog_entries
-            .iter()
-            .find(|(key, _)| key == "OutputIntents")
-            .and_then(|(_, value)| value.as_array().cloned())
-            .unwrap_or_default();
-        intents.push(json!({ "ref": [intent_number, 0] }));
-        match catalog_entries.iter_mut().find(|(key, _)| key == "OutputIntents") {
-            Some(entry) => entry.1 = json!(intents),
-            None => catalog_entries.push(("OutputIntents".to_string(), json!(intents))),
-        }
-        let data = json!({
-            "object": catalog.data.get("object").cloned().unwrap_or(craftkit_sdk::serde_json::Value::Null),
-            "entries": catalog_entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
-        });
-        if let Some(node) = session.document_mut()?.node_mut(catalog.id) {
-            node.data = data;
-        }
-        // And the **edges**: the catalog names the intent, and the
-        // intent names the profile.
-        for (from, to, key) in [(catalog.id, intent, "OutputIntents"), (intent, profile, "DestOutputProfile")]
-        {
-            let payload = json!({ "key": key, "generation": 0 });
-            let relation = craftkit_sdk::Relation::with_payload(from, to, "ref", payload);
-            session.document_mut()?.add_relation(relation);
-        }
-        Ok(Outcome::changed(format!("the file says its colours are {SRGB}")).with_data(json!({
-            "intent": intent,
-            "object": intent_number,
-            "profile": profile,
-            "profile_object": profile_number,
-            "path": path,
-            "bytes": bytes.len(),
-        })))
     }
 }

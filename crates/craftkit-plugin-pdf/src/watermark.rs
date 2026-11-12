@@ -26,10 +26,10 @@
 //! - The **background** of the tree is not here: that is a colour or a
 //!   picture behind the whole page.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Bool, Document, EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{Bool, Document, EngineError, NodeRef, Number, Outcome, Text};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.page.watermark";
@@ -266,156 +266,169 @@ fn content_streams(document: &Document, page: &craftkit_sdk::Node) -> Vec<u64> {
     out
 }
 
-/// **Draw** a watermark on a page: a text, turned about the centre of
-/// the page, in the tree's own grey.
-#[derive(Command)]
-#[command(id = "pdf.page.watermark", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct AddWatermark {
-    /// The page the watermark is on.
-    pub page: NodeRef,
-    /// The text of the watermark.
-    pub text: Text,
-    /// The size of the text: the tree's own size is used when it is
-    /// not given.
-    pub size: Option<Number>,
-    /// The rotation of the text, in degrees: forty-five is the tree's.
-    pub rotation: Option<Number>,
-    /// The opacity of the watermark, between zero and one: a half is
-    /// the tree's.
-    pub opacity: Option<Number>,
-    /// The colour of the text: the tree's grey.
-    pub colour: Option<Text>,
-    /// The watermark is drawn **behind** the content of the page.
-    pub behind: Option<Bool>,
-}
+commands! {
+    /// **Draw** a watermark on a page: a text, turned about the centre of
+    /// the page, in the tree's own grey.
+    pdf.page.watermark {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The page the watermark is on.
 
-impl AddWatermark {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let text = self.text.0.clone();
-        if text.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the watermark has text".to_string(),
-            });
-        }
-        let size = self.size.map(|size| size.0).unwrap_or(0.0);
-        if !size.is_finite() || size < 0.0 {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the size of the watermark is a number that is not negative".to_string(),
-            });
-        }
-        let rotation = self.rotation.map(|rotation| rotation.0).unwrap_or(45.0);
-        if !rotation.is_finite() {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the rotation of the watermark is a number".to_string(),
-            });
-        }
-        let opacity = self.opacity.map(|opacity| opacity.0).unwrap_or(0.5);
-        if !opacity.is_finite() || !(0.0..=1.0).contains(&opacity) {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the opacity of the watermark is between zero and one".to_string(),
-            });
-        }
-        let colour = match &self.colour {
-            Some(colour) => {
-                let colour = colour.0.trim();
-                let parsed = craftkit_sdk::document::Colour::from_hex(colour)
-                    .map_err(|message| EngineError::Failed { id: COMMAND.to_string(), message })?;
-                let [r, g, b, _] = parsed.0;
-                [f64::from(r), f64::from(g), f64::from(b)]
+            page: NodeRef,
+            /// The text of the watermark.
+
+            text: Text,
+            /// The size of the text: the tree's own size is used when it is
+            /// not given.
+
+            size: Option<Number>,
+            /// The rotation of the text, in degrees: forty-five is the tree's.
+
+            rotation: Option<Number>,
+            /// The opacity of the watermark, between zero and one: a half is
+            /// the tree's.
+
+            opacity: Option<Number>,
+            /// The colour of the text: the tree's grey.
+
+            colour: Option<Text>,
+            /// The watermark is drawn **behind** the content of the page.
+
+            behind: Option<Bool>,
+        },
+        run: {
+
+            let text = self.text.0.clone();
+            if text.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the watermark has text".to_string(),
+                });
             }
-            None => [0.6, 0.6, 0.6],
-        };
-        let behind = self.behind.map(|behind| behind.0).unwrap_or(false);
-        // The **page**.
-        let Some(page) = session.document().node(self.page.0) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no node `{}`", self.page.0),
-            });
-        };
-        let box_ = box_of(page);
-        let (width, height) = (box_[2] - box_[0], box_[3] - box_[1]);
-        // The **size**: the one that is asked for, and the tree's own
-        // when it is not asked for.
-        let size = if size > 0.0 { size } else { size_of(&text, width, height) };
-        // The **content** of the watermark.
-        let content = content_of(&text, size, rotation, colour, opacity, width, height);
-        // The **page's content**: the watermark goes in front of it or
-        // behind it, and the page's content is a list of streams or one
-        // stream.
-        let streams = content_streams(session.document(), page);
-        let Some(stream) = (if behind { streams.first() } else { streams.last() }) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the page has no content to draw the watermark on".to_string(),
-            });
-        };
-        let node = session.document().node(*stream).ok_or_else(|| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("there is no node `{stream}`"),
-        })?;
-        let Some(path) = node.stream.clone() else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the stream `{stream}` has no file"),
-            });
-        };
-        let limits = crate::filters::Limits::default();
-        let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
-            .map_err(|message| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("the page's content cannot be read: {message}"),
-        })?;
-        let mut written = Vec::with_capacity(bytes.len() + content.len());
-        if behind {
-            written.extend_from_slice(content.as_bytes());
-            written.extend_from_slice(&bytes);
-        } else {
-            written.extend_from_slice(&bytes);
-            written.extend_from_slice(content.as_bytes());
-        }
-        std::fs::write(&path, &written).map_err(|error| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("the page's content cannot be written: {error}"),
-        })?;
-        // The page's **resources**: the tree's Helvetica and the
-        // graphics state of the opacity.
-        let resources = resources_of(opacity);
-        if let Some(page) = session.document_mut()?.node_mut(self.page.0) {
-            let mut entries = crate::entries_of(&page.data);
-            let merged = match entries.iter().find(|(key, _)| key == "Resources") {
-                Some((_, value)) => {
-                    let mut held = crate::entries_of(value);
-                    for (key, value) in crate::entries_of(&resources) {
-                        match held.iter_mut().find(|(held_key, _)| *held_key == key) {
-                            Some(entry) => entry.1 = value,
-                            None => held.push((key, value)),
-                        }
-                    }
-                    json!({ "entries": held.iter().map(|(key, value)| json!([key, value])).collect::<Vec<Json>>() })
+            let size = self.size.map(|size| size.0).unwrap_or(0.0);
+            if !size.is_finite() || size < 0.0 {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the size of the watermark is a number that is not negative".to_string(),
+                });
+            }
+            let rotation = self.rotation.map(|rotation| rotation.0).unwrap_or(45.0);
+            if !rotation.is_finite() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the rotation of the watermark is a number".to_string(),
+                });
+            }
+            let opacity = self.opacity.map(|opacity| opacity.0).unwrap_or(0.5);
+            if !opacity.is_finite() || !(0.0..=1.0).contains(&opacity) {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the opacity of the watermark is between zero and one".to_string(),
+                });
+            }
+            let colour = match &self.colour {
+                Some(colour) => {
+                    let colour = colour.0.trim();
+                    let parsed = craftkit_sdk::document::Colour::from_hex(colour)
+                        .map_err(|message| EngineError::Failed { id: COMMAND.to_string(), message })?;
+                    let [r, g, b, _] = parsed.0;
+                    [f64::from(r), f64::from(g), f64::from(b)]
                 }
-                None => resources,
+                None => [0.6, 0.6, 0.6],
             };
-            entries.retain(|(key, _)| key != "Resources");
-            entries.push(("Resources".to_string(), merged));
-            page.data = json!({
-                "object": page.data.get("object").cloned().unwrap_or(Json::Null),
-                "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<Json>>(),
-            });
+            let behind = self.behind.map(|behind| behind.0).unwrap_or(false);
+            // The **page**.
+            let Some(page) = session.document().node(self.page.0) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no node `{}`", self.page.0),
+                });
+            };
+            let box_ = box_of(page);
+            let (width, height) = (box_[2] - box_[0], box_[3] - box_[1]);
+            // The **size**: the one that is asked for, and the tree's own
+            // when it is not asked for.
+            let size = if size > 0.0 { size } else { size_of(&text, width, height) };
+            // The **content** of the watermark.
+            let content = content_of(&text, size, rotation, colour, opacity, width, height);
+            // The **page's content**: the watermark goes in front of it or
+            // behind it, and the page's content is a list of streams or one
+            // stream.
+            let streams = content_streams(session.document(), page);
+            let Some(stream) = (if behind { streams.first() } else { streams.last() }) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the page has no content to draw the watermark on".to_string(),
+                });
+            };
+            let node = session.document().node(*stream).ok_or_else(|| EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("there is no node `{stream}`"),
+            })?;
+            let Some(path) = node.stream.clone() else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the stream `{stream}` has no file"),
+                });
+            };
+            let limits = crate::filters::Limits::default();
+            let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
+                .map_err(|message| EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("the page's content cannot be read: {message}"),
+            })?;
+            let mut written = Vec::with_capacity(bytes.len() + content.len());
+            if behind {
+                written.extend_from_slice(content.as_bytes());
+                written.extend_from_slice(&bytes);
+            } else {
+                written.extend_from_slice(&bytes);
+                written.extend_from_slice(content.as_bytes());
+            }
+            std::fs::write(&path, &written).map_err(|error| EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("the page's content cannot be written: {error}"),
+            })?;
+            // The page's **resources**: the tree's Helvetica and the
+            // graphics state of the opacity.
+            let resources = resources_of(opacity);
+            if let Some(page) = session.document_mut()?.node_mut(self.page.0) {
+                let mut entries = crate::entries_of(&page.data);
+                let merged = match entries.iter().find(|(key, _)| key == "Resources") {
+                    Some((_, value)) => {
+                        let mut held = crate::entries_of(value);
+                        for (key, value) in crate::entries_of(&resources) {
+                            match held.iter_mut().find(|(held_key, _)| *held_key == key) {
+                                Some(entry) => entry.1 = value,
+                                None => held.push((key, value)),
+                            }
+                        }
+                        json!({ "entries": held.iter().map(|(key, value)| json!([key, value])).collect::<Vec<Json>>() })
+                    }
+                    None => resources,
+                };
+                entries.retain(|(key, _)| key != "Resources");
+                entries.push(("Resources".to_string(), merged));
+                page.data = json!({
+                    "object": page.data.get("object").cloned().unwrap_or(Json::Null),
+                    "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<Json>>(),
+                });
+            }
+            Ok(Outcome::changed("the watermark is drawn on the page".to_string()).with_data(json!({
+                "page": self.page.0,
+                "text": text,
+                "size": size,
+                "rotation": rotation,
+                "opacity": opacity,
+                "colour": colour,
+                "behind": behind,
+                "bytes": content.len(),
+            })))
+
         }
-        Ok(Outcome::changed("the watermark is drawn on the page".to_string()).with_data(json!({
-            "page": self.page.0,
-            "text": text,
-            "size": size,
-            "rotation": rotation,
-            "opacity": opacity,
-            "colour": colour,
-            "behind": behind,
-            "bytes": content.len(),
-        })))
     }
 }

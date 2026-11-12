@@ -217,79 +217,82 @@ mod widths;
 mod writer;
 mod xref;
 
-use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
+use craftkit_derive::{Evaluator, Layer, NodeKind, Panel, commands};
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Session, Text};
 
-pub use annot::SetAnnotationFlags;
-pub use annotappearance::WriteAnnotation;
-pub use appearance::{ReadAppearance, WriteAppearance};
-pub use attachmentadd::AddAttachment;
-pub use attachments::ReadAttachments;
-pub use background::AddBackground;
-pub use boxes::{PageBoxes, SetPageBox};
-pub use calculate::{ReadCalculatedValue, ReadCalculation};
-pub use calloutadd::AddCallout;
-pub use caretadd::AddCaret;
-pub use checkbox::AddCheckBox;
-pub use combobox::AddCombo;
-pub use comments::{AddComment, CommentInfo, ReadComments};
-pub use compare::{CompareFiles, MarkDifferences};
-pub use convert::Convert;
-pub use customstampadd::AddCustomStamp;
-pub use datefield::AddDate;
-pub use destinations::ReadDestinations;
-pub use embeddedfileadd::AddEmbeddedFile;
-pub use encrypt::ReadEncryption;
-pub use fieldadd::AddField;
-pub use fields::{ReadChildren, ReadFields, ReadInherited, ReadWidgets, SetField, SetFlags, SetParent};
-pub use figures::{ReadFigures, SetFigureAlt};
-pub use flatten::{FlattenComments, FlattenForm};
-pub use fonts::ReadFonts;
-pub use form::ReadForm;
-pub use format::ReadFormat;
-pub use formdata::{ExportFormData, ImportFormData};
-pub use freetextadd::AddFreeText;
-pub use headerfooter::{AddFooter, AddHeader};
-pub use imagefield::AddImage;
-pub use information::{ReadInformation, SetInformation};
-pub use inkadd::AddInk;
-pub use intent::WriteIntent;
-pub use javascript::ReadScripts;
-pub use labels::SetPageLabels;
-pub use lineadd::AddLine;
-pub use listbox::AddList;
-pub use look::SetLook;
-pub use markadd::AddMark;
-pub use marked::ReadMarked;
-pub use marks::RemoveMarks;
-pub use markup::AddMarkup;
-pub use metadata::WriteMetadata;
-pub use number::SetNumber;
-pub use optional::ReadLayers;
-pub use outline::{AddOutline, ReadOutline};
-pub use pages::RemovePage;
-pub use pagetext::ReadPageText;
-pub use patterns::{FindPattern, ReadPatterns};
-pub use polygonadd::AddPolygon;
-pub use preflight::Preflight;
-pub use properties::SetProperties;
-pub use pushbutton::AddButton;
-pub use radio::AddRadio;
-pub use redactmark::AddRedactMark;
-pub use remove::RemoveObject;
-pub use rotation::{ReadRotation, RotatePage};
-pub use signaturefield::AddSignature;
-pub use signatures::ReadSignatures;
-pub use stampadd::AddStamp;
-pub use structure::ReadStructure;
-pub use tabs::{ReadTabOrder, SetTabs};
-pub use tounicode::ReadFontUnicode;
-pub use trailer::ReadTrailer;
-pub use transitions::ReadTransition;
-pub use typedsignatureadd::AddTypedSignature;
-pub use validation::ReadValidation;
-pub use watermark::AddWatermark;
+pub use annot::PdfAnnotFlags;
+pub use annotappearance::PdfAnnotAppearanceWrite;
+pub use appearance::{PdfFieldAppearance, PdfFieldAppearanceWrite};
+pub use attachmentadd::PdfAnnotAttachmentAdd;
+pub use attachments::PdfAttachmentsRead;
+pub use background::PdfPageBackground;
+pub use boxes::{PdfPageBox, PdfPageBoxes};
+pub use calculate::{PdfFieldCalculate, PdfFieldValue};
+pub use calloutadd::PdfAnnotCalloutAdd;
+pub use caretadd::PdfAnnotCaretAdd;
+pub use checkbox::PdfFieldCheckboxAdd;
+pub use combobox::PdfFieldComboAdd;
+pub use comments::{PdfCommentAdd, PdfCommentInfo, PdfCommentRead};
+pub use compare::{PdfCompare, PdfCompareMark};
+pub use convert::PdfConvert;
+pub use customstampadd::PdfAnnotCustomstampAdd;
+pub use datefield::PdfFieldDateAdd;
+pub use destinations::PdfDestsRead;
+pub use embeddedfileadd::PdfEmbeddedfileAdd;
+pub use encrypt::PdfEncryptRead;
+pub use fieldadd::PdfFieldAdd;
+pub use fields::{
+    PdfFieldChildren, PdfFieldFlags, PdfFieldInherit, PdfFieldParent, PdfFieldRead, PdfFieldSet,
+    PdfFieldWidgets,
+};
+pub use figures::{PdfFigureAltSet, PdfFigureRead};
+pub use flatten::{PdfCommentFlatten, PdfFormFlatten};
+pub use fonts::PdfFonts;
+pub use form::PdfFormRead;
+pub use format::PdfFieldFormat;
+pub use formdata::{PdfFormDataExport, PdfFormDataImport};
+pub use freetextadd::PdfAnnotFreetextAdd;
+pub use headerfooter::{PdfPageFooter, PdfPageHeader};
+pub use imagefield::PdfFieldImageAdd;
+pub use information::{PdfInfoRead, PdfInfoSet};
+pub use inkadd::PdfAnnotInkAdd;
+pub use intent::PdfIntentWrite;
+pub use javascript::PdfScriptsRead;
+pub use labels::PdfPageLabels;
+pub use lineadd::PdfAnnotLineAdd;
+pub use listbox::PdfFieldListAdd;
+pub use look::PdfFieldLookSet;
+pub use markadd::PdfAnnotMarkAdd;
+pub use marked::PdfMarkedRead;
+pub use marks::PdfPageMarksRemove;
+pub use markup::PdfMarkupAdd;
+pub use metadata::PdfMetadataWrite;
+pub use number::PdfObjectNumber;
+pub use optional::PdfLayersRead;
+pub use outline::{PdfOutlineAdd, PdfOutlineRead};
+pub use pages::PdfPageRemove;
+pub use pagetext::PdfPageText;
+pub use patterns::{PdfRedactPatternFind, PdfRedactPatterns};
+pub use polygonadd::PdfAnnotPolygonAdd;
+pub use preflight::PdfPreflight;
+pub use properties::PdfFieldPropertiesSet;
+pub use pushbutton::PdfFieldButtonAdd;
+pub use radio::PdfFieldRadioAdd;
+pub use redactmark::PdfAnnotRedactAdd;
+pub use remove::PdfObjectRemove;
+pub use rotation::{PdfPageRotate, PdfPageRotation};
+pub use signaturefield::PdfFieldSignatureAdd;
+pub use signatures::PdfSignaturesRead;
+pub use stampadd::PdfAnnotStampAdd;
+pub use structure::PdfStructureRead;
+pub use tabs::{PdfPageTabs, PdfTabOrder};
+pub use tounicode::PdfFontUnicode;
+pub use trailer::PdfTrailerRead;
+pub use transitions::PdfPageTransition;
+pub use typedsignatureadd::PdfAnnotTypedsignatureAdd;
+pub use validation::PdfFieldValidate;
+pub use watermark::PdfPageWatermark;
 
 /// The PDF layer.
 ///
@@ -408,312 +411,1457 @@ impl Payload {
     }
 }
 
-/// Put an indirect object in the document.
-#[derive(Command)]
-#[command(id = "pdf.object.add", area = "pdf", layer = "pdf", icon = "plus", mutates, undoable, example)]
-pub struct AddObject {
-    /// The object's number in the file.
-    pub object: Number,
-    /// The dictionary: a list of `[key, value]` pairs, in order.
-    pub entries: serde_json::Value,
-}
+commands! {
+    /// Put an indirect object in the document.
+    pdf.object.add {
+        area: "pdf",
+        layer: "pdf",
+        icon: "plus",
+        mutates,
+        undoable,
+        example,
+        params: {
+            /// The object's number in the file.
 
-impl AddObject {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let object = self.object.0;
-        if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: "pdf.object.add".to_string(),
-                message: "an object number is a whole number".to_string(),
-            });
+            object: Number,
+            /// The dictionary: a list of `[key, value]` pairs, in order.
+
+            entries: serde_json::Value,
+        },
+        run: {
+
+            let object = self.object.0;
+            if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: "pdf.object.add".to_string(),
+                    message: "an object number is a whole number".to_string(),
+                });
+            }
+            let number = object as u64;
+            if number == 0 {
+                return Err(EngineError::Failed {
+                    id: "pdf.object.add".to_string(),
+                    message: "object numbers start at one".to_string(),
+                });
+            }
+            let entries = check_entries(&self.entries)?;
+            if let Some(other) = number::holder_of(session, number, None) {
+                return Err(EngineError::Failed {
+                    id: "pdf.object.add".to_string(),
+                    message: format!("the number `{number}` is the number of the object `{other}`"),
+                });
+            }
+            // A number that is **free** is not used again: it was the
+            // number of an object that was taken away, and the file still
+            // says the number is free.
+            if free::the_free(session.document()).iter().any(|entry| entry.number == number) {
+                return Err(EngineError::Failed {
+                    id: "pdf.object.add".to_string(),
+                    message: format!("the number `{number}` is free, and a free number is not used again"),
+                });
+            }
+            let data = serde_json::json!({ "object": number, "entries": entries });
+            let name = format!("object {number}");
+            let id = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
+            Ok(Outcome::changed(format!("added the `{name}`"))
+                .with_data(serde_json::json!({ "id": id, "object": number })))
+
         }
-        let number = object as u64;
-        if number == 0 {
-            return Err(EngineError::Failed {
-                id: "pdf.object.add".to_string(),
-                message: "object numbers start at one".to_string(),
-            });
-        }
-        let entries = check_entries(&self.entries)?;
-        if let Some(other) = number::holder_of(session, number, None) {
-            return Err(EngineError::Failed {
-                id: "pdf.object.add".to_string(),
-                message: format!("the number `{number}` is the number of the object `{other}`"),
-            });
-        }
-        // A number that is **free** is not used again: it was the
-        // number of an object that was taken away, and the file still
-        // says the number is free.
-        if free::the_free(session.document()).iter().any(|entry| entry.number == number) {
-            return Err(EngineError::Failed {
-                id: "pdf.object.add".to_string(),
-                message: format!("the number `{number}` is free, and a free number is not used again"),
-            });
-        }
-        let data = serde_json::json!({ "object": number, "entries": entries });
-        let name = format!("object {number}");
-        let id = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
-        Ok(Outcome::changed(format!("added the `{name}`"))
-            .with_data(serde_json::json!({ "id": id, "object": number })))
     }
-}
-
-/// **Set** a key of an object's dictionary.
-///
-/// The dictionary is the payload, and a payload that cannot be changed
-/// is a payload that was wrong the moment it was written. The key is
-/// **added** when it is not there and **changed** when it is, and the
-/// order of the dictionary is kept: a key that is there keeps its
-/// place, and a key that is new goes at the end.
-///
-/// A node that is **not an object** is refused, and so is an empty
-/// key.
-#[derive(Command)]
-#[command(id = "pdf.entry.set", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct SetEntry {
-    /// The object.
-    pub object: NodeRef,
-    /// The key.
-    pub key: Text,
-    /// The value.
-    pub value: serde_json::Value,
-}
-
-impl SetEntry {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.entry.set".to_string();
-        let object = self.object.0;
-        let Some(node) = session.document().node(object) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{object}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{object}` is a `{}` and not an object", node.kind),
-            });
-        }
-        let key = self.key.0.trim();
-        if key.is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "a key is text".to_string() });
-        }
-        let mut entries = entries_of(&node.data);
-        let value = self.value.clone();
-        match entries.iter_mut().find(|(name, _)| name == key) {
-            Some(entry) => entry.1 = value,
-            None => entries.push((key.to_string(), value)),
-        }
-        let data = serde_json::json!({
-            "object": node.data.get("object").cloned().unwrap_or(serde_json::Value::Null),
-            "entries": entries
-                .iter()
-                .map(|(key, value)| serde_json::json!([key, value]))
-                .collect::<Vec<_>>(),
-        });
-        let Some(node) = session.document_mut()?.node_mut(object) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{object}`"),
-            });
-        };
-        node.data = data;
-        Ok(Outcome::changed(format!("the object `{object}` has the key `{key}`"))
-            .with_data(serde_json::json!({ "id": object, "key": key })))
-    }
-}
-
-/// **Take away** a key of an object's dictionary.
-///
-/// A key that is **not there** is refused: a key that was never there
-/// is not a key that was taken away.
-#[derive(Command)]
-#[command(id = "pdf.entry.remove", area = "pdf", layer = "pdf", icon = "minus", mutates, undoable)]
-pub struct RemoveEntry {
-    /// The object.
-    pub object: NodeRef,
-    /// The key.
-    pub key: Text,
-}
-
-impl RemoveEntry {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.entry.remove".to_string();
-        let object = self.object.0;
-        let Some(node) = session.document().node(object) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{object}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{object}` is a `{}` and not an object", node.kind),
-            });
-        }
-        let key = self.key.0.trim();
-        let mut entries = entries_of(&node.data);
-        let before = entries.len();
-        entries.retain(|(name, _)| name != key);
-        if entries.len() == before {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the object `{object}` has no key `{key}`"),
-            });
-        }
-        let data = serde_json::json!({
-            "object": node.data.get("object").cloned().unwrap_or(serde_json::Value::Null),
-            "entries": entries
-                .iter()
-                .map(|(key, value)| serde_json::json!([key, value]))
-                .collect::<Vec<_>>(),
-        });
-        let Some(node) = session.document_mut()?.node_mut(object) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{object}`"),
-            });
-        };
-        node.data = data;
-        Ok(Outcome::changed(format!("the object `{object}` has no key `{key}`"))
-            .with_data(serde_json::json!({ "id": object, "key": key })))
-    }
-}
-
-/// Put an indirect object that has a **stream** in the document.
-///
-/// The bytes are not in the document: they are in the file beside it, and
-/// the node says which file is its stream.
-#[derive(Command)]
-#[command(id = "pdf.stream.add", area = "pdf", layer = "pdf", icon = "plus", mutates, undoable)]
-pub struct AddStream {
-    /// The object's number in the file.
-    pub object: Number,
-    /// The dictionary: a list of `[key, value]` pairs, in order.
-    pub entries: serde_json::Value,
-    /// Where the bytes are, relative to the document.
-    pub stream: Text,
-}
-
-impl AddStream {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let object = self.object.0;
-        if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: "pdf.stream.add".to_string(),
-                message: "an object number is a whole number".to_string(),
-            });
-        }
-        let number = object as u64;
-        if number == 0 {
-            return Err(EngineError::Failed {
-                id: "pdf.stream.add".to_string(),
-                message: "object numbers start at one".to_string(),
-            });
-        }
-        let entries = check_entries(&self.entries)?;
-        if let Some(other) = number::holder_of(session, number, None) {
-            return Err(EngineError::Failed {
-                id: "pdf.stream.add".to_string(),
-                message: format!("the number `{number}` is the number of the object `{other}`"),
-            });
-        }
-        let path = self.stream.0.clone();
-        if path.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "pdf.stream.add".to_string(),
-                message: "a stream has a path".to_string(),
-            });
-        }
-        let data = serde_json::json!({ "object": number, "entries": entries });
-        let name = format!("object {number}");
-        let id = session.document_mut()?.add_node_with(name.clone(), "pdf.stream", None, data);
-        if let Some(node) = session.document_mut()?.node_mut(id) {
-            node.stream = Some(path.clone());
-        }
-        Ok(Outcome::changed(format!("added the `{name}` with its stream"))
-            .with_data(serde_json::json!({ "id": id, "object": number, "stream": path })))
-    }
-}
-
-/// **Decode** a stream's bytes.
-///
-/// A PDF's stream may be **encoded**: the `/Filter` entry names the way
-/// and the bytes in the file are the encoded ones. The command reads
-/// the file the node names, undoes the filter and writes what was
-/// inside it to another file.
-///
-/// The node is not changed: it still names the **encoded** bytes,
-/// because that is what the PDF file holds, and the decoded bytes are
-/// what the caller asked for.
-#[derive(Command)]
-#[command(id = "pdf.stream.decode", area = "pdf", layer = "pdf", icon = "file", menu("PDF", "Streams"))]
-pub struct DecodeStream {
-    /// The stream whose bytes are decoded.
-    pub stream: NodeRef,
-    /// The filter to undo: `FlateDecode`, `LZWDecode`,
-    /// `ASCIIHexDecode`, `ASCII85Decode` or `RunLengthDecode`.
+    /// **Set** a key of an object's dictionary.
     ///
-    /// Leave it out and the **dictionary** names it, which is where a
-    /// PDF file says which filter a stream is in.
-    pub filter: Option<Text>,
-    /// The **predictor** to undo: the number the PDF gives it — `1` is
-    /// none, `2` is the TIFF one and `10` to `15` are the PNG ones.
+    /// The dictionary is the payload, and a payload that cannot be changed
+    /// is a payload that was wrong the moment it was written. The key is
+    /// **added** when it is not there and **changed** when it is, and the
+    /// order of the dictionary is kept: a key that is there keeps its
+    /// place, and a key that is new goes at the end.
     ///
-    /// Leave it out and the **dictionary** names it, in
-    /// `/DecodeParms`. The other parameters of the predictor — the
-    /// columns, the colours and the bits — come from the dictionary
-    /// whatever this says.
-    pub predictor: Option<Number>,
-    /// Where to write the decoded bytes.
-    pub to: Text,
-}
+    /// A node that is **not an object** is refused, and so is an empty
+    /// key.
+    pdf.entry.set {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The object.
 
-impl DecodeStream {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.stream.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
+            object: NodeRef,
+            /// The key.
+
+            key: Text,
+            /// The value.
+
+            value: serde_json::Value,
+        },
+        run: {
+
+            let id = "pdf.entry.set".to_string();
+            let object = self.object.0;
+            let Some(node) = session.document().node(object) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{object}`"),
+                });
+            };
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{object}` is a `{}` and not an object", node.kind),
+                });
+            }
+            let key = self.key.0.trim();
+            if key.is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "a key is text".to_string() });
+            }
+            let mut entries = entries_of(&node.data);
+            let value = self.value.clone();
+            match entries.iter_mut().find(|(name, _)| name == key) {
+                Some(entry) => entry.1 = value,
+                None => entries.push((key.to_string(), value)),
+            }
+            let data = serde_json::json!({
+                "object": node.data.get("object").cloned().unwrap_or(serde_json::Value::Null),
+                "entries": entries
+                    .iter()
+                    .map(|(key, value)| serde_json::json!([key, value]))
+                    .collect::<Vec<_>>(),
+            });
+            let Some(node) = session.document_mut()?.node_mut(object) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{object}`"),
+                });
+            };
+            node.data = data;
+            Ok(Outcome::changed(format!("the object `{object}` has the key `{key}`"))
+                .with_data(serde_json::json!({ "id": object, "key": key })))
+
+        }
+    }
+    /// **Take away** a key of an object's dictionary.
+    ///
+    /// A key that is **not there** is refused: a key that was never there
+    /// is not a key that was taken away.
+    pdf.entry.remove {
+        area: "pdf",
+        layer: "pdf",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The object.
+
+            object: NodeRef,
+            /// The key.
+
+            key: Text,
+        },
+        run: {
+
+            let id = "pdf.entry.remove".to_string();
+            let object = self.object.0;
+            let Some(node) = session.document().node(object) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{object}`"),
+                });
+            };
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{object}` is a `{}` and not an object", node.kind),
+                });
+            }
+            let key = self.key.0.trim();
+            let mut entries = entries_of(&node.data);
+            let before = entries.len();
+            entries.retain(|(name, _)| name != key);
+            if entries.len() == before {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the object `{object}` has no key `{key}`"),
+                });
+            }
+            let data = serde_json::json!({
+                "object": node.data.get("object").cloned().unwrap_or(serde_json::Value::Null),
+                "entries": entries
+                    .iter()
+                    .map(|(key, value)| serde_json::json!([key, value]))
+                    .collect::<Vec<_>>(),
+            });
+            let Some(node) = session.document_mut()?.node_mut(object) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{object}`"),
+                });
+            };
+            node.data = data;
+            Ok(Outcome::changed(format!("the object `{object}` has no key `{key}`"))
+                .with_data(serde_json::json!({ "id": object, "key": key })))
+
+        }
+    }
+    /// Put an indirect object that has a **stream** in the document.
+    ///
+    /// The bytes are not in the document: they are in the file beside it, and
+    /// the node says which file is its stream.
+    pdf.stream.add {
+        area: "pdf",
+        layer: "pdf",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The object's number in the file.
+
+            object: Number,
+            /// The dictionary: a list of `[key, value]` pairs, in order.
+
+            entries: serde_json::Value,
+            /// Where the bytes are, relative to the document.
+
+            stream: Text,
+        },
+        run: {
+
+            let object = self.object.0;
+            if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: "pdf.stream.add".to_string(),
+                    message: "an object number is a whole number".to_string(),
+                });
+            }
+            let number = object as u64;
+            if number == 0 {
+                return Err(EngineError::Failed {
+                    id: "pdf.stream.add".to_string(),
+                    message: "object numbers start at one".to_string(),
+                });
+            }
+            let entries = check_entries(&self.entries)?;
+            if let Some(other) = number::holder_of(session, number, None) {
+                return Err(EngineError::Failed {
+                    id: "pdf.stream.add".to_string(),
+                    message: format!("the number `{number}` is the number of the object `{other}`"),
+                });
+            }
+            let path = self.stream.0.clone();
+            if path.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "pdf.stream.add".to_string(),
+                    message: "a stream has a path".to_string(),
+                });
+            }
+            let data = serde_json::json!({ "object": number, "entries": entries });
+            let name = format!("object {number}");
+            let id = session.document_mut()?.add_node_with(name.clone(), "pdf.stream", None, data);
+            if let Some(node) = session.document_mut()?.node_mut(id) {
+                node.stream = Some(path.clone());
+            }
+            Ok(Outcome::changed(format!("added the `{name}` with its stream"))
+                .with_data(serde_json::json!({ "id": id, "object": number, "stream": path })))
+
+        }
+    }
+    /// **Decode** a stream's bytes.
+    ///
+    /// A PDF's stream may be **encoded**: the `/Filter` entry names the way
+    /// and the bytes in the file are the encoded ones. The command reads
+    /// the file the node names, undoes the filter and writes what was
+    /// inside it to another file.
+    ///
+    /// The node is not changed: it still names the **encoded** bytes,
+    /// because that is what the PDF file holds, and the decoded bytes are
+    /// what the caller asked for.
+    pdf.stream.decode {
+        area: "pdf",
+        layer: "pdf",
+        icon: "file",
+        menu: ("PDF", "Streams"),
+        params: {
+            /// The stream whose bytes are decoded.
+
+            stream: NodeRef,
+            /// The filter to undo: `FlateDecode`, `LZWDecode`,
+            /// `ASCIIHexDecode`, `ASCII85Decode` or `RunLengthDecode`.
+            ///
+            /// Leave it out and the **dictionary** names it, which is where a
+            /// PDF file says which filter a stream is in.
+
+            filter: Option<Text>,
+            /// The **predictor** to undo: the number the PDF gives it — `1` is
+            /// none, `2` is the TIFF one and `10` to `15` are the PNG ones.
+            ///
+            /// Leave it out and the **dictionary** names it, in
+            /// `/DecodeParms`. The other parameters of the predictor — the
+            /// columns, the colours and the bits — come from the dictionary
+            /// whatever this says.
+
+            predictor: Option<Number>,
+            /// Where to write the decoded bytes.
+
+            to: Text,
+        },
+        run: {
+
+            let id = self.stream.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "pdf.stream.decode".to_string(),
+                    message: format!("there is no node `{id}`"),
+                });
+            };
+            if node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: "pdf.stream.decode".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not a stream", node.kind),
+                });
+            }
+            let to = self.to.0.clone();
+            if to.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "pdf.stream.decode".to_string(),
+                    message: "the decoded bytes go somewhere".to_string(),
+                });
+            }
+            let decoded = decoded_bytes(
+                node,
+                self.filter.as_ref().map(|filter| filter.0.as_str()),
+                self.predictor.as_ref().map(|predictor| predictor.0),
+                true,
+                "pdf.stream.decode",
+            )?;
+            std::fs::write(&to, &decoded.bytes).map_err(|error| EngineError::Failed {
                 id: "pdf.stream.decode".to_string(),
+                message: format!("the decoded bytes cannot be written to `{to}`: {error}"),
+            })?;
+            let from = node.stream.clone().unwrap_or_default();
+            let count = decoded.bytes.len();
+            Ok(Outcome::new(format!("decoded {count} bytes")).with_data(serde_json::json!({
+                "id": id,
+                "from": from,
+                "to": to,
+                "filters": decoded.filters,
+                "predictor": decoded.predictor.map(|kind| format!("{kind:?}")),
+                "bytes": count,
+            })))
+
+        }
+    }
+    /// Read the **operators** of a content stream.
+    ///
+    /// A page's content is a stream of operands and operators, and the
+    /// command says what the stream says: the operators in the order the
+    /// stream has them, with the operands each one was given.
+    pdf.content.operators {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The stream whose bytes are read.
+
+            stream: NodeRef,
+            /// The filter to undo, when the dictionary does not name one.
+
+            filter: Option<Text>,
+        },
+        run: {
+
+            let id = self.stream.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "pdf.content.operators".to_string(),
+                    message: format!("there is no node `{id}`"),
+                });
+            };
+            if node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: "pdf.content.operators".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not a stream", node.kind),
+                });
+            }
+            let decoded = decoded_bytes(
+                node,
+                self.filter.as_ref().map(|filter| filter.0.as_str()),
+                None,
+                false,
+                "pdf.content.operators",
+            )?;
+            let operations = content::operations(&decoded.bytes).map_err(|error| EngineError::Failed {
+                id: "pdf.content.operators".to_string(),
+                message: format!("the content cannot be read: {error:?}"),
+            })?;
+            let count = operations.len();
+            let list: Vec<serde_json::Value> = operations.iter().map(content::Operation::to_json).collect();
+            Ok(Outcome::new(format!("{count} operation(s)"))
+                .with_data(serde_json::json!({ "id": id, "operations": list })))
+
+        }
+    }
+    /// Write the **content** of a stream back.
+    ///
+    /// The content of a stream is read and written again in the kit's own
+    /// form: the operands, each one followed by a space, and then the
+    /// operator and a newline. The **inline images** are kept whole, so a
+    /// stream that is read and written again is the stream it was.
+    ///
+    /// A stream that is **filtered** is refused: its bytes are not the
+    /// content, and writing them back would change what the file says.
+    pdf.content.write {
+        area: "pdf",
+        layer: "pdf",
+        icon: "file",
+        mutates,
+        undoable,
+        params: {
+            /// The stream whose content is written.
+
+            stream: NodeRef,
+        },
+        run: {
+
+            let id = self.stream.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "pdf.content.write".to_string(),
+                    message: format!("there is no node `{id}`"),
+                });
+            };
+            if node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: "pdf.content.write".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not a stream", node.kind),
+                });
+            }
+            // A **filtered** stream's bytes are not the content.
+            if let Some(names) = filters::filter_of(&entries_of(&node.data)) {
+                return Err(EngineError::Failed {
+                    id: "pdf.content.write".to_string(),
+                    message: format!("the stream is filtered by {names:?}, and its bytes are not the content"),
+                });
+            }
+            let Some(path) = node.stream.clone() else {
+                return Err(EngineError::Failed {
+                    id: "pdf.content.write".to_string(),
+                    message: format!("the stream `{id}` has no file"),
+                });
+            };
+            let limits = filters::Limits::default();
+            let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
+                .map_err(|message| EngineError::Failed {
+                id: "pdf.content.write".to_string(),
+                message: format!("the stream's bytes cannot be read: {message}"),
+            })?;
+            let operations = content::operations(&bytes).map_err(|error| EngineError::Failed {
+                id: "pdf.content.write".to_string(),
+                message: format!("the content cannot be read: {error:?}"),
+            })?;
+            let written = content::write_operations(&operations);
+            std::fs::write(&path, &written).map_err(|error| EngineError::Failed {
+                id: "pdf.content.write".to_string(),
+                message: format!("the content cannot be written: {error}"),
+            })?;
+            Ok(Outcome::changed(format!("{} operation(s) written", operations.len())).with_data(
+                serde_json::json!({
+                    "id": id,
+                    "operations": operations.len(),
+                    "bytes": written.len(),
+                }),
+            ))
+
+        }
+    }
+    /// Put a **page** in the document.
+    ///
+    /// A page is an indirect object whose dictionary says `/Type /Page`, and
+    /// it may have a **parent**: the page is in a tree, and the tree is
+    /// what a PDF file has instead of a list of pages.
+    pdf.page.add {
+        area: "pdf",
+        layer: "pdf",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The object's number in the file.
+
+            object: Number,
+            /// The page's own dictionary: a list of `[key, value]` pairs, in
+            /// order.
+
+            entries: Option<serde_json::Value>,
+            /// The page's parent, if it has one.
+
+            parent: Option<NodeRef>,
+        },
+        run: {
+
+            let object = self.object.0;
+            if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: "pdf.page.add".to_string(),
+                    message: "an object number is a whole number".to_string(),
+                });
+            }
+            let number = object as u64;
+            if number == 0 {
+                return Err(EngineError::Failed {
+                    id: "pdf.page.add".to_string(),
+                    message: "object numbers start at one".to_string(),
+                });
+            }
+            let mut entries = match &self.entries {
+                Some(entries) => check_entries(entries)?,
+                None => Vec::new(),
+            };
+            // The page says what it is: the type is the page's own.
+            let kind = entries.iter().find_map(|entry| {
+                let pair = entry.as_array()?;
+                if pair.first()?.as_str()? == "Type" { Some(pair.get(1)?.clone()) } else { None }
+            });
+            match kind {
+                Some(value) if value.as_str() != Some("Page") => {
+                    return Err(EngineError::Failed {
+                        id: "pdf.page.add".to_string(),
+                        message: "a page's type is `Page`".to_string(),
+                    });
+                }
+                Some(_) => {}
+                None => entries.push(serde_json::json!(["Type", "Page"])),
+            }
+            let parent = self.parent.map(|parent| parent.0);
+            if let Some(parent) = parent {
+                let node = session.document().node(parent).ok_or_else(|| EngineError::Failed {
+                    id: "pdf.page.add".to_string(),
+                    message: format!("there is no node `{parent}` in the document"),
+                })?;
+                if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                    return Err(EngineError::Failed {
+                        id: "pdf.page.add".to_string(),
+                        message: format!("the node `{parent}` is a `{}` and not an object", node.kind),
+                    });
+                }
+            }
+            let data = serde_json::json!({ "object": number, "entries": entries });
+            let name = format!("page {number}");
+            let id = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
+            if let Some(parent) = parent {
+                // The page names its parent and the parent names the page:
+                // the tree is two edges, as the file has it.
+                for (from, to, key) in [(id, parent, "Parent"), (parent, id, "Kids")] {
+                    let payload = serde_json::json!({ "key": key, "generation": 0 });
+                    let relation = craftkit_sdk::Relation::with_payload(from, to, "ref", payload);
+                    if !session.document_mut()?.add_relation(relation) {
+                        return Err(EngineError::Failed {
+                            id: "pdf.page.add".to_string(),
+                            message: format!("the page `{id}` is already under `{parent}`"),
+                        });
+                    }
+                }
+                // And the **dictionary** says it too: the file is written
+                // from the dictionary, and a tree that is only in the
+                // document is a tree the file does not have.
+                let to_parent = a_reference(session, parent, 0, "pdf.page.add")?;
+                add_reference(session, id, "Parent", to_parent, false)?;
+                let to_page = a_reference(session, id, 0, "pdf.page.add")?;
+                add_reference(session, parent, "Kids", to_page, true)?;
+                // The **count** of the children is derived: it is how many
+                // of them there are.
+                let kids = session
+                    .document()
+                    .relations
+                    .iter()
+                    .filter(|relation| {
+                        relation.kind == "ref"
+                            && relation.from == parent
+                            && relation.payload.get("key").and_then(|key| key.as_str()) == Some("Kids")
+                    })
+                    .count();
+                if let Some(node) = session.document_mut()?.node_mut(parent) {
+                    node.data = with_entry(&node.data, "Count", serde_json::json!(kids));
+                }
+            }
+            Ok(Outcome::changed(format!("added the `{name}`"))
+                .with_data(serde_json::json!({ "id": id, "object": number, "parent": parent })))
+
+        }
+    }
+    /// The **attributes** of a page, and the ones it inherits.
+    ///
+    /// A page may leave out what a page does not have to say: the **media
+    /// box**, the **resources**, the **crop box** and the **rotation** are
+    /// inherited from the nearest ancestor that has them. The command says
+    /// what the page has, and where each thing came from.
+    pdf.page.attributes {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The page.
+
+            page: NodeRef,
+        },
+        run: {
+
+            let id = self.page.0;
+            let node = session.document().node(id).ok_or_else(|| EngineError::Failed {
+                id: "pdf.page.attributes".to_string(),
                 message: format!("there is no node `{id}`"),
-            });
-        };
-        if node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: "pdf.stream.decode".to_string(),
-                message: format!("the node `{id}` is a `{}` and not a stream", node.kind),
-            });
+            })?;
+            let own = entries_of(&node.data);
+            let mut attributes = serde_json::Map::new();
+            let mut inherited = serde_json::Map::new();
+            for key in INHERITED {
+                if let Some((_, value)) = own.iter().find(|(name, _)| name == key) {
+                    attributes.insert(key.to_string(), value.clone());
+                    continue;
+                }
+                // The **ancestors**: the nearest one that has it wins.
+                let mut ancestor = parent_of(session, id);
+                let mut steps = 0_usize;
+                let mut found = None;
+                while let Some(current) = ancestor {
+                    steps += 1;
+                    if steps > MAX_ANCESTORS {
+                        break;
+                    }
+                    let Some(current_node) = session.document().node(current) else { break };
+                    let entries = entries_of(&current_node.data);
+                    if let Some((_, value)) = entries.iter().find(|(name, _)| name == key) {
+                        found = Some((value.clone(), current));
+                        break;
+                    }
+                    ancestor = parent_of(session, current);
+                }
+                if let Some((value, from)) = found {
+                    attributes.insert(key.to_string(), value);
+                    inherited.insert(key.to_string(), serde_json::json!(from));
+                }
+            }
+            Ok(Outcome::new(format!("{} attribute(s)", attributes.len())).with_data(serde_json::json!({
+                "id": id,
+                "attributes": attributes,
+                "inherited": inherited,
+            })))
+
         }
-        let to = self.to.0.clone();
-        if to.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "pdf.stream.decode".to_string(),
-                message: "the decoded bytes go somewhere".to_string(),
-            });
+    }
+    /// Put an **annotation** on a page.
+    ///
+    /// An annotation is an object of its own: a dictionary with a type, a
+    /// kind, a rectangle, and — for a link — somewhere to go. The page
+    /// names it in its `/Annots`, and that naming is an **edge**, the same
+    /// edge the page tree is made of.
+    ///
+    /// The kind is a **name** and not a closed list: the tree's editor has
+    /// a list of the annotations it draws, and keeps the others as they
+    /// are. Here nothing matches on the kind at all — the annotation says
+    /// what it is, and a third party may add a kind of its own.
+    ///
+    /// Where a link goes is either a **page of this document** — the
+    /// `/Dest` — or a **web address** — the `/A` action, which is an
+    /// object of its own, so that the action may be anything at all.
+    pdf.annot.add {
+        area: "pdf",
+        layer: "pdf",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The page the annotation is on.
+
+            page: NodeRef,
+            /// The annotation's object number in the file.
+
+            object: Number,
+            /// The annotation's kind: `Link`, `Text`, `FreeText`, `Square`,
+            /// `Circle`, `Highlight`, `Popup`, `Widget` or `Stamp`.
+
+            subtype: Text,
+            /// The rectangle the annotation covers: four numbers.
+
+            rect: serde_json::Value,
+            /// The annotation's text.
+
+            contents: Option<Text>,
+            /// The page a link goes to.
+
+            destination: Option<NodeRef>,
+            /// Where a link goes that is not in this document.
+
+            uri: Option<Text>,
+        },
+        run: {
+
+            let id = "pdf.annot.add".to_string();
+            // The **page**: an object whose type is `Page`.
+            let page = session.document().node(self.page.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{}`", self.page.0),
+            })?;
+            if page.kind != "pdf.object" && page.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{}` is a `{}` and not an object", self.page.0, page.kind),
+                });
+            }
+            let kind = entries_of(&page.data)
+                .into_iter()
+                .find(|(key, _)| key == "Type")
+                .and_then(|(_, value)| value.as_str().map(|kind| kind.to_string()));
+            if kind.as_deref() != Some("Page") {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{}` is not a page", self.page.0),
+                });
+            }
+            let page_number = the_number_of(page).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the node `{}` has no object number", self.page.0),
+            })?;
+            // The page's own **annotations**, before the new one is made.
+            let annots = entries_of(&page.data)
+                .into_iter()
+                .find(|(key, _)| key == "Annots")
+                .and_then(|(_, value)| value.as_array().cloned())
+                .unwrap_or_default();
+            // The **object number** of the annotation: a whole number, and
+            // one that nothing else has.
+            let object = self.object.0;
+            if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "an object number is a whole number".to_string(),
+                });
+            }
+            let number = object as u64;
+            if number == 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "object numbers start at one".to_string(),
+                });
+            }
+            if session.document().walk().any(|node| the_number_of(node) == Some(number)) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the object {number} is already in the document"),
+                });
+            }
+            // The **kind**: a name.
+            let subtype = a_name(&self.subtype.0, &id)?;
+            // The **rectangle**: four numbers, and the corners may come in
+            // any order — the tree puts them the right way round.
+            let rect = the_rect(&self.rect, &id)?;
+            // Where it goes: one place, and one place only.
+            if self.destination.is_some() && self.uri.is_some() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "an annotation goes to one place".to_string(),
+                });
+            }
+            let mut entries: Vec<(String, serde_json::Value)> = vec![
+                ("Type".to_string(), serde_json::json!("Annot")),
+                ("Subtype".to_string(), serde_json::json!(subtype)),
+                ("Rect".to_string(), serde_json::json!(rect)),
+            ];
+            if let Some(contents) = &self.contents {
+                entries.push(("Contents".to_string(), serde_json::json!({ "string": contents.0 })));
+            }
+            // The **page** the annotation is on, and the **print** flag: the
+            // tree's editor prints its links, and so does this one.
+            entries.push(("P".to_string(), serde_json::json!({ "ref": [page_number, 0] })));
+            entries.push(("F".to_string(), serde_json::json!(4)));
+            // Where it goes.
+            let mut destination = None;
+            let mut action = None;
+            if let Some(target) = self.destination {
+                let node = session.document().node(target.0).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{}`", target.0),
+                })?;
+                let target_number = the_number_of(node).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{}` has no object number", target.0),
+                })?;
+                // The **destination**: the page, and the way it is shown.
+                entries.push(("Dest".to_string(), serde_json::json!([{ "ref": [target_number, 0] }, "Fit"])));
+                destination = Some(target.0);
+            }
+            if let Some(uri) = &self.uri {
+                let uri = uri.0.trim().to_string();
+                if uri.is_empty() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a web address is not empty".to_string(),
+                    });
+                }
+                if !uri.is_ascii() {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: "a web address is 7-bit ASCII".to_string(),
+                    });
+                }
+                // The **action** is an object of its own: the tree's editor
+                // writes it inside the annotation, and the tree's action is
+                // a closed list of three — a page, a web address, and the
+                // things it does not edit. Here the action is an object, and
+                // the annotation refers to it, so that a third party may
+                // make one of its own.
+                let action_number = the_next_number(session.document(), number);
+                let action_entries: Vec<(String, serde_json::Value)> = vec![
+                    ("S".to_string(), serde_json::json!("URI")),
+                    ("URI".to_string(), serde_json::json!({ "string": uri })),
+                ];
+                let action_data = serde_json::json!({
+                    "object": action_number,
+                    "entries": pairs_of(&action_entries),
+                });
+                let action_name = format!("action {action_number}");
+                let action_id =
+                    session.document_mut()?.add_node_with(action_name, "pdf.object", None, action_data);
+                entries.push(("A".to_string(), serde_json::json!({ "ref": [action_number, 0] })));
+                action = Some(action_id);
+            }
+            // The **annotation** itself.
+            let data = serde_json::json!({ "object": number, "entries": pairs_of(&entries) });
+            let name = format!("annotation {number}");
+            let annot = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
+            // The page **names** the annotation: the `/Annots` is an array
+            // of the annotations, and the array grows.
+            let mut annots = annots;
+            annots.push(serde_json::json!({ "ref": [number, 0] }));
+            if let Some(node) = session.document_mut()?.node_mut(self.page.0) {
+                node.data = with_entry(&node.data, "Annots", serde_json::json!(annots));
+            }
+            // And the **edges**: the page names the annotation, and the
+            // annotation names where it goes.
+            let edges: Vec<(u64, u64, &str)> = vec![
+                (self.page.0, annot, "Annots"),
+                (annot, destination.unwrap_or(annot), "Dest"),
+                (annot, action.unwrap_or(annot), "A"),
+            ];
+            for (from, to, key) in edges {
+                if from == to && key != "Dest" {
+                    continue;
+                }
+                if key == "Dest" && destination.is_none() {
+                    continue;
+                }
+                if key == "A" && action.is_none() {
+                    continue;
+                }
+                let payload = serde_json::json!({ "key": key, "generation": 0 });
+                let relation = craftkit_sdk::Relation::with_payload(from, to, "ref", payload);
+                if !session.document_mut()?.add_relation(relation) {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the object `{from}` already refers to `{to}` under `{key}`"),
+                    });
+                }
+            }
+            Ok(Outcome::changed(format!("added the `{name}` to the page")).with_data(serde_json::json!({
+                "id": annot,
+                "object": number,
+                "page": self.page.0,
+                "subtype": subtype,
+                "rect": rect,
+                "destination": destination,
+                "action": action,
+            })))
+
         }
-        let decoded = decoded_bytes(
-            node,
-            self.filter.as_ref().map(|filter| filter.0.as_str()),
-            self.predictor.as_ref().map(|predictor| predictor.0),
-            true,
-            "pdf.stream.decode",
-        )?;
-        std::fs::write(&to, &decoded.bytes).map_err(|error| EngineError::Failed {
-            id: "pdf.stream.decode".to_string(),
-            message: format!("the decoded bytes cannot be written to `{to}`: {error}"),
-        })?;
-        let from = node.stream.clone().unwrap_or_default();
-        let count = decoded.bytes.len();
-        Ok(Outcome::new(format!("decoded {count} bytes")).with_data(serde_json::json!({
-            "id": id,
-            "from": from,
-            "to": to,
-            "filters": decoded.filters,
-            "predictor": decoded.predictor.map(|kind| format!("{kind:?}")),
-            "bytes": count,
-        })))
+    }
+    /// The **annotations** of a page.
+    ///
+    /// A query: it does not change the document. The page's `/Annots` are
+    /// the edges the page holds, and each one is an object of its own.
+    pdf.page.annotations {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The page.
+
+            page: NodeRef,
+        },
+        run: {
+
+            let id = "pdf.page.annotations".to_string();
+            if session.document().node(self.page.0).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{}`", self.page.0),
+                });
+            }
+            let mut annotations: Vec<serde_json::Value> = Vec::new();
+            for relation in session.document().relations.iter().filter(|relation| {
+                relation.kind == "ref"
+                    && relation.from == self.page.0
+                    && relation
+                        .payload
+                        .get("key")
+                        .and_then(|key| key.as_str())
+                        .map(|key| key == "Annots")
+                        .unwrap_or(false)
+            }) {
+                let Some(node) = session.document().node(relation.to) else { continue };
+                let entries = entries_of(&node.data);
+                let mut annotation = serde_json::Map::new();
+                annotation.insert("id".to_string(), serde_json::json!(node.id));
+                annotation
+                    .insert("object".to_string(), serde_json::json!(the_number_of(node).unwrap_or_default()));
+                for key in ["Subtype", "Rect", "Contents"] {
+                    if let Some((_, value)) = entries.iter().find(|(name, _)| name == key) {
+                        annotation.insert(key.to_string(), value.clone());
+                    }
+                }
+                // The **flags**: whether the annotation prints, and whether
+                // it is hidden.
+                annotation.insert("flags".to_string(), serde_json::json!(crate::annot::flags_of(node)));
+                annotation.insert("print".to_string(), serde_json::json!(crate::annot::prints(node)));
+                annotation.insert("hidden".to_string(), serde_json::json!(crate::annot::is_hidden(node)));
+                if let Some(where_) = where_it_goes(session.document(), &entries) {
+                    annotation.insert("goes_to".to_string(), where_);
+                }
+                annotations.push(serde_json::Value::Object(annotation));
+            }
+            let count = annotations.len();
+            Ok(Outcome::new(format!("{count} annotation(s)"))
+                .with_data(serde_json::json!({ "id": self.page.0, "annotations": annotations })))
+
+        }
+    }
+    /// Read the **objects** of an object stream.
+    ///
+    /// An object stream is a stream that holds a file's objects, so that
+    /// they may be compressed together. The command reads them: each one's
+    /// number and what it says.
+    pdf.objstm.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The stream whose objects are read.
+
+            stream: NodeRef,
+        },
+        run: {
+
+            let id = self.stream.0;
+            let Some(node) = session.document().node(id) else {
+                return Err(EngineError::Failed {
+                    id: "pdf.objstm.read".to_string(),
+                    message: format!("there is no node `{id}`"),
+                });
+            };
+            if node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: "pdf.objstm.read".to_string(),
+                    message: format!("the node `{id}` is a `{}` and not a stream", node.kind),
+                });
+            }
+            let entries = entries_of(&node.data);
+            // The **count** and the **first**: what the dictionary says.
+            let count = entries
+                .iter()
+                .find(|(key, _)| key == "N")
+                .and_then(|(_, value)| whole_number_of(value))
+                .and_then(|number| u64::try_from(number).ok())
+                .ok_or_else(|| EngineError::Failed {
+                    id: "pdf.objstm.read".to_string(),
+                    message: "the object stream does not say how many objects it has".to_string(),
+                })?;
+            let first = entries
+                .iter()
+                .find(|(key, _)| key == "First")
+                .and_then(|(_, value)| whole_number_of(value))
+                .and_then(|number| u64::try_from(number).ok())
+                .ok_or_else(|| EngineError::Failed {
+                    id: "pdf.objstm.read".to_string(),
+                    message: "the object stream does not say where the first object begins".to_string(),
+                })?;
+            let decoded = decoded_bytes(node, None, None, false, "pdf.objstm.read")?;
+            let objects =
+                objects::object_stream(&decoded.bytes, count as usize, first as usize).map_err(|error| {
+                    EngineError::Failed {
+                        id: "pdf.objstm.read".to_string(),
+                        message: format!("the object stream cannot be read: {error:?}"),
+                    }
+                })?;
+            let list: Vec<serde_json::Value> = objects
+                .iter()
+                .map(|object| serde_json::json!({ "object": object.number, "value": object.value }))
+                .collect();
+            let count = list.len();
+            Ok(Outcome::new(format!("{count} object(s)"))
+                .with_data(serde_json::json!({ "id": id, "objects": list })))
+
+        }
+    }
+    /// Read the **cross-reference table** of a file.
+    ///
+    /// The table is the file's own index of itself: it says where each
+    /// object is. The command reads it and reports the entries and the
+    /// trailer.
+    pdf.file.xref {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The file to read.
+
+            path: Text,
+        },
+        run: {
+
+            let path = self.path.0.clone();
+            if path.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "pdf.file.xref".to_string(),
+                    message: "a file has a path".to_string(),
+                });
+            }
+            let limits = filters::Limits::default();
+            let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
+                .map_err(|message| EngineError::Failed {
+                id: "pdf.file.xref".to_string(),
+                message: format!("the file cannot be read: {message}"),
+            })?;
+            let table = xref::read(&bytes).map_err(|error| EngineError::Failed {
+                id: "pdf.file.xref".to_string(),
+                message: format!("the table cannot be read: {error:?}"),
+            })?;
+            let entries: Vec<serde_json::Value> = table
+                .entries
+                .iter()
+                .map(|entry| {
+                    serde_json::json!({
+                        "object": entry.number,
+                        "offset": entry.offset,
+                        "generation": entry.generation,
+                        "kind": match entry.kind {
+                            xref::Kind::InFile => "in-file",
+                            xref::Kind::Free => "free",
+                            xref::Kind::Compressed => "compressed",
+                        },
+                    })
+                })
+                .collect();
+            let trailer: Vec<serde_json::Value> =
+                table.trailer.iter().map(|(key, value)| serde_json::json!([key, value])).collect();
+            let count = entries.len();
+            Ok(Outcome::new(format!("{count} entry(ies)"))
+                .with_data(serde_json::json!({ "path": path, "entries": entries, "trailer": trailer })))
+
+        }
+    }
+    /// Load a PDF **file** into the document.
+    ///
+    /// The file's own index says where its objects are, and the loader
+    /// reads them: every object becomes a **node**, and every reference
+    /// becomes a **relation**. The bytes of a stream go into a file of
+    /// their own, beside the document, because the bytes are not the
+    /// document.
+    pdf.file.load {
+        area: "pdf",
+        layer: "pdf",
+        icon: "file",
+        mutates,
+        undoable,
+        params: {
+            /// The file to read.
+
+            path: Text,
+            /// Where the **streams' bytes** go: a directory of this file's own.
+
+            into: Text,
+        },
+        run: {
+
+            let path = self.path.0.clone();
+            if path.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "pdf.file.load".to_string(),
+                    message: "a file has a path".to_string(),
+                });
+            }
+            let into = self.into.0.clone();
+            if into.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "pdf.file.load".to_string(),
+                    message: "the streams' bytes go somewhere".to_string(),
+                });
+            }
+            let limits = filters::Limits::default();
+            let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
+                .map_err(|message| EngineError::Failed {
+                id: "pdf.file.load".to_string(),
+                message: format!("the file cannot be read: {message}"),
+            })?;
+            let file = loader::load(&bytes).map_err(|error| EngineError::Failed {
+                id: "pdf.file.load".to_string(),
+                message: format!("the file cannot be loaded: {error:?}"),
+            })?;
+            let objects = file.objects;
+            // The **trailer**: the file's own last word, kept in the
+            // document's payload so that the document still says what the
+            // file said.
+            let trailer: Vec<serde_json::Value> =
+                file.trailer.iter().map(|(key, value)| serde_json::json!([key, value])).collect();
+            std::fs::create_dir_all(&into).map_err(|error| EngineError::Failed {
+                id: "pdf.file.load".to_string(),
+                message: format!("the streams' bytes have nowhere to go: {error}"),
+            })?;
+            // The **first pass**: the objects. A reference may point
+            // forward, so every object is in the document before any
+            // reference is made.
+            let mut nodes: Vec<(u64, u64)> = Vec::with_capacity(objects.len());
+            for object in &objects {
+                let entries: Vec<serde_json::Value> =
+                    object.entries.iter().map(|(key, value)| serde_json::json!([key, value])).collect();
+                let data = serde_json::json!({ "object": object.number, "generation": object.generation, "entries": entries });
+                let has_stream = object.stream.is_some();
+                let name = if has_stream {
+                    format!("stream {}", object.number)
+                } else {
+                    format!("object {}", object.number)
+                };
+                let kind = if has_stream { "pdf.stream" } else { "pdf.object" };
+                let id = session.document_mut()?.add_node_with(name, kind, None, data);
+                if let Some(stream) = &object.stream {
+                    // The **bytes** are in a file of their own.
+                    let stream_path = format!("{into}/{}.bin", object.number);
+                    std::fs::write(&stream_path, stream).map_err(|error| EngineError::Failed {
+                        id: "pdf.file.load".to_string(),
+                        message: format!("the stream's bytes cannot be written: {error}"),
+                    })?;
+                    if let Some(node) = session.document_mut()?.node_mut(id) {
+                        node.stream = Some(stream_path);
+                    }
+                }
+                nodes.push((object.number, id));
+            }
+            // The **second pass**: the references.
+            let mut relations = 0_usize;
+            for object in &objects {
+                let Some((_, from)) = nodes.iter().find(|(number, _)| *number == object.number) else {
+                    continue;
+                };
+                for reference in &object.references {
+                    let Some((_, to)) = nodes.iter().find(|(number, _)| *number == reference.number) else {
+                        continue;
+                    };
+                    let payload = serde_json::json!({
+                        "key": reference.key,
+                        "generation": reference.generation,
+                    });
+                    let relation = craftkit_sdk::Relation::with_payload(*from, *to, "ref", payload);
+                    if session.document_mut()?.add_relation(relation) {
+                        relations += 1;
+                    }
+                }
+            }
+            let count = objects.len();
+            // The **trailer** of the file goes into the document's own
+            // payload: it is the file's last word and not an object of
+            // the file.
+            if !trailer.is_empty() {
+                let document = session.document_mut()?;
+                document.data["pdf.trailer"] = serde_json::json!({ "entries": trailer });
+            }
+            // The **free numbers** of the file: the numbers the file says
+            // are not in use. They are kept, because a number that is free
+            // is a number something had.
+            let free = file.free;
+            if !free.is_empty() {
+                let document = session.document_mut()?;
+                free::set_the_free(document, &free);
+            }
+            Ok(Outcome::changed(format!("loaded {count} object(s)")).with_data(serde_json::json!({
+                "path": path,
+                "into": into,
+                "objects": count,
+                "relations": relations,
+                "free": free.len(),
+            })))
+
+        }
+    }
+    /// Write the document out as a PDF **file**.
+    ///
+    /// The objects of the document become the objects of a file, and the
+    /// file says where each one is.
+    pdf.file.write {
+        area: "pdf",
+        layer: "pdf",
+        icon: "file",
+        mutates,
+        undoable,
+        params: {
+            /// Where to write the file.
+
+            path: Text,
+            /// The number of the object that is the file's **root**.
+            ///
+            /// Leave it out and the object whose type is `Catalog` is the root.
+
+            root: Option<Number>,
+        },
+        run: {
+
+            let path = self.path.0.clone();
+            if path.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: "pdf.file.write".to_string(),
+                    message: "a file has a path".to_string(),
+                });
+            }
+            // The **objects**: every node of the battery, with its number
+            // and its dictionary.
+            let mut objects: Vec<writer::Object> = Vec::new();
+            for node in session.document().walk() {
+                if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                    continue;
+                }
+                let Some(number) = node.data.get("object").and_then(|number| number.as_u64()) else {
+                    continue;
+                };
+                let entries = entries_of(&node.data);
+                // The **bytes** of a stream are in the file they came from.
+                let stream = match &node.stream {
+                    Some(path) => {
+                        let limits = filters::Limits::default();
+                        let bytes = craftkit_sdk::files::read_bounded(
+                            std::path::Path::new(path),
+                            limits.max_input as u64,
+                        )
+                        .map_err(|message| EngineError::Failed {
+                            id: "pdf.file.write".to_string(),
+                            message: format!("the stream's bytes cannot be read: {message}"),
+                        })?;
+                        Some(bytes)
+                    }
+                    None => None,
+                };
+                objects.push(writer::Object { number, entries, stream });
+            }
+            if objects.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "pdf.file.write".to_string(),
+                    message: "the document holds no objects to write".to_string(),
+                });
+            }
+            // The **root**: the one that was named, or the catalog.
+            let root = match &self.root {
+                Some(root) => {
+                    let number = root.0;
+                    if !number.is_finite() || number < 0.0 || number.fract() != 0.0 {
+                        return Err(EngineError::Failed {
+                            id: "pdf.file.write".to_string(),
+                            message: "an object number is a whole number".to_string(),
+                        });
+                    }
+                    number as u64
+                }
+                None => objects
+                    .iter()
+                    .find(|object| {
+                        object
+                            .entries
+                            .iter()
+                            .any(|(key, value)| key == "Type" && value.as_str() == Some("Catalog"))
+                    })
+                    .map(|object| object.number)
+                    .ok_or_else(|| EngineError::Failed {
+                        id: "pdf.file.write".to_string(),
+                        message: "the document holds no catalog to be the root of the file".to_string(),
+                    })?,
+            };
+            // The **information** of the file: the object the trailer
+            // names, when the document has one.
+            let info = session
+                .document()
+                .walk()
+                .find(|node| node.kind == "pdf.info")
+                .and_then(|node| node.data.get("object").and_then(|object| object.as_u64()))
+                .and_then(|object| session.document().node(object))
+                .and_then(|node| node.data.get("object").and_then(|number| number.as_u64()));
+            let free = free::the_free(session.document());
+            let trailer = writer::Trailer { root, info, encrypt: None, identifier: None };
+            let file = writer::write(&objects, &free, &trailer).map_err(|error| EngineError::Failed {
+                id: "pdf.file.write".to_string(),
+                message: format!("the file cannot be written: {error:?}"),
+            })?;
+            std::fs::write(&path, &file).map_err(|error| EngineError::Failed {
+                id: "pdf.file.write".to_string(),
+                message: format!("the file cannot be written to `{path}`: {error}"),
+            })?;
+            Ok(Outcome::changed(format!("wrote {} object(s)", objects.len())).with_data(serde_json::json!({
+                "path": path,
+                "root": root,
+                "bytes": file.len(),
+                "free": free.len(),
+            })))
+
+        }
+    }
+    /// The **free numbers** of the file.
+    ///
+    /// A number that is not in use is **free**, and a free number is not
+    /// used again: it was the number of an object that was taken away,
+    /// and the file still says the number is free.
+    ///
+    /// The **next number** is past them all, because a free number is a
+    /// number something had.
+    pdf.file.free {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The number to start from: the next number is past this one as
+            /// well as past the free ones. Leave it out and the next number
+            /// is past the file's own numbers.
+
+            after: Option<Number>,
+        },
+        run: {
+
+            let id = "pdf.file.free".to_string();
+            let mut after = 0_u64;
+            if let Some(number) = &self.after {
+                if !number.0.is_finite() || number.0 < 0.0 || number.0.fract() != 0.0 {
+                    return Err(EngineError::Failed {
+                        id,
+                        message: "an object number is a whole number".to_string(),
+                    });
+                }
+                after = number.0 as u64;
+            }
+            let free = free::the_free(session.document());
+            let numbers: Vec<serde_json::Value> = free
+                .iter()
+                .map(|entry| serde_json::json!({ "object": entry.number, "generation": entry.generation }))
+                .collect();
+            let next = free::the_next_number(session.document(), after);
+            Ok(Outcome::new(format!("the file has {} free number(s)", free.len()))
+                .with_data(serde_json::json!({ "free": numbers, "count": free.len(), "next": next })))
+
+        }
+    }
+    /// Say that one object refers to another.
+    ///
+    /// The reference says which **key** it is under and which **generation**
+    /// of the object it names, and the relation carries both in its payload.
+    pdf.ref.add {
+        area: "pdf",
+        layer: "pdf",
+        icon: "link",
+        mutates,
+        undoable,
+        params: {
+            /// The object the reference is in.
+
+            from: NodeRef,
+            /// The key the reference is under.
+
+            key: Text,
+            /// The object the reference names.
+
+            to: NodeRef,
+            /// The generation of the object it names, if it is not the first.
+
+            generation: Option<Number>,
+            /// Whether the key holds a **list** of references that grows, rather
+            /// than one reference that is set.
+            ///
+            /// A page tree's `/Kids` is a list and a page's `/Parent` is not.
+
+            list: Option<craftkit_sdk::Bool>,
+        },
+        run: {
+
+            let from = self.from.0;
+            let to = self.to.0;
+            for id in [from, to] {
+                if session.document().node(id).is_none() {
+                    return Err(EngineError::Failed {
+                        id: "pdf.ref.add".to_string(),
+                        message: format!("there is no object `{id}` in the document"),
+                    });
+                }
+            }
+            if from == to {
+                return Err(EngineError::Failed {
+                    id: "pdf.ref.add".to_string(),
+                    message: format!("the object `{from}` does not refer to itself"),
+                });
+            }
+            let generation = match &self.generation {
+                Some(generation) if generation.0.is_finite() && generation.0 >= 0.0 => generation.0 as u64,
+                Some(_) => {
+                    return Err(EngineError::Failed {
+                        id: "pdf.ref.add".to_string(),
+                        message: "a generation is a whole number".to_string(),
+                    });
+                }
+                None => 0,
+            };
+            let key = self.key.0.clone();
+            if key.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "pdf.ref.add".to_string(),
+                    message: "a reference is under a key".to_string(),
+                });
+            }
+            let payload = serde_json::json!({ "key": key, "generation": generation });
+            let relation = craftkit_sdk::Relation::with_payload(from, to, "ref", payload.clone());
+            if !session.document_mut()?.add_relation(relation) {
+                return Err(EngineError::Failed {
+                    id: "pdf.ref.add".to_string(),
+                    message: format!("the object `{from}` already refers to `{to}`"),
+                });
+            }
+            // The reference is in the **dictionary** as well: the file is
+            // written from the dictionary, and an edge that is only in the
+            // document is an edge the file does not have.
+            let value = a_reference(session, to, generation, "pdf.ref.add")?;
+            let list = matches!(self.list, Some(craftkit_sdk::Bool(true)));
+            add_reference(session, from, &key, value, list)?;
+            Ok(Outcome::changed(format!("`{from}` refers to `{to}` under `{key}`"))
+                .with_data(serde_json::json!({ "from": from, "to": to, "payload": payload })))
+
+        }
+    }
+    /// The references of the document.
+    ///
+    /// A query: it does not change the document.
+    pdf.refs {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+        },
+        run: {
+
+            let refs: Vec<serde_json::Value> = session
+                .document()
+                .relations
+                .iter()
+                .filter(|relation| relation.kind == "ref")
+                .map(|relation| {
+                    serde_json::json!({
+                        "from": relation.from,
+                        "to": relation.to,
+                        "payload": relation.payload,
+                    })
+                })
+                .collect();
+            let count = refs.len();
+            Ok(Outcome::new(format!("{count} reference(s)")).with_data(serde_json::json!({ "references": refs })))
+
+        }
     }
 }
 
@@ -809,291 +1957,8 @@ struct Decoded {
     predictor: Option<predictors::Predictor>,
 }
 
-/// Read the **operators** of a content stream.
-///
-/// A page's content is a stream of operands and operators, and the
-/// command says what the stream says: the operators in the order the
-/// stream has them, with the operands each one was given.
-#[derive(Command)]
-#[command(id = "pdf.content.operators", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ContentOperators {
-    /// The stream whose bytes are read.
-    pub stream: NodeRef,
-    /// The filter to undo, when the dictionary does not name one.
-    pub filter: Option<Text>,
-}
-
-impl ContentOperators {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.stream.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "pdf.content.operators".to_string(),
-                message: format!("there is no node `{id}`"),
-            });
-        };
-        if node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: "pdf.content.operators".to_string(),
-                message: format!("the node `{id}` is a `{}` and not a stream", node.kind),
-            });
-        }
-        let decoded = decoded_bytes(
-            node,
-            self.filter.as_ref().map(|filter| filter.0.as_str()),
-            None,
-            false,
-            "pdf.content.operators",
-        )?;
-        let operations = content::operations(&decoded.bytes).map_err(|error| EngineError::Failed {
-            id: "pdf.content.operators".to_string(),
-            message: format!("the content cannot be read: {error:?}"),
-        })?;
-        let count = operations.len();
-        let list: Vec<serde_json::Value> = operations.iter().map(content::Operation::to_json).collect();
-        Ok(Outcome::new(format!("{count} operation(s)"))
-            .with_data(serde_json::json!({ "id": id, "operations": list })))
-    }
-}
-
-/// Write the **content** of a stream back.
-///
-/// The content of a stream is read and written again in the kit's own
-/// form: the operands, each one followed by a space, and then the
-/// operator and a newline. The **inline images** are kept whole, so a
-/// stream that is read and written again is the stream it was.
-///
-/// A stream that is **filtered** is refused: its bytes are not the
-/// content, and writing them back would change what the file says.
-#[derive(Command)]
-#[command(id = "pdf.content.write", area = "pdf", layer = "pdf", icon = "file", mutates, undoable)]
-pub struct ContentWrite {
-    /// The stream whose content is written.
-    pub stream: NodeRef,
-}
-
-impl ContentWrite {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.stream.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "pdf.content.write".to_string(),
-                message: format!("there is no node `{id}`"),
-            });
-        };
-        if node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: "pdf.content.write".to_string(),
-                message: format!("the node `{id}` is a `{}` and not a stream", node.kind),
-            });
-        }
-        // A **filtered** stream's bytes are not the content.
-        if let Some(names) = filters::filter_of(&entries_of(&node.data)) {
-            return Err(EngineError::Failed {
-                id: "pdf.content.write".to_string(),
-                message: format!("the stream is filtered by {names:?}, and its bytes are not the content"),
-            });
-        }
-        let Some(path) = node.stream.clone() else {
-            return Err(EngineError::Failed {
-                id: "pdf.content.write".to_string(),
-                message: format!("the stream `{id}` has no file"),
-            });
-        };
-        let limits = filters::Limits::default();
-        let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
-            .map_err(|message| EngineError::Failed {
-            id: "pdf.content.write".to_string(),
-            message: format!("the stream's bytes cannot be read: {message}"),
-        })?;
-        let operations = content::operations(&bytes).map_err(|error| EngineError::Failed {
-            id: "pdf.content.write".to_string(),
-            message: format!("the content cannot be read: {error:?}"),
-        })?;
-        let written = content::write_operations(&operations);
-        std::fs::write(&path, &written).map_err(|error| EngineError::Failed {
-            id: "pdf.content.write".to_string(),
-            message: format!("the content cannot be written: {error}"),
-        })?;
-        Ok(Outcome::changed(format!("{} operation(s) written", operations.len())).with_data(
-            serde_json::json!({
-                "id": id,
-                "operations": operations.len(),
-                "bytes": written.len(),
-            }),
-        ))
-    }
-}
-
-/// Put a **page** in the document.
-///
-/// A page is an indirect object whose dictionary says `/Type /Page`, and
-/// it may have a **parent**: the page is in a tree, and the tree is
-/// what a PDF file has instead of a list of pages.
-#[derive(Command)]
-#[command(id = "pdf.page.add", area = "pdf", layer = "pdf", icon = "plus", mutates, undoable)]
-pub struct AddPage {
-    /// The object's number in the file.
-    pub object: Number,
-    /// The page's own dictionary: a list of `[key, value]` pairs, in
-    /// order.
-    pub entries: Option<serde_json::Value>,
-    /// The page's parent, if it has one.
-    pub parent: Option<NodeRef>,
-}
-
-impl AddPage {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let object = self.object.0;
-        if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: "pdf.page.add".to_string(),
-                message: "an object number is a whole number".to_string(),
-            });
-        }
-        let number = object as u64;
-        if number == 0 {
-            return Err(EngineError::Failed {
-                id: "pdf.page.add".to_string(),
-                message: "object numbers start at one".to_string(),
-            });
-        }
-        let mut entries = match &self.entries {
-            Some(entries) => check_entries(entries)?,
-            None => Vec::new(),
-        };
-        // The page says what it is: the type is the page's own.
-        let kind = entries.iter().find_map(|entry| {
-            let pair = entry.as_array()?;
-            if pair.first()?.as_str()? == "Type" { Some(pair.get(1)?.clone()) } else { None }
-        });
-        match kind {
-            Some(value) if value.as_str() != Some("Page") => {
-                return Err(EngineError::Failed {
-                    id: "pdf.page.add".to_string(),
-                    message: "a page's type is `Page`".to_string(),
-                });
-            }
-            Some(_) => {}
-            None => entries.push(serde_json::json!(["Type", "Page"])),
-        }
-        let parent = self.parent.map(|parent| parent.0);
-        if let Some(parent) = parent {
-            let node = session.document().node(parent).ok_or_else(|| EngineError::Failed {
-                id: "pdf.page.add".to_string(),
-                message: format!("there is no node `{parent}` in the document"),
-            })?;
-            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-                return Err(EngineError::Failed {
-                    id: "pdf.page.add".to_string(),
-                    message: format!("the node `{parent}` is a `{}` and not an object", node.kind),
-                });
-            }
-        }
-        let data = serde_json::json!({ "object": number, "entries": entries });
-        let name = format!("page {number}");
-        let id = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
-        if let Some(parent) = parent {
-            // The page names its parent and the parent names the page:
-            // the tree is two edges, as the file has it.
-            for (from, to, key) in [(id, parent, "Parent"), (parent, id, "Kids")] {
-                let payload = serde_json::json!({ "key": key, "generation": 0 });
-                let relation = craftkit_sdk::Relation::with_payload(from, to, "ref", payload);
-                if !session.document_mut()?.add_relation(relation) {
-                    return Err(EngineError::Failed {
-                        id: "pdf.page.add".to_string(),
-                        message: format!("the page `{id}` is already under `{parent}`"),
-                    });
-                }
-            }
-            // And the **dictionary** says it too: the file is written
-            // from the dictionary, and a tree that is only in the
-            // document is a tree the file does not have.
-            let to_parent = a_reference(session, parent, 0, "pdf.page.add")?;
-            add_reference(session, id, "Parent", to_parent, false)?;
-            let to_page = a_reference(session, id, 0, "pdf.page.add")?;
-            add_reference(session, parent, "Kids", to_page, true)?;
-            // The **count** of the children is derived: it is how many
-            // of them there are.
-            let kids = session
-                .document()
-                .relations
-                .iter()
-                .filter(|relation| {
-                    relation.kind == "ref"
-                        && relation.from == parent
-                        && relation.payload.get("key").and_then(|key| key.as_str()) == Some("Kids")
-                })
-                .count();
-            if let Some(node) = session.document_mut()?.node_mut(parent) {
-                node.data = with_entry(&node.data, "Count", serde_json::json!(kids));
-            }
-        }
-        Ok(Outcome::changed(format!("added the `{name}`"))
-            .with_data(serde_json::json!({ "id": id, "object": number, "parent": parent })))
-    }
-}
-
-/// The **attributes** of a page, and the ones it inherits.
-///
-/// A page may leave out what a page does not have to say: the **media
-/// box**, the **resources**, the **crop box** and the **rotation** are
-/// inherited from the nearest ancestor that has them. The command says
-/// what the page has, and where each thing came from.
-#[derive(Command)]
-#[command(id = "pdf.page.attributes", area = "pdf", layer = "pdf", icon = "list")]
-pub struct PageAttributes {
-    /// The page.
-    pub page: NodeRef,
-}
-
 /// The keys a page **inherits**.
 const INHERITED: [&str; 4] = ["Resources", "MediaBox", "CropBox", "Rotate"];
-
-impl PageAttributes {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.page.0;
-        let node = session.document().node(id).ok_or_else(|| EngineError::Failed {
-            id: "pdf.page.attributes".to_string(),
-            message: format!("there is no node `{id}`"),
-        })?;
-        let own = entries_of(&node.data);
-        let mut attributes = serde_json::Map::new();
-        let mut inherited = serde_json::Map::new();
-        for key in INHERITED {
-            if let Some((_, value)) = own.iter().find(|(name, _)| name == key) {
-                attributes.insert(key.to_string(), value.clone());
-                continue;
-            }
-            // The **ancestors**: the nearest one that has it wins.
-            let mut ancestor = parent_of(session, id);
-            let mut steps = 0_usize;
-            let mut found = None;
-            while let Some(current) = ancestor {
-                steps += 1;
-                if steps > MAX_ANCESTORS {
-                    break;
-                }
-                let Some(current_node) = session.document().node(current) else { break };
-                let entries = entries_of(&current_node.data);
-                if let Some((_, value)) = entries.iter().find(|(name, _)| name == key) {
-                    found = Some((value.clone(), current));
-                    break;
-                }
-                ancestor = parent_of(session, current);
-            }
-            if let Some((value, from)) = found {
-                attributes.insert(key.to_string(), value);
-                inherited.insert(key.to_string(), serde_json::json!(from));
-            }
-        }
-        Ok(Outcome::new(format!("{} attribute(s)", attributes.len())).with_data(serde_json::json!({
-            "id": id,
-            "attributes": attributes,
-            "inherited": inherited,
-        })))
-    }
-}
 
 /// The **parent** of a page.
 fn parent_of(session: &Session, id: u64) -> Option<u64> {
@@ -1127,279 +1992,6 @@ const MAX_ANCESTORS: usize = 64;
 /// bound is the tree's own, and it is here for the same reason: a
 /// thing that cannot be picked is not there.
 const MINIMUM_ANNOTATION: f64 = 2.0;
-
-/// Put an **annotation** on a page.
-///
-/// An annotation is an object of its own: a dictionary with a type, a
-/// kind, a rectangle, and — for a link — somewhere to go. The page
-/// names it in its `/Annots`, and that naming is an **edge**, the same
-/// edge the page tree is made of.
-///
-/// The kind is a **name** and not a closed list: the tree's editor has
-/// a list of the annotations it draws, and keeps the others as they
-/// are. Here nothing matches on the kind at all — the annotation says
-/// what it is, and a third party may add a kind of its own.
-///
-/// Where a link goes is either a **page of this document** — the
-/// `/Dest` — or a **web address** — the `/A` action, which is an
-/// object of its own, so that the action may be anything at all.
-#[derive(Command)]
-#[command(id = "pdf.annot.add", area = "pdf", layer = "pdf", icon = "plus", mutates, undoable)]
-pub struct AddAnnotation {
-    /// The page the annotation is on.
-    pub page: NodeRef,
-    /// The annotation's object number in the file.
-    pub object: Number,
-    /// The annotation's kind: `Link`, `Text`, `FreeText`, `Square`,
-    /// `Circle`, `Highlight`, `Popup`, `Widget` or `Stamp`.
-    pub subtype: Text,
-    /// The rectangle the annotation covers: four numbers.
-    pub rect: serde_json::Value,
-    /// The annotation's text.
-    pub contents: Option<Text>,
-    /// The page a link goes to.
-    pub destination: Option<NodeRef>,
-    /// Where a link goes that is not in this document.
-    pub uri: Option<Text>,
-}
-
-impl AddAnnotation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.annot.add".to_string();
-        // The **page**: an object whose type is `Page`.
-        let page = session.document().node(self.page.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{}`", self.page.0),
-        })?;
-        if page.kind != "pdf.object" && page.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{}` is a `{}` and not an object", self.page.0, page.kind),
-            });
-        }
-        let kind = entries_of(&page.data)
-            .into_iter()
-            .find(|(key, _)| key == "Type")
-            .and_then(|(_, value)| value.as_str().map(|kind| kind.to_string()));
-        if kind.as_deref() != Some("Page") {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{}` is not a page", self.page.0),
-            });
-        }
-        let page_number = the_number_of(page).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the node `{}` has no object number", self.page.0),
-        })?;
-        // The page's own **annotations**, before the new one is made.
-        let annots = entries_of(&page.data)
-            .into_iter()
-            .find(|(key, _)| key == "Annots")
-            .and_then(|(_, value)| value.as_array().cloned())
-            .unwrap_or_default();
-        // The **object number** of the annotation: a whole number, and
-        // one that nothing else has.
-        let object = self.object.0;
-        if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "an object number is a whole number".to_string(),
-            });
-        }
-        let number = object as u64;
-        if number == 0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "object numbers start at one".to_string(),
-            });
-        }
-        if session.document().walk().any(|node| the_number_of(node) == Some(number)) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the object {number} is already in the document"),
-            });
-        }
-        // The **kind**: a name.
-        let subtype = a_name(&self.subtype.0, &id)?;
-        // The **rectangle**: four numbers, and the corners may come in
-        // any order — the tree puts them the right way round.
-        let rect = the_rect(&self.rect, &id)?;
-        // Where it goes: one place, and one place only.
-        if self.destination.is_some() && self.uri.is_some() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "an annotation goes to one place".to_string(),
-            });
-        }
-        let mut entries: Vec<(String, serde_json::Value)> = vec![
-            ("Type".to_string(), serde_json::json!("Annot")),
-            ("Subtype".to_string(), serde_json::json!(subtype)),
-            ("Rect".to_string(), serde_json::json!(rect)),
-        ];
-        if let Some(contents) = &self.contents {
-            entries.push(("Contents".to_string(), serde_json::json!({ "string": contents.0 })));
-        }
-        // The **page** the annotation is on, and the **print** flag: the
-        // tree's editor prints its links, and so does this one.
-        entries.push(("P".to_string(), serde_json::json!({ "ref": [page_number, 0] })));
-        entries.push(("F".to_string(), serde_json::json!(4)));
-        // Where it goes.
-        let mut destination = None;
-        let mut action = None;
-        if let Some(target) = self.destination {
-            let node = session.document().node(target.0).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{}`", target.0),
-            })?;
-            let target_number = the_number_of(node).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{}` has no object number", target.0),
-            })?;
-            // The **destination**: the page, and the way it is shown.
-            entries.push(("Dest".to_string(), serde_json::json!([{ "ref": [target_number, 0] }, "Fit"])));
-            destination = Some(target.0);
-        }
-        if let Some(uri) = &self.uri {
-            let uri = uri.0.trim().to_string();
-            if uri.is_empty() {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "a web address is not empty".to_string(),
-                });
-            }
-            if !uri.is_ascii() {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: "a web address is 7-bit ASCII".to_string(),
-                });
-            }
-            // The **action** is an object of its own: the tree's editor
-            // writes it inside the annotation, and the tree's action is
-            // a closed list of three — a page, a web address, and the
-            // things it does not edit. Here the action is an object, and
-            // the annotation refers to it, so that a third party may
-            // make one of its own.
-            let action_number = the_next_number(session.document(), number);
-            let action_entries: Vec<(String, serde_json::Value)> = vec![
-                ("S".to_string(), serde_json::json!("URI")),
-                ("URI".to_string(), serde_json::json!({ "string": uri })),
-            ];
-            let action_data = serde_json::json!({
-                "object": action_number,
-                "entries": pairs_of(&action_entries),
-            });
-            let action_name = format!("action {action_number}");
-            let action_id =
-                session.document_mut()?.add_node_with(action_name, "pdf.object", None, action_data);
-            entries.push(("A".to_string(), serde_json::json!({ "ref": [action_number, 0] })));
-            action = Some(action_id);
-        }
-        // The **annotation** itself.
-        let data = serde_json::json!({ "object": number, "entries": pairs_of(&entries) });
-        let name = format!("annotation {number}");
-        let annot = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
-        // The page **names** the annotation: the `/Annots` is an array
-        // of the annotations, and the array grows.
-        let mut annots = annots;
-        annots.push(serde_json::json!({ "ref": [number, 0] }));
-        if let Some(node) = session.document_mut()?.node_mut(self.page.0) {
-            node.data = with_entry(&node.data, "Annots", serde_json::json!(annots));
-        }
-        // And the **edges**: the page names the annotation, and the
-        // annotation names where it goes.
-        let edges: Vec<(u64, u64, &str)> = vec![
-            (self.page.0, annot, "Annots"),
-            (annot, destination.unwrap_or(annot), "Dest"),
-            (annot, action.unwrap_or(annot), "A"),
-        ];
-        for (from, to, key) in edges {
-            if from == to && key != "Dest" {
-                continue;
-            }
-            if key == "Dest" && destination.is_none() {
-                continue;
-            }
-            if key == "A" && action.is_none() {
-                continue;
-            }
-            let payload = serde_json::json!({ "key": key, "generation": 0 });
-            let relation = craftkit_sdk::Relation::with_payload(from, to, "ref", payload);
-            if !session.document_mut()?.add_relation(relation) {
-                return Err(EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the object `{from}` already refers to `{to}` under `{key}`"),
-                });
-            }
-        }
-        Ok(Outcome::changed(format!("added the `{name}` to the page")).with_data(serde_json::json!({
-            "id": annot,
-            "object": number,
-            "page": self.page.0,
-            "subtype": subtype,
-            "rect": rect,
-            "destination": destination,
-            "action": action,
-        })))
-    }
-}
-
-/// The **annotations** of a page.
-///
-/// A query: it does not change the document. The page's `/Annots` are
-/// the edges the page holds, and each one is an object of its own.
-#[derive(Command)]
-#[command(id = "pdf.page.annotations", area = "pdf", layer = "pdf", icon = "list")]
-pub struct PageAnnotations {
-    /// The page.
-    pub page: NodeRef,
-}
-
-impl PageAnnotations {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.page.annotations".to_string();
-        if session.document().node(self.page.0).is_none() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{}`", self.page.0),
-            });
-        }
-        let mut annotations: Vec<serde_json::Value> = Vec::new();
-        for relation in session.document().relations.iter().filter(|relation| {
-            relation.kind == "ref"
-                && relation.from == self.page.0
-                && relation
-                    .payload
-                    .get("key")
-                    .and_then(|key| key.as_str())
-                    .map(|key| key == "Annots")
-                    .unwrap_or(false)
-        }) {
-            let Some(node) = session.document().node(relation.to) else { continue };
-            let entries = entries_of(&node.data);
-            let mut annotation = serde_json::Map::new();
-            annotation.insert("id".to_string(), serde_json::json!(node.id));
-            annotation
-                .insert("object".to_string(), serde_json::json!(the_number_of(node).unwrap_or_default()));
-            for key in ["Subtype", "Rect", "Contents"] {
-                if let Some((_, value)) = entries.iter().find(|(name, _)| name == key) {
-                    annotation.insert(key.to_string(), value.clone());
-                }
-            }
-            // The **flags**: whether the annotation prints, and whether
-            // it is hidden.
-            annotation.insert("flags".to_string(), serde_json::json!(crate::annot::flags_of(node)));
-            annotation.insert("print".to_string(), serde_json::json!(crate::annot::prints(node)));
-            annotation.insert("hidden".to_string(), serde_json::json!(crate::annot::is_hidden(node)));
-            if let Some(where_) = where_it_goes(session.document(), &entries) {
-                annotation.insert("goes_to".to_string(), where_);
-            }
-            annotations.push(serde_json::Value::Object(annotation));
-        }
-        let count = annotations.len();
-        Ok(Outcome::new(format!("{count} annotation(s)"))
-            .with_data(serde_json::json!({ "id": self.page.0, "annotations": annotations })))
-    }
-}
 
 /// Where an annotation **goes**: a page of this document, or a web
 /// address.
@@ -1602,510 +2194,6 @@ fn with_entry(data: &serde_json::Value, key: &str, value: serde_json::Value) -> 
     serde_json::json!({ "object": data.get("object").cloned().unwrap_or(serde_json::Value::Null), "entries": pairs_of(&entries) })
 }
 
-/// Read the **objects** of an object stream.
-///
-/// An object stream is a stream that holds a file's objects, so that
-/// they may be compressed together. The command reads them: each one's
-/// number and what it says.
-#[derive(Command)]
-#[command(id = "pdf.objstm.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadObjectStream {
-    /// The stream whose objects are read.
-    pub stream: NodeRef,
-}
-
-impl ReadObjectStream {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = self.stream.0;
-        let Some(node) = session.document().node(id) else {
-            return Err(EngineError::Failed {
-                id: "pdf.objstm.read".to_string(),
-                message: format!("there is no node `{id}`"),
-            });
-        };
-        if node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: "pdf.objstm.read".to_string(),
-                message: format!("the node `{id}` is a `{}` and not a stream", node.kind),
-            });
-        }
-        let entries = entries_of(&node.data);
-        // The **count** and the **first**: what the dictionary says.
-        let count = entries
-            .iter()
-            .find(|(key, _)| key == "N")
-            .and_then(|(_, value)| whole_number_of(value))
-            .and_then(|number| u64::try_from(number).ok())
-            .ok_or_else(|| EngineError::Failed {
-                id: "pdf.objstm.read".to_string(),
-                message: "the object stream does not say how many objects it has".to_string(),
-            })?;
-        let first = entries
-            .iter()
-            .find(|(key, _)| key == "First")
-            .and_then(|(_, value)| whole_number_of(value))
-            .and_then(|number| u64::try_from(number).ok())
-            .ok_or_else(|| EngineError::Failed {
-                id: "pdf.objstm.read".to_string(),
-                message: "the object stream does not say where the first object begins".to_string(),
-            })?;
-        let decoded = decoded_bytes(node, None, None, false, "pdf.objstm.read")?;
-        let objects =
-            objects::object_stream(&decoded.bytes, count as usize, first as usize).map_err(|error| {
-                EngineError::Failed {
-                    id: "pdf.objstm.read".to_string(),
-                    message: format!("the object stream cannot be read: {error:?}"),
-                }
-            })?;
-        let list: Vec<serde_json::Value> = objects
-            .iter()
-            .map(|object| serde_json::json!({ "object": object.number, "value": object.value }))
-            .collect();
-        let count = list.len();
-        Ok(Outcome::new(format!("{count} object(s)"))
-            .with_data(serde_json::json!({ "id": id, "objects": list })))
-    }
-}
-
-/// Read the **cross-reference table** of a file.
-///
-/// The table is the file's own index of itself: it says where each
-/// object is. The command reads it and reports the entries and the
-/// trailer.
-#[derive(Command)]
-#[command(id = "pdf.file.xref", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadXref {
-    /// The file to read.
-    pub path: Text,
-}
-
-impl ReadXref {
-    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
-        let path = self.path.0.clone();
-        if path.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "pdf.file.xref".to_string(),
-                message: "a file has a path".to_string(),
-            });
-        }
-        let limits = filters::Limits::default();
-        let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
-            .map_err(|message| EngineError::Failed {
-            id: "pdf.file.xref".to_string(),
-            message: format!("the file cannot be read: {message}"),
-        })?;
-        let table = xref::read(&bytes).map_err(|error| EngineError::Failed {
-            id: "pdf.file.xref".to_string(),
-            message: format!("the table cannot be read: {error:?}"),
-        })?;
-        let entries: Vec<serde_json::Value> = table
-            .entries
-            .iter()
-            .map(|entry| {
-                serde_json::json!({
-                    "object": entry.number,
-                    "offset": entry.offset,
-                    "generation": entry.generation,
-                    "kind": match entry.kind {
-                        xref::Kind::InFile => "in-file",
-                        xref::Kind::Free => "free",
-                        xref::Kind::Compressed => "compressed",
-                    },
-                })
-            })
-            .collect();
-        let trailer: Vec<serde_json::Value> =
-            table.trailer.iter().map(|(key, value)| serde_json::json!([key, value])).collect();
-        let count = entries.len();
-        Ok(Outcome::new(format!("{count} entry(ies)"))
-            .with_data(serde_json::json!({ "path": path, "entries": entries, "trailer": trailer })))
-    }
-}
-
-/// Load a PDF **file** into the document.
-///
-/// The file's own index says where its objects are, and the loader
-/// reads them: every object becomes a **node**, and every reference
-/// becomes a **relation**. The bytes of a stream go into a file of
-/// their own, beside the document, because the bytes are not the
-/// document.
-#[derive(Command)]
-#[command(id = "pdf.file.load", area = "pdf", layer = "pdf", icon = "file", mutates, undoable)]
-pub struct LoadFile {
-    /// The file to read.
-    pub path: Text,
-    /// Where the **streams' bytes** go: a directory of this file's own.
-    pub into: Text,
-}
-
-impl LoadFile {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let path = self.path.0.clone();
-        if path.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "pdf.file.load".to_string(),
-                message: "a file has a path".to_string(),
-            });
-        }
-        let into = self.into.0.clone();
-        if into.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "pdf.file.load".to_string(),
-                message: "the streams' bytes go somewhere".to_string(),
-            });
-        }
-        let limits = filters::Limits::default();
-        let bytes = craftkit_sdk::files::read_bounded(std::path::Path::new(&path), limits.max_input as u64)
-            .map_err(|message| EngineError::Failed {
-            id: "pdf.file.load".to_string(),
-            message: format!("the file cannot be read: {message}"),
-        })?;
-        let file = loader::load(&bytes).map_err(|error| EngineError::Failed {
-            id: "pdf.file.load".to_string(),
-            message: format!("the file cannot be loaded: {error:?}"),
-        })?;
-        let objects = file.objects;
-        // The **trailer**: the file's own last word, kept in the
-        // document's payload so that the document still says what the
-        // file said.
-        let trailer: Vec<serde_json::Value> =
-            file.trailer.iter().map(|(key, value)| serde_json::json!([key, value])).collect();
-        std::fs::create_dir_all(&into).map_err(|error| EngineError::Failed {
-            id: "pdf.file.load".to_string(),
-            message: format!("the streams' bytes have nowhere to go: {error}"),
-        })?;
-        // The **first pass**: the objects. A reference may point
-        // forward, so every object is in the document before any
-        // reference is made.
-        let mut nodes: Vec<(u64, u64)> = Vec::with_capacity(objects.len());
-        for object in &objects {
-            let entries: Vec<serde_json::Value> =
-                object.entries.iter().map(|(key, value)| serde_json::json!([key, value])).collect();
-            let data = serde_json::json!({ "object": object.number, "generation": object.generation, "entries": entries });
-            let has_stream = object.stream.is_some();
-            let name = if has_stream {
-                format!("stream {}", object.number)
-            } else {
-                format!("object {}", object.number)
-            };
-            let kind = if has_stream { "pdf.stream" } else { "pdf.object" };
-            let id = session.document_mut()?.add_node_with(name, kind, None, data);
-            if let Some(stream) = &object.stream {
-                // The **bytes** are in a file of their own.
-                let stream_path = format!("{into}/{}.bin", object.number);
-                std::fs::write(&stream_path, stream).map_err(|error| EngineError::Failed {
-                    id: "pdf.file.load".to_string(),
-                    message: format!("the stream's bytes cannot be written: {error}"),
-                })?;
-                if let Some(node) = session.document_mut()?.node_mut(id) {
-                    node.stream = Some(stream_path);
-                }
-            }
-            nodes.push((object.number, id));
-        }
-        // The **second pass**: the references.
-        let mut relations = 0_usize;
-        for object in &objects {
-            let Some((_, from)) = nodes.iter().find(|(number, _)| *number == object.number) else {
-                continue;
-            };
-            for reference in &object.references {
-                let Some((_, to)) = nodes.iter().find(|(number, _)| *number == reference.number) else {
-                    continue;
-                };
-                let payload = serde_json::json!({
-                    "key": reference.key,
-                    "generation": reference.generation,
-                });
-                let relation = craftkit_sdk::Relation::with_payload(*from, *to, "ref", payload);
-                if session.document_mut()?.add_relation(relation) {
-                    relations += 1;
-                }
-            }
-        }
-        let count = objects.len();
-        // The **trailer** of the file goes into the document's own
-        // payload: it is the file's last word and not an object of
-        // the file.
-        if !trailer.is_empty() {
-            let document = session.document_mut()?;
-            document.data["pdf.trailer"] = serde_json::json!({ "entries": trailer });
-        }
-        // The **free numbers** of the file: the numbers the file says
-        // are not in use. They are kept, because a number that is free
-        // is a number something had.
-        let free = file.free;
-        if !free.is_empty() {
-            let document = session.document_mut()?;
-            free::set_the_free(document, &free);
-        }
-        Ok(Outcome::changed(format!("loaded {count} object(s)")).with_data(serde_json::json!({
-            "path": path,
-            "into": into,
-            "objects": count,
-            "relations": relations,
-            "free": free.len(),
-        })))
-    }
-}
-
-/// Write the document out as a PDF **file**.
-///
-/// The objects of the document become the objects of a file, and the
-/// file says where each one is.
-#[derive(Command)]
-#[command(id = "pdf.file.write", area = "pdf", layer = "pdf", icon = "file", mutates, undoable)]
-pub struct WriteFile {
-    /// Where to write the file.
-    pub path: Text,
-    /// The number of the object that is the file's **root**.
-    ///
-    /// Leave it out and the object whose type is `Catalog` is the root.
-    pub root: Option<Number>,
-}
-
-impl WriteFile {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let path = self.path.0.clone();
-        if path.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: "pdf.file.write".to_string(),
-                message: "a file has a path".to_string(),
-            });
-        }
-        // The **objects**: every node of the battery, with its number
-        // and its dictionary.
-        let mut objects: Vec<writer::Object> = Vec::new();
-        for node in session.document().walk() {
-            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-                continue;
-            }
-            let Some(number) = node.data.get("object").and_then(|number| number.as_u64()) else {
-                continue;
-            };
-            let entries = entries_of(&node.data);
-            // The **bytes** of a stream are in the file they came from.
-            let stream = match &node.stream {
-                Some(path) => {
-                    let limits = filters::Limits::default();
-                    let bytes = craftkit_sdk::files::read_bounded(
-                        std::path::Path::new(path),
-                        limits.max_input as u64,
-                    )
-                    .map_err(|message| EngineError::Failed {
-                        id: "pdf.file.write".to_string(),
-                        message: format!("the stream's bytes cannot be read: {message}"),
-                    })?;
-                    Some(bytes)
-                }
-                None => None,
-            };
-            objects.push(writer::Object { number, entries, stream });
-        }
-        if objects.is_empty() {
-            return Err(EngineError::Failed {
-                id: "pdf.file.write".to_string(),
-                message: "the document holds no objects to write".to_string(),
-            });
-        }
-        // The **root**: the one that was named, or the catalog.
-        let root = match &self.root {
-            Some(root) => {
-                let number = root.0;
-                if !number.is_finite() || number < 0.0 || number.fract() != 0.0 {
-                    return Err(EngineError::Failed {
-                        id: "pdf.file.write".to_string(),
-                        message: "an object number is a whole number".to_string(),
-                    });
-                }
-                number as u64
-            }
-            None => objects
-                .iter()
-                .find(|object| {
-                    object
-                        .entries
-                        .iter()
-                        .any(|(key, value)| key == "Type" && value.as_str() == Some("Catalog"))
-                })
-                .map(|object| object.number)
-                .ok_or_else(|| EngineError::Failed {
-                    id: "pdf.file.write".to_string(),
-                    message: "the document holds no catalog to be the root of the file".to_string(),
-                })?,
-        };
-        // The **information** of the file: the object the trailer
-        // names, when the document has one.
-        let info = session
-            .document()
-            .walk()
-            .find(|node| node.kind == "pdf.info")
-            .and_then(|node| node.data.get("object").and_then(|object| object.as_u64()))
-            .and_then(|object| session.document().node(object))
-            .and_then(|node| node.data.get("object").and_then(|number| number.as_u64()));
-        let free = free::the_free(session.document());
-        let trailer = writer::Trailer { root, info, encrypt: None, identifier: None };
-        let file = writer::write(&objects, &free, &trailer).map_err(|error| EngineError::Failed {
-            id: "pdf.file.write".to_string(),
-            message: format!("the file cannot be written: {error:?}"),
-        })?;
-        std::fs::write(&path, &file).map_err(|error| EngineError::Failed {
-            id: "pdf.file.write".to_string(),
-            message: format!("the file cannot be written to `{path}`: {error}"),
-        })?;
-        Ok(Outcome::changed(format!("wrote {} object(s)", objects.len())).with_data(serde_json::json!({
-            "path": path,
-            "root": root,
-            "bytes": file.len(),
-            "free": free.len(),
-        })))
-    }
-}
-
-/// The **free numbers** of the file.
-///
-/// A number that is not in use is **free**, and a free number is not
-/// used again: it was the number of an object that was taken away,
-/// and the file still says the number is free.
-///
-/// The **next number** is past them all, because a free number is a
-/// number something had.
-#[derive(Command)]
-#[command(id = "pdf.file.free", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadFree {
-    /// The number to start from: the next number is past this one as
-    /// well as past the free ones. Leave it out and the next number
-    /// is past the file's own numbers.
-    pub after: Option<Number>,
-}
-
-impl ReadFree {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.file.free".to_string();
-        let mut after = 0_u64;
-        if let Some(number) = &self.after {
-            if !number.0.is_finite() || number.0 < 0.0 || number.0.fract() != 0.0 {
-                return Err(EngineError::Failed {
-                    id,
-                    message: "an object number is a whole number".to_string(),
-                });
-            }
-            after = number.0 as u64;
-        }
-        let free = free::the_free(session.document());
-        let numbers: Vec<serde_json::Value> = free
-            .iter()
-            .map(|entry| serde_json::json!({ "object": entry.number, "generation": entry.generation }))
-            .collect();
-        let next = free::the_next_number(session.document(), after);
-        Ok(Outcome::new(format!("the file has {} free number(s)", free.len()))
-            .with_data(serde_json::json!({ "free": numbers, "count": free.len(), "next": next })))
-    }
-}
-
-/// Say that one object refers to another.
-///
-/// The reference says which **key** it is under and which **generation**
-/// of the object it names, and the relation carries both in its payload.
-#[derive(Command)]
-#[command(id = "pdf.ref.add", area = "pdf", layer = "pdf", icon = "link", mutates, undoable)]
-pub struct AddReference {
-    /// The object the reference is in.
-    pub from: NodeRef,
-    /// The key the reference is under.
-    pub key: Text,
-    /// The object the reference names.
-    pub to: NodeRef,
-    /// The generation of the object it names, if it is not the first.
-    pub generation: Option<Number>,
-    /// Whether the key holds a **list** of references that grows, rather
-    /// than one reference that is set.
-    ///
-    /// A page tree's `/Kids` is a list and a page's `/Parent` is not.
-    pub list: Option<craftkit_sdk::Bool>,
-}
-
-impl AddReference {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let from = self.from.0;
-        let to = self.to.0;
-        for id in [from, to] {
-            if session.document().node(id).is_none() {
-                return Err(EngineError::Failed {
-                    id: "pdf.ref.add".to_string(),
-                    message: format!("there is no object `{id}` in the document"),
-                });
-            }
-        }
-        if from == to {
-            return Err(EngineError::Failed {
-                id: "pdf.ref.add".to_string(),
-                message: format!("the object `{from}` does not refer to itself"),
-            });
-        }
-        let generation = match &self.generation {
-            Some(generation) if generation.0.is_finite() && generation.0 >= 0.0 => generation.0 as u64,
-            Some(_) => {
-                return Err(EngineError::Failed {
-                    id: "pdf.ref.add".to_string(),
-                    message: "a generation is a whole number".to_string(),
-                });
-            }
-            None => 0,
-        };
-        let key = self.key.0.clone();
-        if key.is_empty() {
-            return Err(EngineError::Failed {
-                id: "pdf.ref.add".to_string(),
-                message: "a reference is under a key".to_string(),
-            });
-        }
-        let payload = serde_json::json!({ "key": key, "generation": generation });
-        let relation = craftkit_sdk::Relation::with_payload(from, to, "ref", payload.clone());
-        if !session.document_mut()?.add_relation(relation) {
-            return Err(EngineError::Failed {
-                id: "pdf.ref.add".to_string(),
-                message: format!("the object `{from}` already refers to `{to}`"),
-            });
-        }
-        // The reference is in the **dictionary** as well: the file is
-        // written from the dictionary, and an edge that is only in the
-        // document is an edge the file does not have.
-        let value = a_reference(session, to, generation, "pdf.ref.add")?;
-        let list = matches!(self.list, Some(craftkit_sdk::Bool(true)));
-        add_reference(session, from, &key, value, list)?;
-        Ok(Outcome::changed(format!("`{from}` refers to `{to}` under `{key}`"))
-            .with_data(serde_json::json!({ "from": from, "to": to, "payload": payload })))
-    }
-}
-
-/// The references of the document.
-///
-/// A query: it does not change the document.
-#[derive(Command)]
-#[command(id = "pdf.refs", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ListReferences {}
-
-impl ListReferences {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let refs: Vec<serde_json::Value> = session
-            .document()
-            .relations
-            .iter()
-            .filter(|relation| relation.kind == "ref")
-            .map(|relation| {
-                serde_json::json!({
-                    "from": relation.from,
-                    "to": relation.to,
-                    "payload": relation.payload,
-                })
-            })
-            .collect();
-        let count = refs.len();
-        Ok(Outcome::new(format!("{count} reference(s)")).with_data(serde_json::json!({ "references": refs })))
-    }
-}
-
 /// The evaluator that measures the **object graph**.
 ///
 /// It says how many references point at each object — the in-degree of
@@ -2221,100 +2309,100 @@ craftkit_sdk::plugin_anchor!(
     ObjectKind,
     StreamKind,
     InformationKind,
-    AddObject,
-    AddField,
-    AddCheckBox,
-    AddRadio,
-    AddButton,
-    AddCombo,
-    AddList,
-    AddDate,
-    AddSignature,
-    AddImage,
-    AddLine,
-    AddPolygon,
-    AddInk,
-    AddCaret,
-    AddFreeText,
-    AddRedactMark,
-    AddStamp,
-    AddMark,
-    AddAttachment,
-    AddCallout,
-    AddTypedSignature,
-    AddCustomStamp,
-    AddEmbeddedFile,
-    SetProperties,
-    SetLook,
-    WriteAnnotation,
-    Preflight,
-    ReadFonts,
-    ReadTrailer,
-    Convert,
-    ReadFields,
-    CompareFiles,
-    MarkDifferences,
-    AddMarkup,
-    AddWatermark,
-    AddBackground,
-    RemoveMarks,
-    ReadComments,
-    AddComment,
-    CommentInfo,
-    FlattenComments,
-    FlattenForm,
-    AddHeader,
-    AddFooter,
-    ReadInherited,
-    ReadChildren,
-    ReadWidgets,
-    ReadTabOrder,
-    SetTabs,
-    WriteMetadata,
-    WriteIntent,
-    SetAnnotationFlags,
-    ReadEncryption,
-    ReadCalculation,
-    ReadCalculatedValue,
-    ReadForm,
-    ReadAppearance,
-    ReadValidation,
-    ReadFormat,
-    SetField,
-    SetFlags,
-    SetParent,
-    AddStream,
-    SetInformation,
-    ReadInformation,
-    ReadDestinations,
-    ReadSignatures,
-    ReadStructure,
-    ReadPageText,
-    ReadAttachments,
-    ReadLayers,
-    WriteAppearance,
-    ReadMarked,
-    ReadTransition,
-    ReadScripts,
-    ReadFontUnicode,
-    SetPageLabels,
-    RemoveObject,
-    SetNumber,
-    SetEntry,
-    RemoveEntry,
-    AddPage,
-    RemovePage,
-    PageAttributes,
-    DecodeStream,
-    ContentOperators,
-    ReadObjectStream,
-    ReadXref,
-    LoadFile,
-    WriteFile,
-    AddReference,
-    ListReferences,
-    AddOutline,
-    ReadOutline,
+    PdfObjectAdd,
+    PdfFieldAdd,
+    PdfFieldCheckboxAdd,
+    PdfFieldRadioAdd,
+    PdfFieldButtonAdd,
+    PdfFieldComboAdd,
+    PdfFieldListAdd,
+    PdfFieldDateAdd,
+    PdfFieldSignatureAdd,
+    PdfFieldImageAdd,
+    PdfAnnotLineAdd,
+    PdfAnnotPolygonAdd,
+    PdfAnnotInkAdd,
+    PdfAnnotCaretAdd,
+    PdfAnnotFreetextAdd,
+    PdfAnnotRedactAdd,
+    PdfAnnotStampAdd,
+    PdfAnnotMarkAdd,
+    PdfAnnotAttachmentAdd,
+    PdfAnnotCalloutAdd,
+    PdfAnnotTypedsignatureAdd,
+    PdfAnnotCustomstampAdd,
+    PdfEmbeddedfileAdd,
+    PdfFieldPropertiesSet,
+    PdfFieldLookSet,
+    PdfAnnotAppearanceWrite,
+    PdfPreflight,
+    PdfFonts,
+    PdfTrailerRead,
+    PdfConvert,
+    PdfFieldRead,
+    PdfCompare,
+    PdfCompareMark,
+    PdfMarkupAdd,
+    PdfPageWatermark,
+    PdfPageBackground,
+    PdfPageMarksRemove,
+    PdfCommentRead,
+    PdfCommentAdd,
+    PdfCommentInfo,
+    PdfCommentFlatten,
+    PdfFormFlatten,
+    PdfPageHeader,
+    PdfPageFooter,
+    PdfFieldInherit,
+    PdfFieldChildren,
+    PdfFieldWidgets,
+    PdfTabOrder,
+    PdfPageTabs,
+    PdfMetadataWrite,
+    PdfIntentWrite,
+    PdfAnnotFlags,
+    PdfEncryptRead,
+    PdfFieldCalculate,
+    PdfFieldValue,
+    PdfFormRead,
+    PdfFieldAppearance,
+    PdfFieldValidate,
+    PdfFieldFormat,
+    PdfFieldSet,
+    PdfFieldFlags,
+    PdfFieldParent,
+    PdfStreamAdd,
+    PdfInfoSet,
+    PdfInfoRead,
+    PdfDestsRead,
+    PdfSignaturesRead,
+    PdfStructureRead,
+    PdfPageText,
+    PdfAttachmentsRead,
+    PdfLayersRead,
+    PdfFieldAppearanceWrite,
+    PdfMarkedRead,
+    PdfPageTransition,
+    PdfScriptsRead,
+    PdfFontUnicode,
+    PdfPageLabels,
+    PdfObjectRemove,
+    PdfObjectNumber,
+    PdfEntrySet,
+    PdfEntryRemove,
+    PdfPageAdd,
+    PdfPageRemove,
+    PdfPageAttributes,
+    PdfStreamDecode,
+    PdfContentOperators,
+    PdfObjstmRead,
+    PdfFileXref,
+    PdfFileLoad,
+    PdfFileWrite,
+    PdfRefAdd,
+    PdfRefs,
+    PdfOutlineAdd,
+    PdfOutlineRead,
     GraphEvaluator,
     PdfPanel
 );

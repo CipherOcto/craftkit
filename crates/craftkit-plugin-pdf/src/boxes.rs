@@ -29,7 +29,7 @@
 //!   the media box out again when a crop box is removed, so that an
 //!   inherited crop box does not come back.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{self, Value};
 use craftkit_sdk::{EngineError, NodeRef, Outcome, Session, Text};
@@ -181,127 +181,138 @@ pub fn boxes_of(session: &Session, id: u64) -> [Value; 5] {
     ]
 }
 
-/// The **boxes** of a page.
-///
-/// The command says all five, and where each of them came from: the
-/// page's own dictionary, an ancestor, or the default.
-#[derive(Command)]
-#[command(id = "pdf.page.boxes", area = "pdf", layer = "pdf", icon = "list")]
-pub struct PageBoxes {
-    /// The page.
-    pub page: NodeRef,
-}
+commands! {
+    /// The **boxes** of a page.
+    ///
+    /// The command says all five, and where each of them came from: the
+    /// page's own dictionary, an ancestor, or the default.
+    pdf.page.boxes {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The page.
 
-impl PageBoxes {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.page.boxes".to_string();
-        let page = self.page.0;
-        let Some(node) = session.document().node(page) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{page}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{page}` is a `{}` and not an object", node.kind),
-            });
-        }
-        let boxes = boxes_of(session, page);
-        let own: Vec<String> = entries_of(&node.data).into_iter().map(|(key, _)| key).collect();
-        let mut from = serde_json::Map::new();
-        for key in BOXES.iter() {
-            let source = if own.iter().any(|name| name == key) {
-                "own"
-            } else if INHERITED.contains(key) && parent_of(session, page).is_some() {
-                "inherited"
-            } else {
-                "default"
+            page: NodeRef,
+        },
+        run: {
+
+            let id = "pdf.page.boxes".to_string();
+            let page = self.page.0;
+            let Some(node) = session.document().node(page) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{page}`"),
+                });
             };
-            from.insert(key.to_string(), serde_json::json!(source));
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{page}` is a `{}` and not an object", node.kind),
+                });
+            }
+            let boxes = boxes_of(session, page);
+            let own: Vec<String> = entries_of(&node.data).into_iter().map(|(key, _)| key).collect();
+            let mut from = serde_json::Map::new();
+            for key in BOXES.iter() {
+                let source = if own.iter().any(|name| name == key) {
+                    "own"
+                } else if INHERITED.contains(key) && parent_of(session, page).is_some() {
+                    "inherited"
+                } else {
+                    "default"
+                };
+                from.insert(key.to_string(), serde_json::json!(source));
+            }
+            Ok(Outcome::new(format!("the page `{page}` has {} box(es)", BOXES.len())).with_data(
+                serde_json::json!({
+                    "id": page,
+                    "boxes": boxes,
+                    "from": from,
+                }),
+            ))
+
         }
-        Ok(Outcome::new(format!("the page `{page}` has {} box(es)", BOXES.len())).with_data(
-            serde_json::json!({
-                "id": page,
-                "boxes": boxes,
-                "from": from,
-            }),
-        ))
     }
-}
+    /// Set a **box** of a page.
+    ///
+    /// The box is a rectangle in points: four numbers, the lower left
+    /// corner first. The media box is the paper and the others are cut
+    /// back to it, so a box that reaches outside the paper is the paper.
+    ///
+    /// A rectangle that is **not four finite numbers** is refused, and a
+    /// rectangle that would make the page **smaller than a point** is
+    /// refused: the tree's rule, and a page that cannot be seen is not a
+    /// page.
+    pdf.page.box {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The page.
 
-/// Set a **box** of a page.
-///
-/// The box is a rectangle in points: four numbers, the lower left
-/// corner first. The media box is the paper and the others are cut
-/// back to it, so a box that reaches outside the paper is the paper.
-///
-/// A rectangle that is **not four finite numbers** is refused, and a
-/// rectangle that would make the page **smaller than a point** is
-/// refused: the tree's rule, and a page that cannot be seen is not a
-/// page.
-#[derive(Command)]
-#[command(id = "pdf.page.box", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct SetPageBox {
-    /// The page.
-    pub page: NodeRef,
-    /// The box: `MediaBox`, `CropBox`, `BleedBox`, `TrimBox`, `ArtBox`.
-    pub which: Text,
-    /// The rectangle: four numbers, the lower left corner first.
-    pub rect: serde_json::Value,
-}
+            page: NodeRef,
+            /// The box: `MediaBox`, `CropBox`, `BleedBox`, `TrimBox`, `ArtBox`.
 
-impl SetPageBox {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.page.box".to_string();
-        let page = self.page.0;
-        let wanted = self.which.0.clone();
-        let key = box_of(&wanted).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no box `{wanted}`: the boxes are {}", BOXES.join(", ")),
-        })?;
-        let Some(node) = session.document().node(page) else {
-            return Err(EngineError::Failed {
+            which: Text,
+            /// The rectangle: four numbers, the lower left corner first.
+
+            rect: serde_json::Value,
+        },
+        run: {
+
+            let id = "pdf.page.box".to_string();
+            let page = self.page.0;
+            let wanted = self.which.0.clone();
+            let key = box_of(&wanted).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
-                message: format!("there is no node `{page}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
+                message: format!("there is no box `{wanted}`: the boxes are {}", BOXES.join(", ")),
+            })?;
+            let Some(node) = session.document().node(page) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{page}`"),
+                });
+            };
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{page}` is a `{}` and not an object", node.kind),
+                });
+            }
+            let rect = rect_of(&self.rect).ok_or_else(|| EngineError::Failed {
                 id: id.clone(),
-                message: format!("the node `{page}` is a `{}` and not an object", node.kind),
-            });
+                message: "the rectangle is not four numbers".to_string(),
+            })?;
+            // The **media box** is the paper, and every other box is cut
+            // back to it.
+            let boxes = boxes_of(session, page);
+            let media = rect_of(&boxes[0]).unwrap_or(LETTER);
+            let rect = if key == "MediaBox" { rect } else { intersect(rect, media) };
+            if rect[2] - rect[0] < 1.0 || rect[3] - rect[1] < 1.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "the page would be smaller than a point".to_string(),
+                });
+            }
+            let value = Value::Array(rect.iter().map(|number| serde_json::json!(number)).collect());
+            let Some(node) = session.document_mut()?.node_mut(page) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{page}`"),
+                });
+            };
+            let mut entries = entries_of(&node.data);
+            match entries.iter_mut().find(|(name, _)| name == key) {
+                Some(entry) => entry.1 = value.clone(),
+                None => entries.push((key.to_string(), value.clone())),
+            }
+            node.data = entries_into(&node.data, &entries);
+            Ok(Outcome::changed(format!("the `{key}` of the page `{page}` is set"))
+                .with_data(serde_json::json!({ "id": page, "box": key, "rect": value })))
+
         }
-        let rect = rect_of(&self.rect).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: "the rectangle is not four numbers".to_string(),
-        })?;
-        // The **media box** is the paper, and every other box is cut
-        // back to it.
-        let boxes = boxes_of(session, page);
-        let media = rect_of(&boxes[0]).unwrap_or(LETTER);
-        let rect = if key == "MediaBox" { rect } else { intersect(rect, media) };
-        if rect[2] - rect[0] < 1.0 || rect[3] - rect[1] < 1.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "the page would be smaller than a point".to_string(),
-            });
-        }
-        let value = Value::Array(rect.iter().map(|number| serde_json::json!(number)).collect());
-        let Some(node) = session.document_mut()?.node_mut(page) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{page}`"),
-            });
-        };
-        let mut entries = entries_of(&node.data);
-        match entries.iter_mut().find(|(name, _)| name == key) {
-            Some(entry) => entry.1 = value.clone(),
-            None => entries.push((key.to_string(), value.clone())),
-        }
-        node.data = entries_into(&node.data, &entries);
-        Ok(Outcome::changed(format!("the `{key}` of the page `{page}` is set"))
-            .with_data(serde_json::json!({ "id": page, "box": key, "rect": value })))
     }
 }

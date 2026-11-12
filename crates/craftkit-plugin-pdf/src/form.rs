@@ -25,10 +25,10 @@
 //! - the fields and the calculation order are **lists of objects**,
 //!   and the numbers are the numbers the file holds.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, Outcome, Session, Text};
+use craftkit_sdk::{Document, EngineError, Node, Outcome, Text};
 
 /// The **form** of a file: what its dictionary says.
 #[derive(Debug, Clone, PartialEq)]
@@ -124,74 +124,79 @@ pub fn form_of(document: &Document) -> Option<Form> {
     })
 }
 
-/// **Read** the **form** of a PDF file.
-///
-/// A query: it does not change the document. A file that names no form
-/// has no form, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.form.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadForm {
-    /// The entry to read.
+commands! {
+    /// **Read** the **form** of a PDF file.
     ///
-    /// Leave it out and everything the form says is read.
-    pub key: Option<Text>,
-}
+    /// A query: it does not change the document. A file that names no form
+    /// has no form, and the answer says so.
+    pdf.form.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The entry to read.
+            ///
+            /// Leave it out and everything the form says is read.
 
-impl ReadForm {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.form.read".to_string();
-        let document = session.document();
-        let Some(form) = form_of(document) else {
-            return Ok(Outcome::new("the file has no form").with_data(json!({
-                "form": Json::Null,
-                "has_form": false,
-            })));
-        };
-        let listed: Vec<Json> = match &self.key {
-            None => Vec::new(),
-            Some(key) => {
-                let key = key.0.trim();
-                let mut one: Vec<Json> = Vec::new();
-                if key == "Fields" {
-                    one.push(json!(["Fields", json!(form.fields.clone())]));
+            key: Option<Text>,
+        },
+        run: {
+
+            let id = "pdf.form.read".to_string();
+            let document = session.document();
+            let Some(form) = form_of(document) else {
+                return Ok(Outcome::new("the file has no form").with_data(json!({
+                    "form": Json::Null,
+                    "has_form": false,
+                })));
+            };
+            let listed: Vec<Json> = match &self.key {
+                None => Vec::new(),
+                Some(key) => {
+                    let key = key.0.trim();
+                    let mut one: Vec<Json> = Vec::new();
+                    if key == "Fields" {
+                        one.push(json!(["Fields", json!(form.fields.clone())]));
+                    }
+                    if key == "NeedAppearances" {
+                        one.push(json!(["NeedAppearances", json!(form.need_appearances)]));
+                    }
+                    if key == "DA" {
+                        one.push(json!([
+                            "DA",
+                            form.default_appearance.clone().map(|value| json!(value)).unwrap_or(Json::Null)
+                        ]));
+                    }
+                    if key == "SigFlags" {
+                        one.push(json!([
+                            "SigFlags",
+                            form.signature_flags.map(|flags| json!(flags)).unwrap_or(Json::Null)
+                        ]));
+                    }
+                    if key == "CO" {
+                        one.push(json!(["CO", json!(form.calculation_order.clone())]));
+                    }
+                    if one.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the form has no entry `{key}`"),
+                        });
+                    }
+                    one
                 }
-                if key == "NeedAppearances" {
-                    one.push(json!(["NeedAppearances", json!(form.need_appearances)]));
-                }
-                if key == "DA" {
-                    one.push(json!([
-                        "DA",
-                        form.default_appearance.clone().map(|value| json!(value)).unwrap_or(Json::Null)
-                    ]));
-                }
-                if key == "SigFlags" {
-                    one.push(json!([
-                        "SigFlags",
-                        form.signature_flags.map(|flags| json!(flags)).unwrap_or(Json::Null)
-                    ]));
-                }
-                if key == "CO" {
-                    one.push(json!(["CO", json!(form.calculation_order.clone())]));
-                }
-                if one.is_empty() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the form has no entry `{key}`"),
-                    });
-                }
-                one
-            }
-        };
-        Ok(Outcome::new(format!("the form has {} field(s)", form.fields.len())).with_data(json!({
-            "has_form": true,
-            "fields": form.fields.clone(),
-            "field_count": form.fields.len(),
-            "need_appearances": form.need_appearances,
-            "default_appearance": form.default_appearance.clone().map(|value| json!(value)).unwrap_or(Json::Null),
-            "default_resources": form.default_resources.iter().map(|(key, value)| json!([key.clone(), value.clone()])).collect::<Vec<Json>>(),
-            "signature_flags": form.signature_flags.map(|flags| json!(flags)).unwrap_or(Json::Null),
-            "calculation_order": form.calculation_order.clone(),
-            "entries": listed,
-        })))
+            };
+            Ok(Outcome::new(format!("the form has {} field(s)", form.fields.len())).with_data(json!({
+                "has_form": true,
+                "fields": form.fields.clone(),
+                "field_count": form.fields.len(),
+                "need_appearances": form.need_appearances,
+                "default_appearance": form.default_appearance.clone().map(|value| json!(value)).unwrap_or(Json::Null),
+                "default_resources": form.default_resources.iter().map(|(key, value)| json!([key.clone(), value.clone()])).collect::<Vec<Json>>(),
+                "signature_flags": form.signature_flags.map(|flags| json!(flags)).unwrap_or(Json::Null),
+                "calculation_order": form.calculation_order.clone(),
+                "entries": listed,
+            })))
+
+        }
     }
 }

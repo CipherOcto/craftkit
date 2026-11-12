@@ -13,7 +13,7 @@
 //! because a page turned by forty-five degrees is not a page that is
 //! turned.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{self, Value};
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
@@ -90,99 +90,109 @@ pub fn rotation_of(session: &Session, id: u64) -> i64 {
     0
 }
 
-/// Turn a **page**.
-///
-/// The degrees are a **multiple of ninety**, and an amount that is not
-/// is refused: the tree's command truncates the degrees to the
-/// multiple of ninety in them, and a page turned by forty-five degrees
-/// is not a page that is turned.
-///
-/// The new rotation is **taken back into the circle**: a page turned
-/// four times is a page not turned at all.
-#[derive(Command)]
-#[command(id = "pdf.page.rotate", area = "pdf", layer = "pdf", icon = "rotate", mutates, undoable)]
-pub struct RotatePage {
-    /// The page.
-    pub page: NodeRef,
-    /// The degrees, clockwise. A multiple of ninety.
-    pub degrees: Number,
-}
+commands! {
+    /// Turn a **page**.
+    ///
+    /// The degrees are a **multiple of ninety**, and an amount that is not
+    /// is refused: the tree's command truncates the degrees to the
+    /// multiple of ninety in them, and a page turned by forty-five degrees
+    /// is not a page that is turned.
+    ///
+    /// The new rotation is **taken back into the circle**: a page turned
+    /// four times is a page not turned at all.
+    pdf.page.rotate {
+        area: "pdf",
+        layer: "pdf",
+        icon: "rotate",
+        mutates,
+        undoable,
+        params: {
+            /// The page.
 
-impl RotatePage {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.page.rotate".to_string();
-        let page = self.page.0;
-        let degrees = self.degrees.0;
-        if !degrees.is_finite() || degrees.fract() != 0.0 || degrees % 90.0 != 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: "a page is turned by a multiple of ninety degrees".to_string(),
-            });
+            page: NodeRef,
+            /// The degrees, clockwise. A multiple of ninety.
+
+            degrees: Number,
+        },
+        run: {
+
+            let id = "pdf.page.rotate".to_string();
+            let page = self.page.0;
+            let degrees = self.degrees.0;
+            if !degrees.is_finite() || degrees.fract() != 0.0 || degrees % 90.0 != 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: "a page is turned by a multiple of ninety degrees".to_string(),
+                });
+            }
+            let Some(node) = session.document().node(page) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{page}`"),
+                });
+            };
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{page}` is a `{}` and not an object", node.kind),
+                });
+            }
+            let current = rotation_of(session, page);
+            let new = (current + degrees as i64).rem_euclid(360);
+            let Some(node) = session.document_mut()?.node_mut(page) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{page}`"),
+                });
+            };
+            let mut entries = entries_of(&node.data);
+            match entries.iter_mut().find(|(name, _)| name == "Rotate") {
+                Some(entry) => entry.1 = serde_json::json!(new),
+                None => entries.push(("Rotate".to_string(), serde_json::json!(new))),
+            }
+            node.data = entries_into(&node.data, &entries);
+            Ok(Outcome::changed(format!("the page `{page}` is turned to {new} degrees"))
+                .with_data(serde_json::json!({ "id": page, "rotate": new })))
+
         }
-        let Some(node) = session.document().node(page) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{page}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{page}` is a `{}` and not an object", node.kind),
-            });
-        }
-        let current = rotation_of(session, page);
-        let new = (current + degrees as i64).rem_euclid(360);
-        let Some(node) = session.document_mut()?.node_mut(page) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{page}`"),
-            });
-        };
-        let mut entries = entries_of(&node.data);
-        match entries.iter_mut().find(|(name, _)| name == "Rotate") {
-            Some(entry) => entry.1 = serde_json::json!(new),
-            None => entries.push(("Rotate".to_string(), serde_json::json!(new))),
-        }
-        node.data = entries_into(&node.data, &entries);
-        Ok(Outcome::changed(format!("the page `{page}` is turned to {new} degrees"))
-            .with_data(serde_json::json!({ "id": page, "rotate": new })))
     }
-}
+    /// The **rotation** of a page, as it stands.
+    ///
+    /// The number the page has, or the one it inherits, and the circle it
+    /// is in.
+    pdf.page.rotation {
+        area: "pdf",
+        layer: "pdf",
+        icon: "rotate",
+        params: {
+            /// The page.
 
-/// The **rotation** of a page, as it stands.
-///
-/// The number the page has, or the one it inherits, and the circle it
-/// is in.
-#[derive(Command)]
-#[command(id = "pdf.page.rotation", area = "pdf", layer = "pdf", icon = "rotate")]
-pub struct ReadRotation {
-    /// The page.
-    pub page: NodeRef,
-}
+            page: NodeRef,
+        },
+        run: {
 
-impl ReadRotation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.page.rotation".to_string();
-        let page = self.page.0;
-        let Some(node) = session.document().node(page) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{page}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{page}` is a `{}` and not an object", node.kind),
-            });
+            let id = "pdf.page.rotation".to_string();
+            let page = self.page.0;
+            let Some(node) = session.document().node(page) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{page}`"),
+                });
+            };
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{page}` is a `{}` and not an object", node.kind),
+                });
+            }
+            let own = entries_of(&node.data)
+                .into_iter()
+                .find(|(name, _)| name == "Rotate")
+                .and_then(|(_, value)| crate::whole_number_of(&value));
+            let degrees = rotation_of(session, page);
+            Ok(Outcome::new(format!("the page `{page}` is turned {degrees} degrees"))
+                .with_data(serde_json::json!({ "id": page, "rotate": degrees, "own": own })))
+
         }
-        let own = entries_of(&node.data)
-            .into_iter()
-            .find(|(name, _)| name == "Rotate")
-            .and_then(|(_, value)| crate::whole_number_of(&value));
-        let degrees = rotation_of(session, page);
-        Ok(Outcome::new(format!("the page `{page}` is turned {degrees} degrees"))
-            .with_data(serde_json::json!({ "id": page, "rotate": degrees, "own": own })))
     }
 }

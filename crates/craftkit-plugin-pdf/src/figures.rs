@@ -28,10 +28,10 @@
 //!   here either: it is read from the content of the page, and this
 //!   command reads the tree.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Text};
 
 /// The most **deep** the structure tree is walked.
 const MAX_DEPTH: usize = 64;
@@ -172,107 +172,117 @@ fn walk(
     }
 }
 
-/// The **figures** of a file.
-#[derive(Command)]
-#[command(id = "pdf.figure.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadFigures {}
+commands! {
+    /// The **figures** of a file.
+    pdf.figure.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+        },
+        run: {
 
-impl ReadFigures {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let document = session.document();
-        let figures = figures_of(document);
-        let tagged = crate::preflight::the_catalog(document)
-            .map(|catalog| {
-                let catalog_entries = entries_of(catalog);
-                entry(&catalog_entries, "StructTreeRoot").is_some()
-            })
-            .unwrap_or(false);
-        let figures: Vec<Json> = figures
-            .iter()
-            .map(|figure| {
-                json!({
-                    "id": figure.id,
-                    "page": match figure.page {
-                        Some(page) => json!(page),
-                        None => Json::Null,
-                    },
-                    "kind": figure.kind.clone(),
-                    "alt": match &figure.alt {
-                        Some(alt) => json!(alt),
-                        None => Json::Null,
-                    },
+            let document = session.document();
+            let figures = figures_of(document);
+            let tagged = crate::preflight::the_catalog(document)
+                .map(|catalog| {
+                    let catalog_entries = entries_of(catalog);
+                    entry(&catalog_entries, "StructTreeRoot").is_some()
                 })
-            })
-            .collect();
-        Ok(Outcome::new(format!("the file has {} figure(s)", figures.len())).with_data(json!({
-            "tagged": tagged,
-            "figures": figures,
-        })))
+                .unwrap_or(false);
+            let figures: Vec<Json> = figures
+                .iter()
+                .map(|figure| {
+                    json!({
+                        "id": figure.id,
+                        "page": match figure.page {
+                            Some(page) => json!(page),
+                            None => Json::Null,
+                        },
+                        "kind": figure.kind.clone(),
+                        "alt": match &figure.alt {
+                            Some(alt) => json!(alt),
+                            None => Json::Null,
+                        },
+                    })
+                })
+                .collect();
+            Ok(Outcome::new(format!("the file has {} figure(s)", figures.len())).with_data(json!({
+                "tagged": tagged,
+                "figures": figures,
+            })))
+
+        }
     }
-}
+    /// **Set** the **alternative text** of a figure.
+    ///
+    /// The text that is empty **takes the text away**: the tree's own rule.
+    pdf.figure.alt.set {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The figure: the node of its element in the structure tree.
 
-/// **Set** the **alternative text** of a figure.
-///
-/// The text that is empty **takes the text away**: the tree's own rule.
-#[derive(Command)]
-#[command(id = "pdf.figure.alt.set", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct SetFigureAlt {
-    /// The figure: the node of its element in the structure tree.
-    pub figure: NodeRef,
-    /// The alternative text. An empty text takes the text away.
-    pub alt: Text,
-}
+            figure: NodeRef,
+            /// The alternative text. An empty text takes the text away.
 
-impl SetFigureAlt {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.figure.alt.set".to_string();
-        let figure = self.figure.0;
-        let Some(node) = session.document().node(figure) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{figure}`"),
-            });
-        };
-        // The node must be a **figure**: an alternate text is the text
-        // of a figure and not of anything else.
-        let figures = figures_of(session.document());
-        if !figures.iter().any(|held| held.id == figure) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{figure}` is not a figure of the file"),
-            });
-        }
-        let alt = self.alt.0.trim();
-        let mut entries = entries_of(node);
-        let key = "Alt".to_string();
-        match entries.iter_mut().find(|(name, _)| name == &key) {
-            Some(entry) => {
-                if alt.is_empty() {
-                    entries.retain(|(name, _)| name != &key);
-                } else {
-                    entry.1 = json!({ "string": alt });
+            alt: Text,
+        },
+        run: {
+
+            let id = "pdf.figure.alt.set".to_string();
+            let figure = self.figure.0;
+            let Some(node) = session.document().node(figure) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{figure}`"),
+                });
+            };
+            // The node must be a **figure**: an alternate text is the text
+            // of a figure and not of anything else.
+            let figures = figures_of(session.document());
+            if !figures.iter().any(|held| held.id == figure) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{figure}` is not a figure of the file"),
+                });
+            }
+            let alt = self.alt.0.trim();
+            let mut entries = entries_of(node);
+            let key = "Alt".to_string();
+            match entries.iter_mut().find(|(name, _)| name == &key) {
+                Some(entry) => {
+                    if alt.is_empty() {
+                        entries.retain(|(name, _)| name != &key);
+                    } else {
+                        entry.1 = json!({ "string": alt });
+                    }
+                }
+                None => {
+                    if !alt.is_empty() {
+                        entries.push((key, json!({ "string": alt })));
+                    }
                 }
             }
-            None => {
-                if !alt.is_empty() {
-                    entries.push((key, json!({ "string": alt })));
-                }
-            }
-        }
-        let data = json!({
-            "object": node.data.get("object").cloned().unwrap_or(Json::Null),
-            "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
-        });
-        let Some(node) = session.document_mut()?.node_mut(figure) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{figure}`"),
+            let data = json!({
+                "object": node.data.get("object").cloned().unwrap_or(Json::Null),
+                "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
             });
-        };
-        node.data = data;
-        Ok(Outcome::changed(format!("the figure `{figure}` has its alternative text")).with_data(json!({
-            "figure": figure,
-            "alt": if alt.is_empty() { Json::Null } else { json!(alt) },
-        })))
+            let Some(node) = session.document_mut()?.node_mut(figure) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{figure}`"),
+                });
+            };
+            node.data = data;
+            Ok(Outcome::changed(format!("the figure `{figure}` has its alternative text")).with_data(json!({
+                "figure": figure,
+                "alt": if alt.is_empty() { Json::Null } else { json!(alt) },
+            })))
+
+        }
     }
 }

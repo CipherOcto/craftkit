@@ -21,10 +21,10 @@
 //! - the walk is **bounded**: a structure tree deeper than the tree
 //!   reads is not read further.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Node, Outcome};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.marked.read";
@@ -330,46 +330,51 @@ fn text_under(document: &Document, page: u64, mcid: i64) -> Option<String> {
     Some(out)
 }
 
-/// **Read** the **marked content** of a PDF file: the text under every
-/// element of the structure tree.
-///
-/// A query: it does not change the document. A file that is not tagged
-/// has no marked content, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.marked.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadMarked {
-    /// The element to read.
+commands! {
+    /// **Read** the **marked content** of a PDF file: the text under every
+    /// element of the structure tree.
     ///
-    /// Leave it out and every element is read.
-    pub kind: Option<craftkit_sdk::Text>,
-}
+    /// A query: it does not change the document. A file that is not tagged
+    /// has no marked content, and the answer says so.
+    pdf.marked.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The element to read.
+            ///
+            /// Leave it out and every element is read.
 
-impl ReadMarked {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = COMMAND.to_string();
-        let all = marked_of(session.document());
-        let listed: Vec<Json> = match &self.kind {
-            None => all.iter().map(|marked| marked.to_json()).collect(),
-            Some(kind) => {
-                let wanted = kind.0.trim();
-                let one: Vec<Json> = all
-                    .iter()
-                    .filter(|marked| marked.kind == wanted)
-                    .map(|marked| marked.to_json())
-                    .collect();
-                if one.is_empty() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the file has no element of the kind `{wanted}`"),
-                    });
+            kind: Option<craftkit_sdk::Text>,
+        },
+        run: {
+
+            let id = COMMAND.to_string();
+            let all = marked_of(session.document());
+            let listed: Vec<Json> = match &self.kind {
+                None => all.iter().map(|marked| marked.to_json()).collect(),
+                Some(kind) => {
+                    let wanted = kind.0.trim();
+                    let one: Vec<Json> = all
+                        .iter()
+                        .filter(|marked| marked.kind == wanted)
+                        .map(|marked| marked.to_json())
+                        .collect();
+                    if one.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the file has no element of the kind `{wanted}`"),
+                        });
+                    }
+                    one
                 }
-                one
-            }
-        };
-        let count = listed.len();
-        Ok(Outcome::new(format!("the file has {count} marked element(s)")).with_data(json!({
-            "marked": listed,
-            "count": count,
-        })))
+            };
+            let count = listed.len();
+            Ok(Outcome::new(format!("the file has {count} marked element(s)")).with_data(json!({
+                "marked": listed,
+                "count": count,
+            })))
+
+        }
     }
 }

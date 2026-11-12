@@ -25,11 +25,11 @@
 //! - the **rectangle** is four numbers, the corners may come in any
 //!   order, and a field smaller than four points by four is refused.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Text};
 
 use crate::checkbox::CheckStyle;
 use crate::properties::is_locked;
@@ -286,314 +286,330 @@ fn the_da_string(font: &str, size: f64, colour: [f64; 3]) -> String {
     )
 }
 
-/// **Set** the **look** of a field.
-///
-/// The look that is not said is left as it was.
-///
-/// The rules:
-///
-/// - the node must be a **field** of a form;
-/// - a **locked** field takes only unlocking;
-/// - a **colour** is three numbers, and each of them is between zero
-///   and one;
-/// - the **width of the line** is between zero and twelve points;
-/// - the **style of the line** is one of the tree's own five;
-/// - the **font** is one of the tree's own three;
-/// - the **size of the text** is between zero and a hundred points;
-/// - the **check style** belongs to a check box or a radio button and
-///   to nothing else;
-/// - the **rectangle** is four numbers, the corners may come in any
-///   order, and a field smaller than four points by four is refused.
-#[derive(Command)]
-#[command(id = "pdf.field.look.set", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct SetLook {
-    /// The field.
-    pub field: NodeRef,
-    /// The **colour of the border**. Say `none` to take it away.
-    pub border: Option<serde_json::Value>,
-    /// The **colour of the background**. Say `none` to take it away.
-    pub fill: Option<serde_json::Value>,
-    /// The **width of the line**, in points.
-    pub width: Option<Number>,
-    /// The **style of the line**: `Solid`, `Dashed`, `Beveled`,
-    /// `Inset` or `Underline`.
-    pub style: Option<Text>,
-    /// The **colour of the text**.
-    pub text_colour: Option<serde_json::Value>,
-    /// The **font of the text**: `Helvetica`, `Times` or `Courier`.
-    pub font: Option<Text>,
-    /// The **size of the text**, in points.
-    pub font_size: Option<Number>,
-    /// The **mark** of a check box or of a radio button: `Check`,
-    /// `Circle`, `Cross`, `Diamond`, `Square` or `Star`.
-    pub check_style: Option<Text>,
-    /// The **rectangle** the field covers on the page: four numbers.
-    pub rect: Option<serde_json::Value>,
-}
+commands! {
+    /// **Set** the **look** of a field.
+    ///
+    /// The look that is not said is left as it was.
+    ///
+    /// The rules:
+    ///
+    /// - the node must be a **field** of a form;
+    /// - a **locked** field takes only unlocking;
+    /// - a **colour** is three numbers, and each of them is between zero
+    ///   and one;
+    /// - the **width of the line** is between zero and twelve points;
+    /// - the **style of the line** is one of the tree's own five;
+    /// - the **font** is one of the tree's own three;
+    /// - the **size of the text** is between zero and a hundred points;
+    /// - the **check style** belongs to a check box or a radio button and
+    ///   to nothing else;
+    /// - the **rectangle** is four numbers, the corners may come in any
+    ///   order, and a field smaller than four points by four is refused.
+    pdf.field.look.set {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The field.
 
-impl SetLook {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let field = self.field.0;
-        let Some(node) = session.document().node(field).cloned() else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no node `{field}`"),
-            });
-        };
-        let Some(found) = crate::fields::field_of(session.document(), &node) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the node `{field}` is not a field"),
-            });
-        };
-        // A **locked** field takes only unlocking.
-        if is_locked(session.document(), &node) {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the field is locked: unlock it first".to_string(),
-            });
-        }
-        // The **colours**. The border and the background may be taken
-        // away: the tree's own rule, and a colour of "none" is that.
-        let border = match &self.border {
-            Some(value) => the_colour_of(value)?,
-            None => TheColour::Unchanged,
-        };
-        let fill = match &self.fill {
-            Some(value) => the_colour_of(value)?,
-            None => TheColour::Unchanged,
-        };
-        let text_colour = match &self.text_colour {
-            Some(value) => Some(the_colour(value)?),
-            None => None,
-        };
-        // The **width of the line**.
-        let width = match self.width.as_ref().map(|value| value.0) {
-            Some(value) => {
-                if !value.is_finite() || !(0.0..=WIDEST).contains(&value) {
-                    return Err(EngineError::Failed {
-                        id: COMMAND.to_string(),
-                        message: format!("the width of a line is between zero and {WIDEST} points"),
-                    });
-                }
-                Some(value)
+            field: NodeRef,
+            /// The **colour of the border**. Say `none` to take it away.
+
+            border: Option<serde_json::Value>,
+            /// The **colour of the background**. Say `none` to take it away.
+
+            fill: Option<serde_json::Value>,
+            /// The **width of the line**, in points.
+
+            width: Option<Number>,
+            /// The **style of the line**: `Solid`, `Dashed`, `Beveled`,
+            /// `Inset` or `Underline`.
+
+            style: Option<Text>,
+            /// The **colour of the text**.
+
+            text_colour: Option<serde_json::Value>,
+            /// The **font of the text**: `Helvetica`, `Times` or `Courier`.
+
+            font: Option<Text>,
+            /// The **size of the text**, in points.
+
+            font_size: Option<Number>,
+            /// The **mark** of a check box or of a radio button: `Check`,
+            /// `Circle`, `Cross`, `Diamond`, `Square` or `Star`.
+
+            check_style: Option<Text>,
+            /// The **rectangle** the field covers on the page: four numbers.
+
+            rect: Option<serde_json::Value>,
+        },
+        run: {
+
+            let field = self.field.0;
+            let Some(node) = session.document().node(field).cloned() else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no node `{field}`"),
+                });
+            };
+            let Some(found) = crate::fields::field_of(session.document(), &node) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the node `{field}` is not a field"),
+                });
+            };
+            // A **locked** field takes only unlocking.
+            if is_locked(session.document(), &node) {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the field is locked: unlock it first".to_string(),
+                });
             }
-            None => None,
-        };
-        // The **style of the line**.
-        let style = match &self.style {
-            Some(text) => Some(BorderStyle::parse(&text.0).ok_or_else(|| EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!(
-                    "`{}` is not a style of a line; the tree's own are Solid, Dashed, Beveled, Inset and Underline",
-                    text.0
-                ),
-            })?),
-            None => None,
-        };
-        // The **font of the text**.
-        let font = match &self.font {
-            Some(text) => Some(FieldFont::parse(&text.0).ok_or_else(|| EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!(
-                    "`{}` is not a font; the tree's own are Helvetica, Times and Courier",
-                    text.0
-                ),
-            })?),
-            None => None,
-        };
-        // The **size of the text**.
-        let font_size = match self.font_size.as_ref().map(|value| value.0) {
-            Some(value) => {
-                if !value.is_finite() || !(0.0..=BIGGEST).contains(&value) {
-                    return Err(EngineError::Failed {
-                        id: COMMAND.to_string(),
-                        message: format!(
-                            "the size of the text of a field is between zero and {BIGGEST} points"
-                        ),
-                    });
+            // The **colours**. The border and the background may be taken
+            // away: the tree's own rule, and a colour of "none" is that.
+            let border = match &self.border {
+                Some(value) => the_colour_of(value)?,
+                None => TheColour::Unchanged,
+            };
+            let fill = match &self.fill {
+                Some(value) => the_colour_of(value)?,
+                None => TheColour::Unchanged,
+            };
+            let text_colour = match &self.text_colour {
+                Some(value) => Some(the_colour(value)?),
+                None => None,
+            };
+            // The **width of the line**.
+            let width = match self.width.as_ref().map(|value| value.0) {
+                Some(value) => {
+                    if !value.is_finite() || !(0.0..=WIDEST).contains(&value) {
+                        return Err(EngineError::Failed {
+                            id: COMMAND.to_string(),
+                            message: format!("the width of a line is between zero and {WIDEST} points"),
+                        });
+                    }
+                    Some(value)
                 }
-                Some(value)
-            }
-            None => None,
-        };
-        // The **mark of a check box**: only a check box or a radio
-        // button has one.
-        let check_style = match &self.check_style {
-            Some(text) => {
-                let style = CheckStyle::parse(&text.0).ok_or_else(|| EngineError::Failed {
+                None => None,
+            };
+            // The **style of the line**.
+            let style = match &self.style {
+                Some(text) => Some(BorderStyle::parse(&text.0).ok_or_else(|| EngineError::Failed {
                     id: COMMAND.to_string(),
                     message: format!(
-                        "`{}` is not a style of a mark; the tree's own are Check, Circle, Cross, Diamond, Square and Star",
+                        "`{}` is not a style of a line; the tree's own are Solid, Dashed, Beveled, Inset and Underline",
                         text.0
                     ),
-                })?;
-                let is_box = found.kind == crate::fields::FieldKind::Button;
-                if !is_box {
-                    return Err(EngineError::Failed {
-                        id: COMMAND.to_string(),
-                        message: "only check boxes and radio buttons have a check style".to_string(),
-                    });
-                }
-                Some(style)
-            }
-            None => None,
-        };
-        // The **rectangle**: the corners may come in any order.
-        let rect = match &self.rect {
-            Some(value) => {
-                let rect = crate::the_rect(value, COMMAND)?;
-                if rect[2] - rect[0] < SMALLEST || rect[3] - rect[1] < SMALLEST {
-                    return Err(EngineError::Failed {
-                        id: COMMAND.to_string(),
-                        message: "the field is too small".to_string(),
-                    });
-                }
-                Some(rect)
-            }
-            None => None,
-        };
-        // The **widgets** of the field: the kids that have no name of
-        // their own — and a field that has none is its own widget.
-        let kids =
-            entry(&entries_of(&node), "Kids").and_then(|kids| kids.as_array().cloned()).unwrap_or_default();
-        let mut widgets: Vec<u64> = Vec::new();
-        for kid in &kids {
-            let Some(number) = crate::number_of(kid) else { continue };
-            let Some(kid_node) = node_of_number(session.document(), number) else { continue };
-            if entry(&entries_of(kid_node), "T").is_some() {
-                continue;
-            }
-            widgets.push(number);
-        }
-        let own = widgets.is_empty();
-        if own {
-            widgets.push(node.data.get("object").and_then(|object| object.as_u64()).unwrap_or(0));
-        }
-        // The **look** is written on the widgets — and a field that is
-        // its own widget has the look in its own dictionary.
-        let mut entries = entries_of(&node);
-        let put = |entries: &mut Vec<(String, Json)>, key: &str, value: Json| match entries
-            .iter_mut()
-            .find(|(name, _)| name == key)
-        {
-            Some(entry) => entry.1 = value,
-            None => entries.push((key.to_string(), value)),
-        };
-        for widget in &widgets {
-            let mut widget_entries = if own {
-                entries.clone()
-            } else {
-                let Some(widget_node) = node_of_number(session.document(), *widget) else { continue };
-                entries_of(widget_node)
+                })?),
+                None => None,
             };
-            // The **colours**: the border and the background.
-            if !matches!(border, TheColour::Unchanged)
-                || !matches!(fill, TheColour::Unchanged)
-                || check_style.is_some()
-            {
-                let mut mark = match entry(&widget_entries, "MK") {
-                    Some(value) => dictionary_of(value),
-                    None => Vec::new(),
-                };
-                // A colour of **none** is taken away: the tree's own
-                // rule.
-                match border {
-                    TheColour::Set(border) => put(&mut mark, "BC", json!(border)),
-                    TheColour::None => mark.retain(|(key, _)| key != "BC"),
-                    TheColour::Unchanged => {}
-                }
-                match fill {
-                    TheColour::Set(fill) => put(&mut mark, "BG", json!(fill)),
-                    TheColour::None => mark.retain(|(key, _)| key != "BG"),
-                    TheColour::Unchanged => {}
-                }
-                if let Some(style) = check_style {
-                    put(&mut mark, "CA", json!({ "string": style.code() }));
-                }
-                put(
-                    &mut widget_entries,
-                    "MK",
-                    json!({ "entries": mark.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>() }),
-                );
-            }
-            // The **line**: its width and its style.
-            if width.is_some() || style.is_some() {
-                let mut line = match entry(&widget_entries, "BS") {
-                    Some(value) => dictionary_of(value),
-                    None => Vec::new(),
-                };
-                if let Some(width) = width {
-                    put(&mut line, "W", json!(width));
-                }
-                if let Some(style) = style {
-                    put(&mut line, "S", json!(style.code()));
-                    match style {
-                        BorderStyle::Dashed => put(&mut line, "D", json!([3])),
-                        _ => line.retain(|(key, _)| key != "D"),
+            // The **font of the text**.
+            let font = match &self.font {
+                Some(text) => Some(FieldFont::parse(&text.0).ok_or_else(|| EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!(
+                        "`{}` is not a font; the tree's own are Helvetica, Times and Courier",
+                        text.0
+                    ),
+                })?),
+                None => None,
+            };
+            // The **size of the text**.
+            let font_size = match self.font_size.as_ref().map(|value| value.0) {
+                Some(value) => {
+                    if !value.is_finite() || !(0.0..=BIGGEST).contains(&value) {
+                        return Err(EngineError::Failed {
+                            id: COMMAND.to_string(),
+                            message: format!(
+                                "the size of the text of a field is between zero and {BIGGEST} points"
+                            ),
+                        });
                     }
+                    Some(value)
                 }
-                put(
-                    &mut widget_entries,
-                    "BS",
-                    json!({ "entries": line.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>() }),
-                );
+                None => None,
+            };
+            // The **mark of a check box**: only a check box or a radio
+            // button has one.
+            let check_style = match &self.check_style {
+                Some(text) => {
+                    let style = CheckStyle::parse(&text.0).ok_or_else(|| EngineError::Failed {
+                        id: COMMAND.to_string(),
+                        message: format!(
+                            "`{}` is not a style of a mark; the tree's own are Check, Circle, Cross, Diamond, Square and Star",
+                            text.0
+                        ),
+                    })?;
+                    let is_box = found.kind == crate::fields::FieldKind::Button;
+                    if !is_box {
+                        return Err(EngineError::Failed {
+                            id: COMMAND.to_string(),
+                            message: "only check boxes and radio buttons have a check style".to_string(),
+                        });
+                    }
+                    Some(style)
+                }
+                None => None,
+            };
+            // The **rectangle**: the corners may come in any order.
+            let rect = match &self.rect {
+                Some(value) => {
+                    let rect = crate::the_rect(value, COMMAND)?;
+                    if rect[2] - rect[0] < SMALLEST || rect[3] - rect[1] < SMALLEST {
+                        return Err(EngineError::Failed {
+                            id: COMMAND.to_string(),
+                            message: "the field is too small".to_string(),
+                        });
+                    }
+                    Some(rect)
+                }
+                None => None,
+            };
+            // The **widgets** of the field: the kids that have no name of
+            // their own — and a field that has none is its own widget.
+            let kids =
+                entry(&entries_of(&node), "Kids").and_then(|kids| kids.as_array().cloned()).unwrap_or_default();
+            let mut widgets: Vec<u64> = Vec::new();
+            for kid in &kids {
+                let Some(number) = crate::number_of(kid) else { continue };
+                let Some(kid_node) = node_of_number(session.document(), number) else { continue };
+                if entry(&entries_of(kid_node), "T").is_some() {
+                    continue;
+                }
+                widgets.push(number);
             }
-            // The **rectangle**.
-            if let Some(rect) = rect {
-                put(&mut widget_entries, "Rect", json!(rect));
-            }
+            let own = widgets.is_empty();
             if own {
-                entries = widget_entries;
-                continue;
+                widgets.push(node.data.get("object").and_then(|object| object.as_u64()).unwrap_or(0));
             }
-            let Some(widget_node) = node_of_number(session.document(), *widget) else { continue };
-            let id = widget_node.id;
+            // The **look** is written on the widgets — and a field that is
+            // its own widget has the look in its own dictionary.
+            let mut entries = entries_of(&node);
+            let put = |entries: &mut Vec<(String, Json)>, key: &str, value: Json| match entries
+                .iter_mut()
+                .find(|(name, _)| name == key)
+            {
+                Some(entry) => entry.1 = value,
+                None => entries.push((key.to_string(), value)),
+            };
+            for widget in &widgets {
+                let mut widget_entries = if own {
+                    entries.clone()
+                } else {
+                    let Some(widget_node) = node_of_number(session.document(), *widget) else { continue };
+                    entries_of(widget_node)
+                };
+                // The **colours**: the border and the background.
+                if !matches!(border, TheColour::Unchanged)
+                    || !matches!(fill, TheColour::Unchanged)
+                    || check_style.is_some()
+                {
+                    let mut mark = match entry(&widget_entries, "MK") {
+                        Some(value) => dictionary_of(value),
+                        None => Vec::new(),
+                    };
+                    // A colour of **none** is taken away: the tree's own
+                    // rule.
+                    match border {
+                        TheColour::Set(border) => put(&mut mark, "BC", json!(border)),
+                        TheColour::None => mark.retain(|(key, _)| key != "BC"),
+                        TheColour::Unchanged => {}
+                    }
+                    match fill {
+                        TheColour::Set(fill) => put(&mut mark, "BG", json!(fill)),
+                        TheColour::None => mark.retain(|(key, _)| key != "BG"),
+                        TheColour::Unchanged => {}
+                    }
+                    if let Some(style) = check_style {
+                        put(&mut mark, "CA", json!({ "string": style.code() }));
+                    }
+                    put(
+                        &mut widget_entries,
+                        "MK",
+                        json!({ "entries": mark.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>() }),
+                    );
+                }
+                // The **line**: its width and its style.
+                if width.is_some() || style.is_some() {
+                    let mut line = match entry(&widget_entries, "BS") {
+                        Some(value) => dictionary_of(value),
+                        None => Vec::new(),
+                    };
+                    if let Some(width) = width {
+                        put(&mut line, "W", json!(width));
+                    }
+                    if let Some(style) = style {
+                        put(&mut line, "S", json!(style.code()));
+                        match style {
+                            BorderStyle::Dashed => put(&mut line, "D", json!([3])),
+                            _ => line.retain(|(key, _)| key != "D"),
+                        }
+                    }
+                    put(
+                        &mut widget_entries,
+                        "BS",
+                        json!({ "entries": line.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>() }),
+                    );
+                }
+                // The **rectangle**.
+                if let Some(rect) = rect {
+                    put(&mut widget_entries, "Rect", json!(rect));
+                }
+                if own {
+                    entries = widget_entries;
+                    continue;
+                }
+                let Some(widget_node) = node_of_number(session.document(), *widget) else { continue };
+                let id = widget_node.id;
+                let data = json!({
+                    "object": widget_node.data.get("object").cloned().unwrap_or(Json::Null),
+                    "entries": widget_entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+                });
+                if let Some(node) = session.document_mut()?.node_mut(id) {
+                    node.data = data;
+                }
+            }
+            // The **default appearance** is written on the field.
+            if font.is_some() || font_size.is_some() || text_colour.is_some() {
+                let current =
+                    entry(&entries, "DA").and_then(text_of).unwrap_or_else(|| "/Helv 12 Tf 0 g".to_string());
+                let (held_font, held_size, held_colour) = the_da(&current);
+                let font = font.map(|font| font.resource().to_string()).unwrap_or(held_font);
+                let size = font_size.unwrap_or(held_size);
+                let colour = text_colour.unwrap_or(held_colour);
+                let da = the_da_string(&font, size, colour);
+                match entries.iter_mut().find(|(key, _)| key == "DA") {
+                    Some(entry) => entry.1 = json!({ "string": da }),
+                    None => entries.push(("DA".to_string(), json!({ "string": da }))),
+                }
+            }
             let data = json!({
-                "object": widget_node.data.get("object").cloned().unwrap_or(Json::Null),
-                "entries": widget_entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+                "object": node.data.get("object").cloned().unwrap_or(Json::Null),
+                "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
             });
-            if let Some(node) = session.document_mut()?.node_mut(id) {
+            if let Some(node) = session.document_mut()?.node_mut(field) {
                 node.data = data;
             }
+            let held = |colour: &TheColour| match colour {
+                TheColour::Set(colour) => json!(colour),
+                TheColour::None => json!("none"),
+                TheColour::Unchanged => Json::Null,
+            };
+            Ok(Outcome::changed(format!("the field `{field}` has its look")).with_data(json!({
+                "field": field,
+                "border": held(&border),
+                "fill": held(&fill),
+                "width": width,
+                "style": style.map(|style| style.label()),
+                "text_colour": text_colour,
+                "font": font.map(|font| font.label()),
+                "font_size": font_size,
+                "check_style": check_style.map(|style| style.label()),
+                "rect": rect,
+            })))
+
         }
-        // The **default appearance** is written on the field.
-        if font.is_some() || font_size.is_some() || text_colour.is_some() {
-            let current =
-                entry(&entries, "DA").and_then(text_of).unwrap_or_else(|| "/Helv 12 Tf 0 g".to_string());
-            let (held_font, held_size, held_colour) = the_da(&current);
-            let font = font.map(|font| font.resource().to_string()).unwrap_or(held_font);
-            let size = font_size.unwrap_or(held_size);
-            let colour = text_colour.unwrap_or(held_colour);
-            let da = the_da_string(&font, size, colour);
-            match entries.iter_mut().find(|(key, _)| key == "DA") {
-                Some(entry) => entry.1 = json!({ "string": da }),
-                None => entries.push(("DA".to_string(), json!({ "string": da }))),
-            }
-        }
-        let data = json!({
-            "object": node.data.get("object").cloned().unwrap_or(Json::Null),
-            "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
-        });
-        if let Some(node) = session.document_mut()?.node_mut(field) {
-            node.data = data;
-        }
-        let held = |colour: &TheColour| match colour {
-            TheColour::Set(colour) => json!(colour),
-            TheColour::None => json!("none"),
-            TheColour::Unchanged => Json::Null,
-        };
-        Ok(Outcome::changed(format!("the field `{field}` has its look")).with_data(json!({
-            "field": field,
-            "border": held(&border),
-            "fill": held(&fill),
-            "width": width,
-            "style": style.map(|style| style.label()),
-            "text_colour": text_colour,
-            "font": font.map(|font| font.label()),
-            "font_size": font_size,
-            "check_style": check_style.map(|style| style.label()),
-            "rect": rect,
-        })))
     }
 }

@@ -19,10 +19,10 @@
 //! - the **kids** of a name tree are not read: a tree with kids is a
 //!   tree of trees, and the names of the kids are not read here.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Outcome};
 
 /// The **entries** of a value: the pairs of a dictionary, whether it
 /// is written where it is used or named by a reference.
@@ -98,46 +98,51 @@ pub fn destinations_of(document: &Document) -> Vec<(String, Option<u64>)> {
     out
 }
 
-/// **Read** the **named destinations** of a PDF file.
-///
-/// A query: it does not change the document. A file that names no
-/// destination has none, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.dests.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadDestinations {
-    /// The entry to read.
+commands! {
+    /// **Read** the **named destinations** of a PDF file.
     ///
-    /// Leave it out and every destination is read.
-    pub name: Option<craftkit_sdk::Text>,
-}
+    /// A query: it does not change the document. A file that names no
+    /// destination has none, and the answer says so.
+    pdf.dests.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The entry to read.
+            ///
+            /// Leave it out and every destination is read.
 
-impl ReadDestinations {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.dests.read".to_string();
-        let document = session.document();
-        let all = destinations_of(document);
-        let listed: Vec<Json> = match &self.name {
-            None => all.iter().map(|(name, page)| json!({ "name": name, "page": page })).collect(),
-            Some(name) => {
-                let wanted = name.0.trim();
-                let one: Vec<Json> = all
-                    .iter()
-                    .filter(|(held, _)| held == wanted)
-                    .map(|(name, page)| json!({ "name": name, "page": page }))
-                    .collect();
-                if one.is_empty() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the file has no destination called `{wanted}`"),
-                    });
+            name: Option<craftkit_sdk::Text>,
+        },
+        run: {
+
+            let id = "pdf.dests.read".to_string();
+            let document = session.document();
+            let all = destinations_of(document);
+            let listed: Vec<Json> = match &self.name {
+                None => all.iter().map(|(name, page)| json!({ "name": name, "page": page })).collect(),
+                Some(name) => {
+                    let wanted = name.0.trim();
+                    let one: Vec<Json> = all
+                        .iter()
+                        .filter(|(held, _)| held == wanted)
+                        .map(|(name, page)| json!({ "name": name, "page": page }))
+                        .collect();
+                    if one.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the file has no destination called `{wanted}`"),
+                        });
+                    }
+                    one
                 }
-                one
-            }
-        };
-        let count = listed.len();
-        Ok(Outcome::new(format!("the file has {count} named destination(s)")).with_data(json!({
-            "destinations": listed,
-            "count": count,
-        })))
+            };
+            let count = listed.len();
+            Ok(Outcome::new(format!("the file has {count} named destination(s)")).with_data(json!({
+                "destinations": listed,
+                "count": count,
+            })))
+
+        }
     }
 }

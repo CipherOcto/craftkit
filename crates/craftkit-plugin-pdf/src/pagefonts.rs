@@ -27,10 +27,10 @@
 //! - **The encoding of a font is not read.** A font with no map has no
 //!   Unicode here, and the tree falls back to the encoding.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, NodeRef, Outcome};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.page.fonts";
@@ -103,57 +103,62 @@ pub(crate) fn maps_of(document: &Document, page: u64) -> Vec<(String, crate::tou
     out
 }
 
-/// **Read** the **fonts** of a page: the fonts it names, and the maps
-/// they carry.
-///
-/// A query: it does not change the document. A page with no resources
-/// has no fonts, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.page.fonts", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadPageFonts {
-    /// The page whose fonts are read.
-    pub page: NodeRef,
-}
+commands! {
+    /// **Read** the **fonts** of a page: the fonts it names, and the maps
+    /// they carry.
+    ///
+    /// A query: it does not change the document. A page with no resources
+    /// has no fonts, and the answer says so.
+    pdf.page.fonts {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The page whose fonts are read.
 
-impl ReadPageFonts {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let page = self.page.0;
-        let document = session.document();
-        let Some(node) = document.node(page) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no node `{page}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the node `{page}` is a `{}` and not an object", node.kind),
-            });
+            page: NodeRef,
+        },
+        run: {
+
+            let page = self.page.0;
+            let document = session.document();
+            let Some(node) = document.node(page) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no node `{page}`"),
+                });
+            };
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the node `{page}` is a `{}` and not an object", node.kind),
+                });
+            }
+            let mut listed: Vec<Json> = Vec::new();
+            for (name, font) in fonts_of(document, page) {
+                let described = document.node(font).and_then(|node| crate::fonts::font_of(document, node));
+                let map = crate::tounicode::unicode_of(document, font).ok().flatten();
+                // How **tall** the font's glyphs are: the metrics of the
+                // font, and the tree's own rule when the font says nothing.
+                let metrics = crate::metrics::metrics_of(document, font);
+                listed.push(json!({
+                    "name": name,
+                    "font": font,
+                    "base": described.as_ref().map(|font| font.base.clone()).unwrap_or_default(),
+                    "subtype": described.as_ref().map(|font| font.subtype.clone()).unwrap_or_default(),
+                    "has_map": map.is_some(),
+                    "codes": map.as_ref().map(|map| map.entries.len()).unwrap_or(0),
+                    "ascent": metrics.ascent,
+                    "descent": metrics.descent,
+                }));
+            }
+            let count = listed.len();
+            Ok(Outcome::new(format!("the page `{page}` names {count} font(s)")).with_data(json!({
+                "page": page,
+                "fonts": listed,
+                "count": count,
+            })))
+
         }
-        let mut listed: Vec<Json> = Vec::new();
-        for (name, font) in fonts_of(document, page) {
-            let described = document.node(font).and_then(|node| crate::fonts::font_of(document, node));
-            let map = crate::tounicode::unicode_of(document, font).ok().flatten();
-            // How **tall** the font's glyphs are: the metrics of the
-            // font, and the tree's own rule when the font says nothing.
-            let metrics = crate::metrics::metrics_of(document, font);
-            listed.push(json!({
-                "name": name,
-                "font": font,
-                "base": described.as_ref().map(|font| font.base.clone()).unwrap_or_default(),
-                "subtype": described.as_ref().map(|font| font.subtype.clone()).unwrap_or_default(),
-                "has_map": map.is_some(),
-                "codes": map.as_ref().map(|map| map.entries.len()).unwrap_or(0),
-                "ascent": metrics.ascent,
-                "descent": metrics.descent,
-            }));
-        }
-        let count = listed.len();
-        Ok(Outcome::new(format!("the page `{page}` names {count} font(s)")).with_data(json!({
-            "page": page,
-            "fonts": listed,
-            "count": count,
-        })))
     }
 }

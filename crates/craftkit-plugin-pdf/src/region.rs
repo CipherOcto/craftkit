@@ -26,10 +26,10 @@
 //!   by glyph, and this tree works by the **piece** — the box of a
 //!   piece is the box of its whole run.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Outcome};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.page.text.under";
@@ -66,55 +66,61 @@ pub fn under(region: [f64; 4], bounds: [f64; 4], origin: (f64, f64)) -> bool {
     over_x > least_x && over_y > least_y
 }
 
-/// The **text** of a page that is **under a region**.
-///
-/// A query: it does not change the document. A page with no text under
-/// the region has none, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.page.text.under", area = "pdf", layer = "pdf", icon = "list")]
-pub struct TextUnder {
-    /// The page whose text is read.
-    pub page: NodeRef,
-    /// The region: four numbers, the left, the bottom, the right and
-    /// the top of it.
-    pub rect: Json,
-}
+commands! {
+    /// The **text** of a page that is **under a region**.
+    ///
+    /// A query: it does not change the document. A page with no text under
+    /// the region has none, and the answer says so.
+    pdf.page.text.under {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The page whose text is read.
 
-impl TextUnder {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let page = self.page.0;
-        let Some(region) = crate::boxes::rect_of(&self.rect) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the region is not a rectangle of four numbers".to_string(),
-            });
-        };
-        let text = crate::pagetext::text_of_page(session.document(), page)?;
-        let mut found: Vec<Json> = Vec::new();
-        for piece in &text.pieces {
-            let Some(bounds) = piece.bounds else { continue };
-            let origin = match (piece.x, piece.y) {
-                (Some(x), Some(y)) => (x, y),
-                _ => continue,
+            page: NodeRef,
+            /// The region: four numbers, the left, the bottom, the right and
+            /// the top of it.
+
+            rect: Json,
+        },
+        run: {
+
+            let page = self.page.0;
+            let Some(region) = crate::boxes::rect_of(&self.rect) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the region is not a rectangle of four numbers".to_string(),
+                });
             };
-            if !under(region, bounds, origin) {
-                continue;
+            let text = crate::pagetext::text_of_page(session.document(), page)?;
+            let mut found: Vec<Json> = Vec::new();
+            for piece in &text.pieces {
+                let Some(bounds) = piece.bounds else { continue };
+                let origin = match (piece.x, piece.y) {
+                    (Some(x), Some(y)) => (x, y),
+                    _ => continue,
+                };
+                if !under(region, bounds, origin) {
+                    continue;
+                }
+                found.push(json!({
+                    "text": piece.text.clone(),
+                    "operator": piece.operator.clone(),
+                    "font": piece.font.clone().map(|font| json!(font)).unwrap_or(Json::Null),
+                    "x": piece.x.map(|x| json!(x)).unwrap_or(Json::Null),
+                    "y": piece.y.map(|y| json!(y)).unwrap_or(Json::Null),
+                    "box": json!(bounds),
+                }));
             }
-            found.push(json!({
-                "text": piece.text.clone(),
-                "operator": piece.operator.clone(),
-                "font": piece.font.clone().map(|font| json!(font)).unwrap_or(Json::Null),
-                "x": piece.x.map(|x| json!(x)).unwrap_or(Json::Null),
-                "y": piece.y.map(|y| json!(y)).unwrap_or(Json::Null),
-                "box": json!(bounds),
-            }));
+            let count = found.len();
+            Ok(Outcome::new(format!("{count} piece(s) of text are under the region")).with_data(json!({
+                "page": page,
+                "region": json!(region),
+                "pieces": found,
+                "count": count,
+            })))
+
         }
-        let count = found.len();
-        Ok(Outcome::new(format!("{count} piece(s) of text are under the region")).with_data(json!({
-            "page": page,
-            "region": json!(region),
-            "pieces": found,
-            "count": count,
-        })))
     }
 }

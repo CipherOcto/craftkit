@@ -26,137 +26,144 @@
 //!   attributes where they are, and the pages that are left inherit
 //!   them as they did.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session};
 
 use crate::{entries_of, pairs_of, the_number_of};
 
-/// Take a **page** away.
-///
-/// The **last page** cannot go: a file with no pages is not a file.
-///
-/// The **destinations** that went to the page go with it: a bookmark or
-/// a link that went to a page that is not there has no destination,
-/// and half a destination is not a destination.
-///
-/// What the page **held** stays: an annotation of the page is an object
-/// of its own, and it stays in the document — it is simply an object
-/// that nothing refers to any more.
-#[derive(Command)]
-#[command(id = "pdf.page.remove", area = "pdf", layer = "pdf", icon = "trash", mutates, undoable)]
-pub struct RemovePage {
-    /// The page that is taken away.
-    pub page: NodeRef,
-}
+commands! {
+    /// Take a **page** away.
+    ///
+    /// The **last page** cannot go: a file with no pages is not a file.
+    ///
+    /// The **destinations** that went to the page go with it: a bookmark or
+    /// a link that went to a page that is not there has no destination,
+    /// and half a destination is not a destination.
+    ///
+    /// What the page **held** stays: an annotation of the page is an object
+    /// of its own, and it stays in the document — it is simply an object
+    /// that nothing refers to any more.
+    pdf.page.remove {
+        area: "pdf",
+        layer: "pdf",
+        icon: "trash",
+        mutates,
+        undoable,
+        params: {
+            /// The page that is taken away.
 
-impl RemovePage {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.page.remove".to_string();
-        let page = self.page.0;
-        let Some(node) = session.document().node(page) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{page}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{page}` is a `{}` and not an object", node.kind),
-            });
-        }
-        let Some(number) = the_number_of(node) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{page}` has no object number"),
-            });
-        };
-        if !is_a_page(node) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{page}` is not a page"),
-            });
-        }
-        // The **pages** of the file: a file with no pages is not a
-        // file, so the last page cannot go.
-        let pages: Vec<u64> =
-            session.document().walk().filter(|node| is_a_page(node)).map(|node| node.id).collect();
-        if pages.len() <= 1 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "a file with no pages is not a file".to_string(),
-            });
-        }
-        // The **parent** of the page: the tree of pages loses the page,
-        // and the count of the children is derived from the children
-        // that are left.
-        let parent = parent_of(session, page);
-        // The **references** to the page, in the dictionaries of the
-        // objects that hold them. They are found in the dictionaries
-        // and not in the edges, because the file is written from the
-        // dictionaries.
-        let holders: Vec<Holder> = session
-            .document()
-            .walk()
-            .filter(|node| node.id != page && (node.kind == "pdf.object" || node.kind == "pdf.stream"))
-            .filter_map(|node| {
-                let entries = entries_of(&node.data);
-                let (kept, gone) = without_the_page(session, &entries, number);
-                if kept == entries && gone.is_empty() {
-                    return None;
-                }
-                Some(Holder { id: node.id, kept, gone })
-            })
-            .collect();
-        // The **widgets** of the page leave the **form**: a field that
-        // points at a page that is not there would keep it, with its
-        // content, in the file that is written.
-        let widgets = drop_widgets(session, page)?;
-        if !session.document_mut()?.remove_node(page) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{page}`"),
-            });
-        }
-        let mut unlinked: Vec<serde_json::Value> = Vec::new();
-        for widget in &widgets {
-            unlinked.push(serde_json::json!({ "widget": widget, "form": true }));
-        }
-        for holder in holders {
-            for key in &holder.gone {
-                unlinked.push(serde_json::json!({ "object": holder.id, "key": key }));
-            }
-            if let Some(node) = session.document_mut()?.node_mut(holder.id) {
-                node.data = serde_json::json!({
-                    "object": node.data.get("object").cloned().unwrap_or(serde_json::Value::Null),
-                    "entries": pairs_of(&holder.kept),
+            page: NodeRef,
+        },
+        run: {
+
+            let id = "pdf.page.remove".to_string();
+            let page = self.page.0;
+            let Some(node) = session.document().node(page) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{page}`"),
+                });
+            };
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{page}` is a `{}` and not an object", node.kind),
                 });
             }
-        }
-        // The **count** of the children of the tree of pages: it is
-        // derived, and it is derived from the children that are left.
-        if let Some(parent) = parent {
-            let children = session
-                .document()
-                .relations
-                .iter()
-                .filter(|relation| {
-                    relation.kind == "ref"
-                        && relation.from == parent
-                        && relation.payload.get("key").and_then(|key| key.as_str()) == Some("Kids")
-                })
-                .count();
-            if let Some(node) = session.document_mut()?.node_mut(parent) {
-                node.data = crate::with_entry(&node.data, "Count", serde_json::json!(children));
+            let Some(number) = the_number_of(node) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{page}` has no object number"),
+                });
+            };
+            if !is_a_page(node) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{page}` is not a page"),
+                });
             }
+            // The **pages** of the file: a file with no pages is not a
+            // file, so the last page cannot go.
+            let pages: Vec<u64> =
+                session.document().walk().filter(|node| is_a_page(node)).map(|node| node.id).collect();
+            if pages.len() <= 1 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "a file with no pages is not a file".to_string(),
+                });
+            }
+            // The **parent** of the page: the tree of pages loses the page,
+            // and the count of the children is derived from the children
+            // that are left.
+            let parent = parent_of(session, page);
+            // The **references** to the page, in the dictionaries of the
+            // objects that hold them. They are found in the dictionaries
+            // and not in the edges, because the file is written from the
+            // dictionaries.
+            let holders: Vec<Holder> = session
+                .document()
+                .walk()
+                .filter(|node| node.id != page && (node.kind == "pdf.object" || node.kind == "pdf.stream"))
+                .filter_map(|node| {
+                    let entries = entries_of(&node.data);
+                    let (kept, gone) = without_the_page(session, &entries, number);
+                    if kept == entries && gone.is_empty() {
+                        return None;
+                    }
+                    Some(Holder { id: node.id, kept, gone })
+                })
+                .collect();
+            // The **widgets** of the page leave the **form**: a field that
+            // points at a page that is not there would keep it, with its
+            // content, in the file that is written.
+            let widgets = drop_widgets(session, page)?;
+            if !session.document_mut()?.remove_node(page) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{page}`"),
+                });
+            }
+            let mut unlinked: Vec<serde_json::Value> = Vec::new();
+            for widget in &widgets {
+                unlinked.push(serde_json::json!({ "widget": widget, "form": true }));
+            }
+            for holder in holders {
+                for key in &holder.gone {
+                    unlinked.push(serde_json::json!({ "object": holder.id, "key": key }));
+                }
+                if let Some(node) = session.document_mut()?.node_mut(holder.id) {
+                    node.data = serde_json::json!({
+                        "object": node.data.get("object").cloned().unwrap_or(serde_json::Value::Null),
+                        "entries": pairs_of(&holder.kept),
+                    });
+                }
+            }
+            // The **count** of the children of the tree of pages: it is
+            // derived, and it is derived from the children that are left.
+            if let Some(parent) = parent {
+                let children = session
+                    .document()
+                    .relations
+                    .iter()
+                    .filter(|relation| {
+                        relation.kind == "ref"
+                            && relation.from == parent
+                            && relation.payload.get("key").and_then(|key| key.as_str()) == Some("Kids")
+                    })
+                    .count();
+                if let Some(node) = session.document_mut()?.node_mut(parent) {
+                    node.data = crate::with_entry(&node.data, "Count", serde_json::json!(children));
+                }
+            }
+            // The **number** of the page that is gone is **free**: it is
+            // not used again, and the file says so.
+            crate::free::free_number(session.document_mut()?, number, 0);
+            Ok(Outcome::changed(format!("the page `{page}` is gone"))
+                .with_data(serde_json::json!({ "id": page, "object": number, "unlinked": unlinked })))
+
         }
-        // The **number** of the page that is gone is **free**: it is
-        // not used again, and the file says so.
-        crate::free::free_number(session.document_mut()?, number, 0);
-        Ok(Outcome::changed(format!("the page `{page}` is gone"))
-            .with_data(serde_json::json!({ "id": page, "object": number, "unlinked": unlinked })))
     }
 }
 

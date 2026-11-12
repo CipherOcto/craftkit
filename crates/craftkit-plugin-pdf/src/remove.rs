@@ -35,112 +35,119 @@
 //!   taken away is an object of its own, and it stays in the document —
 //!   it is simply an object that nothing refers to any more.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
-use craftkit_sdk::{EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{EngineError, NodeRef, Outcome};
 
 use crate::{entries_of, pairs_of, the_number_of};
 
-/// Take an **indirect object** away.
-///
-/// The object is gone and the references that named it are gone with
-/// it: the edges of the kind `ref` die with the node, and the values
-/// in the dictionaries that named it are taken away — a key that held
-/// one reference loses the key, and a key that held a list loses the
-/// one element that named it.
-///
-/// The **root** of the file is refused: a file without a root is not a
-/// file.
-#[derive(Command)]
-#[command(id = "pdf.object.remove", area = "pdf", layer = "pdf", icon = "trash", mutates, undoable)]
-pub struct RemoveObject {
-    /// The object.
-    pub object: NodeRef,
-}
+commands! {
+    /// Take an **indirect object** away.
+    ///
+    /// The object is gone and the references that named it are gone with
+    /// it: the edges of the kind `ref` die with the node, and the values
+    /// in the dictionaries that named it are taken away — a key that held
+    /// one reference loses the key, and a key that held a list loses the
+    /// one element that named it.
+    ///
+    /// The **root** of the file is refused: a file without a root is not a
+    /// file.
+    pdf.object.remove {
+        area: "pdf",
+        layer: "pdf",
+        icon: "trash",
+        mutates,
+        undoable,
+        params: {
+            /// The object.
 
-impl RemoveObject {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.object.remove".to_string();
-        let object = self.object.0;
-        let Some(node) = session.document().node(object) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{object}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{object}` is a `{}` and not an object", node.kind),
-            });
-        }
-        let Some(number) = the_number_of(node) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the object `{object}` has no object number"),
-            });
-        };
-        if entries_of(&node.data)
-            .iter()
-            .any(|(key, value)| key == "Type" && value.as_str() == Some("Catalog"))
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the object `{object}` is the root of the file, and a root cannot be taken away"
-                ),
-            });
-        }
-        // The **references** to it, in the dictionaries of the objects
-        // that hold them. They are found in the dictionaries and not in
-        // the edges, because the file is written from the dictionaries.
-        let holders: Vec<Holder> = session
-            .document()
-            .walk()
-            .filter(|node| node.id != object && (node.kind == "pdf.object" || node.kind == "pdf.stream"))
-            .filter_map(|node| {
-                let entries = entries_of(&node.data);
-                let kept = without(&entries, number);
-                if kept == entries {
-                    return None;
+            object: NodeRef,
+        },
+        run: {
+
+            let id = "pdf.object.remove".to_string();
+            let object = self.object.0;
+            let Some(node) = session.document().node(object) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{object}`"),
+                });
+            };
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{object}` is a `{}` and not an object", node.kind),
+                });
+            }
+            let Some(number) = the_number_of(node) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the object `{object}` has no object number"),
+                });
+            };
+            if entries_of(&node.data)
+                .iter()
+                .any(|(key, value)| key == "Type" && value.as_str() == Some("Catalog"))
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the object `{object}` is the root of the file, and a root cannot be taken away"
+                    ),
+                });
+            }
+            // The **references** to it, in the dictionaries of the objects
+            // that hold them. They are found in the dictionaries and not in
+            // the edges, because the file is written from the dictionaries.
+            let holders: Vec<Holder> = session
+                .document()
+                .walk()
+                .filter(|node| node.id != object && (node.kind == "pdf.object" || node.kind == "pdf.stream"))
+                .filter_map(|node| {
+                    let entries = entries_of(&node.data);
+                    let kept = without(&entries, number);
+                    if kept == entries {
+                        return None;
+                    }
+                    let gone: Vec<String> = entries
+                        .iter()
+                        .map(|(key, _)| key.clone())
+                        .filter(|key| !kept.iter().any(|(name, _)| name == key))
+                        .collect();
+                    Some(Holder { id: node.id, kept, gone })
+                })
+                .collect();
+            let mut unlinked: Vec<serde_json::Value> = Vec::new();
+            for holder in holders {
+                for key in holder.gone {
+                    unlinked.push(serde_json::json!({ "object": holder.id, "key": key }));
                 }
-                let gone: Vec<String> = entries
-                    .iter()
-                    .map(|(key, _)| key.clone())
-                    .filter(|key| !kept.iter().any(|(name, _)| name == key))
-                    .collect();
-                Some(Holder { id: node.id, kept, gone })
-            })
-            .collect();
-        let mut unlinked: Vec<serde_json::Value> = Vec::new();
-        for holder in holders {
-            for key in holder.gone {
-                unlinked.push(serde_json::json!({ "object": holder.id, "key": key }));
+                let data = serde_json::json!({
+                    "object": session
+                        .document()
+                        .node(holder.id)
+                        .and_then(|node| node.data.get("object").cloned())
+                        .unwrap_or(serde_json::Value::Null),
+                    "entries": pairs_of(&holder.kept),
+                });
+                if let Some(node) = session.document_mut()?.node_mut(holder.id) {
+                    node.data = data;
+                }
             }
-            let data = serde_json::json!({
-                "object": session
-                    .document()
-                    .node(holder.id)
-                    .and_then(|node| node.data.get("object").cloned())
-                    .unwrap_or(serde_json::Value::Null),
-                "entries": pairs_of(&holder.kept),
-            });
-            if let Some(node) = session.document_mut()?.node_mut(holder.id) {
-                node.data = data;
+            if !session.document_mut()?.remove_node(object) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{object}`"),
+                });
             }
+            // The **number** of the object that is gone is **free**: it is
+            // not used again, and the file says so.
+            crate::free::free_number(session.document_mut()?, number, 0);
+            Ok(Outcome::changed(format!("the object `{object}` is gone"))
+                .with_data(serde_json::json!({ "id": object, "object": number, "unlinked": unlinked })))
+
         }
-        if !session.document_mut()?.remove_node(object) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{object}`"),
-            });
-        }
-        // The **number** of the object that is gone is **free**: it is
-        // not used again, and the file says so.
-        crate::free::free_number(session.document_mut()?, number, 0);
-        Ok(Outcome::changed(format!("the object `{object}` is gone"))
-            .with_data(serde_json::json!({ "id": object, "object": number, "unlinked": unlinked })))
     }
 }
 

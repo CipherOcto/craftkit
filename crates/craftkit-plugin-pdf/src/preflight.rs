@@ -17,10 +17,10 @@
 //! have. The rule about encryption is not here — the tree checks it
 //! against the file, and this tree has a document and not a file.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, Outcome, Session, Text};
+use craftkit_sdk::{Document, EngineError, Node, Outcome, Text};
 
 /// The actions a PDF/A file may **not** have: the tree's own list.
 const FORBIDDEN_ACTIONS: [&str; 11] = [
@@ -430,54 +430,59 @@ pub fn issues(document: &Document, level: Option<Level>) -> Vec<Issue> {
     issues
 }
 
-/// **Check** a PDF file: what it declares and what it breaks.
-#[derive(Command)]
-#[command(id = "pdf.preflight", area = "pdf", layer = "pdf", icon = "check")]
-pub struct Preflight {
-    /// The level to check against: `2b` or `3b`.
-    ///
-    /// Without it, the rules that need a level are not checked.
-    pub level: Option<Text>,
-}
+commands! {
+    /// **Check** a PDF file: what it declares and what it breaks.
+    pdf.preflight {
+        area: "pdf",
+        layer: "pdf",
+        icon: "check",
+        params: {
+            /// The level to check against: `2b` or `3b`.
+            ///
+            /// Without it, the rules that need a level are not checked.
 
-impl Preflight {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.preflight".to_string();
-        let level = match &self.level {
-            None => None,
-            Some(level) => Some(Level::from_id(&level.0).ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{}` is not a level: a level is `2b` or `3b`", level.0.trim()),
-            })?),
-        };
-        let document = session.document();
-        let declared = declared(document);
-        let issues = issues(document, level);
-        let (rgb, cmyk) = device_colour(document);
-        let count = issues.len();
-        Ok(Outcome::new(format!("the file breaks {count} rule(s)")).with_data(json!({
-            "pdfa": match &declared.pdfa {
-                Some((part, conformance)) => json!({ "part": part, "conformance": conformance }),
-                None => Json::Null,
-            },
-            "pdfua": match declared.pdfua {
-                Some(part) => json!(part),
-                None => Json::Null,
-            },
-            "output_intents": declared.output_intents.clone(),
-            "fonts": crate::fonts::fonts(document).iter().map(crate::fonts::Font::to_json).collect::<Vec<_>>(),
-            "colour": {
-                "rgb": rgb,
-                "cmyk": cmyk,
-            },
-            "issues": issues
-                .iter()
-                .map(|issue| json!({
-                    "clause": issue.clause,
-                    "message": issue.message.clone(),
-                    "fixable": issue.fixable,
-                }))
-                .collect::<Vec<_>>(),
-        })))
+            level: Option<Text>,
+        },
+        run: {
+
+            let id = "pdf.preflight".to_string();
+            let level = match &self.level {
+                None => None,
+                Some(level) => Some(Level::from_id(&level.0).ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{}` is not a level: a level is `2b` or `3b`", level.0.trim()),
+                })?),
+            };
+            let document = session.document();
+            let declared = declared(document);
+            let issues = issues(document, level);
+            let (rgb, cmyk) = device_colour(document);
+            let count = issues.len();
+            Ok(Outcome::new(format!("the file breaks {count} rule(s)")).with_data(json!({
+                "pdfa": match &declared.pdfa {
+                    Some((part, conformance)) => json!({ "part": part, "conformance": conformance }),
+                    None => Json::Null,
+                },
+                "pdfua": match declared.pdfua {
+                    Some(part) => json!(part),
+                    None => Json::Null,
+                },
+                "output_intents": declared.output_intents.clone(),
+                "fonts": crate::fonts::fonts(document).iter().map(crate::fonts::Font::to_json).collect::<Vec<_>>(),
+                "colour": {
+                    "rgb": rgb,
+                    "cmyk": cmyk,
+                },
+                "issues": issues
+                    .iter()
+                    .map(|issue| json!({
+                        "clause": issue.clause,
+                        "message": issue.message.clone(),
+                        "fixable": issue.fixable,
+                    }))
+                    .collect::<Vec<_>>(),
+            })))
+
+        }
     }
 }

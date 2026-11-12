@@ -122,10 +122,10 @@
 //! - the **colour** of the mark is the `/C` of the annotation, and the
 //!   tree's own red when the annotation says none.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Text};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.annot.appearance.write";
@@ -1373,248 +1373,256 @@ fn the_drawing(entries: &[(String, Json)], subtype: &str) -> Option<(Vec<u8>, [f
     }
 }
 
-/// **Write** the **appearance** of an annotation.
-///
-/// The appearance is a **form XObject** — a little drawing — and the
-/// annotation's `/AP` names it under the key `N`. The bytes of the
-/// drawing are written to a file of their own, beside the document.
-///
-/// The rules:
-///
-/// - the annotation must be one this command draws — a **shape**
-///   (`Square` or `Circle`), a **markup** (`Highlight`, `Underline`,
-///   `StrikeOut` or `Squiggly`), a **line** (`Line`), a **shape of
-///   corners** (`Polygon` or `PolyLine`), the **ink** (`Ink`) or the
-///   **caret** (`Caret`), the **text box** (`FreeText`) or the **mark
-///   of a redaction** (`Redact`) — and any other kind is refused;
-/// - the **rectangle** of the shape is the one the annotation holds,
-///   and the corners may come in any order;
-/// - a **colour** is one number, three numbers or four numbers, and
-///   anything else is refused;
-/// - the **opacity** of the shape is between zero and one;
-/// - a markup needs its **quads** and its **colour**, and one without
-///   either is refused;
-/// - a line needs its **two points** and its **colour**, and one
-///   without either is refused, and the **ends** of it are the three
-///   the tree knows;
-/// - a polygon needs its **corners**, and a cloudy border is a polygon
-///   only;
-/// - the ink needs its **strokes** and its **colour**, and one without
-///   either is refused;
-/// - the caret needs its **rectangle**, and it has a colour whether or
-///   not the annotation says one;
-/// - the mark of a redaction needs its **quads**, and it has a colour
-///   whether or not the annotation says one;
-/// - a **highlight multiplies** over the text, the tree's own rule,
-///   and the file says so with the blend mode.
-#[derive(Command)]
-#[command(id = "pdf.annot.appearance.write", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct WriteAnnotation {
-    /// The annotation.
-    pub annotation: NodeRef,
-    /// Where the bytes of the drawing are written.
-    pub to: Text,
-}
+commands! {
+    /// **Write** the **appearance** of an annotation.
+    ///
+    /// The appearance is a **form XObject** — a little drawing — and the
+    /// annotation's `/AP` names it under the key `N`. The bytes of the
+    /// drawing are written to a file of their own, beside the document.
+    ///
+    /// The rules:
+    ///
+    /// - the annotation must be one this command draws — a **shape**
+    ///   (`Square` or `Circle`), a **markup** (`Highlight`, `Underline`,
+    ///   `StrikeOut` or `Squiggly`), a **line** (`Line`), a **shape of
+    ///   corners** (`Polygon` or `PolyLine`), the **ink** (`Ink`) or the
+    ///   **caret** (`Caret`), the **text box** (`FreeText`) or the **mark
+    ///   of a redaction** (`Redact`) — and any other kind is refused;
+    /// - the **rectangle** of the shape is the one the annotation holds,
+    ///   and the corners may come in any order;
+    /// - a **colour** is one number, three numbers or four numbers, and
+    ///   anything else is refused;
+    /// - the **opacity** of the shape is between zero and one;
+    /// - a markup needs its **quads** and its **colour**, and one without
+    ///   either is refused;
+    /// - a line needs its **two points** and its **colour**, and one
+    ///   without either is refused, and the **ends** of it are the three
+    ///   the tree knows;
+    /// - a polygon needs its **corners**, and a cloudy border is a polygon
+    ///   only;
+    /// - the ink needs its **strokes** and its **colour**, and one without
+    ///   either is refused;
+    /// - the caret needs its **rectangle**, and it has a colour whether or
+    ///   not the annotation says one;
+    /// - the mark of a redaction needs its **quads**, and it has a colour
+    ///   whether or not the annotation says one;
+    /// - a **highlight multiplies** over the text, the tree's own rule,
+    ///   and the file says so with the blend mode.
+    pdf.annot.appearance.write {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The annotation.
 
-impl WriteAnnotation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let annotation = self.annotation.0;
-        let Some(node) = session.document().node(annotation).cloned() else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no node `{annotation}`"),
-            });
-        };
-        let entries = entries_of(&node);
-        let subtype =
-            entry(&entries, "Subtype").and_then(|subtype| subtype.as_str()).unwrap_or_default().to_string();
-        let drawn = subtype == "Square"
-            || subtype == "Circle"
-            || subtype == "Line"
-            || subtype == "Polygon"
-            || subtype == "PolyLine"
-            || subtype == "Ink"
-            || subtype == "Caret"
-            || subtype == "FreeText"
-            || subtype == "Redact"
-            || subtype == "Stamp"
-            || subtype == "FileAttachment"
-            || MARKS.contains(&subtype.as_str());
-        if !drawn {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the appearance of an annotation of the kind `{subtype}` is not drawn here"),
-            });
-        }
-        let path = self.to.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the drawing goes somewhere".to_string(),
-            });
-        }
-        // The **opacity** of the shape, and the tree's own rule that a
-        // highlight **multiplies** over the text.
-        let opacity = match entry(&entries, "CA").and_then(|value| value.as_f64()) {
-            Some(value) if !value.is_finite() || !(0.0..=1.0).contains(&value) => {
+            annotation: NodeRef,
+            /// Where the bytes of the drawing are written.
+
+            to: Text,
+        },
+        run: {
+
+            let annotation = self.annotation.0;
+            let Some(node) = session.document().node(annotation).cloned() else {
                 return Err(EngineError::Failed {
                     id: COMMAND.to_string(),
-                    message: "the opacity of an annotation is between zero and one".to_string(),
+                    message: format!("there is no node `{annotation}`"),
+                });
+            };
+            let entries = entries_of(&node);
+            let subtype =
+                entry(&entries, "Subtype").and_then(|subtype| subtype.as_str()).unwrap_or_default().to_string();
+            let drawn = subtype == "Square"
+                || subtype == "Circle"
+                || subtype == "Line"
+                || subtype == "Polygon"
+                || subtype == "PolyLine"
+                || subtype == "Ink"
+                || subtype == "Caret"
+                || subtype == "FreeText"
+                || subtype == "Redact"
+                || subtype == "Stamp"
+                || subtype == "FileAttachment"
+                || MARKS.contains(&subtype.as_str());
+            if !drawn {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the appearance of an annotation of the kind `{subtype}` is not drawn here"),
                 });
             }
-            Some(value) => value,
-            None => 1.0,
-        };
-        let multiply = subtype == "Highlight";
-        let Some((bytes, rect)) = the_drawing(&entries, &subtype) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the annotation `{annotation}` cannot be drawn"),
-            });
-        };
-        // The **graphics state**: the opacity, and the blend mode of a
-        // highlight.
-        let state = opacity < 1.0 || multiply;
-        let mut bytes = bytes;
-        if state {
-            let mut prefix = b"/GS0 gs\n".to_vec();
-            prefix.append(&mut bytes);
-            bytes = prefix;
-        }
-        std::fs::write(&path, &bytes).map_err(|error| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("the drawing cannot be written to `{path}`: {error}"),
-        })?;
-        // The **appearance**: a form XObject, and the resources it
-        // needs — the graphics state of the opacity.
-        let mut resources: Vec<(String, Json)> = Vec::new();
-        if state {
-            let mut entries = vec![
-                ("Type".to_string(), json!("ExtGState")),
-                ("CA".to_string(), json!(opacity)),
-                ("ca".to_string(), json!(opacity)),
-            ];
-            if multiply {
-                entries.insert(1, ("BM".to_string(), json!("Multiply")));
+            let path = self.to.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the drawing goes somewhere".to_string(),
+                });
             }
-            resources.push(("ExtGState".to_string(), json!({ "entries": crate::pairs_of(&entries) })));
-        }
-        if subtype == "FreeText" {
-            // The **font** of the text: the tree's own Helvetica, under
-            // the name the text of the box uses.
-            resources.push((
-                "Font".to_string(),
-                json!({
-                    "entries": [[
-                        "Helv",
-                        { "entries": [
+            // The **opacity** of the shape, and the tree's own rule that a
+            // highlight **multiplies** over the text.
+            let opacity = match entry(&entries, "CA").and_then(|value| value.as_f64()) {
+                Some(value) if !value.is_finite() || !(0.0..=1.0).contains(&value) => {
+                    return Err(EngineError::Failed {
+                        id: COMMAND.to_string(),
+                        message: "the opacity of an annotation is between zero and one".to_string(),
+                    });
+                }
+                Some(value) => value,
+                None => 1.0,
+            };
+            let multiply = subtype == "Highlight";
+            let Some((bytes, rect)) = the_drawing(&entries, &subtype) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the annotation `{annotation}` cannot be drawn"),
+                });
+            };
+            // The **graphics state**: the opacity, and the blend mode of a
+            // highlight.
+            let state = opacity < 1.0 || multiply;
+            let mut bytes = bytes;
+            if state {
+                let mut prefix = b"/GS0 gs\n".to_vec();
+                prefix.append(&mut bytes);
+                bytes = prefix;
+            }
+            std::fs::write(&path, &bytes).map_err(|error| EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("the drawing cannot be written to `{path}`: {error}"),
+            })?;
+            // The **appearance**: a form XObject, and the resources it
+            // needs — the graphics state of the opacity.
+            let mut resources: Vec<(String, Json)> = Vec::new();
+            if state {
+                let mut entries = vec![
+                    ("Type".to_string(), json!("ExtGState")),
+                    ("CA".to_string(), json!(opacity)),
+                    ("ca".to_string(), json!(opacity)),
+                ];
+                if multiply {
+                    entries.insert(1, ("BM".to_string(), json!("Multiply")));
+                }
+                resources.push(("ExtGState".to_string(), json!({ "entries": crate::pairs_of(&entries) })));
+            }
+            if subtype == "FreeText" {
+                // The **font** of the text: the tree's own Helvetica, under
+                // the name the text of the box uses.
+                resources.push((
+                    "Font".to_string(),
+                    json!({
+                        "entries": [[
+                            "Helv",
+                            { "entries": [
+                                ["Type", "Font"],
+                                ["Subtype", "Type1"],
+                                ["BaseFont", "Helvetica"],
+                                ["Encoding", "WinAnsiEncoding"],
+                            ] },
+                        ]],
+                    }),
+                ));
+            }
+            if subtype == "Stamp" {
+                // The **picture** of a custom stamp: the tree's own XObject,
+                // under the name the drawing uses.
+                if let Some(picture) = entry(&entries, "PCPicture") {
+                    let reference = picture
+                        .get("ref")
+                        .and_then(|value| value.as_array())
+                        .and_then(|list| list.first())
+                        .and_then(|number| number.as_u64());
+                    if let Some(number) = reference {
+                        resources.push((
+                            "XObject".to_string(),
+                            json!({ "entries": [["Pic", { "ref": [number, 0] }]] }),
+                        ));
+                    }
+                }
+                // The **fonts** of the stamp: the tree's own Helvetica and
+                // its bold, under the names the stamp uses.
+                let font = |base: &str| {
+                    json!({
+                        "entries": [
                             ["Type", "Font"],
                             ["Subtype", "Type1"],
-                            ["BaseFont", "Helvetica"],
+                            ["BaseFont", base],
                             ["Encoding", "WinAnsiEncoding"],
-                        ] },
-                    ]],
-                }),
-            ));
-        }
-        if subtype == "Stamp" {
-            // The **picture** of a custom stamp: the tree's own XObject,
-            // under the name the drawing uses.
-            if let Some(picture) = entry(&entries, "PCPicture") {
-                let reference = picture
-                    .get("ref")
-                    .and_then(|value| value.as_array())
-                    .and_then(|list| list.first())
-                    .and_then(|number| number.as_u64());
-                if let Some(number) = reference {
-                    resources.push((
-                        "XObject".to_string(),
-                        json!({ "entries": [["Pic", { "ref": [number, 0] }]] }),
-                    ));
-                }
+                        ],
+                    })
+                };
+                resources.push((
+                    "Font".to_string(),
+                    json!({
+                        "entries": [
+                            ["HelvB", font("Helvetica-Bold")],
+                            ["Helv", font("Helvetica")],
+                        ],
+                    }),
+                ));
             }
-            // The **fonts** of the stamp: the tree's own Helvetica and
-            // its bold, under the names the stamp uses.
-            let font = |base: &str| {
-                json!({
-                    "entries": [
-                        ["Type", "Font"],
-                        ["Subtype", "Type1"],
-                        ["BaseFont", base],
-                        ["Encoding", "WinAnsiEncoding"],
-                    ],
-                })
-            };
-            resources.push((
-                "Font".to_string(),
-                json!({
-                    "entries": [
-                        ["HelvB", font("Helvetica-Bold")],
-                        ["Helv", font("Helvetica")],
-                    ],
-                }),
-            ));
-        }
-        let resources = json!({ "entries": crate::pairs_of(&resources) });
-        let number = crate::free::the_next_number(session.document(), 0);
-        let entries = vec![
-            ("Type".to_string(), json!("XObject")),
-            ("Subtype".to_string(), json!("Form")),
-            ("FormType".to_string(), json!(1)),
-            ("BBox".to_string(), json!(rect)),
-            ("Resources".to_string(), resources),
-        ];
-        let data = json!({ "object": number, "entries": crate::pairs_of(&entries) });
-        let stream =
-            session.document_mut()?.add_node_with(format!("object {number}"), "pdf.stream", None, data);
-        if let Some(node) = session.document_mut()?.node_mut(stream) {
-            node.stream = Some(path.clone());
-        }
-        // The **annotation** names the drawing.
-        let mut entries = crate::entries_of(
-            &session
-                .document()
-                .node(annotation)
-                .ok_or_else(|| EngineError::Failed {
-                    id: COMMAND.to_string(),
-                    message: format!("there is no node `{annotation}`"),
-                })?
-                .data,
-        );
-        let normal = json!({ "entries": [ ["N", { "ref": [number, 0] } ] ] });
-        match entries.iter_mut().find(|(key, _)| key == "AP") {
-            Some(entry) => entry.1 = normal,
-            None => entries.push(("AP".to_string(), normal)),
-        }
-        let data = json!({
-            "object": session.document().node(annotation).and_then(|node| node.data.get("object").cloned()).unwrap_or(Json::Null),
-            "entries": crate::pairs_of(&entries),
-        });
-        if let Some(node) = session.document_mut()?.node_mut(annotation) {
-            node.data = data;
-        }
-        // The **edge**: the annotation refers to the drawing.
-        let relation = craftkit_sdk::Relation::with_payload(
-            annotation,
-            stream,
-            "ref",
-            json!({ "key": "AP", "generation": 0 }),
-        );
-        if !session.document_mut()?.add_relation(relation) {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the annotation `{annotation}` already refers to its drawing"),
+            let resources = json!({ "entries": crate::pairs_of(&resources) });
+            let number = crate::free::the_next_number(session.document(), 0);
+            let entries = vec![
+                ("Type".to_string(), json!("XObject")),
+                ("Subtype".to_string(), json!("Form")),
+                ("FormType".to_string(), json!(1)),
+                ("BBox".to_string(), json!(rect)),
+                ("Resources".to_string(), resources),
+            ];
+            let data = json!({ "object": number, "entries": crate::pairs_of(&entries) });
+            let stream =
+                session.document_mut()?.add_node_with(format!("object {number}"), "pdf.stream", None, data);
+            if let Some(node) = session.document_mut()?.node_mut(stream) {
+                node.stream = Some(path.clone());
+            }
+            // The **annotation** names the drawing.
+            let mut entries = crate::entries_of(
+                &session
+                    .document()
+                    .node(annotation)
+                    .ok_or_else(|| EngineError::Failed {
+                        id: COMMAND.to_string(),
+                        message: format!("there is no node `{annotation}`"),
+                    })?
+                    .data,
+            );
+            let normal = json!({ "entries": [ ["N", { "ref": [number, 0] } ] ] });
+            match entries.iter_mut().find(|(key, _)| key == "AP") {
+                Some(entry) => entry.1 = normal,
+                None => entries.push(("AP".to_string(), normal)),
+            }
+            let data = json!({
+                "object": session.document().node(annotation).and_then(|node| node.data.get("object").cloned()).unwrap_or(Json::Null),
+                "entries": crate::pairs_of(&entries),
             });
+            if let Some(node) = session.document_mut()?.node_mut(annotation) {
+                node.data = data;
+            }
+            // The **edge**: the annotation refers to the drawing.
+            let relation = craftkit_sdk::Relation::with_payload(
+                annotation,
+                stream,
+                "ref",
+                json!({ "key": "AP", "generation": 0 }),
+            );
+            if !session.document_mut()?.add_relation(relation) {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the annotation `{annotation}` already refers to its drawing"),
+                });
+            }
+            Ok(Outcome::changed(format!("the annotation `{annotation}` has an appearance")).with_data(json!({
+                "annotation": annotation,
+                "appearance": stream,
+                "object": number,
+                "path": path,
+                "bytes": bytes.len(),
+                "rect": rect,
+                "opacity": opacity,
+                "multiply": multiply,
+            })))
+
         }
-        Ok(Outcome::changed(format!("the annotation `{annotation}` has an appearance")).with_data(json!({
-            "annotation": annotation,
-            "appearance": stream,
-            "object": number,
-            "path": path,
-            "bytes": bytes.len(),
-            "rect": rect,
-            "opacity": opacity,
-            "multiply": multiply,
-        })))
     }
 }

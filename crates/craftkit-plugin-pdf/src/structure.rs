@@ -24,10 +24,10 @@
 //!   structure tree is written by a program and a program can make a
 //!   deep one, and this tree reads a document and not a machine.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Outcome, Session};
+use craftkit_sdk::{Document, Outcome};
 
 /// The most **deep** a structure tree is read.
 const MAX_DEPTH: usize = 64;
@@ -151,27 +151,32 @@ pub fn structure_of(document: &Document) -> Option<Element> {
     None
 }
 
-/// **Read** the **structure** of a PDF file.
-///
-/// A query: it does not change the document. A file that is not
-/// tagged has no structure, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.structure.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadStructure {}
+commands! {
+    /// **Read** the **structure** of a PDF file.
+    ///
+    /// A query: it does not change the document. A file that is not
+    /// tagged has no structure, and the answer says so.
+    pdf.structure.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+        },
+        run: {
 
-impl ReadStructure {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let document = session.document();
-        let Some(root) = structure_of(document) else {
-            return Ok(Outcome::new("the file is not tagged").with_data(json!({
-                "tagged": false,
-                "structure": Json::Null,
-            })));
-        };
-        let tree = root.to_json();
-        Ok(Outcome::new("the file is tagged").with_data(json!({
-            "tagged": true,
-            "structure": tree,
-        })))
+            let document = session.document();
+            let Some(root) = structure_of(document) else {
+                return Ok(Outcome::new("the file is not tagged").with_data(json!({
+                    "tagged": false,
+                    "structure": Json::Null,
+                })));
+            };
+            let tree = root.to_json();
+            Ok(Outcome::new("the file is tagged").with_data(json!({
+                "tagged": true,
+                "structure": tree,
+            })))
+
+        }
     }
 }

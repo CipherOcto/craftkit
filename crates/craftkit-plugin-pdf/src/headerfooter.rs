@@ -34,7 +34,7 @@
 //!   caller says the day, because a file that says the day it was
 //!   written is not the same file every time.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, Document, EngineError, NodeRef, Number, Outcome, Session, Text};
@@ -465,102 +465,131 @@ fn settings_of(
     })
 }
 
-/// **Draw** a header on a page: the text at the top of it.
-///
-/// The tree's own: three slots, the tokens of the page number and the
-/// date, and the tree's Helvetica.
-#[derive(Command)]
-#[command(id = "pdf.page.header", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct AddHeader {
-    /// The page the header is on.
-    pub page: NodeRef,
-    /// The text at the left of the header.
-    pub left: Option<Text>,
-    /// The text in the middle of the header.
-    pub centre: Option<Text>,
-    /// The text at the right of the header.
-    pub right: Option<Text>,
-    /// The size of the text: eight points is the tree's.
-    pub size: Option<Number>,
-    /// The colour of the text: black is the tree's.
-    pub colour: Option<Text>,
-    /// The text is **underlined**.
-    pub underline: Option<Bool>,
-    /// The margins: four numbers, the top, the bottom, the left and
-    /// the right.
-    pub margins: Option<Json>,
-    /// The number the first page shows.
-    pub start_number: Option<Number>,
-    /// The date the header is stamped with: the year, the month and the
-    /// day.
-    pub date: Option<Json>,
-}
+commands! {
+    /// **Draw** a header on a page: the text at the top of it.
+    ///
+    /// The tree's own: three slots, the tokens of the page number and the
+    /// date, and the tree's Helvetica.
+    pdf.page.header {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The page the header is on.
 
-impl AddHeader {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let slots = Slots {
-            left: self.left.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
-            centre: self.centre.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
-            right: self.right.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
-        };
-        let settings = settings_of(
-            self.size,
-            self.colour.clone(),
-            self.underline,
-            self.margins.clone(),
-            self.start_number,
-            self.date.clone(),
-        )?;
-        draw(session, self.page, slots, settings, true)
+            page: NodeRef,
+            /// The text at the left of the header.
+
+            left: Option<Text>,
+            /// The text in the middle of the header.
+
+            centre: Option<Text>,
+            /// The text at the right of the header.
+
+            right: Option<Text>,
+            /// The size of the text: eight points is the tree's.
+
+            size: Option<Number>,
+            /// The colour of the text: black is the tree's.
+
+            colour: Option<Text>,
+            /// The text is **underlined**.
+
+            underline: Option<Bool>,
+            /// The margins: four numbers, the top, the bottom, the left and
+            /// the right.
+
+            margins: Option<Json>,
+            /// The number the first page shows.
+
+            start_number: Option<Number>,
+            /// The date the header is stamped with: the year, the month and the
+            /// day.
+
+            date: Option<Json>,
+        },
+        run: {
+
+            let slots = Slots {
+                left: self.left.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
+                centre: self.centre.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
+                right: self.right.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
+            };
+            let settings = settings_of(
+                self.size,
+                self.colour.clone(),
+                self.underline,
+                self.margins.clone(),
+                self.start_number,
+                self.date.clone(),
+            )?;
+            draw(session, self.page, slots, settings, true)
+
+        }
     }
-}
+    /// **Draw** a footer on a page: the text at the bottom of it.
+    ///
+    /// The tree's own: three slots, the tokens of the page number and the
+    /// date, and the tree's Helvetica.
+    pdf.page.footer {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The page the footer is on.
 
-/// **Draw** a footer on a page: the text at the bottom of it.
-///
-/// The tree's own: three slots, the tokens of the page number and the
-/// date, and the tree's Helvetica.
-#[derive(Command)]
-#[command(id = "pdf.page.footer", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct AddFooter {
-    /// The page the footer is on.
-    pub page: NodeRef,
-    /// The text at the left of the footer.
-    pub left: Option<Text>,
-    /// The text in the middle of the footer.
-    pub centre: Option<Text>,
-    /// The text at the right of the footer.
-    pub right: Option<Text>,
-    /// The size of the text: eight points is the tree's.
-    pub size: Option<Number>,
-    /// The colour of the text: black is the tree's.
-    pub colour: Option<Text>,
-    /// The text is **underlined**.
-    pub underline: Option<Bool>,
-    /// The margins: four numbers, the top, the bottom, the left and
-    /// the right.
-    pub margins: Option<Json>,
-    /// The number the first page shows.
-    pub start_number: Option<Number>,
-    /// The date the footer is stamped with: the year, the month and the
-    /// day.
-    pub date: Option<Json>,
-}
+            page: NodeRef,
+            /// The text at the left of the footer.
 
-impl AddFooter {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let slots = Slots {
-            left: self.left.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
-            centre: self.centre.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
-            right: self.right.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
-        };
-        let settings = settings_of(
-            self.size,
-            self.colour.clone(),
-            self.underline,
-            self.margins.clone(),
-            self.start_number,
-            self.date.clone(),
-        )?;
-        draw(session, self.page, slots, settings, false)
+            left: Option<Text>,
+            /// The text in the middle of the footer.
+
+            centre: Option<Text>,
+            /// The text at the right of the footer.
+
+            right: Option<Text>,
+            /// The size of the text: eight points is the tree's.
+
+            size: Option<Number>,
+            /// The colour of the text: black is the tree's.
+
+            colour: Option<Text>,
+            /// The text is **underlined**.
+
+            underline: Option<Bool>,
+            /// The margins: four numbers, the top, the bottom, the left and
+            /// the right.
+
+            margins: Option<Json>,
+            /// The number the first page shows.
+
+            start_number: Option<Number>,
+            /// The date the footer is stamped with: the year, the month and the
+            /// day.
+
+            date: Option<Json>,
+        },
+        run: {
+
+            let slots = Slots {
+                left: self.left.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
+                centre: self.centre.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
+                right: self.right.as_ref().map(|text| text.0.clone()).unwrap_or_default(),
+            };
+            let settings = settings_of(
+                self.size,
+                self.colour.clone(),
+                self.underline,
+                self.margins.clone(),
+                self.start_number,
+                self.date.clone(),
+            )?;
+            draw(session, self.page, slots, settings, false)
+
+        }
     }
 }

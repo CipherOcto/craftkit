@@ -22,10 +22,10 @@
 //!   says something this tree cannot read, and saying nothing is
 //!   better than saying half of it.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Outcome};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.page.transition";
@@ -122,29 +122,34 @@ fn dictionary_of(document: &Document, value: &Json) -> Option<Vec<(String, Json)
     )
 }
 
-/// **Read** the **transition** of a page.
-///
-/// A query: it does not change the document. A page with no transition
-/// has none, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.page.transition", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadTransition {
-    /// The page to read.
-    pub page: craftkit_sdk::NodeRef,
-}
+commands! {
+    /// **Read** the **transition** of a page.
+    ///
+    /// A query: it does not change the document. A page with no transition
+    /// has none, and the answer says so.
+    pdf.page.transition {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The page to read.
 
-impl ReadTransition {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let page = self.page.0;
-        let (transition, duration) = transition_of(session.document(), page)?;
-        Ok(Outcome::new(match &transition {
-            Some(_) => format!("the page `{page}` has a transition"),
-            None => format!("the page `{page}` has no transition"),
-        })
-        .with_data(json!({
-            "page": page,
-            "transition": transition.map(|transition| transition.to_json()).unwrap_or(Json::Null),
-            "duration": duration.map(|duration| json!(duration)).unwrap_or(Json::Null),
-        })))
+            page: craftkit_sdk::NodeRef,
+        },
+        run: {
+
+            let page = self.page.0;
+            let (transition, duration) = transition_of(session.document(), page)?;
+            Ok(Outcome::new(match &transition {
+                Some(_) => format!("the page `{page}` has a transition"),
+                None => format!("the page `{page}` has no transition"),
+            })
+            .with_data(json!({
+                "page": page,
+                "transition": transition.map(|transition| transition.to_json()).unwrap_or(Json::Null),
+                "duration": duration.map(|duration| json!(duration)).unwrap_or(Json::Null),
+            })))
+
+        }
     }
 }

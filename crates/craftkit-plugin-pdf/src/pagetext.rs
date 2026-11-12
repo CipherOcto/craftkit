@@ -47,7 +47,7 @@
 //!   its fonts from the `/Pages` node above it is read as a page with
 //!   no fonts.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Session};
@@ -145,59 +145,94 @@ impl PageText {
     }
 }
 
-/// The **text of a page that is not seen**.
-///
-/// The tree's own rules:
-/// - a text drawn in the **invisible** mode is not seen: the modes
-///   three and seven — the mode that paints nothing and the mode that
-///   only clips — are the modes of the tree;
-/// - a text that is **wholly off the page** is not seen either;
-/// - a text with **no size** is seen where it is: a box with no width
-///   and no height is on the page when it begins there.
-#[derive(Command)]
-#[command(id = "pdf.page.text.hidden", area = "pdf", layer = "pdf", icon = "list")]
-pub struct HiddenText {
-    /// The page whose text is read.
-    pub page: NodeRef,
-}
+commands! {
+    /// The **text of a page that is not seen**.
+    ///
+    /// The tree's own rules:
+    /// - a text drawn in the **invisible** mode is not seen: the modes
+    ///   three and seven — the mode that paints nothing and the mode that
+    ///   only clips — are the modes of the tree;
+    /// - a text that is **wholly off the page** is not seen either;
+    /// - a text with **no size** is seen where it is: a box with no width
+    ///   and no height is on the page when it begins there.
+    pdf.page.text.hidden {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The page whose text is read.
 
-impl HiddenText {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let page = self.page.0;
-        if session.document().node(page).is_none() {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no node `{page}`"),
-            });
+            page: NodeRef,
+        },
+        run: {
+
+            let page = self.page.0;
+            if session.document().node(page).is_none() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no node `{page}`"),
+                });
+            }
+            // The **box** of the page: the media box, and the page's own
+            // if it has none.
+            let boxes = crate::boxes::boxes_of(session, page);
+            if crate::boxes::rect_of(&boxes[0]).is_none() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the page `{page}` has no box"),
+                });
+            }
+            let mut hidden: Vec<Json> = Vec::new();
+            for piece in hidden_pieces(session, page) {
+                let invisible = matches!(piece.mode, Some(3) | Some(7));
+                hidden.push(json!({
+                    "text": piece.text.clone(),
+                    "operator": piece.operator.clone(),
+                    "mode": piece.mode.map(|mode| json!(mode)).unwrap_or(Json::Null),
+                    "x": piece.x.map(|x| json!(x)).unwrap_or(Json::Null),
+                    "y": piece.y.map(|y| json!(y)).unwrap_or(Json::Null),
+                    "box": piece.bounds.map(|bounds| json!(bounds)).unwrap_or(Json::Null),
+                    "why": if invisible { "invisible" } else { "off the page" },
+                }));
+            }
+            let count = hidden.len();
+            Ok(Outcome::new(format!("{count} piece(s) of text are not seen")).with_data(json!({
+                "page": page,
+                "pieces": hidden,
+                "count": count,
+            })))
+
         }
-        // The **box** of the page: the media box, and the page's own
-        // if it has none.
-        let boxes = crate::boxes::boxes_of(session, page);
-        if crate::boxes::rect_of(&boxes[0]).is_none() {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the page `{page}` has no box"),
-            });
+    }
+    /// **Read** the **text** of a page.
+    ///
+    /// A query: it does not change the document. A page with no content has
+    /// no text, and the answer says so.
+    pdf.page.text {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The page whose text is read.
+
+            page: NodeRef,
+        },
+        run: {
+
+            let page = self.page.0;
+            let found = text_of_page(session.document(), page)?;
+            let text = found.joined();
+            let pieces = found.pieces.iter().map(|piece| piece.to_json()).collect::<Vec<Json>>();
+            Ok(Outcome::new(format!("the page `{page}` shows {} pieces of text", found.pieces.len())).with_data(
+                json!({
+                    "page": page,
+                    "streams": found.streams,
+                    "pieces": pieces,
+                    "text": text,
+                }),
+            ))
+
         }
-        let mut hidden: Vec<Json> = Vec::new();
-        for piece in hidden_pieces(session, page) {
-            let invisible = matches!(piece.mode, Some(3) | Some(7));
-            hidden.push(json!({
-                "text": piece.text.clone(),
-                "operator": piece.operator.clone(),
-                "mode": piece.mode.map(|mode| json!(mode)).unwrap_or(Json::Null),
-                "x": piece.x.map(|x| json!(x)).unwrap_or(Json::Null),
-                "y": piece.y.map(|y| json!(y)).unwrap_or(Json::Null),
-                "box": piece.bounds.map(|bounds| json!(bounds)).unwrap_or(Json::Null),
-                "why": if invisible { "invisible" } else { "off the page" },
-            }));
-        }
-        let count = hidden.len();
-        Ok(Outcome::new(format!("{count} piece(s) of text are not seen")).with_data(json!({
-            "page": page,
-            "pieces": hidden,
-            "count": count,
-        })))
     }
 }
 
@@ -890,32 +925,4 @@ fn text_through(map: &crate::tounicode::Map, bytes: &[u8]) -> String {
         at += length;
     }
     out
-}
-
-/// **Read** the **text** of a page.
-///
-/// A query: it does not change the document. A page with no content has
-/// no text, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.page.text", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadPageText {
-    /// The page whose text is read.
-    pub page: NodeRef,
-}
-
-impl ReadPageText {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let page = self.page.0;
-        let found = text_of_page(session.document(), page)?;
-        let text = found.joined();
-        let pieces = found.pieces.iter().map(|piece| piece.to_json()).collect::<Vec<Json>>();
-        Ok(Outcome::new(format!("the page `{page}` shows {} pieces of text", found.pieces.len())).with_data(
-            json!({
-                "page": page,
-                "streams": found.streams,
-                "pieces": pieces,
-                "text": text,
-            }),
-        ))
-    }
 }

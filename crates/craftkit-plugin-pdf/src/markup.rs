@@ -24,10 +24,10 @@
 //! - The **author** and the **date** of the tree's markup are not here:
 //!   this tree has no user to name and no clock to read.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Text};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.markup.add";
@@ -73,149 +73,159 @@ pub(crate) fn bounds_of(quads: &[Vec<f64>]) -> [f64; 4] {
     [left, bottom, right, top]
 }
 
-/// **Mark** the text of a page: a highlight, an underline, a strikeout
-/// or a squiggly underline.
-#[derive(Command)]
-#[command(id = "pdf.markup.add", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct AddMarkup {
-    /// The page the markup is on.
-    pub page: NodeRef,
-    /// The object number the annotation has in the file.
-    pub object: Number,
-    /// The kind of markup: `highlight`, `underline`, `strikeout` or
-    /// `squiggly`.
-    pub kind: Text,
-    /// The region the markup covers: four numbers, the left, the
-    /// bottom, the right and the top of it.
-    pub region: Json,
-}
+commands! {
+    /// **Mark** the text of a page: a highlight, an underline, a strikeout
+    /// or a squiggly underline.
+    pdf.markup.add {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The page the markup is on.
 
-impl AddMarkup {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        // The **kind**: one of the tree's own four.
-        let Some((subtype, colour)) = kind_of(&self.kind.0) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!(
-                    "`{}` is not a kind of markup: the kinds are {}",
-                    self.kind.0.trim(),
-                    KINDS.join(", ")
-                ),
-            });
-        };
-        // The **page**: a page of the document.
-        let Some(page) = session.document().node(self.page.0) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no node `{}`", self.page.0),
-            });
-        };
-        let page_number = crate::the_number_of(page).ok_or_else(|| EngineError::Failed {
-            id: COMMAND.to_string(),
-            message: format!("the node `{}` has no object number", self.page.0),
-        })?;
-        // The page's own **annotations**, before the new one is made.
-        let annots = crate::entries_of(&page.data)
-            .into_iter()
-            .find(|(key, _)| key == "Annots")
-            .and_then(|(_, value)| value.as_array().cloned())
-            .unwrap_or_default();
-        // The **region**: four numbers.
-        let Some(region) = crate::boxes::rect_of(&self.region) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the region is not a rectangle of four numbers".to_string(),
-            });
-        };
-        // The **quads**: the lines of the text under the region.
-        let text = crate::pagetext::text_of_page(session.document(), self.page.0)?;
-        let mut quads: Vec<Vec<f64>> = Vec::new();
-        for piece in &text.pieces {
-            let Some(bounds) = piece.bounds else { continue };
-            let origin = match (piece.x, piece.y) {
-                (Some(x), Some(y)) => (x, y),
-                _ => continue,
+            page: NodeRef,
+            /// The object number the annotation has in the file.
+
+            object: Number,
+            /// The kind of markup: `highlight`, `underline`, `strikeout` or
+            /// `squiggly`.
+
+            kind: Text,
+            /// The region the markup covers: four numbers, the left, the
+            /// bottom, the right and the top of it.
+
+            region: Json,
+        },
+        run: {
+
+            // The **kind**: one of the tree's own four.
+            let Some((subtype, colour)) = kind_of(&self.kind.0) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!(
+                        "`{}` is not a kind of markup: the kinds are {}",
+                        self.kind.0.trim(),
+                        KINDS.join(", ")
+                    ),
+                });
             };
-            if !crate::region::under(region, bounds, origin) {
-                continue;
+            // The **page**: a page of the document.
+            let Some(page) = session.document().node(self.page.0) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no node `{}`", self.page.0),
+                });
+            };
+            let page_number = crate::the_number_of(page).ok_or_else(|| EngineError::Failed {
+                id: COMMAND.to_string(),
+                message: format!("the node `{}` has no object number", self.page.0),
+            })?;
+            // The page's own **annotations**, before the new one is made.
+            let annots = crate::entries_of(&page.data)
+                .into_iter()
+                .find(|(key, _)| key == "Annots")
+                .and_then(|(_, value)| value.as_array().cloned())
+                .unwrap_or_default();
+            // The **region**: four numbers.
+            let Some(region) = crate::boxes::rect_of(&self.region) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the region is not a rectangle of four numbers".to_string(),
+                });
+            };
+            // The **quads**: the lines of the text under the region.
+            let text = crate::pagetext::text_of_page(session.document(), self.page.0)?;
+            let mut quads: Vec<Vec<f64>> = Vec::new();
+            for piece in &text.pieces {
+                let Some(bounds) = piece.bounds else { continue };
+                let origin = match (piece.x, piece.y) {
+                    (Some(x), Some(y)) => (x, y),
+                    _ => continue,
+                };
+                if !crate::region::under(region, bounds, origin) {
+                    continue;
+                }
+                quads.push(quad_of(bounds));
             }
-            quads.push(quad_of(bounds));
+            if quads.is_empty() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "there is no text under the region".to_string(),
+                });
+            }
+            // The **object number** of the annotation: a whole number, and
+            // one that nothing else has.
+            let object = self.object.0;
+            if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "an object number is a whole number".to_string(),
+                });
+            }
+            let number = object as u64;
+            if number == 0 {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "object numbers start at one".to_string(),
+                });
+            }
+            if session.document().walk().any(|node| crate::the_number_of(node) == Some(number)) {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the object {number} is already in the document"),
+                });
+            }
+            // The **annotation** itself.
+            let rect = bounds_of(&quads);
+            let flat: Vec<f64> = quads.iter().flat_map(|quad| quad.iter().copied()).collect();
+            let mut entries: Vec<(String, Json)> = vec![
+                ("Type".to_string(), json!("Annot")),
+                ("Subtype".to_string(), json!(subtype)),
+                ("Rect".to_string(), json!(rect)),
+                ("QuadPoints".to_string(), json!(flat)),
+                ("C".to_string(), json!(colour)),
+                ("P".to_string(), json!({ "ref": [page_number, 0] })),
+            ];
+            // The tree's highlight **multiplies** over the text, and the
+            // file says so.
+            if subtype == "Highlight" {
+                entries.push(("BM".to_string(), json!("Multiply")));
+            }
+            let data = json!({ "object": number, "entries": entries });
+            let name = format!("annotation {number}");
+            let annot = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
+            // The page **names** the annotation.
+            let mut annots = annots;
+            annots.push(json!({ "ref": [number, 0] }));
+            if let Some(node) = session.document_mut()?.node_mut(self.page.0) {
+                node.data = crate::with_entry(&node.data, "Annots", json!(annots));
+            }
+            // And the **edge**: the page names the annotation.
+            let relation = craftkit_sdk::Relation::with_payload(
+                self.page.0,
+                annot,
+                "ref",
+                json!({ "key": "Annots", "generation": 0 }),
+            );
+            if !session.document_mut()?.add_relation(relation) {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the page already refers to the annotation `{annot}`"),
+                });
+            }
+            Ok(Outcome::changed(format!("added the `{name}` to the page")).with_data(json!({
+                "id": annot,
+                "object": number,
+                "page": self.page.0,
+                "subtype": subtype,
+                "kind": self.kind.0.trim().to_ascii_lowercase(),
+                "rect": rect,
+                "quads": quads,
+                "colour": colour,
+            })))
+
         }
-        if quads.is_empty() {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "there is no text under the region".to_string(),
-            });
-        }
-        // The **object number** of the annotation: a whole number, and
-        // one that nothing else has.
-        let object = self.object.0;
-        if !object.is_finite() || object < 0.0 || object.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "an object number is a whole number".to_string(),
-            });
-        }
-        let number = object as u64;
-        if number == 0 {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "object numbers start at one".to_string(),
-            });
-        }
-        if session.document().walk().any(|node| crate::the_number_of(node) == Some(number)) {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the object {number} is already in the document"),
-            });
-        }
-        // The **annotation** itself.
-        let rect = bounds_of(&quads);
-        let flat: Vec<f64> = quads.iter().flat_map(|quad| quad.iter().copied()).collect();
-        let mut entries: Vec<(String, Json)> = vec![
-            ("Type".to_string(), json!("Annot")),
-            ("Subtype".to_string(), json!(subtype)),
-            ("Rect".to_string(), json!(rect)),
-            ("QuadPoints".to_string(), json!(flat)),
-            ("C".to_string(), json!(colour)),
-            ("P".to_string(), json!({ "ref": [page_number, 0] })),
-        ];
-        // The tree's highlight **multiplies** over the text, and the
-        // file says so.
-        if subtype == "Highlight" {
-            entries.push(("BM".to_string(), json!("Multiply")));
-        }
-        let data = json!({ "object": number, "entries": entries });
-        let name = format!("annotation {number}");
-        let annot = session.document_mut()?.add_node_with(name.clone(), "pdf.object", None, data);
-        // The page **names** the annotation.
-        let mut annots = annots;
-        annots.push(json!({ "ref": [number, 0] }));
-        if let Some(node) = session.document_mut()?.node_mut(self.page.0) {
-            node.data = crate::with_entry(&node.data, "Annots", json!(annots));
-        }
-        // And the **edge**: the page names the annotation.
-        let relation = craftkit_sdk::Relation::with_payload(
-            self.page.0,
-            annot,
-            "ref",
-            json!({ "key": "Annots", "generation": 0 }),
-        );
-        if !session.document_mut()?.add_relation(relation) {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the page already refers to the annotation `{annot}`"),
-            });
-        }
-        Ok(Outcome::changed(format!("added the `{name}` to the page")).with_data(json!({
-            "id": annot,
-            "object": number,
-            "page": self.page.0,
-            "subtype": subtype,
-            "kind": self.kind.0.trim().to_ascii_lowercase(),
-            "rect": rect,
-            "quads": quads,
-            "colour": colour,
-        })))
     }
 }

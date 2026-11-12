@@ -27,10 +27,10 @@
 //! - a file whose version is below four is scrambled with **RC4**,
 //!   whatever the crypt filters say.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Outcome, Text};
 
 /// The **encryption** of a file: what its dictionary says.
 #[derive(Debug, Clone, PartialEq)]
@@ -181,371 +181,381 @@ pub fn permissions_of(bits: i64) -> Vec<&'static str> {
     names
 }
 
-/// **Read** the **encryption** of a PDF file.
-///
-/// A query: it does not change the document. A file that names no
-/// encryption is not encrypted, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.encrypt.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadEncryption {
-    /// The entry to read.
+commands! {
+    /// **Read** the **encryption** of a PDF file.
     ///
-    /// Leave it out and everything the encryption says is read.
-    pub key: Option<Text>,
-}
+    /// A query: it does not change the document. A file that names no
+    /// encryption is not encrypted, and the answer says so.
+    pdf.encrypt.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The entry to read.
+            ///
+            /// Leave it out and everything the encryption says is read.
 
-impl ReadEncryption {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.encrypt.read".to_string();
-        let document = session.document();
-        let Some(value) = crate::trailer::entry_of(document, "Encrypt") else {
-            return Ok(Outcome::new("the file is not encrypted").with_data(json!({
-                "encrypted": false,
-            })));
-        };
-        let Some(number) = reference_of(&value) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the file names its encryption, and it names it in no way".to_string(),
-            });
-        };
-        let Some(node) = document
-            .walk()
-            .find(|node| node.data.get("object").and_then(|held| held.as_u64()) == Some(number))
-        else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!(
-                    "the file names the encryption of the object `{number}`, and that object is not in it"
-                ),
-            });
-        };
-        let entries = crate::entries_of(&node.data);
-        let encryption = encryption_from(&entries);
-        let permissions = permissions_of(encryption.permissions);
-        // The **entries**: the dictionary of the encryption, or the
-        // one that was asked for.
-        let listed: Vec<Json> = match &self.key {
-            None => entries.iter().map(|(key, value)| json!([key.clone(), value.clone()])).collect(),
-            Some(key) => {
-                let key = key.0.trim();
-                let one: Vec<Json> = entries
-                    .iter()
-                    .filter(|(name, _)| name == key)
-                    .map(|(key, value)| json!([key.clone(), value.clone()]))
-                    .collect();
-                if one.is_empty() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the encryption has no entry `{key}`"),
-                    });
-                }
-                one
-            }
-        };
-        Ok(Outcome::new(format!("the file is encrypted with {}", encryption.strings)).with_data(json!({
-            "encrypted": true,
-            "filter": encryption.filter,
-            "version": encryption.version,
-            "revision": encryption.revision,
-            "length_bits": encryption.length_bits,
-            "permissions": encryption.permissions,
-            "permission_names": permissions,
-            "encrypt_metadata": encryption.encrypt_metadata,
-            "strings": encryption.strings,
-            "streams": encryption.streams,
-            "entries": listed,
-        })))
-    }
-}
+            key: Option<Text>,
+        },
+        run: {
 
-/// **Encrypt** a file with a password, and **write** it out.
-///
-/// A query of the document, and a file is written: the document itself
-/// is not changed. The file that is written is scrambled with the
-/// **standard security handler**, and the trailer names the object that
-/// holds the scramble.
-///
-/// The **cipher** says how the file is scrambled: the streams may be
-/// scrambled with **RC4** or with **AES**, and the strings are always
-/// scrambled with RC4.
-#[derive(Command)]
-#[command(id = "pdf.file.encrypt", area = "pdf", layer = "pdf", icon = "file")]
-pub struct EncryptFile {
-    /// The password that opens the file.
-    pub password: Text,
-    /// Where to write the encrypted file.
-    pub path: Text,
-    /// The password of the **owner**.
-    ///
-    /// Leave it out and the owner is the user: the one password opens
-    /// the file and owns it.
-    pub owner: Option<Text>,
-    /// How the file is scrambled: `rc4` or `aes`.
-    ///
-    /// Leave it out and the streams are scrambled with RC4.
-    pub cipher: Option<Text>,
-}
-
-impl EncryptFile {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.file.encrypt".to_string();
-        let path = self.path.0.clone();
-        if path.trim().is_empty() {
-            return Err(EngineError::Failed { id: id.clone(), message: "the file has a path".to_string() });
-        }
-        let document = session.document();
-        // The **objects** of the document, and the bytes of the streams.
-        let mut objects: Vec<crate::writer::Object> = Vec::new();
-        for node in document.walk() {
-            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-                continue;
-            }
-            let Some(number) = node.data.get("object").and_then(|number| number.as_u64()) else {
-                continue;
+            let id = "pdf.encrypt.read".to_string();
+            let document = session.document();
+            let Some(value) = crate::trailer::entry_of(document, "Encrypt") else {
+                return Ok(Outcome::new("the file is not encrypted").with_data(json!({
+                    "encrypted": false,
+                })));
             };
-            let entries = crate::entries_of(&node.data);
-            let stream = match &node.stream {
-                Some(path) => {
-                    let limits = crate::filters::Limits::default();
-                    let bytes = craftkit_sdk::files::read_bounded(
-                        std::path::Path::new(path),
-                        limits.max_input as u64,
-                    )
-                    .map_err(|message| EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the stream's bytes cannot be read: {message}"),
-                    })?;
-                    Some(bytes)
-                }
-                None => None,
-            };
-            objects.push(crate::writer::Object { number, entries, stream });
-        }
-        if objects.is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the document holds no objects to encrypt".to_string(),
-            });
-        }
-        // The **root**: the catalog of the file.
-        let root = objects
-            .iter()
-            .find(|object| {
-                object.entries.iter().any(|(key, value)| key == "Type" && value.as_str() == Some("Catalog"))
-            })
-            .map(|object| object.number)
-            .ok_or_else(|| EngineError::Failed {
-                id: id.clone(),
-                message: "the document holds no catalog to be the root of the file".to_string(),
-            })?;
-        let info = crate::crypt::number_of(document, "Info");
-        let password = self.password.0.as_bytes().to_vec();
-        let owner = match &self.owner {
-            Some(owner) => owner.0.as_bytes().to_vec(),
-            None => password.clone(),
-        };
-        // The **owner** as text: the handler of revision six takes a
-        // password as it is written, and not as bytes.
-        let owner_text = match &self.owner {
-            Some(owner) => owner.0.clone(),
-            None => self.password.0.clone(),
-        };
-        // The **cipher**: how the streams are scrambled. The strings
-        // are always scrambled with RC4 — until the handler of
-        // revision six, where everything is scrambled with AES-256.
-        let cipher = self.cipher.as_ref().map(|cipher| cipher.0.trim().to_lowercase());
-        let revision_six = matches!(cipher.as_deref(), Some("aes-256") | Some("aes256"));
-        let aes = match cipher.as_deref() {
-            None => false,
-            Some("rc4") => false,
-            Some("aes") | Some("aes-128") => true,
-            Some("aes-256") | Some("aes256") => true,
-            Some(other) => {
+            let Some(number) = reference_of(&value) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("there is no cipher `{other}`: the ciphers are rc4, aes and aes-256"),
+                    message: "the file names its encryption, and it names it in no way".to_string(),
+                });
+            };
+            let Some(node) = document
+                .walk()
+                .find(|node| node.data.get("object").and_then(|held| held.as_u64()) == Some(number))
+            else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!(
+                        "the file names the encryption of the object `{number}`, and that object is not in it"
+                    ),
+                });
+            };
+            let entries = crate::entries_of(&node.data);
+            let encryption = encryption_from(&entries);
+            let permissions = permissions_of(encryption.permissions);
+            // The **entries**: the dictionary of the encryption, or the
+            // one that was asked for.
+            let listed: Vec<Json> = match &self.key {
+                None => entries.iter().map(|(key, value)| json!([key.clone(), value.clone()])).collect(),
+                Some(key) => {
+                    let key = key.0.trim();
+                    let one: Vec<Json> = entries
+                        .iter()
+                        .filter(|(name, _)| name == key)
+                        .map(|(key, value)| json!([key.clone(), value.clone()]))
+                        .collect();
+                    if one.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the encryption has no entry `{key}`"),
+                        });
+                    }
+                    one
+                }
+            };
+            Ok(Outcome::new(format!("the file is encrypted with {}", encryption.strings)).with_data(json!({
+                "encrypted": true,
+                "filter": encryption.filter,
+                "version": encryption.version,
+                "revision": encryption.revision,
+                "length_bits": encryption.length_bits,
+                "permissions": encryption.permissions,
+                "permission_names": permissions,
+                "encrypt_metadata": encryption.encrypt_metadata,
+                "strings": encryption.strings,
+                "streams": encryption.streams,
+                "entries": listed,
+            })))
+
+        }
+    }
+    /// **Encrypt** a file with a password, and **write** it out.
+    ///
+    /// A query of the document, and a file is written: the document itself
+    /// is not changed. The file that is written is scrambled with the
+    /// **standard security handler**, and the trailer names the object that
+    /// holds the scramble.
+    ///
+    /// The **cipher** says how the file is scrambled: the streams may be
+    /// scrambled with **RC4** or with **AES**, and the strings are always
+    /// scrambled with RC4.
+    pdf.file.encrypt {
+        area: "pdf",
+        layer: "pdf",
+        icon: "file",
+        params: {
+            /// The password that opens the file.
+
+            password: Text,
+            /// Where to write the encrypted file.
+
+            path: Text,
+            /// The password of the **owner**.
+            ///
+            /// Leave it out and the owner is the user: the one password opens
+            /// the file and owns it.
+
+            owner: Option<Text>,
+            /// How the file is scrambled: `rc4` or `aes`.
+            ///
+            /// Leave it out and the streams are scrambled with RC4.
+
+            cipher: Option<Text>,
+        },
+        run: {
+
+            let id = "pdf.file.encrypt".to_string();
+            let path = self.path.0.clone();
+            if path.trim().is_empty() {
+                return Err(EngineError::Failed { id: id.clone(), message: "the file has a path".to_string() });
+            }
+            let document = session.document();
+            // The **objects** of the document, and the bytes of the streams.
+            let mut objects: Vec<crate::writer::Object> = Vec::new();
+            for node in document.walk() {
+                if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                    continue;
+                }
+                let Some(number) = node.data.get("object").and_then(|number| number.as_u64()) else {
+                    continue;
+                };
+                let entries = crate::entries_of(&node.data);
+                let stream = match &node.stream {
+                    Some(path) => {
+                        let limits = crate::filters::Limits::default();
+                        let bytes = craftkit_sdk::files::read_bounded(
+                            std::path::Path::new(path),
+                            limits.max_input as u64,
+                        )
+                        .map_err(|message| EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the stream's bytes cannot be read: {message}"),
+                        })?;
+                        Some(bytes)
+                    }
+                    None => None,
+                };
+                objects.push(crate::writer::Object { number, entries, stream });
+            }
+            if objects.is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the document holds no objects to encrypt".to_string(),
                 });
             }
-        };
-        // The **revision** of the scheme and the **length** of its key
-        // follow the cipher.
-        let revision = if revision_six {
-            SIX_REVISION
-        } else if aes {
-            AES_REVISION
-        } else {
-            RC4_REVISION
-        };
-        let length_bits = if revision_six {
-            SIX_LENGTH_BITS
-        } else if aes {
-            AES_LENGTH_BITS
-        } else {
-            RC4_LENGTH_BITS
-        };
-        // The **identifier** of the file: sixteen bytes, and they are
-        // worked out from the passwords and from the numbers of the
-        // objects, so that the same file and the same password always
-        // make the same file.
-        let identifier = identifier_of(&password, &owner, &objects, root);
-        // The **encryption** is an object of the file of its own, and
-        // its own words are not scrambled.
-        let number = crate::free::the_next_number(document, 0);
-        let mut streams = 0usize;
-        if revision_six {
-            // The **seed**: the numbers of the objects, beside the
-            // passwords in everything that is worked out, so that the
-            // same file and the same passwords always make the same
-            // file.
-            let mut seed: Vec<u8> = Vec::new();
-            for object in &objects {
-                seed.extend_from_slice(&(object.number as u32).to_le_bytes());
-            }
-            let made = crate::revision6::make_of_revision_six(
-                &self.password.0,
-                &owner_text,
-                PERMISSIONS,
-                true,
-                &seed,
-                &id,
-            )?;
-            let entries: Vec<(String, Json)> = vec![
-                ("Filter".to_string(), Json::String("Standard".to_string())),
-                ("V".to_string(), Json::Number((5).into())),
-                ("R".to_string(), Json::Number((SIX_REVISION).into())),
-                ("Length".to_string(), Json::Number((SIX_LENGTH_BITS).into())),
-                ("P".to_string(), Json::Number((PERMISSIONS).into())),
-                ("EncryptMetadata".to_string(), Json::Bool(true)),
-                ("CF".to_string(), six_filters()),
-                ("StmF".to_string(), Json::String("StdCF".to_string())),
-                ("StrF".to_string(), Json::String("StdCF".to_string())),
-                ("O".to_string(), text_of(&made.owner)),
-                ("U".to_string(), text_of(&made.user)),
-                ("OE".to_string(), text_of(&made.owner_encrypted)),
-                ("UE".to_string(), text_of(&made.user_encrypted)),
-                ("Perms".to_string(), text_of(&made.permissions)),
-            ];
-            objects.push(crate::writer::Object { number, entries, stream: None });
-            // The **objects** are scrambled with the key of the file:
-            // every object has that key, and there is no key of an
-            // object here.
-            for object in objects.iter_mut() {
-                if object.number == number {
-                    continue;
-                }
-                let mut counter: u64 = 0;
-                object.entries = object
-                    .entries
-                    .iter()
-                    .map(|(name, value)| {
-                        (name.clone(), scrambled_with_aes_made(value, &made.key, object.number, &mut counter))
-                    })
-                    .collect();
-                if let Some(bytes) = &object.stream {
-                    streams += 1;
-                    // The **vector**: the first sixteen bytes of the
-                    // stream are the vector the blocks are chained
-                    // from.
-                    let vector = vector_of_revision_six(&made.key, object.number, b"stream");
-                    let mut body = vector.clone();
-                    body.extend_from_slice(&crate::aes::encrypt(&made.key, &vector, bytes));
-                    object.stream = Some(body);
-                }
-            }
-        } else {
-            // The **owner's entry**: the user's password under the owner's
-            // own key.
-            let owner_entry = crate::crypt::owner_entry(&owner, &password, revision, length_bits);
-            // The **key of the file**, and the **user's entry** it makes.
-            let scheme = crate::crypt::Scheme {
-                number: 0,
-                revision,
-                length_bits,
-                permissions: PERMISSIONS,
-                encrypt_metadata: true,
-                strings: "rc4".to_string(),
-                streams: if aes { "aes-128".to_string() } else { "rc4".to_string() },
-                owner: owner_entry.clone(),
-                user: Vec::new(),
-                identifier: identifier.clone(),
-                owner_encrypted: Vec::new(),
-                user_encrypted: Vec::new(),
-                permissions_block: Vec::new(),
+            // The **root**: the catalog of the file.
+            let root = objects
+                .iter()
+                .find(|object| {
+                    object.entries.iter().any(|(key, value)| key == "Type" && value.as_str() == Some("Catalog"))
+                })
+                .map(|object| object.number)
+                .ok_or_else(|| EngineError::Failed {
+                    id: id.clone(),
+                    message: "the document holds no catalog to be the root of the file".to_string(),
+                })?;
+            let info = crate::crypt::number_of(document, "Info");
+            let password = self.password.0.as_bytes().to_vec();
+            let owner = match &self.owner {
+                Some(owner) => owner.0.as_bytes().to_vec(),
+                None => password.clone(),
             };
-            let key = crate::crypt::file_key(&password, &scheme);
-            let user_entry = crate::crypt::user_entry_written(&key, &identifier, revision);
-            let mut entries: Vec<(String, Json)> = vec![
-                ("Filter".to_string(), Json::String("Standard".to_string())),
-                ("V".to_string(), Json::Number((if aes { 4 } else { 1 }).into())),
-                ("R".to_string(), Json::Number((revision).into())),
-                ("Length".to_string(), Json::Number((length_bits).into())),
-                ("P".to_string(), Json::Number((PERMISSIONS).into())),
-            ];
-            if aes {
-                // The **crypt filters**: the way the streams are scrambled
-                // and the way the strings are scrambled, and which of the
-                // two is used for what.
-                entries.push(("EncryptMetadata".to_string(), Json::Bool(true)));
-                entries.push(("CF".to_string(), aes_filters()));
-                entries.push(("StmF".to_string(), Json::String("StdCF".to_string())));
-                entries.push(("StrF".to_string(), Json::String("RW".to_string())));
-            }
-            entries.push(("O".to_string(), text_of(&owner_entry)));
-            entries.push(("U".to_string(), text_of(&user_entry)));
-            objects.push(crate::writer::Object { number, entries, stream: None });
-            // The **objects** are scrambled under the key of each one.
-            for object in objects.iter_mut() {
-                if object.number == number {
-                    continue;
-                }
-                let object_key = crate::crypt::object_key(&key, object.number, 0, false);
-                object.entries = object
-                    .entries
-                    .iter()
-                    .map(|(name, value)| (name.clone(), crate::crypt::scrambled(value, &object_key)))
-                    .collect();
-                if let Some(bytes) = &object.stream {
-                    streams += 1;
-                    object.stream = Some(if aes {
-                        // The key of an **AES** object is salted, and the
-                        // **vector** the blocks are chained from is the
-                        // first sixteen bytes of the stream.
-                        let stream_key = crate::crypt::object_key(&key, object.number, 0, true);
-                        let vector = vector_of(&stream_key, object.number);
-                        let mut body = vector.clone();
-                        body.extend_from_slice(&crate::aes::encrypt(&stream_key, &vector, bytes));
-                        body
-                    } else {
-                        crate::crypt::rc4(&object_key, bytes)
+            // The **owner** as text: the handler of revision six takes a
+            // password as it is written, and not as bytes.
+            let owner_text = match &self.owner {
+                Some(owner) => owner.0.clone(),
+                None => self.password.0.clone(),
+            };
+            // The **cipher**: how the streams are scrambled. The strings
+            // are always scrambled with RC4 — until the handler of
+            // revision six, where everything is scrambled with AES-256.
+            let cipher = self.cipher.as_ref().map(|cipher| cipher.0.trim().to_lowercase());
+            let revision_six = matches!(cipher.as_deref(), Some("aes-256") | Some("aes256"));
+            let aes = match cipher.as_deref() {
+                None => false,
+                Some("rc4") => false,
+                Some("aes") | Some("aes-128") => true,
+                Some("aes-256") | Some("aes256") => true,
+                Some(other) => {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no cipher `{other}`: the ciphers are rc4, aes and aes-256"),
                     });
                 }
+            };
+            // The **revision** of the scheme and the **length** of its key
+            // follow the cipher.
+            let revision = if revision_six {
+                SIX_REVISION
+            } else if aes {
+                AES_REVISION
+            } else {
+                RC4_REVISION
+            };
+            let length_bits = if revision_six {
+                SIX_LENGTH_BITS
+            } else if aes {
+                AES_LENGTH_BITS
+            } else {
+                RC4_LENGTH_BITS
+            };
+            // The **identifier** of the file: sixteen bytes, and they are
+            // worked out from the passwords and from the numbers of the
+            // objects, so that the same file and the same password always
+            // make the same file.
+            let identifier = identifier_of(&password, &owner, &objects, root);
+            // The **encryption** is an object of the file of its own, and
+            // its own words are not scrambled.
+            let number = crate::free::the_next_number(document, 0);
+            let mut streams = 0usize;
+            if revision_six {
+                // The **seed**: the numbers of the objects, beside the
+                // passwords in everything that is worked out, so that the
+                // same file and the same passwords always make the same
+                // file.
+                let mut seed: Vec<u8> = Vec::new();
+                for object in &objects {
+                    seed.extend_from_slice(&(object.number as u32).to_le_bytes());
+                }
+                let made = crate::revision6::make_of_revision_six(
+                    &self.password.0,
+                    &owner_text,
+                    PERMISSIONS,
+                    true,
+                    &seed,
+                    &id,
+                )?;
+                let entries: Vec<(String, Json)> = vec![
+                    ("Filter".to_string(), Json::String("Standard".to_string())),
+                    ("V".to_string(), Json::Number((5).into())),
+                    ("R".to_string(), Json::Number((SIX_REVISION).into())),
+                    ("Length".to_string(), Json::Number((SIX_LENGTH_BITS).into())),
+                    ("P".to_string(), Json::Number((PERMISSIONS).into())),
+                    ("EncryptMetadata".to_string(), Json::Bool(true)),
+                    ("CF".to_string(), six_filters()),
+                    ("StmF".to_string(), Json::String("StdCF".to_string())),
+                    ("StrF".to_string(), Json::String("StdCF".to_string())),
+                    ("O".to_string(), text_of(&made.owner)),
+                    ("U".to_string(), text_of(&made.user)),
+                    ("OE".to_string(), text_of(&made.owner_encrypted)),
+                    ("UE".to_string(), text_of(&made.user_encrypted)),
+                    ("Perms".to_string(), text_of(&made.permissions)),
+                ];
+                objects.push(crate::writer::Object { number, entries, stream: None });
+                // The **objects** are scrambled with the key of the file:
+                // every object has that key, and there is no key of an
+                // object here.
+                for object in objects.iter_mut() {
+                    if object.number == number {
+                        continue;
+                    }
+                    let mut counter: u64 = 0;
+                    object.entries = object
+                        .entries
+                        .iter()
+                        .map(|(name, value)| {
+                            (name.clone(), scrambled_with_aes_made(value, &made.key, object.number, &mut counter))
+                        })
+                        .collect();
+                    if let Some(bytes) = &object.stream {
+                        streams += 1;
+                        // The **vector**: the first sixteen bytes of the
+                        // stream are the vector the blocks are chained
+                        // from.
+                        let vector = vector_of_revision_six(&made.key, object.number, b"stream");
+                        let mut body = vector.clone();
+                        body.extend_from_slice(&crate::aes::encrypt(&made.key, &vector, bytes));
+                        object.stream = Some(body);
+                    }
+                }
+            } else {
+                // The **owner's entry**: the user's password under the owner's
+                // own key.
+                let owner_entry = crate::crypt::owner_entry(&owner, &password, revision, length_bits);
+                // The **key of the file**, and the **user's entry** it makes.
+                let scheme = crate::crypt::Scheme {
+                    number: 0,
+                    revision,
+                    length_bits,
+                    permissions: PERMISSIONS,
+                    encrypt_metadata: true,
+                    strings: "rc4".to_string(),
+                    streams: if aes { "aes-128".to_string() } else { "rc4".to_string() },
+                    owner: owner_entry.clone(),
+                    user: Vec::new(),
+                    identifier: identifier.clone(),
+                    owner_encrypted: Vec::new(),
+                    user_encrypted: Vec::new(),
+                    permissions_block: Vec::new(),
+                };
+                let key = crate::crypt::file_key(&password, &scheme);
+                let user_entry = crate::crypt::user_entry_written(&key, &identifier, revision);
+                let mut entries: Vec<(String, Json)> = vec![
+                    ("Filter".to_string(), Json::String("Standard".to_string())),
+                    ("V".to_string(), Json::Number((if aes { 4 } else { 1 }).into())),
+                    ("R".to_string(), Json::Number((revision).into())),
+                    ("Length".to_string(), Json::Number((length_bits).into())),
+                    ("P".to_string(), Json::Number((PERMISSIONS).into())),
+                ];
+                if aes {
+                    // The **crypt filters**: the way the streams are scrambled
+                    // and the way the strings are scrambled, and which of the
+                    // two is used for what.
+                    entries.push(("EncryptMetadata".to_string(), Json::Bool(true)));
+                    entries.push(("CF".to_string(), aes_filters()));
+                    entries.push(("StmF".to_string(), Json::String("StdCF".to_string())));
+                    entries.push(("StrF".to_string(), Json::String("RW".to_string())));
+                }
+                entries.push(("O".to_string(), text_of(&owner_entry)));
+                entries.push(("U".to_string(), text_of(&user_entry)));
+                objects.push(crate::writer::Object { number, entries, stream: None });
+                // The **objects** are scrambled under the key of each one.
+                for object in objects.iter_mut() {
+                    if object.number == number {
+                        continue;
+                    }
+                    let object_key = crate::crypt::object_key(&key, object.number, 0, false);
+                    object.entries = object
+                        .entries
+                        .iter()
+                        .map(|(name, value)| (name.clone(), crate::crypt::scrambled(value, &object_key)))
+                        .collect();
+                    if let Some(bytes) = &object.stream {
+                        streams += 1;
+                        object.stream = Some(if aes {
+                            // The key of an **AES** object is salted, and the
+                            // **vector** the blocks are chained from is the
+                            // first sixteen bytes of the stream.
+                            let stream_key = crate::crypt::object_key(&key, object.number, 0, true);
+                            let vector = vector_of(&stream_key, object.number);
+                            let mut body = vector.clone();
+                            body.extend_from_slice(&crate::aes::encrypt(&stream_key, &vector, bytes));
+                            body
+                        } else {
+                            crate::crypt::rc4(&object_key, bytes)
+                        });
+                    }
+                }
             }
+            let free = crate::free::the_free(document);
+            let trailer = crate::writer::Trailer {
+                root,
+                info,
+                encrypt: Some(number),
+                identifier: Some(hex_of(&identifier)),
+            };
+            let file = crate::writer::write(&objects, &free, &trailer).map_err(|error| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the file cannot be written: {error:?}"),
+            })?;
+            std::fs::write(&path, &file).map_err(|error| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the file cannot be written to `{path}`: {error}"),
+            })?;
+            let count = objects.len();
+            Ok(Outcome::new(format!("wrote {count} object(s) with their encryption")).with_data(json!({
+                "path": path,
+                "objects": count,
+                "streams": streams,
+                "bytes": file.len(),
+                "root": root,
+                "encrypt": number,
+            })))
+
         }
-        let free = crate::free::the_free(document);
-        let trailer = crate::writer::Trailer {
-            root,
-            info,
-            encrypt: Some(number),
-            identifier: Some(hex_of(&identifier)),
-        };
-        let file = crate::writer::write(&objects, &free, &trailer).map_err(|error| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the file cannot be written: {error:?}"),
-        })?;
-        std::fs::write(&path, &file).map_err(|error| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the file cannot be written to `{path}`: {error}"),
-        })?;
-        let count = objects.len();
-        Ok(Outcome::new(format!("wrote {count} object(s) with their encryption")).with_data(json!({
-            "path": path,
-            "objects": count,
-            "streams": streams,
-            "bytes": file.len(),
-            "root": root,
-            "encrypt": number,
-        })))
     }
 }
 

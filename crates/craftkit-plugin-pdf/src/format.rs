@@ -24,10 +24,10 @@
 //! a **preset** — a date or a time named by a number — are among them,
 //! because this tree does not hold the table of presets they name.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome};
 
 /// The **format** of a field: what its script says.
 #[derive(Debug, Clone, PartialEq)]
@@ -146,76 +146,81 @@ pub fn format_of(document: &Document, node: &Node) -> Format {
     }
 }
 
-/// **Read** the **format** of a field.
-///
-/// A query: it does not change the document. A field that says nothing
-/// about how its text is shown is shown as it is, and the answer says
-/// so.
-#[derive(Command)]
-#[command(id = "pdf.field.format", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadFormat {
-    /// The field to read.
-    pub field: NodeRef,
-}
+commands! {
+    /// **Read** the **format** of a field.
+    ///
+    /// A query: it does not change the document. A field that says nothing
+    /// about how its text is shown is shown as it is, and the answer says
+    /// so.
+    pdf.field.format {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The field to read.
 
-impl ReadFormat {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.field.format".to_string();
-        let document = session.document();
-        let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{}`", self.field.0),
-        })?;
-        let format = format_of(document, node);
-        let name = crate::fields::qualified_name(document, node);
-        let mut map = craftkit_sdk::serde_json::Map::new();
-        map.insert("field".to_string(), name.clone().map(|name| json!(name)).unwrap_or(Json::Null));
-        let text = match &format {
-            Format::Nothing => {
-                map.insert("kind".to_string(), json!("nothing"));
-                "the field is shown as it is".to_string()
-            }
-            Format::Number { decimals, separator, negative, currency, prepend } => {
-                map.insert("kind".to_string(), json!("number"));
-                map.insert("decimals".to_string(), json!(decimals));
-                map.insert("separator".to_string(), json!(separator));
-                map.insert("negative".to_string(), json!(negative));
-                map.insert("currency".to_string(), json!(currency.clone()));
-                map.insert("prepend".to_string(), json!(prepend));
-                "the field is shown as a number".to_string()
-            }
-            Format::Percent { decimals, separator } => {
-                map.insert("kind".to_string(), json!("percent"));
-                map.insert("decimals".to_string(), json!(decimals));
-                map.insert("separator".to_string(), json!(separator));
-                "the field is shown as a percentage".to_string()
-            }
-            Format::Date(pattern) => {
-                map.insert("kind".to_string(), json!("date"));
-                map.insert("pattern".to_string(), json!(pattern.clone()));
-                "the field is shown as a date".to_string()
-            }
-            Format::Time(pattern) => {
-                map.insert("kind".to_string(), json!("time"));
-                map.insert("pattern".to_string(), json!(pattern.clone()));
-                "the field is shown as a time".to_string()
-            }
-            Format::Special(name) => {
-                map.insert("kind".to_string(), json!("special"));
-                map.insert("form".to_string(), json!(name.clone()));
-                "the field is shown as a special form".to_string()
-            }
-            Format::Mask(mask) => {
-                map.insert("kind".to_string(), json!("mask"));
-                map.insert("mask".to_string(), json!(mask.clone()));
-                "the field is typed into through a mask".to_string()
-            }
-            Format::Unsupported(script) => {
-                map.insert("kind".to_string(), json!("unsupported"));
-                map.insert("script".to_string(), json!(script.clone()));
-                "the field has a script this tree does not understand".to_string()
-            }
-        };
-        Ok(Outcome::new(text).with_data(Json::Object(map)))
+            field: NodeRef,
+        },
+        run: {
+
+            let id = "pdf.field.format".to_string();
+            let document = session.document();
+            let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{}`", self.field.0),
+            })?;
+            let format = format_of(document, node);
+            let name = crate::fields::qualified_name(document, node);
+            let mut map = craftkit_sdk::serde_json::Map::new();
+            map.insert("field".to_string(), name.clone().map(|name| json!(name)).unwrap_or(Json::Null));
+            let text = match &format {
+                Format::Nothing => {
+                    map.insert("kind".to_string(), json!("nothing"));
+                    "the field is shown as it is".to_string()
+                }
+                Format::Number { decimals, separator, negative, currency, prepend } => {
+                    map.insert("kind".to_string(), json!("number"));
+                    map.insert("decimals".to_string(), json!(decimals));
+                    map.insert("separator".to_string(), json!(separator));
+                    map.insert("negative".to_string(), json!(negative));
+                    map.insert("currency".to_string(), json!(currency.clone()));
+                    map.insert("prepend".to_string(), json!(prepend));
+                    "the field is shown as a number".to_string()
+                }
+                Format::Percent { decimals, separator } => {
+                    map.insert("kind".to_string(), json!("percent"));
+                    map.insert("decimals".to_string(), json!(decimals));
+                    map.insert("separator".to_string(), json!(separator));
+                    "the field is shown as a percentage".to_string()
+                }
+                Format::Date(pattern) => {
+                    map.insert("kind".to_string(), json!("date"));
+                    map.insert("pattern".to_string(), json!(pattern.clone()));
+                    "the field is shown as a date".to_string()
+                }
+                Format::Time(pattern) => {
+                    map.insert("kind".to_string(), json!("time"));
+                    map.insert("pattern".to_string(), json!(pattern.clone()));
+                    "the field is shown as a time".to_string()
+                }
+                Format::Special(name) => {
+                    map.insert("kind".to_string(), json!("special"));
+                    map.insert("form".to_string(), json!(name.clone()));
+                    "the field is shown as a special form".to_string()
+                }
+                Format::Mask(mask) => {
+                    map.insert("kind".to_string(), json!("mask"));
+                    map.insert("mask".to_string(), json!(mask.clone()));
+                    "the field is typed into through a mask".to_string()
+                }
+                Format::Unsupported(script) => {
+                    map.insert("kind".to_string(), json!("unsupported"));
+                    map.insert("script".to_string(), json!(script.clone()));
+                    "the field has a script this tree does not understand".to_string()
+                }
+            };
+            Ok(Outcome::new(text).with_data(Json::Object(map)))
+
+        }
     }
 }

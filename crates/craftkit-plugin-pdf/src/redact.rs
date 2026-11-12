@@ -40,7 +40,7 @@
 //! - **The glyphs are not counted one by one**: the tree works glyph
 //!   by glyph, and this tree works by the piece.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session};
@@ -740,219 +740,192 @@ fn write_operations(path: &str, operations: &[crate::content::Operation]) -> Res
     Ok(written.len())
 }
 
-/// The **drawings under a region are taken away**.
-///
-/// A change: the inline images and the paths the region covers are
-/// gone from the content of the page.
-#[derive(Command)]
-#[command(id = "pdf.redact.drawings", area = "pdf", layer = "pdf", icon = "remove", mutates, undoable)]
-pub struct RedactDrawings {
-    /// The page whose drawings are taken away.
-    pub page: NodeRef,
-    /// The region: four numbers, the left, the bottom, the right and
-    /// the top of it.
-    pub rect: Json,
-}
+commands! {
+    /// The **drawings under a region are taken away**.
+    ///
+    /// A change: the inline images and the paths the region covers are
+    /// gone from the content of the page.
+    pdf.redact.drawings {
+        area: "pdf",
+        layer: "pdf",
+        icon: "remove",
+        mutates,
+        undoable,
+        params: {
+            /// The page whose drawings are taken away.
 
-impl RedactDrawings {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let page = self.page.0;
-        let document = session.document();
-        if document.node(page).is_none() {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no node `{page}`"),
-            });
-        }
-        let Some(region) = crate::boxes::rect_of(&self.rect) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the region is not a rectangle of four numbers".to_string(),
-            });
-        };
-        let content = content_of(document, page)?;
-        let images = xobjects_of(document, page);
-        // The **images** the page draws, and the ones the region takes
-        // away: the tree's own rules — an image the region **covers**
-        // is gone, and an image it only **hits** has its covered pixels
-        // cleared, unless the kit cannot read it, and then it is gone
-        // as well.
-        let drawn = images_drawn(&content.operations, &images, document);
-        let mut doomed: Vec<String> = Vec::new();
-        let mut fresh: Vec<Fresh> = Vec::new();
-        for (name, id, ctm) in &drawn {
-            let bounds = ctm.bbox([0.0, 0.0, 1.0, 1.0]);
-            if !overlaps(region, bounds) {
-                continue;
+            page: NodeRef,
+            /// The region: four numbers, the left, the bottom, the right and
+            /// the top of it.
+
+            rect: Json,
+        },
+        run: {
+
+            let page = self.page.0;
+            let document = session.document();
+            if document.node(page).is_none() {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no node `{page}`"),
+                });
             }
-            if covers(region, bounds) {
-                doomed.push(name.clone());
-                continue;
-            }
-            let Some(node) = document.node(*id) else {
-                doomed.push(name.clone());
-                continue;
+            let Some(region) = crate::boxes::rect_of(&self.rect) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the region is not a rectangle of four numbers".to_string(),
+                });
             };
-            match crate::image::clear(document, node, ctm, &[region]) {
-                // The **pixels** of the image are cleared: it is written
-                // again, as a new object.
-                Some(Some(bytes)) => {
-                    fresh.push((name.clone(), bytes, crate::image::entries_of_an_image(node)))
-                }
-                // No pixel of it is covered: it is left as it is.
-                Some(None) => {}
-                // The kit cannot read it: it is taken away whole.
-                None => doomed.push(name.clone()),
-            }
-        }
-        // The **forms** the region hits: their content is rewritten, and
-        // they are written again as new objects — the tree's own rule,
-        // and the reason is the same as the one of the images.
-        let forms = forms_drawn(&content.operations, &images, document);
-        let mut doomed_forms: Vec<String> = Vec::new();
-        let mut rewritten: Vec<Form> = Vec::new();
-        for (name, id, placed) in &forms {
-            // The **box** of the form: its own BBox, placed on the page.
-            let box_ = document
-                .node(*id)
-                .map(|node| crate::entries_of(&node.data))
-                .and_then(|entries| {
-                    entries.iter().find(|(key, _)| key == "BBox").map(|(_, value)| value.clone())
-                })
-                .and_then(|value| {
-                    value
-                        .as_array()
-                        .map(|list| list.iter().filter_map(|number| number.as_f64()).collect::<Vec<f64>>())
-                })
-                .filter(|corners| corners.len() == 4)
-                .map(|corners| placed.bbox([corners[0], corners[1], corners[2], corners[3]]));
-            if let Some(box_) = box_
-                && !overlaps(region, box_)
-            {
-                continue;
-            }
-            let Some(node) = document.node(*id) else {
-                doomed_forms.push(name.clone());
-                continue;
-            };
-            // The **content** of the form: a form whose content cannot
-            // be read is taken away whole.
-            let Ok(operations) = operations_of(node) else {
-                doomed_forms.push(name.clone());
-                continue;
-            };
-            // The **images** the form draws: the tree's own rule — the
-            // form has resources of its own, and the page's are used
-            // when it has none.
-            let own = resources_of(document, node);
-            let resources = if own.is_empty() {
-                document.node(page).map(|page| resources_of(document, page)).unwrap_or_default()
-            } else {
-                own
-            };
-            let images = xobjects_of_resources(document, &resources);
-            let xobjects: Vec<(String, Json)> = match resources.iter().find(|(key, _)| key == "XObject") {
-                Some((_, value)) => entries_of_value(document, value).unwrap_or_default(),
-                None => Vec::new(),
-            };
-            let drawn = images_drawn(&operations, &images, document);
-            // The **fate** of each of them: an image the region covers
-            // is gone, and an image it only hits has its covered
-            // pixels cleared — and it is then drawn under a new name,
-            // for the object the forms share keeps the name it had.
+            let content = content_of(document, page)?;
+            let images = xobjects_of(document, page);
+            // The **images** the page draws, and the ones the region takes
+            // away: the tree's own rules — an image the region **covers**
+            // is gone, and an image it only **hits** has its covered pixels
+            // cleared, unless the kit cannot read it, and then it is gone
+            // as well.
+            let drawn = images_drawn(&content.operations, &images, document);
             let mut doomed: Vec<String> = Vec::new();
             let mut fresh: Vec<Fresh> = Vec::new();
-            for (held, image, ctm) in &drawn {
-                // The image is placed by the form and by the page.
-                let placed = ctm.then(placed);
-                let bounds = placed.bbox([0.0, 0.0, 1.0, 1.0]);
+            for (name, id, ctm) in &drawn {
+                let bounds = ctm.bbox([0.0, 0.0, 1.0, 1.0]);
                 if !overlaps(region, bounds) {
                     continue;
                 }
                 if covers(region, bounds) {
-                    doomed.push(held.clone());
+                    doomed.push(name.clone());
                     continue;
                 }
-                let Some(node) = document.node(*image) else {
-                    doomed.push(held.clone());
+                let Some(node) = document.node(*id) else {
+                    doomed.push(name.clone());
                     continue;
                 };
-                match crate::image::clear(document, node, &placed, &[region]) {
-                    // The **pixels** of the image are cleared: it is
-                    // written again, as a new object.
+                match crate::image::clear(document, node, ctm, &[region]) {
+                    // The **pixels** of the image are cleared: it is written
+                    // again, as a new object.
                     Some(Some(bytes)) => {
-                        fresh.push((held.clone(), bytes, crate::image::entries_of_an_image(node)))
+                        fresh.push((name.clone(), bytes, crate::image::entries_of_an_image(node)))
                     }
                     // No pixel of it is covered: it is left as it is.
                     Some(None) => {}
                     // The kit cannot read it: it is taken away whole.
-                    None => doomed.push(held.clone()),
+                    None => doomed.push(name.clone()),
                 }
             }
-            let drawings = drawings_under(&operations, region, &doomed, &[], *placed);
-            if drawings.images == 0 && drawings.paths == 0 && drawings.shadings == 0 && fresh.is_empty() {
-                continue;
-            }
-            // The **dictionary** of the form, without the ones that say
-            // how its bytes are encoded.
-            let entries: Vec<(String, Json)> = crate::entries_of(&node.data)
-                .into_iter()
-                .filter(|(key, _)| key != "Filter" && key != "Length" && key != "DecodeParms")
-                .collect();
-            rewritten.push(Form {
-                name: name.clone(),
-                entries,
-                operations,
-                resources,
-                images,
-                xobjects,
-                placed: *placed,
-                doomed,
-                fresh,
-                renames: Vec::new(),
-            });
-        }
-        // The **new images**: a new object for each of them, and a new
-        // name for it, so that the object the pages share is untouched.
-        let directory =
-            std::path::Path::new(&content.path).parent().map(|parent| parent.to_string_lossy().to_string());
-        let mut renamed: Vec<(String, String)> = Vec::new();
-        let mut cleared = 0usize;
-        let mut forms_written = 0usize;
-        for (name, bytes, entries) in &fresh {
-            let number = crate::free::the_next_number(session.document(), 0);
-            let Some(directory) = directory.clone() else {
-                return Err(EngineError::Failed {
-                    id: COMMAND.to_string(),
-                    message: "the stream of the page has no folder, and the image has nowhere to go"
-                        .to_string(),
+            // The **forms** the region hits: their content is rewritten, and
+            // they are written again as new objects — the tree's own rule,
+            // and the reason is the same as the one of the images.
+            let forms = forms_drawn(&content.operations, &images, document);
+            let mut doomed_forms: Vec<String> = Vec::new();
+            let mut rewritten: Vec<Form> = Vec::new();
+            for (name, id, placed) in &forms {
+                // The **box** of the form: its own BBox, placed on the page.
+                let box_ = document
+                    .node(*id)
+                    .map(|node| crate::entries_of(&node.data))
+                    .and_then(|entries| {
+                        entries.iter().find(|(key, _)| key == "BBox").map(|(_, value)| value.clone())
+                    })
+                    .and_then(|value| {
+                        value
+                            .as_array()
+                            .map(|list| list.iter().filter_map(|number| number.as_f64()).collect::<Vec<f64>>())
+                    })
+                    .filter(|corners| corners.len() == 4)
+                    .map(|corners| placed.bbox([corners[0], corners[1], corners[2], corners[3]]));
+                if let Some(box_) = box_
+                    && !overlaps(region, box_)
+                {
+                    continue;
+                }
+                let Some(node) = document.node(*id) else {
+                    doomed_forms.push(name.clone());
+                    continue;
+                };
+                // The **content** of the form: a form whose content cannot
+                // be read is taken away whole.
+                let Ok(operations) = operations_of(node) else {
+                    doomed_forms.push(name.clone());
+                    continue;
+                };
+                // The **images** the form draws: the tree's own rule — the
+                // form has resources of its own, and the page's are used
+                // when it has none.
+                let own = resources_of(document, node);
+                let resources = if own.is_empty() {
+                    document.node(page).map(|page| resources_of(document, page)).unwrap_or_default()
+                } else {
+                    own
+                };
+                let images = xobjects_of_resources(document, &resources);
+                let xobjects: Vec<(String, Json)> = match resources.iter().find(|(key, _)| key == "XObject") {
+                    Some((_, value)) => entries_of_value(document, value).unwrap_or_default(),
+                    None => Vec::new(),
+                };
+                let drawn = images_drawn(&operations, &images, document);
+                // The **fate** of each of them: an image the region covers
+                // is gone, and an image it only hits has its covered
+                // pixels cleared — and it is then drawn under a new name,
+                // for the object the forms share keeps the name it had.
+                let mut doomed: Vec<String> = Vec::new();
+                let mut fresh: Vec<Fresh> = Vec::new();
+                for (held, image, ctm) in &drawn {
+                    // The image is placed by the form and by the page.
+                    let placed = ctm.then(placed);
+                    let bounds = placed.bbox([0.0, 0.0, 1.0, 1.0]);
+                    if !overlaps(region, bounds) {
+                        continue;
+                    }
+                    if covers(region, bounds) {
+                        doomed.push(held.clone());
+                        continue;
+                    }
+                    let Some(node) = document.node(*image) else {
+                        doomed.push(held.clone());
+                        continue;
+                    };
+                    match crate::image::clear(document, node, &placed, &[region]) {
+                        // The **pixels** of the image are cleared: it is
+                        // written again, as a new object.
+                        Some(Some(bytes)) => {
+                            fresh.push((held.clone(), bytes, crate::image::entries_of_an_image(node)))
+                        }
+                        // No pixel of it is covered: it is left as it is.
+                        Some(None) => {}
+                        // The kit cannot read it: it is taken away whole.
+                        None => doomed.push(held.clone()),
+                    }
+                }
+                let drawings = drawings_under(&operations, region, &doomed, &[], *placed);
+                if drawings.images == 0 && drawings.paths == 0 && drawings.shadings == 0 && fresh.is_empty() {
+                    continue;
+                }
+                // The **dictionary** of the form, without the ones that say
+                // how its bytes are encoded.
+                let entries: Vec<(String, Json)> = crate::entries_of(&node.data)
+                    .into_iter()
+                    .filter(|(key, _)| key != "Filter" && key != "Length" && key != "DecodeParms")
+                    .collect();
+                rewritten.push(Form {
+                    name: name.clone(),
+                    entries,
+                    operations,
+                    resources,
+                    images,
+                    xobjects,
+                    placed: *placed,
+                    doomed,
+                    fresh,
+                    renames: Vec::new(),
                 });
-            };
-            let path = format!("{directory}/{number}.bin");
-            std::fs::write(&path, bytes).map_err(|error| EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the image cannot be written: {error}"),
-            })?;
-            let data = json!({
-                "object": number,
-                "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
-            });
-            let stream =
-                session.document_mut()?.add_node_with(format!("object {number}"), "pdf.stream", None, data);
-            if let Some(node) = session.document_mut()?.node_mut(stream) {
-                node.stream = Some(path);
             }
-            let new_name =
-                fresh_name(&images, &renamed.iter().map(|(_, name)| name.clone()).collect::<Vec<_>>());
-            point_at(session, page, &new_name, number)?;
-            renamed.push((name.clone(), new_name));
-            cleared += 1;
-        }
-        // The **new images of the forms**: the same rule as the images
-        // of the page — a new object for each of them, and a new name
-        // for it, so that the object the forms share is untouched.
-        for form in rewritten.iter_mut() {
-            for (name, bytes, entries) in &form.fresh {
+            // The **new images**: a new object for each of them, and a new
+            // name for it, so that the object the pages share is untouched.
+            let directory =
+                std::path::Path::new(&content.path).parent().map(|parent| parent.to_string_lossy().to_string());
+            let mut renamed: Vec<(String, String)> = Vec::new();
+            let mut cleared = 0usize;
+            let mut forms_written = 0usize;
+            for (name, bytes, entries) in &fresh {
                 let number = crate::free::the_next_number(session.document(), 0);
                 let Some(directory) = directory.clone() else {
                     return Err(EngineError::Failed {
@@ -970,107 +943,408 @@ impl RedactDrawings {
                     "object": number,
                     "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
                 });
-                let stream = session.document_mut()?.add_node_with(
-                    format!("object {number}"),
-                    "pdf.stream",
-                    None,
-                    data,
-                );
+                let stream =
+                    session.document_mut()?.add_node_with(format!("object {number}"), "pdf.stream", None, data);
                 if let Some(node) = session.document_mut()?.node_mut(stream) {
                     node.stream = Some(path);
                 }
-                let taken = form.renames.iter().map(|(_, name, _)| name.clone()).collect::<Vec<_>>();
-                let new_name = fresh_name(&form.images, &taken);
-                form.renames.push((name.clone(), new_name, number));
+                let new_name =
+                    fresh_name(&images, &renamed.iter().map(|(_, name)| name.clone()).collect::<Vec<_>>());
+                point_at(session, page, &new_name, number)?;
+                renamed.push((name.clone(), new_name));
                 cleared += 1;
             }
+            // The **new images of the forms**: the same rule as the images
+            // of the page — a new object for each of them, and a new name
+            // for it, so that the object the forms share is untouched.
+            for form in rewritten.iter_mut() {
+                for (name, bytes, entries) in &form.fresh {
+                    let number = crate::free::the_next_number(session.document(), 0);
+                    let Some(directory) = directory.clone() else {
+                        return Err(EngineError::Failed {
+                            id: COMMAND.to_string(),
+                            message: "the stream of the page has no folder, and the image has nowhere to go"
+                                .to_string(),
+                        });
+                    };
+                    let path = format!("{directory}/{number}.bin");
+                    std::fs::write(&path, bytes).map_err(|error| EngineError::Failed {
+                        id: COMMAND.to_string(),
+                        message: format!("the image cannot be written: {error}"),
+                    })?;
+                    let data = json!({
+                        "object": number,
+                        "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+                    });
+                    let stream = session.document_mut()?.add_node_with(
+                        format!("object {number}"),
+                        "pdf.stream",
+                        None,
+                        data,
+                    );
+                    if let Some(node) = session.document_mut()?.node_mut(stream) {
+                        node.stream = Some(path);
+                    }
+                    let taken = form.renames.iter().map(|(_, name, _)| name.clone()).collect::<Vec<_>>();
+                    let new_name = fresh_name(&form.images, &taken);
+                    form.renames.push((name.clone(), new_name, number));
+                    cleared += 1;
+                }
+            }
+            // The **new forms**: the same rule as the images — a new object
+            // with the new content, and a new name for it.
+            for form in &rewritten {
+                let number = crate::free::the_next_number(session.document(), 0);
+                let Some(directory) = directory.clone() else {
+                    return Err(EngineError::Failed {
+                        id: COMMAND.to_string(),
+                        message: "the stream of the page has no folder, and the form has nowhere to go"
+                            .to_string(),
+                    });
+                };
+                // The **content** of the form: the images that are taken
+                // away are not drawn, and the images that are cleared are
+                // drawn under their new names.
+                let renames: Vec<(String, String)> =
+                    form.renames.iter().map(|(old, new, _)| (old.clone(), new.clone())).collect();
+                let drawings = drawings_under(&form.operations, region, &form.doomed, &renames, form.placed);
+                let bytes = crate::content::write_operations(&drawings.operations);
+                // The **resources** of the new form: the tree's own rule —
+                // the form carries resources of its own, the images that
+                // are taken away are not among them, and the images that
+                // are cleared are.
+                let resources = resources_of_form(form);
+                let mut entries = form.entries.clone();
+                match entries.iter_mut().find(|(key, _)| key == "Resources") {
+                    Some(entry) => entry.1 = resources,
+                    None => entries.push(("Resources".to_string(), resources)),
+                }
+                let path = format!("{directory}/{number}.bin");
+                std::fs::write(&path, bytes).map_err(|error| EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the form cannot be written: {error}"),
+                })?;
+                let data = json!({
+                    "object": number,
+                    "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+                });
+                let stream =
+                    session.document_mut()?.add_node_with(format!("object {number}"), "pdf.stream", None, data);
+                if let Some(node) = session.document_mut()?.node_mut(stream) {
+                    node.stream = Some(path);
+                }
+                let new_name =
+                    fresh_name(&images, &renamed.iter().map(|(_, name)| name.clone()).collect::<Vec<_>>());
+                point_at(session, page, &new_name, number)?;
+                renamed.push((form.name.clone(), new_name));
+                forms_written += 1;
+            }
+            let mut gone = doomed.clone();
+            gone.extend(doomed_forms.iter().cloned());
+            let drawings =
+                drawings_under(&content.operations, region, &gone, &renamed, crate::content::Matrix::IDENTITY);
+            if drawings.images == 0
+                && drawings.paths == 0
+                && drawings.shadings == 0
+                && cleared == 0
+                && forms_written == 0
+            {
+                return Ok(Outcome::new(format!("nothing of the page `{page}` is under the region")).with_data(
+                    json!({
+                        "page": page,
+                        "region": json!(region),
+                        "images": 0,
+                        "cleared": 0,
+                        "forms": 0,
+                        "paths": 0,
+                        "shadings": 0,
+                    }),
+                ));
+            }
+            let bytes = write_operations(&content.path, &drawings.operations)?;
+            Ok(Outcome::changed(format!(
+                "{} image(s) removed, {} image(s) cleared, {} form(s) rewritten, {} path(s) removed, and {} shading(s) clipped",
+                drawings.images, cleared, forms_written, drawings.paths, drawings.shadings
+            ))
+            .with_data(json!({
+                "page": page,
+                "stream": content.stream,
+                "region": json!(region),
+                "images": drawings.images,
+                "cleared": cleared,
+                "forms": forms_written,
+                "paths": drawings.paths,
+                "shadings": drawings.shadings,
+                "bytes": bytes,
+            })))
+
         }
-        // The **new forms**: the same rule as the images — a new object
-        // with the new content, and a new name for it.
-        for form in &rewritten {
-            let number = crate::free::the_next_number(session.document(), 0);
-            let Some(directory) = directory.clone() else {
+    }
+    /// The **annotations under a region are taken away**.
+    ///
+    /// A change: the annotations the region overlaps are gone from the
+    /// document, and the pop-ups that belong to them go with them.
+    pdf.redact.annotations {
+        area: "pdf",
+        layer: "pdf",
+        icon: "remove",
+        mutates,
+        undoable,
+        params: {
+            /// The page whose annotations are taken away.
+
+            page: NodeRef,
+            /// The region: four numbers, the left, the bottom, the right and
+            /// the top of it.
+
+            rect: Json,
+        },
+        run: {
+
+            let page = self.page.0;
+            let document = session.document();
+            let Some(node) = document.node(page) else {
                 return Err(EngineError::Failed {
                     id: COMMAND.to_string(),
-                    message: "the stream of the page has no folder, and the form has nowhere to go"
-                        .to_string(),
+                    message: format!("there is no node `{page}`"),
                 });
             };
-            // The **content** of the form: the images that are taken
-            // away are not drawn, and the images that are cleared are
-            // drawn under their new names.
-            let renames: Vec<(String, String)> =
-                form.renames.iter().map(|(old, new, _)| (old.clone(), new.clone())).collect();
-            let drawings = drawings_under(&form.operations, region, &form.doomed, &renames, form.placed);
-            let bytes = crate::content::write_operations(&drawings.operations);
-            // The **resources** of the new form: the tree's own rule —
-            // the form carries resources of its own, the images that
-            // are taken away are not among them, and the images that
-            // are cleared are.
-            let resources = resources_of_form(form);
-            let mut entries = form.entries.clone();
-            match entries.iter_mut().find(|(key, _)| key == "Resources") {
-                Some(entry) => entry.1 = resources,
-                None => entries.push(("Resources".to_string(), resources)),
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the node `{page}` is a `{}` and not an object", node.kind),
+                });
             }
-            let path = format!("{directory}/{number}.bin");
-            std::fs::write(&path, bytes).map_err(|error| EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the form cannot be written: {error}"),
-            })?;
-            let data = json!({
-                "object": number,
-                "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
-            });
-            let stream =
-                session.document_mut()?.add_node_with(format!("object {number}"), "pdf.stream", None, data);
-            if let Some(node) = session.document_mut()?.node_mut(stream) {
-                node.stream = Some(path);
+            let Some(region) = crate::boxes::rect_of(&self.rect) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the region is not a rectangle of four numbers".to_string(),
+                });
+            };
+            // The **annotations** the region overlaps. A pop-up is never
+            // taken away by the region: it goes with the annotation it
+            // belongs to.
+            let annotations = annotations_of(document, page);
+            let mut doomed: Vec<u64> = Vec::new();
+            for (id, rectangle, subtype) in &annotations {
+                if subtype == "Popup" {
+                    continue;
+                }
+                let Some(rectangle) = rectangle else { continue };
+                if !overlaps(region, *rectangle) {
+                    continue;
+                }
+                doomed.push(*id);
             }
-            let new_name =
-                fresh_name(&images, &renamed.iter().map(|(_, name)| name.clone()).collect::<Vec<_>>());
-            point_at(session, page, &new_name, number)?;
-            renamed.push((form.name.clone(), new_name));
-            forms_written += 1;
+            // The **pop-ups** of the annotations that are gone.
+            for (id, _rectangle, subtype) in &annotations {
+                if subtype != "Popup" || doomed.contains(id) {
+                    continue;
+                }
+                let parent = document.node(*id).map(|node| crate::entries_of(&node.data)).and_then(|entries| {
+                    entries.iter().find(|(key, _)| key == "Parent").map(|(_, value)| value.clone())
+                });
+                let Some(parent) = parent else { continue };
+                let Some(number) = crate::number_of(&parent) else { continue };
+                let owner =
+                    document.walk().find(|node| crate::the_number_of(node) == Some(number)).map(|node| node.id);
+                if let Some(owner) = owner
+                    && doomed.contains(&owner)
+                {
+                    doomed.push(*id);
+                }
+            }
+            if doomed.is_empty() {
+                return Ok(Outcome::new(format!("nothing of the page `{page}` is under the region"))
+                    .with_data(json!({ "page": page, "region": json!(region), "removed": 0 })));
+            }
+            let mut removed: Vec<u64> = Vec::new();
+            for id in &doomed {
+                if session.document_mut()?.remove_node(*id) {
+                    removed.push(*id);
+                }
+            }
+            Ok(Outcome::changed(format!("{} annotation(s) removed", removed.len())).with_data(json!({
+                "page": page,
+                "region": json!(region),
+                "removed": removed.len(),
+                "annotations": removed,
+            })))
+
         }
-        let mut gone = doomed.clone();
-        gone.extend(doomed_forms.iter().cloned());
-        let drawings =
-            drawings_under(&content.operations, region, &gone, &renamed, crate::content::Matrix::IDENTITY);
-        if drawings.images == 0
-            && drawings.paths == 0
-            && drawings.shadings == 0
-            && cleared == 0
-            && forms_written == 0
-        {
-            return Ok(Outcome::new(format!("nothing of the page `{page}` is under the region")).with_data(
-                json!({
-                    "page": page,
-                    "region": json!(region),
-                    "images": 0,
-                    "cleared": 0,
-                    "forms": 0,
-                    "paths": 0,
-                    "shadings": 0,
-                }),
-            ));
+    }
+    /// The **box** of a redaction is drawn into the page.
+    ///
+    /// The tree's own rule: the mark of a redaction is gone when it is
+    /// applied, and **a box in its fill colour is drawn in its place**,
+    /// with the overlay text of the mark on it. The tree's fill colour is
+    /// black, and a mark with no colour of its own has no box.
+    ///
+    /// Here the box is drawn on its own: the commands that take the text,
+    /// the drawings and the annotations away are the tree's, and this
+    /// command draws what the tree draws in place of the mark.
+    pdf.redact.box {
+        area: "pdf",
+        layer: "pdf",
+        icon: "remove",
+        mutates,
+        undoable,
+        params: {
+            /// The page the box goes on.
+
+            page: NodeRef,
+            /// The region: four numbers, the left, the bottom, the right and
+            /// the top of it.
+
+            rect: Json,
+            /// The colour of the box: three numbers, red, green and blue.
+            ///
+            /// The tree's default is black.
+
+            color: Option<Json>,
+        },
+        run: {
+
+            let id = "pdf.redact.box".to_string();
+            let page = self.page.0;
+            let document = session.document();
+            let Some(node) = document.node(page) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{page}`"),
+                });
+            };
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{page}` is a `{}` and not an object", node.kind),
+                });
+            }
+            let Some(region) = crate::boxes::rect_of(&self.rect) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the region is not a rectangle of four numbers".to_string(),
+                });
+            };
+            let colour = match &self.color {
+                Some(colour) => colour_of(colour, &id)?,
+                None => [0.0, 0.0, 0.0],
+            };
+            let content = content_of(document, page)?;
+            // The **box**: the region, filled with the colour, drawn into
+            // the content of the page.
+            let mut changed = content.operations.clone();
+            // The **transform** the content ends in, and the way back from
+            // the space of the region to the space the content is written
+            // in: the region is in the space of the page, and the path of
+            // the box is written in the space of the content.
+            let end = transform_at_end(&content.operations);
+            let (x, y, width, height) = match end.invert() {
+                Some(back) => {
+                    let (left, bottom) = back.apply(region[0], region[1]);
+                    let (right, top) = back.apply(region[2], region[3]);
+                    (left, bottom, right - left, top - bottom)
+                }
+                None => (region[0], region[1], region[2] - region[0], region[3] - region[1]),
+            };
+            changed.push(op_of("q", &[]));
+            changed.push(op_of("rg", &[colour[0], colour[1], colour[2]]));
+            changed.push(op_of("re", &[x, y, width, height]));
+            changed.push(op_of("f", &[]));
+            changed.push(op_of("Q", &[]));
+            let bytes = write_operations(&content.path, &changed)?;
+            Ok(Outcome::changed(format!("a box was drawn on the page `{page}`")).with_data(json!({
+                "page": page,
+                "stream": content.stream,
+                "region": json!(region),
+                "color": json!(colour),
+                "bytes": bytes,
+            })))
+
         }
-        let bytes = write_operations(&content.path, &drawings.operations)?;
-        Ok(Outcome::changed(format!(
-            "{} image(s) removed, {} image(s) cleared, {} form(s) rewritten, {} path(s) removed, and {} shading(s) clipped",
-            drawings.images, cleared, forms_written, drawings.paths, drawings.shadings
-        ))
-        .with_data(json!({
-            "page": page,
-            "stream": content.stream,
-            "region": json!(region),
-            "images": drawings.images,
-            "cleared": cleared,
-            "forms": forms_written,
-            "paths": drawings.paths,
-            "shadings": drawings.shadings,
-            "bytes": bytes,
-        })))
+    }
+    /// The **text under a region is removed**.
+    ///
+    /// A change: the content of the page is written again without the
+    /// text the region covers.
+    pdf.redact.text {
+        area: "pdf",
+        layer: "pdf",
+        icon: "remove",
+        mutates,
+        undoable,
+        params: {
+            /// The page whose text is removed.
+
+            page: NodeRef,
+            /// The region: four numbers, the left, the bottom, the right and
+            /// the top of it.
+
+            rect: Json,
+        },
+        run: {
+
+            let page = self.page.0;
+            let document = session.document();
+            let Some(node) = document.node(page) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no node `{page}`"),
+                });
+            };
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the node `{page}` is a `{}` and not an object", node.kind),
+                });
+            }
+            let Some(region) = crate::boxes::rect_of(&self.rect) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: "the region is not a rectangle of four numbers".to_string(),
+                });
+            };
+            let content = content_of(document, page)?;
+            // The **pieces** of the page: the text and where it is.
+            let pieces = crate::pagetext::pieces_of_operations(document, page, &content.operations);
+            let (changed, removed) = remove_under(&content.operations, &pieces, region);
+            if removed == 0 {
+                return Ok(Outcome::new(format!("nothing of the page `{page}` is under the region"))
+                    .with_data(json!({ "page": page, "region": json!(region), "removed": 0 })));
+            }
+            // The **verification**: the text that is left is read again, and
+            // if any of it is still under the region nothing is written.
+            let left = crate::pagetext::pieces_of_operations(document, page, &changed);
+            let residue = left
+                .iter()
+                .filter(|piece| {
+                    // A piece with nothing but spaces in it is the gap the
+                    // removal leaves, and a gap is not text.
+                    if piece.text.trim().is_empty() {
+                        return false;
+                    }
+                    piece.bounds.is_some()
+                        && crate::region::under(region, piece.bounds.unwrap_or([0.0; 4]), origin_of(piece))
+                })
+                .count();
+            if residue > 0 {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!(
+                        "{residue} piece(s) of text are still under the region, so nothing was changed"
+                    ),
+                });
+            }
+            let bytes = write_operations(&content.path, &changed)?;
+            Ok(Outcome::changed(format!("{removed} piece(s) of text removed")).with_data(json!({
+                "page": page,
+                "stream": content.stream,
+                "region": json!(region),
+                "removed": removed,
+                "bytes": bytes,
+            })))
+
+        }
     }
 }
 
@@ -1205,94 +1479,6 @@ fn annotations_of(document: &Document, page: u64) -> Vec<(u64, Option<[f64; 4]>,
     out
 }
 
-/// The **annotations under a region are taken away**.
-///
-/// A change: the annotations the region overlaps are gone from the
-/// document, and the pop-ups that belong to them go with them.
-#[derive(Command)]
-#[command(id = "pdf.redact.annotations", area = "pdf", layer = "pdf", icon = "remove", mutates, undoable)]
-pub struct RedactAnnotations {
-    /// The page whose annotations are taken away.
-    pub page: NodeRef,
-    /// The region: four numbers, the left, the bottom, the right and
-    /// the top of it.
-    pub rect: Json,
-}
-
-impl RedactAnnotations {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let page = self.page.0;
-        let document = session.document();
-        let Some(node) = document.node(page) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no node `{page}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the node `{page}` is a `{}` and not an object", node.kind),
-            });
-        }
-        let Some(region) = crate::boxes::rect_of(&self.rect) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the region is not a rectangle of four numbers".to_string(),
-            });
-        };
-        // The **annotations** the region overlaps. A pop-up is never
-        // taken away by the region: it goes with the annotation it
-        // belongs to.
-        let annotations = annotations_of(document, page);
-        let mut doomed: Vec<u64> = Vec::new();
-        for (id, rectangle, subtype) in &annotations {
-            if subtype == "Popup" {
-                continue;
-            }
-            let Some(rectangle) = rectangle else { continue };
-            if !overlaps(region, *rectangle) {
-                continue;
-            }
-            doomed.push(*id);
-        }
-        // The **pop-ups** of the annotations that are gone.
-        for (id, _rectangle, subtype) in &annotations {
-            if subtype != "Popup" || doomed.contains(id) {
-                continue;
-            }
-            let parent = document.node(*id).map(|node| crate::entries_of(&node.data)).and_then(|entries| {
-                entries.iter().find(|(key, _)| key == "Parent").map(|(_, value)| value.clone())
-            });
-            let Some(parent) = parent else { continue };
-            let Some(number) = crate::number_of(&parent) else { continue };
-            let owner =
-                document.walk().find(|node| crate::the_number_of(node) == Some(number)).map(|node| node.id);
-            if let Some(owner) = owner
-                && doomed.contains(&owner)
-            {
-                doomed.push(*id);
-            }
-        }
-        if doomed.is_empty() {
-            return Ok(Outcome::new(format!("nothing of the page `{page}` is under the region"))
-                .with_data(json!({ "page": page, "region": json!(region), "removed": 0 })));
-        }
-        let mut removed: Vec<u64> = Vec::new();
-        for id in &doomed {
-            if session.document_mut()?.remove_node(*id) {
-                removed.push(*id);
-            }
-        }
-        Ok(Outcome::changed(format!("{} annotation(s) removed", removed.len())).with_data(json!({
-            "page": page,
-            "region": json!(region),
-            "removed": removed.len(),
-            "annotations": removed,
-        })))
-    }
-}
-
 /// The **transform** of a content stream at its end.
 ///
 /// The `q` and the `Q` keep it, and the `cm` changes it: the tree's
@@ -1356,166 +1542,4 @@ fn colour_of(value: &Json, id: &str) -> Result<[f64; 3], EngineError> {
         colour[at] = number;
     }
     Ok(colour)
-}
-
-/// The **box** of a redaction is drawn into the page.
-///
-/// The tree's own rule: the mark of a redaction is gone when it is
-/// applied, and **a box in its fill colour is drawn in its place**,
-/// with the overlay text of the mark on it. The tree's fill colour is
-/// black, and a mark with no colour of its own has no box.
-///
-/// Here the box is drawn on its own: the commands that take the text,
-/// the drawings and the annotations away are the tree's, and this
-/// command draws what the tree draws in place of the mark.
-#[derive(Command)]
-#[command(id = "pdf.redact.box", area = "pdf", layer = "pdf", icon = "remove", mutates, undoable)]
-pub struct RedactBox {
-    /// The page the box goes on.
-    pub page: NodeRef,
-    /// The region: four numbers, the left, the bottom, the right and
-    /// the top of it.
-    pub rect: Json,
-    /// The colour of the box: three numbers, red, green and blue.
-    ///
-    /// The tree's default is black.
-    pub color: Option<Json>,
-}
-
-impl RedactBox {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.redact.box".to_string();
-        let page = self.page.0;
-        let document = session.document();
-        let Some(node) = document.node(page) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{page}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{page}` is a `{}` and not an object", node.kind),
-            });
-        }
-        let Some(region) = crate::boxes::rect_of(&self.rect) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the region is not a rectangle of four numbers".to_string(),
-            });
-        };
-        let colour = match &self.color {
-            Some(colour) => colour_of(colour, &id)?,
-            None => [0.0, 0.0, 0.0],
-        };
-        let content = content_of(document, page)?;
-        // The **box**: the region, filled with the colour, drawn into
-        // the content of the page.
-        let mut changed = content.operations.clone();
-        // The **transform** the content ends in, and the way back from
-        // the space of the region to the space the content is written
-        // in: the region is in the space of the page, and the path of
-        // the box is written in the space of the content.
-        let end = transform_at_end(&content.operations);
-        let (x, y, width, height) = match end.invert() {
-            Some(back) => {
-                let (left, bottom) = back.apply(region[0], region[1]);
-                let (right, top) = back.apply(region[2], region[3]);
-                (left, bottom, right - left, top - bottom)
-            }
-            None => (region[0], region[1], region[2] - region[0], region[3] - region[1]),
-        };
-        changed.push(op_of("q", &[]));
-        changed.push(op_of("rg", &[colour[0], colour[1], colour[2]]));
-        changed.push(op_of("re", &[x, y, width, height]));
-        changed.push(op_of("f", &[]));
-        changed.push(op_of("Q", &[]));
-        let bytes = write_operations(&content.path, &changed)?;
-        Ok(Outcome::changed(format!("a box was drawn on the page `{page}`")).with_data(json!({
-            "page": page,
-            "stream": content.stream,
-            "region": json!(region),
-            "color": json!(colour),
-            "bytes": bytes,
-        })))
-    }
-}
-
-/// The **text under a region is removed**.
-///
-/// A change: the content of the page is written again without the
-/// text the region covers.
-#[derive(Command)]
-#[command(id = "pdf.redact.text", area = "pdf", layer = "pdf", icon = "remove", mutates, undoable)]
-pub struct RedactText {
-    /// The page whose text is removed.
-    pub page: NodeRef,
-    /// The region: four numbers, the left, the bottom, the right and
-    /// the top of it.
-    pub rect: Json,
-}
-
-impl RedactText {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let page = self.page.0;
-        let document = session.document();
-        let Some(node) = document.node(page) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no node `{page}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the node `{page}` is a `{}` and not an object", node.kind),
-            });
-        }
-        let Some(region) = crate::boxes::rect_of(&self.rect) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: "the region is not a rectangle of four numbers".to_string(),
-            });
-        };
-        let content = content_of(document, page)?;
-        // The **pieces** of the page: the text and where it is.
-        let pieces = crate::pagetext::pieces_of_operations(document, page, &content.operations);
-        let (changed, removed) = remove_under(&content.operations, &pieces, region);
-        if removed == 0 {
-            return Ok(Outcome::new(format!("nothing of the page `{page}` is under the region"))
-                .with_data(json!({ "page": page, "region": json!(region), "removed": 0 })));
-        }
-        // The **verification**: the text that is left is read again, and
-        // if any of it is still under the region nothing is written.
-        let left = crate::pagetext::pieces_of_operations(document, page, &changed);
-        let residue = left
-            .iter()
-            .filter(|piece| {
-                // A piece with nothing but spaces in it is the gap the
-                // removal leaves, and a gap is not text.
-                if piece.text.trim().is_empty() {
-                    return false;
-                }
-                piece.bounds.is_some()
-                    && crate::region::under(region, piece.bounds.unwrap_or([0.0; 4]), origin_of(piece))
-            })
-            .count();
-        if residue > 0 {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!(
-                    "{residue} piece(s) of text are still under the region, so nothing was changed"
-                ),
-            });
-        }
-        let bytes = write_operations(&content.path, &changed)?;
-        Ok(Outcome::changed(format!("{removed} piece(s) of text removed")).with_data(json!({
-            "page": page,
-            "stream": content.stream,
-            "region": json!(region),
-            "removed": removed,
-            "bytes": bytes,
-        })))
-    }
 }

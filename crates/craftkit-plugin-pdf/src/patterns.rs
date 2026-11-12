@@ -33,10 +33,10 @@
 //! - **The tree's patterns are matched glyph by glyph**, and here they
 //!   are matched over characters.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Outcome, Text};
 
 /// The **patterns** of a redaction: the tree's own.
 pub const PATTERNS: [&str; 5] = ["phone", "email", "credit-card", "ssn", "date"];
@@ -309,60 +309,68 @@ pub fn find(pattern: &str, text: &[char]) -> Vec<std::ops::Range<usize>> {
     out
 }
 
-/// The **patterns** of a redaction: the tree's five, with their labels.
-#[derive(Command)]
-#[command(id = "pdf.redact.patterns", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadPatterns {}
+commands! {
+    /// The **patterns** of a redaction: the tree's five, with their labels.
+    pdf.redact.patterns {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+        },
+        run: {
 
-impl ReadPatterns {
-    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
-        let patterns: Vec<Json> = PATTERNS
-            .iter()
-            .filter_map(|pattern| label_of(pattern).map(|label| json!({ "id": pattern, "label": label })))
-            .collect();
-        Ok(Outcome::new(format!("there are {} pattern(s)", patterns.len())).with_data(json!({
-            "patterns": patterns,
-            "count": patterns.len(),
-        })))
-    }
-}
+            let patterns: Vec<Json> = PATTERNS
+                .iter()
+                .filter_map(|pattern| label_of(pattern).map(|label| json!({ "id": pattern, "label": label })))
+                .collect();
+            Ok(Outcome::new(format!("there are {} pattern(s)", patterns.len())).with_data(json!({
+                "patterns": patterns,
+                "count": patterns.len(),
+            })))
 
-/// The **text** that matches a pattern: the ranges of it, and the text
-/// of each range.
-#[derive(Command)]
-#[command(id = "pdf.redact.pattern.find", area = "pdf", layer = "pdf", icon = "find")]
-pub struct FindPattern {
-    /// The text to look in.
-    pub text: Text,
-    /// The pattern: `phone`, `email`, `credit-card`, `ssn` or `date`.
-    pub pattern: Text,
-}
-
-impl FindPattern {
-    fn run(&self, _session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "pdf.redact.pattern.find";
-        let pattern = self.pattern.0.trim().to_ascii_lowercase();
-        if !PATTERNS.contains(&pattern.as_str()) {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!(
-                    "`{pattern}` is not a pattern of a redaction: the patterns are {}",
-                    PATTERNS.join(", ")
-                ),
-            });
         }
-        let text: Vec<char> = self.text.0.chars().collect();
-        let ranges: Vec<Json> = find(&pattern, &text)
-            .into_iter()
-            .map(|range| {
-                let found: String = text[range.clone()].iter().collect();
-                json!({ "start": range.start, "end": range.end, "text": found })
-            })
-            .collect();
-        Ok(Outcome::new(format!("the text holds {} match(es)", ranges.len())).with_data(json!({
-            "pattern": pattern,
-            "matches": ranges,
-            "count": ranges.len(),
-        })))
+    }
+    /// The **text** that matches a pattern: the ranges of it, and the text
+    /// of each range.
+    pdf.redact.pattern.find {
+        area: "pdf",
+        layer: "pdf",
+        icon: "find",
+        params: {
+            /// The text to look in.
+
+            text: Text,
+            /// The pattern: `phone`, `email`, `credit-card`, `ssn` or `date`.
+
+            pattern: Text,
+        },
+        run: {
+
+            let command = "pdf.redact.pattern.find";
+            let pattern = self.pattern.0.trim().to_ascii_lowercase();
+            if !PATTERNS.contains(&pattern.as_str()) {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!(
+                        "`{pattern}` is not a pattern of a redaction: the patterns are {}",
+                        PATTERNS.join(", ")
+                    ),
+                });
+            }
+            let text: Vec<char> = self.text.0.chars().collect();
+            let ranges: Vec<Json> = find(&pattern, &text)
+                .into_iter()
+                .map(|range| {
+                    let found: String = text[range.clone()].iter().collect();
+                    json!({ "start": range.start, "end": range.end, "text": found })
+                })
+                .collect();
+            Ok(Outcome::new(format!("the text holds {} match(es)", ranges.len())).with_data(json!({
+                "pattern": pattern,
+                "matches": ranges,
+                "count": ranges.len(),
+            })))
+
+        }
     }
 }

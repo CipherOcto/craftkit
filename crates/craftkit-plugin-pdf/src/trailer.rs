@@ -10,10 +10,10 @@
 //! battery owns, so that a document that was loaded from a file still
 //! says where its trailer came from (§513).
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Outcome, Session, Text};
+use craftkit_sdk::{Document, EngineError, Outcome, Text};
 
 /// The key the pdf battery keeps the **trailer** under.
 const TRAILER_KEY: &str = "pdf.trailer";
@@ -50,41 +50,46 @@ pub fn is_encrypted(document: &Document) -> bool {
     entry_of(document, "Encrypt").is_some()
 }
 
-/// **Read** the trailer of a PDF file.
-///
-/// A query: it does not change the document.
-#[derive(Command)]
-#[command(id = "pdf.trailer.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadTrailer {
-    /// The entry to read.
+commands! {
+    /// **Read** the trailer of a PDF file.
     ///
-    /// Leave it out and every entry of the trailer is read.
-    pub key: Option<Text>,
-}
+    /// A query: it does not change the document.
+    pdf.trailer.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The entry to read.
+            ///
+            /// Leave it out and every entry of the trailer is read.
 
-impl ReadTrailer {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let document = session.document();
-        let entries = trailer_of(document);
-        let (entries, count) = match &self.key {
-            None => (entries.clone(), entries.len()),
-            Some(key) => {
-                let one: Vec<_> = entries.iter().filter(|(name, _)| name == key.0.trim()).cloned().collect();
-                if one.is_empty() {
-                    return Err(EngineError::Failed {
-                        id: "pdf.trailer.read".to_string(),
-                        message: format!("the trailer has no entry `{}`", key.0.trim()),
-                    });
+            key: Option<Text>,
+        },
+        run: {
+
+            let document = session.document();
+            let entries = trailer_of(document);
+            let (entries, count) = match &self.key {
+                None => (entries.clone(), entries.len()),
+                Some(key) => {
+                    let one: Vec<_> = entries.iter().filter(|(name, _)| name == key.0.trim()).cloned().collect();
+                    if one.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: "pdf.trailer.read".to_string(),
+                            message: format!("the trailer has no entry `{}`", key.0.trim()),
+                        });
+                    }
+                    let count = one.len();
+                    (one, count)
                 }
-                let count = one.len();
-                (one, count)
-            }
-        };
-        let listed: Vec<Json> =
-            entries.iter().map(|(key, value)| json!([key.clone(), value.clone()])).collect();
-        Ok(Outcome::new(format!("the trailer holds {count} entry(ies)")).with_data(json!({
-            "entries": listed,
-            "encrypted": is_encrypted(document),
-        })))
+            };
+            let listed: Vec<Json> =
+                entries.iter().map(|(key, value)| json!([key.clone(), value.clone()])).collect();
+            Ok(Outcome::new(format!("the trailer holds {count} entry(ies)")).with_data(json!({
+                "entries": listed,
+                "encrypted": is_encrypted(document),
+            })))
+
+        }
     }
 }

@@ -23,10 +23,10 @@
 //! - a field that says nothing about its appearance has none, and the
 //!   answer says so.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Text};
 
 /// The **appearance** of a field: what the file says about it.
 #[derive(Debug, Clone, PartialEq)]
@@ -152,46 +152,222 @@ pub fn appearance_of(document: &Document, node: &Node) -> Option<Appearance> {
     })
 }
 
-/// **Read** the **appearance** of a field.
-///
-/// A query: it does not change the document. A field that says nothing
-/// about its appearance has none, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.field.appearance", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadAppearance {
-    /// The field to read.
-    pub field: NodeRef,
-}
+commands! {
+    /// **Read** the **appearance** of a field.
+    ///
+    /// A query: it does not change the document. A field that says nothing
+    /// about its appearance has none, and the answer says so.
+    pdf.field.appearance {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The field to read.
 
-impl ReadAppearance {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.field.appearance".to_string();
-        let document = session.document();
-        let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{}`", self.field.0),
-        })?;
-        let name = crate::fields::qualified_name(document, node);
-        let Some(appearance) = appearance_of(document, node) else {
-            return Ok(Outcome::new("the field has no appearance").with_data(json!({
+            field: NodeRef,
+        },
+        run: {
+
+            let id = "pdf.field.appearance".to_string();
+            let document = session.document();
+            let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{}`", self.field.0),
+            })?;
+            let name = crate::fields::qualified_name(document, node);
+            let Some(appearance) = appearance_of(document, node) else {
+                return Ok(Outcome::new("the field has no appearance").with_data(json!({
+                    "field": name.clone().map(|name| json!(name)).unwrap_or(Json::Null),
+                    "has_appearance": false,
+                    "states": Vec::<Json>::new(),
+                    "state": Json::Null,
+                    "box": Json::Null,
+                    "matrix": Json::Null,
+                    "operations": Vec::<Json>::new(),
+                })));
+            };
+            Ok(Outcome::new("the field has an appearance").with_data(json!({
                 "field": name.clone().map(|name| json!(name)).unwrap_or(Json::Null),
-                "has_appearance": false,
-                "states": Vec::<Json>::new(),
-                "state": Json::Null,
-                "box": Json::Null,
-                "matrix": Json::Null,
-                "operations": Vec::<Json>::new(),
-            })));
-        };
-        Ok(Outcome::new("the field has an appearance").with_data(json!({
-            "field": name.clone().map(|name| json!(name)).unwrap_or(Json::Null),
-            "has_appearance": true,
-            "states": appearance.states.clone(),
-            "state": appearance.state.clone().map(|state| json!(state)).unwrap_or(Json::Null),
-            "box": appearance.box_.clone().map(|values| json!(values)).unwrap_or(Json::Null),
-            "matrix": appearance.matrix.clone().map(|values| json!(values)).unwrap_or(Json::Null),
-            "operations": appearance.operations.clone(),
-        })))
+                "has_appearance": true,
+                "states": appearance.states.clone(),
+                "state": appearance.state.clone().map(|state| json!(state)).unwrap_or(Json::Null),
+                "box": appearance.box_.clone().map(|values| json!(values)).unwrap_or(Json::Null),
+                "matrix": appearance.matrix.clone().map(|values| json!(values)).unwrap_or(Json::Null),
+                "operations": appearance.operations.clone(),
+            })))
+
+        }
+    }
+    /// **Write** the **appearance** of a field.
+    ///
+    /// The appearance is a **form XObject** — a little drawing — and the
+    /// widget's `/AP` names it under the key `N`. The bytes of the
+    /// drawing are written to a file of their own, beside the document,
+    /// and the node of the appearance says which file they are in.
+    ///
+    /// The rules:
+    ///
+    /// - the widget must have a **rectangle**, for the drawing to be
+    ///   drawn in;
+    /// - the **value** is the one the widget holds, or the one it
+    ///   inherits, and a widget that holds none is refused;
+    /// - the **size** and the **font** come from the default appearance
+    ///   (`/DA`), and a field that says none is refused;
+    /// - the font must be **in the file** — in the page's resources or in
+    ///   the form's — and a font that is not there is refused;
+    /// - the text is drawn at the **top left** of the box, two points
+    ///   from its edge, and the drawing is clipped to the box;
+    /// - the **frame** of the field is drawn from its **look**: the
+    ///   background is filled from the `/BG` and the border is stroked from
+    ///   the `/BC` and the `/BS` — the tree's own `frame` — and a field
+    ///   that says no colour has no background and no border.
+    pdf.field.appearance.write {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The widget the appearance is written for.
+
+            widget: NodeRef,
+            /// Where the bytes of the appearance are written.
+
+            to: Text,
+        },
+        run: {
+
+            let id = "pdf.field.appearance.write".to_string();
+            let widget = self.widget.0;
+            let Some(node) = session.document().node(widget) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{widget}`"),
+                });
+            };
+            let entries = entries_of(node);
+            let subtype = entry(&entries, "Subtype").and_then(|subtype| subtype.as_str());
+            if subtype != Some("Widget") {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{widget}` is not a widget"),
+                });
+            }
+            let Some((width, height)) = box_of(node) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the widget `{widget}` has no box to be drawn in"),
+                });
+            };
+            let Some(value) = value_of(session.document(), node) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the widget `{widget}` holds no value to draw"),
+                });
+            };
+            let Some(da) = da_of(session.document(), node) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the widget `{widget}` says nothing about how its text is drawn"),
+                });
+            };
+            let Some((font, size)) = font_and_size(&da) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the default appearance `{da}` says no font and no size"),
+                });
+            };
+            let Some(font_number) = font_number_of(session.document(), node, &font) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the font `{font}` is not in the file"),
+                });
+            };
+            let Some(drawing) = the_drawing(&font, size, width, height, &value) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the value of the widget `{widget}` cannot be written"),
+                });
+            };
+            // The **frame** of the widget: the background and the border of
+            // it, as the tree's own `frame` draws them.
+            let frame = the_frame_of(session.document(), &entries, width, height);
+            let mut bytes = frame.into_bytes();
+            bytes.extend_from_slice(&drawing);
+            let path = self.to.0.clone();
+            if path.trim().is_empty() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "the drawing goes somewhere".to_string(),
+                });
+            }
+            std::fs::write(&path, &bytes).map_err(|error| EngineError::Failed {
+                id: id.clone(),
+                message: format!("the drawing cannot be written to `{path}`: {error}"),
+            })?;
+            // The **appearance**: a form XObject with the box, and the
+            // font it draws with.
+            let number = crate::free::the_next_number(session.document(), 0);
+            let font_resource = json!({ "entries": [ [ font.clone(), { "ref": [font_number, 0] } ] ] });
+            let resources = json!({ "entries": [ [ "Font", font_resource ] ] });
+            let appearance = json!({
+                "object": number,
+                "entries": [
+                    ["Type", "XObject"],
+                    ["Subtype", "Form"],
+                    ["BBox", [0.0, 0.0, width, height]],
+                    ["Resources", resources],
+                ],
+            });
+            let name = format!("object {number}");
+            let stream = session.document_mut()?.add_node_with(name, "pdf.stream", None, appearance);
+            if let Some(node) = session.document_mut()?.node_mut(stream) {
+                node.stream = Some(path.clone());
+            }
+            // The widget's **appearance**: the normal one, under `N`.
+            let normal = json!({ "entries": [ ["N", { "ref": [number, 0] } ] ] });
+            let mut entries = entries_of(session.document().node(widget).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{widget}`"),
+            })?);
+            match entries.iter_mut().find(|(key, _)| key == "AP") {
+                Some(entry) => entry.1 = normal,
+                None => entries.push(("AP".to_string(), normal)),
+            }
+            let data = json!({
+                "object": session.document().node(widget).and_then(|node| node.data.get("object").cloned()).unwrap_or(Json::Null),
+                "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+            });
+            if let Some(node) = session.document_mut()?.node_mut(widget) {
+                node.data = data;
+            }
+            // The **edge**: the widget refers to the appearance, and the
+            // file is written from the edges as well as from the
+            // dictionaries.
+            let relation = craftkit_sdk::Relation::with_payload(
+                widget,
+                stream,
+                "ref",
+                json!({ "key": "AP", "generation": 0 }),
+            );
+            if !session.document_mut()?.add_relation(relation) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the widget `{widget}` already refers to the appearance"),
+                });
+            }
+            Ok(Outcome::changed(format!("the widget `{widget}` has an appearance")).with_data(json!({
+                "widget": widget,
+                "appearance": stream,
+                "object": number,
+                "path": path,
+                "bytes": bytes.len(),
+                "font": font,
+                "size": size,
+                "box": [0.0, 0.0, width, height],
+            })))
+
+        }
     }
 }
 
@@ -475,170 +651,4 @@ fn the_frame_of(document: &Document, entries: &[(String, Json)], width: f64, hei
         ));
     }
     out
-}
-
-/// **Write** the **appearance** of a field.
-///
-/// The appearance is a **form XObject** — a little drawing — and the
-/// widget's `/AP` names it under the key `N`. The bytes of the
-/// drawing are written to a file of their own, beside the document,
-/// and the node of the appearance says which file they are in.
-///
-/// The rules:
-///
-/// - the widget must have a **rectangle**, for the drawing to be
-///   drawn in;
-/// - the **value** is the one the widget holds, or the one it
-///   inherits, and a widget that holds none is refused;
-/// - the **size** and the **font** come from the default appearance
-///   (`/DA`), and a field that says none is refused;
-/// - the font must be **in the file** — in the page's resources or in
-///   the form's — and a font that is not there is refused;
-/// - the text is drawn at the **top left** of the box, two points
-///   from its edge, and the drawing is clipped to the box;
-/// - the **frame** of the field is drawn from its **look**: the
-///   background is filled from the `/BG` and the border is stroked from
-///   the `/BC` and the `/BS` — the tree's own `frame` — and a field
-///   that says no colour has no background and no border.
-#[derive(Command)]
-#[command(id = "pdf.field.appearance.write", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct WriteAppearance {
-    /// The widget the appearance is written for.
-    pub widget: NodeRef,
-    /// Where the bytes of the appearance are written.
-    pub to: Text,
-}
-
-impl WriteAppearance {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.field.appearance.write".to_string();
-        let widget = self.widget.0;
-        let Some(node) = session.document().node(widget) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{widget}`"),
-            });
-        };
-        let entries = entries_of(node);
-        let subtype = entry(&entries, "Subtype").and_then(|subtype| subtype.as_str());
-        if subtype != Some("Widget") {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{widget}` is not a widget"),
-            });
-        }
-        let Some((width, height)) = box_of(node) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the widget `{widget}` has no box to be drawn in"),
-            });
-        };
-        let Some(value) = value_of(session.document(), node) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the widget `{widget}` holds no value to draw"),
-            });
-        };
-        let Some(da) = da_of(session.document(), node) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the widget `{widget}` says nothing about how its text is drawn"),
-            });
-        };
-        let Some((font, size)) = font_and_size(&da) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the default appearance `{da}` says no font and no size"),
-            });
-        };
-        let Some(font_number) = font_number_of(session.document(), node, &font) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the font `{font}` is not in the file"),
-            });
-        };
-        let Some(drawing) = the_drawing(&font, size, width, height, &value) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the value of the widget `{widget}` cannot be written"),
-            });
-        };
-        // The **frame** of the widget: the background and the border of
-        // it, as the tree's own `frame` draws them.
-        let frame = the_frame_of(session.document(), &entries, width, height);
-        let mut bytes = frame.into_bytes();
-        bytes.extend_from_slice(&drawing);
-        let path = self.to.0.clone();
-        if path.trim().is_empty() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "the drawing goes somewhere".to_string(),
-            });
-        }
-        std::fs::write(&path, &bytes).map_err(|error| EngineError::Failed {
-            id: id.clone(),
-            message: format!("the drawing cannot be written to `{path}`: {error}"),
-        })?;
-        // The **appearance**: a form XObject with the box, and the
-        // font it draws with.
-        let number = crate::free::the_next_number(session.document(), 0);
-        let font_resource = json!({ "entries": [ [ font.clone(), { "ref": [font_number, 0] } ] ] });
-        let resources = json!({ "entries": [ [ "Font", font_resource ] ] });
-        let appearance = json!({
-            "object": number,
-            "entries": [
-                ["Type", "XObject"],
-                ["Subtype", "Form"],
-                ["BBox", [0.0, 0.0, width, height]],
-                ["Resources", resources],
-            ],
-        });
-        let name = format!("object {number}");
-        let stream = session.document_mut()?.add_node_with(name, "pdf.stream", None, appearance);
-        if let Some(node) = session.document_mut()?.node_mut(stream) {
-            node.stream = Some(path.clone());
-        }
-        // The widget's **appearance**: the normal one, under `N`.
-        let normal = json!({ "entries": [ ["N", { "ref": [number, 0] } ] ] });
-        let mut entries = entries_of(session.document().node(widget).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{widget}`"),
-        })?);
-        match entries.iter_mut().find(|(key, _)| key == "AP") {
-            Some(entry) => entry.1 = normal,
-            None => entries.push(("AP".to_string(), normal)),
-        }
-        let data = json!({
-            "object": session.document().node(widget).and_then(|node| node.data.get("object").cloned()).unwrap_or(Json::Null),
-            "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
-        });
-        if let Some(node) = session.document_mut()?.node_mut(widget) {
-            node.data = data;
-        }
-        // The **edge**: the widget refers to the appearance, and the
-        // file is written from the edges as well as from the
-        // dictionaries.
-        let relation = craftkit_sdk::Relation::with_payload(
-            widget,
-            stream,
-            "ref",
-            json!({ "key": "AP", "generation": 0 }),
-        );
-        if !session.document_mut()?.add_relation(relation) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the widget `{widget}` already refers to the appearance"),
-            });
-        }
-        Ok(Outcome::changed(format!("the widget `{widget}` has an appearance")).with_data(json!({
-            "widget": widget,
-            "appearance": stream,
-            "object": number,
-            "path": path,
-            "bytes": bytes.len(),
-            "font": font,
-            "size": size,
-            "box": [0.0, 0.0, width, height],
-        })))
-    }
 }

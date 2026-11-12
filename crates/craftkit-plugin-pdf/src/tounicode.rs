@@ -28,10 +28,10 @@
 //!   font — are not read: they stand for glyphs and not for
 //!   characters.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Outcome};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.font.unicode";
@@ -247,48 +247,53 @@ pub fn unicode_of(document: &Document, font: u64) -> Result<Option<Map>, EngineE
     Ok(Some(map))
 }
 
-/// **Read** the **Unicode map** of a font.
-///
-/// A query: it does not change the document. A font with no map has
-/// no Unicode, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.font.unicode", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadFontUnicode {
-    /// The font to read.
-    pub font: craftkit_sdk::NodeRef,
-}
+commands! {
+    /// **Read** the **Unicode map** of a font.
+    ///
+    /// A query: it does not change the document. A font with no map has
+    /// no Unicode, and the answer says so.
+    pdf.font.unicode {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The font to read.
 
-impl ReadFontUnicode {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let font = self.font.0;
-        let Some(node) = session.document().node(font) else {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("there is no node `{font}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: COMMAND.to_string(),
-                message: format!("the node `{font}` is a `{}` and not an object", node.kind),
-            });
-        }
-        let map = unicode_of(session.document(), font)?;
-        let Some(map) = map else {
-            return Ok(Outcome::new("the font has no Unicode map").with_data(json!({
+            font: craftkit_sdk::NodeRef,
+        },
+        run: {
+
+            let font = self.font.0;
+            let Some(node) = session.document().node(font) else {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("there is no node `{font}`"),
+                });
+            };
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: COMMAND.to_string(),
+                    message: format!("the node `{font}` is a `{}` and not an object", node.kind),
+                });
+            }
+            let map = unicode_of(session.document(), font)?;
+            let Some(map) = map else {
+                return Ok(Outcome::new("the font has no Unicode map").with_data(json!({
+                    "font": font,
+                    "has_map": false,
+                    "entries": Vec::<Json>::new(),
+                    "count": 0,
+                })));
+            };
+            let listed: Vec<Json> = map.entries.iter().map(|entry| entry.to_json()).collect();
+            let count = listed.len();
+            Ok(Outcome::new(format!("the font has {count} mapped code(s)")).with_data(json!({
                 "font": font,
-                "has_map": false,
-                "entries": Vec::<Json>::new(),
-                "count": 0,
-            })));
-        };
-        let listed: Vec<Json> = map.entries.iter().map(|entry| entry.to_json()).collect();
-        let count = listed.len();
-        Ok(Outcome::new(format!("the font has {count} mapped code(s)")).with_data(json!({
-            "font": font,
-            "has_map": true,
-            "entries": listed,
-            "count": count,
-        })))
+                "has_map": true,
+                "entries": listed,
+                "count": count,
+            })))
+
+        }
     }
 }

@@ -20,10 +20,10 @@
 //!   here and no way to check them, and an answer that said a
 //!   signature is good would be a guess.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Node, Outcome};
 
 /// One **signature** of a file: what the file says about it.
 #[derive(Debug, Clone, PartialEq)]
@@ -105,49 +105,54 @@ pub fn signatures_of(document: &Document) -> Vec<Signature> {
     out
 }
 
-/// **Read** the **signatures** of a PDF file.
-///
-/// A query: it does not change the document. The bytes of a signature
-/// are **not checked**: there is no key here, and an answer that said
-/// a signature is good would be a guess.
-#[derive(Command)]
-#[command(id = "pdf.signatures.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadSignatures {
-    /// The signature to read.
+commands! {
+    /// **Read** the **signatures** of a PDF file.
     ///
-    /// Leave it out and every signature is read.
-    pub field: Option<craftkit_sdk::Text>,
-}
+    /// A query: it does not change the document. The bytes of a signature
+    /// are **not checked**: there is no key here, and an answer that said
+    /// a signature is good would be a guess.
+    pdf.signatures.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The signature to read.
+            ///
+            /// Leave it out and every signature is read.
 
-impl ReadSignatures {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.signatures.read".to_string();
-        let document = session.document();
-        let all = signatures_of(document);
-        let listed: Vec<Json> = match &self.field {
-            None => all.iter().map(signature_json).collect(),
-            Some(field) => {
-                let wanted = field.0.trim();
-                let one: Vec<Json> = all
-                    .iter()
-                    .filter(|signature| signature.field.as_deref() == Some(wanted))
-                    .map(signature_json)
-                    .collect();
-                if one.is_empty() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the file has no signature called `{wanted}`"),
-                    });
+            field: Option<craftkit_sdk::Text>,
+        },
+        run: {
+
+            let id = "pdf.signatures.read".to_string();
+            let document = session.document();
+            let all = signatures_of(document);
+            let listed: Vec<Json> = match &self.field {
+                None => all.iter().map(signature_json).collect(),
+                Some(field) => {
+                    let wanted = field.0.trim();
+                    let one: Vec<Json> = all
+                        .iter()
+                        .filter(|signature| signature.field.as_deref() == Some(wanted))
+                        .map(signature_json)
+                        .collect();
+                    if one.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the file has no signature called `{wanted}`"),
+                        });
+                    }
+                    one
                 }
-                one
-            }
-        };
-        let count = listed.len();
-        Ok(Outcome::new(format!("the file has {count} signature(s)")).with_data(json!({
-            "signatures": listed,
-            "count": count,
-            "verified": false,
-        })))
+            };
+            let count = listed.len();
+            Ok(Outcome::new(format!("the file has {count} signature(s)")).with_data(json!({
+                "signatures": listed,
+                "count": count,
+                "verified": false,
+            })))
+
+        }
     }
 }
 

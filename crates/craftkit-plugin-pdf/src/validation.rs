@@ -13,10 +13,10 @@
 //! kept as it is and reported as unsupported, because a script that
 //! needs a JavaScript engine is not one this tree may pretend to run.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome};
 
 /// The **validation** of a field: what its script says.
 #[derive(Debug, Clone, PartialEq)]
@@ -67,52 +67,57 @@ pub fn validation_of(document: &Document, node: &Node) -> Validation {
     }
 }
 
-/// **Read** the **validation** of a field.
-///
-/// A query: it does not change the document. A field that says nothing
-/// about what it accepts validates nothing, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.field.validate", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadValidation {
-    /// The field to read.
-    pub field: NodeRef,
-}
+commands! {
+    /// **Read** the **validation** of a field.
+    ///
+    /// A query: it does not change the document. A field that says nothing
+    /// about what it accepts validates nothing, and the answer says so.
+    pdf.field.validate {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The field to read.
 
-impl ReadValidation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.field.validate".to_string();
-        let document = session.document();
-        let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {
-            id: id.clone(),
-            message: format!("there is no node `{}`", self.field.0),
-        })?;
-        let validation = validation_of(document, node);
-        let name = crate::fields::qualified_name(document, node);
-        let (kind, greater, min, less, max) = match &validation {
-            Validation::Nothing => ("nothing", false, Json::Null, false, Json::Null),
-            Validation::Range { greater, min, less, max } => (
-                "range",
-                *greater,
-                min.map(|value| json!(value)).unwrap_or(Json::Null),
-                *less,
-                max.map(|value| json!(value)).unwrap_or(Json::Null),
-            ),
-            Validation::Unsupported(script) => {
-                ("unsupported", false, json!(script.clone()), false, Json::Null)
-            }
-        };
-        Ok(Outcome::new(match &validation {
-            Validation::Nothing => "the field validates nothing".to_string(),
-            Validation::Range { .. } => "the field accepts a range of values".to_string(),
-            Validation::Unsupported(_) => "the field has a script this tree does not understand".to_string(),
-        })
-        .with_data(json!({
-            "field": name.clone().map(|name| json!(name)).unwrap_or(Json::Null),
-            "kind": kind,
-            "greater": greater,
-            "min": min,
-            "less": less,
-            "max": max,
-        })))
+            field: NodeRef,
+        },
+        run: {
+
+            let id = "pdf.field.validate".to_string();
+            let document = session.document();
+            let node = document.node(self.field.0).ok_or_else(|| EngineError::Failed {
+                id: id.clone(),
+                message: format!("there is no node `{}`", self.field.0),
+            })?;
+            let validation = validation_of(document, node);
+            let name = crate::fields::qualified_name(document, node);
+            let (kind, greater, min, less, max) = match &validation {
+                Validation::Nothing => ("nothing", false, Json::Null, false, Json::Null),
+                Validation::Range { greater, min, less, max } => (
+                    "range",
+                    *greater,
+                    min.map(|value| json!(value)).unwrap_or(Json::Null),
+                    *less,
+                    max.map(|value| json!(value)).unwrap_or(Json::Null),
+                ),
+                Validation::Unsupported(script) => {
+                    ("unsupported", false, json!(script.clone()), false, Json::Null)
+                }
+            };
+            Ok(Outcome::new(match &validation {
+                Validation::Nothing => "the field validates nothing".to_string(),
+                Validation::Range { .. } => "the field accepts a range of values".to_string(),
+                Validation::Unsupported(_) => "the field has a script this tree does not understand".to_string(),
+            })
+            .with_data(json!({
+                "field": name.clone().map(|name| json!(name)).unwrap_or(Json::Null),
+                "kind": kind,
+                "greater": greater,
+                "min": min,
+                "less": less,
+                "max": max,
+            })))
+
+        }
     }
 }

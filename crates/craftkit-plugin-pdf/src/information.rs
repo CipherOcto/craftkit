@@ -23,10 +23,10 @@
 //!   own** (`DOCPROPS` in its own file format). Here the trailer
 //!   writes `/Info`, which is what a PDF file says.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome};
 
 /// The **information node** of a document: the node that says which
 /// object is the information dictionary.
@@ -63,117 +63,126 @@ pub fn text_of_entry(document: &Document, key: &str) -> Option<String> {
     crate::fields::text_of(&value)
 }
 
-/// Say which object is the file's **information**.
-#[derive(Command)]
-#[command(id = "pdf.info.set", area = "pdf", layer = "pdf", icon = "pencil", mutates, undoable)]
-pub struct SetInformation {
-    /// The object that is the information dictionary.
-    pub object: NodeRef,
-}
+commands! {
+    /// Say which object is the file's **information**.
+    pdf.info.set {
+        area: "pdf",
+        layer: "pdf",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The object that is the information dictionary.
 
-impl SetInformation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.info.set".to_string();
-        let object = self.object.0;
-        let Some(node) = session.document().node(object) else {
-            return Err(EngineError::Failed { id, message: format!("there is no node `{object}`") });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{object}` is a `{}` and not an object", node.kind),
-            });
-        }
-        let number = node.data.get("object").and_then(|number| number.as_u64()).ok_or_else(|| {
-            EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{object}` has no object number"),
-            }
-        })?;
-        // There is **one** information dictionary in a file, and a
-        // second one would be a second answer to one question.
-        if let Some(already) = the_information_node(session.document()) {
-            let already_object = already.data.get("object").and_then(|object| object.as_u64()).unwrap_or(0);
-            if already_object != object {
+            object: NodeRef,
+        },
+        run: {
+
+            let id = "pdf.info.set".to_string();
+            let object = self.object.0;
+            let Some(node) = session.document().node(object) else {
+                return Err(EngineError::Failed { id, message: format!("there is no node `{object}`") });
+            };
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
                 return Err(EngineError::Failed {
                     id,
-                    message: format!("the file already has the information of the node `{already_object}`"),
+                    message: format!("the node `{object}` is a `{}` and not an object", node.kind),
                 });
             }
-            return Ok(Outcome::changed(format!("the object `{number}` is the information of the file"))
-                .with_data(json!({ "object": object, "number": number })));
-        }
-        let info = session.document_mut()?.add_node_with_under(
-            None,
-            "the information".to_string(),
-            "pdf.info",
-            None,
-            json!({ "object": object }),
-        );
-        Ok(Outcome::changed(format!("the object `{number}` is the information of the file"))
-            .with_data(json!({ "id": info, "object": object, "number": number })))
-    }
-}
-
-/// **Read** the **information** of a PDF file.
-///
-/// A query: it does not change the document. A file that has no
-/// information dictionary has no information, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.info.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadInformation {
-    /// The entry to read.
-    ///
-    /// Leave it out and everything the information says is read.
-    pub key: Option<craftkit_sdk::Text>,
-}
-
-impl ReadInformation {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.info.read".to_string();
-        let document = session.document();
-        let Some(information) = crate::information::the_information(document) else {
-            return Ok(Outcome::new("the file has no information").with_data(json!({
-                "has_information": false,
-                "entries": Vec::<Json>::new(),
-            })));
-        };
-        let entries = crate::entries_of(&information.data);
-        let listed: Vec<Json> = match &self.key {
-            None => entries.iter().map(|(key, value)| json!([key.clone(), value.clone()])).collect(),
-            Some(key) => {
-                let key = key.0.trim();
-                let one: Vec<Json> = entries
-                    .iter()
-                    .filter(|(name, _)| name == key)
-                    .map(|(name, value)| json!([name.clone(), value.clone()]))
-                    .collect();
-                if one.is_empty() {
+            let number = node.data.get("object").and_then(|number| number.as_u64()).ok_or_else(|| {
+                EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{object}` has no object number"),
+                }
+            })?;
+            // There is **one** information dictionary in a file, and a
+            // second one would be a second answer to one question.
+            if let Some(already) = the_information_node(session.document()) {
+                let already_object = already.data.get("object").and_then(|object| object.as_u64()).unwrap_or(0);
+                if already_object != object {
                     return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the information has no entry `{key}`"),
+                        id,
+                        message: format!("the file already has the information of the node `{already_object}`"),
                     });
                 }
-                one
+                return Ok(Outcome::changed(format!("the object `{number}` is the information of the file"))
+                    .with_data(json!({ "object": object, "number": number })));
             }
-        };
-        let mut data = json!({
-            "has_information": true,
-            "object": information.data.get("object").cloned().unwrap_or(Json::Null),
-        });
-        if let Some(map) = data.as_object_mut() {
-            for key in
-                ["Title", "Author", "Subject", "Keywords", "Creator", "Producer", "CreationDate", "ModDate"]
-            {
-                let value = crate::information::text_of_entry(document, key)
-                    .map(|value| json!(value))
-                    .unwrap_or(Json::Null);
-                map.insert(key.to_string(), value);
+            let info = session.document_mut()?.add_node_with_under(
+                None,
+                "the information".to_string(),
+                "pdf.info",
+                None,
+                json!({ "object": object }),
+            );
+            Ok(Outcome::changed(format!("the object `{number}` is the information of the file"))
+                .with_data(json!({ "id": info, "object": object, "number": number })))
+
+        }
+    }
+    /// **Read** the **information** of a PDF file.
+    ///
+    /// A query: it does not change the document. A file that has no
+    /// information dictionary has no information, and the answer says so.
+    pdf.info.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The entry to read.
+            ///
+            /// Leave it out and everything the information says is read.
+
+            key: Option<craftkit_sdk::Text>,
+        },
+        run: {
+
+            let id = "pdf.info.read".to_string();
+            let document = session.document();
+            let Some(information) = crate::information::the_information(document) else {
+                return Ok(Outcome::new("the file has no information").with_data(json!({
+                    "has_information": false,
+                    "entries": Vec::<Json>::new(),
+                })));
+            };
+            let entries = crate::entries_of(&information.data);
+            let listed: Vec<Json> = match &self.key {
+                None => entries.iter().map(|(key, value)| json!([key.clone(), value.clone()])).collect(),
+                Some(key) => {
+                    let key = key.0.trim();
+                    let one: Vec<Json> = entries
+                        .iter()
+                        .filter(|(name, _)| name == key)
+                        .map(|(name, value)| json!([name.clone(), value.clone()]))
+                        .collect();
+                    if one.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the information has no entry `{key}`"),
+                        });
+                    }
+                    one
+                }
+            };
+            let mut data = json!({
+                "has_information": true,
+                "object": information.data.get("object").cloned().unwrap_or(Json::Null),
+            });
+            if let Some(map) = data.as_object_mut() {
+                for key in
+                    ["Title", "Author", "Subject", "Keywords", "Creator", "Producer", "CreationDate", "ModDate"]
+                {
+                    let value = crate::information::text_of_entry(document, key)
+                        .map(|value| json!(value))
+                        .unwrap_or(Json::Null);
+                    map.insert(key.to_string(), value);
+                }
             }
+            if let Some(map) = data.as_object_mut() {
+                map.insert("entries".to_string(), json!(listed));
+            }
+            Ok(Outcome::new("the file has information").with_data(data))
+
         }
-        if let Some(map) = data.as_object_mut() {
-            map.insert("entries".to_string(), json!(listed));
-        }
-        Ok(Outcome::new("the file has information").with_data(data))
     }
 }

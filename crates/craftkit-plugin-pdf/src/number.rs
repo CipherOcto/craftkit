@@ -22,120 +22,128 @@
 //!   root is the object whose type is `Catalog`, and the file is
 //!   written with the number the object has.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json;
 use craftkit_sdk::{EngineError, NodeRef, Number, Outcome, Session};
 
 use crate::{entries_of, pairs_of, the_number_of};
 
-/// The **number** of an object.
-///
-/// The number is changed and every reference to the object follows it:
-/// a reference that was left behind would name an object that is not
-/// there.
-///
-/// A number that is **another object's** is refused, and so is a number
-/// that is not a whole number, and so is a number the object already
-/// has.
-#[derive(Command)]
-#[command(id = "pdf.object.number", area = "pdf", layer = "pdf", icon = "hash", mutates, undoable)]
-pub struct SetNumber {
-    /// The object.
-    pub object: NodeRef,
-    /// The number it has in the file.
-    pub number: Number,
-}
+commands! {
+    /// The **number** of an object.
+    ///
+    /// The number is changed and every reference to the object follows it:
+    /// a reference that was left behind would name an object that is not
+    /// there.
+    ///
+    /// A number that is **another object's** is refused, and so is a number
+    /// that is not a whole number, and so is a number the object already
+    /// has.
+    pdf.object.number {
+        area: "pdf",
+        layer: "pdf",
+        icon: "hash",
+        mutates,
+        undoable,
+        params: {
+            /// The object.
 
-impl SetNumber {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.object.number".to_string();
-        let object = self.object.0;
-        let Some(node) = session.document().node(object) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{object}`"),
-            });
-        };
-        if node.kind != "pdf.object" && node.kind != "pdf.stream" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{object}` is a `{}` and not an object", node.kind),
-            });
-        }
-        let own = entries_of(&node.data);
-        let Some(old) = the_number_of(node) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the object `{object}` has no object number"),
-            });
-        };
-        let number = self.number.0;
-        if !number.is_finite() || number < 0.0 || number.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "an object number is a whole number".to_string(),
-            });
-        }
-        let number = number as u64;
-        if number == 0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: "object numbers start at one".to_string(),
-            });
-        }
-        if number == old {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the object `{object}` already has the number `{number}`"),
-            });
-        }
-        if let Some(other) = holder_of(session, number, Some(object)) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the number `{number}` is the number of the object `{other}`"),
-            });
-        }
-        // The **references** to it, in the dictionaries of the objects
-        // that hold them.
-        let holders: Vec<(u64, Vec<(String, serde_json::Value)>)> = session
-            .document()
-            .walk()
-            .filter(|node| node.id != object && (node.kind == "pdf.object" || node.kind == "pdf.stream"))
-            .filter_map(|node| {
-                let entries = entries_of(&node.data);
-                let kept = renumbered(&entries, old, number);
-                if kept == entries { None } else { Some((node.id, kept)) }
-            })
-            .collect();
-        let mut moved: Vec<serde_json::Value> = Vec::new();
-        for (holder, kept) in holders {
-            let data = serde_json::json!({
-                "object": session
-                    .document()
-                    .node(holder)
-                    .and_then(|node| node.data.get("object").cloned())
-                    .unwrap_or(serde_json::Value::Null),
-                "entries": pairs_of(&kept),
-            });
-            if let Some(node) = session.document_mut()?.node_mut(holder) {
-                node.data = data;
+            object: NodeRef,
+            /// The number it has in the file.
+
+            number: Number,
+        },
+        run: {
+
+            let id = "pdf.object.number".to_string();
+            let object = self.object.0;
+            let Some(node) = session.document().node(object) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{object}`"),
+                });
+            };
+            if node.kind != "pdf.object" && node.kind != "pdf.stream" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{object}` is a `{}` and not an object", node.kind),
+                });
             }
-            moved.push(serde_json::json!({ "object": holder }));
+            let own = entries_of(&node.data);
+            let Some(old) = the_number_of(node) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the object `{object}` has no object number"),
+                });
+            };
+            let number = self.number.0;
+            if !number.is_finite() || number < 0.0 || number.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "an object number is a whole number".to_string(),
+                });
+            }
+            let number = number as u64;
+            if number == 0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: "object numbers start at one".to_string(),
+                });
+            }
+            if number == old {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the object `{object}` already has the number `{number}`"),
+                });
+            }
+            if let Some(other) = holder_of(session, number, Some(object)) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the number `{number}` is the number of the object `{other}`"),
+                });
+            }
+            // The **references** to it, in the dictionaries of the objects
+            // that hold them.
+            let holders: Vec<(u64, Vec<(String, serde_json::Value)>)> = session
+                .document()
+                .walk()
+                .filter(|node| node.id != object && (node.kind == "pdf.object" || node.kind == "pdf.stream"))
+                .filter_map(|node| {
+                    let entries = entries_of(&node.data);
+                    let kept = renumbered(&entries, old, number);
+                    if kept == entries { None } else { Some((node.id, kept)) }
+                })
+                .collect();
+            let mut moved: Vec<serde_json::Value> = Vec::new();
+            for (holder, kept) in holders {
+                let data = serde_json::json!({
+                    "object": session
+                        .document()
+                        .node(holder)
+                        .and_then(|node| node.data.get("object").cloned())
+                        .unwrap_or(serde_json::Value::Null),
+                    "entries": pairs_of(&kept),
+                });
+                if let Some(node) = session.document_mut()?.node_mut(holder) {
+                    node.data = data;
+                }
+                moved.push(serde_json::json!({ "object": holder }));
+            }
+            let data = serde_json::json!({
+                "object": number,
+                "entries": own
+                    .iter()
+                    .map(|(key, value)| serde_json::json!([key, value]))
+                    .collect::<Vec<_>>(),
+            });
+            if let Some(node) = session.document_mut()?.node_mut(object) {
+                node.data = data;
+                node.name = format!("object {number}");
+            }
+            Ok(Outcome::changed(format!("the object `{object}` has the number `{number}`"))
+                .with_data(serde_json::json!({ "id": object, "object": number, "was": old, "moved": moved })))
+
         }
-        let data = serde_json::json!({
-            "object": number,
-            "entries": own
-                .iter()
-                .map(|(key, value)| serde_json::json!([key, value]))
-                .collect::<Vec<_>>(),
-        });
-        if let Some(node) = session.document_mut()?.node_mut(object) {
-            node.data = data;
-            node.name = format!("object {number}");
-        }
-        Ok(Outcome::changed(format!("the object `{object}` has the number `{number}`"))
-            .with_data(serde_json::json!({ "id": object, "object": number, "was": old, "moved": moved })))
     }
 }
 

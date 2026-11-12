@@ -25,10 +25,10 @@
 //!   layer may be a name or a dictionary of names, and a dictionary
 //!   says nothing this tree reads.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Outcome};
 
 /// The name of the command, in the messages.
 const COMMAND: &str = "pdf.layers.read";
@@ -165,42 +165,47 @@ fn numbers_of(value: Option<&Json>) -> Vec<u64> {
     list.iter().filter_map(crate::number_of).collect()
 }
 
-/// **Read** the **layers** of a PDF file.
-///
-/// A query: it does not change the document. A file with no optional
-/// content has no layers, and the answer says so.
-#[derive(Command)]
-#[command(id = "pdf.layers.read", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadLayers {
-    /// The layer to read.
+commands! {
+    /// **Read** the **layers** of a PDF file.
     ///
-    /// Leave it out and every layer is read.
-    pub name: Option<craftkit_sdk::Text>,
-}
+    /// A query: it does not change the document. A file with no optional
+    /// content has no layers, and the answer says so.
+    pdf.layers.read {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The layer to read.
+            ///
+            /// Leave it out and every layer is read.
 
-impl ReadLayers {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = COMMAND.to_string();
-        let all = layers_of(session.document());
-        let listed: Vec<Json> = match &self.name {
-            None => all.iter().map(|layer| layer.to_json()).collect(),
-            Some(name) => {
-                let wanted = name.0.trim();
-                let one: Vec<Json> =
-                    all.iter().filter(|layer| layer.name == wanted).map(|layer| layer.to_json()).collect();
-                if one.is_empty() {
-                    return Err(EngineError::Failed {
-                        id: id.clone(),
-                        message: format!("the file has no layer called `{wanted}`"),
-                    });
+            name: Option<craftkit_sdk::Text>,
+        },
+        run: {
+
+            let id = COMMAND.to_string();
+            let all = layers_of(session.document());
+            let listed: Vec<Json> = match &self.name {
+                None => all.iter().map(|layer| layer.to_json()).collect(),
+                Some(name) => {
+                    let wanted = name.0.trim();
+                    let one: Vec<Json> =
+                        all.iter().filter(|layer| layer.name == wanted).map(|layer| layer.to_json()).collect();
+                    if one.is_empty() {
+                        return Err(EngineError::Failed {
+                            id: id.clone(),
+                            message: format!("the file has no layer called `{wanted}`"),
+                        });
+                    }
+                    one
                 }
-                one
-            }
-        };
-        let count = listed.len();
-        Ok(Outcome::new(format!("the file has {count} layer(s)")).with_data(json!({
-            "layers": listed,
-            "count": count,
-        })))
+            };
+            let count = listed.len();
+            Ok(Outcome::new(format!("the file has {count} layer(s)")).with_data(json!({
+                "layers": listed,
+                "count": count,
+            })))
+
+        }
     }
 }

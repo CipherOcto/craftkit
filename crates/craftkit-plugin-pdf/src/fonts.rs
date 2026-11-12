@@ -16,10 +16,10 @@
 //! - a **Type 0** font is a composite: its programs are in the fonts
 //!   it descends from, and it is embedded when the first of them is.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, NodeRef, Outcome};
 
 /// A **font** of a document.
 #[derive(Debug, Clone, PartialEq)]
@@ -147,35 +147,40 @@ pub fn fonts(document: &Document) -> Vec<Font> {
     fonts
 }
 
-/// **Read** the fonts of a PDF file.
-///
-/// A query: it does not change the document.
-#[derive(Command)]
-#[command(id = "pdf.fonts", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadFonts {
-    /// The font to read.
+commands! {
+    /// **Read** the fonts of a PDF file.
     ///
-    /// Leave it out and every font of the document is read.
-    pub font: Option<NodeRef>,
-}
+    /// A query: it does not change the document.
+    pdf.fonts {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The font to read.
+            ///
+            /// Leave it out and every font of the document is read.
 
-impl ReadFonts {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let document = session.document();
-        let mut fonts = fonts(document);
-        if let Some(font) = self.font {
-            let node = document.node(font.0).ok_or_else(|| EngineError::Failed {
-                id: "pdf.fonts".to_string(),
-                message: format!("there is no node `{}`", font.0),
-            })?;
-            let one = font_of(document, node).ok_or_else(|| EngineError::Failed {
-                id: "pdf.fonts".to_string(),
-                message: format!("the node `{}` is not a font", font.0),
-            })?;
-            fonts = vec![one];
+            font: Option<NodeRef>,
+        },
+        run: {
+
+            let document = session.document();
+            let mut fonts = fonts(document);
+            if let Some(font) = self.font {
+                let node = document.node(font.0).ok_or_else(|| EngineError::Failed {
+                    id: "pdf.fonts".to_string(),
+                    message: format!("there is no node `{}`", font.0),
+                })?;
+                let one = font_of(document, node).ok_or_else(|| EngineError::Failed {
+                    id: "pdf.fonts".to_string(),
+                    message: format!("the node `{}` is not a font", font.0),
+                })?;
+                fonts = vec![one];
+            }
+            let count = fonts.len();
+            Ok(Outcome::new(format!("the file has {count} font(s)"))
+                .with_data(json!({ "fonts": fonts.iter().map(Font::to_json).collect::<Vec<_>>() })))
+
         }
-        let count = fonts.len();
-        Ok(Outcome::new(format!("the file has {count} font(s)"))
-            .with_data(json!({ "fonts": fonts.iter().map(Font::to_json).collect::<Vec<_>>() })))
     }
 }

@@ -23,10 +23,10 @@
 //!   two — and in the same **column** when their left edges are within
 //!   half the width of the first one.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{Document, EngineError, NodeRef, Outcome, Text};
 
 /// The **orders** a page may be reached in: this tree's own names.
 const ORDERS: [&str; 4] = ["rows", "columns", "structure", "annotations"];
@@ -151,81 +151,152 @@ fn index_of(document: &Document, page: u64, widget: u64) -> Option<usize> {
     annots.iter().position(|annot| crate::number_of(annot) == Some(widget))
 }
 
-/// **Say** the **tab order** of a page.
-///
-/// The order in which the annotations of a page are reached: `rows`,
-/// `columns`, `structure` or `annotations`.
-///
-/// The rules:
-///
-/// - a node that is **not a page** is refused;
-/// - an order that is **not an order** is refused, and the refusal
-///   names the orders there are;
-/// - an order that is **not said** leaves the page as it was;
-/// - the order **annotations** takes the fact away: a page that says
-///   nothing is reached in the annotation order, and a page that says
-///   so has nothing to say.
-#[derive(Command)]
-#[command(id = "pdf.page.tabs", area = "pdf", layer = "pdf", icon = "list", mutates, undoable)]
-pub struct SetTabs {
-    /// The page.
-    pub page: NodeRef,
-    /// The order the page's annotations are reached in: `rows`,
+commands! {
+    /// **Say** the **tab order** of a page.
+    ///
+    /// The order in which the annotations of a page are reached: `rows`,
     /// `columns`, `structure` or `annotations`.
     ///
-    /// Leave it out and the page keeps the order it has.
-    pub tabs: Option<Text>,
-}
+    /// The rules:
+    ///
+    /// - a node that is **not a page** is refused;
+    /// - an order that is **not an order** is refused, and the refusal
+    ///   names the orders there are;
+    /// - an order that is **not said** leaves the page as it was;
+    /// - the order **annotations** takes the fact away: a page that says
+    ///   nothing is reached in the annotation order, and a page that says
+    ///   so has nothing to say.
+    pdf.page.tabs {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        mutates,
+        undoable,
+        params: {
+            /// The page.
 
-impl SetTabs {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.page.tabs".to_string();
-        let page = self.page.0;
-        let Some(node) = session.document().node(page).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{page}`"),
-            });
-        };
-        if !crate::entries_of(&node.data)
-            .iter()
-            .any(|(key, value)| key == "Type" && value.as_str() == Some("Page"))
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{page}` is not a page"),
-            });
-        }
-        let mut entries = crate::entries_of(&node.data);
-        if let Some(tabs) = &self.tabs {
-            let tabs = tabs.0.trim().to_ascii_lowercase();
-            let Some(order) = TabOrder::parse(&tabs) else {
+            page: NodeRef,
+            /// The order the page's annotations are reached in: `rows`,
+            /// `columns`, `structure` or `annotations`.
+            ///
+            /// Leave it out and the page keeps the order it has.
+
+            tabs: Option<Text>,
+        },
+        run: {
+
+            let id = "pdf.page.tabs".to_string();
+            let page = self.page.0;
+            let Some(node) = session.document().node(page).cloned() else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!("`{tabs}` is not an order: the orders are {}", ORDERS.join(", ")),
+                    message: format!("there is no node `{page}`"),
                 });
             };
-            match order.the_name() {
-                Some(name) => match entries.iter_mut().find(|(key, _)| key == "Tabs") {
-                    Some(entry) => entry.1 = json!(name),
-                    None => entries.push(("Tabs".to_string(), json!(name))),
-                },
-                None => {
-                    // The order **annotations** takes the fact away.
-                    entries.retain(|(key, _)| key != "Tabs");
+            if !crate::entries_of(&node.data)
+                .iter()
+                .any(|(key, value)| key == "Type" && value.as_str() == Some("Page"))
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{page}` is not a page"),
+                });
+            }
+            let mut entries = crate::entries_of(&node.data);
+            if let Some(tabs) = &self.tabs {
+                let tabs = tabs.0.trim().to_ascii_lowercase();
+                let Some(order) = TabOrder::parse(&tabs) else {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("`{tabs}` is not an order: the orders are {}", ORDERS.join(", ")),
+                    });
+                };
+                match order.the_name() {
+                    Some(name) => match entries.iter_mut().find(|(key, _)| key == "Tabs") {
+                        Some(entry) => entry.1 = json!(name),
+                        None => entries.push(("Tabs".to_string(), json!(name))),
+                    },
+                    None => {
+                        // The order **annotations** takes the fact away.
+                        entries.retain(|(key, _)| key != "Tabs");
+                    }
                 }
             }
+            let order = order_of(session.document(), page);
+            let data = json!({
+                "object": node.data.get("object").cloned().unwrap_or(Json::Null),
+                "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
+            });
+            if let Some(node) = session.document_mut()?.node_mut(page) {
+                node.data = data;
+            }
+            Ok(Outcome::changed(format!("the page `{page}` is reached in `{}`", order.name()))
+                .with_data(json!({ "id": page, "tabs": order.name() })))
+
         }
-        let order = order_of(session.document(), page);
-        let data = json!({
-            "object": node.data.get("object").cloned().unwrap_or(Json::Null),
-            "entries": entries.iter().map(|(key, value)| json!([key, value])).collect::<Vec<_>>(),
-        });
-        if let Some(node) = session.document_mut()?.node_mut(page) {
-            node.data = data;
+    }
+    /// **Read** the **tab order** of a form.
+    ///
+    /// The order in which the fields of a form are reached: the
+    /// annotations of a page in the order the page says, and the pages in
+    /// the document's order.
+    pdf.tab.order {
+        area: "pdf",
+        layer: "pdf",
+        icon: "list",
+        params: {
+            /// The page whose order is read.
+            ///
+            /// Leave it out and the whole document is read.
+
+            page: Option<NodeRef>,
+        },
+        run: {
+
+            let id = "pdf.tab.order".to_string();
+            let document = session.document();
+            let only = match self.page {
+                Some(page) => {
+                    let node = document.node(page.0).ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("there is no node `{}`", page.0),
+                    })?;
+                    Some(crate::the_number_of(node).ok_or_else(|| EngineError::Failed {
+                        id: id.clone(),
+                        message: format!("the node `{}` has no object number", page.0),
+                    })?)
+                }
+                None => None,
+            };
+            let order = tab_order(document);
+            let mut pages: Vec<Json> = Vec::new();
+            for page in pages_of(document) {
+                if only.is_some_and(|only| only != page) {
+                    continue;
+                }
+                pages.push(json!({
+                    "page": page,
+                    "order": order_of(document, page).name(),
+                }));
+            }
+            let listed: Vec<Json> = order
+                .iter()
+                .enumerate()
+                .filter(|(_, item)| only.is_none_or(|only| only == item.page))
+                .map(|(rank, item)| {
+                    json!({
+                        "rank": rank,
+                        "field": item.field.clone(),
+                        "widget": item.widget,
+                        "page": item.page,
+                    })
+                })
+                .collect();
+            let count = listed.len();
+            Ok(Outcome::new(format!("the form has {count} annotation(s) in its tab order"))
+                .with_data(json!({ "pages": pages, "order": listed })))
+
         }
-        Ok(Outcome::changed(format!("the page `{page}` is reached in `{}`", order.name()))
-            .with_data(json!({ "id": page, "tabs": order.name() })))
     }
 }
 
@@ -314,65 +385,4 @@ fn groups(items: &[Item], row: bool) -> Vec<Vec<Item>> {
         }
     }
     groups
-}
-
-/// **Read** the **tab order** of a form.
-///
-/// The order in which the fields of a form are reached: the
-/// annotations of a page in the order the page says, and the pages in
-/// the document's order.
-#[derive(Command)]
-#[command(id = "pdf.tab.order", area = "pdf", layer = "pdf", icon = "list")]
-pub struct ReadTabOrder {
-    /// The page whose order is read.
-    ///
-    /// Leave it out and the whole document is read.
-    pub page: Option<NodeRef>,
-}
-
-impl ReadTabOrder {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "pdf.tab.order".to_string();
-        let document = session.document();
-        let only = match self.page {
-            Some(page) => {
-                let node = document.node(page.0).ok_or_else(|| EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("there is no node `{}`", page.0),
-                })?;
-                Some(crate::the_number_of(node).ok_or_else(|| EngineError::Failed {
-                    id: id.clone(),
-                    message: format!("the node `{}` has no object number", page.0),
-                })?)
-            }
-            None => None,
-        };
-        let order = tab_order(document);
-        let mut pages: Vec<Json> = Vec::new();
-        for page in pages_of(document) {
-            if only.is_some_and(|only| only != page) {
-                continue;
-            }
-            pages.push(json!({
-                "page": page,
-                "order": order_of(document, page).name(),
-            }));
-        }
-        let listed: Vec<Json> = order
-            .iter()
-            .enumerate()
-            .filter(|(_, item)| only.is_none_or(|only| only == item.page))
-            .map(|(rank, item)| {
-                json!({
-                    "rank": rank,
-                    "field": item.field.clone(),
-                    "widget": item.widget,
-                    "page": item.page,
-                })
-            })
-            .collect();
-        let count = listed.len();
-        Ok(Outcome::new(format!("the form has {count} annotation(s) in its tab order"))
-            .with_data(json!({ "pages": pages, "order": listed })))
-    }
 }
