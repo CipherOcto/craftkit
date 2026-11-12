@@ -4229,6 +4229,7 @@ so.
 | the **gates** that were running | **built.** The gate runs the batteries' tests, the range checks are written the way clippy asks for on every toolchain the gate uses, and the internal dependencies name their version (§841) | §841 |
 | the **machines** the gate runs on | **built.** The fixtures are named for the platform that builds them, and the formatter runs one package at a time, so the gate is green on macOS and Windows as well as on Linux (§842) | §842 |
 | the **failures** the matrix found | **built.** The tests' temporary directories are unique per call, the paths are compared as paths, and a test that waits waits until a deadline (§843) | §843 |
+| the **check** that is the size of the change | **built.** The gate's own checks, over the packages a change can break: the ones that changed and the ones that depend on them — and the ones that were left out are named (§845) | §845 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -55612,3 +55613,70 @@ built the tree, and writes down the plan to take that cost down.
   turns "where is it" into a lookup and leaves "what does it mean" alone.
 - **The plan is fourteen arcs that do not exist yet.** This one measures and
   writes; it builds none of them.
+## 845. The check that is the size of the change
+
+A change to one battery was being checked by rebuilding every battery in the
+tree. This arc makes the check the size of the change.
+
+### What was built
+
+- **`cargo xtask verify`** — the same checks the gate runs, over the packages
+  a change can break:
+  - `--package <name>` — that package, and everything that depends on it;
+  - `--changed` — the packages the working tree changed, and everything that
+    depends on them;
+  - `--all`, or no flag — every package: the gate's own scope.
+- **The blast radius**, computed from the manifest graph: a change to
+  `craftkit-sdk` is a change to every battery, and a check that verified only
+  the SDK would be a check that missed the breakage it was looking for.
+- **The report names what was left out.** The packages that were not checked
+  are printed, by name.
+- **One place that knows what the workspace is**: the package list and the
+  dependencies between the packages moved into `xtask/src/packages.rs`, and
+  the gate and the verify command both read it.
+
+### What the port found
+
+- **The workspace test was the cost, and it was paid 959 times.** The
+  history of this tree holds **959** `cargo test --workspace` runs, worth
+  **26.8 hours**; **448** of them, longer than half a minute, held **94 %** of
+  that time, and the slowest took **24 minutes**. One package's tests run in
+  **0.8 seconds**.
+- **A scoped check that does not say what it skipped reads as a whole
+  check.** So the command prints the packages it did not check, and the tree's
+  rule holds: a check that could not run is never reported as one that
+  passed.
+- **Git and cargo do not agree about paths.** Git says what changed relative
+  to the root; cargo says where a package is in absolute terms. Comparing
+  the two naively compares a relative path with an absolute one, matches
+  nothing, and the scope falls back to the whole tree — which is what happened
+  the first time this command ran. The packages now carry their directory
+  **relative to the root**, and that is the spelling both sides use.
+- **A package that is not in the workspace is an error.** A scope that named
+  a package that does not exist would check nothing at all and say "ok", so
+  it is refused with the list of the packages that do exist.
+
+### What it cost
+
+- **One new test file**: `xtask/tests/verify.rs` — eight tests: the flags
+  name the scope, two scopes at once are refused, a change carries what
+  depends on it, the scope is the change and what depends on it, a package
+  that is not there is an error and not a nothing, a change to the
+  workspace's own files checks the whole tree, a file belongs to the package
+  that holds it, and a package owns the files under its directory.
+- **One new module** (`verify`), **one moved** (`packages`), and **one
+  command**.
+
+### What it does not settle
+
+- **The scope is a rule about packages, not about features.** A change to a
+  crate that a battery's *feature* turns on is checked by the crate's
+  dependents, and a feature that turns a dependency on without changing the
+  manifest is not seen. The manifest is what the graph is made of.
+- **The command runs the same phases the gate runs, and it does not replace
+  the gate.** The gate checks the whole tree before a push; this checks the
+  blast radius while the change is being made.
+- **The numbers in the survey are the numbers of one session.** That the
+  workspace test was the cost is a fact about this tree's history; that
+  959 runs is a fact about the way this tree was worked on, and a tree worked
+  on differently would have a different count.
