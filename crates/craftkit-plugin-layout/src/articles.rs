@@ -27,7 +27,7 @@
 //!   and the tree's articles are what the EPUB and the HTML are
 //!   exported in. There is no selection here and nothing is exported.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -131,278 +131,303 @@ fn articles_json(articles: &[Node]) -> Vec<Json> {
         .collect()
 }
 
-/// The **articles** of a document: their names, their items and whether
-/// they are exported.
-#[derive(Command)]
-#[command(id = "layout.document.articles", area = "layout", layer = "layout", icon = "list")]
-pub struct ReadArticles {
-    /// The document.
-    pub document: NodeRef,
-}
+commands! {
+    /// The **articles** of a document: their names, their items and whether
+    /// they are exported.
+    layout.document.articles {
+        area: "layout",
+        layer: "layout",
+        icon: "list",
+        params: {
+            /// The document.
 
-impl ReadArticles {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.document.articles";
-        let document = self.document.0;
-        let Some(node) = session.document().node(document) else {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        let articles = articles_json(&articles_of(node));
-        Ok(Outcome::new(format!("the document `{document}` holds {} article(s)", articles.len())).with_data(
-            json!({
-                "document": document,
-                "articles": articles,
-                "count": articles.len(),
-            }),
-        ))
-    }
-}
+            document: NodeRef,
+        },
+        run: {
 
-/// **New** article in a document.
-///
-/// The name is `Article N` when it is not given, and a name that is
-/// taken is refused.
-#[derive(Command)]
-#[command(id = "layout.article.new", area = "layout", layer = "layout", icon = "plus", mutates, undoable)]
-pub struct NewArticle {
-    /// The document.
-    pub document: NodeRef,
-    /// The name of the article.
-    pub name: Option<Text>,
-    /// The items it holds, in the order they are in.
-    pub items: Option<Json>,
-}
-
-impl NewArticle {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.article.new";
-        let document = self.document.0;
-        let Some(node) = session.document().node(document).cloned() else {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        let articles = articles_of(&node);
-        // The **name**: the one that is given, and the first free
-        // `Article N` when it is not.
-        let name = match self.name.as_ref().map(|name| name.0.trim().to_string()) {
-            Some(name) if name.is_empty() => {
+            let command = "layout.document.articles";
+            let document = self.document.0;
+            let Some(node) = session.document().node(document) else {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
-                    message: "an article has a name".to_string(),
+                    message: format!("there is no document `{document}`"),
                 });
+            };
+            let articles = articles_json(&articles_of(node));
+            Ok(Outcome::new(format!("the document `{document}` holds {} article(s)", articles.len())).with_data(
+                json!({
+                    "document": document,
+                    "articles": articles,
+                    "count": articles.len(),
+                }),
+            ))
+
+        }
+    }
+    /// **New** article in a document.
+    ///
+    /// The name is `Article N` when it is not given, and a name that is
+    /// taken is refused.
+    layout.article.new {
+        area: "layout",
+        layer: "layout",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
+
+            document: NodeRef,
+            /// The name of the article.
+
+            name: Option<Text>,
+            /// The items it holds, in the order they are in.
+
+            items: Option<Json>,
+        },
+        run: {
+
+            let command = "layout.article.new";
+            let document = self.document.0;
+            let Some(node) = session.document().node(document).cloned() else {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            let articles = articles_of(&node);
+            // The **name**: the one that is given, and the first free
+            // `Article N` when it is not.
+            let name = match self.name.as_ref().map(|name| name.0.trim().to_string()) {
+                Some(name) if name.is_empty() => {
+                    return Err(EngineError::Failed {
+                        id: command.to_string(),
+                        message: "an article has a name".to_string(),
+                    });
+                }
+                Some(name) => {
+                    if name.chars().count() > MAX_NAME {
+                        return Err(EngineError::Failed {
+                            id: command.to_string(),
+                            message: format!("the name of an article is not longer than {MAX_NAME} characters"),
+                        });
+                    }
+                    if articles.iter().any(|article| {
+                        article.data.get("name").and_then(|name| name.as_str()).unwrap_or_default() == name
+                    }) {
+                        return Err(EngineError::Failed {
+                            id: command.to_string(),
+                            message: format!("an article named `{name}` exists"),
+                        });
+                    }
+                    name
+                }
+                None => (1..=articles.len() + 1)
+                    .map(|number| format!("Article {number}"))
+                    .find(|name| {
+                        !articles.iter().any(|article| {
+                            article.data.get("name").and_then(|name| name.as_str()).unwrap_or_default() == name
+                        })
+                    })
+                    .ok_or_else(|| EngineError::Failed {
+                        id: command.to_string(),
+                        message: "no free article name".to_string(),
+                    })?,
+            };
+            // The **items**: the ones that are there.
+            let given = ids_of(command, self.items.clone())?;
+            let items: Vec<u64> = given.into_iter().filter(|id| is_item(session, *id)).collect();
+            let id = session.document_mut()?.add_node_with_under(
+                Some(document),
+                name.clone(),
+                "layout.article",
+                None,
+                json!({ "name": name, "items": items, "export": true }),
+            );
+            Ok(Outcome::changed(format!("added the article `{name}`")).with_data(json!({
+                "id": id,
+                "document": document,
+                "name": name,
+                "items": items,
+            })))
+
+        }
+    }
+    /// **Add** items to an article, in the order they are given.
+    ///
+    /// An item that is already in the article is not in it twice, and an
+    /// item that is not there is not in it at all.
+    layout.article.add {
+        area: "layout",
+        layer: "layout",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The article.
+
+            article: NodeRef,
+            /// The items.
+
+            items: Option<Json>,
+        },
+        run: {
+
+            let command = "layout.article.add";
+            let article = self.article.0;
+            the_article(session, command, article)?;
+            let given = ids_of(command, self.items.clone())?;
+            let mut items = items_of(the_article(session, command, article)?);
+            let mut added = 0usize;
+            for id in given {
+                if !is_item(session, id) || items.contains(&id) {
+                    continue;
+                }
+                items.push(id);
+                added += 1;
             }
-            Some(name) => {
+            if let Some(node) = session.document_mut()?.node_mut(article) {
+                set_items(node, &items);
+            }
+            Ok(Outcome::changed(format!("added {added} item(s) to the article `{article}`")).with_data(json!({
+                "article": article,
+                "added": added,
+                "items": items,
+            })))
+
+        }
+    }
+    /// **Take** items out of an article.
+    layout.article.remove {
+        area: "layout",
+        layer: "layout",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The article.
+
+            article: NodeRef,
+            /// The items.
+
+            items: Option<Json>,
+        },
+        run: {
+
+            let command = "layout.article.remove";
+            let article = self.article.0;
+            the_article(session, command, article)?;
+            let given = ids_of(command, self.items.clone())?;
+            let mut items = items_of(the_article(session, command, article)?);
+            let before = items.len();
+            items.retain(|id| !given.contains(id));
+            let removed = before - items.len();
+            if let Some(node) = session.document_mut()?.node_mut(article) {
+                set_items(node, &items);
+            }
+            Ok(Outcome::changed(format!("took {removed} item(s) out of the article `{article}`")).with_data(
+                json!({
+                    "article": article,
+                    "removed": removed,
+                    "items": items,
+                }),
+            ))
+
+        }
+    }
+    /// The **options** of an article: its name, whether it is exported and
+    /// the order of its items.
+    layout.article.options {
+        area: "layout",
+        layer: "layout",
+        icon: "pencil",
+        mutates,
+        undoable,
+        params: {
+            /// The article.
+
+            article: NodeRef,
+            /// Its new name.
+
+            to: Option<Text>,
+            /// Whether it is exported.
+
+            export: Option<Bool>,
+            /// The order of its items: these come first, and the rest follow.
+
+            order: Option<Json>,
+        },
+        run: {
+
+            let command = "layout.article.options";
+            let article = self.article.0;
+            the_article(session, command, article)?;
+            let mut items = items_of(the_article(session, command, article)?);
+            // The **order**: the items that are named come first, and the
+            // rest follow in the order they were in.
+            if let Some(order) = self.order.clone() {
+                let named = ids_of(command, Some(order))?;
+                let mut ordered: Vec<u64> = named.into_iter().filter(|id| items.contains(id)).collect();
+                let rest: Vec<u64> = items.iter().filter(|id| !ordered.contains(id)).copied().collect();
+                ordered.extend(rest);
+                items = ordered;
+            }
+            let name = self.to.as_ref().map(|name| name.0.trim().to_string());
+            if let Some(name) = name.as_ref() {
+                if name.is_empty() {
+                    return Err(EngineError::Failed {
+                        id: command.to_string(),
+                        message: "an article has a name".to_string(),
+                    });
+                }
                 if name.chars().count() > MAX_NAME {
                     return Err(EngineError::Failed {
                         id: command.to_string(),
                         message: format!("the name of an article is not longer than {MAX_NAME} characters"),
                     });
                 }
-                if articles.iter().any(|article| {
-                    article.data.get("name").and_then(|name| name.as_str()).unwrap_or_default() == name
-                }) {
-                    return Err(EngineError::Failed {
-                        id: command.to_string(),
-                        message: format!("an article named `{name}` exists"),
-                    });
+            }
+            let export = self.export.map(|flag| flag.0);
+            if let Some(node) = session.document_mut()?.node_mut(article) {
+                set_items(node, &items);
+                if let Some(name) = name.clone() {
+                    node.name = name.clone();
+                    node.data["name"] = json!(name);
                 }
-                name
+                if let Some(export) = export {
+                    node.data["export"] = json!(export);
+                }
             }
-            None => (1..=articles.len() + 1)
-                .map(|number| format!("Article {number}"))
-                .find(|name| {
-                    !articles.iter().any(|article| {
-                        article.data.get("name").and_then(|name| name.as_str()).unwrap_or_default() == name
-                    })
-                })
-                .ok_or_else(|| EngineError::Failed {
-                    id: command.to_string(),
-                    message: "no free article name".to_string(),
-                })?,
-        };
-        // The **items**: the ones that are there.
-        let given = ids_of(command, self.items.clone())?;
-        let items: Vec<u64> = given.into_iter().filter(|id| is_item(session, *id)).collect();
-        let id = session.document_mut()?.add_node_with_under(
-            Some(document),
-            name.clone(),
-            "layout.article",
-            None,
-            json!({ "name": name, "items": items, "export": true }),
-        );
-        Ok(Outcome::changed(format!("added the article `{name}`")).with_data(json!({
-            "id": id,
-            "document": document,
-            "name": name,
-            "items": items,
-        })))
-    }
-}
-
-/// **Add** items to an article, in the order they are given.
-///
-/// An item that is already in the article is not in it twice, and an
-/// item that is not there is not in it at all.
-#[derive(Command)]
-#[command(id = "layout.article.add", area = "layout", layer = "layout", icon = "plus", mutates, undoable)]
-pub struct AddToArticle {
-    /// The article.
-    pub article: NodeRef,
-    /// The items.
-    pub items: Option<Json>,
-}
-
-impl AddToArticle {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.article.add";
-        let article = self.article.0;
-        the_article(session, command, article)?;
-        let given = ids_of(command, self.items.clone())?;
-        let mut items = items_of(the_article(session, command, article)?);
-        let mut added = 0usize;
-        for id in given {
-            if !is_item(session, id) || items.contains(&id) {
-                continue;
-            }
-            items.push(id);
-            added += 1;
-        }
-        if let Some(node) = session.document_mut()?.node_mut(article) {
-            set_items(node, &items);
-        }
-        Ok(Outcome::changed(format!("added {added} item(s) to the article `{article}`")).with_data(json!({
-            "article": article,
-            "added": added,
-            "items": items,
-        })))
-    }
-}
-
-/// **Take** items out of an article.
-#[derive(Command)]
-#[command(id = "layout.article.remove", area = "layout", layer = "layout", icon = "minus", mutates, undoable)]
-pub struct RemoveFromArticle {
-    /// The article.
-    pub article: NodeRef,
-    /// The items.
-    pub items: Option<Json>,
-}
-
-impl RemoveFromArticle {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.article.remove";
-        let article = self.article.0;
-        the_article(session, command, article)?;
-        let given = ids_of(command, self.items.clone())?;
-        let mut items = items_of(the_article(session, command, article)?);
-        let before = items.len();
-        items.retain(|id| !given.contains(id));
-        let removed = before - items.len();
-        if let Some(node) = session.document_mut()?.node_mut(article) {
-            set_items(node, &items);
-        }
-        Ok(Outcome::changed(format!("took {removed} item(s) out of the article `{article}`")).with_data(
-            json!({
+            Ok(Outcome::changed(format!("the options of the article `{article}` are set")).with_data(json!({
                 "article": article,
-                "removed": removed,
                 "items": items,
-            }),
-        ))
+                "export": export,
+                "name": name,
+            })))
+
+        }
     }
-}
+    /// **Delete** an article.
+    layout.article.delete {
+        area: "layout",
+        layer: "layout",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The article.
 
-/// The **options** of an article: its name, whether it is exported and
-/// the order of its items.
-#[derive(Command)]
-#[command(
-    id = "layout.article.options",
-    area = "layout",
-    layer = "layout",
-    icon = "pencil",
-    mutates,
-    undoable
-)]
-pub struct ArticleOptions {
-    /// The article.
-    pub article: NodeRef,
-    /// Its new name.
-    pub to: Option<Text>,
-    /// Whether it is exported.
-    pub export: Option<Bool>,
-    /// The order of its items: these come first, and the rest follow.
-    pub order: Option<Json>,
-}
+            article: NodeRef,
+        },
+        run: {
 
-impl ArticleOptions {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.article.options";
-        let article = self.article.0;
-        the_article(session, command, article)?;
-        let mut items = items_of(the_article(session, command, article)?);
-        // The **order**: the items that are named come first, and the
-        // rest follow in the order they were in.
-        if let Some(order) = self.order.clone() {
-            let named = ids_of(command, Some(order))?;
-            let mut ordered: Vec<u64> = named.into_iter().filter(|id| items.contains(id)).collect();
-            let rest: Vec<u64> = items.iter().filter(|id| !ordered.contains(id)).copied().collect();
-            ordered.extend(rest);
-            items = ordered;
+            let command = "layout.article.delete";
+            let article = self.article.0;
+            the_article(session, command, article)?;
+            session.document_mut()?.remove_node(article);
+            Ok(Outcome::changed(format!("the article `{article}` is gone"))
+                .with_data(json!({ "article": article })))
+
         }
-        let name = self.to.as_ref().map(|name| name.0.trim().to_string());
-        if let Some(name) = name.as_ref() {
-            if name.is_empty() {
-                return Err(EngineError::Failed {
-                    id: command.to_string(),
-                    message: "an article has a name".to_string(),
-                });
-            }
-            if name.chars().count() > MAX_NAME {
-                return Err(EngineError::Failed {
-                    id: command.to_string(),
-                    message: format!("the name of an article is not longer than {MAX_NAME} characters"),
-                });
-            }
-        }
-        let export = self.export.map(|flag| flag.0);
-        if let Some(node) = session.document_mut()?.node_mut(article) {
-            set_items(node, &items);
-            if let Some(name) = name.clone() {
-                node.name = name.clone();
-                node.data["name"] = json!(name);
-            }
-            if let Some(export) = export {
-                node.data["export"] = json!(export);
-            }
-        }
-        Ok(Outcome::changed(format!("the options of the article `{article}` are set")).with_data(json!({
-            "article": article,
-            "items": items,
-            "export": export,
-            "name": name,
-        })))
-    }
-}
-
-/// **Delete** an article.
-#[derive(Command)]
-#[command(id = "layout.article.delete", area = "layout", layer = "layout", icon = "minus", mutates, undoable)]
-pub struct DeleteArticle {
-    /// The article.
-    pub article: NodeRef,
-}
-
-impl DeleteArticle {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.article.delete";
-        let article = self.article.0;
-        the_article(session, command, article)?;
-        session.document_mut()?.remove_node(article);
-        Ok(Outcome::changed(format!("the article `{article}` is gone"))
-            .with_data(json!({ "article": article })))
     }
 }

@@ -30,10 +30,10 @@
 //!   at a time, when a key is held down; and the tree's turn may be
 //!   any angle at all. Here the turn is any number of degrees.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome};
 
 use crate::items::{item_of, may_edit};
 
@@ -92,43 +92,51 @@ pub fn turned_json(item: &Node) -> Json {
     }
 }
 
-/// **Turn** an item.
-///
-/// The turn is about the middle of the item's shape, and the place of
-/// the item does not move.
-#[derive(Command)]
-#[command(id = "layout.item.rotate", area = "layout", layer = "layout", icon = "rect", mutates, undoable)]
-pub struct RotateItem {
-    /// The item.
-    pub item: NodeRef,
-    /// The turn, in degrees. A turn of ninety is a quarter turn, and
-    /// the turn is clockwise on the page.
-    pub degrees: Number,
-}
+commands! {
+    /// **Turn** an item.
+    ///
+    /// The turn is about the middle of the item's shape, and the place of
+    /// the item does not move.
+    layout.item.rotate {
+        area: "layout",
+        layer: "layout",
+        icon: "rect",
+        mutates,
+        undoable,
+        params: {
+            /// The item.
 
-impl RotateItem {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "layout.item.rotate".to_string();
-        let item = self.item.0;
-        let node = item_of(session, &id, item)?;
-        may_edit(session, &node, &id)?;
-        let degrees = self.degrees.0;
-        if !degrees.is_finite() {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("{degrees} is not a turn: a turn is a number of degrees"),
-            });
+            item: NodeRef,
+            /// The turn, in degrees. A turn of ninety is a quarter turn, and
+            /// the turn is clockwise on the page.
+
+            degrees: Number,
+        },
+        run: {
+
+            let id = "layout.item.rotate".to_string();
+            let item = self.item.0;
+            let node = item_of(session, &id, item)?;
+            may_edit(session, &node, &id)?;
+            let degrees = self.degrees.0;
+            if !degrees.is_finite() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("{degrees} is not a turn: a turn is a number of degrees"),
+                });
+            }
+            if !degrees.to_radians().is_finite() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the turn {degrees} degrees is not a number of radians"),
+                });
+            }
+            if let Some(node) = session.document_mut()?.node_mut(item) {
+                node.data["rotation"] = json!(degrees);
+            }
+            Ok(Outcome::changed(format!("the item `{item}` is turned {degrees} degrees"))
+                .with_data(json!({ "item": item, "degrees": degrees, "radians": degrees.to_radians() })))
+
         }
-        if !degrees.to_radians().is_finite() {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the turn {degrees} degrees is not a number of radians"),
-            });
-        }
-        if let Some(node) = session.document_mut()?.node_mut(item) {
-            node.data["rotation"] = json!(degrees);
-        }
-        Ok(Outcome::changed(format!("the item `{item}` is turned {degrees} degrees"))
-            .with_data(json!({ "item": item, "degrees": degrees, "radians": degrees.to_radians() })))
     }
 }

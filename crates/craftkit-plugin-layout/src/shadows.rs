@@ -16,10 +16,10 @@
 //! - a **colour** that is not `#rrggbb` is refused;
 //! - an **opacity** that is not between zero and one is refused.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Text};
 
 use crate::items::{item_of, may_edit};
 
@@ -111,74 +111,86 @@ pub fn shadow_json(item: &Node) -> Json {
     })
 }
 
-/// **Give** an item a shadow.
-#[derive(Command)]
-#[command(id = "layout.item.shadow", area = "layout", layer = "layout", icon = "paint", mutates, undoable)]
-pub struct SetShadow {
-    /// The item.
-    pub item: NodeRef,
-    /// The **angle** the light comes from, in degrees.
-    pub angle: Number,
-    /// The **distance** the shadow is moved, in points.
-    pub distance: Number,
-    /// The **blur** the shadow is softened by, in points.
-    pub blur: Option<Number>,
-    /// The **colour** of the shadow, as `#rrggbb`.
-    pub colour: Option<Text>,
-    /// The **opacity** of the shadow, from zero to one.
-    pub opacity: Option<Number>,
-}
+commands! {
+    /// **Give** an item a shadow.
+    layout.item.shadow {
+        area: "layout",
+        layer: "layout",
+        icon: "paint",
+        mutates,
+        undoable,
+        params: {
+            /// The item.
 
-impl SetShadow {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "layout.item.shadow".to_string();
-        let item = self.item.0;
-        let node = item_of(session, &id, item)?;
-        may_edit(session, &node, &id)?;
-        let angle = self.angle.0;
-        if !angle.is_finite() {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("{angle} is not an angle: an angle is a number of degrees"),
-            });
+            item: NodeRef,
+            /// The **angle** the light comes from, in degrees.
+
+            angle: Number,
+            /// The **distance** the shadow is moved, in points.
+
+            distance: Number,
+            /// The **blur** the shadow is softened by, in points.
+
+            blur: Option<Number>,
+            /// The **colour** of the shadow, as `#rrggbb`.
+
+            colour: Option<Text>,
+            /// The **opacity** of the shadow, from zero to one.
+
+            opacity: Option<Number>,
+        },
+        run: {
+
+            let id = "layout.item.shadow".to_string();
+            let item = self.item.0;
+            let node = item_of(session, &id, item)?;
+            may_edit(session, &node, &id)?;
+            let angle = self.angle.0;
+            if !angle.is_finite() {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("{angle} is not an angle: an angle is a number of degrees"),
+                });
+            }
+            let distance = self.distance.0;
+            if !distance.is_finite() || distance < 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!(
+                        "{distance} is not a distance: a distance is a number and not a negative one"
+                    ),
+                });
+            }
+            let blur = self.blur.map(|blur| blur.0).unwrap_or(0.0);
+            if !blur.is_finite() || blur < 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("{blur} is not a blur: a blur is a number and not a negative one"),
+                });
+            }
+            let colour = match &self.colour {
+                Some(colour) => match craftkit_sdk::Colour::from_hex(colour.0.trim()) {
+                    Ok(_) => colour.0.trim().to_ascii_lowercase(),
+                    Err(why) => {
+                        return Err(EngineError::Failed { id, message: why });
+                    }
+                },
+                None => "#000000".to_string(),
+            };
+            let opacity = self.opacity.map(|opacity| opacity.0).unwrap_or(1.0);
+            if !opacity.is_finite() || !(0.0..=1.0).contains(&opacity) {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("{opacity} is not an opacity: an opacity is between zero and one"),
+                });
+            }
+            let shadow = Shadow { angle, distance, blur, colour, opacity };
+            if let Some(node) = session.document_mut()?.node_mut(item) {
+                node.data["shadow"] = shadow.to_json();
+            }
+            Ok(Outcome::changed(format!("the item `{item}` has a shadow"))
+                .with_data(json!({ "item": item, "shadow": shadow.to_json() })))
+
         }
-        let distance = self.distance.0;
-        if !distance.is_finite() || distance < 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: format!(
-                    "{distance} is not a distance: a distance is a number and not a negative one"
-                ),
-            });
-        }
-        let blur = self.blur.map(|blur| blur.0).unwrap_or(0.0);
-        if !blur.is_finite() || blur < 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("{blur} is not a blur: a blur is a number and not a negative one"),
-            });
-        }
-        let colour = match &self.colour {
-            Some(colour) => match craftkit_sdk::Colour::from_hex(colour.0.trim()) {
-                Ok(_) => colour.0.trim().to_ascii_lowercase(),
-                Err(why) => {
-                    return Err(EngineError::Failed { id, message: why });
-                }
-            },
-            None => "#000000".to_string(),
-        };
-        let opacity = self.opacity.map(|opacity| opacity.0).unwrap_or(1.0);
-        if !opacity.is_finite() || !(0.0..=1.0).contains(&opacity) {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("{opacity} is not an opacity: an opacity is between zero and one"),
-            });
-        }
-        let shadow = Shadow { angle, distance, blur, colour, opacity };
-        if let Some(node) = session.document_mut()?.node_mut(item) {
-            node.data["shadow"] = shadow.to_json();
-        }
-        Ok(Outcome::changed(format!("the item `{item}` has a shadow"))
-            .with_data(json!({ "item": item, "shadow": shadow.to_json() })))
     }
 }

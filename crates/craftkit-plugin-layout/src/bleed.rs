@@ -20,10 +20,10 @@
 //! - a side that is **not said** keeps the room it had, and a
 //!   document with no bleed has no room at all.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome};
 
 /// The **bleed** of a document: the room at each side of the page.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -95,65 +95,76 @@ pub fn bleed_box_of(document: &Document, page: &Node) -> Option<(f64, f64, f64, 
     Some(bleed.box_of(width, height))
 }
 
-/// **Set** the bleed of a document.
-///
-/// A side that is not said keeps the room it had.
-#[derive(Command)]
-#[command(id = "layout.document.bleed", area = "layout", layer = "layout", icon = "rect", mutates, undoable)]
-pub struct SetBleed {
-    /// The document.
-    pub document: NodeRef,
-    /// The room at the top of the page.
-    pub top: Option<Number>,
-    /// The room at the bottom of the page.
-    pub bottom: Option<Number>,
-    /// The room at the left of the page.
-    pub left: Option<Number>,
-    /// The room at the right of the page.
-    pub right: Option<Number>,
-}
+commands! {
+    /// **Set** the bleed of a document.
+    ///
+    /// A side that is not said keeps the room it had.
+    layout.document.bleed {
+        area: "layout",
+        layer: "layout",
+        icon: "rect",
+        mutates,
+        undoable,
+        params: {
+            /// The document.
 
-impl SetBleed {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "layout.document.bleed".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no document `{document}`"),
-            });
-        };
-        if node.kind != "layout.document" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
-        }
-        let mut bleed = bleed_of(node);
-        for (side, given) in
-            [("top", &self.top), ("bottom", &self.bottom), ("left", &self.left), ("right", &self.right)]
-        {
-            let Some(given) = given else { continue };
-            let value = given.0;
-            if !value.is_finite() || value < 0.0 {
+            document: NodeRef,
+            /// The room at the top of the page.
+
+            top: Option<Number>,
+            /// The room at the bottom of the page.
+
+            bottom: Option<Number>,
+            /// The room at the left of the page.
+
+            left: Option<Number>,
+            /// The room at the right of the page.
+
+            right: Option<Number>,
+        },
+        run: {
+
+            let id = "layout.document.bleed".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document) else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!(
-                        "{value} is not the room of a bleed: the room is a number and not a negative one"
-                    ),
+                    message: format!("there is no document `{document}`"),
+                });
+            };
+            if node.kind != "layout.document" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
                 });
             }
-            match side {
-                "top" => bleed.top = value,
-                "bottom" => bleed.bottom = value,
-                "left" => bleed.left = value,
-                _ => bleed.right = value,
+            let mut bleed = bleed_of(node);
+            for (side, given) in
+                [("top", &self.top), ("bottom", &self.bottom), ("left", &self.left), ("right", &self.right)]
+            {
+                let Some(given) = given else { continue };
+                let value = given.0;
+                if !value.is_finite() || value < 0.0 {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "{value} is not the room of a bleed: the room is a number and not a negative one"
+                        ),
+                    });
+                }
+                match side {
+                    "top" => bleed.top = value,
+                    "bottom" => bleed.bottom = value,
+                    "left" => bleed.left = value,
+                    _ => bleed.right = value,
+                }
             }
+            if let Some(node) = session.document_mut()?.node_mut(document) {
+                node.data["bleed"] = bleed.to_json();
+            }
+            Ok(Outcome::changed(format!("the document `{document}` has a bleed of {bleed:?}"))
+                .with_data(json!({ "document": document, "bleed": bleed.to_json() })))
+
         }
-        if let Some(node) = session.document_mut()?.node_mut(document) {
-            node.data["bleed"] = bleed.to_json();
-        }
-        Ok(Outcome::changed(format!("the document `{document}` has a bleed of {bleed:?}"))
-            .with_data(json!({ "document": document, "bleed": bleed.to_json() })))
     }
 }

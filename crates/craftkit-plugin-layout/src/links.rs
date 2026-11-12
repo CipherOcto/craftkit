@@ -31,7 +31,7 @@
 //!   is a fact of the machine's layout: here a page is a **node**, and
 //!   the link to it is an **edge**.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -143,28 +143,124 @@ fn document_of(session: &Session, item: u64) -> Option<u64> {
         .map(|node| node.id)
 }
 
-/// **Set** the link of an item: a target outside the document.
-///
-/// The target must be one that may be opened — a web link or a mail
-/// link — and an empty target takes the link away.
-#[derive(Command)]
-#[command(id = "layout.item.link", area = "layout", layer = "layout", icon = "link", mutates, undoable)]
-pub struct SetItemLink {
-    /// The item.
-    pub item: NodeRef,
-    /// The target: `https://example.com` or `mailto:ann@example.com`.
-    /// Without it, the link is taken away.
-    pub target: Text,
-}
+commands! {
+    /// **Set** the link of an item: a target outside the document.
+    ///
+    /// The target must be one that may be opened — a web link or a mail
+    /// link — and an empty target takes the link away.
+    layout.item.link {
+        area: "layout",
+        layer: "layout",
+        icon: "link",
+        mutates,
+        undoable,
+        params: {
+            /// The item.
 
-impl SetItemLink {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "layout.item.link".to_string();
-        let item = self.item.0;
-        let node = item_of(session, &id, item)?;
-        may_edit(session, &node, &id)?;
-        let target = self.target.0.trim().to_string();
-        if target.is_empty() {
+            item: NodeRef,
+            /// The target: `https://example.com` or `mailto:ann@example.com`.
+            /// Without it, the link is taken away.
+
+            target: Text,
+        },
+        run: {
+
+            let id = "layout.item.link".to_string();
+            let item = self.item.0;
+            let node = item_of(session, &id, item)?;
+            may_edit(session, &node, &id)?;
+            let target = self.target.0.trim().to_string();
+            if target.is_empty() {
+                session
+                    .document_mut()?
+                    .remove_relations(|relation| relation.kind == LINKS_TO && relation.from == item);
+                if let Some(node) = session.document_mut()?.node_mut(item)
+                    && let Some(map) = node.data.as_object_mut()
+                {
+                    map.remove("link");
+                }
+                return Ok(Outcome::changed(format!("the item `{item}` has no link"))
+                    .with_data(json!({ "item": item, "target": Json::Null })));
+            }
+            if let Some(why) = why_not(&target) {
+                return Err(EngineError::Failed { id: id.clone(), message: why });
+            }
+            session
+                .document_mut()?
+                .remove_relations(|relation| relation.kind == LINKS_TO && relation.from == item);
+            if let Some(node) = session.document_mut()?.node_mut(item) {
+                node.data["link"] = json!({ "target": target });
+            }
+            Ok(Outcome::changed(format!("the item `{item}` points at `{target}`"))
+                .with_data(json!({ "item": item, "target": target })))
+
+        }
+    }
+    /// **Set** the link of an item to a **page** of the document.
+    ///
+    /// The page must be a page of the **same document**: a page of another
+    /// document is a link to a document that is not here. Without a page,
+    /// the link to a page is taken away.
+    layout.item.page.link {
+        area: "layout",
+        layer: "layout",
+        icon: "link",
+        mutates,
+        undoable,
+        params: {
+            /// The item.
+
+            item: NodeRef,
+            /// The page it points at. Without it, the link to a page is taken
+            /// away.
+
+            page: Option<NodeRef>,
+        },
+        run: {
+
+            let id = "layout.item.page.link".to_string();
+            let item = self.item.0;
+            let node = item_of(session, &id, item)?;
+            may_edit(session, &node, &id)?;
+            let Some(page) = self.page.map(|page| page.0) else {
+                session
+                    .document_mut()?
+                    .remove_relations(|relation| relation.kind == LINKS_TO && relation.from == item);
+                if let Some(node) = session.document_mut()?.node_mut(item)
+                    && let Some(map) = node.data.as_object_mut()
+                {
+                    map.remove("link");
+                }
+                return Ok(Outcome::changed(format!("the item `{item}` points at no page"))
+                    .with_data(json!({ "item": item, "page": Json::Null })));
+            };
+            let Some(page_node) = session.document().node(page).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no page `{page}`"),
+                });
+            };
+            if page_node.kind != "layout.page" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{page}` is a `{}` and not a page", page_node.kind),
+                });
+            }
+            // The page must be in the **same document** as the item.
+            let Some(document) = document_of(session, item) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the item `{item}` is in no document"),
+                });
+            };
+            let same = pages_of(session, document).contains(&page);
+            if !same {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the page `{page}` is not in the document of the item `{item}`"),
+                });
+            }
+            let name = page_node.name.clone();
             session
                 .document_mut()?
                 .remove_relations(|relation| relation.kind == LINKS_TO && relation.from == item);
@@ -173,162 +269,81 @@ impl SetItemLink {
             {
                 map.remove("link");
             }
-            return Ok(Outcome::changed(format!("the item `{item}` has no link"))
-                .with_data(json!({ "item": item, "target": Json::Null })));
+            let added = session.document_mut()?.add_relation(craftkit_sdk::Relation::with_payload(
+                item,
+                page,
+                LINKS_TO,
+                json!({ "page": name.clone() }),
+            ));
+            if !added {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the item `{item}` already points at the page `{name}`"),
+                });
+            }
+            Ok(Outcome::changed(format!("the item `{item}` points at the page `{name}`"))
+                .with_data(json!({ "item": item, "page": page, "name": name })))
+
         }
-        if let Some(why) = why_not(&target) {
-            return Err(EngineError::Failed { id: id.clone(), message: why });
-        }
-        session
-            .document_mut()?
-            .remove_relations(|relation| relation.kind == LINKS_TO && relation.from == item);
-        if let Some(node) = session.document_mut()?.node_mut(item) {
-            node.data["link"] = json!({ "target": target });
-        }
-        Ok(Outcome::changed(format!("the item `{item}` points at `{target}`"))
-            .with_data(json!({ "item": item, "target": target })))
     }
-}
+    /// **Read** the links of a document.
+    ///
+    /// The answer is every item that carries a link: the target it points
+    /// at, or the page it points at, and whether the target **may be
+    /// opened**.
+    layout.links {
+        area: "layout",
+        layer: "layout",
+        icon: "link",
+        params: {
+            /// The document.
 
-/// **Set** the link of an item to a **page** of the document.
-///
-/// The page must be a page of the **same document**: a page of another
-/// document is a link to a document that is not here. Without a page,
-/// the link to a page is taken away.
-#[derive(Command)]
-#[command(id = "layout.item.page.link", area = "layout", layer = "layout", icon = "link", mutates, undoable)]
-pub struct SetItemPageLink {
-    /// The item.
-    pub item: NodeRef,
-    /// The page it points at. Without it, the link to a page is taken
-    /// away.
-    pub page: Option<NodeRef>,
-}
+            document: NodeRef,
+        },
+        run: {
 
-impl SetItemPageLink {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "layout.item.page.link".to_string();
-        let item = self.item.0;
-        let node = item_of(session, &id, item)?;
-        may_edit(session, &node, &id)?;
-        let Some(page) = self.page.map(|page| page.0) else {
-            session
-                .document_mut()?
-                .remove_relations(|relation| relation.kind == LINKS_TO && relation.from == item);
-            if let Some(node) = session.document_mut()?.node_mut(item)
-                && let Some(map) = node.data.as_object_mut()
-            {
-                map.remove("link");
+            let id = "layout.links".to_string();
+            let document = self.document.0;
+            let Some(node) = session.document().node(document) else {
+                return Err(EngineError::Failed { id, message: format!("there is no document `{document}`") });
+            };
+            if node.kind != "layout.document" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the node `{document}` is a `{}` and not a document", node.kind),
+                });
             }
-            return Ok(Outcome::changed(format!("the item `{item}` points at no page"))
-                .with_data(json!({ "item": item, "page": Json::Null })));
-        };
-        let Some(page_node) = session.document().node(page).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no page `{page}`"),
-            });
-        };
-        if page_node.kind != "layout.page" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{page}` is a `{}` and not a page", page_node.kind),
-            });
-        }
-        // The page must be in the **same document** as the item.
-        let Some(document) = document_of(session, item) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the item `{item}` is in no document"),
-            });
-        };
-        let same = pages_of(session, document).contains(&page);
-        if !same {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the page `{page}` is not in the document of the item `{item}`"),
-            });
-        }
-        let name = page_node.name.clone();
-        session
-            .document_mut()?
-            .remove_relations(|relation| relation.kind == LINKS_TO && relation.from == item);
-        if let Some(node) = session.document_mut()?.node_mut(item)
-            && let Some(map) = node.data.as_object_mut()
-        {
-            map.remove("link");
-        }
-        let added = session.document_mut()?.add_relation(craftkit_sdk::Relation::with_payload(
-            item,
-            page,
-            LINKS_TO,
-            json!({ "page": name.clone() }),
-        ));
-        if !added {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the item `{item}` already points at the page `{name}`"),
-            });
-        }
-        Ok(Outcome::changed(format!("the item `{item}` points at the page `{name}`"))
-            .with_data(json!({ "item": item, "page": page, "name": name })))
-    }
-}
-
-/// **Read** the links of a document.
-///
-/// The answer is every item that carries a link: the target it points
-/// at, or the page it points at, and whether the target **may be
-/// opened**.
-#[derive(Command)]
-#[command(id = "layout.links", area = "layout", layer = "layout", icon = "link")]
-pub struct ReadLinks {
-    /// The document.
-    pub document: NodeRef,
-}
-
-impl ReadLinks {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "layout.links".to_string();
-        let document = self.document.0;
-        let Some(node) = session.document().node(document) else {
-            return Err(EngineError::Failed { id, message: format!("there is no document `{document}`") });
-        };
-        if node.kind != "layout.document" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the node `{document}` is a `{}` and not a document", node.kind),
-            });
-        }
-        let document_node = node.clone();
-        let mut links: Vec<Json> = Vec::new();
-        for item in items_of(&document_node) {
-            let page = page_of(session.document(), item.id);
-            let target = target_of(&item);
-            if target.is_none() && page.is_none() {
-                continue;
+            let document_node = node.clone();
+            let mut links: Vec<Json> = Vec::new();
+            for item in items_of(&document_node) {
+                let page = page_of(session.document(), item.id);
+                let target = target_of(&item);
+                if target.is_none() && page.is_none() {
+                    continue;
+                }
+                let mut link = json!({ "item": item.id, "name": item.name });
+                if let Some(target) = &target {
+                    link["kind"] = json!("target");
+                    link["target"] = json!(target);
+                    link["may_be_opened"] = json!(may_be_opened(target));
+                } else if let Some(page) = page {
+                    let name = session.document().node(page).map(|node| node.name.clone());
+                    link["kind"] = json!("page");
+                    link["page"] = json!(page);
+                    link["page_name"] = match name {
+                        Some(name) => json!(name),
+                        None => Json::Null,
+                    };
+                    link["may_be_opened"] = json!(true);
+                }
+                links.push(link);
             }
-            let mut link = json!({ "item": item.id, "name": item.name });
-            if let Some(target) = &target {
-                link["kind"] = json!("target");
-                link["target"] = json!(target);
-                link["may_be_opened"] = json!(may_be_opened(target));
-            } else if let Some(page) = page {
-                let name = session.document().node(page).map(|node| node.name.clone());
-                link["kind"] = json!("page");
-                link["page"] = json!(page);
-                link["page_name"] = match name {
-                    Some(name) => json!(name),
-                    None => Json::Null,
-                };
-                link["may_be_opened"] = json!(true);
-            }
-            links.push(link);
+            Ok(Outcome::new(format!("the document has {} link(s)", links.len())).with_data(json!({
+                "document": document,
+                "links": links,
+                "count": links.len(),
+            })))
+
         }
-        Ok(Outcome::new(format!("the document has {} link(s)", links.len())).with_data(json!({
-            "document": document,
-            "links": links,
-            "count": links.len(),
-        })))
     }
 }

@@ -19,10 +19,10 @@
 //!   top and the bottom less than the height together;
 //! - a side that is **not said** keeps the room it had.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome};
 
 /// The **margins** of a page: the room at each side of it.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -87,75 +87,86 @@ pub fn margin_box_of(page: &Node) -> Option<(f64, f64, f64, f64)> {
     margin_of(page).box_of(width, height)
 }
 
-/// **Set** the margins of a page.
-///
-/// A side that is not said keeps the room it had.
-#[derive(Command)]
-#[command(id = "layout.page.margin", area = "layout", layer = "layout", icon = "rect", mutates, undoable)]
-pub struct SetMargin {
-    /// The page.
-    pub page: NodeRef,
-    /// The room at the top of the page.
-    pub top: Option<Number>,
-    /// The room at the bottom of the page.
-    pub bottom: Option<Number>,
-    /// The room at the left of the page.
-    pub left: Option<Number>,
-    /// The room at the right of the page.
-    pub right: Option<Number>,
-}
+commands! {
+    /// **Set** the margins of a page.
+    ///
+    /// A side that is not said keeps the room it had.
+    layout.page.margin {
+        area: "layout",
+        layer: "layout",
+        icon: "rect",
+        mutates,
+        undoable,
+        params: {
+            /// The page.
 
-impl SetMargin {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "layout.page.margin".to_string();
-        let page = self.page.0;
-        let Some(node) = session.document().node(page).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no page `{page}`"),
-            });
-        };
-        if node.kind != "layout.page" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{page}` is a `{}` and not a page", node.kind),
-            });
-        }
-        let mut margin = margin_of(&node);
-        for (side, given) in
-            [("top", &self.top), ("bottom", &self.bottom), ("left", &self.left), ("right", &self.right)]
-        {
-            let Some(given) = given else { continue };
-            let value = given.0;
-            if !value.is_finite() || value < 0.0 {
+            page: NodeRef,
+            /// The room at the top of the page.
+
+            top: Option<Number>,
+            /// The room at the bottom of the page.
+
+            bottom: Option<Number>,
+            /// The room at the left of the page.
+
+            left: Option<Number>,
+            /// The room at the right of the page.
+
+            right: Option<Number>,
+        },
+        run: {
+
+            let id = "layout.page.margin".to_string();
+            let page = self.page.0;
+            let Some(node) = session.document().node(page).cloned() else {
                 return Err(EngineError::Failed {
                     id: id.clone(),
-                    message: format!(
-                        "{value} is not the room of a margin: the room is a number and not a negative one"
-                    ),
+                    message: format!("there is no page `{page}`"),
+                });
+            };
+            if node.kind != "layout.page" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{page}` is a `{}` and not a page", node.kind),
                 });
             }
-            match side {
-                "top" => margin.top = value,
-                "bottom" => margin.bottom = value,
-                "left" => margin.left = value,
-                _ => margin.right = value,
+            let mut margin = margin_of(&node);
+            for (side, given) in
+                [("top", &self.top), ("bottom", &self.bottom), ("left", &self.left), ("right", &self.right)]
+            {
+                let Some(given) = given else { continue };
+                let value = given.0;
+                if !value.is_finite() || value < 0.0 {
+                    return Err(EngineError::Failed {
+                        id: id.clone(),
+                        message: format!(
+                            "{value} is not the room of a margin: the room is a number and not a negative one"
+                        ),
+                    });
+                }
+                match side {
+                    "top" => margin.top = value,
+                    "bottom" => margin.bottom = value,
+                    "left" => margin.left = value,
+                    _ => margin.right = value,
+                }
             }
+            // The margins must leave **room** for the page: a margin box
+            // that is not a box is not a box.
+            let width = node.data.get("width").and_then(|width| width.as_f64()).unwrap_or(0.0);
+            let height = node.data.get("height").and_then(|height| height.as_f64()).unwrap_or(0.0);
+            if margin.box_of(width, height).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the margins leave no room for the page: the page is {width} by {height}"),
+                });
+            }
+            if let Some(node) = session.document_mut()?.node_mut(page) {
+                node.data["margin"] = margin.to_json();
+            }
+            Ok(Outcome::changed(format!("the page `{page}` has margins"))
+                .with_data(json!({ "page": page, "margin": margin.to_json() })))
+
         }
-        // The margins must leave **room** for the page: a margin box
-        // that is not a box is not a box.
-        let width = node.data.get("width").and_then(|width| width.as_f64()).unwrap_or(0.0);
-        let height = node.data.get("height").and_then(|height| height.as_f64()).unwrap_or(0.0);
-        if margin.box_of(width, height).is_none() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the margins leave no room for the page: the page is {width} by {height}"),
-            });
-        }
-        if let Some(node) = session.document_mut()?.node_mut(page) {
-            node.data["margin"] = margin.to_json();
-        }
-        Ok(Outcome::changed(format!("the page `{page}` has margins"))
-            .with_data(json!({ "page": page, "margin": margin.to_json() })))
     }
 }

@@ -22,7 +22,7 @@
 //! - **Ungrouping** puts the items back where the group stood, in the
 //!   order they were in.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
@@ -87,222 +87,234 @@ fn ids_of(value: &Json, command: &str) -> Result<Vec<u64>, EngineError> {
     Ok(ids)
 }
 
-/// **Group** items.
-///
-/// The group stands where the item at the back stood, and the items
-/// are in it in the order they were.
-#[derive(Command)]
-#[command(id = "layout.item.group", area = "layout", layer = "layout", icon = "group", mutates, undoable)]
-pub struct GroupItems {
-    /// The items to group: at least two.
-    pub items: Json,
-    /// What to call the group.
-    pub name: Option<Text>,
-}
+commands! {
+    /// **Group** items.
+    ///
+    /// The group stands where the item at the back stood, and the items
+    /// are in it in the order they were.
+    layout.item.group {
+        area: "layout",
+        layer: "layout",
+        icon: "group",
+        mutates,
+        undoable,
+        params: {
+            /// The items to group: at least two.
 
-impl GroupItems {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.item.group";
-        let ids = ids_of(&self.items, command)?;
-        if ids.len() < 2 {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: "a group holds at least two items".to_string(),
-            });
-        }
-        // The **items**: they are items, and a locked one may not be
-        // grouped.
-        for id in &ids {
-            let node = item_of(session, command, *id)?;
-            may_edit(session, &node, command)?;
-        }
-        // The **parent**: the items are at the same level, and that is
-        // the tree's own rule.
-        let mut parent: Option<u64> = None;
-        for id in &ids {
-            let Some(held) = parent_of(session, *id) else {
+            items: Json,
+            /// What to call the group.
+
+            name: Option<Text>,
+        },
+        run: {
+
+            let command = "layout.item.group";
+            let ids = ids_of(&self.items, command)?;
+            if ids.len() < 2 {
                 return Err(EngineError::Failed {
                     id: command.to_string(),
-                    message: format!("the item `{id}` is in nothing"),
+                    message: "a group holds at least two items".to_string(),
                 });
-            };
-            match parent {
-                None => parent = Some(held),
-                Some(parent) if parent == held => {}
-                Some(_) => {
+            }
+            // The **items**: they are items, and a locked one may not be
+            // grouped.
+            for id in &ids {
+                let node = item_of(session, command, *id)?;
+                may_edit(session, &node, command)?;
+            }
+            // The **parent**: the items are at the same level, and that is
+            // the tree's own rule.
+            let mut parent: Option<u64> = None;
+            for id in &ids {
+                let Some(held) = parent_of(session, *id) else {
                     return Err(EngineError::Failed {
                         id: command.to_string(),
-                        message:
-                            "the items to group must be on the same spread and at the same level (all of them in the spread, or all of them in one group)"
-                                .to_string(),
+                        message: format!("the item `{id}` is in nothing"),
                     });
+                };
+                match parent {
+                    None => parent = Some(held),
+                    Some(parent) if parent == held => {}
+                    Some(_) => {
+                        return Err(EngineError::Failed {
+                            id: command.to_string(),
+                            message:
+                                "the items to group must be on the same spread and at the same level (all of them in the spread, or all of them in one group)"
+                                    .to_string(),
+                        });
+                    }
                 }
             }
-        }
-        let parent = parent.unwrap_or_default();
-        let Some(parent_node) = session.document().node(parent).cloned() else {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("the items are in the node `{parent}`, and it is gone"),
-            });
-        };
-        if parent_node.kind != "layout.spread" && parent_node.kind != "layout.item.group" {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("the node `{parent}` is a `{}` and holds no items", parent_node.kind),
-            });
-        }
-        let Some(spread) = spread_of(session, ids[0]) else {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("the item `{}` is not in a spread", ids[0]),
-            });
-        };
-        // The **items** as the parent holds them: the ones that are
-        // grouped, in the order they were drawn.
-        let held: Vec<std::sync::Arc<Node>> =
-            parent_node.children.iter().filter(|child| ids.contains(&child.id)).cloned().collect();
-        if held.len() != ids.len() {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: "the items to group are not all in the same place".to_string(),
-            });
-        }
-        // The **layer** of the item at the back: the group is on that
-        // layer, and the items keep the layers they were on.
-        let back = held.first().map(|item| item.id).unwrap_or_default();
-        let layer = session
-            .document()
-            .relations
-            .iter()
-            .find(|relation| relation.from == back && relation.kind == craftkit_sdk::layer::ON_LAYER)
-            .cloned();
-        // The **group** is made in the place the items were.
-        let name = self.name.as_ref().map(|name| name.0.trim().to_string()).filter(|name| !name.is_empty());
-        let name = name.unwrap_or_else(|| DEFAULT_NAME.to_string());
-        let group = session.document_mut()?.add_node_with_under(
-            Some(parent),
-            name.clone(),
-            "layout.item.group",
-            None,
-            json!({}),
-        );
-        // The **children** of the parent, with the group in the place
-        // the item at the back stood, and the items gone from it.
-        let Some(parent_node) = session.document().node(parent).cloned() else {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("the items are in the node `{parent}`, and it is gone"),
-            });
-        };
-        let group_node = parent_node.children.iter().find(|child| child.id == group).cloned();
-        let Some(group_node) = group_node else {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("the group `{group}` was not made"),
-            });
-        };
-        let mut children: Vec<std::sync::Arc<Node>> = Vec::with_capacity(parent_node.children.len());
-        let mut placed = false;
-        for child in parent_node.children.iter() {
-            if child.id == group {
-                // The group is placed where the item at the back stood.
-                continue;
+            let parent = parent.unwrap_or_default();
+            let Some(parent_node) = session.document().node(parent).cloned() else {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("the items are in the node `{parent}`, and it is gone"),
+                });
+            };
+            if parent_node.kind != "layout.spread" && parent_node.kind != "layout.item.group" {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("the node `{parent}` is a `{}` and holds no items", parent_node.kind),
+                });
             }
-            if !child.kind.starts_with("layout.item.") {
+            let Some(spread) = spread_of(session, ids[0]) else {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("the item `{}` is not in a spread", ids[0]),
+                });
+            };
+            // The **items** as the parent holds them: the ones that are
+            // grouped, in the order they were drawn.
+            let held: Vec<std::sync::Arc<Node>> =
+                parent_node.children.iter().filter(|child| ids.contains(&child.id)).cloned().collect();
+            if held.len() != ids.len() {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: "the items to group are not all in the same place".to_string(),
+                });
+            }
+            // The **layer** of the item at the back: the group is on that
+            // layer, and the items keep the layers they were on.
+            let back = held.first().map(|item| item.id).unwrap_or_default();
+            let layer = session
+                .document()
+                .relations
+                .iter()
+                .find(|relation| relation.from == back && relation.kind == craftkit_sdk::layer::ON_LAYER)
+                .cloned();
+            // The **group** is made in the place the items were.
+            let name = self.name.as_ref().map(|name| name.0.trim().to_string()).filter(|name| !name.is_empty());
+            let name = name.unwrap_or_else(|| DEFAULT_NAME.to_string());
+            let group = session.document_mut()?.add_node_with_under(
+                Some(parent),
+                name.clone(),
+                "layout.item.group",
+                None,
+                json!({}),
+            );
+            // The **children** of the parent, with the group in the place
+            // the item at the back stood, and the items gone from it.
+            let Some(parent_node) = session.document().node(parent).cloned() else {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("the items are in the node `{parent}`, and it is gone"),
+                });
+            };
+            let group_node = parent_node.children.iter().find(|child| child.id == group).cloned();
+            let Some(group_node) = group_node else {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("the group `{group}` was not made"),
+                });
+            };
+            let mut children: Vec<std::sync::Arc<Node>> = Vec::with_capacity(parent_node.children.len());
+            let mut placed = false;
+            for child in parent_node.children.iter() {
+                if child.id == group {
+                    // The group is placed where the item at the back stood.
+                    continue;
+                }
+                if !child.kind.starts_with("layout.item.") {
+                    children.push(child.clone());
+                    continue;
+                }
+                if ids.contains(&child.id) {
+                    if !placed {
+                        children.push(group_node.clone());
+                        placed = true;
+                    }
+                    continue;
+                }
                 children.push(child.clone());
-                continue;
             }
-            if ids.contains(&child.id) {
-                if !placed {
-                    children.push(group_node.clone());
-                    placed = true;
+            if let Some(node) = session.document_mut()?.node_mut(parent) {
+                node.children = children;
+            }
+            // The **items** are in the group, in the order they were drawn.
+            if let Some(node) = session.document_mut()?.node_mut(group) {
+                for item in held {
+                    node.children.push(item);
                 }
-                continue;
             }
-            children.push(child.clone());
-        }
-        if let Some(node) = session.document_mut()?.node_mut(parent) {
-            node.children = children;
-        }
-        // The **items** are in the group, in the order they were drawn.
-        if let Some(node) = session.document_mut()?.node_mut(group) {
-            for item in held {
-                node.children.push(item);
+            // The **layer** of the group is the layer of the item at the
+            // back: the tree's own rule.
+            if let Some(layer) = layer {
+                let mut relation = layer;
+                relation.from = group;
+                session.document_mut()?.add_relation(relation);
             }
+            Ok(Outcome::changed(format!("grouped {} items into `{name}`", ids.len())).with_data(json!({
+                "group": group,
+                "name": name,
+                "spread": spread,
+                "items": ids,
+            })))
+
         }
-        // The **layer** of the group is the layer of the item at the
-        // back: the tree's own rule.
-        if let Some(layer) = layer {
-            let mut relation = layer;
-            relation.from = group;
-            session.document_mut()?.add_relation(relation);
-        }
-        Ok(Outcome::changed(format!("grouped {} items into `{name}`", ids.len())).with_data(json!({
-            "group": group,
-            "name": name,
-            "spread": spread,
-            "items": ids,
-        })))
     }
-}
+    /// **Ungroup** a group: the items go back where the group stood.
+    layout.item.ungroup {
+        area: "layout",
+        layer: "layout",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The group.
 
-/// **Ungroup** a group: the items go back where the group stood.
-#[derive(Command)]
-#[command(id = "layout.item.ungroup", area = "layout", layer = "layout", icon = "minus", mutates, undoable)]
-pub struct UngroupItems {
-    /// The group.
-    pub group: NodeRef,
-}
+            group: NodeRef,
+        },
+        run: {
 
-impl UngroupItems {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.item.ungroup";
-        let group = self.group.0;
-        let node = item_of(session, command, group)?;
-        if node.kind != "layout.item.group" {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("the node `{group}` is a `{}` and not a group", node.kind),
-            });
-        }
-        may_edit(session, &node, command)?;
-        let Some(parent) = parent_of(session, group) else {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("the group `{group}` is in nothing"),
-            });
-        };
-        let Some(parent_node) = session.document().node(parent).cloned() else {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("the group `{group}` is in the node `{parent}`, and it is gone"),
-            });
-        };
-        // The **items** of the group, in the order they are in.
-        let held: Vec<std::sync::Arc<Node>> = node.children.clone();
-        let items: Vec<u64> = held.iter().map(|child| child.id).collect();
-        // The **children** of the parent, with the items of the group
-        // where the group stood.
-        let mut children: Vec<std::sync::Arc<Node>> =
-            Vec::with_capacity(parent_node.children.len() + held.len());
-        for child in parent_node.children.iter() {
-            if child.id == group {
-                for item in held.iter() {
-                    children.push(item.clone());
-                }
-                continue;
+            let command = "layout.item.ungroup";
+            let group = self.group.0;
+            let node = item_of(session, command, group)?;
+            if node.kind != "layout.item.group" {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("the node `{group}` is a `{}` and not a group", node.kind),
+                });
             }
-            children.push(child.clone());
+            may_edit(session, &node, command)?;
+            let Some(parent) = parent_of(session, group) else {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("the group `{group}` is in nothing"),
+                });
+            };
+            let Some(parent_node) = session.document().node(parent).cloned() else {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("the group `{group}` is in the node `{parent}`, and it is gone"),
+                });
+            };
+            // The **items** of the group, in the order they are in.
+            let held: Vec<std::sync::Arc<Node>> = node.children.clone();
+            let items: Vec<u64> = held.iter().map(|child| child.id).collect();
+            // The **children** of the parent, with the items of the group
+            // where the group stood.
+            let mut children: Vec<std::sync::Arc<Node>> =
+                Vec::with_capacity(parent_node.children.len() + held.len());
+            for child in parent_node.children.iter() {
+                if child.id == group {
+                    for item in held.iter() {
+                        children.push(item.clone());
+                    }
+                    continue;
+                }
+                children.push(child.clone());
+            }
+            if let Some(node) = session.document_mut()?.node_mut(parent) {
+                node.children = children;
+            }
+            // The **group** is gone, and the layers of the items stay.
+            session.document_mut()?.remove_node(group);
+            Ok(Outcome::changed(format!("ungrouped {} item(s)", items.len())).with_data(json!({
+                "group": group,
+                "items": items,
+            })))
+
         }
-        if let Some(node) = session.document_mut()?.node_mut(parent) {
-            node.children = children;
-        }
-        // The **group** is gone, and the layers of the items stay.
-        session.document_mut()?.remove_node(group);
-        Ok(Outcome::changed(format!("ungrouped {} item(s)", items.len())).with_data(json!({
-            "group": group,
-            "items": items,
-        })))
     }
 }

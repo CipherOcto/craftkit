@@ -23,10 +23,10 @@
 //!   is neither single nor left nor right is a page of no side;
 //! - a node that is not a page may not have a side.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
-use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Session, Text};
+use craftkit_sdk::{EngineError, Node, NodeRef, Outcome, Text};
 
 /// The **side** of a page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,43 +75,51 @@ pub fn inside_outside(page: &Node) -> (f64, f64) {
     }
 }
 
-/// **Say** which side of its spread a page is on.
-#[derive(Command)]
-#[command(id = "layout.page.side", area = "layout", layer = "layout", icon = "page", mutates, undoable)]
-pub struct SetSide {
-    /// The page.
-    pub page: NodeRef,
-    /// The side it is on: `single`, `left` or `right`.
-    pub side: Text,
-}
+commands! {
+    /// **Say** which side of its spread a page is on.
+    layout.page.side {
+        area: "layout",
+        layer: "layout",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The page.
 
-impl SetSide {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "layout.page.side".to_string();
-        let page = self.page.0;
-        let Some(node) = session.document().node(page).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no node `{page}`"),
-            });
-        };
-        if node.kind != "layout.page" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{page}` is a `{}` and not a page", node.kind),
-            });
+            page: NodeRef,
+            /// The side it is on: `single`, `left` or `right`.
+
+            side: Text,
+        },
+        run: {
+
+            let id = "layout.page.side".to_string();
+            let page = self.page.0;
+            let Some(node) = session.document().node(page).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no node `{page}`"),
+                });
+            };
+            if node.kind != "layout.page" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{page}` is a `{}` and not a page", node.kind),
+                });
+            }
+            let name = self.side.0.trim();
+            let Some(side) = Side::parse(name) else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("`{name}` is not a side: a side is `single`, `left` or `right`"),
+                });
+            };
+            if let Some(node) = session.document_mut()?.node_mut(page) {
+                node.data["side"] = json!(side.name());
+            }
+            Ok(Outcome::changed(format!("the page `{page}` is a {} page", side.name()))
+                .with_data(json!({ "page": page, "side": side.name() })))
+
         }
-        let name = self.side.0.trim();
-        let Some(side) = Side::parse(name) else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("`{name}` is not a side: a side is `single`, `left` or `right`"),
-            });
-        };
-        if let Some(node) = session.document_mut()?.node_mut(page) {
-            node.data["side"] = json!(side.name());
-        }
-        Ok(Outcome::changed(format!("the page `{page}` is a {} page", side.name()))
-            .with_data(json!({ "page": page, "side": side.name() })))
     }
 }

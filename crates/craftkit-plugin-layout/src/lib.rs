@@ -81,38 +81,45 @@ mod shadows;
 mod sides;
 mod styles;
 
-use craftkit_derive::{Command, Evaluator, Layer, NodeKind, Panel};
+use craftkit_derive::{Evaluator, Layer, NodeKind, Panel, commands};
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{
-    Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Relation, Session, Text,
-};
+use craftkit_sdk::{Document, EngineError, Node, NodeRef, Number, Outcome, Plan, PlanItem, Relation, Text};
 
 pub use articles::{
-    AddToArticle, ArticleOptions, DeleteArticle, NewArticle, ReadArticles, RemoveFromArticle,
+    LayoutArticleAdd, LayoutArticleDelete, LayoutArticleNew, LayoutArticleOptions, LayoutArticleRemove,
+    LayoutDocumentArticles,
 };
-pub use bleed::SetBleed;
-pub use bookmarks::{AddBookmark, DeleteBookmark, ReadBookmarks, RenameBookmark};
-pub use columns::SetColumns;
-pub use facing::ReadFacing;
-pub use grouping::{GroupItems, UngroupItems};
-pub use guides::{AddGuide, CreateGuides, DeleteAllGuides, DeleteGuide, MoveGuide, ReadGuides};
-pub use items::{HideItem, LockItem, ScaleItem, SetOpacity, ShowItem, UnlockItem};
+pub use bleed::LayoutDocumentBleed;
+pub use bookmarks::{LayoutBookmarkAdd, LayoutBookmarkDelete, LayoutBookmarkRename, LayoutDocumentBookmarks};
+pub use columns::LayoutPageColumns;
+pub use facing::LayoutPageFacing;
+pub use grouping::{LayoutItemGroup, LayoutItemUngroup};
+pub use guides::{
+    LayoutGuideAdd, LayoutGuideCreate, LayoutGuideDelete, LayoutGuideDeleteAll, LayoutGuideMove,
+    LayoutPageGuides,
+};
+pub use items::{
+    LayoutItemHide, LayoutItemLock, LayoutItemOpacity, LayoutItemScale, LayoutItemShow, LayoutItemUnlock,
+};
 pub use layers::{
-    DeleteLayer, DeleteUnusedLayers, HideLayer, LockLayer, MergeLayers, MoveLayer, RenameLayer, ShowLayer,
-    UnlockLayer,
+    LayoutLayerDelete, LayoutLayerHide, LayoutLayerLock, LayoutLayerMerge, LayoutLayerMove,
+    LayoutLayerRename, LayoutLayerShow, LayoutLayerUnlock, LayoutLayerUnusedDelete,
 };
-pub use linked::{LinkStory, ReadLinks as ReadStoryLinks, SetStoryText, UnlinkStory, UpdateLinks};
-pub use links::{ReadLinks, SetItemLink, SetItemPageLink};
-pub use margins::SetMargin;
-pub use order::{BackwardItem, BringToFront, ForwardItem, ListItems, SendToBack};
-pub use pages::{DeletePage, MovePage};
-pub use paint::{SetFill, SetStroke};
-pub use parents::{ClearParent, SetParent};
-pub use radii::SetRadius;
-pub use rotation::RotateItem;
-pub use shadows::SetShadow;
-pub use sides::SetSide;
-pub use styles::{AddStyle, SetItemStyle, SetStyleFill, SetStyleStroke};
+pub use linked::{
+    LayoutDocumentLinks as ReadStoryLinks, LayoutStoryLink, LayoutStorySet, LayoutStoryUnlink,
+    LayoutStoryUpdate,
+};
+pub use links::{LayoutItemLink, LayoutItemPageLink, LayoutLinks};
+pub use margins::LayoutPageMargin;
+pub use order::{LayoutItemBack, LayoutItemBackward, LayoutItemForward, LayoutItemFront, LayoutItemList};
+pub use pages::{LayoutPageDelete, LayoutPageMove};
+pub use paint::{LayoutItemFill, LayoutItemStroke};
+pub use parents::{LayoutPageParent, LayoutPageParentClear};
+pub use radii::LayoutItemRadius;
+pub use rotation::LayoutItemRotate;
+pub use shadows::LayoutItemShadow;
+pub use sides::LayoutPageSide;
+pub use styles::{LayoutItemStyle, LayoutStyleAdd, LayoutStyleFill, LayoutStyleStroke};
 
 /// The layout layer.
 ///
@@ -467,430 +474,479 @@ fn edge_name(document: &Document, from: u64, kind: &str) -> Json {
     }
 }
 
-/// Put a **document** in the document.
-#[derive(Command)]
-#[command(
-    id = "layout.document.add",
-    area = "layout",
-    layer = "layout",
-    icon = "plus",
-    mutates,
-    undoable,
-    example
-)]
-pub struct AddDocument {
-    /// What to call it.
-    pub name: Text,
-}
+commands! {
+    /// Put a **document** in the document.
+    layout.document.add {
+        area: "layout",
+        layer: "layout",
+        icon: "plus",
+        mutates,
+        undoable,
+        example,
+        params: {
+            /// What to call it.
 
-impl AddDocument {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: "layout.document.add".to_string(),
-                message: "a document has a name".to_string(),
-            });
+            name: Text,
+        },
+        run: {
+
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "layout.document.add".to_string(),
+                    message: "a document has a name".to_string(),
+                });
+            }
+            let id = session.document_mut()?.add_node_with_under(
+                None,
+                name.clone(),
+                "layout.document",
+                None,
+                json!({}),
+            );
+            Ok(Outcome::changed(format!("added the document `{name}`"))
+                .with_data(json!({ "id": id, "name": name })))
+
         }
-        let id = session.document_mut()?.add_node_with_under(
-            None,
-            name.clone(),
-            "layout.document",
-            None,
-            json!({}),
-        );
-        Ok(Outcome::changed(format!("added the document `{name}`"))
-            .with_data(json!({ "id": id, "name": name })))
     }
-}
+    /// Put a **spread** in a document.
+    layout.spread.add {
+        area: "layout",
+        layer: "layout",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The document it goes in.
 
-/// Put a **spread** in a document.
-#[derive(Command)]
-#[command(id = "layout.spread.add", area = "layout", layer = "layout", icon = "plus", mutates, undoable)]
-pub struct AddSpread {
-    /// The document it goes in.
-    pub document: NodeRef,
-    /// What to call it.
-    pub name: Text,
-}
+            document: NodeRef,
+            /// What to call it.
 
-impl AddSpread {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: "layout.spread.add".to_string(),
-                message: "a spread has a name".to_string(),
-            });
+            name: Text,
+        },
+        run: {
+
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "layout.spread.add".to_string(),
+                    message: "a spread has a name".to_string(),
+                });
+            }
+            let document = self.document.0;
+            if session.document().node(document).is_none() {
+                return Err(EngineError::Failed {
+                    id: "layout.spread.add".to_string(),
+                    message: format!("there is no document `{document}`"),
+                });
+            }
+            let id = session.document_mut()?.add_node_with_under(
+                Some(document),
+                name.clone(),
+                "layout.spread",
+                None,
+                json!({}),
+            );
+            Ok(Outcome::changed(format!("added the spread `{name}`"))
+                .with_data(json!({ "id": id, "name": name })))
+
         }
-        let document = self.document.0;
-        if session.document().node(document).is_none() {
-            return Err(EngineError::Failed {
-                id: "layout.spread.add".to_string(),
-                message: format!("there is no document `{document}`"),
-            });
-        }
-        let id = session.document_mut()?.add_node_with_under(
-            Some(document),
-            name.clone(),
-            "layout.spread",
-            None,
-            json!({}),
-        );
-        Ok(Outcome::changed(format!("added the spread `{name}`"))
-            .with_data(json!({ "id": id, "name": name })))
     }
-}
+    /// Put a **page** in a spread.
+    layout.page.add {
+        area: "layout",
+        layer: "layout",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The spread it goes in.
 
-/// Put a **page** in a spread.
-#[derive(Command)]
-#[command(id = "layout.page.add", area = "layout", layer = "layout", icon = "plus", mutates, undoable)]
-pub struct AddPage {
-    /// The spread it goes in.
-    pub spread: NodeRef,
-    /// What to call it.
-    pub name: Text,
-    /// How wide it is.
-    pub width: Option<Number>,
-    /// How high it is.
-    pub height: Option<Number>,
-}
+            spread: NodeRef,
+            /// What to call it.
 
-impl AddPage {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: "layout.page.add".to_string(),
-                message: "a page has a name".to_string(),
-            });
+            name: Text,
+            /// How wide it is.
+
+            width: Option<Number>,
+            /// How high it is.
+
+            height: Option<Number>,
+        },
+        run: {
+
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "layout.page.add".to_string(),
+                    message: "a page has a name".to_string(),
+                });
+            }
+            let spread = self.spread.0;
+            if session.document().node(spread).is_none() {
+                return Err(EngineError::Failed {
+                    id: "layout.page.add".to_string(),
+                    message: format!("there is no spread `{spread}`"),
+                });
+            }
+            let width = size(self.width.as_ref(), 210.0, "layout.page.add", "a width")?;
+            let height = size(self.height.as_ref(), 297.0, "layout.page.add", "a height")?;
+            let id = session.document_mut()?.add_node_with_under(
+                Some(spread),
+                name.clone(),
+                "layout.page",
+                None,
+                json!({ "width": width, "height": height }),
+            );
+            Ok(Outcome::changed(format!("added the page `{name}`"))
+                .with_data(json!({ "id": id, "name": name, "width": width, "height": height })))
+
         }
-        let spread = self.spread.0;
-        if session.document().node(spread).is_none() {
-            return Err(EngineError::Failed {
-                id: "layout.page.add".to_string(),
-                message: format!("there is no spread `{spread}`"),
-            });
-        }
-        let width = size(self.width.as_ref(), 210.0, "layout.page.add", "a width")?;
-        let height = size(self.height.as_ref(), 297.0, "layout.page.add", "a height")?;
-        let id = session.document_mut()?.add_node_with_under(
-            Some(spread),
-            name.clone(),
-            "layout.page",
-            None,
-            json!({ "width": width, "height": height }),
-        );
-        Ok(Outcome::changed(format!("added the page `{name}`"))
-            .with_data(json!({ "id": id, "name": name, "width": width, "height": height })))
     }
-}
+    /// Put a **layer** in a document.
+    layout.layer.add {
+        area: "layout",
+        layer: "layout",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The document it goes in.
 
-/// Put a **layer** in a document.
-#[derive(Command)]
-#[command(id = "layout.layer.add", area = "layout", layer = "layout", icon = "plus", mutates, undoable)]
-pub struct AddLayer {
-    /// The document it goes in.
-    pub document: NodeRef,
-    /// The layer's name.
-    pub name: Text,
-    /// Its colour, as a name or a number.
-    pub color: Option<Text>,
-}
+            document: NodeRef,
+            /// The layer's name.
 
-impl AddLayer {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: "layout.layer.add".to_string(),
-                message: "a layer has a name".to_string(),
-            });
+            name: Text,
+            /// Its colour, as a name or a number.
+
+            color: Option<Text>,
+        },
+        run: {
+
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "layout.layer.add".to_string(),
+                    message: "a layer has a name".to_string(),
+                });
+            }
+            let document = self.document.0;
+            if session.document().node(document).is_none() {
+                return Err(EngineError::Failed {
+                    id: "layout.layer.add".to_string(),
+                    message: format!("there is no document `{document}`"),
+                });
+            }
+            let color = self.color.as_ref().map(|color| color.0.clone());
+            let id = session.document_mut()?.add_node_with_under(
+                Some(document),
+                name.clone(),
+                "layout.layer",
+                None,
+                json!({ "color": color }),
+            );
+            Ok(Outcome::changed(format!("added the layer `{name}`")).with_data(json!({ "id": id, "name": name })))
+
         }
-        let document = self.document.0;
-        if session.document().node(document).is_none() {
-            return Err(EngineError::Failed {
-                id: "layout.layer.add".to_string(),
-                message: format!("there is no document `{document}`"),
-            });
-        }
-        let color = self.color.as_ref().map(|color| color.0.clone());
-        let id = session.document_mut()?.add_node_with_under(
-            Some(document),
-            name.clone(),
-            "layout.layer",
-            None,
-            json!({ "color": color }),
-        );
-        Ok(Outcome::changed(format!("added the layer `{name}`")).with_data(json!({ "id": id, "name": name })))
     }
-}
+    /// Put a **story** in a document: the text, stored once.
+    layout.story.add {
+        area: "layout",
+        layer: "layout",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The document it goes in.
 
-/// Put a **story** in a document: the text, stored once.
-#[derive(Command)]
-#[command(id = "layout.story.add", area = "layout", layer = "layout", icon = "plus", mutates, undoable)]
-pub struct AddStory {
-    /// The document it goes in.
-    pub document: NodeRef,
-    /// What to call it.
-    pub name: Text,
-    /// The text of the story.
-    pub text: Text,
-}
+            document: NodeRef,
+            /// What to call it.
 
-impl AddStory {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: "layout.story.add".to_string(),
-                message: "a story has a name".to_string(),
-            });
+            name: Text,
+            /// The text of the story.
+
+            text: Text,
+        },
+        run: {
+
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "layout.story.add".to_string(),
+                    message: "a story has a name".to_string(),
+                });
+            }
+            let document = self.document.0;
+            if session.document().node(document).is_none() {
+                return Err(EngineError::Failed {
+                    id: "layout.story.add".to_string(),
+                    message: format!("there is no document `{document}`"),
+                });
+            }
+            let id = session.document_mut()?.add_node_with_under(
+                Some(document),
+                name.clone(),
+                "layout.story",
+                None,
+                json!({ "text": self.text.0 }),
+            );
+            Ok(Outcome::changed(format!("added the story `{name}`")).with_data(json!({ "id": id, "name": name })))
+
         }
-        let document = self.document.0;
-        if session.document().node(document).is_none() {
-            return Err(EngineError::Failed {
-                id: "layout.story.add".to_string(),
-                message: format!("there is no document `{document}`"),
-            });
-        }
-        let id = session.document_mut()?.add_node_with_under(
-            Some(document),
-            name.clone(),
-            "layout.story",
-            None,
-            json!({ "text": self.text.0 }),
-        );
-        Ok(Outcome::changed(format!("added the story `{name}`")).with_data(json!({ "id": id, "name": name })))
     }
-}
+    /// Put an **asset** in a document: a file the document places.
+    ///
+    /// The file is the node's **stream**, so the bytes travel beside the
+    /// document in the package and nobody names a path twice.
+    layout.asset.add {
+        area: "layout",
+        layer: "layout",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The document it goes in.
 
-/// Put an **asset** in a document: a file the document places.
-///
-/// The file is the node's **stream**, so the bytes travel beside the
-/// document in the package and nobody names a path twice.
-#[derive(Command)]
-#[command(id = "layout.asset.add", area = "layout", layer = "layout", icon = "plus", mutates, undoable)]
-pub struct AddAsset {
-    /// The document it goes in.
-    pub document: NodeRef,
-    /// What to call it.
-    pub name: Text,
-    /// Where the file is, relative to the document.
-    pub path: Text,
-    /// What kind of file it is: `image`, `eps`, `font`, …
-    pub kind: Option<Text>,
-}
+            document: NodeRef,
+            /// What to call it.
 
-impl AddAsset {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: "layout.asset.add".to_string(),
-                message: "an asset has a name".to_string(),
-            });
+            name: Text,
+            /// Where the file is, relative to the document.
+
+            path: Text,
+            /// What kind of file it is: `image`, `eps`, `font`, …
+
+            kind: Option<Text>,
+        },
+        run: {
+
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "layout.asset.add".to_string(),
+                    message: "an asset has a name".to_string(),
+                });
+            }
+            let path = self.path.0.trim().to_string();
+            if path.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "layout.asset.add".to_string(),
+                    message: "an asset says which file it is".to_string(),
+                });
+            }
+            let document = self.document.0;
+            if session.document().node(document).is_none() {
+                return Err(EngineError::Failed {
+                    id: "layout.asset.add".to_string(),
+                    message: format!("there is no document `{document}`"),
+                });
+            }
+            let kind = self.kind.as_ref().map(|kind| kind.0.clone()).unwrap_or_else(|| "file".to_string());
+            let id = session.document_mut()?.add_node_with_under(
+                Some(document),
+                name.clone(),
+                "layout.asset",
+                None,
+                json!({ "kind": kind }),
+            );
+            let Some(node) = session.document_mut()?.node_mut(id) else {
+                return Err(EngineError::Failed {
+                    id: "layout.asset.add".to_string(),
+                    message: format!("the asset `{name}` is not in the document"),
+                });
+            };
+            node.stream = Some(path.clone());
+            Ok(Outcome::changed(format!("added the asset `{name}`"))
+                .with_data(json!({ "id": id, "name": name, "path": path })))
+
         }
-        let path = self.path.0.trim().to_string();
-        if path.is_empty() {
-            return Err(EngineError::Failed {
-                id: "layout.asset.add".to_string(),
-                message: "an asset says which file it is".to_string(),
-            });
-        }
-        let document = self.document.0;
-        if session.document().node(document).is_none() {
-            return Err(EngineError::Failed {
-                id: "layout.asset.add".to_string(),
-                message: format!("there is no document `{document}`"),
-            });
-        }
-        let kind = self.kind.as_ref().map(|kind| kind.0.clone()).unwrap_or_else(|| "file".to_string());
-        let id = session.document_mut()?.add_node_with_under(
-            Some(document),
-            name.clone(),
-            "layout.asset",
-            None,
-            json!({ "kind": kind }),
-        );
-        let Some(node) = session.document_mut()?.node_mut(id) else {
-            return Err(EngineError::Failed {
-                id: "layout.asset.add".to_string(),
-                message: format!("the asset `{name}` is not in the document"),
-            });
-        };
-        node.stream = Some(path.clone());
-        Ok(Outcome::changed(format!("added the asset `{name}`"))
-            .with_data(json!({ "id": id, "name": name, "path": path })))
     }
-}
+    /// Put an **item** in a spread.
+    ///
+    /// The **kind** is named by the caller: `layout.item.frame`,
+    /// `layout.item.graphic`, `layout.item.group`, or anything else that is
+    /// a well-formed id — because the list is open.
+    layout.item.add {
+        area: "layout",
+        layer: "layout",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The spread it goes in.
 
-/// Put an **item** in a spread.
-///
-/// The **kind** is named by the caller: `layout.item.frame`,
-/// `layout.item.graphic`, `layout.item.group`, or anything else that is
-/// a well-formed id — because the list is open.
-#[derive(Command)]
-#[command(id = "layout.item.add", area = "layout", layer = "layout", icon = "plus", mutates, undoable)]
-pub struct AddItem {
-    /// The spread it goes in.
-    pub spread: NodeRef,
-    /// What to call it.
-    pub name: Text,
-    /// What kind of item it is.
-    pub kind: Option<Text>,
-    /// Its shape: `rectangle`, `ellipse`, `polygon`, `line`, `path`.
-    pub shape: Option<Text>,
-    /// Where it is, as `{x, y, width, height}`.
-    pub rect: Option<Json>,
-}
+            spread: NodeRef,
+            /// What to call it.
 
-impl AddItem {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let name = self.name.0.trim().to_string();
-        if name.is_empty() {
-            return Err(EngineError::Failed {
-                id: "layout.item.add".to_string(),
-                message: "an item has a name".to_string(),
-            });
+            name: Text,
+            /// What kind of item it is.
+
+            kind: Option<Text>,
+            /// Its shape: `rectangle`, `ellipse`, `polygon`, `line`, `path`.
+
+            shape: Option<Text>,
+            /// Where it is, as `{x, y, width, height}`.
+
+            rect: Option<Json>,
+        },
+        run: {
+
+            let name = self.name.0.trim().to_string();
+            if name.is_empty() {
+                return Err(EngineError::Failed {
+                    id: "layout.item.add".to_string(),
+                    message: "an item has a name".to_string(),
+                });
+            }
+            let spread = self.spread.0;
+            if session.document().node(spread).is_none() {
+                return Err(EngineError::Failed {
+                    id: "layout.item.add".to_string(),
+                    message: format!("there is no spread `{spread}`"),
+                });
+            }
+            let kind = match &self.kind {
+                Some(kind) => kind.0.trim().to_string(),
+                None => "layout.item.frame".to_string(),
+            };
+            if let Some(malformed) = craftkit_sdk::contribution::malformed_dotted_id(&kind) {
+                return Err(EngineError::Failed { id: "layout.item.add".to_string(), message: malformed });
+            }
+            let shape =
+                self.shape.as_ref().map(|shape| shape.0.clone()).unwrap_or_else(|| "rectangle".to_string());
+            let rect = self.rect.clone().unwrap_or(Json::Null);
+            let id = session.document_mut()?.add_node_with_under(
+                Some(spread),
+                name.clone(),
+                &kind,
+                None,
+                json!({ "shape": shape, "rect": rect }),
+            );
+            Ok(Outcome::changed(format!("added the item `{name}`"))
+                .with_data(json!({ "id": id, "name": name, "kind": kind })))
+
         }
-        let spread = self.spread.0;
-        if session.document().node(spread).is_none() {
-            return Err(EngineError::Failed {
-                id: "layout.item.add".to_string(),
-                message: format!("there is no spread `{spread}`"),
-            });
-        }
-        let kind = match &self.kind {
-            Some(kind) => kind.0.trim().to_string(),
-            None => "layout.item.frame".to_string(),
-        };
-        if let Some(malformed) = craftkit_sdk::contribution::malformed_dotted_id(&kind) {
-            return Err(EngineError::Failed { id: "layout.item.add".to_string(), message: malformed });
-        }
-        let shape =
-            self.shape.as_ref().map(|shape| shape.0.clone()).unwrap_or_else(|| "rectangle".to_string());
-        let rect = self.rect.clone().unwrap_or(Json::Null);
-        let id = session.document_mut()?.add_node_with_under(
-            Some(spread),
-            name.clone(),
-            &kind,
-            None,
-            json!({ "shape": shape, "rect": rect }),
-        );
-        Ok(Outcome::changed(format!("added the item `{name}`"))
-            .with_data(json!({ "id": id, "name": name, "kind": kind })))
     }
-}
+    /// Put an item **on a layer**.
+    ///
+    /// The layer is not the item's parent — the item is in the spread, and
+    /// it is *on* a layer. So this is an **edge**, and it says what it is.
+    layout.item.layer {
+        area: "layout",
+        layer: "layout",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The item.
 
-/// Put an item **on a layer**.
-///
-/// The layer is not the item's parent — the item is in the spread, and
-/// it is *on* a layer. So this is an **edge**, and it says what it is.
-#[derive(Command)]
-#[command(id = "layout.item.layer", area = "layout", layer = "layout", icon = "plus", mutates, undoable)]
-pub struct PutOnLayer {
-    /// The item.
-    pub item: NodeRef,
-    /// The layer.
-    pub layer: NodeRef,
-}
+            item: NodeRef,
+            /// The layer.
 
-impl PutOnLayer {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let item = self.item.0;
-        let layer = self.layer.0;
-        let Some(node) = session.document().node(layer) else {
-            return Err(EngineError::Failed {
-                id: "layout.item.layer".to_string(),
-                message: format!("there is no layer `{layer}`"),
-            });
-        };
-        if node.kind != "layout.layer" {
-            return Err(EngineError::Failed {
-                id: "layout.item.layer".to_string(),
-                message: format!("the node `{layer}` is not a layer"),
-            });
+            layer: NodeRef,
+        },
+        run: {
+
+            let item = self.item.0;
+            let layer = self.layer.0;
+            let Some(node) = session.document().node(layer) else {
+                return Err(EngineError::Failed {
+                    id: "layout.item.layer".to_string(),
+                    message: format!("there is no layer `{layer}`"),
+                });
+            };
+            if node.kind != "layout.layer" {
+                return Err(EngineError::Failed {
+                    id: "layout.item.layer".to_string(),
+                    message: format!("the node `{layer}` is not a layer"),
+                });
+            }
+            // A **locked** item may not be edited, and a layer is an edit.
+            let Some(item_node) = session.document().node(item).cloned() else {
+                return Err(EngineError::Failed {
+                    id: "layout.item.layer".to_string(),
+                    message: format!("there is no item `{item}`"),
+                });
+            };
+            crate::items::may_edit(session, &item_node, "layout.item.layer")?;
+            let name = node.name.clone();
+            let added = session.document_mut()?.add_relation(Relation::with_payload(
+                item,
+                layer,
+                craftkit_sdk::layer::ON_LAYER,
+                json!({ "layer": name.clone() }),
+            ));
+            if !added {
+                return Err(EngineError::Failed {
+                    id: "layout.item.layer".to_string(),
+                    message: format!("the item `{item}` is already on the layer `{name}`"),
+                });
+            }
+            Ok(Outcome::changed(format!("put the item {item} on the layer `{name}`"))
+                .with_data(json!({ "item": item, "layer": layer, "name": name })))
+
         }
-        // A **locked** item may not be edited, and a layer is an edit.
-        let Some(item_node) = session.document().node(item).cloned() else {
-            return Err(EngineError::Failed {
-                id: "layout.item.layer".to_string(),
-                message: format!("there is no item `{item}`"),
-            });
-        };
-        crate::items::may_edit(session, &item_node, "layout.item.layer")?;
-        let name = node.name.clone();
-        let added = session.document_mut()?.add_relation(Relation::with_payload(
-            item,
-            layer,
-            craftkit_sdk::layer::ON_LAYER,
-            json!({ "layer": name.clone() }),
-        ));
-        if !added {
-            return Err(EngineError::Failed {
-                id: "layout.item.layer".to_string(),
-                message: format!("the item `{item}` is already on the layer `{name}`"),
-            });
-        }
-        Ok(Outcome::changed(format!("put the item {item} on the layer `{name}`"))
-            .with_data(json!({ "item": item, "layer": layer, "name": name })))
     }
-}
+    /// Put a **story** in an item: the text the frame shows.
+    ///
+    /// The story is not the item's parent and not its payload: it is an
+    /// **edge**, and it says which story. The story's own list of frames is
+    /// **derived** from these edges, so the two ends cannot disagree.
+    layout.item.story {
+        area: "layout",
+        layer: "layout",
+        icon: "plus",
+        mutates,
+        undoable,
+        params: {
+            /// The item.
 
-/// Put a **story** in an item: the text the frame shows.
-///
-/// The story is not the item's parent and not its payload: it is an
-/// **edge**, and it says which story. The story's own list of frames is
-/// **derived** from these edges, so the two ends cannot disagree.
-#[derive(Command)]
-#[command(id = "layout.item.story", area = "layout", layer = "layout", icon = "plus", mutates, undoable)]
-pub struct PutStory {
-    /// The item.
-    pub item: NodeRef,
-    /// The story.
-    pub story: NodeRef,
-}
+            item: NodeRef,
+            /// The story.
 
-impl PutStory {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let item = self.item.0;
-        let story = self.story.0;
-        let Some(node) = session.document().node(story) else {
-            return Err(EngineError::Failed {
-                id: "layout.item.story".to_string(),
-                message: format!("there is no story `{story}`"),
-            });
-        };
-        if node.kind != "layout.story" {
-            return Err(EngineError::Failed {
-                id: "layout.item.story".to_string(),
-                message: format!("the node `{story}` is not a story"),
-            });
+            story: NodeRef,
+        },
+        run: {
+
+            let item = self.item.0;
+            let story = self.story.0;
+            let Some(node) = session.document().node(story) else {
+                return Err(EngineError::Failed {
+                    id: "layout.item.story".to_string(),
+                    message: format!("there is no story `{story}`"),
+                });
+            };
+            if node.kind != "layout.story" {
+                return Err(EngineError::Failed {
+                    id: "layout.item.story".to_string(),
+                    message: format!("the node `{story}` is not a story"),
+                });
+            }
+            // A **locked** item may not be edited, and a story is an edit.
+            let Some(item_node) = session.document().node(item).cloned() else {
+                return Err(EngineError::Failed {
+                    id: "layout.item.story".to_string(),
+                    message: format!("there is no item `{item}`"),
+                });
+            };
+            crate::items::may_edit(session, &item_node, "layout.item.story")?;
+            let name = node.name.clone();
+            let added = session.document_mut()?.add_relation(Relation::with_payload(
+                item,
+                story,
+                "layout.text",
+                json!({ "story": name.clone() }),
+            ));
+            if !added {
+                return Err(EngineError::Failed {
+                    id: "layout.item.story".to_string(),
+                    message: format!("the item `{item}` already shows the story `{name}`"),
+                });
+            }
+            Ok(Outcome::changed(format!("put the story `{name}` in the item {item}"))
+                .with_data(json!({ "item": item, "story": story, "name": name })))
+
         }
-        // A **locked** item may not be edited, and a story is an edit.
-        let Some(item_node) = session.document().node(item).cloned() else {
-            return Err(EngineError::Failed {
-                id: "layout.item.story".to_string(),
-                message: format!("there is no item `{item}`"),
-            });
-        };
-        crate::items::may_edit(session, &item_node, "layout.item.story")?;
-        let name = node.name.clone();
-        let added = session.document_mut()?.add_relation(Relation::with_payload(
-            item,
-            story,
-            "layout.text",
-            json!({ "story": name.clone() }),
-        ));
-        if !added {
-            return Err(EngineError::Failed {
-                id: "layout.item.story".to_string(),
-                message: format!("the item `{item}` already shows the story `{name}`"),
-            });
-        }
-        Ok(Outcome::changed(format!("put the story `{name}` in the item {item}"))
-            .with_data(json!({ "item": item, "story": story, "name": name })))
     }
 }
 
@@ -1002,45 +1058,45 @@ craftkit_sdk::plugin_anchor!(
     FrameKind,
     GraphicKind,
     GroupKind,
-    AddDocument,
-    SetBleed,
-    AddSpread,
-    AddPage,
-    SetColumns,
-    SetMargin,
-    SetParent,
-    ClearParent,
-    SetSide,
-    ReadFacing,
-    AddLayer,
-    AddStory,
-    AddAsset,
-    AddItem,
-    SetOpacity,
-    HideItem,
-    ShowItem,
-    LockItem,
-    UnlockItem,
-    ScaleItem,
-    RotateItem,
-    SetRadius,
-    SetShadow,
-    ListItems,
-    BringToFront,
-    SendToBack,
-    ForwardItem,
-    BackwardItem,
-    PutOnLayer,
-    PutStory,
-    SetItemLink,
-    SetFill,
-    SetStroke,
-    AddStyle,
-    SetStyleFill,
-    SetStyleStroke,
-    SetItemStyle,
-    SetItemPageLink,
-    ReadLinks,
+    LayoutDocumentAdd,
+    LayoutDocumentBleed,
+    LayoutSpreadAdd,
+    LayoutPageAdd,
+    LayoutPageColumns,
+    LayoutPageMargin,
+    LayoutPageParent,
+    LayoutPageParentClear,
+    LayoutPageSide,
+    LayoutPageFacing,
+    LayoutLayerAdd,
+    LayoutStoryAdd,
+    LayoutAssetAdd,
+    LayoutItemAdd,
+    LayoutItemOpacity,
+    LayoutItemHide,
+    LayoutItemShow,
+    LayoutItemLock,
+    LayoutItemUnlock,
+    LayoutItemScale,
+    LayoutItemRotate,
+    LayoutItemRadius,
+    LayoutItemShadow,
+    LayoutItemList,
+    LayoutItemFront,
+    LayoutItemBack,
+    LayoutItemForward,
+    LayoutItemBackward,
+    LayoutItemLayer,
+    LayoutItemStory,
+    LayoutItemLink,
+    LayoutItemFill,
+    LayoutItemStroke,
+    LayoutStyleAdd,
+    LayoutStyleFill,
+    LayoutStyleStroke,
+    LayoutItemStyle,
+    LayoutItemPageLink,
+    LayoutLinks,
     PagesEvaluator,
     FramesEvaluator,
     LayoutPanel

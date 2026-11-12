@@ -33,7 +33,7 @@
 //! - **The tree's locked column guides** — a document setting that
 //!   says a vertical guide may not be dragged — are not here.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
 use craftkit_sdk::{Bool, EngineError, Node, NodeRef, Number, Outcome, Session, Text};
@@ -288,266 +288,137 @@ fn guide_json(guide: &Node, index: usize) -> Json {
     })
 }
 
-/// **Add** a guide to a page.
-///
-/// The position is a spread coordinate. A guide that is named by no
-/// page is put on the page that stands under its coordinate, and a
-/// spread guide is put on the first page of its spread.
-#[derive(Command)]
-#[command(id = "layout.guide.add", area = "layout", layer = "layout", icon = "ruler", mutates, undoable)]
-pub struct AddGuide {
-    /// The page it goes on.
-    pub page: Option<NodeRef>,
-    /// The spread it goes on, when the page is not named.
-    pub spread: Option<NodeRef>,
-    /// `horizontal`, `vertical` or `both`.
-    pub orientation: Text,
-    /// Where it stands.
-    pub position: Option<Number>,
-    /// The x of a guide in **both** directions.
-    pub x: Option<Number>,
-    /// The y of a guide in **both** directions.
-    pub y: Option<Number>,
-    /// The x of a horizontal guide, which is where the page is found.
-    pub at: Option<Number>,
-    /// Whether it crosses the pasteboard.
-    pub spread_guide: Option<Bool>,
-    /// Whether it is a liquid guide.
-    pub liquid: Option<Bool>,
-}
+commands! {
+    /// **Add** a guide to a page.
+    ///
+    /// The position is a spread coordinate. A guide that is named by no
+    /// page is put on the page that stands under its coordinate, and a
+    /// spread guide is put on the first page of its spread.
+    layout.guide.add {
+        area: "layout",
+        layer: "layout",
+        icon: "ruler",
+        mutates,
+        undoable,
+        params: {
+            /// The page it goes on.
 
-impl AddGuide {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.guide.add";
-        let spread_guide = self.spread_guide.map(|flag| flag.0).unwrap_or(false);
-        let liquid = self.liquid.map(|flag| flag.0).unwrap_or(false);
-        // The **orientation**: what the guide is, and a guide in both
-        // directions is two guides.
-        let orientation = self.orientation.0.trim().to_ascii_lowercase();
-        let wanted: Vec<(&str, f64)> = match orientation.as_str() {
-            "horizontal" | "vertical" => {
-                let position =
-                    self.position.map(|position| position.0).ok_or_else(|| EngineError::Failed {
+            page: Option<NodeRef>,
+            /// The spread it goes on, when the page is not named.
+
+            spread: Option<NodeRef>,
+            /// `horizontal`, `vertical` or `both`.
+
+            orientation: Text,
+            /// Where it stands.
+
+            position: Option<Number>,
+            /// The x of a guide in **both** directions.
+
+            x: Option<Number>,
+            /// The y of a guide in **both** directions.
+
+            y: Option<Number>,
+            /// The x of a horizontal guide, which is where the page is found.
+
+            at: Option<Number>,
+            /// Whether it crosses the pasteboard.
+
+            spread_guide: Option<Bool>,
+            /// Whether it is a liquid guide.
+
+            liquid: Option<Bool>,
+        },
+        run: {
+
+            let command = "layout.guide.add";
+            let spread_guide = self.spread_guide.map(|flag| flag.0).unwrap_or(false);
+            let liquid = self.liquid.map(|flag| flag.0).unwrap_or(false);
+            // The **orientation**: what the guide is, and a guide in both
+            // directions is two guides.
+            let orientation = self.orientation.0.trim().to_ascii_lowercase();
+            let wanted: Vec<(&str, f64)> = match orientation.as_str() {
+                "horizontal" | "vertical" => {
+                    let position =
+                        self.position.map(|position| position.0).ok_or_else(|| EngineError::Failed {
+                            id: command.to_string(),
+                            message: "a guide needs a position".to_string(),
+                        })?;
+                    vec![(if orientation == "horizontal" { "horizontal" } else { "vertical" }, position)]
+                }
+                "both" => {
+                    let x = self.x.map(|x| x.0).ok_or_else(|| EngineError::Failed {
                         id: command.to_string(),
-                        message: "a guide needs a position".to_string(),
+                        message: "a guide in both directions needs an x and a y".to_string(),
                     })?;
-                vec![(if orientation == "horizontal" { "horizontal" } else { "vertical" }, position)]
-            }
-            "both" => {
-                let x = self.x.map(|x| x.0).ok_or_else(|| EngineError::Failed {
-                    id: command.to_string(),
-                    message: "a guide in both directions needs an x and a y".to_string(),
-                })?;
-                let y = self.y.map(|y| y.0).ok_or_else(|| EngineError::Failed {
-                    id: command.to_string(),
-                    message: "a guide in both directions needs an x and a y".to_string(),
-                })?;
-                vec![("horizontal", y), ("vertical", x)]
-            }
-            _ => {
-                return Err(EngineError::Failed {
-                    id: command.to_string(),
-                    message: "orientation: horizontal|vertical|both".to_string(),
-                });
-            }
-        };
-        // The **position** of every guide: finite and in its bounds.
-        let mut guides = Vec::new();
-        for (orientation, position) in wanted {
-            let position = position_of(position, command)?;
-            guides.push((orientation, position));
-        }
-        // The **page** the guides go on, and the spread they are in.
-        let page = match self.page {
-            Some(page) => {
-                the_page(session, command, page.0)?;
-                if let Some(spread) = self.spread
-                    && spread_of(session, page.0) != Some(spread.0)
-                {
+                    let y = self.y.map(|y| y.0).ok_or_else(|| EngineError::Failed {
+                        id: command.to_string(),
+                        message: "a guide in both directions needs an x and a y".to_string(),
+                    })?;
+                    vec![("horizontal", y), ("vertical", x)]
+                }
+                _ => {
                     return Err(EngineError::Failed {
                         id: command.to_string(),
-                        message: format!("the page `{}` is not in the spread `{}`", page.0, spread.0),
+                        message: "orientation: horizontal|vertical|both".to_string(),
                     });
                 }
-                page.0
-            }
-            None => {
-                let spread = self.spread.map(|spread| spread.0).ok_or_else(|| EngineError::Failed {
-                    id: command.to_string(),
-                    message: "a guide needs a page or a spread".to_string(),
-                })?;
-                let spread_node = the_spread(session, command, spread)?.clone();
-                if page_ids(&spread_node).is_empty() {
-                    return Err(EngineError::Failed {
-                        id: command.to_string(),
-                        message: format!("the spread `{spread}` has no page"),
-                    });
-                }
-                // The page that stands **under** the coordinate of the
-                // guide, and the first page for a spread guide.
-                if spread_guide {
-                    page_ids(&spread_node)[0]
-                } else {
-                    let x = match orientation.as_str() {
-                        "vertical" => guides[0].1,
-                        "horizontal" => self.at.map(|at| at.0).unwrap_or(0.0),
-                        _ => self.x.map(|x| x.0).unwrap_or(0.0),
-                    };
-                    page_under(&spread_node, x).ok_or_else(|| EngineError::Failed {
-                        id: command.to_string(),
-                        message: format!("the spread `{spread}` has no page"),
-                    })?
-                }
-            }
-        };
-        // A **liquid** guide is never a spread guide, as in the tree.
-        let liquid = liquid && !spread_guide;
-        let mut made = Vec::new();
-        for (orientation, position) in guides {
-            let name = format!("{orientation} guide");
-            let id = session.document_mut()?.add_node_with_under(
-                Some(page),
-                name,
-                "layout.guide",
-                None,
-                json!({
-                    "orientation": orientation,
-                    "position": position,
-                    "spread": spread_guide,
-                    "liquid": liquid,
-                }),
-            );
-            made.push(json!({
-                "id": id,
-                "page": page,
-                "orientation": orientation,
-                "position": position,
-                "spread": spread_guide,
-                "liquid": liquid,
-            }));
-        }
-        Ok(Outcome::changed(format!("added {} guide(s)", made.len())).with_data(json!({
-            "guides": made,
-            "count": made.len(),
-        })))
-    }
-}
-
-/// **Create** the guides of a page: a grid of them, across the page
-/// or across its margins.
-///
-/// The tree's own rules: a page may be cut into **rows** and
-/// **columns** — at most a thousand of either — and the cells may have
-/// a **gutter** between them. `n` divisions make `n - 1` guides, and
-/// with a gutter each of them is doubled: the edge of the cell and the
-/// edge after the gutter. One command may make at most **ten thousand**
-/// guides.
-#[derive(Command)]
-#[command(id = "layout.guide.create", area = "layout", layer = "layout", icon = "ruler", mutates, undoable)]
-pub struct CreateGuides {
-    /// The spread the pages are in.
-    pub spread: NodeRef,
-    /// The page, when it is not every page of the spread.
-    pub page: Option<NodeRef>,
-    /// The rows the page is cut into.
-    pub rows: Option<Number>,
-    /// The columns the page is cut into.
-    pub columns: Option<Number>,
-    /// The room between the rows.
-    pub row_gutter: Option<Number>,
-    /// The room between the columns.
-    pub column_gutter: Option<Number>,
-    /// `margins` — the default — or `page`.
-    pub fit_to: Option<Text>,
-    /// Whether the guides that are there are cleared first.
-    pub remove_existing: Option<Bool>,
-}
-
-impl CreateGuides {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.guide.create";
-        let rows = divisions_of(command, "rows", self.rows)?;
-        let columns = divisions_of(command, "columns", self.columns)?;
-        let row_gutter = gutter_of(command, "rowGutter", self.row_gutter)?;
-        let column_gutter = gutter_of(command, "columnGutter", self.column_gutter)?;
-        // The **area** the guides stand across: the margins of the
-        // page, or the page itself.
-        let fit_to = self.fit_to.as_ref().map(|fit| fit.0.trim().to_ascii_lowercase());
-        let to_page = match fit_to.as_deref() {
-            None | Some("margins") => false,
-            Some("page") => true,
-            Some(_) => {
-                return Err(EngineError::Failed {
-                    id: command.to_string(),
-                    message: "fitTo: margins|page".to_string(),
-                });
-            }
-        };
-        let spread = self.spread.0;
-        let spread_node = the_spread(session, command, spread)?.clone();
-        // The **pages** the guides are made on.
-        let pages: Vec<u64> = match self.page {
-            Some(page) => {
-                if !page_ids(&spread_node).contains(&page.0) {
-                    return Err(EngineError::Failed {
-                        id: command.to_string(),
-                        message: format!("there is no page `{}` in the spread `{spread}`", page.0),
-                    });
-                }
-                vec![page.0]
-            }
-            None => page_ids(&spread_node),
-        };
-        // The **count**: at most ten thousand guides in one command.
-        let per_page = guide_count(rows, row_gutter) + guide_count(columns, column_gutter);
-        let total = per_page.saturating_mul(pages.len());
-        if total > MAX_GUIDES_CREATED {
-            return Err(EngineError::Failed {
-                id: command.to_string(),
-                message: format!("a single command may create at most {MAX_GUIDES_CREATED} guides"),
-            });
-        }
-        let remove = self.remove_existing.map(|flag| flag.0).unwrap_or(false);
-        let mut made = 0usize;
-        for page in pages {
-            let Some(node) = page_node(&spread_node, page) else { continue };
-            let width = width_of(&node);
-            let height = node
-                .data
-                .get("height")
-                .and_then(|height| height.as_f64())
-                .filter(|height| height.is_finite())
-                .unwrap_or(0.0);
-            let place = place_of(&spread_node, page);
-            // The **area**: the margin box of the page, and the page
-            // itself when the guides are to fit it.
-            let margins = crate::parents::margins_of(session.document(), page);
-            let (x0, x1, y0, y1) = if to_page {
-                (place, place + width, 0.0, height)
-            } else {
-                (
-                    place + margins.left,
-                    (place + width - margins.right).max(place + margins.left),
-                    margins.top,
-                    (height - margins.bottom).max(margins.top),
-                )
             };
-            // The **guides** themselves.
-            let mut wanted: Vec<(&str, f64)> = Vec::new();
-            for y in grid_positions(y0, y1, rows, row_gutter)? {
-                wanted.push(("horizontal", y));
-            }
-            for x in grid_positions(x0, x1, columns, column_gutter)? {
-                wanted.push(("vertical", x));
-            }
-            if remove {
-                for guide in guide_ids(&node) {
-                    session.document_mut()?.remove_node(guide);
-                }
-            }
+            // The **position** of every guide: finite and in its bounds.
+            let mut guides = Vec::new();
             for (orientation, position) in wanted {
+                let position = position_of(position, command)?;
+                guides.push((orientation, position));
+            }
+            // The **page** the guides go on, and the spread they are in.
+            let page = match self.page {
+                Some(page) => {
+                    the_page(session, command, page.0)?;
+                    if let Some(spread) = self.spread
+                        && spread_of(session, page.0) != Some(spread.0)
+                    {
+                        return Err(EngineError::Failed {
+                            id: command.to_string(),
+                            message: format!("the page `{}` is not in the spread `{}`", page.0, spread.0),
+                        });
+                    }
+                    page.0
+                }
+                None => {
+                    let spread = self.spread.map(|spread| spread.0).ok_or_else(|| EngineError::Failed {
+                        id: command.to_string(),
+                        message: "a guide needs a page or a spread".to_string(),
+                    })?;
+                    let spread_node = the_spread(session, command, spread)?.clone();
+                    if page_ids(&spread_node).is_empty() {
+                        return Err(EngineError::Failed {
+                            id: command.to_string(),
+                            message: format!("the spread `{spread}` has no page"),
+                        });
+                    }
+                    // The page that stands **under** the coordinate of the
+                    // guide, and the first page for a spread guide.
+                    if spread_guide {
+                        page_ids(&spread_node)[0]
+                    } else {
+                        let x = match orientation.as_str() {
+                            "vertical" => guides[0].1,
+                            "horizontal" => self.at.map(|at| at.0).unwrap_or(0.0),
+                            _ => self.x.map(|x| x.0).unwrap_or(0.0),
+                        };
+                        page_under(&spread_node, x).ok_or_else(|| EngineError::Failed {
+                            id: command.to_string(),
+                            message: format!("the spread `{spread}` has no page"),
+                        })?
+                    }
+                }
+            };
+            // A **liquid** guide is never a spread guide, as in the tree.
+            let liquid = liquid && !spread_guide;
+            let mut made = Vec::new();
+            for (orientation, position) in guides {
                 let name = format!("{orientation} guide");
-                session.document_mut()?.add_node_with_under(
+                let id = session.document_mut()?.add_node_with_under(
                     Some(page),
                     name,
                     "layout.guide",
@@ -555,126 +426,289 @@ impl CreateGuides {
                     json!({
                         "orientation": orientation,
                         "position": position,
-                        "spread": false,
-                        "liquid": false,
+                        "spread": spread_guide,
+                        "liquid": liquid,
                     }),
                 );
-                made += 1;
+                made.push(json!({
+                    "id": id,
+                    "page": page,
+                    "orientation": orientation,
+                    "position": position,
+                    "spread": spread_guide,
+                    "liquid": liquid,
+                }));
             }
+            Ok(Outcome::changed(format!("added {} guide(s)", made.len())).with_data(json!({
+                "guides": made,
+                "count": made.len(),
+            })))
+
         }
-        Ok(Outcome::changed(format!("made {made} guide(s)")).with_data(json!({
-            "guides": made,
-            "count": made,
-            "spread": spread,
-        })))
     }
-}
+    /// **Create** the guides of a page: a grid of them, across the page
+    /// or across its margins.
+    ///
+    /// The tree's own rules: a page may be cut into **rows** and
+    /// **columns** — at most a thousand of either — and the cells may have
+    /// a **gutter** between them. `n` divisions make `n - 1` guides, and
+    /// with a gutter each of them is doubled: the edge of the cell and the
+    /// edge after the gutter. One command may make at most **ten thousand**
+    /// guides.
+    layout.guide.create {
+        area: "layout",
+        layer: "layout",
+        icon: "ruler",
+        mutates,
+        undoable,
+        params: {
+            /// The spread the pages are in.
 
-/// **Move** a guide to another place.
-#[derive(Command)]
-#[command(id = "layout.guide.move", area = "layout", layer = "layout", icon = "ruler", mutates, undoable)]
-pub struct MoveGuide {
-    /// The guide.
-    pub guide: NodeRef,
-    /// Where it stands now.
-    pub position: Number,
-}
+            spread: NodeRef,
+            /// The page, when it is not every page of the spread.
 
-impl MoveGuide {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.guide.move";
-        let guide = self.guide.0;
-        the_guide(session, command, guide)?;
-        let position = position_of(self.position.0, command)?;
-        let node = session.document().node(guide).cloned().ok_or_else(|| EngineError::Failed {
-            id: command.to_string(),
-            message: format!("there is no guide `{guide}`"),
-        })?;
-        may_edit(session, &node, command)?;
-        if let Some(node) = session.document_mut()?.node_mut(guide) {
-            node.data["position"] = json!(position);
-        }
-        Ok(Outcome::changed(format!("the guide `{guide}` stands at {position}"))
-            .with_data(json!({ "guide": guide, "position": position })))
-    }
-}
+            page: Option<NodeRef>,
+            /// The rows the page is cut into.
 
-/// **Delete** a guide.
-#[derive(Command)]
-#[command(id = "layout.guide.delete", area = "layout", layer = "layout", icon = "minus", mutates, undoable)]
-pub struct DeleteGuide {
-    /// The guide.
-    pub guide: NodeRef,
-}
+            rows: Option<Number>,
+            /// The columns the page is cut into.
 
-impl DeleteGuide {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.guide.delete";
-        let guide = self.guide.0;
-        let node = the_guide(session, command, guide)?.clone();
-        may_edit(session, &node, command)?;
-        session.document_mut()?.remove_node(guide);
-        Ok(Outcome::changed(format!("the guide `{guide}` is gone")).with_data(json!({ "guide": guide })))
-    }
-}
+            columns: Option<Number>,
+            /// The room between the rows.
 
-/// **Delete** every guide of a spread.
-#[derive(Command)]
-#[command(
-    id = "layout.guide.delete.all",
-    area = "layout",
-    layer = "layout",
-    icon = "minus",
-    mutates,
-    undoable
-)]
-pub struct DeleteAllGuides {
-    /// The spread.
-    pub spread: NodeRef,
-}
+            row_gutter: Option<Number>,
+            /// The room between the columns.
 
-impl DeleteAllGuides {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.guide.delete.all";
-        let spread = self.spread.0;
-        let node = the_spread(session, command, spread)?.clone();
-        let mut deleted = 0usize;
-        for page in page_ids(&node) {
-            let Some(page_node) = page_node(&node, page) else { continue };
-            for guide in guide_ids(&page_node) {
-                deleted += 1;
-                session.document_mut()?.remove_node(guide);
+            column_gutter: Option<Number>,
+            /// `margins` — the default — or `page`.
+
+            fit_to: Option<Text>,
+            /// Whether the guides that are there are cleared first.
+
+            remove_existing: Option<Bool>,
+        },
+        run: {
+
+            let command = "layout.guide.create";
+            let rows = divisions_of(command, "rows", self.rows)?;
+            let columns = divisions_of(command, "columns", self.columns)?;
+            let row_gutter = gutter_of(command, "rowGutter", self.row_gutter)?;
+            let column_gutter = gutter_of(command, "columnGutter", self.column_gutter)?;
+            // The **area** the guides stand across: the margins of the
+            // page, or the page itself.
+            let fit_to = self.fit_to.as_ref().map(|fit| fit.0.trim().to_ascii_lowercase());
+            let to_page = match fit_to.as_deref() {
+                None | Some("margins") => false,
+                Some("page") => true,
+                Some(_) => {
+                    return Err(EngineError::Failed {
+                        id: command.to_string(),
+                        message: "fitTo: margins|page".to_string(),
+                    });
+                }
+            };
+            let spread = self.spread.0;
+            let spread_node = the_spread(session, command, spread)?.clone();
+            // The **pages** the guides are made on.
+            let pages: Vec<u64> = match self.page {
+                Some(page) => {
+                    if !page_ids(&spread_node).contains(&page.0) {
+                        return Err(EngineError::Failed {
+                            id: command.to_string(),
+                            message: format!("there is no page `{}` in the spread `{spread}`", page.0),
+                        });
+                    }
+                    vec![page.0]
+                }
+                None => page_ids(&spread_node),
+            };
+            // The **count**: at most ten thousand guides in one command.
+            let per_page = guide_count(rows, row_gutter) + guide_count(columns, column_gutter);
+            let total = per_page.saturating_mul(pages.len());
+            if total > MAX_GUIDES_CREATED {
+                return Err(EngineError::Failed {
+                    id: command.to_string(),
+                    message: format!("a single command may create at most {MAX_GUIDES_CREATED} guides"),
+                });
             }
+            let remove = self.remove_existing.map(|flag| flag.0).unwrap_or(false);
+            let mut made = 0usize;
+            for page in pages {
+                let Some(node) = page_node(&spread_node, page) else { continue };
+                let width = width_of(&node);
+                let height = node
+                    .data
+                    .get("height")
+                    .and_then(|height| height.as_f64())
+                    .filter(|height| height.is_finite())
+                    .unwrap_or(0.0);
+                let place = place_of(&spread_node, page);
+                // The **area**: the margin box of the page, and the page
+                // itself when the guides are to fit it.
+                let margins = crate::parents::margins_of(session.document(), page);
+                let (x0, x1, y0, y1) = if to_page {
+                    (place, place + width, 0.0, height)
+                } else {
+                    (
+                        place + margins.left,
+                        (place + width - margins.right).max(place + margins.left),
+                        margins.top,
+                        (height - margins.bottom).max(margins.top),
+                    )
+                };
+                // The **guides** themselves.
+                let mut wanted: Vec<(&str, f64)> = Vec::new();
+                for y in grid_positions(y0, y1, rows, row_gutter)? {
+                    wanted.push(("horizontal", y));
+                }
+                for x in grid_positions(x0, x1, columns, column_gutter)? {
+                    wanted.push(("vertical", x));
+                }
+                if remove {
+                    for guide in guide_ids(&node) {
+                        session.document_mut()?.remove_node(guide);
+                    }
+                }
+                for (orientation, position) in wanted {
+                    let name = format!("{orientation} guide");
+                    session.document_mut()?.add_node_with_under(
+                        Some(page),
+                        name,
+                        "layout.guide",
+                        None,
+                        json!({
+                            "orientation": orientation,
+                            "position": position,
+                            "spread": false,
+                            "liquid": false,
+                        }),
+                    );
+                    made += 1;
+                }
+            }
+            Ok(Outcome::changed(format!("made {made} guide(s)")).with_data(json!({
+                "guides": made,
+                "count": made,
+                "spread": spread,
+            })))
+
         }
-        Ok(Outcome::changed(format!("deleted {deleted} guide(s)")).with_data(json!({
-            "spread": spread,
-            "deleted": deleted,
-        })))
     }
-}
+    /// **Move** a guide to another place.
+    layout.guide.move {
+        area: "layout",
+        layer: "layout",
+        icon: "ruler",
+        mutates,
+        undoable,
+        params: {
+            /// The guide.
 
-/// The **guides** of a page: what they are and where they stand.
-#[derive(Command)]
-#[command(id = "layout.page.guides", area = "layout", layer = "layout", icon = "list")]
-pub struct ReadGuides {
-    /// The page.
-    pub page: NodeRef,
-}
+            guide: NodeRef,
+            /// Where it stands now.
 
-impl ReadGuides {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let command = "layout.page.guides";
-        let page = self.page.0;
-        let node = the_page(session, command, page)?;
-        let guides: Vec<Json> = guide_ids(node)
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, guide)| session.document().node(guide).map(|node| guide_json(node, index)))
-            .collect();
-        Ok(Outcome::new(format!("the page `{page}` holds {} guide(s)", guides.len())).with_data(json!({
-            "page": page,
-            "guides": guides,
-            "count": guides.len(),
-        })))
+            position: Number,
+        },
+        run: {
+
+            let command = "layout.guide.move";
+            let guide = self.guide.0;
+            the_guide(session, command, guide)?;
+            let position = position_of(self.position.0, command)?;
+            let node = session.document().node(guide).cloned().ok_or_else(|| EngineError::Failed {
+                id: command.to_string(),
+                message: format!("there is no guide `{guide}`"),
+            })?;
+            may_edit(session, &node, command)?;
+            if let Some(node) = session.document_mut()?.node_mut(guide) {
+                node.data["position"] = json!(position);
+            }
+            Ok(Outcome::changed(format!("the guide `{guide}` stands at {position}"))
+                .with_data(json!({ "guide": guide, "position": position })))
+
+        }
+    }
+    /// **Delete** a guide.
+    layout.guide.delete {
+        area: "layout",
+        layer: "layout",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The guide.
+
+            guide: NodeRef,
+        },
+        run: {
+
+            let command = "layout.guide.delete";
+            let guide = self.guide.0;
+            let node = the_guide(session, command, guide)?.clone();
+            may_edit(session, &node, command)?;
+            session.document_mut()?.remove_node(guide);
+            Ok(Outcome::changed(format!("the guide `{guide}` is gone")).with_data(json!({ "guide": guide })))
+
+        }
+    }
+    /// **Delete** every guide of a spread.
+    layout.guide.delete.all {
+        area: "layout",
+        layer: "layout",
+        icon: "minus",
+        mutates,
+        undoable,
+        params: {
+            /// The spread.
+
+            spread: NodeRef,
+        },
+        run: {
+
+            let command = "layout.guide.delete.all";
+            let spread = self.spread.0;
+            let node = the_spread(session, command, spread)?.clone();
+            let mut deleted = 0usize;
+            for page in page_ids(&node) {
+                let Some(page_node) = page_node(&node, page) else { continue };
+                for guide in guide_ids(&page_node) {
+                    deleted += 1;
+                    session.document_mut()?.remove_node(guide);
+                }
+            }
+            Ok(Outcome::changed(format!("deleted {deleted} guide(s)")).with_data(json!({
+                "spread": spread,
+                "deleted": deleted,
+            })))
+
+        }
+    }
+    /// The **guides** of a page: what they are and where they stand.
+    layout.page.guides {
+        area: "layout",
+        layer: "layout",
+        icon: "list",
+        params: {
+            /// The page.
+
+            page: NodeRef,
+        },
+        run: {
+
+            let command = "layout.page.guides";
+            let page = self.page.0;
+            let node = the_page(session, command, page)?;
+            let guides: Vec<Json> = guide_ids(node)
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, guide)| session.document().node(guide).map(|node| guide_json(node, index)))
+                .collect();
+            Ok(Outcome::new(format!("the page `{page}` holds {} guide(s)", guides.len())).with_data(json!({
+                "page": page,
+                "guides": guides,
+                "count": guides.len(),
+            })))
+
+        }
     }
 }

@@ -17,10 +17,10 @@
 //! - an item whose shape is **not a rectangle** may not have a radius:
 //!   a radius is a rectangle's own.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome};
 
 use crate::items::{item_of, may_edit};
 
@@ -57,60 +57,68 @@ pub fn corners_json(item: &Node) -> Json {
     }
 }
 
-/// **Round** the corners of an item.
-#[derive(Command)]
-#[command(id = "layout.item.radius", area = "layout", layer = "layout", icon = "rect", mutates, undoable)]
-pub struct SetRadius {
-    /// The item.
-    pub item: NodeRef,
-    /// The radius of the corners, in points.
-    pub radius: Number,
-}
+commands! {
+    /// **Round** the corners of an item.
+    layout.item.radius {
+        area: "layout",
+        layer: "layout",
+        icon: "rect",
+        mutates,
+        undoable,
+        params: {
+            /// The item.
 
-impl SetRadius {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "layout.item.radius".to_string();
-        let item = self.item.0;
-        let node = item_of(session, &id, item)?;
-        may_edit(session, &node, &id)?;
-        let radius = self.radius.0;
-        if !radius.is_finite() || radius < 0.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("{radius} is not a radius: a radius is a number and not a negative one"),
-            });
+            item: NodeRef,
+            /// The radius of the corners, in points.
+
+            radius: Number,
+        },
+        run: {
+
+            let id = "layout.item.radius".to_string();
+            let item = self.item.0;
+            let node = item_of(session, &id, item)?;
+            may_edit(session, &node, &id)?;
+            let radius = self.radius.0;
+            if !radius.is_finite() || radius < 0.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("{radius} is not a radius: a radius is a number and not a negative one"),
+                });
+            }
+            let shape = node.data.get("shape").and_then(|shape| shape.as_str()).unwrap_or_default();
+            if shape != "rectangle" {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!(
+                        "a radius is a rectangle's own, and the item `{}` is a `{shape}`",
+                        node.name
+                    ),
+                });
+            }
+            let rect = node.data.get("rect").and_then(|rect| rect.as_object());
+            let size = |name: &str| rect.and_then(|rect| rect.get(name)).and_then(|value| value.as_f64());
+            let (Some(width), Some(height)) = (size("width"), size("height")) else {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!("the item `{}` has no box to round", node.name),
+                });
+            };
+            let shorter = width.min(height);
+            if radius > shorter / 2.0 {
+                return Err(EngineError::Failed {
+                    id,
+                    message: format!(
+                        "a radius of {radius} is more than half the shorter side of the box, which is {shorter}"
+                    ),
+                });
+            }
+            if let Some(node) = session.document_mut()?.node_mut(item) {
+                node.data["radius"] = json!(radius);
+            }
+            Ok(Outcome::changed(format!("the item `{item}` is rounded by {radius}"))
+                .with_data(json!({ "item": item, "radius": radius })))
+
         }
-        let shape = node.data.get("shape").and_then(|shape| shape.as_str()).unwrap_or_default();
-        if shape != "rectangle" {
-            return Err(EngineError::Failed {
-                id,
-                message: format!(
-                    "a radius is a rectangle's own, and the item `{}` is a `{shape}`",
-                    node.name
-                ),
-            });
-        }
-        let rect = node.data.get("rect").and_then(|rect| rect.as_object());
-        let size = |name: &str| rect.and_then(|rect| rect.get(name)).and_then(|value| value.as_f64());
-        let (Some(width), Some(height)) = (size("width"), size("height")) else {
-            return Err(EngineError::Failed {
-                id,
-                message: format!("the item `{}` has no box to round", node.name),
-            });
-        };
-        let shorter = width.min(height);
-        if radius > shorter / 2.0 {
-            return Err(EngineError::Failed {
-                id,
-                message: format!(
-                    "a radius of {radius} is more than half the shorter side of the box, which is {shorter}"
-                ),
-            });
-        }
-        if let Some(node) = session.document_mut()?.node_mut(item) {
-            node.data["radius"] = json!(radius);
-        }
-        Ok(Outcome::changed(format!("the item `{item}` is rounded by {radius}"))
-            .with_data(json!({ "item": item, "radius": radius })))
     }
 }

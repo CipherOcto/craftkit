@@ -22,7 +22,7 @@
 //!   loops is stopped — a document that says something impossible
 //!   must not hang the engine.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::json;
 use craftkit_sdk::{Document, EngineError, Node, NodeRef, Outcome, Session};
@@ -120,77 +120,82 @@ fn page_of(session: &Session, id: u64, command: &str) -> Result<Node, EngineErro
     Ok(node)
 }
 
-/// **Give** a page a parent: the page it takes what it has not got of
-/// its own from.
-#[derive(Command)]
-#[command(id = "layout.page.parent", area = "layout", layer = "layout", icon = "page", mutates, undoable)]
-pub struct SetParent {
-    /// The page.
-    pub page: NodeRef,
-    /// The page it follows.
-    pub parent: NodeRef,
-}
+commands! {
+    /// **Give** a page a parent: the page it takes what it has not got of
+    /// its own from.
+    layout.page.parent {
+        area: "layout",
+        layer: "layout",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The page.
 
-impl SetParent {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "layout.page.parent".to_string();
-        let page = self.page.0;
-        let parent = self.parent.0;
-        page_of(session, page, &id)?;
-        let parent_node = page_of(session, parent, &id)?;
-        if page == parent {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the page `{page}` may not be its own parent"),
-            });
+            page: NodeRef,
+            /// The page it follows.
+
+            parent: NodeRef,
+        },
+        run: {
+
+            let id = "layout.page.parent".to_string();
+            let page = self.page.0;
+            let parent = self.parent.0;
+            page_of(session, page, &id)?;
+            let parent_node = page_of(session, parent, &id)?;
+            if page == parent {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the page `{page}` may not be its own parent"),
+                });
+            }
+            // The parent may not be a **descendant** of the page: a page
+            // that is its own ancestor is a loop.
+            if crate::parents::parents_of(session.document(), parent).contains(&page) {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the page `{parent}` follows the page `{page}`, and that is a loop"),
+                });
+            }
+            let name = parent_node.name.clone();
+            if let Some(node) = session.document_mut()?.node_mut(page) {
+                node.data["parent"] = json!(parent);
+            }
+            Ok(Outcome::changed(format!("the page `{page}` follows the page `{name}`"))
+                .with_data(json!({ "page": page, "parent": parent })))
+
         }
-        // The parent may not be a **descendant** of the page: a page
-        // that is its own ancestor is a loop.
-        if crate::parents::parents_of(session.document(), parent).contains(&page) {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the page `{parent}` follows the page `{page}`, and that is a loop"),
-            });
-        }
-        let name = parent_node.name.clone();
-        if let Some(node) = session.document_mut()?.node_mut(page) {
-            node.data["parent"] = json!(parent);
-        }
-        Ok(Outcome::changed(format!("the page `{page}` follows the page `{name}`"))
-            .with_data(json!({ "page": page, "parent": parent })))
     }
-}
+    /// Take the **parent** of a page away.
+    layout.page.parent.clear {
+        area: "layout",
+        layer: "layout",
+        icon: "page",
+        mutates,
+        undoable,
+        params: {
+            /// The page.
 
-/// Take the **parent** of a page away.
-#[derive(Command)]
-#[command(
-    id = "layout.page.parent.clear",
-    area = "layout",
-    layer = "layout",
-    icon = "page",
-    mutates,
-    undoable
-)]
-pub struct ClearParent {
-    /// The page.
-    pub page: NodeRef,
-}
+            page: NodeRef,
+        },
+        run: {
 
-impl ClearParent {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "layout.page.parent.clear".to_string();
-        let page = self.page.0;
-        let node = page_of(session, page, &id)?;
-        if crate::parents::parent_of(&node).is_none() {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the page `{page}` follows no page"),
-            });
+            let id = "layout.page.parent.clear".to_string();
+            let page = self.page.0;
+            let node = page_of(session, page, &id)?;
+            if crate::parents::parent_of(&node).is_none() {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the page `{page}` follows no page"),
+                });
+            }
+            if let Some(node) = session.document_mut()?.node_mut(page) {
+                node.data["parent"] = json!(null);
+            }
+            Ok(Outcome::changed(format!("the page `{page}` follows no page now"))
+                .with_data(json!({ "page": page })))
+
         }
-        if let Some(node) = session.document_mut()?.node_mut(page) {
-            node.data["parent"] = json!(null);
-        }
-        Ok(Outcome::changed(format!("the page `{page}` follows no page now"))
-            .with_data(json!({ "page": page })))
     }
 }

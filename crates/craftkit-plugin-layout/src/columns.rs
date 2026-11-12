@@ -18,10 +18,10 @@
 //! - a gutter so wide that the columns **do not fit** in the margin
 //!   box is refused: there is no column left to set text in.
 
-use craftkit_derive::Command;
+use craftkit_derive::commands;
 
 use craftkit_sdk::serde_json::{Value as Json, json};
-use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome, Session};
+use craftkit_sdk::{EngineError, Node, NodeRef, Number, Outcome};
 
 /// The **most** columns a page may have: the tree's own.
 const MAX_COLUMNS: u32 = 216;
@@ -84,69 +84,78 @@ pub fn columns_of(page: &Node) -> Columns {
     Columns { count, gutter }
 }
 
-/// **Set** the columns of a page.
-#[derive(Command)]
-#[command(id = "layout.page.columns", area = "layout", layer = "layout", icon = "rect", mutates, undoable)]
-pub struct SetColumns {
-    /// The page.
-    pub page: NodeRef,
-    /// How many columns there are.
-    pub count: Number,
-    /// The room between them. Without it, the columns have no gutter.
-    pub gutter: Option<Number>,
-}
+commands! {
+    /// **Set** the columns of a page.
+    layout.page.columns {
+        area: "layout",
+        layer: "layout",
+        icon: "rect",
+        mutates,
+        undoable,
+        params: {
+            /// The page.
 
-impl SetColumns {
-    fn run(&self, session: &mut Session) -> Result<Outcome, EngineError> {
-        let id = "layout.page.columns".to_string();
-        let page = self.page.0;
-        let Some(node) = session.document().node(page).cloned() else {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("there is no page `{page}`"),
-            });
-        };
-        if node.kind != "layout.page" {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the node `{page}` is a `{}` and not a page", node.kind),
-            });
+            page: NodeRef,
+            /// How many columns there are.
+
+            count: Number,
+            /// The room between them. Without it, the columns have no gutter.
+
+            gutter: Option<Number>,
+        },
+        run: {
+
+            let id = "layout.page.columns".to_string();
+            let page = self.page.0;
+            let Some(node) = session.document().node(page).cloned() else {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("there is no page `{page}`"),
+                });
+            };
+            if node.kind != "layout.page" {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the node `{page}` is a `{}` and not a page", node.kind),
+                });
+            }
+            let count = self.count.0;
+            if !count.is_finite() || count < 1.0 || count.fract() != 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{count} is not a number of columns: the columns are counted from one"),
+                });
+            }
+            if count > MAX_COLUMNS as f64 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("a page may have at most {MAX_COLUMNS} columns"),
+                });
+            }
+            let gutter = self.gutter.map(|gutter| gutter.0).unwrap_or(0.0);
+            if !gutter.is_finite() || gutter < 0.0 {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("{gutter} is not a gutter: the gutter is a number and not a negative one"),
+                });
+            }
+            let columns = Columns { count: count as u32, gutter };
+            // The columns must **fit**: there is no column left to set
+            // text in when the gutter is wider than the room.
+            if let Some(margin_box) = crate::margins::margin_box_of(&node)
+                && columns.boxes_of(margin_box).is_none()
+            {
+                return Err(EngineError::Failed {
+                    id: id.clone(),
+                    message: format!("the columns do not fit in the margin box with a gutter of {gutter}"),
+                });
+            }
+            if let Some(node) = session.document_mut()?.node_mut(page) {
+                node.data["columns"] = columns.to_json();
+            }
+            Ok(Outcome::changed(format!("the page `{page}` is set in {} column(s)", columns.count))
+                .with_data(json!({ "page": page, "columns": columns.to_json() })))
+
         }
-        let count = self.count.0;
-        if !count.is_finite() || count < 1.0 || count.fract() != 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("{count} is not a number of columns: the columns are counted from one"),
-            });
-        }
-        if count > MAX_COLUMNS as f64 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("a page may have at most {MAX_COLUMNS} columns"),
-            });
-        }
-        let gutter = self.gutter.map(|gutter| gutter.0).unwrap_or(0.0);
-        if !gutter.is_finite() || gutter < 0.0 {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("{gutter} is not a gutter: the gutter is a number and not a negative one"),
-            });
-        }
-        let columns = Columns { count: count as u32, gutter };
-        // The columns must **fit**: there is no column left to set
-        // text in when the gutter is wider than the room.
-        if let Some(margin_box) = crate::margins::margin_box_of(&node)
-            && columns.boxes_of(margin_box).is_none()
-        {
-            return Err(EngineError::Failed {
-                id: id.clone(),
-                message: format!("the columns do not fit in the margin box with a gutter of {gutter}"),
-            });
-        }
-        if let Some(node) = session.document_mut()?.node_mut(page) {
-            node.data["columns"] = columns.to_json();
-        }
-        Ok(Outcome::changed(format!("the page `{page}` is set in {} column(s)", columns.count))
-            .with_data(json!({ "page": page, "columns": columns.to_json() })))
     }
 }
