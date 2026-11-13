@@ -4255,6 +4255,7 @@ so.
 | the **sound battery**, as a table | **built.** The battery of a sound document is a table; the table learned a parameter's other spelling, a body is found by its name and not by what comes next, and a rename touches no string (§868) | §868 |
 | the **grid battery**, as a table | **built.** The last battery is a table in 69 files, and the tree's readers read a character literal — a quote, as a character — so the source and the registry agree again (§869) | §869 |
 | the **battery**, as a table, and the gate that says so | **built.** The tree's own gate has a sixth rule — a battery declares its commands as rows of a table, and one that uses the other spelling is a finding — and the house's rules, the architecture and the recipes name both spellings (§870) | §870 |
+| the **snapshot**, and what it pins | **built.** The battery snapshots now pin every field the registry carries that is data — the parameters' help, their other spelling, their unit, the journal and the example flags — and a new test says that every one of the tree's 2 719 parameters has a help (§871) | §871 |
 | the **cost** of the tree, and the plan to take it down | **built.** The cost of the v2 work was measured — 826 arcs, 35.4 calls each, 53 hours of machine time — and the plan to remove it is written down: fourteen arcs in four waves, each with the number that has to move (§844) | §844 |
 | the **export value** of an option | **built.** An option carries an export value and a display text; the field holds the export value and the reader sees the display text (§778) | §778 |
 | the **look** of a field | **built.** The background and the border of it are drawn from the `/MK` and the `/BS` of the widget (§779) | §779 |
@@ -57473,3 +57474,67 @@ not checked is a comment, and the tree has a gate for exactly that.
   tree, not a fact about the rule.** The day the picture plugin grows a
   family of commands, the rule's table has to grow with it — and the table
   is a list in the gate, where a reader can see it.
+
+## 871. The snapshot pins all of the registry, and every parameter says what it is
+
+§860–§869 pinned each battery's registry: *the registry is what it was*.
+This arc asks the question a claim should be asked: **was it all of it?**
+
+### What was built
+
+- **The snapshot pins everything the registry carries that is data.** The
+  line a snapshot writes now carries the parameters' **help**, their other
+  **spelling**, their kind's own **name** and their **unit** — and the
+  command's **journal** and **example** flags:
+  ```text
+  fx.comp.add | Add | fx | command | fx | plus | Put a **composition** in the document. | - | fx |
+  width(number)! help="How wide it is, in pixels.",height(number)! help="How tall it is, in
+  pixels.",duration(number)! help="How long it is, in frames." | mutates=true | undoable=true |
+  journal=true | example=true
+  ```
+  All nine batteries' snapshots were taken again — from the registry as it
+  is, which is the registry the conversion left alone.
+- **Every parameter of the tree says what it is.** `apps/craftkit-studio/tests/parameters.rs`
+  says that every parameter of every command **this build links** has a
+  help, that the help is **one line**, and that a parameter with two
+  spellings names the other one.
+
+### What the port found
+
+- **The snapshot was checking half of the thing it was about.** It wrote
+  the id, the label, the area, the capability, the layer, the icon, the
+  documentation, the chord, the menu path, the parameters' names and kinds
+  — and the flags that change the document. It did **not** write the
+  parameter's **help**, its other spelling, its kind's own name or its
+  unit, and it did not write the **journal** flag or the **example** flag.
+  A conversion that dropped a parameter's help would have passed every
+  snapshot in the tree.
+- **A snapshot cannot write a function down.** The `enabled` predicate is
+  a `fn(&Session) -> bool`, and there is no way to put one in a line of
+  text. So the snapshot says everything else, and says so in its own
+  prose — what it cannot say is left named.
+- **The tree was already whole.** **2 719** parameters, and **every one**
+  of them has a help. The hole was not in the tree; it was in what the
+  tree *checked*. Now the check is there, and the fact is a fact the tree
+  can prove rather than a fact a reader has to trust.
+
+### What it cost
+
+- **The nine snapshots**: the format, and the 961 lines again — the same
+  registry, written down more of itself.
+- **One new test file**: `apps/craftkit-studio/tests/parameters.rs` — three
+  tests: every parameter has a help, every help is one line, every
+  alternative is named.
+
+### What it does not settle
+
+- **A snapshot says what the tree was, not what the tree should be.** The
+  snapshot is taken from the registry, so it can only say that the
+  conversion did not change the registry — not that the registry is right.
+  That is the compiler's checks and the tree's own rules.
+- **The availability of a command is still a function.** A command that
+  says when it is enabled carries a predicate the snapshot cannot hold,
+  and a battery that grows one will have to find another way to pin it.
+- **The snapshot is a file of 961 lines.** It is a **copy** of the
+  registry, and a copy is a thing that can drift: the tree's own test is
+  what says that it has not, and that test runs on every change.
