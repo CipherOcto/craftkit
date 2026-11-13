@@ -52,7 +52,44 @@ pub fn is_arithmetic_function(name: &str) -> bool {
             | "EVEN"
             | "ODD"
             | "SQRTPI"
+            | "CEILING.MATH"
+            | "CEILING.PRECISE"
+            | "ISO.CEILING"
+            | "FLOOR.MATH"
+            | "FLOOR.PRECISE"
     )
+}
+
+/// A number rounded **up** or **down** to a multiple — the tree's
+/// rule.
+///
+/// The **direction** is `up` for the ceilings and `false` for the
+/// floors, and `away` says what a **negative** number does: away from
+/// the zero, or toward it.
+///
+/// The tree's rule: the significance is taken as it is — its sign does
+/// not matter — a significance of zero and a number of zero are zero,
+/// and the number is written with fifteen significant digits before
+/// the rounding, so that the binary noise is not rounded into the
+/// answer.
+fn ceil_floor_math(number: f64, significance: f64, up: bool, away: bool) -> Result<f64, String> {
+    let significance = significance.abs();
+    if significance == 0.0 || number == 0.0 {
+        return Ok(0.0);
+    }
+    let quotient = clean(number / significance);
+    let rounded = if number >= 0.0 {
+        if up { quotient.ceil() } else { quotient.floor() }
+    } else if away {
+        quotient.floor()
+    } else {
+        quotient.ceil()
+    };
+    let result = clean(rounded * significance);
+    if !result.is_finite() {
+        return Err("#NUM!".to_string());
+    }
+    Ok(if result == 0.0 { 0.0 } else { result })
 }
 
 /// The number with **fifteen significant digits**: the binary noise
@@ -339,6 +376,41 @@ impl Book {
                 return Value::Number(number.log2());
             }
             return Value::Number(number.ln() / base.ln());
+        }
+        // The **rounding to a multiple**, the tree's five.
+        if matches!(name, "CEILING.MATH" | "CEILING.PRECISE" | "ISO.CEILING" | "FLOOR.MATH" | "FLOOR.PRECISE")
+        {
+            let number = match self.number_at(sheet, arguments, 0, being) {
+                Ok(number) => number,
+                Err(message) => return Value::Error(message),
+            };
+            let significance = match arguments.get(1) {
+                Some(_) => match self.number_at(sheet, arguments, 1, being) {
+                    Ok(significance) => significance,
+                    Err(message) => return Value::Error(message),
+                },
+                None => 1.0,
+            };
+            let mode = match arguments.get(2) {
+                Some(_) => match self.number_at(sheet, arguments, 2, being) {
+                    Ok(mode) => mode,
+                    Err(message) => return Value::Error(message),
+                },
+                None => 0.0,
+            };
+            // The tree's rule: the **mode** says what a negative
+            // number does, and the two floors and the two ceilings
+            // read it the other way round.
+            let (up, away) = match name {
+                "CEILING.MATH" => (true, mode != 0.0),
+                "CEILING.PRECISE" | "ISO.CEILING" => (true, false),
+                "FLOOR.MATH" => (false, mode == 0.0),
+                _ => (false, true),
+            };
+            return match ceil_floor_math(number, significance, up, away) {
+                Ok(result) => Value::Number(result),
+                Err(message) => Value::Error(message),
+            };
         }
         if matches!(name, "MROUND" | "CEILING" | "FLOOR" | "MOD" | "QUOTIENT" | "POWER") {
             let number = match self.number_at(sheet, arguments, 0, being) {

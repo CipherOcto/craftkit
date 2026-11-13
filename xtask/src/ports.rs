@@ -178,6 +178,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/counted.rs",
         section: "§878",
     },
+    Port {
+        rule: "the rounding to a multiple",
+        from: "gridcraft/crates/functions/src/math.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/arithmetic.rs",
+        command: "craftkit-plugin-grid::arithmetic",
+        test: "crates/craftkit-plugin-grid/tests/arithmetic.rs",
+        section: "§879",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

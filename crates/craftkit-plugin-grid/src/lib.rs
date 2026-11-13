@@ -24,6 +24,10 @@
 //! find the next whole number that is even or odd — with the tree's
 //! own careful rules (the module `arithmetic`).
 //!
+//! And a formula may round a number up or down to a **multiple** of
+//! another one — the tree's five, and the **mode** that says what a
+//! negative number does (the module `arithmetic`).
+//!
 //! And a formula may ask about an **angle**: its sine and its cosine,
 //! its tangent and their inverses, the hyperbolic ones and the turn of
 //! an angle from degrees to radians (the module `trigonometry`).

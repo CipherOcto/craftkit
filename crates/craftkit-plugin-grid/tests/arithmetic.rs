@@ -228,3 +228,65 @@ fn the_constant_pi_is_the_trees() {
     );
     assert_eq!(computed(&mut session, sheet, "A2", "=IF(PI()>3,1,0)"), json!(1.0), "and above three");
 }
+
+/// The **rounding to a multiple** — the tree's five.
+#[test]
+fn the_rounding_to_a_multiple() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    assert_eq!(
+        computed(&mut session, sheet, "A1", "=CEILING.MATH(5.5)"),
+        json!(6.0),
+        "the next whole number"
+    );
+    assert_eq!(computed(&mut session, sheet, "A2", "=CEILING.MATH(2.1,0.5)"), json!(2.5), "the next half");
+    assert_eq!(computed(&mut session, sheet, "A3", "=FLOOR.MATH(2.9,0.5)"), json!(2.5), "and the one before");
+    assert_eq!(
+        computed(&mut session, sheet, "A4", "=CEILING.MATH(5.5,0)"),
+        json!(0.0),
+        "a significance of zero is zero"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A5", "=CEILING.MATH(5.5,-1)"),
+        json!(6.0),
+        "and the sign of the significance does not matter"
+    );
+}
+
+/// The **negative** numbers round away from the zero or toward it, and
+/// the two families read the mode the other way round.
+#[test]
+fn the_negative_numbers_round_away_from_the_zero_or_toward_it() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    assert_eq!(
+        computed(&mut session, sheet, "A1", "=CEILING.PRECISE(-5.5)"),
+        json!(-5.0),
+        "the precise ceiling is toward the zero"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A2", "=ISO.CEILING(-5.5)"),
+        json!(-5.0),
+        "and the ISO one is the same"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A3", "=FLOOR.PRECISE(-5.5)"),
+        json!(-6.0),
+        "the precise floor is away from the zero"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A4", "=FLOOR.MATH(-5.5)"),
+        json!(-6.0),
+        "and the floor by default is away from the zero"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A5", "=FLOOR.MATH(-5.5,1,1)"),
+        json!(-5.0),
+        "and with the mode it is toward the zero"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A6", "=CEILING.MATH(-5.5,1,1)"),
+        json!(-6.0),
+        "while the ceiling with the mode is away from the zero"
+    );
+}
