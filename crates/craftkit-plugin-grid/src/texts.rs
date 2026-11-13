@@ -50,6 +50,8 @@ pub fn is_text_function(name: &str) -> bool {
             | "FINDB"
             | "SEARCHB"
             | "REPLACEB"
+            | "TEXTBEFORE"
+            | "TEXTAFTER"
     )
 }
 
@@ -140,7 +142,210 @@ fn proper(text: &str) -> String {
     out
 }
 
+/// The **matches** of the delimiters in a text.
+///
+/// The tree's rule: the **longest** delimiter wins at a place, the
+/// scan goes on after it, and a text with no delimiters is a match at
+/// every place. The scan from the end goes backwards and takes the
+/// longest delimiter there too.
+fn find_matches(
+    text: &[char],
+    delimiters: &[Vec<char>],
+    insensitive: bool,
+    from_end: bool,
+) -> Vec<(usize, usize)> {
+    let folded: Vec<char> = if insensitive {
+        text.iter().map(|character| character.to_lowercase().next().unwrap_or(*character)).collect()
+    } else {
+        text.to_vec()
+    };
+    let delimiters: Vec<Vec<char>> = delimiters
+        .iter()
+        .filter(|delimiter| !delimiter.is_empty())
+        .map(|delimiter| {
+            if insensitive {
+                delimiter
+                    .iter()
+                    .map(|character| character.to_lowercase().next().unwrap_or(*character))
+                    .collect()
+            } else {
+                delimiter.clone()
+            }
+        })
+        .collect();
+    if delimiters.is_empty() {
+        return (0..=folded.len()).map(|at| (at, at)).collect();
+    }
+    let mut out = Vec::new();
+    if from_end {
+        let mut end = folded.len();
+        while end > 0 {
+            let longest = delimiters
+                .iter()
+                .filter(|delimiter| {
+                    end.checked_sub(delimiter.len()).and_then(|start| folded.get(start..end))
+                        == Some(delimiter.as_slice())
+                })
+                .map(Vec::len)
+                .max();
+            match longest {
+                Some(length) => {
+                    out.push((end - length, end));
+                    end -= length;
+                }
+                None => end -= 1,
+            }
+        }
+        out.reverse();
+        return out;
+    }
+    let mut at = 0;
+    while at < folded.len() {
+        let longest = delimiters
+            .iter()
+            .filter(|delimiter| folded.get(at..at + delimiter.len()) == Some(delimiter.as_slice()))
+            .map(Vec::len)
+            .max();
+        match longest {
+            Some(length) => {
+                out.push((at, at + length));
+                at += length;
+            }
+            None => at += 1,
+        }
+    }
+    out
+}
+
 impl Book {
+    /// The tree's `TEXTBEFORE` and `TEXTAFTER`: the text **before** a
+    /// mark and the text **after** it.
+    ///
+    /// The **delimiter** is one or more marks — the text of a plain
+    /// argument, or the text of each cell of a range — and the
+    /// **instance** says which of them: the first is one, and a
+    /// negative one counts from the end.
+    ///
+    /// The **match mode** is zero or one: zero is the text as it is,
+    /// and one is the text folded.
+    ///
+    /// The **match end** says that the end of the text is a mark too,
+    /// so that the text after the last mark is the empty text.
+    ///
+    /// The tree's rule: an instance of zero, a match mode that is not
+    /// zero or one, and an instance that is further away than the
+    /// text is long are all errors — and a mark that is not there is
+    /// the value that is given, or `#N/A`.
+    fn around(
+        &self,
+        sheet: &str,
+        name: &str,
+        arguments: &[Expr],
+        being: &mut Vec<(String, crate::formula::CellRef)>,
+    ) -> Value {
+        if arguments.len() < 2 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let first = self.evaluate(sheet, &arguments[0], being);
+        let text = match value_text(&first) {
+            Ok(text) => text,
+            Err(message) => return Value::Error(message),
+        };
+        let delimiters = match self.delimiters_of(sheet, &arguments[1], being) {
+            Ok(delimiters) => delimiters,
+            Err(message) => return Value::Error(message),
+        };
+        let instance = match arguments.get(2) {
+            Some(expression) => match self.evaluate(sheet, expression, being).as_number() {
+                Some(number) if number.is_finite() => number.trunc() as i64,
+                _ => return Value::Error("#VALUE!".to_string()),
+            },
+            None => 1,
+        };
+        let mode = match arguments.get(3) {
+            Some(expression) => match self.evaluate(sheet, expression, being).as_number() {
+                Some(number) if number.is_finite() => number.trunc() as i64,
+                _ => return Value::Error("#VALUE!".to_string()),
+            },
+            None => 0,
+        };
+        let match_end = match arguments.get(4) {
+            Some(expression) => match self.evaluate(sheet, expression, being) {
+                Value::Bool(flag) => flag,
+                Value::Number(number) => number != 0.0,
+                Value::Empty => false,
+                _ => return Value::Error("#VALUE!".to_string()),
+            },
+            None => false,
+        };
+        let characters: Vec<char> = text.chars().collect();
+        if !(0..=1).contains(&mode)
+            || instance == 0
+            || instance.unsigned_abs() as usize > characters.len().max(1)
+        {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let mut matches = find_matches(&characters, &delimiters, mode == 1, instance < 0);
+        if match_end {
+            if instance > 0 {
+                if !matches.last().is_some_and(|(start, _)| *start == characters.len()) {
+                    matches.push((characters.len(), characters.len()));
+                }
+            } else if !matches.first().is_some_and(|(start, _)| *start == 0) {
+                matches.insert(0, (0, 0));
+            }
+        }
+        let count = instance.unsigned_abs() as usize;
+        let hit = if instance > 0 {
+            matches.get(count - 1).copied()
+        } else {
+            matches.len().checked_sub(count).and_then(|index| matches.get(index).copied())
+        };
+        match hit {
+            Some((start, end)) => {
+                let text = if name == "TEXTBEFORE" {
+                    characters[..start].iter().collect::<String>()
+                } else {
+                    characters[end..].iter().collect::<String>()
+                };
+                Value::Text(text)
+            }
+            None => match arguments.get(5) {
+                Some(expression) => self.evaluate(sheet, expression, being),
+                None => Value::Error("#N/A".to_string()),
+            },
+        }
+    }
+
+    /// The **delimiters** of an argument: the text of each cell of a
+    /// range, or the text of a plain argument.
+    fn delimiters_of(
+        &self,
+        sheet: &str,
+        argument: &Expr,
+        being: &mut Vec<(String, crate::formula::CellRef)>,
+    ) -> Result<Vec<Vec<char>>, String> {
+        match argument {
+            Expr::Range { .. } | Expr::Name(_) => {
+                let (name, area) = self.area_of(sheet, argument)?;
+                let mut delimiters = Vec::new();
+                for row in area.start.row..=area.end.row {
+                    for col in area.start.col..=area.end.col {
+                        let value = self.value_of_guarded(&name, crate::formula::CellRef { col, row }, being);
+                        let text = value_text(&value)?;
+                        delimiters.push(text.chars().collect());
+                    }
+                }
+                Ok(delimiters)
+            }
+            other => {
+                let value = self.evaluate(sheet, other, being);
+                let text = value_text(&value)?;
+                Ok(vec![text.chars().collect()])
+            }
+        }
+    }
+
     /// The **text functions**: the shaping of a text.
     pub(crate) fn shaping(
         &self,
@@ -214,6 +419,7 @@ impl Book {
             "REPLACE" => self.replacing(sheet, arguments, being),
             "T" => self.t_of(sheet, arguments, being),
             "CLEAN" => Value::Text(text.chars().filter(|character| (*character as u32) >= 32).collect()),
+            "TEXTBEFORE" | "TEXTAFTER" => self.around(sheet, name, arguments, being),
             _ => Value::Error(format!("there is no function `{name}`")),
         }
     }

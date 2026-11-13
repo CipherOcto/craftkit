@@ -164,6 +164,10 @@
 //! fold it or clean it — `LEFT`, `RIGHT`, `MID`, `LEN`, `TRIM`,
 //! `UPPER`, `LOWER` and `PROPER` (the module `texts`).
 //!
+//! And a formula may take the text **before a mark** and the text
+//! **after** it — with the tree's instance, its match mode and its
+//! match end (the module `texts`).
+//!
 //! And a formula may **find** a value in a range — `MATCH`, `VLOOKUP`
 //! and `INDEX` — and the search is the **exact** one; the tree's
 //! approximate search is not here, and a lookup that asks for it says

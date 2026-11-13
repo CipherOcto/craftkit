@@ -163,3 +163,55 @@ fn a_value_that_is_an_error_is_that_error() {
     let value = value_of(&mut session, sheet, "A1");
     assert_eq!(value["error"], Json::String("#DIV/0!".to_string()), "the error is the error");
 }
+
+/// The text **before** a mark and the text **after** it.
+#[test]
+fn the_text_before_a_mark_and_the_text_after_it() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    formula(&mut session, sheet, "A1", "=TEXTBEFORE(\"a-b-c\",\"-\")");
+    assert_eq!(value_of(&mut session, sheet, "A1"), json!("a"), "the text before the first mark");
+    formula(&mut session, sheet, "A2", "=TEXTAFTER(\"a-b-c\",\"-\")");
+    assert_eq!(value_of(&mut session, sheet, "A2"), json!("b-c"), "and the text after it");
+    formula(&mut session, sheet, "A3", "=TEXTBEFORE(\"a-b-c\",\"-\",2)");
+    assert_eq!(value_of(&mut session, sheet, "A3"), json!("a-b"), "the second mark");
+    formula(&mut session, sheet, "A4", "=TEXTAFTER(\"a-b-c\",\"-\",-1)");
+    assert_eq!(value_of(&mut session, sheet, "A4"), json!("c"), "the last mark, counted from the end");
+}
+
+/// The **match mode** folds the text, and the **match end** makes the
+/// end of the text a mark too.
+#[test]
+fn the_match_mode_folds_the_text_and_the_match_end_is_a_mark() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    formula(&mut session, sheet, "A1", "=TEXTBEFORE(\"a-B-c\",\"B\")");
+    assert_eq!(
+        value_of(&mut session, sheet, "A1"),
+        json!("a-"),
+        "the case of the text is the case of the text"
+    );
+    formula(&mut session, sheet, "A2", "=TEXTBEFORE(\"a-B-c\",\"b\",1,1)");
+    assert_eq!(value_of(&mut session, sheet, "A2"), json!("a-"), "unless the mode folds it");
+    formula(&mut session, sheet, "A3", "=TEXTAFTER(\"a-b-c\",\"-\",3,0,TRUE)");
+    assert_eq!(value_of(&mut session, sheet, "A3"), json!(""), "the end of the text is a mark too");
+    formula(&mut session, sheet, "A4", "=TEXTAFTER(\"a-b-c\",\"-\",3)");
+    let value = value_of(&mut session, sheet, "A4");
+    assert_eq!(value["error"], Json::String("#N/A".to_string()), "and without it there is no third mark");
+}
+
+/// A mark that is **not there** is the value that is given, and
+/// `#N/A` when there is none.
+#[test]
+fn a_mark_that_is_not_there() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    formula(&mut session, sheet, "A1", "=TEXTBEFORE(\"abc\",\"-\",1,0,FALSE,\"nothing\")");
+    assert_eq!(value_of(&mut session, sheet, "A1"), json!("nothing"), "the value that is given");
+    formula(&mut session, sheet, "A2", "=TEXTBEFORE(\"abc\",\"-\")");
+    let value = value_of(&mut session, sheet, "A2");
+    assert_eq!(value["error"], Json::String("#N/A".to_string()), "it is an error");
+    formula(&mut session, sheet, "A3", "=TEXTBEFORE(\"abc\",\"-\",0)");
+    let value = value_of(&mut session, sheet, "A3");
+    assert_eq!(value["error"], Json::String("#VALUE!".to_string()), "an instance of zero is an error");
+}
