@@ -142,6 +142,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("craftkit-au", Class::Layer(1)),
     ("craftkit-au-fixture", Class::Layer(1)),
     ("craftkit-png", Class::Layer(1)),
+    ("craftkit-zip", Class::Layer(1)),
     // L2 — the whole surface a plugin needs: the registry, the session, the
     // document and the format.
     ("craftkit-sdk", Class::Layer(2)),

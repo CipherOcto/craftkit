@@ -834,6 +834,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "craftkit-zip"
+version = "0.2.0"
+dependencies = [
+ "craftkit-deflate",
+ "flate2",
+]
+
+[[package]]
 name = "crc32fast"
 version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

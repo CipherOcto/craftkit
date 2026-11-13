@@ -1,0 +1,17 @@
+[package]
+name = "craftkit-zip"
+description = "The package: a ZIP archive, read. A library, not a plugin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# The **inflate**: a part of a package is a compressed stream, and the
+# inflate is the tree's own (§901).
+craftkit-deflate = { workspace = true }
+
+[dev-dependencies]
+# A **compressor**, for the tests only: a reader is tested against
+# packages that were written by somebody else.
+flate2 = "1.1"

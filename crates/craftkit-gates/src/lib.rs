@@ -196,6 +196,9 @@ pub const LAYERS: &[(&str, u8)] = &[
     // The **PNG reader**: RFC 2083, and the pixels of a picture come
     // out of a zlib stream — which is the inflate, one layer down.
     ("craftkit-png", 1),
+    // The **package reader**: a ZIP archive, and a part of it is a
+    // compressed stream — which is the inflate, one layer down.
+    ("craftkit-zip", 1),
     // L2 — the whole surface a plugin needs: the registry, the session,
     // the document and the format.
     ("craftkit-sdk", 2),
