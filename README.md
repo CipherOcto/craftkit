@@ -4326,6 +4326,7 @@ so.
 | the **aggregates** that count the text | **built.** AVERAGEA, MAXA, MINA, VARA, VARPA, STDEVA and STDEVPA count the text of a cell as a zero and a boolean as one or zero (§878) | §878 |
 | the **rounding** to a multiple | **built.** CEILING.MATH, CEILING.PRECISE, ISO.CEILING, FLOOR.MATH and FLOOR.PRECISE round a number to a multiple, and the mode says what a negative number does (§879) | §879 |
 | the **text** around a mark | **built.** TEXTBEFORE and TEXTAFTER take the text before a mark and the text after it — with the tree's instance, its match mode and its match end (§880) | §880 |
+| the **text** of a number | **built.** FIXED and DOLLAR write a number as text, and NUMBERVALUE reads a text with the separators of the text's own (§881) | §881 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58218,3 +58219,68 @@ that is **after** it.
 - **The tree's `REGEXEXTRACT`, `REGEXREPLACE` and `REGEXTEST` are not
   here.** They match a pattern, and a pattern is a regular
   expression, and this tree has no engine for one.
+
+## 881. The text of a number
+
+A formula may write a number as **text**, and it may read a text as a
+number with the separators of the text's own.
+
+### What was built
+
+- **Four functions** of the grid battery's formula language:
+  - `FIXED(number, [decimals], [no_commas])` — the number written as
+    text;
+  - `DOLLAR(number, [decimals])` — the number written as money;
+  - `USDOLLAR(number, [decimals])` — the same function under the
+    tree's other name;
+  - `NUMBERVALUE(text, [decimal_separator], [group_separator])` — a
+    text read as a number.
+- The **rule** of the three that write:
+  - the number is rounded to the **decimals** — two when they are not
+    given — and the **halves go away from the zero**;
+  - the integer part is written in **groups of three**, unless the
+    third argument says that there are no separators;
+  - a negative amount is in **parentheses** for `DOLLAR`, and its sign
+    is **outside** for `FIXED`.
+- The **rule** of `NUMBERVALUE`:
+  - the **decimal separator** and the **group separator** are the
+    first character of the second and the third arguments — a point
+    and a comma when they are not given — and they may not be the
+    same character;
+  - the **spaces** in the text are not there;
+  - an **empty text** is zero;
+  - the **percent signs** at the end of the text make the number a
+    hundredth of itself — one for each of them.
+
+### What the port found
+
+- **The tree's `USDOLLAR` is `DOLLAR`** — the same function under the
+  tree's compatibility name, and the tree's `DOLLAR` is the one that
+  writes the sign of the money in parentheses.
+- **The tree's `FIXED` and `DOLLAR` round first and write after.** The
+  number is rounded with the halves away from the zero and then
+  written — so `2.675` is `2.68` and not `2.67`, which is the tree's
+  own rule for the rounding of a number (§358).
+- **The tree's `NUMBERVALUE` reads a text with its own separators and
+  refuses the other ones.** A point in a text whose group separator is
+  a space is an error and not a separator — the text's separators are
+  the ones the text says they are.
+
+### What it cost
+
+- **Three functions** in the module `texts`, and **one** in the module
+  `textvalue` — the tree's `NUMBERVALUE` is a reading of a text with
+  separators of its own, and not the reading of `VALUE`.
+- **Three tests**: the number written as text, the money written with
+  its sign in parentheses, and the text read with the separators of its
+  own.
+- **No new command**: the text of a number is a function of the
+  formula language. The grid battery still carries **188** commands and
+  the MCP server **1045**.
+
+### What it does not settle
+
+- **The tree's `ARRAYTOTEXT` and `VALUETOTEXT` are not here.** They
+  write a value in a form meant to be read back, and a value here is
+  not a thing that is read back.
+- **The tree's `TEXTSPLIT` is not here**, as §880 says.
