@@ -4340,6 +4340,7 @@ so.
 | the **odds and ends**, and the **weekend** of the tree's own | **built.** SUMPRODUCT, SERIESSUM, PROB and PERCENTOF are here, and NETWORKDAYS.INTL and WORKDAY.INTL take a weekend of the tree's own (§892) | §892 |
 | the **pattern** and the **cube** | **built.** The tree's regular expressions and its seven cube functions are refused, each with the reason it is not here, and the three matrix functions that give back a table are refused as an array (§893) | §893 |
 | the **model** of a series in time | **built.** The tree's four ETS functions are here with its additive state space, its rule for a timeline and its three errors: `#N/A`, `#VALUE!` and `#NUM!` (§894) | §894 |
+| the **registry** of what the battery knows | **built.** Every family of the grid battery declares the names it carries, the engine dispatches through the registry, and `TRUE()` and `FALSE()` are functions as well as values (§895) | §895 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59046,3 +59047,83 @@ The tree's last family of functions is here: the four that fit a
   the number `1` means *find the season*, the number `0` means *there
   is none*, and every other number from 2 to 8 760 is the length of the
   season, said so.
+
+## 895. The registry of what the battery knows
+
+The last of the tree's functions is here, and now the tree can say
+**what it has** — in one place, and in a form a machine can read.
+
+### What was built
+
+- **A registry** — `craftkit_plugin_grid::inventory`: a `Family` for
+  every family of functions, a table of the family and the names it
+  carries, and three ways to ask it: `functions()` for the whole list,
+  `family_of(name)` for the family of one name, and `knows(name)` for
+  the answer to a yes or no.
+- **The engine asks the registry.** The dispatch was a chain of
+  thirty questions — one per family — and it is now one `match` on the
+  family the registry says.
+- **Every family declares its names.** Thirty modules carry a `NAMES`
+  constant, and the `matches!(name, "A" | "B" | …)` that each of them
+  had is gone.
+- **`TRUE()` and `FALSE()`** — the tree's booleans are functions as
+  well as values.
+
+### What the port found
+
+- **A predicate is a list that cannot be read.** The family of a
+  function was written as a pattern match: the names were all there,
+  and no one could count them, order them or check them. They are a
+  constant now, and the family is what carries them.
+- **The registry was already there, in pieces.** The chain of thirty
+  `if`s *was* the registry, spread over thirty files and unreadable
+  as one thing. Making it a value puts it in one place — and the
+  **compiler** now says when a family is left out of it: a family
+  whose names are in no table is a family that is never used, and the
+  build stops. That is the tree's own rule — the compiler writes the
+  registration — and it is now true of the formula language as well.
+- **The tree's booleans were values and not functions.** The parser
+  turned the word `TRUE` into a boolean before it looked for a
+  bracket, so `TRUE()` — the tree's own spelling, and the tree's own
+  function — did not parse at all.
+- **The tree has two lists, and this tree had one.** The tree's
+  *registry* holds **four hundred and ninety** names, and this battery
+  knows every one of them. And the tree's **host** — the program that
+  runs the formulas — carries a **second list** of its own:
+  `AGGREGATE`, `AREAS`, `BYCOL`, `BYROW`, `CELL`, `COLUMN`,
+  `FORMULATEXT`, `INDIRECT`, `ISFORMULA`, `ISOMITTED`, `ISREF`,
+  `LAMBDA`, `LET`, `MAKEARRAY`, `MAP`, `OFFSET`, `RANDARRAY`,
+  `REDUCE`, `ROW`, `SCAN`, `SHEET`, `SHEETS`, `SUBTOTAL` and
+  `TRIMRANGE` — twenty-three names that the tree's functions crate
+  does not register at all. This battery has three of them — `TEXT`,
+  `SUBTOTAL` and `RANDARRAY` — and not the other twenty, and the
+  registry says so by holding **493** names and not one more.
+
+### What it cost
+
+- **One module** — `inventory` — public, with the family, the table
+  and the three questions.
+- **Thirty modules touched**: each family declares its names, and the
+  predicate it had is gone.
+- **The engine**: the chain of thirty questions is one `match`.
+- **Seven tests** in the grid battery's new registry test file: no
+  name is in two families, the list is the tree's list, every name in
+  the list is answered by the engine, a name the battery does not know
+  is not in the list, the list says which family carries a name, the
+  registry and the list agree, and the tree's booleans are functions as
+  well as values.
+- **No new command**: a function is not a command, and the formula
+  command is the same one. The grid battery still carries **188**
+  commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **The tree's second list is not here.** The twenty host-level names
+  this battery does not have are the next arc, and each of them wants
+  a decision: a name that gives back a **table** is refused as an
+  array, a name that gives back a **reference** is a different thing
+  again, and a name that needs a **lambda** is a language of its own.
+- **The registry does not say how many arguments a function takes.**
+  The tree's registry says, and this one does not: the arity of a
+  function is checked where the function is answered, and a registry
+  that carried arity would be a second thing to keep true.
