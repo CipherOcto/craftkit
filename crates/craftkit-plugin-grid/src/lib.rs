@@ -162,6 +162,12 @@
 //! so. And it may ask for the **shape** of a range — how many rows it
 //! has and how many columns (the module `lookups`).
 //!
+//! And a formula may **find a value the tree's way** — `XLOOKUP` gives
+//! the value at the place of the needle, and `XMATCH` gives the place
+//! — and the **match mode** is how a value may meet the needle: the
+//! same value, the largest below it, the smallest above it, or the
+//! same text with the wildcards in it (the module `lookups`).
+//!
 //! And a formula may **make a date** and take it apart — `DATE`,
 //! `YEAR`, `MONTH` and `DAY` — in the date system of the workbook,
 //! and may ask for the **week** of a day in its year (the module

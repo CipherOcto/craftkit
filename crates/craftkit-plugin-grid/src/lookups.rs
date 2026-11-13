@@ -32,12 +32,201 @@
 //! And `MATCH` and `VLOOKUP` differ from the tree in their **default**:
 //! the tree's default is the approximate search, and here the default
 //! is the exact one.
+//!
+//! # The tree's other two
+//!
+//! The tree has two more lookups, and they are a pair:
+//!
+//! - `XLOOKUP(needle, lookup_array, return_array, [if_not_found],
+//!   [match_mode], [search_mode])` — the value of the **return array**
+//!   at the place of the needle;
+//! - `XMATCH(needle, lookup_array, [match_mode], [search_mode])` — the
+//!   **place** of the needle, counted from one.
+//!
+//! The **match mode** is how a value may meet the needle:
+//!
+//! - `0` — the **same** value, without the wildcards (the default);
+//! - `-1` — the **largest** value below the needle;
+//! - `1` — the **smallest** value above the needle;
+//! - `2` — the same text, with the **wildcards** in it.
+//!
+//! And the **search mode** is which way the search goes: `1` is from
+//! the first to the last, and `-1` is from the last to the first.
+//!
+//! The **binary search** — the search mode `2` and the `-2` — is not
+//! here: it is a bisection over the whole vector, and a bisection is
+//! not a rule that can be written down in a sentence. A search that
+//! asks for it is refused with a message that says so.
 
 use crate::formula::{Book, CellRef, Expr, Value};
 
 /// Whether a name is one of the **lookup functions**.
 pub fn is_lookup_function(name: &str) -> bool {
-    matches!(name, "MATCH" | "VLOOKUP" | "INDEX" | "ROWS" | "COLUMNS")
+    matches!(name, "MATCH" | "VLOOKUP" | "INDEX" | "ROWS" | "COLUMNS" | "XLOOKUP" | "XMATCH")
+}
+
+/// The message of the search that is **not here**: the binary search.
+const BINARY: &str = "not supported yet: a binary search";
+
+/// The **match mode**: how a value may meet the needle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MatchMode {
+    /// The **same** value — the exact search, without the wildcards.
+    Exact,
+    /// The **largest** value below the needle.
+    Smaller,
+    /// The **smallest** value above the needle.
+    Larger,
+    /// The same text, with the **wildcards** in it.
+    Wildcard,
+}
+
+impl MatchMode {
+    /// The match mode of an **argument**.
+    fn of(value: &Value) -> Result<MatchMode, String> {
+        let Some(mode) = value.as_number() else {
+            return Err("#VALUE!".to_string());
+        };
+        if !mode.is_finite() {
+            return Err("#VALUE!".to_string());
+        }
+        match mode.trunc() as i64 {
+            0 => Ok(MatchMode::Exact),
+            -1 => Ok(MatchMode::Smaller),
+            1 => Ok(MatchMode::Larger),
+            2 => Ok(MatchMode::Wildcard),
+            _ => Err("#VALUE!".to_string()),
+        }
+    }
+}
+
+/// The **search mode**: which way the search goes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SearchMode {
+    /// From the **first** to the last.
+    FirstToLast,
+    /// From the **last** to the first.
+    LastToFirst,
+}
+
+impl SearchMode {
+    /// The search mode of an **argument**.
+    fn of(value: &Value) -> Result<SearchMode, String> {
+        let Some(mode) = value.as_number() else {
+            return Err("#VALUE!".to_string());
+        };
+        if !mode.is_finite() {
+            return Err("#VALUE!".to_string());
+        }
+        match mode.trunc() as i64 {
+            1 => Ok(SearchMode::FirstToLast),
+            -1 => Ok(SearchMode::LastToFirst),
+            // The binary search is not here.
+            2 | -2 => Err(BINARY.to_string()),
+            _ => Err("#VALUE!".to_string()),
+        }
+    }
+
+    /// Whether the search goes from the last to the first.
+    fn reversed(self) -> bool {
+        self == SearchMode::LastToFirst
+    }
+}
+
+/// Whether a **needle** and a **value** are the same, without the
+/// wildcards.
+///
+/// The tree's rule for a lookup: two numbers are the same number, two
+/// texts are the same text **without case**, and a value of one kind
+/// is not a value of another kind.
+fn same_value(needle: &Value, value: &Value) -> bool {
+    match (needle, value) {
+        (Value::Number(one), Value::Number(other)) => one == other,
+        (Value::Bool(one), Value::Bool(other)) => one == other,
+        (Value::Text(one), Value::Text(other)) => {
+            crate::criteria::compare_text(one, other) == std::cmp::Ordering::Equal
+        }
+        (Value::Error(one), Value::Error(other)) => one == other,
+        (Value::Empty, Value::Empty) => true,
+        _ => false,
+    }
+}
+
+/// The **order** of a value and the needle, for the searches that
+/// look for the next smaller or the next larger.
+///
+/// The tree's rule: two numbers are ordered as numbers — and
+/// **exactly** as numbers, and not as the fifteen digits of an
+/// equality — two texts as texts without case, and a value of one
+/// kind is not ordered against a needle of another kind.
+fn order_of(value: &Value, needle: &Value) -> Option<std::cmp::Ordering> {
+    match (value, needle) {
+        (Value::Number(one), Value::Number(other)) => one.partial_cmp(other),
+        (Value::Text(one), Value::Text(other)) => Some(crate::criteria::compare_text(one, other)),
+        _ => None,
+    }
+}
+
+/// The **place** of a needle in a vector of values.
+///
+/// The exact search is the first match — or the last, when the search
+/// goes from the last to the first. The searches for the next smaller
+/// and the next larger try the **exact** search first, and then take
+/// the best candidate: the largest value below the needle, or the
+/// smallest above it.
+fn place_of(needle: &Value, values: &[Value], mode: MatchMode, reversed: bool) -> Option<usize> {
+    let equal = |value: &Value| match mode {
+        MatchMode::Wildcard => match (needle, value) {
+            (Value::Text(pattern), Value::Text(text)) => crate::formula::wildcard(pattern, text),
+            _ => same_value(needle, value),
+        },
+        _ => same_value(needle, value),
+    };
+    let order: Vec<usize> =
+        if reversed { (0..values.len()).rev().collect() } else { (0..values.len()).collect() };
+    if let Some(place) = order.iter().copied().find(|place| equal(&values[*place])) {
+        return Some(place);
+    }
+    if !matches!(mode, MatchMode::Smaller | MatchMode::Larger) {
+        return None;
+    }
+    let mut best: Option<usize> = None;
+    for place in order {
+        let Some(order) = order_of(&values[place], needle) else { continue };
+        let candidate = match mode {
+            MatchMode::Smaller => order == std::cmp::Ordering::Less,
+            MatchMode::Larger => order == std::cmp::Ordering::Greater,
+            _ => false,
+        };
+        if !candidate {
+            continue;
+        }
+        let better = match best.map(|best| order_of(&values[best], needle)) {
+            None => true,
+            Some(None) => true,
+            Some(Some(previous)) => match mode {
+                // The best candidate is the one **closest** to the
+                // needle: the largest below it, and the smallest
+                // above it.
+                MatchMode::Smaller => previous == std::cmp::Ordering::Less,
+                MatchMode::Larger => previous == std::cmp::Ordering::Greater,
+                _ => false,
+            },
+        };
+        if better {
+            best = Some(place);
+        }
+    }
+    best
+}
+
+/// The **needle** of a lookup: a value, and the empty one is the
+/// number zero.
+fn lookup_needle(value: &Value) -> Value {
+    match value {
+        Value::Empty => Value::Number(0.0),
+        other => other.clone(),
+    }
 }
 
 /// The message of the search that is **not here**.
@@ -73,6 +262,8 @@ impl Book {
             "VLOOKUP" => self.vlookup_call(sheet, arguments, being),
             "INDEX" => self.index_call(sheet, arguments, being),
             "ROWS" | "COLUMNS" => self.shape_call(sheet, name, arguments, being),
+            "XLOOKUP" => self.xlookup_call(sheet, arguments, being),
+            "XMATCH" => self.xmatch_call(sheet, arguments, being),
             _ => Value::Error(format!("there is no function `{name}`")),
         }
     }
@@ -244,5 +435,173 @@ impl Book {
         let cell =
             CellRef { col: area.start.col + (column - 1) as u32, row: area.start.row + (row - 1) as u32 };
         self.value_of_guarded(&name, cell, being)
+    }
+
+    /// The tree's `XLOOKUP`: the value of the **return array** at the
+    /// place of the needle.
+    ///
+    /// The lookup array is a **vector** — a row or a column — and the
+    /// return array is of the same shape: a column lookup returns the
+    /// **rows** of the return array, and a row lookup returns its
+    /// **columns**. The tree's `XLOOKUP` may return a whole row or a
+    /// whole column, and this tree has no arrays, so a return array
+    /// that is wider than one cell is refused.
+    ///
+    /// The needle that is **not there** is the value that is given in
+    /// the fourth argument, and `#N/A` when there is none.
+    fn xlookup_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() < 3 || arguments.len() > 6 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let needle = self.evaluate(sheet, &arguments[0], being);
+        if let Value::Error(message) = &needle {
+            return Value::Error(message.clone());
+        }
+        let needle = lookup_needle(&needle);
+        let (lookup_sheet, lookup) = match self.area_of(sheet, &arguments[1]) {
+            Ok(area) => area,
+            Err(message) => return Value::Error(message),
+        };
+        let (return_sheet, returns) = match self.area_of(sheet, &arguments[2]) {
+            Ok(area) => area,
+            Err(message) => return Value::Error(message),
+        };
+        let lookup_rows = (lookup.end.row - lookup.start.row + 1) as usize;
+        let lookup_columns = (lookup.end.col - lookup.start.col + 1) as usize;
+        // The lookup array is a **vector**: a row or a column.
+        if lookup_rows > 1 && lookup_columns > 1 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let return_rows = (returns.end.row - returns.start.row + 1) as usize;
+        let return_columns = (returns.end.col - returns.start.col + 1) as usize;
+        // The **orientation**: a column lookup returns the rows of the
+        // return array, and a row lookup returns its columns. A lookup
+        // array of one cell takes the orientation of the return array.
+        let vertical = if lookup_rows == 1 && lookup_columns == 1 {
+            return_rows == 1 || return_columns != 1
+        } else {
+            lookup_columns == 1
+        };
+        if vertical && return_rows != lookup_rows {
+            return Value::Error("#VALUE!".to_string());
+        }
+        if !vertical && return_columns != lookup_columns {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let mode = match self.match_mode(sheet, arguments.get(4), being) {
+            Ok(mode) => mode,
+            Err(message) => return Value::Error(message),
+        };
+        let search = match self.search_mode(sheet, arguments.get(5), being) {
+            Ok(search) => search,
+            Err(message) => return Value::Error(message),
+        };
+        let values = self.vector_of(&lookup_sheet, &lookup, vertical, being);
+        let Some(place) = place_of(&needle, &values, mode, search.reversed()) else {
+            // The needle that is **not there**.
+            return match arguments.get(3) {
+                Some(argument) => self.evaluate(sheet, argument, being),
+                None => Value::Error("#N/A".to_string()),
+            };
+        };
+        // The **result**: the cell of the return array.
+        if vertical {
+            if return_columns != 1 {
+                return Value::Error("not supported yet: an array".to_string());
+            }
+            let cell = CellRef { col: returns.start.col, row: returns.start.row + place as u32 };
+            return self.value_of_guarded(&return_sheet, cell, being);
+        }
+        if return_rows != 1 {
+            return Value::Error("not supported yet: an array".to_string());
+        }
+        let cell = CellRef { col: returns.start.col + place as u32, row: returns.start.row };
+        self.value_of_guarded(&return_sheet, cell, being)
+    }
+
+    /// The tree's `XMATCH`: the **place** of the needle in a vector of
+    /// values, counted from one.
+    fn xmatch_call(&self, sheet: &str, arguments: &[Expr], being: &mut Vec<(String, CellRef)>) -> Value {
+        if arguments.len() < 2 || arguments.len() > 4 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let needle = self.evaluate(sheet, &arguments[0], being);
+        if let Value::Error(message) = &needle {
+            return Value::Error(message.clone());
+        }
+        let needle = lookup_needle(&needle);
+        let (lookup_sheet, lookup) = match self.area_of(sheet, &arguments[1]) {
+            Ok(area) => area,
+            Err(message) => return Value::Error(message),
+        };
+        let rows = (lookup.end.row - lookup.start.row + 1) as usize;
+        let columns = (lookup.end.col - lookup.start.col + 1) as usize;
+        if rows > 1 && columns > 1 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let mode = match self.match_mode(sheet, arguments.get(2), being) {
+            Ok(mode) => mode,
+            Err(message) => return Value::Error(message),
+        };
+        let search = match self.search_mode(sheet, arguments.get(3), being) {
+            Ok(search) => search,
+            Err(message) => return Value::Error(message),
+        };
+        let values = self.vector_of(&lookup_sheet, &lookup, columns == 1, being);
+        match place_of(&needle, &values, mode, search.reversed()) {
+            Some(place) => Value::Number((place + 1) as f64),
+            None => Value::Error("#N/A".to_string()),
+        }
+    }
+
+    /// The **match mode** of a search: how a value may meet the
+    /// needle.
+    fn match_mode(
+        &self,
+        sheet: &str,
+        argument: Option<&Expr>,
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Result<MatchMode, String> {
+        let Some(argument) = argument else { return Ok(MatchMode::Exact) };
+        let value = self.evaluate(sheet, argument, being);
+        MatchMode::of(&value)
+    }
+
+    /// The **search mode** of a search: which way the search goes.
+    fn search_mode(
+        &self,
+        sheet: &str,
+        argument: Option<&Expr>,
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Result<SearchMode, String> {
+        let Some(argument) = argument else { return Ok(SearchMode::FirstToLast) };
+        let value = self.evaluate(sheet, argument, being);
+        SearchMode::of(&value)
+    }
+
+    /// The **values** of a range, in the order a vector is read: down
+    /// a column, or across a row.
+    fn vector_of(
+        &self,
+        sheet: &str,
+        area: &crate::formula::Area,
+        vertical: bool,
+        being: &mut Vec<(String, CellRef)>,
+    ) -> Vec<Value> {
+        let rows = (area.end.row - area.start.row + 1) as usize;
+        let columns = (area.end.col - area.start.col + 1) as usize;
+        let mut values = Vec::new();
+        if vertical {
+            for row in 0..rows {
+                let cell = CellRef { col: area.start.col, row: area.start.row + row as u32 };
+                values.push(self.value_of_guarded(sheet, cell, being));
+            }
+        } else {
+            for column in 0..columns {
+                let cell = CellRef { col: area.start.col + column as u32, row: area.start.row };
+                values.push(self.value_of_guarded(sheet, cell, being));
+            }
+        }
+        values
     }
 }
