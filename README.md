@@ -4324,6 +4324,7 @@ so.
 | the **days** between two dates | **built.** DAYS360 counts them under the year of three hundred and sixty days, and DATEDIF counts the time between two dates in the unit that is asked for (§876) | §876 |
 | the **fraction** of a year, and the working days | **built.** YEARFRAC gives the fraction of a year under a basis, and NETWORKDAYS and WORKDAY count and step over the working days (§877) | §877 |
 | the **aggregates** that count the text | **built.** AVERAGEA, MAXA, MINA, VARA, VARPA, STDEVA and STDEVPA count the text of a cell as a zero and a boolean as one or zero (§878) | §878 |
+| the **rounding** to a multiple | **built.** CEILING.MATH, CEILING.PRECISE, ISO.CEILING, FLOOR.MATH and FLOOR.PRECISE round a number to a multiple, and the mode says what a negative number does (§879) | §879 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58095,3 +58096,64 @@ as a zero**.
 - **The tree's `A` functions have no array here.** The tree's
   `AVERAGEA` may take a range that is a formula's **spilled** result,
   and this tree has no arrays.
+
+## 879. The rounding to a multiple
+
+A formula may round a number up or down to a multiple of another one.
+
+### What was built
+
+- **Five functions** of the grid battery's formula language:
+  - `CEILING.MATH(number, [significance], [mode])`;
+  - `CEILING.PRECISE(number, [significance])`;
+  - `ISO.CEILING(number, [significance])`;
+  - `FLOOR.MATH(number, [significance], [mode])`;
+  - `FLOOR.PRECISE(number, [significance])`.
+- The **rule** of the five:
+  - the **significance** is taken as it is — its sign does not matter —
+    and it is one when it is not given;
+  - a significance of zero and a number of zero are **zero**;
+  - the number is written with **fifteen significant digits** before
+    the rounding, so that the binary noise is not rounded into the
+    answer.
+- The **mode** says what a **negative** number does: away from the
+  zero, or toward it. It is zero when it is not given.
+- The two **ceilings** and the two **floors** read the mode the other
+  way round: `CEILING.MATH` with a mode that is not zero rounds a
+  negative number **away** from the zero, and `FLOOR.MATH` with a mode
+  of zero does the same.
+
+### What the port found
+
+- **The tree's `ISO.CEILING` is `CEILING.PRECISE`.** The same
+  function under two names, and the tree's `CEILING.PRECISE` rounds a
+  negative number **toward** the zero while its `FLOOR.PRECISE` rounds
+  it **away** from the zero.
+- **The tree's `CEILING` and `FLOOR` are a different pair.** They are
+  the tree's compatibility pair, they refuse a positive number with a
+  negative significance, and they are already in this tree (§359).
+  The five that are here take the significance as it is, and a
+  significance of zero is zero and not an error.
+- **The tree's five round the negative numbers with the mode.** The
+  mode is not a direction for the positive numbers — those always go
+  the way the name says — it is only what a negative number does.
+
+### What it cost
+
+- **Five functions** in the module `arithmetic`, and a **rounding to a
+  multiple** helper of their own: the rule of the five is not the rule
+  of the tree's `CEILING` and `FLOOR`, which are already here.
+- **Two tests** in the grid battery's arithmetic test file: the
+  rounding to a multiple, and the negative numbers rounding away from
+  the zero or toward it.
+- **No new command**: the rounding is a function of the formula
+  language. The grid battery still carries **188** commands and the MCP
+  server **1045**.
+
+### What it does not settle
+
+- **The tree's `CEILING` and `FLOOR` keep their own rule**, and the
+  two pairs are not the same: a significance of zero is an error for
+  `FLOOR` and a zero for the five that are here.
+- **The tree's `ROUNDUP` and `ROUNDDOWN` are a different thing**: they
+  round to a number of **digits**, and not to a multiple.
