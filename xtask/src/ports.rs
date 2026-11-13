@@ -196,6 +196,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/texts.rs",
         section: "§880",
     },
+    Port {
+        rule: "the text of a number",
+        from: "gridcraft/crates/functions/src/text.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/texts.rs",
+        command: "craftkit-plugin-grid::textvalue",
+        test: "crates/craftkit-plugin-grid/tests/textvalue.rs",
+        section: "§881",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

@@ -101,3 +101,40 @@ fn the_date_and_the_time_of_a_text_are_found() {
         "and a time is not a date"
     );
 }
+
+/// A text read as a number with the **separators** of the text's own.
+#[test]
+fn a_text_read_with_the_separators_of_its_own() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    assert_eq!(
+        computed(&mut session, sheet, "A1", "=NUMBERVALUE(\"2.500,27\",\",\",\".\")"),
+        json!(2500.27),
+        "the separators of the text"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A2", "=NUMBERVALUE(\"3.5%\")"),
+        json!(0.035),
+        "the percent sign makes it a hundredth"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A3", "=NUMBERVALUE(\" 1 000 \")"),
+        json!(1000.0),
+        "the spaces are not there"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A4", "=NUMBERVALUE(\"\")"),
+        json!(0.0),
+        "and an empty text is zero"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A5", "=NUMBERVALUE(\"1.2.3\")"),
+        json!({ "error": "#VALUE!" }),
+        "and a text with two points is not a number"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "A6", "=NUMBERVALUE(\"1.5\",\",\",\" \")"),
+        json!({ "error": "#VALUE!" }),
+        "and the point is not a separator of that text"
+    );
+}

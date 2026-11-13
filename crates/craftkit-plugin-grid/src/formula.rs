@@ -2456,6 +2456,93 @@ impl Book {
         }
     }
 
+    /// The tree's `NUMBERVALUE`: a text read as a number, with the
+    /// **separators** of the text's own.
+    ///
+    /// The tree's rule: the **decimal separator** and the **group
+    /// separator** are the first character of the second and the third
+    /// arguments — a point and a comma when they are not given — and
+    /// they may not be the same character.
+    ///
+    /// The **spaces** in the text are not there, a text that is empty
+    /// is zero, and the **percent signs** at the end of it make the
+    /// number a hundredth of itself — one for each of them.
+    fn numbervalue(
+        &self,
+        sheet: &str,
+        arguments: &[Expr],
+        being: &mut Vec<(String, CellRef)>,
+        text: String,
+    ) -> Value {
+        let decimal = match arguments.get(1) {
+            Some(expression) => {
+                let value = self.evaluate(sheet, expression, being);
+                match crate::texts::value_text(&value) {
+                    Ok(text) => match text.chars().next() {
+                        Some(character) => character,
+                        None => return Value::Error("#VALUE!".to_string()),
+                    },
+                    Err(message) => return Value::Error(message),
+                }
+            }
+            None => '.',
+        };
+        let group = match arguments.get(2) {
+            Some(expression) => {
+                let value = self.evaluate(sheet, expression, being);
+                match crate::texts::value_text(&value) {
+                    Ok(text) => match text.chars().next() {
+                        Some(character) => character,
+                        None => return Value::Error("#VALUE!".to_string()),
+                    },
+                    Err(message) => return Value::Error(message),
+                }
+            }
+            None => ',',
+        };
+        if decimal == group {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let body: String = text.chars().filter(|character| !character.is_whitespace()).collect();
+        if body.is_empty() {
+            return Value::Number(0.0);
+        }
+        // The **percent signs** at the end of the text.
+        let mut body = body;
+        let mut percent = 0;
+        while let Some(stripped) = body.strip_suffix('%') {
+            body = stripped.to_string();
+            percent += 1;
+        }
+        let mut seen_decimal = false;
+        let mut out = String::new();
+        for character in body.chars() {
+            if character == decimal {
+                if seen_decimal {
+                    return Value::Error("#VALUE!".to_string());
+                }
+                seen_decimal = true;
+                out.push('.');
+            } else if character == group {
+                if seen_decimal {
+                    return Value::Error("#VALUE!".to_string());
+                }
+            } else if character == '.' || character == ',' {
+                return Value::Error("#VALUE!".to_string());
+            } else {
+                out.push(character);
+            }
+        }
+        let Some(number) = crate::textvalue::number_of(&out, self.system()) else {
+            return Value::Error("#VALUE!".to_string());
+        };
+        let number = number / 100f64.powi(percent);
+        if !number.is_finite() {
+            return Value::Error("#NUM!".to_string());
+        }
+        Value::Number(number)
+    }
+
     /// The tree's `COUNTIF`: the **count** of the cells that meet a
     /// condition.
     ///
@@ -2770,6 +2857,9 @@ impl Book {
             Ok(text) => text,
             Err(message) => return Value::Error(message),
         };
+        if name == "NUMBERVALUE" {
+            return self.numbervalue(sheet, arguments, being, text);
+        }
         let number = if name == "DATEVALUE" {
             crate::textvalue::date_of(&text, self.system())
         } else {

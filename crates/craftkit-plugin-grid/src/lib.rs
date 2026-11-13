@@ -71,6 +71,11 @@
 //! about signs, currencies, separators and parentheses (the module
 //! `textvalue`).
 //!
+//! And a formula may write a number as **text** — with its decimals
+//! and its separators, and the sign of the money in parentheses — and
+//! it may read a text as a number with the **separators of the
+//! text's own** (the modules `texts` and `textvalue`).
+//!
 //! And a formula may ask about the **cash flows** of a plan: the rate
 //! at which a series of payments is worth nothing, with dates or
 //! without them, what a sum grows to through a schedule, and the

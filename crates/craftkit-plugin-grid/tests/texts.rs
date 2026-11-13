@@ -215,3 +215,41 @@ fn a_mark_that_is_not_there() {
     let value = value_of(&mut session, sheet, "A3");
     assert_eq!(value["error"], Json::String("#VALUE!".to_string()), "an instance of zero is an error");
 }
+
+/// A number written as **text** — with its separators and its
+/// decimals.
+#[test]
+fn a_number_written_as_text() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    formula(&mut session, sheet, "A1", "=FIXED(1234.567,1)");
+    assert_eq!(value_of(&mut session, sheet, "A1"), json!("1,234.6"), "the separators and the decimal");
+    formula(&mut session, sheet, "A2", "=FIXED(1234.567,-1)");
+    assert_eq!(value_of(&mut session, sheet, "A2"), json!("1,230"), "and no decimal at all");
+    formula(&mut session, sheet, "A3", "=FIXED(1234.567,1,TRUE)");
+    assert_eq!(value_of(&mut session, sheet, "A3"), json!("1234.6"), "and no separators");
+    formula(&mut session, sheet, "A4", "=FIXED(-1234.567,1)");
+    assert_eq!(value_of(&mut session, sheet, "A4"), json!("-1,234.6"), "and the sign outside");
+}
+
+/// The **money** is written with its sign in parentheses, and the
+/// `USDOLLAR` is the same function under another name.
+#[test]
+fn the_money_is_written_with_its_sign_in_parentheses() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    formula(&mut session, sheet, "A1", "=DOLLAR(1234.567)");
+    assert_eq!(value_of(&mut session, sheet, "A1"), json!("$1,234.57"), "the amount");
+    formula(&mut session, sheet, "A2", "=DOLLAR(-1234.567)");
+    assert_eq!(
+        value_of(&mut session, sheet, "A2"),
+        json!("($1,234.57)"),
+        "and the negative one in parentheses"
+    );
+    formula(&mut session, sheet, "A3", "=USDOLLAR(1234.567)");
+    assert_eq!(
+        value_of(&mut session, sheet, "A3"),
+        json!("$1,234.57"),
+        "and the other name is the same function"
+    );
+}

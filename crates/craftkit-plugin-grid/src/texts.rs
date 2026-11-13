@@ -52,6 +52,9 @@ pub fn is_text_function(name: &str) -> bool {
             | "REPLACEB"
             | "TEXTBEFORE"
             | "TEXTAFTER"
+            | "FIXED"
+            | "DOLLAR"
+            | "USDOLLAR"
     )
 }
 
@@ -217,6 +220,39 @@ fn find_matches(
     out
 }
 
+/// A number written with its **decimals** and its **separators**.
+///
+/// The tree's rule: the number is written with its decimals — and
+/// none when the decimals are fewer than none — and the integer part
+/// is written in groups of three when the separators are on.
+fn fixed_text(number: f64, decimals: i64, separators: bool) -> String {
+    let digits = decimals.max(0) as usize;
+    let written = format!("{:.*}", digits, number);
+    let (integer, fraction) = match written.split_once('.') {
+        Some((integer, fraction)) => (integer.to_string(), Some(fraction.to_string())),
+        None => (written.clone(), None),
+    };
+    let integer = if separators {
+        let bytes = integer.as_bytes();
+        let mut out = String::new();
+        for (index, byte) in bytes.iter().enumerate() {
+            if index > 0 && (bytes.len() - index) % 3 == 0 {
+                out.push(',');
+            }
+            out.push(char::from(*byte));
+        }
+        out
+    } else {
+        integer
+    };
+    let mut out = integer;
+    if let Some(fraction) = fraction {
+        out.push('.');
+        out.push_str(&fraction);
+    }
+    out
+}
+
 impl Book {
     /// The tree's `TEXTBEFORE` and `TEXTAFTER`: the text **before** a
     /// mark and the text **after** it.
@@ -346,6 +382,63 @@ impl Book {
         }
     }
 
+    /// The tree's `FIXED` and `DOLLAR`: a number written as **text**.
+    ///
+    /// The tree's rule: the number is rounded to the **decimals** —
+    /// two when they are not given — and the halves go away from the
+    /// zero. The integer part is written with the **separators**,
+    /// unless the third argument says not to.
+    ///
+    /// `DOLLAR` writes the sign of the money the way the tree writes
+    /// it: a negative amount is in **parentheses**. The `FIXED` one
+    /// has the sign outside.
+    fn fixed_of(
+        &self,
+        sheet: &str,
+        name: &str,
+        arguments: &[Expr],
+        being: &mut Vec<(String, crate::formula::CellRef)>,
+    ) -> Value {
+        let number = match self.number_at(sheet, arguments, 0, being) {
+            Ok(number) => number,
+            Err(message) => return Value::Error(message),
+        };
+        let decimals = match arguments.get(1) {
+            Some(expression) => match self.evaluate(sheet, expression, being).as_number() {
+                Some(number) if number.is_finite() => number.trunc(),
+                _ => return Value::Error("#VALUE!".to_string()),
+            },
+            None => 2.0,
+        };
+        if decimals > 127.0 {
+            return Value::Error("#VALUE!".to_string());
+        }
+        let decimals = decimals.max(-308.0) as i64;
+        let rounded = crate::arithmetic::round_half_away(number, decimals as i32);
+        if !rounded.is_finite() || rounded.abs() >= 1e300 {
+            return Value::Error("#NUM!".to_string());
+        }
+        // The third argument says that there are **no** separators.
+        let separators = match arguments.get(2) {
+            Some(expression) => match self.evaluate(sheet, expression, being) {
+                Value::Bool(flag) => !flag,
+                Value::Number(number) => number == 0.0,
+                Value::Empty => true,
+                _ => return Value::Error("#VALUE!".to_string()),
+            },
+            None => true,
+        };
+        let body = fixed_text(rounded.abs(), decimals, separators);
+        let text = if name == "FIXED" {
+            if rounded < 0.0 { format!("-{body}") } else { body }
+        } else if rounded < 0.0 {
+            format!("(${body})")
+        } else {
+            format!("${body}")
+        };
+        Value::Text(text)
+    }
+
     /// The **text functions**: the shaping of a text.
     pub(crate) fn shaping(
         &self,
@@ -420,6 +513,7 @@ impl Book {
             "T" => self.t_of(sheet, arguments, being),
             "CLEAN" => Value::Text(text.chars().filter(|character| (*character as u32) >= 32).collect()),
             "TEXTBEFORE" | "TEXTAFTER" => self.around(sheet, name, arguments, being),
+            "FIXED" | "DOLLAR" | "USDOLLAR" => self.fixed_of(sheet, name, arguments, being),
             _ => Value::Error(format!("there is no function `{name}`")),
         }
     }
