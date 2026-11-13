@@ -33,6 +33,7 @@ pub fn is_regression_function(name: &str) -> bool {
             | "INTERCEPT"
             | "STEYX"
             | "FORECAST"
+            | "FORECAST.LINEAR"
             | "COVAR"
             | "COVARIANCE.P"
             | "COVARIANCE.S"
@@ -109,7 +110,7 @@ impl Book {
         // The two sets of numbers, and which of the arguments they
         // are.
         let (first, second) = match name {
-            "FORECAST" => (1, 2),
+            "FORECAST" | "FORECAST.LINEAR" => (1, 2),
             _ => (0, 1),
         };
         let Some(left) = arguments.get(first) else {
@@ -185,7 +186,7 @@ impl Book {
                 let error = ((square_y - cross * cross / square_x) / (count - 2.0)).max(0.0).sqrt();
                 Value::Number(error)
             }
-            "FORECAST" => {
+            "FORECAST" | "FORECAST.LINEAR" => {
                 let at = match self.number_at(sheet, arguments, 0, being) {
                     Ok(number) => number,
                     Err(message) => return Value::Error(message),
