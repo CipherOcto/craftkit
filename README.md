@@ -4328,6 +4328,7 @@ so.
 | the **text** around a mark | **built.** TEXTBEFORE and TEXTAFTER take the text before a mark and the text after it — with the tree's instance, its match mode and its match end (§880) | §880 |
 | the **text** of a number | **built.** FIXED and DOLLAR write a number as text, and NUMBERVALUE reads a text with the separators of the text's own (§881) | §881 |
 | the **lookup** across | **built.** HLOOKUP finds the value of a row of the column that holds the needle, and the tree's LOOKUP — a bisection — is refused and says why (§882) | §882 |
+| the **worth** today | **built.** NPV is the sum of what each payment of a series is worth today, and the first payment is discounted once (§883) | §883 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58343,3 +58344,49 @@ reads a **vector**.
   same reason: it is a bisection.
 - **The tree's approximate search is not here** — in `MATCH`, in
   `VLOOKUP`, in `HLOOKUP` or in `LOOKUP`.
+
+## 883. The worth today
+
+A series of payments is worth something **today**, and that something
+is the sum of what each payment is worth today.
+
+### What was built
+
+- **One function** of the grid battery's formula language:
+  `NPV(rate, value1, [value2], ...)`.
+- The **rule**:
+  - the **first** flow is discounted once, and the second twice — so a
+    series that starts today is worth less than a series that starts
+    in a year;
+  - the **cells** of a range that are not numbers are not flows and
+    are not counted, and the text of a plain argument is the number it
+    writes;
+  - a rate of **less than none** — a rate of minus one — is a
+    division by nothing.
+
+### What the port found
+
+- **The tree's `NPV` and its `XNPV` are two rules.** The `XNPV` is
+  here already, and it discounts each flow by the **days** between
+  the dates; the `NPV` has no dates and discounts each flow by its
+  **place**. So a series that starts today and a series that starts
+  in a year are worth different things under the two.
+- **The tree's `NPV` counts the cells of a range and not the range
+  itself.** A cell that holds a number is a flow and a cell that
+  holds anything else is not there.
+
+### What it cost
+
+- **One function** in the module `cashflows`, and a **flows** helper
+  of its own: the tree's rule for the flows of a series is not the
+  rule of the other aggregates, which skip the text of a plain
+  argument too.
+- **One test** in the grid battery's cash-flow test file.
+- **No new command**: the worth today is a function of the formula
+  language. The grid battery still carries **188** commands and the MCP
+  server **1045**.
+
+### What it does not settle
+
+- **The tree's `NPV` of a series with a date in it** is the `XNPV`,
+  and that is here already.
