@@ -25,7 +25,116 @@ use crate::formula::{Book, CellRef, Expr, Value};
 
 /// Whether a name is one of the **depreciation functions**.
 pub fn is_depreciation_function(name: &str) -> bool {
-    matches!(name, "SLN" | "SYD" | "DB" | "DDB" | "VDB")
+    matches!(name, "SLN" | "SYD" | "DB" | "DDB" | "VDB" | "AMORLINC" | "AMORDEGRC")
+}
+
+/// A **thing that wears out**, bought on a day.
+struct Wearing {
+    /// What it cost.
+    cost: f64,
+    /// The day it was bought on.
+    purchased: f64,
+    /// The day its first period ends.
+    first: f64,
+    /// What is left of it at the end.
+    salvage: f64,
+    /// The period that is asked for.
+    period: f64,
+    /// The rate of the depreciation.
+    rate: f64,
+    /// The basis of the year.
+    basis: u32,
+    /// The calendar of the workbook.
+    system: crate::dates::System,
+}
+
+/// The **straight line** depreciation of a thing bought on a day — the
+/// tree's `AMORLINC`.
+///
+/// The tree's rule: the **first period** is the part of the year
+/// between the day the thing was bought and the day the first period
+/// ends, and the rest of the periods are the same. The last period
+/// takes what is left and no more.
+fn amorlinc(thing: &Wearing) -> Value {
+    if thing.cost < 0.0
+        || thing.salvage < 0.0
+        || thing.salvage > thing.cost
+        || thing.period < 0.0
+        || thing.rate <= 0.0
+        || thing.first < thing.purchased
+    {
+        return Value::Error("#NUM!".to_string());
+    }
+    let Some(fraction) = crate::daycounts::year_frac(thing.system, thing.purchased, thing.first, thing.basis)
+    else {
+        return Value::Error("#NUM!".to_string());
+    };
+    let full = thing.cost * thing.rate;
+    let limit = thing.cost - thing.salvage;
+    let first_period = (full * fraction).min(limit);
+    if thing.period == 0.0 {
+        return Value::Number(first_period);
+    }
+    let remaining = limit - first_period - (thing.period - 1.0) * full;
+    Value::Number(full.min(remaining.max(0.0)))
+}
+
+/// The **declining balance** depreciation of a thing bought on a day
+/// — the tree's `AMORDEGRC`.
+///
+/// The tree's rule: the rate of the depreciation is the rate of the
+/// thing times a **coefficient** that depends on how long the thing
+/// lasts — one under three years, one and a half under five, two up
+/// to six, and two and a half after that. The first period is the
+/// part of the year the thing was bought in, and the **two last
+/// periods split what is left** between them.
+fn amordegrc(thing: &Wearing) -> Value {
+    if thing.cost < 0.0
+        || thing.salvage < 0.0
+        || thing.salvage > thing.cost
+        || thing.period < 0.0
+        || thing.rate <= 0.0
+        || thing.first < thing.purchased
+        || thing.period > 1e6
+    {
+        return Value::Error("#NUM!".to_string());
+    }
+    let life = 1.0 / thing.rate;
+    let coefficient = if life < 3.0 {
+        1.0
+    } else if life < 5.0 {
+        1.5
+    } else if life <= 6.0 {
+        2.0
+    } else {
+        2.5
+    };
+    let rate = thing.rate * coefficient;
+    let Some(fraction) = crate::daycounts::year_frac(thing.system, thing.purchased, thing.first, thing.basis)
+    else {
+        return Value::Error("#NUM!".to_string());
+    };
+    let mut book = thing.cost;
+    let mut depreciation = (fraction * rate * thing.cost).round();
+    if thing.period == 0.0 {
+        return Value::Number(depreciation);
+    }
+    book -= depreciation;
+    let mut rest = book - thing.salvage;
+    let mut step = 1.0;
+    while step <= thing.period {
+        depreciation = (rate * book).round();
+        rest -= depreciation;
+        if rest < 0.0 {
+            // The two last periods split what is left, and after them
+            // there is nothing left.
+            let left = thing.period - step;
+            return Value::Number(if left <= 1.0 { (book * 0.5).round() } else { 0.0 });
+        }
+        book -= depreciation;
+        step += 1.0;
+    }
+    Value::Number(depreciation)
 }
 
 /// The **straight line** depreciation: the same every period.
@@ -229,6 +338,48 @@ impl Book {
                     Err(message) => return Value::Error(message),
                 };
                 ddb(cost, salvage, life, period, factor)
+            }
+            "AMORLINC" | "AMORDEGRC" => {
+                let (cost, purchased, first, salvage, period, rate) = match (
+                    self.number_at(sheet, arguments, 0, being),
+                    self.number_at(sheet, arguments, 1, being),
+                    self.number_at(sheet, arguments, 2, being),
+                    self.number_at(sheet, arguments, 3, being),
+                    self.number_at(sheet, arguments, 4, being),
+                    self.number_at(sheet, arguments, 5, being),
+                ) {
+                    (Ok(cost), Ok(purchased), Ok(first), Ok(salvage), Ok(period), Ok(rate)) => {
+                        (cost, purchased, first, salvage, period, rate)
+                    }
+                    (Err(message), _, _, _, _, _)
+                    | (_, Err(message), _, _, _, _)
+                    | (_, _, Err(message), _, _, _)
+                    | (_, _, _, Err(message), _, _)
+                    | (_, _, _, _, Err(message), _)
+                    | (_, _, _, _, _, Err(message)) => {
+                        return Value::Error(message);
+                    }
+                };
+                let basis = match self.optional_number(sheet, arguments, 6, being) {
+                    Ok(Some(basis)) => basis,
+                    Ok(None) => 0.0,
+                    Err(message) => return Value::Error(message),
+                };
+                let basis = match crate::daycounts::basis_of(Some(basis)) {
+                    Ok(basis) => basis,
+                    Err(message) => return Value::Error(message),
+                };
+                let thing = Wearing {
+                    cost,
+                    purchased,
+                    first,
+                    salvage,
+                    period: period.trunc(),
+                    rate,
+                    basis,
+                    system: self.system(),
+                };
+                if name == "AMORLINC" { amorlinc(&thing) } else { amordegrc(&thing) }
             }
             _ => {
                 // `VDB`: the declining balance over a span of periods.

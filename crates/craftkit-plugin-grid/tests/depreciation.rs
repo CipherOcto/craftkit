@@ -208,3 +208,28 @@ fn the_trees_errors_are_the_errors() {
         "and a span that ends before it starts is an error"
     );
 }
+
+/// A thing bought on a day wears out from that day — the tree's
+/// `AMORLINC` and `AMORDEGRC`.
+#[test]
+fn a_thing_bought_on_a_day_wears_out_from_that_day() {
+    let mut session = session();
+    let (_workbook, sheet) = a_sheet(&mut session);
+    // The tree's own example: a cost of two thousand four hundred,
+    // bought in August and first settled in December.
+    assert_eq!(
+        computed(&mut session, sheet, "D1", "=AMORLINC(2400,DATE(2008,8,19),DATE(2008,12,31),300,1,0.15,1)"),
+        json!(360.0),
+        "the straight line of the first period"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "D2", "=AMORDEGRC(2400,DATE(2008,8,19),DATE(2008,12,31),300,1,0.15,1)"),
+        json!(776.0),
+        "and the declining balance of the first period"
+    );
+    assert_eq!(
+        computed(&mut session, sheet, "D3", "=AMORLINC(2400,DATE(2008,12,31),DATE(2008,8,19),300,1,0.15)"),
+        json!({ "error": "#NUM!" }),
+        "and a first period that ends before the thing was bought is an error"
+    );
+}
