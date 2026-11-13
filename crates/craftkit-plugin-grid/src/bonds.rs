@@ -29,31 +29,26 @@
 use crate::dates::System;
 use crate::daycounts::{basis_of, day_count, frequency_of, shift_months, year_frac, ymd};
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **bond functions**.
-pub fn is_bond_function(name: &str) -> bool {
-    matches!(
-        name,
-        "COUPDAYBS"
-            | "COUPDAYS"
-            | "COUPDAYSNC"
-            | "COUPNUM"
-            | "COUPNCD"
-            | "COUPPCD"
-            | "PRICE"
-            | "YIELD"
-            | "DURATION"
-            | "MDURATION"
-            | "PRICEMAT"
-            | "YIELDMAT"
-            | "ODDFPRICE"
-            | "ODDFYIELD"
-            | "ODDLPRICE"
-            | "ODDLYIELD"
-            | "ACCRINT"
-            | "ACCRINTM"
-    )
-}
+pub const NAMES: &[&str] = &[
+    "COUPDAYBS",
+    "COUPDAYS",
+    "COUPDAYSNC",
+    "COUPNUM",
+    "COUPNCD",
+    "COUPPCD",
+    "PRICE",
+    "YIELD",
+    "DURATION",
+    "MDURATION",
+    "PRICEMAT",
+    "YIELDMAT",
+    "ODDFPRICE",
+    "ODDFYIELD",
+    "ODDLPRICE",
+    "ODDLYIELD",
+    "ACCRINT",
+    "ACCRINTM",
+];
 
 /// A **coupon period**: the dates around it and how many there are.
 struct Coupon {

@@ -40,25 +40,10 @@
 
 use crate::criteria::{Condition, compare_text, number_text};
 use crate::formula::Value;
-
-/// Whether a **name** is the name of a database function.
-pub(crate) fn is_database_function(name: &str) -> bool {
-    matches!(
-        name,
-        "DSUM"
-            | "DAVERAGE"
-            | "DCOUNT"
-            | "DCOUNTA"
-            | "DGET"
-            | "DMAX"
-            | "DMIN"
-            | "DPRODUCT"
-            | "DVAR"
-            | "DVARP"
-            | "DSTDEV"
-            | "DSTDEVP"
-    )
-}
+pub(crate) const NAMES: &[&str] = &[
+    "DSUM", "DAVERAGE", "DCOUNT", "DCOUNTA", "DGET", "DMAX", "DMIN", "DPRODUCT", "DVAR", "DVARP", "DSTDEV",
+    "DSTDEVP",
+];
 
 /// A **table** of values: rows of cells.
 pub(crate) type Table = Vec<Vec<Value>>;

@@ -32,24 +32,19 @@
 //!   smaller of the two tails, and never more than one. Here the same.
 
 use crate::formula::Value;
-
-/// Whether a **name** is the name of a test of a hypothesis.
-pub(crate) fn is_hypothesis_function(name: &str) -> bool {
-    matches!(
-        name,
-        "T.TEST"
-            | "TTEST"
-            | "CHISQ.TEST"
-            | "CHITEST"
-            | "F.TEST"
-            | "FTEST"
-            | "Z.TEST"
-            | "ZTEST"
-            | "CONFIDENCE"
-            | "CONFIDENCE.NORM"
-            | "CONFIDENCE.T"
-    )
-}
+pub(crate) const NAMES: &[&str] = &[
+    "T.TEST",
+    "TTEST",
+    "CHISQ.TEST",
+    "CHITEST",
+    "F.TEST",
+    "FTEST",
+    "Z.TEST",
+    "ZTEST",
+    "CONFIDENCE",
+    "CONFIDENCE.NORM",
+    "CONFIDENCE.T",
+];
 
 /// The **numbers** of a set of values; an error is the error.
 fn numbers_of(values: &[Value]) -> Result<Vec<f64>, String> {

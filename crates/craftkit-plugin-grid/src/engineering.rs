@@ -16,32 +16,27 @@
 //! complement**, and a bit is **forty-eight** bits wide at most.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **engineering functions**.
-pub fn is_engineering_function(name: &str) -> bool {
-    matches!(
-        name,
-        "BIN2DEC"
-            | "BIN2HEX"
-            | "BIN2OCT"
-            | "DEC2BIN"
-            | "DEC2HEX"
-            | "DEC2OCT"
-            | "HEX2BIN"
-            | "HEX2DEC"
-            | "HEX2OCT"
-            | "OCT2BIN"
-            | "OCT2DEC"
-            | "OCT2HEX"
-            | "BITAND"
-            | "BITOR"
-            | "BITXOR"
-            | "BITLSHIFT"
-            | "BITRSHIFT"
-            | "DELTA"
-            | "GESTEP"
-    )
-}
+pub const NAMES: &[&str] = &[
+    "BIN2DEC",
+    "BIN2HEX",
+    "BIN2OCT",
+    "DEC2BIN",
+    "DEC2HEX",
+    "DEC2OCT",
+    "HEX2BIN",
+    "HEX2DEC",
+    "HEX2OCT",
+    "OCT2BIN",
+    "OCT2DEC",
+    "OCT2HEX",
+    "BITAND",
+    "BITOR",
+    "BITXOR",
+    "BITLSHIFT",
+    "BITRSHIFT",
+    "DELTA",
+    "GESTEP",
+];
 
 /// The **bits** a base has.
 fn bits_of(radix: u32) -> i64 {

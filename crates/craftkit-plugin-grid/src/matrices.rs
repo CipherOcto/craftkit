@@ -20,11 +20,7 @@
 //! a determinant that should be a whole number is one.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **matrix functions**.
-pub fn is_matrix_function(name: &str) -> bool {
-    matches!(name, "MDETERM")
-}
+pub const NAMES: &[&str] = &["MDETERM"];
 
 /// The **determinant** of a square of numbers.
 ///

@@ -18,11 +18,7 @@
 //! one.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **odds and ends**.
-pub fn is_odd_function(name: &str) -> bool {
-    matches!(name, "SUMPRODUCT" | "SERIESSUM" | "PROB" | "PERCENTOF")
-}
+pub const NAMES: &[&str] = &["SUMPRODUCT", "SERIESSUM", "PROB", "PERCENTOF"];
 
 impl Book {
     /// The **values** an argument holds.

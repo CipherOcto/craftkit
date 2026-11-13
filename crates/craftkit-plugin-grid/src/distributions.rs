@@ -21,77 +21,72 @@
 //! is a number error.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **distribution functions**.
-pub fn is_distribution_function(name: &str) -> bool {
-    matches!(
-        name,
-        "GAMMA"
-            | "GAMMALN"
-            | "GAMMALN.PRECISE"
-            | "ERF"
-            | "ERF.PRECISE"
-            | "ERFC"
-            | "ERFC.PRECISE"
-            | "NORM.DIST"
-            | "NORMDIST"
-            | "NORM.INV"
-            | "NORMINV"
-            | "NORM.S.DIST"
-            | "NORMSDIST"
-            | "NORM.S.INV"
-            | "NORMSINV"
-            | "GAUSS"
-            | "PHI"
-            | "GAMMA.DIST"
-            | "GAMMADIST"
-            | "GAMMA.INV"
-            | "GAMMAINV"
-            | "T.DIST"
-            | "T.DIST.2T"
-            | "T.DIST.RT"
-            | "TDIST"
-            | "T.INV"
-            | "T.INV.2T"
-            | "TINV"
-            | "CHISQ.DIST"
-            | "CHISQ.DIST.RT"
-            | "CHIDIST"
-            | "CHISQ.INV"
-            | "CHISQ.INV.RT"
-            | "F.DIST"
-            | "F.DIST.RT"
-            | "F.INV"
-            | "FINV"
-            | "BINOM.DIST"
-            | "BINOMDIST"
-            | "BINOM.INV"
-            | "POISSON"
-            | "POISSON.DIST"
-            | "EXPON"
-            | "EXPONDIST"
-            | "EXPON.DIST"
-            | "BETA.DIST"
-            | "BETADIST"
-            | "BETA.INV"
-            | "LOGNORM.DIST"
-            | "LOGNORMDIST"
-            | "LOGNORM.INV"
-            | "LOGINV"
-            | "WEIBULL"
-            | "WEIBULL.DIST"
-            | "HYPGEOM.DIST"
-            | "HYPGEOMDIST"
-            | "CHIINV"
-            | "FDIST"
-            | "CRITBINOM"
-            | "BETAINV"
-            | "F.INV.RT"
-            | "NEGBINOM.DIST"
-            | "NEGBINOMDIST"
-            | "BINOM.DIST.RANGE"
-    )
-}
+pub const NAMES: &[&str] = &[
+    "GAMMA",
+    "GAMMALN",
+    "GAMMALN.PRECISE",
+    "ERF",
+    "ERF.PRECISE",
+    "ERFC",
+    "ERFC.PRECISE",
+    "NORM.DIST",
+    "NORMDIST",
+    "NORM.INV",
+    "NORMINV",
+    "NORM.S.DIST",
+    "NORMSDIST",
+    "NORM.S.INV",
+    "NORMSINV",
+    "GAUSS",
+    "PHI",
+    "GAMMA.DIST",
+    "GAMMADIST",
+    "GAMMA.INV",
+    "GAMMAINV",
+    "T.DIST",
+    "T.DIST.2T",
+    "T.DIST.RT",
+    "TDIST",
+    "T.INV",
+    "T.INV.2T",
+    "TINV",
+    "CHISQ.DIST",
+    "CHISQ.DIST.RT",
+    "CHIDIST",
+    "CHISQ.INV",
+    "CHISQ.INV.RT",
+    "F.DIST",
+    "F.DIST.RT",
+    "F.INV",
+    "FINV",
+    "BINOM.DIST",
+    "BINOMDIST",
+    "BINOM.INV",
+    "POISSON",
+    "POISSON.DIST",
+    "EXPON",
+    "EXPONDIST",
+    "EXPON.DIST",
+    "BETA.DIST",
+    "BETADIST",
+    "BETA.INV",
+    "LOGNORM.DIST",
+    "LOGNORMDIST",
+    "LOGNORM.INV",
+    "LOGINV",
+    "WEIBULL",
+    "WEIBULL.DIST",
+    "HYPGEOM.DIST",
+    "HYPGEOMDIST",
+    "CHIINV",
+    "FDIST",
+    "CRITBINOM",
+    "BETAINV",
+    "F.INV.RT",
+    "NEGBINOM.DIST",
+    "NEGBINOMDIST",
+    "BINOM.DIST.RANGE",
+];
 
 /// A value read as a **truth**.
 fn as_bool(value: &Value) -> Result<bool, String> {

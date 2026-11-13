@@ -27,60 +27,55 @@
 //! is `#NUM!`.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **statistical functions**.
-pub fn is_statistical_function(name: &str) -> bool {
-    matches!(
-        name,
-        "MEDIAN"
-            | "MODE"
-            | "STDEV"
-            | "STDEVP"
-            | "VAR"
-            | "VARP"
-            | "LARGE"
-            | "SMALL"
-            | "RANK"
-            | "PERCENTILE"
-            | "QUARTILE"
-            | "COUNTBLANK"
-            | "AVEDEV"
-            | "DEVSQ"
-            | "GEOMEAN"
-            | "HARMEAN"
-            | "TRIMMEAN"
-            | "KURT"
-            | "SKEW"
-            | "SKEW.P"
-            | "STANDARDIZE"
-            | "FISHER"
-            | "FISHERINV"
-            | "MODE.SNGL"
-            | "STDEV.S"
-            | "STDEV.P"
-            | "VAR.S"
-            | "VAR.P"
-            | "RANK.EQ"
-            | "RANK.AVG"
-            | "PERCENTILE.INC"
-            | "PERCENTILE.EXC"
-            | "QUARTILE.INC"
-            | "QUARTILE.EXC"
-            | "PERCENTRANK"
-            | "PERCENTRANK.INC"
-            | "PERCENTRANK.EXC"
-            | "SUMX2MY2"
-            | "SUMX2PY2"
-            | "SUMXMY2"
-            | "AVERAGEA"
-            | "MAXA"
-            | "MINA"
-            | "VARA"
-            | "VARPA"
-            | "STDEVA"
-            | "STDEVPA"
-    )
-}
+pub const NAMES: &[&str] = &[
+    "MEDIAN",
+    "MODE",
+    "STDEV",
+    "STDEVP",
+    "VAR",
+    "VARP",
+    "LARGE",
+    "SMALL",
+    "RANK",
+    "PERCENTILE",
+    "QUARTILE",
+    "COUNTBLANK",
+    "AVEDEV",
+    "DEVSQ",
+    "GEOMEAN",
+    "HARMEAN",
+    "TRIMMEAN",
+    "KURT",
+    "SKEW",
+    "SKEW.P",
+    "STANDARDIZE",
+    "FISHER",
+    "FISHERINV",
+    "MODE.SNGL",
+    "STDEV.S",
+    "STDEV.P",
+    "VAR.S",
+    "VAR.P",
+    "RANK.EQ",
+    "RANK.AVG",
+    "PERCENTILE.INC",
+    "PERCENTILE.EXC",
+    "QUARTILE.INC",
+    "QUARTILE.EXC",
+    "PERCENTRANK",
+    "PERCENTRANK.INC",
+    "PERCENTRANK.EXC",
+    "SUMX2MY2",
+    "SUMX2PY2",
+    "SUMXMY2",
+    "AVERAGEA",
+    "MAXA",
+    "MINA",
+    "VARA",
+    "VARPA",
+    "STDEVA",
+    "STDEVPA",
+];
 
 /// The **numbers** of a set, in the order a reader reads them.
 fn sorted(mut numbers: Vec<f64>) -> Vec<f64> {

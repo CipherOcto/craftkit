@@ -23,11 +23,7 @@
 //! `TRUE` or `FALSE` is a value error.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **logical functions**.
-pub fn is_logical_function(name: &str) -> bool {
-    matches!(name, "AND" | "OR" | "XOR" | "NOT" | "IFS" | "IFERROR" | "IFNA" | "SWITCH" | "CHOOSE")
-}
+pub const NAMES: &[&str] = &["AND", "OR", "XOR", "NOT", "IFS", "IFERROR", "IFNA", "SWITCH", "CHOOSE"];
 
 /// A value read as a **truth**.
 fn as_bool(value: &Value) -> Result<bool, String> {

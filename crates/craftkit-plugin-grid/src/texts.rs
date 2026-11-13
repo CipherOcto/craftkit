@@ -21,44 +21,39 @@
 //! error: the shaping of an error is the error.
 
 use crate::formula::{Book, Expr, Value, truth_of};
-
-/// Whether a name is one of the **text functions**.
-pub fn is_text_function(name: &str) -> bool {
-    matches!(
-        name,
-        "LEFT"
-            | "RIGHT"
-            | "MID"
-            | "LEN"
-            | "TRIM"
-            | "UPPER"
-            | "LOWER"
-            | "PROPER"
-            | "CONCATENATE"
-            | "CONCAT"
-            | "TEXTJOIN"
-            | "FIND"
-            | "SEARCH"
-            | "SUBSTITUTE"
-            | "REPLACE"
-            | "T"
-            | "CLEAN"
-            | "LEFTB"
-            | "RIGHTB"
-            | "MIDB"
-            | "LENB"
-            | "FINDB"
-            | "SEARCHB"
-            | "REPLACEB"
-            | "TEXTBEFORE"
-            | "TEXTAFTER"
-            | "FIXED"
-            | "DOLLAR"
-            | "USDOLLAR"
-            | "VALUETOTEXT"
-            | "HYPERLINK"
-    )
-}
+pub const NAMES: &[&str] = &[
+    "LEFT",
+    "RIGHT",
+    "MID",
+    "LEN",
+    "TRIM",
+    "UPPER",
+    "LOWER",
+    "PROPER",
+    "CONCATENATE",
+    "CONCAT",
+    "TEXTJOIN",
+    "FIND",
+    "SEARCH",
+    "SUBSTITUTE",
+    "REPLACE",
+    "T",
+    "CLEAN",
+    "LEFTB",
+    "RIGHTB",
+    "MIDB",
+    "LENB",
+    "FINDB",
+    "SEARCHB",
+    "REPLACEB",
+    "TEXTBEFORE",
+    "TEXTAFTER",
+    "FIXED",
+    "DOLLAR",
+    "USDOLLAR",
+    "VALUETOTEXT",
+    "HYPERLINK",
+];
 
 /// The most characters a text may hold.
 ///

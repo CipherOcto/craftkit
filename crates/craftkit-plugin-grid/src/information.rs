@@ -24,27 +24,22 @@
 //! be even or odd.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **information functions**.
-pub fn is_information_function(name: &str) -> bool {
-    matches!(
-        name,
-        "ISBLANK"
-            | "ISERR"
-            | "ISERROR"
-            | "ISNA"
-            | "ISNUMBER"
-            | "ISTEXT"
-            | "ISNONTEXT"
-            | "ISLOGICAL"
-            | "ISEVEN"
-            | "ISODD"
-            | "TYPE"
-            | "ERROR.TYPE"
-            | "NA"
-            | "N"
-    )
-}
+pub const NAMES: &[&str] = &[
+    "ISBLANK",
+    "ISERR",
+    "ISERROR",
+    "ISNA",
+    "ISNUMBER",
+    "ISTEXT",
+    "ISNONTEXT",
+    "ISLOGICAL",
+    "ISEVEN",
+    "ISODD",
+    "TYPE",
+    "ERROR.TYPE",
+    "NA",
+    "N",
+];
 
 /// The **number** that names an error.
 fn code_of(message: &str) -> Option<f64> {

@@ -53,11 +53,7 @@
 
 use crate::criteria::Condition;
 use crate::formula::{Area, Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **aggregate functions**.
-pub fn is_aggregate_function(name: &str) -> bool {
-    matches!(name, "COUNTIFS" | "SUMIFS" | "AVERAGEIFS" | "MAXIFS" | "MINIFS" | "AVERAGEIF")
-}
+pub const NAMES: &[&str] = &["COUNTIFS", "SUMIFS", "AVERAGEIFS", "MAXIFS", "MINIFS", "AVERAGEIF"];
 
 /// A **pair** of a condition: a range of cells and the condition the
 /// cells of it may meet.

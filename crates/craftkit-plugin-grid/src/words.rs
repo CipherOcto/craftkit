@@ -24,29 +24,24 @@
 //! than the tree's bound is a value error.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **word functions**.
-pub fn is_word_function(name: &str) -> bool {
-    matches!(
-        name,
-        "REPT"
-            | "EXACT"
-            | "BASE"
-            | "DECIMAL"
-            | "ROMAN"
-            | "ARABIC"
-            | "CHAR"
-            | "CODE"
-            | "UNICHAR"
-            | "UNICODE"
-            | "ENCODEURL"
-            | "DBCS"
-            | "JIS"
-            | "PHONETIC"
-            | "ASC"
-            | "BAHTTEXT"
-    )
-}
+pub const NAMES: &[&str] = &[
+    "REPT",
+    "EXACT",
+    "BASE",
+    "DECIMAL",
+    "ROMAN",
+    "ARABIC",
+    "CHAR",
+    "CODE",
+    "UNICHAR",
+    "UNICODE",
+    "ENCODEURL",
+    "DBCS",
+    "JIS",
+    "PHONETIC",
+    "ASC",
+    "BAHTTEXT",
+];
 
 /// The most characters a text may hold: the tree's bound.
 const MAX_TEXT: usize = 32_767;

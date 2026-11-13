@@ -24,23 +24,8 @@
 //! not zero means the payment comes at the beginning of the period.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **cash flow functions**.
-pub fn is_cash_flow_function(name: &str) -> bool {
-    matches!(
-        name,
-        "IRR"
-            | "MIRR"
-            | "XIRR"
-            | "XNPV"
-            | "NPV"
-            | "FVSCHEDULE"
-            | "CUMIPMT"
-            | "CUMPRINC"
-            | "DOLLARDE"
-            | "DOLLARFR"
-    )
-}
+pub const NAMES: &[&str] =
+    &["IRR", "MIRR", "XIRR", "XNPV", "NPV", "FVSCHEDULE", "CUMIPMT", "CUMPRINC", "DOLLARDE", "DOLLARFR"];
 
 /// The **present value** of a series of dated payments.
 fn xnpv_of(rate: f64, values: &[f64], dates: &[f64]) -> f64 {

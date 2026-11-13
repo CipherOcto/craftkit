@@ -22,36 +22,10 @@ use crate::formula::{Book, CellRef, Expr, Value};
 /// The tree's bound on the argument of a trigonometric function:
 /// `2^27`.
 const TRIG_LIMIT: f64 = 134_217_728.0;
-
-/// Whether a name is one of the **trigonometric functions**.
-pub fn is_trigonometric_function(name: &str) -> bool {
-    matches!(
-        name,
-        "SIN"
-            | "COS"
-            | "TAN"
-            | "ASIN"
-            | "ACOS"
-            | "ATAN"
-            | "ATAN2"
-            | "SINH"
-            | "COSH"
-            | "TANH"
-            | "ASINH"
-            | "ACOSH"
-            | "ATANH"
-            | "COT"
-            | "COTH"
-            | "CSC"
-            | "CSCH"
-            | "SEC"
-            | "SECH"
-            | "ACOT"
-            | "ACOTH"
-            | "DEGREES"
-            | "RADIANS"
-    )
-}
+pub const NAMES: &[&str] = &[
+    "SIN", "COS", "TAN", "ASIN", "ACOS", "ATAN", "ATAN2", "SINH", "COSH", "TANH", "ASINH", "ACOSH", "ATANH",
+    "COT", "COTH", "CSC", "CSCH", "SEC", "SECH", "ACOT", "ACOTH", "DEGREES", "RADIANS",
+];
 
 /// An **angle** a trigonometric function may take.
 fn angle(number: f64) -> Result<f64, String> {

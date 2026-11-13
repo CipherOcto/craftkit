@@ -21,24 +21,19 @@
 //! division by nothing.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **regression functions**.
-pub fn is_regression_function(name: &str) -> bool {
-    matches!(
-        name,
-        "CORREL"
-            | "PEARSON"
-            | "RSQ"
-            | "SLOPE"
-            | "INTERCEPT"
-            | "STEYX"
-            | "FORECAST"
-            | "FORECAST.LINEAR"
-            | "COVAR"
-            | "COVARIANCE.P"
-            | "COVARIANCE.S"
-    )
-}
+pub const NAMES: &[&str] = &[
+    "CORREL",
+    "PEARSON",
+    "RSQ",
+    "SLOPE",
+    "INTERCEPT",
+    "STEYX",
+    "FORECAST",
+    "FORECAST.LINEAR",
+    "COVAR",
+    "COVARIANCE.P",
+    "COVARIANCE.S",
+];
 
 /// The **mean** of a set of numbers.
 fn mean(numbers: &[f64]) -> Result<f64, String> {

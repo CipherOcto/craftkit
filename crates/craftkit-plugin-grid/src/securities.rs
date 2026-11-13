@@ -26,14 +26,8 @@
 
 use crate::dates::System;
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **security functions**.
-pub fn is_security_function(name: &str) -> bool {
-    matches!(
-        name,
-        "DISC" | "PRICEDISC" | "YIELDDISC" | "INTRATE" | "RECEIVED" | "TBILLPRICE" | "TBILLYIELD" | "TBILLEQ"
-    )
-}
+pub const NAMES: &[&str] =
+    &["DISC", "PRICEDISC", "YIELDDISC", "INTRATE", "RECEIVED", "TBILLPRICE", "TBILLYIELD", "TBILLEQ"];
 
 /// The **fraction of a year** between a settlement and a maturity.
 fn fraction(system: System, settlement: f64, maturity: f64, basis: u32) -> Option<f64> {

@@ -432,6 +432,7 @@ mod hypotheses;
 mod importing;
 mod information;
 mod inserting;
+pub mod inventory;
 mod links;
 mod logic;
 mod lookups;

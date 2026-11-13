@@ -56,6 +56,17 @@ pub const MAX_ROWS: u64 = 1_048_576;
 /// The tree's bound: a sheet is sixteen thousand columns wide.
 pub const MAX_COLS: u64 = 16_384;
 
+/// The **names** of the functions the engine itself carries.
+///
+/// Every other family of functions has a module of its own; these are
+/// the ones the engine answers in its own body, because they are the
+/// ones a formula is made of: the choice of `IF`, the sum of `SUM`,
+/// the count of `COUNT`, the text of `TEXT`, and the rest.
+pub const NAMES: &[&str] = &[
+    "IF", "TEXT", "SUBTOTAL", "COUNTIF", "SUMIF", "SUM", "AVERAGE", "MIN", "MAX", "COUNT", "COUNTA",
+    "CONVERT", "TRUE", "FALSE",
+];
+
 /// A cell's address: a column and a row, both counted from zero.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CellRef {
@@ -1076,11 +1087,16 @@ impl Parser {
             word.push_str(&tail);
             self.at = furthest;
         }
-        if word.eq_ignore_ascii_case("TRUE") {
-            return Ok(Expr::Bool(true));
-        }
-        if word.eq_ignore_ascii_case("FALSE") {
-            return Ok(Expr::Bool(false));
+        // A **boolean**: `TRUE` or `FALSE`. The tree's word is also the
+        // tree's **function** — `TRUE()` — and a word with a bracket
+        // after it is a call and not a value.
+        if self.peek() != Some('(') {
+            if word.eq_ignore_ascii_case("TRUE") {
+                return Ok(Expr::Bool(true));
+            }
+            if word.eq_ignore_ascii_case("FALSE") {
+                return Ok(Expr::Bool(false));
+            }
         }
         // A **sheet**: `Sheet1!A1`. The word is the sheet's name and
         // the reference that follows is in it.
@@ -2140,108 +2156,126 @@ impl Book {
         if name == "IF" {
             return self.if_call(sheet, arguments, being);
         }
+        // The tree's **booleans** as functions: `TRUE()` and `FALSE()`.
+        // The word alone is a value, and the word with a bracket after
+        // it is a call, and the tree has both.
+        if name == "TRUE" || name == "FALSE" {
+            if !arguments.is_empty() {
+                return Value::Error("#VALUE!".to_string());
+            }
+            return Value::Bool(name == "TRUE");
+        }
         if name == "COUNTIF" {
             return self.countif(sheet, arguments, being);
         }
         if name == "SUMIF" {
             return self.sumif(sheet, arguments, being);
         }
-        if crate::aggregates::is_aggregate_function(name) {
-            return self.aggregates(sheet, name, arguments, being);
-        }
-        if crate::texts::is_text_function(name) {
-            return self.shaping(sheet, name, arguments, being);
-        }
-        if crate::lookups::is_lookup_function(name) {
-            return self.looking(sheet, name, arguments, being);
-        }
-        if crate::datetimes::is_date_function(name) {
-            return self.dates(sheet, name, arguments, being);
-        }
-        if crate::statistics::is_statistical_function(name) {
-            return self.statistics(sheet, name, arguments, being);
-        }
-        if crate::arithmetic::is_arithmetic_function(name) {
-            return self.arithmetic(sheet, name, arguments, being);
-        }
-        if crate::odds::is_odd_function(name) {
-            return self.odds(sheet, name, arguments, being);
-        }
-        if crate::trigonometry::is_trigonometric_function(name) {
-            return self.trigonometry(sheet, name, arguments, being);
-        }
-        if crate::finance::is_financial_function(name) {
-            return self.finance(sheet, name, arguments, being);
-        }
-        if crate::depreciation::is_depreciation_function(name) {
-            return self.depreciation(sheet, name, arguments, being);
-        }
-        if crate::securities::is_security_function(name) {
-            return self.securities(sheet, name, arguments, being);
-        }
-        if crate::bonds::is_bond_function(name) {
-            return self.bonds(sheet, name, arguments, being);
-        }
-        if crate::combinations::is_combination_function(name) {
-            return self.combinations(sheet, name, arguments, being);
-        }
-        if crate::engineering::is_engineering_function(name) {
-            return self.engineering(sheet, name, arguments, being);
-        }
-        if crate::bessels::is_bessel_function(name) {
-            return self.bessel(sheet, name, arguments, being);
-        }
-        if crate::information::is_information_function(name) {
-            return self.information(sheet, name, arguments, being);
-        }
-        if crate::logic::is_logical_function(name) {
-            return self.logic(sheet, name, arguments, being);
-        }
-        if crate::regression::is_regression_function(name) {
-            return self.regression(sheet, name, arguments, being);
-        }
-        if crate::distributions::is_distribution_function(name) {
-            return self.distributions(sheet, name, arguments, being);
-        }
-        if crate::cashflows::is_cash_flow_function(name) {
-            return self.cash_flows(sheet, name, arguments, being);
-        }
-        if crate::words::is_word_function(name) {
-            return self.words(sheet, name, arguments, being);
-        }
-        if crate::database::is_database_function(name) {
-            return self.database(sheet, name, arguments, being);
-        }
-        if crate::hypotheses::is_hypothesis_function(name) {
-            return self.hypotheses(sheet, name, arguments, being);
-        }
-        if crate::textvalue::is_text_value_function(name) {
-            return self.text_value(sheet, name, arguments, being);
-        }
-        // The tree's **arrays**: a function that gives back a table,
-        // and a formula here is a value.
-        if crate::arrays::is_array_function(name) {
-            return Value::Error("not supported yet: an array".to_string());
-        }
-        // The **world outside the workbook**: the clock, a random
-        // number, the network and the environment of the program.
-        if let Some(reason) = crate::outside::reason_for(name) {
-            return Value::Error(reason.to_string());
-        }
-        // The **pattern** and the **cube**: an engine for patterns and
-        // a connection to a cube of data.
-        if let Some(reason) = crate::refused::reason_for(name) {
-            return Value::Error(reason.to_string());
-        }
-        // The **model of a series in time**.
-        if crate::ets::is_ets_function(name) {
-            return self.ets(sheet, name, arguments, being);
-        }
-        if crate::matrices::is_matrix_function(name) {
-            return self.matrices(sheet, name, arguments, being);
-        }
-        if crate::complex::is_complex_function(name) {
-            return self.complex(sheet, name, arguments, being);
+        // The **registry**: a value. The name says which family
+        // carries it, and the family answers it.
+        match crate::inventory::family_of(name) {
+            Some(crate::inventory::Family::Core) => {}
+            Some(crate::inventory::Family::Aggregate) => {
+                return self.aggregates(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Text) => {
+                return self.shaping(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Lookup) => {
+                return self.looking(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Date) => {
+                return self.dates(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Statistical) => {
+                return self.statistics(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Arithmetic) => {
+                return self.arithmetic(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Odds) => {
+                return self.odds(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Trigonometric) => {
+                return self.trigonometry(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Financial) => {
+                return self.finance(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Depreciation) => {
+                return self.depreciation(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Security) => {
+                return self.securities(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Bond) => {
+                return self.bonds(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Combination) => {
+                return self.combinations(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Engineering) => {
+                return self.engineering(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Bessel) => {
+                return self.bessel(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Information) => {
+                return self.information(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Logical) => {
+                return self.logic(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Regression) => {
+                return self.regression(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Distribution) => {
+                return self.distributions(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::CashFlow) => {
+                return self.cash_flows(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Word) => {
+                return self.words(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Database) => {
+                return self.database(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Hypothesis) => {
+                return self.hypotheses(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::TextValue) => {
+                return self.text_value(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Complex) => {
+                return self.complex(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Ets) => {
+                return self.ets(sheet, name, arguments, being);
+            }
+            Some(crate::inventory::Family::Matrix) => {
+                return self.matrices(sheet, name, arguments, being);
+            }
+            // The tree's **arrays**: a function that gives back a
+            // table, and a formula here is a value.
+            Some(crate::inventory::Family::Array) => {
+                return Value::Error("not supported yet: an array".to_string());
+            }
+            // The **world outside the workbook**: the clock, a random
+            // number, the network and the environment of the program.
+            Some(crate::inventory::Family::Outside) => {
+                let reason = crate::outside::reason_for(name)
+                    .unwrap_or("not supported yet: the world outside the workbook");
+                return Value::Error(reason.to_string());
+            }
+            // The **pattern** and the **cube**: an engine for patterns
+            // and a connection to a cube of data.
+            Some(crate::inventory::Family::Refused) => {
+                let reason =
+                    crate::refused::reason_for(name).unwrap_or("not supported yet: the thing is not here");
+                return Value::Error(reason.to_string());
+            }
+            None => {}
         }
         if name == "CONVERT" {
             return self.convert(sheet, arguments, being);

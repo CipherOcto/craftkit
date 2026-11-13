@@ -34,11 +34,8 @@
 //!   straight line or a season that repeats exactly.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **ETS functions**.
-pub fn is_ets_function(name: &str) -> bool {
-    matches!(name, "FORECAST.ETS" | "FORECAST.ETS.CONFINT" | "FORECAST.ETS.SEASONALITY" | "FORECAST.ETS.STAT")
-}
+pub const NAMES: &[&str] =
+    &["FORECAST.ETS", "FORECAST.ETS.CONFINT", "FORECAST.ETS.SEASONALITY", "FORECAST.ETS.STAT"];
 
 /// The most points a series may hold.
 const MAX_POINTS: usize = 200_000;

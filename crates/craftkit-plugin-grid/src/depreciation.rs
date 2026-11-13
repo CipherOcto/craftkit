@@ -22,11 +22,7 @@
 //! fifteen significant digits and rounded to three.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **depreciation functions**.
-pub fn is_depreciation_function(name: &str) -> bool {
-    matches!(name, "SLN" | "SYD" | "DB" | "DDB" | "VDB" | "AMORLINC" | "AMORDEGRC")
-}
+pub const NAMES: &[&str] = &["SLN", "SYD", "DB", "DDB", "VDB", "AMORLINC", "AMORDEGRC"];
 
 /// A **thing that wears out**, bought on a day.
 struct Wearing {

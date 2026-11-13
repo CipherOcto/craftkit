@@ -28,11 +28,7 @@
 //!   recurrence carries it up.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **Bessel functions**.
-pub fn is_bessel_function(name: &str) -> bool {
-    matches!(name, "BESSELJ" | "BESSELY" | "BESSELI" | "BESSELK")
-}
+pub const NAMES: &[&str] = &["BESSELJ", "BESSELY", "BESSELI", "BESSELK"];
 
 /// The most points the **integral** of the first kind may use.
 const MAX_POINTS: f64 = 4_000_000.0;

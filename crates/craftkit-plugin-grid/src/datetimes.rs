@@ -47,34 +47,29 @@
 //! `YD` — the days that are left of the year.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **date functions**.
-pub fn is_date_function(name: &str) -> bool {
-    matches!(
-        name,
-        "DATE"
-            | "YEAR"
-            | "MONTH"
-            | "DAY"
-            | "TIME"
-            | "HOUR"
-            | "MINUTE"
-            | "SECOND"
-            | "WEEKDAY"
-            | "EDATE"
-            | "EOMONTH"
-            | "DAYS"
-            | "WEEKNUM"
-            | "ISOWEEKNUM"
-            | "DAYS360"
-            | "DATEDIF"
-            | "YEARFRAC"
-            | "NETWORKDAYS"
-            | "WORKDAY"
-            | "NETWORKDAYS.INTL"
-            | "WORKDAY.INTL"
-    )
-}
+pub const NAMES: &[&str] = &[
+    "DATE",
+    "YEAR",
+    "MONTH",
+    "DAY",
+    "TIME",
+    "HOUR",
+    "MINUTE",
+    "SECOND",
+    "WEEKDAY",
+    "EDATE",
+    "EOMONTH",
+    "DAYS",
+    "WEEKNUM",
+    "ISOWEEKNUM",
+    "DAYS360",
+    "DATEDIF",
+    "YEARFRAC",
+    "NETWORKDAYS",
+    "WORKDAY",
+    "NETWORKDAYS.INTL",
+    "WORKDAY.INTL",
+];
 
 /// The **weekend** of a week: the days that are not working days.
 ///

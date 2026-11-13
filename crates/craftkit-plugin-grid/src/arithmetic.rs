@@ -21,44 +21,39 @@
 //!   number that is not one is `#NUM!`.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **arithmetic functions**.
-pub fn is_arithmetic_function(name: &str) -> bool {
-    matches!(
-        name,
-        "ROUND"
-            | "ROUNDUP"
-            | "ROUNDDOWN"
-            | "TRUNC"
-            | "INT"
-            | "MROUND"
-            | "CEILING"
-            | "FLOOR"
-            | "MOD"
-            | "QUOTIENT"
-            | "ABS"
-            | "SIGN"
-            | "SQRT"
-            | "POWER"
-            | "EXP"
-            | "LN"
-            | "LOG"
-            | "LOG10"
-            | "PI"
-            | "PRODUCT"
-            | "SUMSQ"
-            | "GCD"
-            | "LCM"
-            | "EVEN"
-            | "ODD"
-            | "SQRTPI"
-            | "CEILING.MATH"
-            | "CEILING.PRECISE"
-            | "ISO.CEILING"
-            | "FLOOR.MATH"
-            | "FLOOR.PRECISE"
-    )
-}
+pub const NAMES: &[&str] = &[
+    "ROUND",
+    "ROUNDUP",
+    "ROUNDDOWN",
+    "TRUNC",
+    "INT",
+    "MROUND",
+    "CEILING",
+    "FLOOR",
+    "MOD",
+    "QUOTIENT",
+    "ABS",
+    "SIGN",
+    "SQRT",
+    "POWER",
+    "EXP",
+    "LN",
+    "LOG",
+    "LOG10",
+    "PI",
+    "PRODUCT",
+    "SUMSQ",
+    "GCD",
+    "LCM",
+    "EVEN",
+    "ODD",
+    "SQRTPI",
+    "CEILING.MATH",
+    "CEILING.PRECISE",
+    "ISO.CEILING",
+    "FLOOR.MATH",
+    "FLOOR.PRECISE",
+];
 
 /// A number rounded **up** or **down** to a multiple — the tree's
 /// rule.

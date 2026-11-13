@@ -35,11 +35,7 @@
 //!   here too.
 
 use crate::dates::System;
-
-/// Whether a **name** is the name of a function that reads a text.
-pub(crate) fn is_text_value_function(name: &str) -> bool {
-    matches!(name, "VALUE" | "DATEVALUE" | "TIMEVALUE" | "NUMBERVALUE")
-}
+pub(crate) const NAMES: &[&str] = &["VALUE", "DATEVALUE", "TIMEVALUE", "NUMBERVALUE"];
 
 /// The **number inside accounting parentheses**, as plain text.
 fn parenthesized(text: &str) -> Option<String> {

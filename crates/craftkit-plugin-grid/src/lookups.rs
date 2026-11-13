@@ -59,23 +59,8 @@
 //! asks for it is refused with a message that says so.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **lookup functions**.
-pub fn is_lookup_function(name: &str) -> bool {
-    matches!(
-        name,
-        "MATCH"
-            | "VLOOKUP"
-            | "HLOOKUP"
-            | "LOOKUP"
-            | "INDEX"
-            | "ROWS"
-            | "COLUMNS"
-            | "XLOOKUP"
-            | "XMATCH"
-            | "ADDRESS"
-    )
-}
+pub const NAMES: &[&str] =
+    &["MATCH", "VLOOKUP", "HLOOKUP", "LOOKUP", "INDEX", "ROWS", "COLUMNS", "XLOOKUP", "XMATCH", "ADDRESS"];
 
 /// The message of the search that is **not here**: the binary search.
 const BINARY: &str = "not supported yet: a binary search";

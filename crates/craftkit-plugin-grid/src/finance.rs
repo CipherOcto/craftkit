@@ -25,26 +25,21 @@
 //! is the tree's own: any number that is not zero means the beginning.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **financial functions**.
-pub fn is_financial_function(name: &str) -> bool {
-    matches!(
-        name,
-        "PMT"
-            | "PV"
-            | "FV"
-            | "NPER"
-            | "RATE"
-            | "IPMT"
-            | "PPMT"
-            | "ISPMT"
-            | "EFFECT"
-            | "NOMINAL"
-            | "PDURATION"
-            | "RRI"
-            | "EUROCONVERT"
-    )
-}
+pub const NAMES: &[&str] = &[
+    "PMT",
+    "PV",
+    "FV",
+    "NPER",
+    "RATE",
+    "IPMT",
+    "PPMT",
+    "ISPMT",
+    "EFFECT",
+    "NOMINAL",
+    "PDURATION",
+    "RRI",
+    "EUROCONVERT",
+];
 
 /// The **currencies** the tree's euro conversion knows.
 ///

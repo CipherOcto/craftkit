@@ -21,11 +21,8 @@
 //! beyond a double.
 
 use crate::formula::{Book, CellRef, Expr, Value};
-
-/// Whether a name is one of the **combination functions**.
-pub fn is_combination_function(name: &str) -> bool {
-    matches!(name, "FACT" | "FACTDOUBLE" | "COMBIN" | "COMBINA" | "PERMUT" | "PERMUTATIONA" | "MULTINOMIAL")
-}
+pub const NAMES: &[&str] =
+    &["FACT", "FACTDOUBLE", "COMBIN", "COMBINA", "PERMUT", "PERMUTATIONA", "MULTINOMIAL"];
 
 /// The **factorial** of a number.
 fn factorial_of(number: f64) -> Result<f64, String> {

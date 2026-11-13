@@ -121,39 +121,34 @@ impl Cx {
 
 /// The complex number **one**.
 const ONE: Cx = Cx { re: 1.0, im: 0.0 };
-
-/// Whether a **name** is the name of a complex function.
-pub(crate) fn is_complex_function(name: &str) -> bool {
-    matches!(
-        name,
-        "COMPLEX"
-            | "IMABS"
-            | "IMAGINARY"
-            | "IMARGUMENT"
-            | "IMCONJUGATE"
-            | "IMCOS"
-            | "IMCOSH"
-            | "IMCOT"
-            | "IMCSC"
-            | "IMCSCH"
-            | "IMDIV"
-            | "IMEXP"
-            | "IMLN"
-            | "IMLOG10"
-            | "IMLOG2"
-            | "IMPOWER"
-            | "IMPRODUCT"
-            | "IMREAL"
-            | "IMSEC"
-            | "IMSECH"
-            | "IMSIN"
-            | "IMSINH"
-            | "IMSQRT"
-            | "IMSUB"
-            | "IMSUM"
-            | "IMTAN"
-    )
-}
+pub(crate) const NAMES: &[&str] = &[
+    "COMPLEX",
+    "IMABS",
+    "IMAGINARY",
+    "IMARGUMENT",
+    "IMCONJUGATE",
+    "IMCOS",
+    "IMCOSH",
+    "IMCOT",
+    "IMCSC",
+    "IMCSCH",
+    "IMDIV",
+    "IMEXP",
+    "IMLN",
+    "IMLOG10",
+    "IMLOG2",
+    "IMPOWER",
+    "IMPRODUCT",
+    "IMREAL",
+    "IMSEC",
+    "IMSECH",
+    "IMSIN",
+    "IMSINH",
+    "IMSQRT",
+    "IMSUB",
+    "IMSUM",
+    "IMTAN",
+];
 
 /// A **real number** written in a complex text.
 fn parse_real(text: &str) -> Option<f64> {
