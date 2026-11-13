@@ -4334,6 +4334,7 @@ so.
 | the **determinant** of a square | **built.** MDETERM is the number that multiplies a row of a square with another row to give nothing — with the tree's pivoting and its fifteen significant digits (§886) | §886 |
 | the tree's **other names** | **built.** CHIINV, FDIST, CRITBINOM, BETAINV and F.INV.RT are the tree's names for functions that are here, and the negative binomial and the range of the binomial are here too (§887) | §887 |
 | the **world outside** the workbook | **built.** The clock, the random number, the network, the XML reader and the environment of the program are the tree's seven functions that ask the world, and each is refused and says why (§888) | §888 |
+| the **address** of a cell, and the **link** to it | **built.** ADDRESS writes the address of a cell in the tree's two styles, HYPERLINK writes the name of a link, VALUETOTEXT writes any value as text and ASC writes the full-width characters as half-width ones (§889) | §889 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58686,3 +58687,66 @@ something. None of them is here, and each of them says why.
 - **The tree's `NOW` and `TODAY` could be given a date**: a document
   may carry a date of its own. That is a fact about the document, and
   the tree has no such fact here.
+
+## 889. The address of a cell, and the link to it
+
+Four functions of the tree's language that write a **place** and a
+**name** are here.
+
+### What was built
+
+- **`ADDRESS(row_num, column_num, [abs_num], [a1], [sheet_text])`** —
+  the address of a cell, as text:
+  - the row and the column are counted from one, and the default
+    **anchoring** is one — both parts are anchored;
+  - the anchoring of **two** anchors the row, **three** anchors the
+    column and **four** anchors neither;
+  - the **style** argument says whether the address is written as
+    `A1` or as `R1C1`, and `A1` is the default;
+  - the **sheet** argument puts the address in a sheet, and a sheet
+    whose name needs quotes is quoted.
+- **`HYPERLINK(link_location, [friendly_name])`** — the **friendly
+  name** of a link is what the cell shows, and the link itself is
+  shown when there is no name.
+- **`VALUETOTEXT(value, [format])`** — any value written as text, and
+  the **strict** form writes a text in quotes — with a quote in it
+  written twice.
+- **`ASC(text)`** — the **full-width** characters written as
+  **half-width** ones.
+
+### What the port found
+
+- **The tree's `ADDRESS` has two styles and the second one is a
+  whole language of its own**: `R1C1` writes the row and the column as
+  numbers, and the part that is not anchored in **brackets** —
+  `R[2]C[3]`. A style is a style, and both of them are here.
+- **The tree's `ASC` is the identity in the tree** — the tree's text
+  is of single bytes, so there is no full-width character to change.
+  Here the text may hold one, and the conversion is done.
+- **The tree's `HYPERLINK` does not open anything**: it is a name
+  and a target, and the cell shows the name. That is the same thing
+  the tree's own link on a cell is, and the tree has both.
+- **The tree's `VALUETOTEXT` of an error is the error written as
+  text**, not the error itself — it is the one function that turns an
+  error into a text, because its whole business is writing a value
+  as text.
+
+### What it cost
+
+- **Four functions**: one in the lookups, two in the texts and one
+  with the words of a text.
+- **One helper** shared with the rest of the tree: the name of a
+  sheet, quoted when it needs it.
+- **Seven tests** in the grid battery's address test file: the
+  address and its anchoring, the `R1C1` style, the sheet, the row and
+  the column that are not there, the friendly name, any value written
+  as text, and the full-width characters.
+- **No new command**: a function is not a command, and the formula
+  command is the same one. The grid battery still carries **188**
+  commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **The tree's `ADDRESS` may write the name of a **book** before the
+  name of the sheet** — `[Book1]Sheet1`. This tree has no book in a
+  formula, and so it has no such name.
