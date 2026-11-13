@@ -2228,6 +2228,11 @@ impl Book {
         if let Some(reason) = crate::outside::reason_for(name) {
             return Value::Error(reason.to_string());
         }
+        // The **pattern** and the **cube**: an engine for patterns and
+        // a connection to a cube of data.
+        if let Some(reason) = crate::refused::reason_for(name) {
+            return Value::Error(reason.to_string());
+        }
         if crate::matrices::is_matrix_function(name) {
             return self.matrices(sheet, name, arguments, being);
         }
