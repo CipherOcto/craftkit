@@ -4352,6 +4352,7 @@ so.
 | the **workbook reader**: a workbook file, read as a workbook | **built.** A workbook file is read as a workbook — its sheets, their names, their cells, their values and their formulas — with the tree's grid bounds and the tree's date systems (§904) | §904 |
 | the **command** that imports a workbook file | **built.** `grid.import.xlsx` reads a workbook file into the document — a workbook, a sheet for each sheet of the file, and the cells — with the file's own date system (§905) | §905 |
 | the **styles part**: the number formats, so a date becomes a date | **built.** The number formats of a workbook are read, and a cell with a date format on it is a date (§906) | §906 |
+| the **defined names** of a workbook: the names the formulas use | **built.** The names of a workbook are read and imported, and a formula that uses one reads the range it stands for (§907) | §907 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59819,3 +59820,53 @@ A number with a date format on it is a date.
   formula with another cell keeps its value and has no formula.
 - **The workbook is not written back**: there is still no command that
   saves a workbook.
+
+## 907. The defined names of a workbook: the names the formulas use
+
+A name is a word that stands for a range of cells.
+
+### What was built
+
+- **The names of a workbook** are read: the word, the range it stands
+  for, and the **sheet** it belongs to when it belongs to one rather
+  than to the workbook.
+- **The import carries the names**: a name in a file becomes a name in
+  the workbook, and a formula that uses it reads the range it stands
+  for.
+
+### What the port found
+
+- **The tree has two kinds of name**: one of the workbook and one of a
+  sheet, and the sheet's own name wins. This tree has **one** kind, and
+  it is the workbook's: a name stands for a range and the range names
+  its sheet, so a name is never a name for "the sheet it was written
+  on".
+- **The tree's names are formulas**: a name may stand for a range, and
+  it may stand for a number — a rate of `0.07` — or for a function.
+  Here a name stands for a **range** and for nothing else, and a name
+  whose text is not a range is not imported and the import says so.
+- **The built-in names of a file are not names**: `_xlnm.Print_Area`
+  and `_xlnm.Print_Titles` and `_xlnm._FilterDatabase` say how a sheet
+  is printed and how it is filtered, and they are not read here.
+- **The tree's scope is a number and this one is a name**: the number
+  in the file counts the sheets the file holds, and a file may hold
+  sheets this reader does not read — so a name's sheet is resolved by
+  name, and a name whose scope names a sheet that is not there is not
+  imported.
+
+### What it cost
+
+- **One field** in the reader's workbook — the names — and the reading
+  of them: about fifty lines.
+- **Two tests**: one in the reader's test file (a name of the
+  workbook, a name of a sheet, and a built-in name that is not read)
+  and one in the import's test file (the name is imported and reads
+  back).
+- **No new command** and **no new dependency**: the names are in the
+  workbook part, and the reader of §903 reads it.
+
+### What it does not settle
+
+- **The fonts, the fills and the borders are still not read.**
+- **A shared formula is still not filled in.**
+- **The workbook is still not written back.**
