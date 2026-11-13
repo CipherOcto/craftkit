@@ -4319,6 +4319,7 @@ so.
 | the **cues** of an SCC file | **built.** An SCC file is read — the tree's CEA-608 pairs, its pop-on and roll-up, and its drop-frame timecode (§694) | §694 |
 | the **cues** of a track written as an SCC file | **built.** The cues of a track are written as an SCC file — the tree's pop-on load, its rows, its characters and its timecode (§695) | §695 |
 | the **cues** of an MCC file | **built.** An MCC file is read — the tree's abbreviations, its distribution packets and its field one (§696) | §696 |
+| the **counting** of more than one condition | **built.** COUNTIFS, SUMIFS, AVERAGEIFS, MAXIFS and MINIFS gather the cells that meet every condition, and AVERAGEIF averages what meets one — with the tree's cut criterion and its division by zero (§874) | §874 |
 
 ### The list of things that are honestly not there: empty
 
@@ -57696,3 +57697,89 @@ forgotten is not a thing a gate can see on its own.
 - **The scratch is a test's own.** It is a **dev** dependency and
   nothing that ships links it, so a program that wants a path it can
   hand back has no such thing yet.
+
+## 874. The counting of more than one condition
+
+A formula may count what meets **one** condition (§365). The tree also
+counts what meets **several**.
+
+### What was built
+
+- **Six functions** of the grid battery's formula language:
+  - `COUNTIFS(criteria_range1, criteria1, ...)` — the **count** of
+    the cells that meet **every** condition;
+  - `SUMIFS(sum_range, criteria_range1, criteria1, ...)` — the **sum**
+    of the cells that stand opposite them;
+  - `AVERAGEIFS(average_range, criteria_range1, criteria1, ...)` —
+    the **average** of them;
+  - `MAXIFS(max_range, ...)` and `MINIFS(min_range, ...)` — the
+    **largest** and the **smallest** of them;
+  - `AVERAGEIF(range, criteria, [average_range])` — the average of
+    the cells that meet **one** condition.
+- The **condition** is the tree's condition (the module `criteria`): a
+  value, a text condition written out, the tree's wildcards, and the
+  comparison of text without case.
+- Every range of the family is **the same shape**: the range of the
+  values and every range of the conditions are read cell by cell, one
+  beside the other, and a range that is not that shape is `#VALUE!`
+  and not a shorter read.
+- `AVERAGEIF` is the odd one: it takes **one** condition, and the
+  range of the values it averages may be **sized like** the range it is
+  averaged over and is anchored at its own top left cell — the tree's
+  rule for the sum range of `SUMIF`.
+- The **average of nothing** is `#DIV/0!`, and the **largest and the
+  smallest of nothing** are zero.
+
+### What the port found
+
+- **The tree's long criterion is cut and this tree's was refused.** The
+  tree refuses a text criterion of more than two hundred and fifty-five
+  characters when there is **one** condition, and **cuts** it to its
+  first two hundred and fifty-five characters when there are two or
+  more. Here the bound is the tree's, and so is the cut — the criterion
+  of two pairs is matched by its first two hundred and fifty-five
+  characters and not refused.
+- **The tree's `AVERAGEIFS` of nothing is a division by zero.** The
+  tree's `AVERAGEIFS` of no cells is `#DIV/0!`, and its `MAXIFS` and
+  `MINIFS` of no cells are zero. So are they here.
+- **The tree's `AVERAGEIF` is not `AVERAGEIFS` with one pair.** The
+  tree's `AVERAGEIF` reads its values from a range that may be sized
+  like the range it is averaged over, and `AVERAGEIFS` refuses a range
+  that is not the same shape. The two are different rules here too.
+- **A range of another shape is an error and not a shorter read.** The
+  tree reads the ranges cell by cell and refuses the ones that do not
+  line up, and so does this tree.
+
+### What it cost
+
+- **One new module**: `aggregates` — with the six functions, the
+  **pairs** of conditions they read, and the shape they must all have.
+- **One new method on the condition**: a criterion of two or more pairs
+  is cut to the bound and not refused.
+- **One new test file** in the grid battery (`tests/aggregates.rs`):
+  ten tests — the cells that meet every condition being counted, the
+  cells that meet every condition being added from another range, the
+  average of them, the average of nothing being a division by zero, the
+  largest and the smallest of them and of nothing, the average of the
+  cells that meet one condition, the average range being sized like the
+  range, a range of conditions that is not the shape of the first being
+  an error, a list of conditions that is not made of pairs being an
+  error, and a criterion over the bound being refused with one condition
+  and cut with two.
+- **No new command**: the counting is a function of the formula
+  language. The grid battery still carries **188** commands and the MCP
+  server **1045**.
+
+### What it does not settle
+
+- **The tree's other counting functions are still not here.** The tree
+  has `AVERAGEA`, `MAXA`, `MINA`, `VARA` and `VARPA`, which count the
+  **text** of a cell as a number, and this tree does not.
+- **The tree's array formulas are not here.** A condition that is a
+  range of cells is a spilled formula in the tree and is not a thing
+  this tree has — so a criterion that is a range is a single cell's
+  value here.
+- **The tree's `COUNTIFS` of a range that is not the shape of the
+  first is `#VALUE!`, and so is this tree's** — but the tree's ranges
+  may be **resized** by the evaluator before they are read, and this
+  tree's may not.
