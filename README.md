@@ -4331,6 +4331,7 @@ so.
 | the **worth** today | **built.** NPV is the sum of what each payment of a series is worth today, and the first payment is discounted once (§883) | §883 |
 | a **thing** bought on a day | **built.** AMORLINC and AMORDEGRC are the straight line and the declining balance of a thing bought on a day, with the tree's first period and its coefficient (§884) | §884 |
 | the tree's **arrays** | **built.** The twenty-eight functions of the tree that give back a table are listed and refused, each with the reason that a formula here is a value (§885) | §885 |
+| the **determinant** of a square | **built.** MDETERM is the number that multiplies a row of a square with another row to give nothing — with the tree's pivoting and its fifteen significant digits (§886) | §886 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58509,3 +58510,49 @@ values, and a formula here is a **value**.
   the same reason — and that is in the tree already (§370).
 - **The tree's `XLOOKUP` of a whole row is refused** for the same
   reason, and that is §875.
+
+## 886. The determinant of a square
+
+The tree has functions of a **matrix**, and one of them gives back a
+number.
+
+### What was built
+
+- **One function** of the grid battery's formula language:
+  `MDETERM(range)` — the **determinant** of a square of numbers: the
+  number that multiplies a row of the square with another row to give
+  nothing.
+- The **rule**:
+  - the square must be a **square** — one that is not is `#VALUE!` —
+    and every cell of it must be a **number**;
+  - the answer is written with **fifteen significant digits**, so that
+    a determinant that should be a whole number is one;
+  - a square with **no pivot** to bring up has a determinant of zero.
+- The tree works it out with a **partial pivoting**: the largest of the
+  numbers below the diagonal is brought up, and the sign of the answer
+  changes when two rows are swapped.
+
+### What the port found
+
+- **The tree has four matrix functions and only one of them gives back
+  a number.** `MMULT`, `MINVERSE` and `MUNIT` give back a **table**,
+  and so they are refused with the tree's arrays (§885) — and the one
+  that gives back a number is here.
+- **The tree's determinant is tidied.** A determinant that comes out of
+  the pivoting as `0.9999999999999998` is written as `1`, and that is
+  the tree's rule and not a rounding of this tree's own.
+
+### What it cost
+
+- **One module** — `matrices` — with the **determinant** and its
+  pivoting in it, one **dispatch**, and **two tests**.
+- **No new command**: the determinant is a function of the formula
+  language. The grid battery still carries **188** commands and the MCP
+  server **1045**.
+
+### What it does not settle
+
+- **The tree's `MINVERSE` and `MMULT` are refused** as the arrays they
+  are, and `MUNIT` with them.
+- **The tree's square of more than two thousand cells is a number
+  error**, and so is here.
