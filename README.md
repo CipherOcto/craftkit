@@ -4335,6 +4335,7 @@ so.
 | the tree's **other names** | **built.** CHIINV, FDIST, CRITBINOM, BETAINV and F.INV.RT are the tree's names for functions that are here, and the negative binomial and the range of the binomial are here too (§887) | §887 |
 | the **world outside** the workbook | **built.** The clock, the random number, the network, the XML reader and the environment of the program are the tree's seven functions that ask the world, and each is refused and says why (§888) | §888 |
 | the **address** of a cell, and the **link** to it | **built.** ADDRESS writes the address of a cell in the tree's two styles, HYPERLINK writes the name of a link, VALUETOTEXT writes any value as text and ASC writes the full-width characters as half-width ones (§889) | §889 |
+| the **Bessel** and the **euro** | **built.** The four Bessel functions are here with the tree's four ways of working them out, and EUROCONVERT converts with the tree's table of the fixed rates (§890) | §890 |
 
 ### The list of things that are honestly not there: empty
 
@@ -58750,3 +58751,63 @@ Four functions of the tree's language that write a **place** and a
 - **The tree's `ADDRESS` may write the name of a **book** before the
   name of the sheet** — `[Book1]Sheet1`. This tree has no book in a
   formula, and so it has no such name.
+
+## 890. The Bessel and the euro
+
+Five functions of the tree's language: the four **Bessel** functions
+and the **euro**.
+
+### What was built
+
+- **`BESSELJ(x, n)`**, **`BESSELY(x, n)`**, **`BESSELI(x, n)`** and
+  **`BESSELK(x, n)`** — the four Bessel functions, with the tree's
+  rules: the **order** is a whole number that is not negative and not
+  above a hundred thousand, and a function that has no value — the
+  second kind at a number that is not positive — is `#NUM!`.
+- **`EUROCONVERT(number, source, target, [full_precision],
+  [triangulation_precision])`** — the euro conversion, with the tree's
+  own table of the rates:
+  - the **source** and the **target** are **codes** of the tree's
+    fourteen currencies, and a code that is not known is `#VALUE!`;
+  - the **full precision** says that the answer is not rounded to the
+    decimals of the currency;
+  - the **triangulation** says how many digits the euros are written
+    with on the way, and it is at least three;
+  - the same currency on both sides is the number itself.
+
+### What the port found
+
+- **The tree's Bessel functions are four different ways of working
+  the numbers out**, and each of them is here: the **first kind** is
+  an **integral** summed with the trapezoid rule — the integrand goes
+  round and round, and the rule closes in fast — the **second kind**
+  is the **Neumann series** over the first kind and then the
+  recurrence, the **modified first kind** is its own **power series**
+  whose terms are all of one sign, and the **modified second kind**
+  is an integral too.
+- **The tree's euro table is a table of fixed rates** — the rates of
+  the Council's regulation, with the number of decimals each
+  currency is written with. They are facts about the world and not
+  about a program, and so they are the same in every tree.
+- **The tree's euro conversion rounds to the decimals of the
+  **target**, not of the source**: ten euros are nineteen thousand three
+  hundred and sixty-three liras and not nineteen thousand three
+  hundred and sixty-two — the lira has no decimals.
+
+### What it cost
+
+- **One module** — `bessels` — and **one table** of the currencies in
+  the finance.
+- **Four tests** in the grid battery's Bessel test file: the four
+  functions, the order that is not there, the euro and its rates, and
+  the currency that is not known.
+- **No new command**: a function is not a command, and the formula
+  command is the same one. The grid battery still carries **188**
+  commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **The tree's euro table is of a date**: the rates were fixed when
+  the currencies were locked, and they have not changed since. A
+  table of rates that changes with the day is a fact about the world
+  and not a rule, and there is none here.
