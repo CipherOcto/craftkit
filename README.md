@@ -4343,6 +4343,7 @@ so.
 | the **registry** of what the battery knows | **built.** Every family of the grid battery declares the names it carries, the engine dispatches through the registry, and `TRUE()` and `FALSE()` are functions as well as values (§895) | §895 |
 | the **host's** names, and the **places** they name | **built.** ROW, COLUMN, AREAS, ISREF, ISFORMULA, FORMULATEXT, SHEET and SHEETS are here, with the tree's rules and the order of the sheets (§896) | §896 |
 | the host's **tables**, **lambdas** and **places** | **built.** The tree's BYROW, BYCOL, MAKEARRAY, MAP and SCAN are refused as arrays, its LAMBDA, LET, ISOMITTED and REDUCE as lambdas, and its OFFSET, INDIRECT and TRIMRANGE as worked-out references (§897) | §897 |
+| the two **heavy** ones: the cell, and the aggregate | **built.** The tree's CELL asks its twelve questions and says the reason for the one it cannot answer, and the tree's AGGREGATE has its nineteen functions and its four options (§898) | §898 |
 
 ### The list of things that are honestly not there: empty
 
@@ -59255,3 +59256,79 @@ says **why** it is not here.
 - **The tree's `CELL` has a width**, and this tree's cells have no
   width to ask about; so `CELL("width")` has no answer here, and the
   arc that brings `CELL` has to say what it does about it.
+
+## 898. The two heavy ones: the cell, and the aggregate
+
+The tree's **second list** is finished.
+
+### What was built
+
+- **`CELL(info_type, [reference])`** — what the tree asks about a
+  cell: its `address`, its `row`, its `col`, its `contents`, its
+  `type`, its `sheetname`, its `protect`, its `format`, its
+  `filename`, its `prefix`, its `color` and its `parentheses`.
+- **`AGGREGATE(function_num, options, reference, …)`** — the tree's
+  `SUBTOTAL` with **nineteen** functions and **four** options: the
+  functions from one to nineteen, the options that leave out the rows
+  that are hidden by hand, the errors, and the subtotals inside, and
+  the `k` of the functions from fourteen on.
+
+### What the port found
+
+- **The tree's whole function surface is here.** The tree's registry
+  holds **490** names and its host carries **24** more — **514** in
+  all — and this battery's registry holds **515**: every one of the
+  tree's, and one of its own (`EXPON`, this tree's alias of
+  `EXPONDIST`). The tree's second list is finished.
+- **The tree's `AGGREGATE` has an option for each thing it leaves
+  out**, and the tree's `SUBTOTAL` has none: `SUBTOTAL` always
+  leaves out the rows a filter hides and the subtotals inside it, and
+  the numbers from 101 on leave out the rows that are hidden by hand
+  as well. `AGGREGATE` says it with its second argument — the rows a
+  **filter** hides are never left out by an `AGGREGATE`, and the rows
+  that are **hidden by hand** are left out when the options say so.
+- **An error inside an aggregate is the answer**, unless the options
+  say to leave it out: the tree's `AGGREGATE(9, 0, A1:A3)` over a
+  range with an error in it is that error, and `AGGREGATE(9, 2, A1:A3)`
+  is the sum of the rest.
+- **The tree's `CELL` has a `width`**, and it is the width of the
+  column — a thing a cell here does not have, and so `CELL("width")`
+  is refused with the reason it is not here. The other twelve
+  questions the tree asks are answered.
+- **The tree's `CELL("format")` does not answer with the format** —
+  it answers with the tree's own **code** for it: `G` for the general
+  format, `P2` for two decimals of a percentage, `S3` for three
+  decimals of a scientific form, `C2` for a currency, `D1` for a
+  date, `D9` for a time, `,2` for a group separator, and `F2` for
+  anything else. That code is here too, in the tree's own spelling.
+
+### What it cost
+
+- **Two functions** in the host module: `CELL` and `AGGREGATE`.
+- **The tree's `AGGREGATE` reuses the statistics' own numbers** — the
+  median, the mode, the k-th largest and smallest, and the two
+  percentiles — which are now `pub(crate)` and are asked for over a
+  list of numbers and not only over a range.
+- **The tree's format code** is a small function in the grid's own
+  format module.
+- **The subtotal's gathering** now says which of the three things it
+  leaves out it leaves out, so that the aggregate can say it too.
+- **Three tests** in the grid battery's host test file: the tree's
+  `CELL`, the tree's `AGGREGATE`, and the errors of an aggregate.
+- **No new command**: a function is not a command, and the formula
+  command is the same one. The grid battery still carries **188**
+  commands and the MCP server **1045**.
+
+### What it does not settle
+
+- **The tree's `SUBTOTAL` and this tree's `SUBTOTAL` are not the same
+  function.** The tree's `SUBTOTAL` counts an **error** in a range as
+  an error of the whole subtotal, and this tree's counts it as a
+  value — and the tree's `SUBTOTAL` from 101 on leaves out the rows
+  that are hidden by hand and *not* the rows a filter hides, while
+  this tree's leaves out both. The tree's own comment says the
+  opposite of what its code does, and this tree follows the comment.
+  That is a difference and not a bug, and it is not settled here.
+- **The tree's `CELL("filename")` is empty until the workbook has a
+  file of its own**, and a workbook here has no file either, so the
+  answer is the tree's answer and is empty.

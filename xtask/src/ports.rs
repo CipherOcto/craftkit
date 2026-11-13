@@ -349,6 +349,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/host.rs",
         section: "§897",
     },
+    Port {
+        rule: "the two heavy ones: the cell, and the aggregate",
+        from: "gridcraft/crates/calc/src/eval/reference_fns.rs",
+        to: "craftkit-plugin-grid",
+        module: "src/host.rs",
+        command: "craftkit-plugin-grid::host",
+        test: "crates/craftkit-plugin-grid/tests/host.rs",
+        section: "§898",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in
