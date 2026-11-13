@@ -403,6 +403,15 @@ pub const PORTS: &[Port] = &[
         test: "crates/craftkit-plugin-grid/tests/xlsximport.rs",
         section: "§905",
     },
+    Port {
+        rule: "the styles part: the number formats, so a date becomes a date",
+        from: "gridcraft/crates/xlsx/src/styles.rs",
+        to: "craftkit-xlsx",
+        module: "src/styles.rs",
+        command: "craftkit-xlsx::read_styles",
+        test: "crates/craftkit-xlsx/tests/workbook.rs",
+        section: "§906",
+    },
 ];
 
 /// The problems the manifest has: a row that names a command that is not in

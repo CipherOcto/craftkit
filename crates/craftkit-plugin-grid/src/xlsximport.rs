@@ -120,6 +120,8 @@ commands! {
             let mut filled = 0u64;
             let mut formulas = 0u64;
             let mut unread = 0u64;
+            let mut formats = 0u64;
+            let mut unread_formats = 0u64;
             let mut taken: Vec<String> = Vec::new();
             for sheet in &workbook.sheets {
                 // The **name** of the sheet: the tree's rules, and the
@@ -167,6 +169,19 @@ commands! {
                         entry.insert("value".to_string(), value.to_json());
                         filled += 1;
                     }
+                    // The **format** of the cell: the file's own code,
+                    // and only when this tree's format language can
+                    // read it. A code that is not read is not carried:
+                    // a format that is quietly wrong is worse than a
+                    // format that is missing.
+                    if let Some(code) = &cell.format
+                        && crate::format::Format::parse(code).is_some()
+                    {
+                        entry.insert("format".to_string(), json!(code));
+                        formats += 1;
+                    } else if cell.format.is_some() {
+                        unread_formats += 1;
+                    }
                     if entry.is_empty() {
                         continue;
                     }
@@ -189,6 +204,11 @@ commands! {
             if unread > 0 {
                 summary.push_str(&format!("; {unread} formula(s) could not be read and were not imported"));
             }
+            if unread_formats > 0 {
+                summary.push_str(&format!(
+                    "; {unread_formats} format(s) could not be read and were not imported"
+                ));
+            }
             Ok(Outcome::changed(summary).with_data(json!({
                 "id": workbook_id,
                 "name": name,
@@ -196,6 +216,8 @@ commands! {
                 "cells": filled,
                 "formulas": formulas,
                 "unread_formulas": unread,
+                "formats": formats,
+                "unread_formats": unread_formats,
                 "system": system.name(),
                 "warnings": workbook.warnings,
             })))

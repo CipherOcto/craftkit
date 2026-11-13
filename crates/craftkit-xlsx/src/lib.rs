@@ -56,8 +56,10 @@
 #![forbid(unsafe_code)]
 
 mod rels;
+mod styles;
 
 pub use rels::{Rel, rels_of, resolve, split_dir};
+pub use styles::{Styles, read_styles};
 
 /// The most **rows** a sheet may have: the tree's own bound.
 pub const MAX_ROWS: u64 = 1_048_576;
@@ -136,6 +138,12 @@ pub struct Cell {
     /// differently, and the battery that owns the spreadsheet model
     /// knows how to read those.
     pub formula: Option<String>,
+    /// The **number format** of the cell, when it has one.
+    ///
+    /// The code is the file's own, and a cell with no format of its own
+    /// has none: the general format is the format of a cell that names
+    /// nothing, and it is not carried.
+    pub format: Option<String>,
 }
 
 /// A **sheet** of a workbook: a name and its cells.
@@ -211,6 +219,7 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
 
     let workbook_rels = rels_of(&mut package, &part)?;
     let strings = shared_strings(&mut package, &workbook_rels, &mut workbook.warnings)?;
+    let styles = read_styles_of(&mut package, &workbook_rels, &mut workbook.warnings);
 
     let sheet_elements = workbook_xml
         .child("sheets")
@@ -234,7 +243,7 @@ pub fn read(bytes: &[u8]) -> Result<Workbook, Error> {
             workbook.warnings.push(format!("the sheet \"{name}\" is a {} and was not read", relation.kind));
             continue;
         }
-        let mut sheet = read_sheet(&mut package, &relation.target, &strings, &mut workbook.warnings);
+        let mut sheet = read_sheet(&mut package, &relation.target, &strings, &styles, &mut workbook.warnings);
         sheet.name = name;
         workbook.sheets.push(sheet);
         let _ = index;
@@ -283,6 +292,7 @@ fn read_sheet(
     package: &mut craftkit_zip::Package<'_>,
     part: &str,
     strings: &[String],
+    styles: &Styles,
     warnings: &mut Vec<String>,
 ) -> Sheet {
     let mut sheet = Sheet::default();
@@ -334,7 +344,8 @@ fn read_sheet(
             next_column = column + 1;
             let value = value_of(cell, strings);
             let formula = cell.child("f").map(|f| f.text.trim().to_string()).filter(|text| !text.is_empty());
-            sheet.cells.push(Cell { column, row: row_index as u32, value, formula });
+            let format = styles.format(cell.attr_u32("s")).map(|code| code.to_string());
+            sheet.cells.push(Cell { column, row: row_index as u32, value, formula, format });
         }
     }
 
@@ -413,6 +424,25 @@ fn column_index(letters: &str) -> Option<u32> {
         column = column * 26 + (character.to_ascii_uppercase() as u32 - 'A' as u32 + 1);
     }
     Some(column - 1)
+}
+
+/// The **styles** of a workbook: the format of each cell.
+///
+/// A workbook with no styles part has no formats, and that is not an
+/// error: a file may be written without one.
+fn read_styles_of(
+    package: &mut craftkit_zip::Package<'_>,
+    workbook_rels: &[Rel],
+    warnings: &mut Vec<String>,
+) -> Styles {
+    let Some(relation) = workbook_rels.iter().find(|rel| rel.kind == "styles") else {
+        return Styles::default();
+    };
+    let Some(root) = read_xml(package, &relation.target).ok().flatten() else {
+        warnings.push(format!("the part {} could not be read", relation.target));
+        return Styles::default();
+    };
+    read_styles(&root)
 }
 
 /// Read a part of the package as XML.
