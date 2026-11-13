@@ -113,6 +113,10 @@ fix(sound): the clip that read past its end — §812
 Commit after every arc that builds. Never commit `target*/`; `.gitignore`
 already excludes it.
 
+**And commit to `main`.** Which branch may be worked on, and how many
+checkouts there may be, is one rule and it is written once: in
+[`AGENTS.md`](AGENTS.md), under "Before you commit".
+
 ---
 
 ## 5. What a review will look for

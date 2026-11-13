@@ -257,9 +257,9 @@ expensive, put it in CI rather than running it here.
 
 ## Before you commit
 
-This **is** a git repository: branch `main` (the v2 work is on `exp/v2-root`),
-a local history, and the remote `git@github.com:CipherOcto/craftkit.git`.
-`git push` goes there — and only there. Before every commit:
+This **is** a git repository: branch `main` — the only working branch — a local
+history, and the remote `git@github.com:CipherOcto/craftkit.git`. `git push`
+goes there — and only there. Before every commit:
 
 ```text
 cargo xtask ci          # fmt, assets, cleanroom, lists, layers, web, clippy, tests, wasm
@@ -269,6 +269,35 @@ cargo test -p craftkit-gates
 
 Commit after every feature arc that builds, one topic per commit (see
 `CONTRIBUTING.md`). Never commit `target*/`; `.gitignore` already excludes it.
+
+**The gate is not an inner loop.** A whole-tree `cargo xtask ci --all` is a
+heavy job: from a cold cache it is about **twenty-three minutes** on this
+machine, and it rebuilds every test binary in the tree. This is a shared
+machine, and the gate takes more of it than anything else in the tree.
+
+- **Batch the work, then gate it once.** Make one big change, or one batch
+  of them, and run the gate **once** for the batch. Do not run it after every
+  small step, and do not run it several times a day to feel safer — the
+  second run of the same tree says nothing the first did not.
+- **While you work, use the cheap checks.** `cargo fmt`, `cargo clippy -p
+  <crate>`, `cargo test -p <crate>` and `cargo test -p craftkit-gates` are
+  seconds. The whole-tree gate is what runs before a commit and before a
+  push, and it is run when there is a batch to put through it.
+- **A green gate is a fact about a commit, not a running state.** It says
+  *this* tree is green; it does not stay green while the tree keeps moving.
+
+**`main` is the only working branch, and there is one worktree.**
+
+- **A branch is never created without the owner's word.** If a piece of work
+  wants a branch of its own, it is asked for — and an agent does not create
+  one on its own account. A branch an agent made for itself is work the owner
+  did not ask for, sitting somewhere the owner is not looking.
+- **There is one worktree on disk, and it is `main`.** The tree is checked out
+  once. A second checkout is a second place where the tree can be changed, and
+  the second place is where a change goes that nobody reviews.
+- **Every other branch is deleted**, local and remote, as soon as its work is
+  on `main`. A merged branch is a pointer into the history and nothing else,
+  and an unmerged one is work that is not in the tree yet.
 
 ---
 
